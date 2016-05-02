@@ -1,0 +1,26 @@
+[root]
+name = "rust-tls"
+version = "0.1.0"
+dependencies = [
+ "ring 0.1.0 (git+https://github.com/briansmith/ring)",
+]
+
+[[package]]
+name = "num"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "ring"
+version = "0.1.0"
+source = "git+https://github.com/briansmith/ring#b78a8d06d29a3a724b0f2cf857d35acb8d376bd2"
+dependencies = [
+ "num 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "rustc-serialize"
+version = "0.3.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
