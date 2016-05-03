@@ -1,5 +1,5 @@
 
-use codec::{encode_u8, decode_u8, encode_u16, decode_u16, Reader, Codec};
+use codec::{encode_u8, read_u8, encode_u16, read_u16, Reader, Codec};
 
 #[derive(Debug)]
 pub enum ProtocolVersion {
@@ -16,16 +16,21 @@ impl Codec for ProtocolVersion {
     encode_u16(self.get_u16(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> ProtocolVersion {
-    let u = decode_u16(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<ProtocolVersion> {
+    let u = read_u16(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x0200 => ProtocolVersion::SSLv2,
       0x0300 => ProtocolVersion::SSLv3,
       0x0301 => ProtocolVersion::TLSv1_0,
       0x0302 => ProtocolVersion::TLSv1_1,
       0x0303 => ProtocolVersion::TLSv1_2,
       x => ProtocolVersion::Unknown(x)
-    }
+    })
   }
 }
 
@@ -59,9 +64,14 @@ impl Codec for HashAlgorithm {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> HashAlgorithm {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<HashAlgorithm> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => HashAlgorithm::NONE,
       0x01 => HashAlgorithm::MD5,
       0x02 => HashAlgorithm::SHA1,
@@ -70,7 +80,7 @@ impl Codec for HashAlgorithm {
       0x05 => HashAlgorithm::SHA384,
       0x06 => HashAlgorithm::SHA512,
       x => HashAlgorithm::Unknown(x)
-    }
+    })
   }
 }
 
@@ -103,15 +113,20 @@ impl Codec for SignatureAlgorithm {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> SignatureAlgorithm {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<SignatureAlgorithm> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => SignatureAlgorithm::Anonymous,
       0x01 => SignatureAlgorithm::RSA,
       0x02 => SignatureAlgorithm::DSA,
       0x03 => SignatureAlgorithm::ECDSA,
       x => SignatureAlgorithm::Unknown(x)
-    }
+    })
   }
 }
 
@@ -144,9 +159,14 @@ impl Codec for ClientCertificateType {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> ClientCertificateType {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<ClientCertificateType> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x01 => ClientCertificateType::RSASign,
       0x02 => ClientCertificateType::DSSSign,
       0x03 => ClientCertificateType::RSAFixedDH,
@@ -155,7 +175,7 @@ impl Codec for ClientCertificateType {
       0x06 => ClientCertificateType::DSSEphemeralDH,
       0x14 => ClientCertificateType::FortezzaDMS,
       x => ClientCertificateType::Unknown(x)
-    }
+    })
   }
 }
 
@@ -187,14 +207,19 @@ impl Codec for Compression {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> Compression {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<Compression> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => Compression::Null,
       0x01 => Compression::Deflate,
       0x40 => Compression::LSZ,
       x => Compression::Unknown(x)
-    }
+    })
   }
 }
 
@@ -224,16 +249,21 @@ impl Codec for ContentType {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> ContentType {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<ContentType> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x14 => ContentType::ChangeCipherSpec,
       0x15 => ContentType::Alert,
       0x16 => ContentType::Handshake,
       0x17 => ContentType::ApplicationData,
       0x18 => ContentType::Heartbeat,
       x => ContentType::Unknown(x)
-    }
+    })
   }
 }
 
@@ -272,9 +302,14 @@ impl Codec for HandshakeType {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> HandshakeType {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<HandshakeType> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => HandshakeType::HelloRequest,
       0x01 => HandshakeType::ClientHello,
       0x02 => HandshakeType::ServerHello,
@@ -288,7 +323,7 @@ impl Codec for HandshakeType {
       0x15 => HandshakeType::CertificateURL,
       0x16 => HandshakeType::CertificateStatus,
       x => HandshakeType::Unknown(x)
-    }
+    })
   }
 }
 
@@ -324,13 +359,18 @@ impl Codec for AlertLevel {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> AlertLevel {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<AlertLevel> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x01 => AlertLevel::Warning,
       0x02 => AlertLevel::Fatal,
       x => AlertLevel::Unknown(x)
-    }
+    })
   }
 }
 
@@ -380,9 +420,14 @@ impl Codec for AlertDescription {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> AlertDescription {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<AlertDescription> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => AlertDescription::CloseNotify,
       0x0a => AlertDescription::UnexpectedMessage,
       0x14 => AlertDescription::BadRecordMac,
@@ -410,7 +455,7 @@ impl Codec for AlertDescription {
       0x6e => AlertDescription::UnsupportedExtension,
       0x70 => AlertDescription::UnrecognisedName,
       x => AlertDescription::Unknown(x)
-    }
+    })
   }
 }
 
@@ -460,13 +505,18 @@ impl Codec for HeartbeatMessageType {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> HeartbeatMessageType {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<HeartbeatMessageType> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x01 => HeartbeatMessageType::Request,
       0x02 => HeartbeatMessageType::Response,
       x => HeartbeatMessageType::Unknown(x)
-    }
+    })
   }
 }
 
@@ -511,9 +561,14 @@ impl Codec for ExtensionType {
     encode_u16(self.get_u16(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> ExtensionType {
-    let u = decode_u16(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<ExtensionType> {
+    let u = read_u16(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x0000 => ExtensionType::ServerName,
       0x0001 => ExtensionType::MaxFragmentLength,
       0x0002 => ExtensionType::ClientCertificateUrl,
@@ -536,7 +591,7 @@ impl Codec for ExtensionType {
       0x754f => ExtensionType::ChannelId,
       0xff01 => ExtensionType::RenegotiationInfo,
       x => ExtensionType::Unknown(x)
-    }
+    })
   }
 }
 
@@ -580,12 +635,17 @@ impl Codec for ServerNameType {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> ServerNameType {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<ServerNameType> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => ServerNameType::HostName,
       x => ServerNameType::Unknown(x)
-    }
+    })
   }
 }
 
@@ -638,9 +698,14 @@ impl Codec for NamedCurve {
     encode_u16(self.get_u16(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> NamedCurve {
-    let u = decode_u16(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<NamedCurve> {
+    let u = read_u16(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x0001 => NamedCurve::sect163k1,
       0x0002 => NamedCurve::sect163r1,
       0x0003 => NamedCurve::sect163r2,
@@ -672,7 +737,7 @@ impl Codec for NamedCurve {
       0xff01 => NamedCurve::arbitrary_explicit_prime_curves,
       0xff02 => NamedCurve::arbitrary_explicit_char2_curves,
       x => NamedCurve::Unknown(x)
-    }
+    })
   }
 }
 
@@ -1084,9 +1149,14 @@ impl Codec for CipherSuite {
     encode_u16(self.get_u16(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> CipherSuite {
-    let u = decode_u16(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<CipherSuite> {
+    let u = read_u16(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x0000 => CipherSuite::TLS_NULL_WITH_NULL_NULL,
       0x0001 => CipherSuite::TLS_RSA_WITH_NULL_MD5,
       0x0002 => CipherSuite::TLS_RSA_WITH_NULL_SHA,
@@ -1448,7 +1518,7 @@ impl Codec for CipherSuite {
       0xfefe => CipherSuite::SSL_RSA_FIPS_WITH_DES_CBC_SHA,
       0xfeff => CipherSuite::SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA,
       x => CipherSuite::Unknown(x)
-    }
+    })
   }
 }
 
@@ -1833,14 +1903,19 @@ impl Codec for ECPointFormat {
     encode_u8(self.get_u8(), bytes);
   }
 
-  fn decode(r: &mut Reader) -> ECPointFormat {
-    let u = decode_u8(r);
-    match u {
+  fn read(r: &mut Reader) -> Option<ECPointFormat> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
       0x00 => ECPointFormat::Uncompressed,
       0x01 => ECPointFormat::ANSIX962CompressedPrime,
       0x02 => ECPointFormat::ANSIX962CompressedChar2,
       x => ECPointFormat::Unknown(x)
-    }
+    })
   }
 }
 
