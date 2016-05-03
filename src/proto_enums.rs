@@ -15,7 +15,7 @@ impl Codec for ProtocolVersion {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u16(self.get_u16(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> ProtocolVersion {
     let u = decode_u16(r);
     match u {
@@ -58,7 +58,7 @@ impl Codec for HashAlgorithm {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> HashAlgorithm {
     let u = decode_u8(r);
     match u {
@@ -102,7 +102,7 @@ impl Codec for SignatureAlgorithm {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> SignatureAlgorithm {
     let u = decode_u8(r);
     match u {
@@ -143,7 +143,7 @@ impl Codec for ClientCertificateType {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> ClientCertificateType {
     let u = decode_u8(r);
     match u {
@@ -186,7 +186,7 @@ impl Codec for Compression {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> Compression {
     let u = decode_u8(r);
     match u {
@@ -223,7 +223,7 @@ impl Codec for ContentType {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> ContentType {
     let u = decode_u8(r);
     match u {
@@ -271,7 +271,7 @@ impl Codec for HandshakeType {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> HandshakeType {
     let u = decode_u8(r);
     match u {
@@ -323,7 +323,7 @@ impl Codec for AlertLevel {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> AlertLevel {
     let u = decode_u8(r);
     match u {
@@ -379,7 +379,7 @@ impl Codec for AlertDescription {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> AlertDescription {
     let u = decode_u8(r);
     match u {
@@ -459,7 +459,7 @@ impl Codec for HeartbeatMessageType {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> HeartbeatMessageType {
     let u = decode_u8(r);
     match u {
@@ -510,7 +510,7 @@ impl Codec for ExtensionType {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u16(self.get_u16(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> ExtensionType {
     let u = decode_u16(r);
     match u {
@@ -579,7 +579,7 @@ impl Codec for ServerNameType {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u8(self.get_u8(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> ServerNameType {
     let u = decode_u8(r);
     match u {
@@ -625,6 +625,9 @@ pub enum NamedCurve {
   secp256r1,
   secp384r1,
   secp521r1,
+  brainpoolp256r1,
+  brainpoolp384r1,
+  brainpoolp512r1,
   arbitrary_explicit_prime_curves,
   arbitrary_explicit_char2_curves,
   Unknown(u16)
@@ -634,7 +637,7 @@ impl Codec for NamedCurve {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u16(self.get_u16(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> NamedCurve {
     let u = decode_u16(r);
     match u {
@@ -663,6 +666,9 @@ impl Codec for NamedCurve {
       0x0017 => NamedCurve::secp256r1,
       0x0018 => NamedCurve::secp384r1,
       0x0019 => NamedCurve::secp521r1,
+      0x001a => NamedCurve::brainpoolp256r1,
+      0x001b => NamedCurve::brainpoolp384r1,
+      0x001c => NamedCurve::brainpoolp512r1,
       0xff01 => NamedCurve::arbitrary_explicit_prime_curves,
       0xff02 => NamedCurve::arbitrary_explicit_char2_curves,
       x => NamedCurve::Unknown(x)
@@ -698,6 +704,9 @@ impl NamedCurve {
       NamedCurve::secp256r1 => 0x0017,
       NamedCurve::secp384r1 => 0x0018,
       NamedCurve::secp521r1 => 0x0019,
+      NamedCurve::brainpoolp256r1 => 0x001a,
+      NamedCurve::brainpoolp384r1 => 0x001b,
+      NamedCurve::brainpoolp512r1 => 0x001c,
       NamedCurve::arbitrary_explicit_prime_curves => 0xff01,
       NamedCurve::arbitrary_explicit_char2_curves => 0xff02,
       NamedCurve::Unknown(v) => v
@@ -1074,7 +1083,7 @@ impl Codec for CipherSuite {
   fn encode(&self, bytes: &mut Vec<u8>) {
     encode_u16(self.get_u16(), bytes);
   }
-  
+
   fn decode(r: &mut Reader) -> CipherSuite {
     let u = decode_u16(r);
     match u {
@@ -1807,6 +1816,41 @@ impl CipherSuite {
       CipherSuite::SSL_RSA_FIPS_WITH_DES_CBC_SHA => 0xfefe,
       CipherSuite::SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA => 0xfeff,
       CipherSuite::Unknown(v) => v
+    }
+  }
+}
+
+#[derive(Debug)]
+pub enum ECPointFormat {
+  Uncompressed,
+  ANSIX962CompressedPrime,
+  ANSIX962CompressedChar2,
+  Unknown(u8)
+}
+
+impl Codec for ECPointFormat {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    encode_u8(self.get_u8(), bytes);
+  }
+
+  fn decode(r: &mut Reader) -> ECPointFormat {
+    let u = decode_u8(r);
+    match u {
+      0x00 => ECPointFormat::Uncompressed,
+      0x01 => ECPointFormat::ANSIX962CompressedPrime,
+      0x02 => ECPointFormat::ANSIX962CompressedChar2,
+      x => ECPointFormat::Unknown(x)
+    }
+  }
+}
+
+impl ECPointFormat {
+  pub fn get_u8(&self) -> u8 {
+    match *self {
+      ECPointFormat::Uncompressed => 0x00,
+      ECPointFormat::ANSIX962CompressedPrime => 0x01,
+      ECPointFormat::ANSIX962CompressedChar2 => 0x02,
+      ECPointFormat::Unknown(v) => v
     }
   }
 }
