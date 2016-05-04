@@ -1929,3 +1929,40 @@ impl ECPointFormat {
     }
   }
 }
+
+#[derive(Debug)]
+pub enum HeartbeatMode {
+  PeerAllowedToSend,
+  PeerNotAllowedToSend,
+  Unknown(u8)
+}
+
+impl Codec for HeartbeatMode {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    encode_u8(self.get_u8(), bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<HeartbeatMode> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
+      0x01 => HeartbeatMode::PeerAllowedToSend,
+      0x02 => HeartbeatMode::PeerNotAllowedToSend,
+      x => HeartbeatMode::Unknown(x)
+    })
+  }
+}
+
+impl HeartbeatMode {
+  pub fn get_u8(&self) -> u8 {
+    match *self {
+      HeartbeatMode::PeerAllowedToSend => 0x01,
+      HeartbeatMode::PeerNotAllowedToSend => 0x02,
+      HeartbeatMode::Unknown(v) => v
+    }
+  }
+}

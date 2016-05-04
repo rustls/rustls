@@ -3,44 +3,64 @@ use std::fmt::Debug;
 mod proto_enums;
 use proto_enums::{AlertLevel, AlertDescription, ContentType, ProtocolVersion, HandshakeType};
 use proto_enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedCurve};
-use proto_enums::{HashAlgorithm, SignatureAlgorithm};
+use proto_enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
 #[macro_use]
 mod codec;
 use codec::{Codec, Reader};
 
 /* An externally length'd payload */
 #[derive(Debug)]
-struct UnknownPayload {
+struct Payload {
   body: Box<[u8]>
 }
 
-impl Codec for UnknownPayload {
+impl Codec for Payload {
   fn encode(&self, bytes: &mut Vec<u8>) {
     bytes.extend_from_slice(&self.body);
   }
   
-  fn read(r: &mut Reader) -> Option<UnknownPayload> {
-    Some(UnknownPayload { body: r.rest().to_vec().into_boxed_slice() })
+  fn read(r: &mut Reader) -> Option<Payload> {
+    Some(Payload { body: r.rest().to_vec().into_boxed_slice() })
   }
 }
 
 /* An arbitrary, unknown-content, u16-length-prefixed payload */
 #[derive(Debug)]
-struct UnknownPayloadU16 {
+struct PayloadU16 {
   body: Box<[u8]>
 }
 
-impl Codec for UnknownPayloadU16 {
+impl Codec for PayloadU16 {
   fn encode(&self, bytes: &mut Vec<u8>) {
     codec::encode_u16(self.body.len() as u16, bytes);
     bytes.extend_from_slice(&self.body);
   }
   
-  fn read(r: &mut Reader) -> Option<UnknownPayloadU16> {
+  fn read(r: &mut Reader) -> Option<PayloadU16> {
     let len = try_ret!(codec::read_u16(r)) as usize;
     let sub = try_ret!(r.sub(len));
     let body = sub.rest().to_vec().into_boxed_slice();
-    Some(UnknownPayloadU16 { body: body })
+    Some(PayloadU16 { body: body })
+  }
+}
+
+/* An arbitrary, unknown-content, u8-length-prefixed payload */
+#[derive(Debug)]
+struct PayloadU8 {
+  body: Box<[u8]>
+}
+
+impl Codec for PayloadU8 {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    codec::encode_u8(self.body.len() as u8, bytes);
+    bytes.extend_from_slice(&self.body);
+  }
+  
+  fn read(r: &mut Reader) -> Option<PayloadU8> {
+    let len = try_ret!(codec::read_u8(r)) as usize;
+    let sub = try_ret!(r.sub(len));
+    let body = sub.rest().to_vec().into_boxed_slice();
+    Some(PayloadU8 { body: body })
   }
 }
 
@@ -109,7 +129,7 @@ impl Codec for SessionID {
 #[derive(Debug)]
 struct UnknownExtension {
   typ: ExtensionType,
-  payload: UnknownPayload
+  payload: Payload
 }
 
 impl UnknownExtension {
@@ -119,7 +139,7 @@ impl UnknownExtension {
   }
   
   fn read(typ: ExtensionType, r: &mut Reader) -> Option<UnknownExtension> {
-    let payload = try_ret!(UnknownPayload::read(r));
+    let payload = try_ret!(Payload::read(r));
     Some(UnknownExtension { typ: typ, payload: payload })
   }
 }
@@ -181,10 +201,83 @@ impl Codec for SupportedSignatureAlgorithms {
 }
 
 #[derive(Debug)]
+enum ServerNamePayload {
+  HostName(String),
+  Unknown(Payload)
+}
+
+impl ServerNamePayload {
+  fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
+    let len = try_ret!(codec::read_u16(r)) as usize;
+    let name = try_ret!(r.take(len));
+    let hostname = String::from_utf8(name.to_vec());
+
+    match hostname {
+      Ok(n) => Some(ServerNamePayload::HostName(n)),
+      _ => None
+    }
+  }
+
+  fn encode_hostname(name: &String, bytes: &mut Vec<u8>) {
+    codec::encode_u16(name.len() as u16, bytes);
+    bytes.extend_from_slice(name.as_bytes());
+  }
+
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    match *self {
+      ServerNamePayload::HostName(ref r) => ServerNamePayload::encode_hostname(r, bytes),
+      ServerNamePayload::Unknown(ref r) => r.encode(bytes)
+    }
+  }
+}
+
+#[derive(Debug)]
+struct ServerName {
+  typ: ServerNameType,
+  payload: ServerNamePayload
+}
+
+impl Codec for ServerName {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.typ.encode(bytes);
+    self.payload.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<ServerName> {
+    let typ = try_ret!(ServerNameType::read(r));
+
+    let payload = match typ {
+      ServerNameType::HostName =>
+        try_ret!(ServerNamePayload::read_hostname(r)),
+      _ =>
+        ServerNamePayload::Unknown(try_ret!(Payload::read(r)))
+    };
+
+    Some(ServerName { typ: typ, payload: payload })
+  }
+}
+
+type ServerNameRequest = Vec<ServerName>;
+
+impl Codec for ServerNameRequest {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    codec::encode_vec_u16(bytes, self);
+  }
+
+  fn read(r: &mut Reader) -> Option<ServerNameRequest> {
+    codec::read_vec_u16::<ServerName>(r)
+  }
+}
+
+#[derive(Debug)]
 enum ClientExtension {
   ECPointFormats(ECPointFormatList),
   EllipticCurves(EllipticCurveList),
   SignatureAlgorithms(SupportedSignatureAlgorithms),
+  Heartbeat(HeartbeatMode),
+  ServerName(ServerNameRequest),
+  SessionTicketRequest,
+  SessionTicketOffer(Payload),
   Unknown(UnknownExtension)
 }
 
@@ -194,6 +287,10 @@ impl Codec for ClientExtension {
       ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats.encode(bytes),
       ClientExtension::EllipticCurves(_) => ExtensionType::EllipticCurves.encode(bytes),
       ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms.encode(bytes),
+      ClientExtension::Heartbeat(_) => ExtensionType::Heartbeat.encode(bytes),
+      ClientExtension::ServerName(_) => ExtensionType::ServerName.encode(bytes),
+      ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket.encode(bytes),
+      ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket.encode(bytes),
       ClientExtension::Unknown(ref r) => r.typ.encode(bytes)
     }
 
@@ -202,6 +299,10 @@ impl Codec for ClientExtension {
       ClientExtension::ECPointFormats(ref r) => r.encode(&mut sub),
       ClientExtension::EllipticCurves(ref r) => r.encode(&mut sub),
       ClientExtension::SignatureAlgorithms(ref r) => r.encode(&mut sub),
+      ClientExtension::Heartbeat(ref r) => r.encode(&mut sub),
+      ClientExtension::ServerName(ref r) => r.encode(&mut sub),
+      ClientExtension::SessionTicketRequest => (),
+      ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
       ClientExtension::Unknown(ref r) => r.encode(&mut sub)
     }
 
@@ -221,6 +322,16 @@ impl Codec for ClientExtension {
         ClientExtension::EllipticCurves(try_ret!(EllipticCurveList::read(&mut sub))),
       ExtensionType::SignatureAlgorithms =>
         ClientExtension::SignatureAlgorithms(try_ret!(SupportedSignatureAlgorithms::read(&mut sub))),
+      ExtensionType::Heartbeat =>
+        ClientExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub))),
+      ExtensionType::ServerName =>
+        ClientExtension::ServerName(try_ret!(ServerNameRequest::read(&mut sub))),
+      ExtensionType::SessionTicket =>
+        if sub.any_left() {
+          ClientExtension::SessionTicketOffer(try_ret!(Payload::read(&mut sub)))
+        } else {
+          ClientExtension::SessionTicketRequest
+        },
       _ =>
         ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub)))
     })
@@ -230,6 +341,10 @@ impl Codec for ClientExtension {
 #[derive(Debug)]
 enum ServerExtension {
   ECPointFormats(ECPointFormatList),
+  Heartbeat(HeartbeatMode),
+  ServerNameAcknowledgement,
+  SessionTicketAcknowledgement,
+  RenegotiationInfo(PayloadU8),
   Unknown(UnknownExtension)
 }
 
@@ -237,12 +352,20 @@ impl Codec for ServerExtension {
   fn encode(&self, bytes: &mut Vec<u8>) {
     match *self {
       ServerExtension::ECPointFormats(_) => ExtensionType::ECPointFormats.encode(bytes),
+      ServerExtension::Heartbeat(_) => ExtensionType::Heartbeat.encode(bytes),
+      ServerExtension::ServerNameAcknowledgement => ExtensionType::ServerName.encode(bytes),
+      ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket.encode(bytes),
+      ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo.encode(bytes),
       ServerExtension::Unknown(ref r) => r.typ.encode(bytes)
     }
 
     let mut sub: Vec<u8> = Vec::new();
     match *self {
       ServerExtension::ECPointFormats(ref r) => r.encode(&mut sub),
+      ServerExtension::Heartbeat(ref r) => r.encode(&mut sub),
+      ServerExtension::ServerNameAcknowledgement => (),
+      ServerExtension::SessionTicketAcknowledgement => (),
+      ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
       ServerExtension::Unknown(ref r) => r.encode(&mut sub)
     }
 
@@ -258,6 +381,14 @@ impl Codec for ServerExtension {
     Some(match typ {
       ExtensionType::ECPointFormats =>
         ServerExtension::ECPointFormats(try_ret!(ECPointFormatList::read(&mut sub))),
+      ExtensionType::Heartbeat =>
+        ServerExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub))),
+      ExtensionType::ServerName =>
+        ServerExtension::ServerNameAcknowledgement,
+      ExtensionType::SessionTicket =>
+        ServerExtension::SessionTicketAcknowledgement,
+      ExtensionType::RenegotiationInfo =>
+        ServerExtension::RenegotiationInfo(try_ret!(PayloadU8::read(&mut sub))),
       _ =>
         ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub)))
     })
@@ -352,7 +483,7 @@ enum HandshakePayload {
   HelloRequest,
   ClientHello(ClientHelloPayload),
   ServerHello(ServerHelloPayload),
-  Unknown(UnknownPayload)
+  Unknown(Payload)
 }
 
 impl HandshakePayload {
@@ -397,7 +528,7 @@ impl Codec for HandshakeMessagePayload {
       HandshakeType::ServerHello =>
         HandshakePayload::ServerHello(try_ret!(ServerHelloPayload::read(&mut sub))),
       _ =>
-        HandshakePayload::Unknown(try_ret!(UnknownPayload::read(&mut sub)))
+        HandshakePayload::Unknown(try_ret!(Payload::read(&mut sub)))
     };
 
     Some(HandshakeMessagePayload { typ: typ, payload: payload })
@@ -408,7 +539,7 @@ impl Codec for HandshakeMessagePayload {
 enum MessagePayload {
   Alert(AlertMessagePayload),
   Handshake(HandshakeMessagePayload),
-  Unknown(UnknownPayloadU16)
+  Unknown(PayloadU16)
 }
 
 impl MessagePayload {
@@ -449,7 +580,7 @@ impl Message {
   pub fn read(r: &mut Reader) -> Option<Message> {
     let typ = try_ret!(ContentType::read(r));
     let version = try_ret!(ProtocolVersion::read(r));
-    let payload = try_ret!(UnknownPayloadU16::read(r));
+    let payload = try_ret!(PayloadU16::read(r));
 
     Some(Message { typ: typ, version: version, payload: MessagePayload::Unknown(payload) })
   }
