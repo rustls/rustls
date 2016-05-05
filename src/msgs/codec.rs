@@ -1,12 +1,5 @@
 use std::fmt::Debug;
 
-/* A macro which takes an Option<T> and returns None if it
- * is None, otherwise unwraps(). */
-#[export_macro]
-macro_rules! try_ret(
-    ($e:expr) => (match $e { Some(e) => e, None => return None })
-);
-
 /* Read from a byte slice. */
 pub struct Reader<'a> {
   buf: &'a [u8],
@@ -133,6 +126,17 @@ pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
   bytes.append(&mut sub);
 }
 
+pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
+  let mut sub: Vec<u8> = Vec::new();
+  for i in items {
+    i.encode(&mut sub);
+  }
+
+  assert!(sub.len() <= 0xffffff);
+  encode_u24(sub.len() as u32, bytes);
+  bytes.append(&mut sub);
+}
+
 pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
   let mut ret: Vec<T> = Vec::new();
   let len = try_ret!(read_u8(r)) as usize;
@@ -148,6 +152,18 @@ pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
 pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
   let mut ret: Vec<T> = Vec::new();
   let len = try_ret!(read_u16(r)) as usize;
+  let mut sub = try_ret!(r.sub(len));
+
+  while sub.any_left() {
+    ret.push(try_ret!(T::read(&mut sub)));
+  }
+
+  Some(ret)
+}
+
+pub fn read_vec_u24<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
+  let mut ret: Vec<T> = Vec::new();
+  let len = try_ret!(read_u24(r)) as usize;
   let mut sub = try_ret!(r.sub(len));
 
   while sub.any_left() {
