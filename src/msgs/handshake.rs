@@ -432,7 +432,7 @@ impl Codec for ServerKeyExchangePayload {
 }
 
 #[derive(Debug)]
-enum HandshakePayload {
+pub enum HandshakePayload {
   HelloRequest,
   ClientHello(ClientHelloPayload),
   ServerHello(ServerHelloPayload),
@@ -458,8 +458,8 @@ impl HandshakePayload {
 
 #[derive(Debug)]
 pub struct HandshakeMessagePayload {
-  typ: HandshakeType,
-  payload: HandshakePayload
+  pub typ: HandshakeType,
+  pub payload: HandshakePayload
 }
 
 impl Codec for HandshakeMessagePayload {

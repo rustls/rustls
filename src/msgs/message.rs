@@ -7,7 +7,7 @@ use msgs::enums::{ContentType, ProtocolVersion};
 use std::fmt::Debug;
 
 #[derive(Debug)]
-enum MessagePayload {
+pub enum MessagePayload {
   Alert(AlertMessagePayload),
   Handshake(HandshakeMessagePayload),
   Unknown(PayloadU16)
@@ -42,9 +42,9 @@ impl MessagePayload {
 /* aka TLSPlaintext */
 #[derive(Debug)]
 pub struct Message {
-  typ: ContentType,
-  version: ProtocolVersion,
-  payload: MessagePayload
+  pub typ: ContentType,
+  pub version: ProtocolVersion,
+  pub payload: MessagePayload
 }
 
 impl Message {
