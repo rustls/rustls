@@ -1,7 +1,10 @@
 use msgs::enums::{ContentType, HandshakeType};
+use msgs::enums::{Compression, ProtocolVersion};
 use msgs::message::{Message, MessagePayload};
-use msgs::handshake::{HandshakePayload};
+use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms_default};
+use server::ServerSession;
 
+use std::fmt::{Debug, Formatter};
 use std::fmt;
 
 #[derive(Debug)]
@@ -11,10 +14,17 @@ enum HandshakeError {
   General(String)
 }
 
-#[derive(Debug, Clone)]
-enum State {
-  AwaitClientHello,
-}
+macro_rules! extract_handshake(
+  ( $m:expr, $t:path ) => (
+    match $m.payload {
+      MessagePayload::Handshake(ref hsp) => match hsp.payload {
+        $t(ref hm) => Some(hm),
+        _ => None
+      },
+      _ => None
+    }
+  )
+);
 
 #[derive(Debug)]
 struct Expectation {
@@ -22,37 +32,70 @@ struct Expectation {
   handshake_types: Vec<HandshakeType>
 }
 
-fn AwaitClientHelloExpect() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::ClientHello]
-  }
+trait Handler : Debug {
+  fn expect(&self) -> Expectation;
+  fn handle(&self, sess: &mut ServerSession, m: &Message) -> Result<Option<Box<Handler>>, HandshakeError>;
 }
 
-fn ProcessClientHello(m: &Message) -> Result<Option<HandshakeState>, HandshakeError> {
-  if let MessagePayload::Handshake(ref hsp) = m.payload {
-    print!("we got a handshake {:?}", hsp);
+#[derive(Debug)]
+struct ExpectClientHello {}
 
-    if let HandshakePayload::ClientHello(ref ch) = hsp.payload {
-      print!("we got a clienthello {:?}", ch);
+impl Handler for ExpectClientHello {
+  fn expect(&self) -> Expectation {
+    Expectation {
+      content_types: vec![ContentType::Handshake],
+      handshake_types: vec![HandshakeType::ClientHello]
     }
   }
 
-  Ok(None)
+  fn handle(&self, sess: &mut ServerSession, m: &Message) -> Result<Option<Box<Handler>>, HandshakeError> {
+    let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
+
+    if client_hello.client_version != ProtocolVersion::TLSv1_2 {
+      return Err(HandshakeError::General("client does not support TLSv1_2".to_string()));
+    }
+
+    if !client_hello.compression_methods.contains(&Compression::Null) {
+      return Err(HandshakeError::General("client did not offer Null compression".to_string()));
+    }
+
+    let default_sigalgs_ext = SupportedSignatureAlgorithms_default();
+    let default_eccurves_ext = vec![];
+    let default_ecpoints_ext = vec![];
+
+    let sni_ext = client_hello.get_sni_extension();
+    let sigalgs_ext = client_hello.get_sigalgs_extension()
+      .unwrap_or(&default_sigalgs_ext);
+    let eccurves_ext = client_hello.get_eccurves_extension()
+      .unwrap_or(&default_eccurves_ext);
+    let ecpoints_ext = client_hello.get_ecpoints_extension()
+      .unwrap_or(&default_ecpoints_ext);
+
+    println!("we got a clienthello {:?}", client_hello);
+    println!("sni {:?}", sni_ext);
+    println!("sigalgs {:?}", sigalgs_ext);
+    println!("eccurves {:?}", eccurves_ext);
+    println!("ecpoints {:?}", ecpoints_ext);
+
+    let cert_chain = sess.config.cert_resolver.resolve(sni_ext, sigalgs_ext, eccurves_ext, ecpoints_ext);
+    if cert_chain.is_err() {
+      return Err(HandshakeError::General("no server certificate resolved".to_string()));
+    }
+
+    Ok(None)
+  }
 }
 
-pub struct HandshakeState  {
-  state: State,
-  expect_next: fn() -> Expectation,
-  process: fn(m: &Message) -> Result<Option<HandshakeState>, HandshakeError>
+pub struct HandshakeState<'a> {
+  handler: Box<Handler>,
+  session: &'a mut ServerSession
 }
 
-impl fmt::Debug for HandshakeState {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    f.debug_struct("HandshakeState")
-     .field("state", &self.state)
-     .field("expect_next", &(self.expect_next)())
-     .finish()
+impl<'a> Debug for HandshakeState<'a> {
+  fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+    fmt.debug_struct("HandshakeState")
+       .field("handler", &self.handler)
+       .finish()
   }
 }
 
@@ -62,26 +105,28 @@ fn interesting_p(m: &Message) -> bool {
    m.is_content_type(ContentType::ChangeCipherSpec))
 }
 
-impl HandshakeState {
-  pub fn new() -> HandshakeState {
-    HandshakeState {
-      state: State::AwaitClientHello,
-      expect_next: AwaitClientHelloExpect,
-      process: ProcessClientHello
-    }
+impl<'a> HandshakeState<'a> {
+  pub fn new(session: &'a mut ServerSession) -> HandshakeState<'a> {
+    HandshakeState { handler: Box::new(ExpectClientHello {}), session: session }
   }
 
-  pub fn process_message(&self, m: &Message) -> Result<Option<HandshakeState>, HandshakeError> {
+  pub fn process_message(&mut self, m: &Message) -> Result<(), HandshakeError> {
     if !interesting_p(m) {
-      return Ok(None);
+      return Ok(());
     }
 
     try!(self.check_appropriate(m));
-    (self.process)(m)
+
+    let maybe_new_handler = try!(self.handler.handle(self.session, m));
+    if let Some(new_handler) = maybe_new_handler {
+      self.handler = new_handler;
+    }
+
+    Ok(())
   }
 
   fn check_appropriate(&self, m: &Message) -> Result<(), HandshakeError> {
-    let expect = (self.expect_next)();
+    let expect = self.handler.expect();
 
     if !expect.content_types.contains(&m.typ) {
       return Err(HandshakeError::InappropriateMessage {

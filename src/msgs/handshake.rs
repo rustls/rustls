@@ -6,9 +6,9 @@ use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
 #[derive(Debug)]
-struct Random {
-  gmt_unix_time: u32,
-  opaque: [u8; 28]
+pub struct Random {
+  pub gmt_unix_time: u32,
+  pub opaque: [u8; 28]
 }
 
 impl Codec for Random {
@@ -28,8 +28,8 @@ impl Codec for Random {
 }
 
 #[derive(Debug)]
-struct SessionID {
-  bytes: Vec<u8>
+pub struct SessionID {
+  pub bytes: Vec<u8>
 }
 
 impl Codec for SessionID {
@@ -48,7 +48,7 @@ impl Codec for SessionID {
 }
 
 #[derive(Debug)]
-struct UnknownExtension {
+pub struct UnknownExtension {
   typ: ExtensionType,
   payload: Payload
 }
@@ -65,7 +65,7 @@ impl UnknownExtension {
   }
 }
 
-type ECPointFormatList = Vec<ECPointFormat>;
+pub type ECPointFormatList = Vec<ECPointFormat>;
 
 impl Codec for ECPointFormatList {
   fn encode(&self, bytes: &mut Vec<u8>) {
@@ -77,7 +77,7 @@ impl Codec for ECPointFormatList {
   }
 }
 
-type EllipticCurveList = Vec<NamedCurve>;
+pub type EllipticCurveList = Vec<NamedCurve>;
 
 impl Codec for EllipticCurveList {
   fn encode(&self, bytes: &mut Vec<u8>) {
@@ -90,26 +90,34 @@ impl Codec for EllipticCurveList {
 }
 
 #[derive(Debug)]
-struct SignatureAndHashAlgorithm {
-  hash: HashAlgorithm,
-  signature: SignatureAlgorithm
+pub struct SignatureAndHashAlgorithm {
+  pub hash: HashAlgorithm,
+  pub sign: SignatureAlgorithm
 }
 
 impl Codec for SignatureAndHashAlgorithm {
   fn encode(&self, bytes: &mut Vec<u8>) {
     self.hash.encode(bytes);
-    self.signature.encode(bytes);
+    self.sign.encode(bytes);
   }
 
   fn read(r: &mut Reader) -> Option<SignatureAndHashAlgorithm> {
     let hash = try_ret!(HashAlgorithm::read(r));
     let sign = try_ret!(SignatureAlgorithm::read(r));
 
-    Some(SignatureAndHashAlgorithm { hash: hash, signature: sign })
+    Some(SignatureAndHashAlgorithm { hash: hash, sign: sign })
   }
 }
 
-type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
+pub type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
+
+pub fn SupportedSignatureAlgorithms_default() -> SupportedSignatureAlgorithms {
+  vec![
+    SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
+    SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::DSA },
+    SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA }
+  ]
+}
 
 impl Codec for SupportedSignatureAlgorithms {
   fn encode(&self, bytes: &mut Vec<u8>) {
@@ -122,7 +130,7 @@ impl Codec for SupportedSignatureAlgorithms {
 }
 
 #[derive(Debug)]
-enum ServerNamePayload {
+pub enum ServerNamePayload {
   HostName(String),
   Unknown(Payload)
 }
@@ -153,9 +161,9 @@ impl ServerNamePayload {
 }
 
 #[derive(Debug)]
-struct ServerName {
-  typ: ServerNameType,
-  payload: ServerNamePayload
+pub struct ServerName {
+  pub typ: ServerNameType,
+  pub payload: ServerNamePayload
 }
 
 impl Codec for ServerName {
@@ -178,7 +186,7 @@ impl Codec for ServerName {
   }
 }
 
-type ServerNameRequest = Vec<ServerName>;
+pub type ServerNameRequest = Vec<ServerName>;
 
 impl Codec for ServerNameRequest {
   fn encode(&self, bytes: &mut Vec<u8>) {
@@ -191,7 +199,7 @@ impl Codec for ServerNameRequest {
 }
 
 #[derive(Debug)]
-enum ClientExtension {
+pub enum ClientExtension {
   ECPointFormats(ECPointFormatList),
   EllipticCurves(EllipticCurveList),
   SignatureAlgorithms(SupportedSignatureAlgorithms),
@@ -202,18 +210,24 @@ enum ClientExtension {
   Unknown(UnknownExtension)
 }
 
+impl ClientExtension {
+  pub fn get_type(&self) -> ExtensionType {
+    match *self {
+      ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
+      ClientExtension::EllipticCurves(_) => ExtensionType::EllipticCurves,
+      ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
+      ClientExtension::Heartbeat(_) => ExtensionType::Heartbeat,
+      ClientExtension::ServerName(_) => ExtensionType::ServerName,
+      ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket,
+      ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
+      ClientExtension::Unknown(ref r) => r.typ.clone()
+    }
+  }
+}
+
 impl Codec for ClientExtension {
   fn encode(&self, bytes: &mut Vec<u8>) {
-    match *self {
-      ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats.encode(bytes),
-      ClientExtension::EllipticCurves(_) => ExtensionType::EllipticCurves.encode(bytes),
-      ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms.encode(bytes),
-      ClientExtension::Heartbeat(_) => ExtensionType::Heartbeat.encode(bytes),
-      ClientExtension::ServerName(_) => ExtensionType::ServerName.encode(bytes),
-      ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket.encode(bytes),
-      ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket.encode(bytes),
-      ClientExtension::Unknown(ref r) => r.typ.encode(bytes)
-    }
+    self.get_type().encode(bytes);
 
     let mut sub: Vec<u8> = Vec::new();
     match *self {
@@ -260,7 +274,7 @@ impl Codec for ClientExtension {
 }
 
 #[derive(Debug)]
-enum ServerExtension {
+pub enum ServerExtension {
   ECPointFormats(ECPointFormatList),
   Heartbeat(HeartbeatMode),
   ServerNameAcknowledgement,
@@ -269,16 +283,22 @@ enum ServerExtension {
   Unknown(UnknownExtension)
 }
 
+impl ServerExtension {
+  pub fn get_type(&self) -> ExtensionType {
+    match *self {
+      ServerExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
+      ServerExtension::Heartbeat(_) => ExtensionType::Heartbeat,
+      ServerExtension::ServerNameAcknowledgement => ExtensionType::ServerName,
+      ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket,
+      ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
+      ServerExtension::Unknown(ref r) => r.typ.clone()
+    }
+  }
+}
+
 impl Codec for ServerExtension {
   fn encode(&self, bytes: &mut Vec<u8>) {
-    match *self {
-      ServerExtension::ECPointFormats(_) => ExtensionType::ECPointFormats.encode(bytes),
-      ServerExtension::Heartbeat(_) => ExtensionType::Heartbeat.encode(bytes),
-      ServerExtension::ServerNameAcknowledgement => ExtensionType::ServerName.encode(bytes),
-      ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket.encode(bytes),
-      ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo.encode(bytes),
-      ServerExtension::Unknown(ref r) => r.typ.encode(bytes)
-    }
+    self.get_type().encode(bytes);
 
     let mut sub: Vec<u8> = Vec::new();
     match *self {
@@ -317,13 +337,13 @@ impl Codec for ServerExtension {
 }
 
 #[derive(Debug)]
-struct ClientHelloPayload {
-  client_version: ProtocolVersion,
-  random: Random,
-  session_id: SessionID,
-  cipher_suites: Vec<CipherSuite>,
-  compression_methods: Vec<Compression>,
-  extensions: Vec<ClientExtension>
+pub struct ClientHelloPayload {
+  pub client_version: ProtocolVersion,
+  pub random: Random,
+  pub session_id: SessionID,
+  pub cipher_suites: Vec<CipherSuite>,
+  pub compression_methods: Vec<Compression>,
+  pub extensions: Vec<ClientExtension>
 }
 
 impl Codec for ClientHelloPayload {
@@ -358,14 +378,48 @@ impl Codec for ClientHelloPayload {
   }
 }
 
+impl ClientHelloPayload {
+  pub fn get_sni_extension(&self) -> Option<&ServerNameRequest> {
+    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ServerName));
+    match *ext {
+      ClientExtension::ServerName(ref req) => Some(req),
+      _ => None
+    }
+  }
+
+  pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureAlgorithms> {
+    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::SignatureAlgorithms));
+    match *ext {
+      ClientExtension::SignatureAlgorithms(ref req) => Some(req),
+      _ => None
+    }
+  }
+  
+  pub fn get_eccurves_extension(&self) -> Option<&EllipticCurveList> {
+    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::EllipticCurves));
+    match *ext {
+      ClientExtension::EllipticCurves(ref req) => Some(req),
+      _ => None
+    }
+  }
+  
+  pub fn get_ecpoints_extension(&self) -> Option<&ECPointFormatList> {
+    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ECPointFormats));
+    match *ext {
+      ClientExtension::ECPointFormats(ref req) => Some(req),
+      _ => None
+    }
+  }
+}
+
 #[derive(Debug)]
-struct ServerHelloPayload {
-  server_version: ProtocolVersion,
-  random: Random,
-  session_id: SessionID,
-  cipher_suite: CipherSuite,
-  compression_method: Compression,
-  extensions: Vec<ServerExtension>
+pub struct ServerHelloPayload {
+  pub server_version: ProtocolVersion,
+  pub random: Random,
+  pub session_id: SessionID,
+  pub cipher_suite: CipherSuite,
+  pub compression_method: Compression,
+  pub extensions: Vec<ServerExtension>
 }
 
 impl Codec for ServerHelloPayload {
@@ -399,8 +453,8 @@ impl Codec for ServerHelloPayload {
   }
 }
 
-type ASN1Cert = PayloadU24;
-type CertificatePayload = Vec<ASN1Cert>;
+pub type ASN1Cert = PayloadU24;
+pub type CertificatePayload = Vec<ASN1Cert>;
 
 impl Codec for CertificatePayload {
   fn encode(&self, bytes: &mut Vec<u8>) {
@@ -413,7 +467,7 @@ impl Codec for CertificatePayload {
 }
 
 #[derive(Debug)]
-enum ServerKeyExchangePayload {
+pub enum ServerKeyExchangePayload {
   Unknown(Payload)
 }
 

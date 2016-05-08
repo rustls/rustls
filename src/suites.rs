@@ -21,6 +21,11 @@ SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 };
 
+pub static default_ciphersuites: [&'static SupportedCipherSuite; 2] = [
+  &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+  &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+];
+
 /* These both O(N^2)! */
 pub fn choose_ciphersuite_preferring_client(
     client_suites: &Vec<CipherSuite>,

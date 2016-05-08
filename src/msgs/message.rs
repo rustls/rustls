@@ -4,7 +4,6 @@ use msgs::base::PayloadU16;
 use msgs::alert::AlertMessagePayload;
 use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
-use std::fmt::Debug;
 
 #[derive(Debug)]
 pub enum MessagePayload {
