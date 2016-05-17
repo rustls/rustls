@@ -1,8 +1,9 @@
 use msgs::enums::{CipherSuite};
+use msgs::handshake::CertificatePayload;
 
 #[derive(Debug)]
 pub struct SupportedCipherSuite {
-  suite: CipherSuite,
+  pub suite: CipherSuite,
 }
 
 impl PartialEq for SupportedCipherSuite {
@@ -21,7 +22,7 @@ SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 };
 
-pub static default_ciphersuites: [&'static SupportedCipherSuite; 2] = [
+pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 2] = [
   &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
   &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 ];
@@ -47,6 +48,12 @@ pub fn choose_ciphersuite_preferring_server(
   }
 
   None
+}
+
+pub fn reduce_given_cert(all: &Vec<&'static SupportedCipherSuite>, certs: &CertificatePayload)
+  -> Vec<&'static SupportedCipherSuite> {
+  /* NYI */
+  all.clone()
 }
 
 #[cfg(test)]

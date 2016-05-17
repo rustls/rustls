@@ -1,5 +1,5 @@
 
-use msgs::codec::{Codec, Reader};
+use msgs::codec::{Codec, Reader, encode_u16};
 use msgs::base::PayloadU16;
 use msgs::alert::AlertMessagePayload;
 use msgs::handshake::HandshakeMessagePayload;
@@ -58,7 +58,11 @@ impl Message {
   pub fn encode(&self, bytes: &mut Vec<u8>) {
     self.typ.encode(bytes);
     self.version.encode(bytes);
-    self.payload.encode(bytes);
+
+    let mut sub = Vec::new();
+    self.payload.encode(&mut sub);
+    encode_u16(sub.len() as u16, bytes);
+    bytes.extend(sub);
   }
 
   pub fn is_content_type(&self, typ: ContentType) -> bool {

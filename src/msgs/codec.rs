@@ -33,6 +33,10 @@ impl<'a> Reader<'a> {
     self.buf.len() - self.offs
   }
 
+  pub fn used(&self) -> usize {
+    self.offs
+  }
+
   pub fn sub(&mut self, len: usize) -> Option<Reader> {
     self.take(len).and_then(|bytes| Some(Reader::init(bytes)))
   }
@@ -49,7 +53,7 @@ pub fn encode_u8(v: u8, bytes: &mut Vec<u8>) {
   bytes.push(v);
 }
 
-fn decode_u8(bytes: &[u8]) -> Option<u8> {
+pub fn decode_u8(bytes: &[u8]) -> Option<u8> {
   Some(bytes[0])
 }
 
@@ -62,7 +66,7 @@ pub fn encode_u16(v: u16, bytes: &mut Vec<u8>) {
   bytes.push(v as u8);
 }
 
-fn decode_u16(bytes: &[u8]) -> Option<u16> {
+pub fn decode_u16(bytes: &[u8]) -> Option<u16> {
   Some(((bytes[0] as u16) << 8) | bytes[1] as u16)
 }
 
@@ -76,7 +80,7 @@ pub fn encode_u24(v: u32, bytes: &mut Vec<u8>) {
   bytes.push(v as u8);
 }
 
-fn decode_u24(bytes: &[u8]) -> Option<u32> {
+pub fn decode_u24(bytes: &[u8]) -> Option<u32> {
   Some(((bytes[0] as u32) << 16) | ((bytes[1] as u32) << 8) | bytes[2] as u32)
 }
 
@@ -91,7 +95,7 @@ pub fn encode_u32(v: u32, bytes: &mut Vec<u8>) {
   bytes.push(v as u8);
 }
 
-fn decode_u32(bytes: &[u8]) -> Option<u32> {
+pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
   Some(
        ((bytes[0] as u32) << 24) |
        ((bytes[1] as u32) << 16) |

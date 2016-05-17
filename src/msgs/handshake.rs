@@ -27,6 +27,14 @@ impl Codec for Random {
   }
 }
 
+impl Random {
+  pub fn from_vec(bytes: &Vec<u8>) -> Random {
+    assert_eq!(bytes.len(), 32);
+    let mut rd = Reader::init(&bytes);
+    Random::read(&mut rd).unwrap()
+  }
+}
+
 #[derive(Debug)]
 pub struct SessionID {
   pub bytes: Vec<u8>
@@ -111,7 +119,9 @@ impl Codec for SignatureAndHashAlgorithm {
 
 pub type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
 
-pub fn SupportedSignatureAlgorithms_default() -> SupportedSignatureAlgorithms {
+/* What SupportedSignatureAlgorithms are hardcoded in the RFC.
+ * Yes, you cannot avoid SHA1 in standard TLS. */
+pub fn default_supported_signature_algorithms() -> SupportedSignatureAlgorithms {
   vec![
     SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
     SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::DSA },

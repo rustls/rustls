@@ -2,7 +2,7 @@ use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
 /* An externally length'd payload */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Payload {
   pub body: Box<[u8]>
 }
@@ -18,7 +18,7 @@ impl Codec for Payload {
 }
 
 /* An arbitrary, unknown-content, u24-length-prefixed payload */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PayloadU24 {
   pub body: Box<[u8]>
 }
@@ -38,7 +38,7 @@ impl Codec for PayloadU24 {
 }
 
 /* An arbitrary, unknown-content, u16-length-prefixed payload */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PayloadU16 {
   pub body: Box<[u8]>
 }
@@ -58,7 +58,7 @@ impl Codec for PayloadU16 {
 }
 
 /* An arbitrary, unknown-content, u8-length-prefixed payload */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PayloadU8 {
   pub body: Box<[u8]>
 }
