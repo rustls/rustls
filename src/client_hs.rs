@@ -92,11 +92,7 @@ fn ExpectServerHello_handle(sess: &mut ClientSession, m: &Message) -> Result<Con
     return Err(HandshakeError::General("server chose non-offered ciphersuite".to_string()));
   }
 
-  if !sess.handshake_data.init_with_cs(scs.unwrap()) {
-    return Err(HandshakeError::General("failed to init our ciphersuite data".to_string()));
-  }
-
-  /* TODO: we can send a ClientKeyExchange now */
+  sess.handshake_data.ciphersuite = scs;
 
   Ok(ConnState::ExpectCertificate)
 }
@@ -134,9 +130,14 @@ fn ExpectServerKX_expect() -> Expectation {
 }
 
 fn ExpectServerKX_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
-  let kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
+  let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
+  let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.handshake_data.ciphersuite.unwrap().kx);
 
-  println!("we have serverkx {:?}", kx);
+  if maybe_decoded_kx.is_none() {
+    return Err(HandshakeError::General("cannot decode server's kx".to_string()));
+  }
+
+  println!("we have serverkx {:?}", maybe_decoded_kx);
   /* TODO: check signature by subject pubkey on this struct */
   Ok(ConnState::ExpectServerHelloDone)
 }

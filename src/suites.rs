@@ -1,9 +1,28 @@
-use msgs::enums::{CipherSuite};
+use msgs::enums::{CipherSuite, HashAlgorithm};
+use msgs::handshake::KeyExchangeAlgorithm;
 use msgs::handshake::CertificatePayload;
+
+extern crate ring;
+
+#[derive(Debug)]
+pub enum BulkAlgorithm {
+  AES_128_GCM,
+  AES_256_GCM
+}
+
+/* This contains the data we need to keep for a connection
+ * for a particular kind of KX. */
+pub enum KeyExchangeData {
+  ECDHE(ring::agreement::EphemeralKeyPair),
+  Invalid
+}
 
 #[derive(Debug)]
 pub struct SupportedCipherSuite {
   pub suite: CipherSuite,
+  pub kx: KeyExchangeAlgorithm,
+  pub bulk: BulkAlgorithm,
+  pub hash: HashAlgorithm
 }
 
 impl PartialEq for SupportedCipherSuite {
@@ -12,14 +31,26 @@ impl PartialEq for SupportedCipherSuite {
   }
 }
 
+impl SupportedCipherSuite {
+  pub fn init_kx(&self) -> KeyExchangeData {
+    KeyExchangeData::Invalid
+  }
+}
+
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
 SupportedCipherSuite {
-  suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+  suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+  kx: KeyExchangeAlgorithm::ECDHE_RSA,
+  bulk: BulkAlgorithm::AES_128_GCM,
+  hash: HashAlgorithm::SHA256
 };
 
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
 SupportedCipherSuite {
-  suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+  suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+  kx: KeyExchangeAlgorithm::ECDHE_RSA,
+  bulk: BulkAlgorithm::AES_256_GCM,
+  hash: HashAlgorithm::SHA384
 };
 
 pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 2] = [

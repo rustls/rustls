@@ -2,6 +2,7 @@ pub mod msgs;
 use msgs::codec::Reader;
 use msgs::message::Message;
 
+mod rand;
 mod session;
 pub mod server;
 pub mod client;

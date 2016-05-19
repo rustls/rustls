@@ -1,6 +1,6 @@
 use msgs::enums::CipherSuite;
 use session::SessionSecrets;
-use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
+use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES, KeyExchangeData};
 use msgs::handshake::{SessionID, CertificatePayload};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{ClientExtension};
@@ -8,14 +8,12 @@ use msgs::deframer::MessageDeframer;
 use msgs::message::Message;
 use client_hs;
 use handshake::HandshakeError;
+use rand;
 
 use std::sync::Arc;
 use std::fmt::Debug;
 use std::io;
 use std::collections::VecDeque;
-
-extern crate rand;
-use self::rand::Rng;
 
 pub struct ClientConfig {
   /* List of ciphersuites, in preference order. */
@@ -35,6 +33,7 @@ pub struct ClientHandshakeData {
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub client_random: Vec<u8>,
   pub server_random: Vec<u8>,
+  pub kx_data: KeyExchangeData,
   pub secrets: SessionSecrets
 }
 
@@ -45,18 +44,13 @@ impl ClientHandshakeData {
       ciphersuite: None,
       client_random: Vec::new(),
       server_random: Vec::new(),
+      kx_data: KeyExchangeData::Invalid,
       secrets: SessionSecrets::for_client()
     }
   }
 
   pub fn generate_client_random(&mut self) {
-    let mut rng = rand::thread_rng();
-    self.client_random.resize(32, 0);
-    rng.fill_bytes(&mut self.client_random);
-  }
-
-  pub fn init_with_cs(&mut self, cs: &'static SupportedCipherSuite) -> bool {
-
+    rand::fill_random_vec(&mut self.client_random, 32);
   }
 }
 
@@ -108,10 +102,15 @@ impl ClientSession {
     ret
   }
 
-  pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<SupportedCipherSuite> {
+  pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
     let got = suite.clone();
-    self.config.ciphersuites.iter()
-      .find(|ics| ics.suite == got)
+    for ref scs in &self.config.ciphersuites {
+      if scs.suite == got {
+        return Some(scs);
+      }
+    }
+
+    None
   }
 
   pub fn add_extensions(&self, exts: &mut Vec<ClientExtension>) {

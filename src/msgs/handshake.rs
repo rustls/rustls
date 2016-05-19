@@ -1,6 +1,7 @@
 use msgs::enums::{ProtocolVersion, HandshakeType};
 use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedCurve};
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
+use msgs::enums::{ECCurveType};
 use msgs::base::{Payload, PayloadU8, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
@@ -527,13 +528,99 @@ impl Codec for CertificatePayload {
 }
 
 #[derive(Debug)]
+pub enum KeyExchangeAlgorithm {
+  DHE_DSS,
+  DHE_RSA,
+  DH_ANON,
+  RSA,
+  DH_DSS,
+  DH_RSA,
+  ECDH_ECDSA,
+  ECDHE_ECDSA,
+  ECDH_RSA,
+  ECDHE_RSA,
+  ECDH_anon
+}
+
+/* We don't support arbitrary curves.  It's a terrible
+ * idea and unnecessary attack surface.  Please,
+ * get a grip. */
+#[derive(Debug)]
+pub struct ECParameters {
+  curve_type: ECCurveType,
+  named_curve: NamedCurve
+}
+
+impl Codec for ECParameters {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.curve_type.encode(bytes);
+    self.named_curve.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<ECParameters> {
+    let ct = try_ret!(ECCurveType::read(r));
+    
+    if ct != ECCurveType::NamedCurve {
+      return None;
+    }
+
+    let nc = try_ret!(NamedCurve::read(r));
+
+    Some(ECParameters { curve_type: ct, named_curve: nc })
+  }
+}
+
+#[derive(Debug)]
+pub struct ServerECDHParams {
+  pub curve_params: ECParameters,
+  pub public: PayloadU8
+}
+
+impl Codec for ServerECDHParams {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.curve_params.encode(bytes);
+    self.public.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<ServerECDHParams> {
+    let cp = try_ret!(ECParameters::read(r));
+    let pb = try_ret!(PayloadU8::read(r));
+
+    Some(ServerECDHParams { curve_params: cp, public: pb })
+  }
+}
+
+#[derive(Debug)]
+pub struct ECDHEServerKeyExchange {
+  pub params: ServerECDHParams,
+  pub sig: Vec<u8>
+}
+
+impl Codec for ECDHEServerKeyExchange {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.params.encode(bytes);
+    bytes.extend(self.sig.iter());
+  }
+
+  fn read(r: &mut Reader) -> Option<ECDHEServerKeyExchange> {
+    let params = try_ret!(ServerECDHParams::read(r));
+    let mut sig = Vec::new();
+    sig.extend_from_slice(r.rest());
+
+    Some(ECDHEServerKeyExchange { params: params, sig: sig })
+  }
+}
+
+#[derive(Debug)]
 pub enum ServerKeyExchangePayload {
+  ECDHE(ECDHEServerKeyExchange),
   Unknown(Payload)
 }
 
 impl Codec for ServerKeyExchangePayload {
   fn encode(&self, bytes: &mut Vec<u8>) {
     match *self {
+      ServerKeyExchangePayload::ECDHE(ref x) => x.encode(bytes),
       ServerKeyExchangePayload::Unknown(ref x) => x.encode(bytes)
     }
   }
@@ -542,6 +629,22 @@ impl Codec for ServerKeyExchangePayload {
     /* read as Unknown, fully parse when we know the
      * KeyExchangeAlgorithm */
     Payload::read(r).and_then(|x| Some(ServerKeyExchangePayload::Unknown(x)))
+  }
+}
+
+impl ServerKeyExchangePayload {
+  pub fn unwrap_given_kxa(&self, kxa: &KeyExchangeAlgorithm) -> Option<ServerKeyExchangePayload> {
+    if let ServerKeyExchangePayload::Unknown(ref unk) = *self {
+      let mut rd = Reader::init(&unk.body);
+
+      return match *kxa {
+        KeyExchangeAlgorithm::ECDHE_ECDSA | KeyExchangeAlgorithm::ECDHE_RSA =>
+          ECDHEServerKeyExchange::read(&mut rd).and_then(|x| Some(ServerKeyExchangePayload::ECDHE(x))),
+        _ => None
+      };
+    }
+
+    None
   }
 }
 

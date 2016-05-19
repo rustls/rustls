@@ -8,14 +8,12 @@ use msgs::deframer::MessageDeframer;
 use msgs::message::Message;
 use server_hs;
 use handshake::HandshakeError;
+use rand;
 
 use std::sync::Arc;
 use std::fmt::Debug;
 use std::io;
 use std::collections::VecDeque;
-
-extern crate rand;
-use self::rand::Rng;
 
 pub trait StoresSessions {
   /* Generate a session ID. */
@@ -136,9 +134,7 @@ impl ServerHandshakeData {
   }
 
   pub fn generate_server_random(&mut self) {
-    let mut rng = rand::thread_rng();
-    self.server_random.resize(32, 0);
-    rng.fill_bytes(&mut self.server_random);
+    rand::fill_random_vec(&mut self.server_random, 32);
   }
 }
 

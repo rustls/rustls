@@ -1966,3 +1966,43 @@ impl HeartbeatMode {
     }
   }
 }
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ECCurveType {
+  ExplicitPrime,
+  ExplicitChar2,
+  NamedCurve,
+  Unknown(u8)
+}
+
+impl Codec for ECCurveType {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    encode_u8(self.get_u8(), bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<ECCurveType> {
+    let u = read_u8(r);
+
+    if u.is_none() {
+      return None
+    }
+
+    Some(match u.unwrap() {
+      0x01 => ECCurveType::ExplicitPrime,
+      0x02 => ECCurveType::ExplicitChar2,
+      0x03 => ECCurveType::NamedCurve,
+      x => ECCurveType::Unknown(x)
+    })
+  }
+}
+
+impl ECCurveType {
+  pub fn get_u8(&self) -> u8 {
+    match *self {
+      ECCurveType::ExplicitPrime => 0x01,
+      ECCurveType::ExplicitChar2 => 0x02,
+      ECCurveType::NamedCurve => 0x03,
+      ECCurveType::Unknown(v) => v
+    }
+  }
+}
