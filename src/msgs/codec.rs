@@ -10,7 +10,7 @@ impl<'a> Reader<'a> {
   pub fn init(bytes: &[u8]) -> Reader {
     Reader { buf: bytes, offs: 0 }
   }
-  
+
   pub fn rest(&self) -> &[u8] {
     &self.buf[self.offs ..]
   }

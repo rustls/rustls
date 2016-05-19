@@ -16,7 +16,7 @@ impl Codec for Random {
     codec::encode_u32(self.gmt_unix_time, bytes);
     bytes.extend_from_slice(&self.opaque);
   }
-  
+
   fn read(r: &mut Reader) -> Option<Random> {
     let time = try_ret!(codec::read_u32(r));
     let bytes = try_ret!(r.take(28));
@@ -45,13 +45,19 @@ impl Codec for SessionID {
     codec::encode_u8(self.bytes.len() as u8, bytes);
     bytes.extend_from_slice(&self.bytes[..]);
   }
-  
+
   fn read(r: &mut Reader) -> Option<SessionID> {
     let mut ret = SessionID { bytes: Vec::new() };
     let len = try_ret!(codec::read_u8(r)) as usize;
     let sub = try_ret!(r.sub(len));
     ret.bytes.extend_from_slice(sub.rest());
     Some(ret)
+  }
+}
+
+impl SessionID {
+  pub fn empty() -> SessionID {
+    SessionID { bytes: Vec::new() }
   }
 }
 
@@ -66,7 +72,7 @@ impl UnknownExtension {
     self.typ.encode(bytes);
     self.payload.encode(bytes);
   }
-  
+
   fn read(typ: ExtensionType, r: &mut Reader) -> Option<UnknownExtension> {
     let payload = try_ret!(Payload::read(r));
     Some(UnknownExtension { typ: typ, payload: payload })
@@ -85,6 +91,16 @@ impl Codec for ECPointFormatList {
   }
 }
 
+pub trait SupportedPointFormats {
+  fn supported() -> ECPointFormatList;
+}
+
+impl SupportedPointFormats for ECPointFormatList {
+  fn supported() -> ECPointFormatList {
+    vec![ECPointFormat::Uncompressed]
+  }
+}
+
 pub type EllipticCurveList = Vec<NamedCurve>;
 
 impl Codec for EllipticCurveList {
@@ -94,6 +110,16 @@ impl Codec for EllipticCurveList {
 
   fn read(r: &mut Reader) -> Option<EllipticCurveList> {
     codec::read_vec_u16::<NamedCurve>(r)
+  }
+}
+
+pub trait SupportedCurves {
+  fn supported() -> EllipticCurveList;
+}
+
+impl SupportedCurves for EllipticCurveList {
+  fn supported() -> EllipticCurveList {
+    vec![ NamedCurve::secp256r1, NamedCurve::secp384r1 ]
   }
 }
 
@@ -119,14 +145,38 @@ impl Codec for SignatureAndHashAlgorithm {
 
 pub type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
 
-/* What SupportedSignatureAlgorithms are hardcoded in the RFC.
- * Yes, you cannot avoid SHA1 in standard TLS. */
-pub fn default_supported_signature_algorithms() -> SupportedSignatureAlgorithms {
-  vec![
-    SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
-    SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::DSA },
-    SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA }
-  ]
+pub trait SupportedMandatedSignatureAlgorithms {
+  fn mandated() -> SupportedSignatureAlgorithms;
+  fn supported() -> SupportedSignatureAlgorithms;
+}
+
+impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
+  /* What SupportedSignatureAlgorithms are hardcoded in the RFC.
+   * Yes, you cannot avoid SHA1 in standard TLS. */
+  fn mandated() -> SupportedSignatureAlgorithms {
+    vec![
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::DSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA }
+    ]
+  }
+
+  fn supported() -> SupportedSignatureAlgorithms {
+    /* In approximate decreasing order of security. */
+    vec![
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: SignatureAlgorithm::ECDSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::ECDSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: SignatureAlgorithm::ECDSA },
+
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: SignatureAlgorithm::RSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::RSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: SignatureAlgorithm::RSA },
+
+      /* Leave the truly crap ones for last */
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
+    ]
+  }
 }
 
 impl Codec for SupportedSignatureAlgorithms {
@@ -254,7 +304,7 @@ impl Codec for ClientExtension {
     codec::encode_u16(sub.len() as u16, bytes);
     bytes.append(&mut sub);
   }
-  
+
   fn read(r: &mut Reader) -> Option<ClientExtension> {
     let typ = try_ret!(ExtensionType::read(r));
     let len = try_ret!(codec::read_u16(r)) as usize;
@@ -323,7 +373,7 @@ impl Codec for ServerExtension {
     codec::encode_u16(sub.len() as u16, bytes);
     bytes.append(&mut sub);
   }
-  
+
   fn read(r: &mut Reader) -> Option<ServerExtension> {
     let typ = try_ret!(ExtensionType::read(r));
     let len = try_ret!(codec::read_u16(r)) as usize;
@@ -368,7 +418,7 @@ impl Codec for ClientHelloPayload {
       codec::encode_vec_u16(bytes, &self.extensions);
     }
   }
-  
+
   fn read(r: &mut Reader) -> Option<ClientHelloPayload> {
 
     let mut ret = ClientHelloPayload {
@@ -404,7 +454,7 @@ impl ClientHelloPayload {
       _ => None
     }
   }
-  
+
   pub fn get_eccurves_extension(&self) -> Option<&EllipticCurveList> {
     let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::EllipticCurves));
     match *ext {
@@ -412,7 +462,7 @@ impl ClientHelloPayload {
       _ => None
     }
   }
-  
+
   pub fn get_ecpoints_extension(&self) -> Option<&ECPointFormatList> {
     let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ECPointFormats));
     match *ext {

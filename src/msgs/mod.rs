@@ -24,7 +24,7 @@ mod test {
       let mut out: Vec<u8> = vec![];
       m.encode(&mut out);
       assert!(out.len() > 0);
-  
+
       m.decode_payload();
     }
   }

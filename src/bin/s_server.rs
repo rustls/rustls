@@ -50,7 +50,7 @@ impl mio::Handler for TlsServer {
             let token = self.connections
               .insert_with(|token| Connection::new(socket, token, tls_session))
               .unwrap();
-            
+
             println!("token is {:?}", token);
             self.connections[token].register(event_loop);
           }

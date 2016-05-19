@@ -7,6 +7,7 @@ use msgs::handshake::{EllipticCurveList, ECPointFormatList};
 use msgs::deframer::MessageDeframer;
 use msgs::message::Message;
 use server_hs;
+use handshake::HandshakeError;
 
 use std::sync::Arc;
 use std::fmt::Debug;
@@ -22,10 +23,10 @@ pub trait StoresSessions {
 
   /* Store session secrets. */
   fn store(&self, id: &SessionID, sec: &SessionSecrets) -> bool;
-  
+
   /* Find a session with the given id. */
   fn find(&self, id: &SessionID) -> Option<SessionSecrets>;
-  
+
   /* Erase a session with the given id. */
   fn erase(&self, id: &SessionID) -> bool;
 }
@@ -178,12 +179,13 @@ impl ServerSession {
     !self.tls_queue.is_empty()
   }
 
-  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), server_hs::HandshakeError> {
+  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
     msg.decode_payload();
 
     let handler = self.get_handler();
-    try!(server_hs::check_message(handler, msg));
-    let new_state = try!(server_hs::process_message(handler, self, msg));
+    let expects = (handler.expect)();
+    try!(expects.check_message(msg));
+    let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
 
     Ok(())
@@ -197,7 +199,7 @@ impl ServerSession {
     }
   }
 
-  pub fn process_new_packets(&mut self) -> Result<(), server_hs::HandshakeError> {
+  pub fn process_new_packets(&mut self) -> Result<(), HandshakeError> {
     while true {
       match self.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),
@@ -224,7 +226,7 @@ impl ServerSession {
     msg.encode(&mut data);
 
     println!("write {:?}", data);
-      
+
     wr.write_all(&data)
   }
 }

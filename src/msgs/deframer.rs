@@ -128,7 +128,7 @@ mod tests {
     m.decode_payload();
     assert_eq!(m.typ, msgs::enums::ContentType::Alert);
   }
-  
+
   #[test]
   fn check_incremental() {
     let mut d = MessageDeframer::new();

@@ -2,20 +2,11 @@ use msgs::enums::{ContentType, HandshakeType};
 use msgs::enums::{Compression, ProtocolVersion};
 use msgs::message::{Message, MessagePayload};
 use msgs::codec::Codec;
-use msgs::handshake::{HandshakePayload, default_supported_signature_algorithms};
+use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use server::{ServerSession, ConnState};
 use suites;
-
-use std::fmt::{Debug, Formatter};
-use std::fmt;
-
-#[derive(Debug)]
-pub enum HandshakeError {
-  InappropriateMessage { expect_types: Vec<ContentType>, got_type: ContentType },
-  InappropriateHandshakeMessage { expect_types: Vec<HandshakeType>, got_type: HandshakeType },
-  General(String)
-}
+use handshake::{HandshakeError, Expectation, ExpectFunction};
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -29,21 +20,14 @@ macro_rules! extract_handshake(
   )
 );
 
-#[derive(Debug)]
-struct Expectation {
-  content_types: Vec<ContentType>,
-  handshake_types: Vec<HandshakeType>
-}
-
-type ExpectFunction = fn() -> Expectation;
-type HandleFunction = fn(&mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError>;
+pub type HandleFunction = fn(&mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError>;
 
 /* These are effectively operations on the ServerSession, variant on the
  * connection state. They must not have state of their own -- so they're
- * function points rather than a trait. */
+ * functions rather than a trait. */
 pub struct Handler {
-  expect: ExpectFunction,
-  handle: HandleFunction
+  pub expect: ExpectFunction,
+  pub handle: HandleFunction
 }
 
 fn emit_server_hello(sess: &mut ServerSession) {
@@ -112,7 +96,7 @@ fn ExpectClientHello_handle(sess: &mut ServerSession, m: &Message) -> Result<Con
     return Err(HandshakeError::General("client did not offer Null compression".to_string()));
   }
 
-  let default_sigalgs_ext = default_supported_signature_algorithms();
+  let default_sigalgs_ext = SupportedSignatureAlgorithms::default();
   let default_eccurves_ext = vec![];
   let default_ecpoints_ext = vec![];
 
@@ -200,30 +184,4 @@ pub static InvalidState: Handler = Handler {
   expect: InvalidState_expect,
   handle: InvalidState_handle
 };
-
-pub fn process_message(handler: &Handler, sess: &mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError> {
-  (handler.handle)(sess, m)
-}
-
-pub fn check_message(handler: &Handler, m: &Message) -> Result<(), HandshakeError> {
-  let expect = (handler.expect)();
-
-  if !expect.content_types.contains(&m.typ) {
-    return Err(HandshakeError::InappropriateMessage {
-      expect_types: expect.content_types,
-      got_type: m.typ.clone()
-    });
-  }
-
-  if let MessagePayload::Handshake(ref hsp) = m.payload {
-    if !expect.handshake_types.contains(&hsp.typ) {
-      return Err(HandshakeError::InappropriateHandshakeMessage {
-        expect_types: expect.handshake_types,
-        got_type: hsp.typ.clone()
-      });
-    }
-  }
-
-  Ok(())
-}
 
