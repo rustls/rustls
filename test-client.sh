@@ -1,6 +1,6 @@
 #!/bin/sh
 
-openssl s_server -www -accept 8443 -key test/key.pem -cert test/cert.pem -msg -debug -state &
+openssl s_server -www -accept 8443 -key test/end.key -cert test/end.cert -CAfile test/end.chain -msg -debug -state &
 server=$!
 sleep 1
 

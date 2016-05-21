@@ -48,14 +48,27 @@ impl mio::Handler for TlsClient {
   }
 }
 
+fn read_file(filename: &str) -> Vec<u8> {
+  use std::io::Read;
+
+  let mut r = Vec::new();
+  let mut f = std::fs::File::open(filename).unwrap();
+  f.read_to_end(&mut r).unwrap();
+  r
+}
+
 impl TlsClient {
   fn new(sock: TcpStream) -> TlsClient {
-    let config = Arc::new(rustls::client::ClientConfig::default());
+    let mut config = rustls::client::ClientConfig::default();
+    config.root_store.add(&read_file("test/ca.der"))
+      .unwrap();
+
+    let cfg = Arc::new(config);
 
     TlsClient {
       socket: sock,
       closing: false,
-      tls_session: rustls::client::ClientSession::new(&config, "thing.com")
+      tls_session: rustls::client::ClientSession::new(&cfg, "testserver.com")
     }
   }
 

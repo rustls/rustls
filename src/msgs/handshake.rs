@@ -2,7 +2,7 @@ use msgs::enums::{ProtocolVersion, HandshakeType};
 use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedCurve};
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
 use msgs::enums::{ECCurveType};
-use msgs::base::{Payload, PayloadU8, PayloadU24};
+use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
@@ -571,6 +571,26 @@ impl Codec for ECParameters {
 }
 
 #[derive(Debug)]
+pub struct DigitallySignedStruct {
+  pub alg: SignatureAndHashAlgorithm,
+  pub sig: PayloadU16
+}
+
+impl Codec for DigitallySignedStruct {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.alg.encode(bytes);
+    self.sig.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<DigitallySignedStruct> {
+    let alg = try_ret!(SignatureAndHashAlgorithm::read(r));
+    let sig = try_ret!(PayloadU16::read(r));
+
+    Some(DigitallySignedStruct { alg: alg, sig: sig })
+  }
+}
+
+#[derive(Debug)]
 pub struct ServerECDHParams {
   pub curve_params: ECParameters,
   pub public: PayloadU8
@@ -593,21 +613,20 @@ impl Codec for ServerECDHParams {
 #[derive(Debug)]
 pub struct ECDHEServerKeyExchange {
   pub params: ServerECDHParams,
-  pub sig: Vec<u8>
+  pub dss: DigitallySignedStruct
 }
 
 impl Codec for ECDHEServerKeyExchange {
   fn encode(&self, bytes: &mut Vec<u8>) {
     self.params.encode(bytes);
-    bytes.extend(self.sig.iter());
+    self.dss.encode(bytes);
   }
 
   fn read(r: &mut Reader) -> Option<ECDHEServerKeyExchange> {
     let params = try_ret!(ServerECDHParams::read(r));
-    let mut sig = Vec::new();
-    sig.extend_from_slice(r.rest());
+    let dss = try_ret!(DigitallySignedStruct::read(r));
 
-    Some(ECDHEServerKeyExchange { params: params, sig: sig })
+    Some(ECDHEServerKeyExchange { params: params, dss: dss })
   }
 }
 

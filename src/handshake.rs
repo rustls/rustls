@@ -2,11 +2,14 @@ use msgs::enums::{ContentType, HandshakeType};
 use msgs::message::{Message, MessagePayload};
 
 use std::fmt::Debug;
+extern crate webpki;
 
 #[derive(Debug)]
 pub enum HandshakeError {
   InappropriateMessage { expect_types: Vec<ContentType>, got_type: ContentType },
   InappropriateHandshakeMessage { expect_types: Vec<HandshakeType>, got_type: HandshakeType },
+  NoCertificatesPresented,
+  WebPKIError(webpki::Error),
   General(String)
 }
 

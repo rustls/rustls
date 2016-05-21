@@ -10,6 +10,7 @@ use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use client::{ClientSession, ConnState};
 use suites;
+use verifycert;
 use handshake::{HandshakeError, Expectation, ExpectFunction};
 
 macro_rules! extract_handshake(
@@ -111,9 +112,8 @@ fn ExpectCertificate_expect() -> Expectation {
 
 fn ExpectCertificate_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
-  sess.handshake_data.server_cert_chain = Some(cert_chain.clone());
+  sess.handshake_data.server_cert_chain = cert_chain.clone();
   println!("we have server cert {:?}", cert_chain);
-  /* TODO: verify cert here, extract subject pubkey */
   Ok(ConnState::ExpectServerKX)
 }
 
@@ -137,7 +137,10 @@ fn ExpectServerKX_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnSt
     return Err(HandshakeError::General("cannot decode server's kx".to_string()));
   }
 
-  println!("we have serverkx {:?}", maybe_decoded_kx);
+  let decoded_kx = maybe_decoded_kx.unwrap();
+  println!("we have serverkx {:?}", decoded_kx);
+
+
   /* TODO: check signature by subject pubkey on this struct */
   Ok(ConnState::ExpectServerHelloDone)
 }
@@ -156,6 +159,12 @@ fn ExpectServerHelloDone_expect() -> Expectation {
 
 fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
   println!("we have serverhellodone");
+
+  let rc = verifycert::verify_cert(&sess.config.root_store,
+                                   &sess.handshake_data.server_cert_chain,
+                                   &sess.handshake_data.dns_name);
+  println!("verify result {:?}", rc);
+
   Ok(ConnState::ExpectCCS)
 }
 

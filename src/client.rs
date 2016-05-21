@@ -7,6 +7,7 @@ use msgs::handshake::{ClientExtension};
 use msgs::deframer::MessageDeframer;
 use msgs::message::Message;
 use client_hs;
+use verifycert;
 use handshake::HandshakeError;
 use rand;
 
@@ -17,20 +18,25 @@ use std::collections::VecDeque;
 
 pub struct ClientConfig {
   /* List of ciphersuites, in preference order. */
-  pub ciphersuites: Vec<&'static SupportedCipherSuite>
+  pub ciphersuites: Vec<&'static SupportedCipherSuite>,
+
+  /* Collection of root certificates. */
+  pub root_store: verifycert::RootCertStore
 }
 
 impl ClientConfig {
   pub fn default() -> ClientConfig {
     ClientConfig {
       ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
+      root_store: verifycert::RootCertStore::empty()
     }
   }
 }
 
 pub struct ClientHandshakeData {
-  pub server_cert_chain: Option<CertificatePayload>,
+  pub server_cert_chain: CertificatePayload,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
+  pub dns_name: String,
   pub client_random: Vec<u8>,
   pub server_random: Vec<u8>,
   pub kx_data: KeyExchangeData,
@@ -38,10 +44,11 @@ pub struct ClientHandshakeData {
 }
 
 impl ClientHandshakeData {
-  fn new() -> ClientHandshakeData {
+  fn new(host_name: &str) -> ClientHandshakeData {
     ClientHandshakeData {
-      server_cert_chain: None,
+      server_cert_chain: Vec::new(),
       ciphersuite: None,
+      dns_name: host_name.to_string(),
       client_random: Vec::new(),
       server_random: Vec::new(),
       kx_data: KeyExchangeData::Invalid,
@@ -78,7 +85,7 @@ impl ClientSession {
              hostname: &str) -> ClientSession {
     let mut cs = ClientSession {
       config: client_config.clone(),
-      handshake_data: ClientHandshakeData::new(),
+      handshake_data: ClientHandshakeData::new(hostname),
       secrets_current: SessionSecrets::for_client(),
       message_deframer: MessageDeframer::new(),
       tls_queue: VecDeque::new(),

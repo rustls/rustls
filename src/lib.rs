@@ -4,6 +4,7 @@ use msgs::message::Message;
 
 mod rand;
 mod session;
+mod verifycert;
 pub mod server;
 pub mod client;
 mod handshake;
