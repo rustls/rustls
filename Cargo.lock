@@ -5,7 +5,7 @@ dependencies = [
  "mio 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ring 0.1.0 (git+https://github.com/briansmith/ring)",
  "time 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)",
- "webpki 0.1.0 (git+https://github.com/briansmith/webpki)",
+ "webpki 0.1.0 (git+file:///home/jbp/webpki/)",
 ]
 
 [[package]]
@@ -150,7 +150,7 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.1.0"
-source = "git+https://github.com/briansmith/ring#157dd0160dc9bb0ae7fe0028771409630986785d"
+source = "git+https://github.com/briansmith/ring#7e97b263f760d6006232c165278928ab7eb3b913"
 dependencies = [
  "lazy_static 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -180,7 +180,7 @@ dependencies = [
 [[package]]
 name = "webpki"
 version = "0.1.0"
-source = "git+https://github.com/briansmith/webpki#a157f83b0d7aff9bcc5b05236de58ca1979a022c"
+source = "git+file:///home/jbp/webpki/#44e2f058757711beea67e845a79a520b777d20a1"
 dependencies = [
  "ring 0.1.0 (git+https://github.com/briansmith/ring)",
  "rustc-serialize 0.3.19 (registry+https://github.com/rust-lang/crates.io-index)",

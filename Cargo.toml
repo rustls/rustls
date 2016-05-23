@@ -5,7 +5,7 @@ authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 
 [dependencies]
 ring = { version = "0.1.0", git = "https://github.com/briansmith/ring" }
-webpki = { version = "0.1.0", git = "https://github.com/briansmith/webpki" }
+webpki = { version = "0.1.0", git = "file:///home/jbp/webpki/" }
 
 mio = "0.5.1"
 time = "0.1.35"
