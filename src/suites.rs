@@ -2,7 +2,7 @@ use msgs::enums::{CipherSuite, HashAlgorithm, NamedCurve};
 use msgs::handshake::KeyExchangeAlgorithm;
 use msgs::handshake::CertificatePayload;
 use msgs::handshake::ServerECDHParams;
-use msgs::base::Payload;
+use msgs::base::{Payload, PayloadU8};
 use msgs::codec::{Reader, Codec};
 
 extern crate ring;
@@ -56,7 +56,11 @@ impl KeyExchangeResult {
   }
 
   pub fn encode_public(&self) -> Payload {
-    Payload { body: self.pubkey.clone().into_boxed_slice() }
+    /* This is a bodgey way of making an ECPoint. */
+    let ecpoint = PayloadU8 { body: self.pubkey.clone().into_boxed_slice() };
+    let mut body = Vec::new();
+    ecpoint.encode(&mut body);
+    Payload { body: body.into_boxed_slice() }
   }
 }
 
