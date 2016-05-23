@@ -124,7 +124,7 @@ impl SupportedCurves for EllipticCurveList {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SignatureAndHashAlgorithm {
   pub hash: HashAlgorithm,
   pub sign: SignatureAlgorithm
@@ -547,8 +547,8 @@ pub enum KeyExchangeAlgorithm {
  * get a grip. */
 #[derive(Debug)]
 pub struct ECParameters {
-  curve_type: ECCurveType,
-  named_curve: NamedCurve
+  pub curve_type: ECCurveType,
+  pub named_curve: NamedCurve
 }
 
 impl Codec for ECParameters {
@@ -570,7 +570,7 @@ impl Codec for ECParameters {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DigitallySignedStruct {
   pub alg: SignatureAndHashAlgorithm,
   pub sig: PayloadU16
@@ -665,6 +665,22 @@ impl ServerKeyExchangePayload {
 
     None
   }
+
+  pub fn encode_params(&self, bytes: &mut Vec<u8>) {
+    bytes.clear();
+
+    match *self {
+      ServerKeyExchangePayload::ECDHE(ref x) => x.params.encode(bytes),
+      _ => (),
+    };
+  }
+
+  pub fn get_sig(&self) -> Option<DigitallySignedStruct> {
+    match *self {
+      ServerKeyExchangePayload::ECDHE(ref x) => Some(x.dss.clone()),
+      _ => None
+    }
+  }
 }
 
 #[derive(Debug)]
@@ -675,6 +691,8 @@ pub enum HandshakePayload {
   Certificate(CertificatePayload),
   ServerKeyExchange(ServerKeyExchangePayload),
   ServerHelloDone,
+  ClientKeyExchange(Payload),
+  Finished(Payload),
   Unknown(Payload)
 }
 
@@ -686,7 +704,9 @@ impl HandshakePayload {
       HandshakePayload::ServerHello(ref x) => x.encode(bytes),
       HandshakePayload::Certificate(ref x) => x.encode(bytes),
       HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
-      HandshakePayload::ServerHelloDone => {}
+      HandshakePayload::ServerHelloDone => {},
+      HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
+      HandshakePayload::Finished(ref x) => x.encode(bytes),
       HandshakePayload::Unknown(ref x) => x.encode(bytes)
     }
   }
@@ -728,6 +748,10 @@ impl Codec for HandshakeMessagePayload {
         HandshakePayload::ServerKeyExchange(try_ret!(ServerKeyExchangePayload::read(&mut sub))),
       HandshakeType::ServerHelloDone if sub.left() == 0 =>
         HandshakePayload::ServerHelloDone,
+      HandshakeType::ClientKeyExchange =>
+        HandshakePayload::ClientKeyExchange(try_ret!(Payload::read(&mut sub))),
+      HandshakeType::Finished =>
+        HandshakePayload::Finished(try_ret!(Payload::read(&mut sub))),
       _ =>
         HandshakePayload::Unknown(try_ret!(Payload::read(&mut sub)))
     };

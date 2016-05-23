@@ -1,6 +1,9 @@
-use msgs::enums::{CipherSuite, HashAlgorithm};
+use msgs::enums::{CipherSuite, HashAlgorithm, NamedCurve};
 use msgs::handshake::KeyExchangeAlgorithm;
 use msgs::handshake::CertificatePayload;
+use msgs::handshake::ServerECDHParams;
+use msgs::base::Payload;
+use msgs::codec::{Reader, Codec};
 
 extern crate ring;
 
@@ -10,11 +13,51 @@ pub enum BulkAlgorithm {
   AES_256_GCM
 }
 
-/* This contains the data we need to keep for a connection
- * for a particular kind of KX. */
-pub enum KeyExchangeData {
-  ECDHE(ring::agreement::EphemeralKeyPair),
-  Invalid
+/* The result of a key exchange.  This has our public key,
+ * and the agreed premaster secret. */
+pub struct KeyExchangeResult {
+  pub pubkey: Vec<u8>,
+  pub premaster_secret: Vec<u8>
+}
+
+impl KeyExchangeResult {
+  pub fn ECDHE(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
+    let mut rd = Reader::init(&kx_params);
+    let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
+
+    let alg = match ecdh_params.curve_params.named_curve {
+      NamedCurve::secp256r1 => &ring::agreement::ECDH_P256,
+      NamedCurve::secp384r1 => &ring::agreement::ECDH_P384,
+      _ => unreachable!()
+    };
+    
+    let rng = ring::rand::SystemRandom::new();
+    let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng).unwrap();
+    
+    /* Encode our public key. */
+    let mut pubkey = Vec::new();
+    pubkey.resize(ours.public_key_len(), 0u8);
+    ours.compute_public_key(pubkey.as_mut_slice());
+
+    /* Do the key agreement. */
+    let secret = ring::agreement::agree_ephemeral(
+      ours,
+      alg,
+      ring::input::Input::new(&ecdh_params.public.body).unwrap(),
+      (),
+      |v| { let mut r = Vec::new(); r.extend_from_slice(v); Ok(r) }
+    );
+
+    if secret.is_err() {
+      return None;
+    }
+    
+    Some(KeyExchangeResult { pubkey: pubkey, premaster_secret: secret.unwrap() })
+  }
+
+  pub fn encode_public(&self) -> Payload {
+    Payload { body: self.pubkey.clone().into_boxed_slice() }
+  }
 }
 
 #[derive(Debug)]
@@ -32,8 +75,22 @@ impl PartialEq for SupportedCipherSuite {
 }
 
 impl SupportedCipherSuite {
-  pub fn init_kx(&self) -> KeyExchangeData {
-    KeyExchangeData::Invalid
+  pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
+    match &self.hash {
+      &HashAlgorithm::SHA1 => &ring::digest::SHA1,
+      &HashAlgorithm::SHA256 => &ring::digest::SHA256,
+      &HashAlgorithm::SHA384 => &ring::digest::SHA384,
+      &HashAlgorithm::SHA512 => &ring::digest::SHA512,
+      _ => unreachable!()
+    }
+  }
+
+  pub fn do_client_kx(&self, kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
+    match &self.kx {
+      &KeyExchangeAlgorithm::ECDHE_ECDSA |
+        &KeyExchangeAlgorithm::ECDHE_RSA => KeyExchangeResult::ECDHE(kx_params),
+      _ => unreachable!()
+    }
   }
 }
 

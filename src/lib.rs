@@ -3,12 +3,13 @@ use msgs::codec::Reader;
 use msgs::message::Message;
 
 mod rand;
+mod hash_hs;
+mod prf;
 mod session;
-mod verifycert;
-pub mod server;
-pub mod client;
+mod verify;
 mod handshake;
 mod server_hs;
 mod client_hs;
 mod suites;
-mod prf;
+pub mod server;
+pub mod client;

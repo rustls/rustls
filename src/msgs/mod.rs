@@ -7,6 +7,7 @@ pub mod base;
 pub mod enums;
 pub mod alert;
 pub mod handshake;
+pub mod ccs;
 pub mod message;
 pub mod deframer;
 

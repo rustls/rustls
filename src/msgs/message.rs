@@ -2,6 +2,7 @@
 use msgs::codec::{Codec, Reader, encode_u16};
 use msgs::base::PayloadU16;
 use msgs::alert::AlertMessagePayload;
+use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
 
@@ -9,14 +10,16 @@ use msgs::enums::{ContentType, ProtocolVersion};
 pub enum MessagePayload {
   Alert(AlertMessagePayload),
   Handshake(HandshakeMessagePayload),
+  ChangeCipherSpec(ChangeCipherSpecPayload),
   Unknown(PayloadU16)
 }
 
 impl MessagePayload {
-  fn encode(&self, bytes: &mut Vec<u8>) {
+  pub fn encode(&self, bytes: &mut Vec<u8>) {
     match *self {
       MessagePayload::Alert(ref x) => x.encode(bytes),
       MessagePayload::Handshake(ref x) => x.encode(bytes),
+      MessagePayload::ChangeCipherSpec(ref x) => x.encode(bytes),
       MessagePayload::Unknown(ref x) => x.encode(bytes)
     }
   }
@@ -29,6 +32,8 @@ impl MessagePayload {
           Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r)))),
         ContentType::Handshake =>
           Some(MessagePayload::Handshake(try_ret!(HandshakeMessagePayload::read(&mut r)))),
+        ContentType::ChangeCipherSpec =>
+          Some(MessagePayload::ChangeCipherSpec(try_ret!(ChangeCipherSpecPayload::read(&mut r)))),
         _ =>
           None
       }

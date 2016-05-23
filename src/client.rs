@@ -1,13 +1,15 @@
 use msgs::enums::CipherSuite;
 use session::SessionSecrets;
-use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES, KeyExchangeData};
+use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use msgs::handshake::{SessionID, CertificatePayload};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
-use msgs::handshake::{ClientExtension};
+use msgs::handshake::{ClientExtension, DigitallySignedStruct};
 use msgs::deframer::MessageDeframer;
 use msgs::message::Message;
+use msgs::base::Payload;
 use client_hs;
-use verifycert;
+use hash_hs;
+use verify;
 use handshake::HandshakeError;
 use rand;
 
@@ -21,43 +23,57 @@ pub struct ClientConfig {
   pub ciphersuites: Vec<&'static SupportedCipherSuite>,
 
   /* Collection of root certificates. */
-  pub root_store: verifycert::RootCertStore
+  pub root_store: verify::RootCertStore
 }
 
 impl ClientConfig {
   pub fn default() -> ClientConfig {
     ClientConfig {
       ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
-      root_store: verifycert::RootCertStore::empty()
+      root_store: verify::RootCertStore::empty()
     }
   }
 }
 
 pub struct ClientHandshakeData {
+  pub client_hello: Vec<u8>,
   pub server_cert_chain: CertificatePayload,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub dns_name: String,
   pub client_random: Vec<u8>,
   pub server_random: Vec<u8>,
-  pub kx_data: KeyExchangeData,
+  pub server_kx_params: Vec<u8>,
+  pub server_kx_sig: Option<DigitallySignedStruct>,
+  pub handshake_hash: Option<hash_hs::HandshakeHash>,
   pub secrets: SessionSecrets
 }
 
 impl ClientHandshakeData {
   fn new(host_name: &str) -> ClientHandshakeData {
     ClientHandshakeData {
+      client_hello: Vec::new(),
       server_cert_chain: Vec::new(),
       ciphersuite: None,
       dns_name: host_name.to_string(),
       client_random: Vec::new(),
       server_random: Vec::new(),
-      kx_data: KeyExchangeData::Invalid,
+      server_kx_params: Vec::new(),
+      server_kx_sig: None,
+      handshake_hash: None,
       secrets: SessionSecrets::for_client()
     }
   }
 
   pub fn generate_client_random(&mut self) {
     rand::fill_random_vec(&mut self.client_random, 32);
+  }
+
+  pub fn hash_message(&mut self, m: &Message) {
+    self.handshake_hash.as_mut().unwrap().update(m);
+  }
+
+  pub fn get_verify_data(&self) -> Payload {
+    Payload { body: self.handshake_hash.as_ref().unwrap().get_current_hash().into_boxed_slice() }
   }
 }
 
@@ -92,7 +108,7 @@ impl ClientSession {
       state: ConnState::ExpectServerHello
     };
 
-    client_hs::send_client_hello(&mut cs);
+    client_hs::emit_client_hello(&mut cs);
     cs
   }
 
@@ -154,7 +170,7 @@ impl ClientSession {
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), HandshakeError> {
-    while true {
+    loop {
       match self.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),
         None => break
