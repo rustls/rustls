@@ -117,8 +117,6 @@ impl ServerConfig {
 pub struct ServerHandshakeData {
   pub server_cert_chain: Option<CertificatePayload>,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
-  pub client_random: Vec<u8>,
-  pub server_random: Vec<u8>,
   pub secrets: SessionSecrets
 }
 
@@ -127,14 +125,12 @@ impl ServerHandshakeData {
     ServerHandshakeData {
       server_cert_chain: None,
       ciphersuite: None,
-      client_random: Vec::new(),
-      server_random: Vec::new(),
       secrets: SessionSecrets::for_server()
     }
   }
 
   pub fn generate_server_random(&mut self) {
-    rand::fill_random_vec(&mut self.server_random, 32);
+    rand::fill_random(&mut self.secrets.server_random);
   }
 }
 

@@ -55,7 +55,7 @@ pub fn emit_client_hello(sess: &mut ClientSession) {
         payload: HandshakePayload::ClientHello(
           ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
-            random: Random::from_vec(&sess.handshake_data.client_random),
+            random: Random::from_slice(&sess.handshake_data.secrets.client_random),
             session_id: SessionID::empty(),
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
@@ -105,7 +105,9 @@ fn ExpectServerHello_handle(sess: &mut ClientSession, m: &Message) -> Result<Con
     .update(m);
 
   sess.handshake_data.ciphersuite = scs;
-  server_hello.random.encode(&mut sess.handshake_data.server_random);
+
+  /* Save ServerRandom */
+  server_hello.random.write_slice(&mut sess.handshake_data.secrets.server_random);
 
   Ok(ConnState::ExpectCertificate)
 }
@@ -238,7 +240,9 @@ fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result
    * 3. Complete the key exchange:
    *    a) generate our kx pair
    *    b) emit a ClientKeyExchange containing it
-   *    c) derive the resulting keys, emit a CCS and Finished. */
+   *    c) emit a CCS
+   *    d) derive the shared keys, and start encryption
+   * 4. emit a Finished, our first encrypted message under the new keys. */
 
   /* 1. */
   try!(verify::verify_cert(&sess.config.root_store,
@@ -249,10 +253,8 @@ fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result
   /* Build up the contents of the signed message.
    * It's ClientHello.random || ServerHello.random || ServerKeyExchange.params */
   let mut message = Vec::new();
-  assert_eq!(sess.handshake_data.client_random.len(), 32);
-  assert_eq!(sess.handshake_data.server_random.len(), 32);
-  message.extend_from_slice(&sess.handshake_data.client_random);
-  message.extend_from_slice(&sess.handshake_data.server_random);
+  message.extend_from_slice(&sess.handshake_data.secrets.client_random);
+  message.extend_from_slice(&sess.handshake_data.secrets.server_random);
   message.extend_from_slice(&sess.handshake_data.server_kx_params);
 
   dumphex("verify message", &message);
@@ -262,16 +264,24 @@ fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result
                          &sess.handshake_data.server_cert_chain[0],
                          sess.handshake_data.server_kx_sig.as_ref().unwrap()));
 
-  /* 3. */
+  /* 3a. */
   let kxd = try!(sess.handshake_data.ciphersuite.as_ref().unwrap()
     .do_client_kx(&sess.handshake_data.server_kx_params)
     .ok_or_else(|| HandshakeError::General("key exchange failed".to_string()))
   );
 
-  //sess.handshake_data.secrets.init_with_pms(&kxd.premaster_secret);
-
+  /* 3b. */
   emit_clientkx(sess, &kxd);
+
+  /* 3c. */
   emit_ccs(sess);
+
+  /* 3d. Now commit secrets. */
+  sess.secrets_current.init(sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
+                            &kxd.premaster_secret);
+  sess.start_encryption();
+
+  /* 4. */
   emit_finished(sess);
 
   Ok(ConnState::ExpectCCS)

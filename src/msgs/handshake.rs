@@ -6,6 +6,8 @@ use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
+use std::io::Write;
+
 #[derive(Debug)]
 pub struct Random {
   pub gmt_unix_time: u32,
@@ -29,10 +31,16 @@ impl Codec for Random {
 }
 
 impl Random {
-  pub fn from_vec(bytes: &Vec<u8>) -> Random {
+  pub fn from_slice(bytes: &[u8]) -> Random {
     assert_eq!(bytes.len(), 32);
     let mut rd = Reader::init(&bytes);
     Random::read(&mut rd).unwrap()
+  }
+
+  pub fn write_slice(&self, mut bytes: &mut [u8]) {
+    let mut buf = Vec::new();
+    self.encode(&mut buf);
+    bytes.write(&buf);
   }
 }
 

@@ -40,8 +40,6 @@ pub struct ClientHandshakeData {
   pub server_cert_chain: CertificatePayload,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub dns_name: String,
-  pub client_random: Vec<u8>,
-  pub server_random: Vec<u8>,
   pub server_kx_params: Vec<u8>,
   pub server_kx_sig: Option<DigitallySignedStruct>,
   pub handshake_hash: Option<hash_hs::HandshakeHash>,
@@ -55,8 +53,6 @@ impl ClientHandshakeData {
       server_cert_chain: Vec::new(),
       ciphersuite: None,
       dns_name: host_name.to_string(),
-      client_random: Vec::new(),
-      server_random: Vec::new(),
       server_kx_params: Vec::new(),
       server_kx_sig: None,
       handshake_hash: None,
@@ -65,7 +61,7 @@ impl ClientHandshakeData {
   }
 
   pub fn generate_client_random(&mut self) {
-    rand::fill_random_vec(&mut self.client_random, 32);
+    rand::fill_random(&mut self.secrets.client_random);
   }
 
   pub fn hash_message(&mut self, m: &Message) {

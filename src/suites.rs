@@ -69,7 +69,8 @@ pub struct SupportedCipherSuite {
   pub suite: CipherSuite,
   pub kx: KeyExchangeAlgorithm,
   pub bulk: BulkAlgorithm,
-  pub hash: HashAlgorithm
+  pub hash: HashAlgorithm,
+  pub key_block_len: usize
 }
 
 impl PartialEq for SupportedCipherSuite {
@@ -96,6 +97,13 @@ impl SupportedCipherSuite {
       _ => unreachable!()
     }
   }
+
+  pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
+    match &self.bulk {
+      &BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
+      &BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM
+    }
+  }
 }
 
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
@@ -103,7 +111,8 @@ SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
   kx: KeyExchangeAlgorithm::ECDHE_RSA,
   bulk: BulkAlgorithm::AES_128_GCM,
-  hash: HashAlgorithm::SHA256
+  hash: HashAlgorithm::SHA256,
+  key_block_len: 0 + 0 + 16 + 16 + 4 + 4
 };
 
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
@@ -111,7 +120,8 @@ SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
   kx: KeyExchangeAlgorithm::ECDHE_RSA,
   bulk: BulkAlgorithm::AES_256_GCM,
-  hash: HashAlgorithm::SHA384
+  hash: HashAlgorithm::SHA384,
+  key_block_len: 0 + 0 + 32 + 32 + 4 + 4
 };
 
 pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 2] = [

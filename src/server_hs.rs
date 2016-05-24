@@ -43,7 +43,7 @@ fn emit_server_hello(sess: &mut ServerSession) {
         payload: HandshakePayload::ServerHello(
           ServerHelloPayload {
             server_version: ProtocolVersion::TLSv1_2,
-            random: Random::from_vec(&sess.handshake_data.server_random),
+            random: Random::from_slice(&sess.handshake_data.secrets.server_random),
             session_id: sessid,
             cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite.clone(),
             compression_method: Compression::Null,
@@ -139,7 +139,7 @@ fn ExpectClientHello_handle(sess: &mut ServerSession, m: &Message) -> Result<Con
   }
 
   sess.handshake_data.ciphersuite = maybe_ciphersuite;
-  client_hello.random.encode(&mut sess.handshake_data.client_random);
+  client_hello.random.write_slice(&mut sess.handshake_data.secrets.client_random);
 
   emit_server_hello(sess);
   emit_certificate(sess);
