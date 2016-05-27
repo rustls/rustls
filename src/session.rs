@@ -17,8 +17,8 @@ pub struct SessionSecrets {
 
 fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
   let mut randoms = [0u8; 64];
-  randoms.as_mut().write(first);
-  randoms[32..].as_mut().write(second);
+  randoms.as_mut().write(first).unwrap();
+  randoms[32..].as_mut().write(second).unwrap();
   randoms
 }
 
@@ -45,8 +45,8 @@ impl SessionSecrets {
               hashalg: &'static ring::digest::Algorithm,
               pms: &[u8]) {
     /* Copy in randoms. */
-    self.client_random.as_mut().write(&hs_rands.client_random);
-    self.server_random.as_mut().write(&hs_rands.server_random);
+    self.client_random.as_mut().write(&hs_rands.client_random).unwrap();
+    self.server_random.as_mut().write(&hs_rands.server_random).unwrap();
 
     self.hash = Some(hashalg);
 
@@ -176,8 +176,8 @@ impl MessageCipher for GCMMessageCipher {
     }
 
     let mut nonce = [0u8; 12];
-    nonce.as_mut().write(&self.dec_salt);
-    nonce[4..].as_mut().write(&buf);
+    nonce.as_mut().write(&self.dec_salt).unwrap();
+    nonce[4..].as_mut().write(&buf).unwrap();
 
     let mut aad = Vec::new();
     codec::encode_u64(seq, &mut aad);
@@ -204,7 +204,7 @@ impl MessageCipher for GCMMessageCipher {
 
   fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
     let mut nonce = [0u8; 12];
-    nonce.as_mut().write(&self.enc_salt);
+    nonce.as_mut().write(&self.enc_salt).unwrap();
     rand::fill_random(&mut nonce[4..]);
 
     let mut buf = Vec::new();
@@ -232,7 +232,7 @@ impl MessageCipher for GCMMessageCipher {
                                    tag_len,
                                    &aad));
 
-    buf[0..8].as_mut().write(&nonce[4..]);
+    buf[0..8].as_mut().write(&nonce[4..]).unwrap();
     println!("payload len {}\n", buf.len());
     dumphex("outgoing", &buf);
 
@@ -246,8 +246,8 @@ impl MessageCipher for GCMMessageCipher {
 
 impl GCMMessageCipher {
   fn new(alg: &'static ring::aead::Algorithm,
-         enc_mac_key: &[u8], enc_key: &[u8], enc_iv: &[u8],
-         dec_mac_key: &[u8], dec_key: &[u8], dec_iv: &[u8]) -> GCMMessageCipher {
+         _enc_mac_key: &[u8], enc_key: &[u8], enc_iv: &[u8],
+         _dec_mac_key: &[u8], dec_key: &[u8], dec_iv: &[u8]) -> GCMMessageCipher {
     let mut ret = GCMMessageCipher {
       alg: alg,
       enc_key: ring::aead::SealingKey::new(alg, enc_key).unwrap(),
@@ -261,8 +261,8 @@ impl GCMMessageCipher {
     dumphex("dec_key", dec_key);
     dumphex("dec_iv ", dec_iv);
 
-    ret.enc_salt.as_mut().write(enc_iv);
-    ret.dec_salt.as_mut().write(dec_iv);
+    ret.enc_salt.as_mut().write(enc_iv).unwrap();
+    ret.dec_salt.as_mut().write(dec_iv).unwrap();
     ret
   }
 }
@@ -271,11 +271,11 @@ impl GCMMessageCipher {
 pub struct InvalidMessageCipher {}
 
 impl MessageCipher for InvalidMessageCipher {
-  fn decrypt(&self, m: &Message, seq: u64) -> Result<Message, ()> {
+  fn decrypt(&self, _m: &Message, _seq: u64) -> Result<Message, ()> {
     Err(())
   }
 
-  fn encrypt(&self, m: &Message, seq: u64) -> Result<Message, ()> {
+  fn encrypt(&self, _m: &Message, _seq: u64) -> Result<Message, ()> {
     Err(())
   }
 }

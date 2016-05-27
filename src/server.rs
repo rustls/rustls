@@ -1,4 +1,3 @@
-use msgs::enums::CipherSuite;
 use session::SessionSecrets;
 use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use msgs::handshake::{SessionID, CertificatePayload};
@@ -11,7 +10,6 @@ use handshake::HandshakeError;
 use rand;
 
 use std::sync::Arc;
-use std::fmt::Debug;
 use std::io;
 use std::collections::VecDeque;
 
@@ -60,9 +58,9 @@ struct NoSessionStorage {}
 
 impl StoresSessions for NoSessionStorage {
   fn generate(&self) -> SessionID { SessionID { bytes: Vec::new() } }
-  fn store(&self, id: &SessionID, sec: &SessionSecrets) -> bool { false }
-  fn find(&self, id: &SessionID) -> Option<SessionSecrets> { None }
-  fn erase(&self, id: &SessionID) -> bool { false }
+  fn store(&self, _id: &SessionID, _sec: &SessionSecrets) -> bool { false }
+  fn find(&self, _id: &SessionID) -> Option<SessionSecrets> { None }
+  fn erase(&self, _id: &SessionID) -> bool { false }
 }
 
 /* Something which never resolves a certificate. */
@@ -70,10 +68,10 @@ struct FailResolveChain {}
 
 impl ResolvesCert for FailResolveChain {
   fn resolve(&self,
-             server_name: Option<&ServerNameRequest>,
-             sigalgs: &SupportedSignatureAlgorithms,
-             ec_curves: &EllipticCurveList,
-             ec_pointfmts: &ECPointFormatList) -> Result<CertificatePayload, ()> {
+             _server_name: Option<&ServerNameRequest>,
+             _sigalgs: &SupportedSignatureAlgorithms,
+             _ec_curves: &EllipticCurveList,
+             _ec_pointfmts: &ECPointFormatList) -> Result<CertificatePayload, ()> {
     Err(())
   }
 }
@@ -91,10 +89,10 @@ impl AlwaysResolvesChain {
 
 impl ResolvesCert for AlwaysResolvesChain {
   fn resolve(&self,
-             server_name: Option<&ServerNameRequest>,
-             sigalgs: &SupportedSignatureAlgorithms,
-             ec_curves: &EllipticCurveList,
-             ec_pointfmts: &ECPointFormatList) -> Result<CertificatePayload, ()> {
+             _server_name: Option<&ServerNameRequest>,
+             _sigalgs: &SupportedSignatureAlgorithms,
+             _ec_curves: &EllipticCurveList,
+             _ec_pointfmts: &ECPointFormatList) -> Result<CertificatePayload, ()> {
     Ok(self.chain.clone())
   }
 }
@@ -185,14 +183,14 @@ impl ServerSession {
 
   fn get_handler(&self) -> &'static server_hs::Handler {
     match self.state {
-      ConnState::ExpectClientHello => &server_hs::ExpectClientHello,
-      ConnState::ExpectClientKX => &server_hs::ExpectClientKX,
-      _ => &server_hs::InvalidState
+      ConnState::ExpectClientHello => &server_hs::EXPECT_CLIENT_HELLO,
+      ConnState::ExpectClientKX => &server_hs::EXPECT_CLIENT_KX,
+      _ => &server_hs::INVALID_STATE
     }
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), HandshakeError> {
-    while true {
+    loop {
       match self.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),
         None => break

@@ -7,7 +7,6 @@ use ring::input::Input;
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::SignatureAndHashAlgorithm;
-use msgs::enums::{SignatureAlgorithm, HashAlgorithm};
 use handshake::HandshakeError;
 
 /* Which signature verification mechanisms we support.  No particular
@@ -120,7 +119,7 @@ static RSA_SHA512: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0
 
 fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<&'static [u8], HandshakeError> {
   use msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
-  use msgs::enums::HashAlgorithm::{SHA1, SHA224, SHA256, SHA384, SHA512};
+  use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
   match (&sh.sign, &sh.hash) {
     (&ECDSA, &SHA1) => Ok(ECDSA_SHA1),

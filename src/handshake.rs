@@ -1,7 +1,6 @@
 use msgs::enums::{ContentType, HandshakeType};
 use msgs::message::{Message, MessagePayload};
 
-use std::fmt::Debug;
 extern crate webpki;
 
 #[derive(Debug)]

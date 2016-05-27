@@ -2,9 +2,6 @@ extern crate webpki;
 extern crate ring;
 
 pub mod msgs;
-use msgs::codec::Reader;
-use msgs::message::Message;
-
 mod rand;
 mod hash_hs;
 mod prf;

@@ -1,7 +1,6 @@
 use msgs::enums::{ContentType, HandshakeType};
 use msgs::enums::{Compression, ProtocolVersion};
 use msgs::message::{Message, MessagePayload};
-use msgs::codec::Codec;
 use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use server::{ServerSession, ConnState};
@@ -74,18 +73,18 @@ fn emit_certificate(sess: &mut ServerSession) {
   sess.tls_queue.push_back(c);
 }
 
-fn emit_server_kx(sess: &mut ServerSession) {
+fn emit_server_kx(_sess: &mut ServerSession) {
   println!("emit_server_kx");
 }
 
-fn ExpectClientHello_expect() -> Expectation {
+fn expect_client_hello() -> Expectation {
   Expectation {
     content_types: vec![ContentType::Handshake],
     handshake_types: vec![HandshakeType::ClientHello]
   }
 }
 
-fn ExpectClientHello_handle(sess: &mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
   if client_hello.client_version != ProtocolVersion::TLSv1_2 {
@@ -148,40 +147,40 @@ fn ExpectClientHello_handle(sess: &mut ServerSession, m: &Message) -> Result<Con
   Ok(ConnState::ExpectClientKX)
 }
 
-pub static ExpectClientHello: Handler = Handler {
-  expect: ExpectClientHello_expect,
-  handle: ExpectClientHello_handle
+pub static EXPECT_CLIENT_HELLO: Handler = Handler {
+  expect: expect_client_hello,
+  handle: handle_client_hello
 };
 
-fn ExpectClientKX_expect() -> Expectation {
+fn expect_client_kx() -> Expectation {
   Expectation {
     content_types: vec![ContentType::Handshake],
     handshake_types: vec![HandshakeType::ClientKeyExchange]
   }
 }
 
-fn ExpectClientKX_handle(sess: &mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_client_kx(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, HandshakeError> {
   Err(HandshakeError::General("ExpectClientKeyExchange nyi".to_string()))
 }
 
-pub static ExpectClientKX: Handler = Handler {
-  expect: ExpectClientKX_expect,
-  handle: ExpectClientKX_handle
+pub static EXPECT_CLIENT_KX: Handler = Handler {
+  expect: expect_client_kx,
+  handle: handle_client_kx
 };
 
-fn InvalidState_expect() -> Expectation {
+fn expect_invalid() -> Expectation {
   Expectation {
     content_types: Vec::new(),
     handshake_types: Vec::new()
   }
 }
 
-fn InvalidState_handle(sess: &mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_invalid(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, HandshakeError> {
   Err(HandshakeError::General("bad state".to_string()))
 }
 
-pub static InvalidState: Handler = Handler {
-  expect: InvalidState_expect,
-  handle: InvalidState_handle
+pub static INVALID_STATE: Handler = Handler {
+  expect: expect_invalid,
+  handle: handle_invalid
 };
 

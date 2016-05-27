@@ -2,9 +2,7 @@ use msgs::enums::CipherSuite;
 use session::SessionSecrets;
 use session::MessageCipher;
 use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
-use msgs::handshake::{SessionID, CertificatePayload};
-use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
-use msgs::handshake::{ClientExtension, DigitallySignedStruct};
+use msgs::handshake::{CertificatePayload, ClientExtension, DigitallySignedStruct};
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::message::Message;
@@ -15,7 +13,6 @@ use handshake::HandshakeError;
 use rand;
 
 use std::sync::Arc;
-use std::fmt::Debug;
 use std::io;
 use std::collections::VecDeque;
 use std::mem;
@@ -173,7 +170,7 @@ impl ClientSession {
     None
   }
 
-  pub fn add_extensions(&self, exts: &mut Vec<ClientExtension>) {
+  pub fn add_extensions(&self, _exts: &mut Vec<ClientExtension>) {
   }
 
   pub fn wants_read(&self) -> bool {
@@ -200,13 +197,13 @@ impl ClientSession {
 
   fn get_handler(&self) -> &'static client_hs::Handler {
     match self.state {
-      ConnState::ExpectServerHello => &client_hs::ExpectServerHello,
-      ConnState::ExpectCertificate => &client_hs::ExpectCertificate,
-      ConnState::ExpectServerKX => &client_hs::ExpectServerKX,
-      ConnState::ExpectServerHelloDone => &client_hs::ExpectServerHelloDone,
-      ConnState::ExpectCCS => &client_hs::ExpectCCS,
-      ConnState::ExpectFinished => &client_hs::ExpectFinished,
-      _ => &client_hs::InvalidState
+      ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
+      ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
+      ConnState::ExpectServerKX => &client_hs::EXPECT_SERVER_KX,
+      ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
+      ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
+      ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,
+      _ => &client_hs::INVALID_STATE
     }
   }
 

@@ -41,8 +41,8 @@ impl mio::Handler for TlsClient {
   }
 
   fn timeout(&mut self,
-             event_loop: &mut mio::EventLoop<TlsClient>,
-             timeout: <TlsClient as mio::Handler>::Timeout) {
+             _event_loop: &mut mio::EventLoop<TlsClient>,
+             _timeout: <TlsClient as mio::Handler>::Timeout) {
     println!("connection timed out");
     process::exit(1);
   }

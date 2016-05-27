@@ -13,8 +13,3 @@ pub fn fill_random(bytes: &mut [u8]) {
     .unwrap();
 }
 
-/* Make the vec v contain sz random bytes. */
-pub fn fill_random_vec(v: &mut Vec<u8>, sz: usize) {
-  v.resize(sz, 0u8);
-  fill_random(v);
-}

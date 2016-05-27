@@ -7,6 +7,7 @@ use msgs::codec::{Reader, Codec};
 
 extern crate ring;
 
+#[allow(non_camel_case_types)]
 #[derive(Debug)]
 pub enum BulkAlgorithm {
   AES_128_GCM,
@@ -21,7 +22,7 @@ pub struct KeyExchangeResult {
 }
 
 impl KeyExchangeResult {
-  pub fn ECDHE(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
+  pub fn ecdhe(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
     let mut rd = Reader::init(&kx_params);
     let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
 
@@ -37,7 +38,7 @@ impl KeyExchangeResult {
     /* Encode our public key. */
     let mut pubkey = Vec::new();
     pubkey.resize(ours.public_key_len(), 0u8);
-    ours.compute_public_key(pubkey.as_mut_slice());
+    ours.compute_public_key(pubkey.as_mut_slice()).unwrap();
 
     /* Do the key agreement. */
     let secret = ring::agreement::agree_ephemeral(
@@ -95,7 +96,7 @@ impl SupportedCipherSuite {
   pub fn do_client_kx(&self, kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
     match &self.kx {
       &KeyExchangeAlgorithm::ECDHE_ECDSA |
-        &KeyExchangeAlgorithm::ECDHE_RSA => KeyExchangeResult::ECDHE(kx_params),
+        &KeyExchangeAlgorithm::ECDHE_RSA => KeyExchangeResult::ecdhe(kx_params),
       _ => unreachable!()
     }
   }
@@ -162,7 +163,7 @@ pub fn choose_ciphersuite_preferring_server(
   None
 }
 
-pub fn reduce_given_cert(all: &Vec<&'static SupportedCipherSuite>, certs: &CertificatePayload)
+pub fn reduce_given_cert(all: &Vec<&'static SupportedCipherSuite>, _certs: &CertificatePayload)
   -> Vec<&'static SupportedCipherSuite> {
   /* NYI */
   all.clone()

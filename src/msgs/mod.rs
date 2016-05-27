@@ -6,6 +6,7 @@ pub mod base;
 #[allow(non_camel_case_types)]
 pub mod enums;
 pub mod alert;
+#[allow(non_camel_case_types)]
 pub mod handshake;
 pub mod ccs;
 pub mod message;
