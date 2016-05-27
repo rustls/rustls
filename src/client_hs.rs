@@ -331,15 +331,48 @@ fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, H
                     .ok_or(HandshakeError::DecryptError));
   dm.decode_payload();
 
-  let finished = extract_handshake!(dm, HandshakePayload::Finished);
+  let finished = try!(extract_handshake!(dm, HandshakePayload::Finished)
+    .ok_or(HandshakeError::General("finished message missing".to_string()))
+  );
+
+  /* Work out what verify_data we expect. */
+  let vh = sess.handshake_data.get_verify_hash();
+  let expect_verify_data = sess.secrets_current.server_verify_data(&vh);
+
+  /* Constant-time verification of this is relatively unimportant: they only
+   * get one chance.  But it can't hurt. */
+  use ring;
+  ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
+    .map_err(|_| HandshakeError::DecryptError)
+    .unwrap();
+
   println!("got finished {:?}", finished);
-  sess.flush();
   Ok(ConnState::Traffic)
 }
 
 pub static EXPECT_FINISHED: Handler = Handler {
   expect: expect_finished,
   handle: handle_finished
+};
+
+/* -- Traffic transit state -- */
+fn expect_traffic() -> Expectation {
+  Expectation {
+    content_types: vec![ContentType::ApplicationData],
+    handshake_types: Vec::new()
+  }
+}
+
+fn handle_traffic(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+  let dm = try!(sess.decrypt_incoming(m)
+                .ok_or(HandshakeError::DecryptError));
+  sess.take_received_plaintext(dm.get_opaque_payload().unwrap());
+  Ok(ConnState::Traffic)
+}
+
+pub static TRAFFIC: Handler = Handler {
+  expect: expect_traffic,
+  handle: handle_traffic
 };
 
 /* -- Generic invalid state -- */

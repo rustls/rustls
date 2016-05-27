@@ -164,12 +164,8 @@ fn dumphex(why: &str, buf: &[u8]) {
 
 impl MessageCipher for GCMMessageCipher {
   fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
-    let mut buf = try!({
-      match msg.payload {
-        MessagePayload::Unknown(ref payload) => Ok(payload.body.to_vec()),
-        _ => Err(())
-      }
-    });
+    let payload = try!(msg.get_opaque_payload().ok_or(()));
+    let mut buf = payload.body.to_vec();
 
     if buf.len() < GCM_OVERHEAD {
       return Err(());

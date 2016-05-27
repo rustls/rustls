@@ -46,10 +46,7 @@ mod tests {
 
     assert_eq!(&m.typ, typ);
     assert_eq!(&m.version, version);
-    match m.payload {
-      MessagePayload::Unknown(ref pl) => assert_eq!(pl.body.to_vec(), bytes.to_vec()),
-      _ => unreachable!()
-    };
+    assert_eq!(m.get_opaque_payload().unwrap().body.to_vec(), bytes.to_vec());
   }
 
   #[test]

@@ -6,6 +6,7 @@ use msgs::handshake::{CertificatePayload, ClientExtension, DigitallySignedStruct
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::message::Message;
+use msgs::base::Payload;
 use client_hs;
 use hash_hs;
 use verify;
@@ -72,6 +73,7 @@ impl ClientHandshakeData {
   }
 }
 
+#[derive(PartialEq)]
 pub enum ConnState {
   ExpectServerHello,
   ExpectCertificate,
@@ -101,7 +103,8 @@ pub struct ClientSession {
   read_seq: u64,
   pub message_deframer: MessageDeframer,
   pub message_fragmenter: MessageFragmenter,
-  pub plain_buf: Vec<u8>,
+  pub sendable_plaintext: Vec<u8>,
+  pub received_plaintext: Vec<u8>,
   pub tls_queue: VecDeque<Message>,
   pub state: ConnState
 }
@@ -118,7 +121,8 @@ impl ClientSession {
       read_seq: 0,
       message_deframer: MessageDeframer::new(),
       message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),
-      plain_buf: Vec::new(),
+      sendable_plaintext: Vec::new(),
+      received_plaintext: Vec::new(),
       tls_queue: VecDeque::new(),
       state: ConnState::ExpectServerHello
     };
@@ -192,6 +196,11 @@ impl ClientSession {
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
 
+    /* Once we're connected, start flushing sendable_plaintext. */
+    if self.state == ConnState::Traffic {
+      self.flush_plaintext();
+    }
+
     Ok(())
   }
 
@@ -203,7 +212,7 @@ impl ClientSession {
       ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
       ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
       ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,
-      _ => &client_hs::INVALID_STATE
+      ConnState::Traffic => &client_hs::TRAFFIC
     }
   }
 
@@ -239,11 +248,65 @@ impl ClientSession {
   }
 
   pub fn send_plain(&mut self, data: &[u8]) {
+    use msgs::enums::{ContentType, ProtocolVersion};
+    use msgs::message::MessagePayload;
 
+    if self.state != ConnState::Traffic {
+      /* If we haven't completed handshaking, buffer
+       * plaintext to send once we do. */
+      self.sendable_plaintext.extend_from_slice(data);
+      return;
+    }
+
+    assert!(self.state.is_encrypted());
+
+    /* Make one giant message, then have the fragmenter chop
+     * it into bits.  Then encrypt and queue those bits. */
+    let m = Message {
+      typ: ContentType::ApplicationData,
+      version: ProtocolVersion::TLSv1_2,
+      payload: MessagePayload::opaque(data.to_vec())
+    };
+
+    let mut plain_messages = VecDeque::new();
+    self.message_fragmenter.fragment(&m, &mut plain_messages);
+
+    for m in plain_messages {
+      let em = self.encrypt_outgoing(&m);
+      self.tls_queue.push_back(em);
+    }
   }
 
-  pub fn flush(&mut self) {
-    let buf = mem::replace(&mut self.plain_buf, Vec::new());
+  pub fn flush_plaintext(&mut self) {
+    if self.state != ConnState::Traffic {
+      return;
+    }
+
+    let buf = mem::replace(&mut self.sendable_plaintext, Vec::new());
     self.send_plain(&buf);
+  }
+
+  pub fn take_received_plaintext(&mut self, bytes: Payload) {
+    self.received_plaintext.extend_from_slice(&bytes.body);
+  }
+}
+
+impl io::Read for ClientSession {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    let len = try!(self.received_plaintext.as_slice().read(buf));
+    self.received_plaintext.drain(0..len);
+    Ok(len)
+  }
+}
+
+impl io::Write for ClientSession {
+  fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    self.send_plain(buf);
+    Ok(buf.len())
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    self.flush_plaintext();
+    Ok(())
   }
 }

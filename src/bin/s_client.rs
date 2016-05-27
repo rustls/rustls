@@ -4,6 +4,10 @@ use std::process;
 extern crate mio;
 use mio::tcp::TcpStream;
 
+use std::str;
+use std::io;
+use std::io::{Read, Write};
+
 extern crate rustls;
 
 const CLIENT: mio::Token = mio::Token(0);
@@ -45,6 +49,22 @@ impl mio::Handler for TlsClient {
              _timeout: <TlsClient as mio::Handler>::Timeout) {
     println!("connection timed out");
     process::exit(1);
+  }
+}
+
+impl io::Write for TlsClient {
+  fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+    self.tls_session.write(bytes)
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    self.tls_session.flush()
+  }
+}
+
+impl io::Read for TlsClient {
+  fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+    self.tls_session.read(bytes)
   }
 }
 
@@ -92,6 +112,13 @@ impl TlsClient {
       self.closing = true;
       return;
     }
+
+    /* We might have new plaintext as a result. */
+    let mut plaintext = Vec::new();
+    self.tls_session.read_to_end(&mut plaintext).unwrap();
+    if plaintext.len() > 0 {
+      println!("got {}", str::from_utf8(&plaintext).unwrap());
+    }
   }
 
   fn do_write(&mut self) {
@@ -138,6 +165,7 @@ fn main() {
   let sock = TcpStream::connect(&addr).unwrap();
   let mut event_loop = mio::EventLoop::new().unwrap();
   let mut tlsclient = TlsClient::new(sock);
+  tlsclient.write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
   tlsclient.register(&mut event_loop);
   event_loop.run(&mut tlsclient).unwrap();
 }

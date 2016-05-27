@@ -11,7 +11,7 @@ pub enum MessagePayload {
   Alert(AlertMessagePayload),
   Handshake(HandshakeMessagePayload),
   ChangeCipherSpec(ChangeCipherSpecPayload),
-  Unknown(Payload)
+  Opaque(Payload)
 }
 
 impl MessagePayload {
@@ -20,12 +20,12 @@ impl MessagePayload {
       MessagePayload::Alert(ref x) => x.encode(bytes),
       MessagePayload::Handshake(ref x) => x.encode(bytes),
       MessagePayload::ChangeCipherSpec(ref x) => x.encode(bytes),
-      MessagePayload::Unknown(ref x) => x.encode(bytes)
+      MessagePayload::Opaque(ref x) => x.encode(bytes)
     }
   }
 
   pub fn decode_given_type(&self, typ: &ContentType) -> Option<MessagePayload> {
-    if let MessagePayload::Unknown(ref payload) = *self {
+    if let MessagePayload::Opaque(ref payload) = *self {
       let mut r = Reader::init(&payload.body);
       match *typ {
         ContentType::Alert =>
@@ -43,7 +43,7 @@ impl MessagePayload {
   }
 
   pub fn opaque(data: Vec<u8>) -> MessagePayload {
-    MessagePayload::Unknown(Payload { body: data.into_boxed_slice() })
+    MessagePayload::Opaque(Payload { body: data.into_boxed_slice() })
   }
 }
 
@@ -64,7 +64,7 @@ impl Message {
     let mut sub = try_ret!(r.sub(len as usize));
     let payload = try_ret!(Payload::read(&mut sub));
 
-    Some(Message { typ: typ, version: version, payload: MessagePayload::Unknown(payload) })
+    Some(Message { typ: typ, version: version, payload: MessagePayload::Opaque(payload) })
   }
 
   pub fn encode(&self, bytes: &mut Vec<u8>) {
@@ -84,6 +84,14 @@ impl Message {
   pub fn decode_payload(&mut self) {
     if let Some(x) = self.payload.decode_given_type(&self.typ) {
       self.payload = x;
+    }
+  }
+
+  pub fn get_opaque_payload(&self) -> Option<Payload> {
+    if let MessagePayload::Opaque(ref op) = self.payload {
+      Some(op.clone())
+    } else {
+      None
     }
   }
 }
