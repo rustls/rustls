@@ -9,6 +9,7 @@ pub enum HandshakeError {
   InappropriateMessage { expect_types: Vec<ContentType>, got_type: ContentType },
   InappropriateHandshakeMessage { expect_types: Vec<HandshakeType>, got_type: HandshakeType },
   NoCertificatesPresented,
+  DecryptError,
   WebPKIError(webpki::Error),
   General(String)
 }
@@ -29,7 +30,8 @@ impl Expectation {
     }
 
     if let MessagePayload::Handshake(ref hsp) = m.payload {
-      if !self.handshake_types.contains(&hsp.typ) {
+      if self.handshake_types.len() > 0
+        && !self.handshake_types.contains(&hsp.typ) {
         return Err(HandshakeError::InappropriateHandshakeMessage {
           expect_types: self.handshake_types.clone(),
           got_type: hsp.typ.clone()

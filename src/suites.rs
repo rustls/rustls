@@ -30,10 +30,10 @@ impl KeyExchangeResult {
       NamedCurve::secp384r1 => &ring::agreement::ECDH_P384,
       _ => unreachable!()
     };
-    
+
     let rng = ring::rand::SystemRandom::new();
     let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng).unwrap();
-    
+
     /* Encode our public key. */
     let mut pubkey = Vec::new();
     pubkey.resize(ours.public_key_len(), 0u8);
@@ -51,7 +51,7 @@ impl KeyExchangeResult {
     if secret.is_err() {
       return None;
     }
-    
+
     Some(KeyExchangeResult { pubkey: pubkey, premaster_secret: secret.unwrap() })
   }
 
@@ -70,7 +70,9 @@ pub struct SupportedCipherSuite {
   pub kx: KeyExchangeAlgorithm,
   pub bulk: BulkAlgorithm,
   pub hash: HashAlgorithm,
-  pub key_block_len: usize
+  pub mac_key_len: usize,
+  pub enc_key_len: usize,
+  pub fixed_iv_len: usize
 }
 
 impl PartialEq for SupportedCipherSuite {
@@ -104,6 +106,10 @@ impl SupportedCipherSuite {
       &BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM
     }
   }
+
+  pub fn key_block_len(&self) -> usize {
+    (self.mac_key_len + self.enc_key_len + self.fixed_iv_len) * 2
+  }
 }
 
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
@@ -112,7 +118,9 @@ SupportedCipherSuite {
   kx: KeyExchangeAlgorithm::ECDHE_RSA,
   bulk: BulkAlgorithm::AES_128_GCM,
   hash: HashAlgorithm::SHA256,
-  key_block_len: 0 + 0 + 16 + 16 + 4 + 4
+  mac_key_len: 0,
+  enc_key_len: 16,
+  fixed_iv_len: 4
 };
 
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
@@ -121,7 +129,9 @@ SupportedCipherSuite {
   kx: KeyExchangeAlgorithm::ECDHE_RSA,
   bulk: BulkAlgorithm::AES_256_GCM,
   hash: HashAlgorithm::SHA384,
-  key_block_len: 0 + 0 + 32 + 32 + 4 + 4
+  mac_key_len: 0,
+  enc_key_len: 32,
+  fixed_iv_len: 4
 };
 
 pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 2] = [

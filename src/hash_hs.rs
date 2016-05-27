@@ -1,10 +1,20 @@
 extern crate ring;
 use self::ring::digest;
 
+use msgs::codec::Codec;
 use msgs::message::{Message, MessagePayload};
 
 pub struct HandshakeHash {
   ctx: digest::Context
+}
+
+fn dump(label: &str, bytes: &[u8]) {
+  print!("{}: ", label);
+
+  for b in bytes {
+    print!("{:02x}", b);
+  }
+  println!("");
 }
 
 impl HandshakeHash {
@@ -14,10 +24,12 @@ impl HandshakeHash {
 
   pub fn update(&mut self, m: &Message) -> &mut HandshakeHash {
     match m.payload {
-      MessagePayload::Handshake(_) => {
+      MessagePayload::Handshake(ref hs) => {
         let mut buf = Vec::new();
-        m.payload.encode(&mut buf);
-        self.update_raw(&buf);
+        hs.encode(&mut buf);
+        println!("hash msg {:?} {} bytes", hs.typ, buf.len());
+        dump("hash", &buf);
+        self.ctx.update(&buf);
       },
       _ => unreachable!()
     };
@@ -25,6 +37,8 @@ impl HandshakeHash {
   }
 
   pub fn update_raw(&mut self, buf: &[u8]) -> &mut HandshakeHash {
+    println!("hash raw {} bytes", buf.len());
+    dump("hash init", buf);
     self.ctx.update(buf);
     self
   }
@@ -33,7 +47,6 @@ impl HandshakeHash {
     let h = self.ctx.clone().finish();
     let mut ret = Vec::new();
     ret.extend_from_slice(h.as_ref());
-    ret.truncate(12);
     ret
   }
 }

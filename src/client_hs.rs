@@ -1,6 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType};
 use msgs::enums::{Compression, ProtocolVersion};
 use msgs::message::{Message, MessagePayload};
+use msgs::base::Payload;
 use msgs::codec::Codec;
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random};
@@ -214,21 +215,26 @@ fn emit_ccs(sess: &mut ClientSession) {
 }
 
 fn emit_finished(sess: &mut ClientSession) {
-  let verify_data = sess.handshake_data.get_verify_data();
+  let vh = sess.handshake_data.get_verify_hash();
+  dumphex("finished vh", &vh);
+  let verify_data = sess.secrets_current.client_verify_data(&vh);
+  dumphex("finished verify", &verify_data);
+  let verify_data_payload = Payload { body: verify_data.into_boxed_slice() };
+
   let mut f = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
     payload: MessagePayload::Handshake(
       HandshakeMessagePayload {
         typ: HandshakeType::Finished,
-        payload: HandshakePayload::Finished(verify_data)
+        payload: HandshakePayload::Finished(verify_data_payload)
       }
     )
   };
 
   sess.handshake_data.hash_message(&f);
-  //sess.encrypt_outgoing(&mut f);
-  sess.tls_queue.push_back(f);
+  let ef = sess.encrypt_outgoing(&f);
+  sess.tls_queue.push_back(ef);
 }
 
 fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
@@ -259,7 +265,7 @@ fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result
 
   dumphex("verify message", &message);
   dumphex("verify sig", &sess.handshake_data.server_kx_sig.as_ref().unwrap().sig.body);
-  
+
   try!(verify::verify_kx(&message,
                          &sess.handshake_data.server_cert_chain[0],
                          sess.handshake_data.server_kx_sig.as_ref().unwrap()));
@@ -277,7 +283,8 @@ fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result
   emit_ccs(sess);
 
   /* 3d. Now commit secrets. */
-  sess.secrets_current.init(sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
+  sess.secrets_current.init(&sess.handshake_data.secrets,
+                            sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
                             &kxd.premaster_secret);
   sess.start_encryption();
 
@@ -290,6 +297,49 @@ fn ExpectServerHelloDone_handle(sess: &mut ClientSession, m: &Message) -> Result
 pub static ExpectServerHelloDone: Handler = Handler {
   expect: ExpectServerHelloDone_expect,
   handle: ExpectServerHelloDone_handle
+};
+
+/* -- Waiting for their CCS -- */
+fn ExpectCCS_expect() -> Expectation {
+  Expectation {
+    content_types: vec![ContentType::ChangeCipherSpec],
+    handshake_types: vec![]
+  }
+}
+
+fn ExpectCCS_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+  /* nb. msgs layer validates trivial contents of CCS */
+  println!("got server CCS");
+  Ok(ConnState::ExpectFinished)
+}
+
+pub static ExpectCCS: Handler = Handler {
+  expect: ExpectCCS_expect,
+  handle: ExpectCCS_handle
+};
+
+/* -- Waiting for their finished -- */
+fn ExpectFinished_expect() -> Expectation {
+  Expectation {
+    content_types: vec![ContentType::Handshake],
+    handshake_types: vec![] /* we need to decrypt before we can check this */
+  }
+}
+
+fn ExpectFinished_handle(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+  let mut dm = try!(sess.decrypt_incoming(m)
+                    .ok_or(HandshakeError::DecryptError));
+  dm.decode_payload();
+
+  let finished = extract_handshake!(dm, HandshakePayload::Finished);
+  println!("got finished {:?}", finished);
+  sess.flush();
+  Ok(ConnState::Traffic)
+}
+
+pub static ExpectFinished: Handler = Handler {
+  expect: ExpectFinished_expect,
+  handle: ExpectFinished_handle
 };
 
 /* -- Generic invalid state -- */

@@ -10,6 +10,7 @@ pub mod handshake;
 pub mod ccs;
 pub mod message;
 pub mod deframer;
+pub mod fragmenter;
 
 #[cfg(test)]
 mod test {

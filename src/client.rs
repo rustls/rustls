@@ -1,12 +1,13 @@
 use msgs::enums::CipherSuite;
 use session::SessionSecrets;
+use session::MessageCipher;
 use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use msgs::handshake::{SessionID, CertificatePayload};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{ClientExtension, DigitallySignedStruct};
 use msgs::deframer::MessageDeframer;
+use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::message::Message;
-use msgs::base::Payload;
 use client_hs;
 use hash_hs;
 use verify;
@@ -17,6 +18,7 @@ use std::sync::Arc;
 use std::fmt::Debug;
 use std::io;
 use std::collections::VecDeque;
+use std::mem;
 
 pub struct ClientConfig {
   /* List of ciphersuites, in preference order. */
@@ -68,8 +70,8 @@ impl ClientHandshakeData {
     self.handshake_hash.as_mut().unwrap().update(m);
   }
 
-  pub fn get_verify_data(&self) -> Payload {
-    Payload { body: self.handshake_hash.as_ref().unwrap().get_current_hash().into_boxed_slice() }
+  pub fn get_verify_hash(&self) -> Vec<u8> {
+    self.handshake_hash.as_ref().unwrap().get_current_hash()
   }
 }
 
@@ -83,11 +85,26 @@ pub enum ConnState {
   Traffic
 }
 
+impl ConnState {
+  fn is_encrypted(&self) -> bool {
+    match *self {
+      ConnState::ExpectFinished
+        | ConnState::Traffic => true,
+      _ => false
+    }
+  }
+}
+
 pub struct ClientSession {
   pub config: Arc<ClientConfig>,
   pub handshake_data: ClientHandshakeData,
   pub secrets_current: SessionSecrets,
+  message_cipher: Box<MessageCipher>,
+  write_seq: u64,
+  read_seq: u64,
   pub message_deframer: MessageDeframer,
+  pub message_fragmenter: MessageFragmenter,
+  pub plain_buf: Vec<u8>,
   pub tls_queue: VecDeque<Message>,
   pub state: ConnState
 }
@@ -99,7 +116,12 @@ impl ClientSession {
       config: client_config.clone(),
       handshake_data: ClientHandshakeData::new(hostname),
       secrets_current: SessionSecrets::for_client(),
+      message_cipher: MessageCipher::invalid(),
+      write_seq: 0,
+      read_seq: 0,
       message_deframer: MessageDeframer::new(),
+      message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),
+      plain_buf: Vec::new(),
       tls_queue: VecDeque::new(),
       state: ConnState::ExpectServerHello
     };
@@ -119,6 +141,25 @@ impl ClientSession {
     ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
     ret
+  }
+
+  pub fn start_encryption(&mut self) {
+    let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
+    self.message_cipher = MessageCipher::new(scs, &self.secrets_current);
+  }
+
+  pub fn encrypt_outgoing(&mut self, plain: &Message) -> Message {
+    let seq = self.write_seq;
+    self.write_seq += 1;
+    assert!(self.write_seq != 0);
+    self.message_cipher.encrypt(plain, seq).unwrap()
+  }
+
+  pub fn decrypt_incoming(&mut self, plain: &Message) -> Option<Message> {
+    let seq = self.read_seq;
+    self.read_seq += 1;
+    assert!(self.read_seq != 0);
+    self.message_cipher.decrypt(plain, seq).ok()
   }
 
   pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
@@ -144,7 +185,9 @@ impl ClientSession {
   }
 
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
-    msg.decode_payload();
+    if !self.state.is_encrypted() {
+      msg.decode_payload();
+    }
 
     let handler = self.get_handler();
     let expects = (handler.expect)();
@@ -161,6 +204,8 @@ impl ClientSession {
       ConnState::ExpectCertificate => &client_hs::ExpectCertificate,
       ConnState::ExpectServerKX => &client_hs::ExpectServerKX,
       ConnState::ExpectServerHelloDone => &client_hs::ExpectServerHelloDone,
+      ConnState::ExpectCCS => &client_hs::ExpectCCS,
+      ConnState::ExpectFinished => &client_hs::ExpectFinished,
       _ => &client_hs::InvalidState
     }
   }
@@ -194,5 +239,14 @@ impl ClientSession {
     println!("write {:?}", data);
 
     wr.write_all(&data)
+  }
+
+  pub fn send_plain(&mut self, data: &[u8]) {
+
+  }
+
+  pub fn flush(&mut self) {
+    let buf = mem::replace(&mut self.plain_buf, Vec::new());
+    self.send_plain(&buf);
   }
 }

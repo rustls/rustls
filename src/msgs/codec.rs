@@ -108,6 +108,17 @@ pub fn read_u32(r: &mut Reader) -> Option<u32> {
   r.take(4).and_then(decode_u32)
 }
 
+pub fn encode_u64(v: u64, bytes: &mut Vec<u8>) {
+  bytes.push((v >> 56) as u8);
+  bytes.push((v >> 48) as u8);
+  bytes.push((v >> 40) as u8);
+  bytes.push((v >> 32) as u8);
+  bytes.push((v >> 24) as u8);
+  bytes.push((v >> 16) as u8);
+  bytes.push((v >> 8) as u8);
+  bytes.push(v as u8);
+}
+
 pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
   let mut sub: Vec<u8> = Vec::new();
   for i in items {

@@ -1,6 +1,6 @@
 
-use msgs::codec::{Codec, Reader, encode_u16};
-use msgs::base::PayloadU16;
+use msgs::codec::{Codec, Reader, encode_u16, read_u16};
+use msgs::base::Payload;
 use msgs::alert::AlertMessagePayload;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::handshake::HandshakeMessagePayload;
@@ -11,7 +11,7 @@ pub enum MessagePayload {
   Alert(AlertMessagePayload),
   Handshake(HandshakeMessagePayload),
   ChangeCipherSpec(ChangeCipherSpecPayload),
-  Unknown(PayloadU16)
+  Unknown(Payload)
 }
 
 impl MessagePayload {
@@ -41,6 +41,10 @@ impl MessagePayload {
       None
     }
   }
+
+  pub fn opaque(data: Vec<u8>) -> MessagePayload {
+    MessagePayload::Unknown(Payload { body: data.into_boxed_slice() })
+  }
 }
 
 /* aka TLSPlaintext */
@@ -55,7 +59,10 @@ impl Message {
   pub fn read(r: &mut Reader) -> Option<Message> {
     let typ = try_ret!(ContentType::read(r));
     let version = try_ret!(ProtocolVersion::read(r));
-    let payload = try_ret!(PayloadU16::read(r));
+    let len = try_ret!(read_u16(r));
+
+    let mut sub = try_ret!(r.sub(len as usize));
+    let payload = try_ret!(Payload::read(&mut sub));
 
     Some(Message { typ: typ, version: version, payload: MessagePayload::Unknown(payload) })
   }

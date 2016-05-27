@@ -40,7 +40,7 @@ impl Random {
   pub fn write_slice(&self, mut bytes: &mut [u8]) {
     let mut buf = Vec::new();
     self.encode(&mut buf);
-    bytes.write(&buf);
+    assert_eq!(bytes.write(&buf).unwrap(), 32);
   }
 }
 
