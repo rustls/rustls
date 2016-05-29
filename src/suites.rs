@@ -135,7 +135,31 @@ SupportedCipherSuite {
   fixed_iv_len: 4
 };
 
-pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 2] = [
+pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+  kx: KeyExchangeAlgorithm::ECDHE_ECDSA,
+  bulk: BulkAlgorithm::AES_128_GCM,
+  hash: HashAlgorithm::SHA256,
+  mac_key_len: 0,
+  enc_key_len: 16,
+  fixed_iv_len: 4
+};
+
+pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+  kx: KeyExchangeAlgorithm::ECDHE_ECDSA,
+  bulk: BulkAlgorithm::AES_256_GCM,
+  hash: HashAlgorithm::SHA384,
+  mac_key_len: 0,
+  enc_key_len: 32,
+  fixed_iv_len: 4
+};
+
+pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 4] = [
+  &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+  &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
   &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
   &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 ];
