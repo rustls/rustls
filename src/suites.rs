@@ -27,6 +27,7 @@ impl KeyExchangeResult {
     let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
 
     let alg = match ecdh_params.curve_params.named_curve {
+      NamedCurve::X25519 => &ring::agreement::X25519,
       NamedCurve::secp256r1 => &ring::agreement::ECDH_P256,
       NamedCurve::secp384r1 => &ring::agreement::ECDH_P384,
       _ => unreachable!()

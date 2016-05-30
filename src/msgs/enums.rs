@@ -688,6 +688,8 @@ pub enum NamedCurve {
   brainpoolp256r1,
   brainpoolp384r1,
   brainpoolp512r1,
+  X25519,
+  X448,
   arbitrary_explicit_prime_curves,
   arbitrary_explicit_char2_curves,
   Unknown(u16)
@@ -734,6 +736,8 @@ impl Codec for NamedCurve {
       0x001a => NamedCurve::brainpoolp256r1,
       0x001b => NamedCurve::brainpoolp384r1,
       0x001c => NamedCurve::brainpoolp512r1,
+      0x001d => NamedCurve::X25519,
+      0x001e => NamedCurve::X448,
       0xff01 => NamedCurve::arbitrary_explicit_prime_curves,
       0xff02 => NamedCurve::arbitrary_explicit_char2_curves,
       x => NamedCurve::Unknown(x)
@@ -772,6 +776,8 @@ impl NamedCurve {
       NamedCurve::brainpoolp256r1 => 0x001a,
       NamedCurve::brainpoolp384r1 => 0x001b,
       NamedCurve::brainpoolp512r1 => 0x001c,
+      NamedCurve::X25519 => 0x001d,
+      NamedCurve::X448 => 0x001e,
       NamedCurve::arbitrary_explicit_prime_curves => 0xff01,
       NamedCurve::arbitrary_explicit_char2_curves => 0xff02,
       NamedCurve::Unknown(v) => v
