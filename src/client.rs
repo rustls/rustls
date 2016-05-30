@@ -3,9 +3,10 @@ use session::SessionSecrets;
 use session::MessageCipher;
 use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, ClientExtension, DigitallySignedStruct};
+use msgs::enums::{ContentType, AlertDescription, AlertLevel};
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
-use msgs::message::Message;
+use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
 use client_hs;
 use hash_hs;
@@ -101,6 +102,7 @@ pub struct ClientSession {
   message_cipher: Box<MessageCipher>,
   write_seq: u64,
   read_seq: u64,
+  peer_eof: bool,
   pub message_deframer: MessageDeframer,
   pub message_fragmenter: MessageFragmenter,
   pub sendable_plaintext: Vec<u8>,
@@ -119,6 +121,7 @@ impl ClientSession {
       message_cipher: MessageCipher::invalid(),
       write_seq: 0,
       read_seq: 0,
+      peer_eof: false,
       message_deframer: MessageDeframer::new(),
       message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),
       sendable_plaintext: Vec::new(),
@@ -174,9 +177,6 @@ impl ClientSession {
     None
   }
 
-  pub fn add_extensions(&self, _exts: &mut Vec<ClientExtension>) {
-  }
-
   pub fn wants_read(&self) -> bool {
     true
   }
@@ -185,9 +185,44 @@ impl ClientSession {
     !self.tls_queue.is_empty()
   }
 
+  fn process_alert(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
+    /* Decrypt it if needed. */
+    if self.state.is_encrypted() {
+      let mut dm = try!(self.decrypt_incoming(msg)
+                        .ok_or(HandshakeError::DecryptError));
+      dm.decode_payload();
+      *msg = dm;
+    }
+
+    /* Log it. */
+    println!("Alert received: {:?}", msg);
+
+    if let MessagePayload::Alert(ref alert) = msg.payload {
+      /* If we get a CloseNotify, make a note to declare EOF to our
+       * caller. */
+      if alert.description == AlertDescription::CloseNotify {
+        self.peer_eof = true;
+        return Ok(())
+      }
+
+      /* Warnings are nonfatal. */
+      if alert.level == AlertLevel::Warning {
+        return Ok(())
+      }
+
+      return Err(HandshakeError::AlertReceived(alert.description.clone()));
+    } else {
+      unreachable!();
+    }
+  }
+
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
     if !self.state.is_encrypted() {
       msg.decode_payload();
+    }
+
+    if msg.is_content_type(ContentType::Alert) {
+      return self.process_alert(msg);
     }
 
     let handler = self.get_handler();
@@ -249,7 +284,6 @@ impl ClientSession {
 
   pub fn send_plain(&mut self, data: &[u8]) {
     use msgs::enums::{ContentType, ProtocolVersion};
-    use msgs::message::MessagePayload;
 
     if self.state != ConnState::Traffic {
       /* If we haven't completed handshaking, buffer
@@ -295,6 +329,11 @@ impl io::Read for ClientSession {
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     let len = try!(self.received_plaintext.as_slice().read(buf));
     self.received_plaintext.drain(0..len);
+
+    if len == 0 && self.peer_eof {
+      return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));
+    }
+
     Ok(len)
   }
 }

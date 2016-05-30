@@ -3,8 +3,8 @@ use msgs::codec::{Codec, Reader};
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {
-  level: AlertLevel,
-  description: AlertDescription
+  pub level: AlertLevel,
+  pub description: AlertDescription
 }
 
 impl Codec for AlertMessagePayload {

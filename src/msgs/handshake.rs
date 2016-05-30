@@ -342,6 +342,20 @@ impl Codec for ClientExtension {
   }
 }
 
+impl ClientExtension {
+  /// Make a basic SNI ServerNameRequest quoting `hostname`.
+  pub fn make_sni(hostname: &str) -> ClientExtension {
+    let name = ServerName {
+      typ: ServerNameType::HostName,
+      payload: ServerNamePayload::HostName(hostname.to_string())
+    };
+
+    ClientExtension::ServerName(
+      vec![ name ]
+    )
+  }
+}
+
 #[derive(Debug)]
 pub enum ServerExtension {
   ECPointFormats(ECPointFormatList),

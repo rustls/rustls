@@ -1,4 +1,4 @@
-use msgs::enums::{ContentType, HandshakeType};
+use msgs::enums::{ContentType, HandshakeType, AlertDescription};
 use msgs::message::{Message, MessagePayload};
 
 extern crate webpki;
@@ -9,6 +9,7 @@ pub enum HandshakeError {
   InappropriateHandshakeMessage { expect_types: Vec<HandshakeType>, got_type: HandshakeType },
   NoCertificatesPresented,
   DecryptError,
+  AlertReceived(AlertDescription),
   WebPKIError(webpki::Error),
   General(String)
 }

@@ -42,10 +42,10 @@ pub fn emit_client_hello(sess: &mut ClientSession) {
   sess.handshake_data.generate_client_random();
 
   let mut exts = Vec::new();
+  exts.push(ClientExtension::make_sni(&sess.handshake_data.dns_name));
   exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
   exts.push(ClientExtension::EllipticCurves(EllipticCurveList::supported()));
   exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported()));
-  sess.add_extensions(&mut exts);
 
   let sh = Message {
     typ: ContentType::Handshake,
