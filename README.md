@@ -97,4 +97,4 @@ closing connection
 - Signing support in *ring* to unblock server work.
 - Server support.
 - Write some more sample programs.
-- Stabilize and document public API.
+- Stabilise and document public API.
