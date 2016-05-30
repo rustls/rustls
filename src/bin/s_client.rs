@@ -6,7 +6,7 @@ use mio::tcp::TcpStream;
 
 use std::str;
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Read, Write, BufReader};
 
 extern crate rustls;
 
@@ -78,9 +78,12 @@ fn read_file(filename: &str) -> Vec<u8> {
 }
 
 impl TlsClient {
-  fn new(sock: TcpStream) -> TlsClient {
+  fn new(sock: TcpStream, hostname: &str) -> TlsClient {
     let mut config = rustls::client::ClientConfig::default();
-    config.root_store.add(&read_file("test/ca.der"))
+    let certfile = std::fs::File::open("certs.pem")
+      .unwrap();
+    let mut reader = BufReader::new(certfile);
+    config.root_store.add_pem_file(&mut reader)
       .unwrap();
 
     let cfg = Arc::new(config);
@@ -88,7 +91,7 @@ impl TlsClient {
     TlsClient {
       socket: sock,
       closing: false,
-      tls_session: rustls::client::ClientSession::new(&cfg, "testserver.com")
+      tls_session: rustls::client::ClientSession::new(&cfg, hostname)
     }
   }
 
@@ -115,9 +118,15 @@ impl TlsClient {
 
     /* We might have new plaintext as a result. */
     let mut plaintext = Vec::new();
-    self.tls_session.read_to_end(&mut plaintext).unwrap();
-    if plaintext.len() > 0 {
+    let rc = self.tls_session.read_to_end(&mut plaintext);
+    if rc.is_ok() && plaintext.len() > 0 {
       println!("got {}", str::from_utf8(&plaintext).unwrap());
+    }
+
+    if rc.is_err() {
+      println!("plaintext read error {:?}", rc.unwrap_err());
+      self.closing = true;
+      return;
     }
   }
 
@@ -161,11 +170,26 @@ impl TlsClient {
 }
 
 fn main() {
-  let addr = "127.0.0.1:8443".parse().unwrap();
+  use std::net::ToSocketAddrs;
+  use std::env;
+  use std::process;
+
+  let args: Vec<String> = env::args().collect();
+
+  if args.len() != 2 {
+    println!("usage: {} hostname", args[0]);
+    println!("connects to <hostname> port 443, and sends a trivial HTTP request");
+    process::exit(1);
+  }
+
+  let hostname = &args[1];
+  let port = 443;
+
+  let addr = (hostname.as_str(), port).to_socket_addrs().unwrap().next().unwrap();
   let sock = TcpStream::connect(&addr).unwrap();
   let mut event_loop = mio::EventLoop::new().unwrap();
-  let mut tlsclient = TlsClient::new(sock);
-  tlsclient.write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
+  let mut tlsclient = TlsClient::new(sock, &hostname);
+  tlsclient.write(format!("GET / HTTP/1.1\r\nHost: {}\r\n\r\n", hostname).as_bytes()).unwrap();
   tlsclient.register(&mut event_loop);
   event_loop.run(&mut tlsclient).unwrap();
 }
