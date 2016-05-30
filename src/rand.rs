@@ -4,7 +4,6 @@
  * they panic on error. */
 
 extern crate ring;
-use ring::rand::SecureRandom;
 
 /* Fill the whole slice with random material. */
 pub fn fill_random(bytes: &mut [u8]) {

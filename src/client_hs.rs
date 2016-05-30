@@ -2,7 +2,6 @@ use msgs::enums::{ContentType, HandshakeType};
 use msgs::enums::{Compression, ProtocolVersion};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
-use msgs::codec::Codec;
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random};
 use msgs::handshake::ClientExtension;
