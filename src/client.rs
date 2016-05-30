@@ -189,9 +189,6 @@ impl ClientSession {
   }
 
   fn process_alert(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
-    /* Log it. */
-    println!("Alert received: {:?}", msg);
-
     if let MessagePayload::Alert(ref alert) = msg.payload {
       /* If we get a CloseNotify, make a note to declare EOF to our
        * caller. */
@@ -202,9 +199,11 @@ impl ClientSession {
 
       /* Warnings are nonfatal. */
       if alert.level == AlertLevel::Warning {
+        warn!("TLS alert warning received: {:?}", msg);
         return Ok(())
       }
 
+      error!("TLS alert received: {:?}", msg);
       return Err(HandshakeError::AlertReceived(alert.description.clone()));
     } else {
       unreachable!();

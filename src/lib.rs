@@ -1,6 +1,8 @@
 extern crate webpki;
 extern crate ring;
 extern crate rustc_serialize;
+#[macro_use]
+extern crate log;
 
 pub mod msgs;
 mod rand;
