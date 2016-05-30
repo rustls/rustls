@@ -8,15 +8,6 @@ pub struct HandshakeHash {
   ctx: digest::Context
 }
 
-fn dump(label: &str, bytes: &[u8]) {
-  print!("{}: ", label);
-
-  for b in bytes {
-    print!("{:02x}", b);
-  }
-  println!("");
-}
-
 impl HandshakeHash {
   pub fn new(alg: &'static digest::Algorithm) -> HandshakeHash {
     HandshakeHash { ctx: digest::Context::new(alg) }
@@ -27,8 +18,6 @@ impl HandshakeHash {
       MessagePayload::Handshake(ref hs) => {
         let mut buf = Vec::new();
         hs.encode(&mut buf);
-        println!("hash msg {:?} {} bytes", hs.typ, buf.len());
-        dump("hash", &buf);
         self.ctx.update(&buf);
       },
       _ => unreachable!()
@@ -37,8 +26,6 @@ impl HandshakeHash {
   }
 
   pub fn update_raw(&mut self, buf: &[u8]) -> &mut HandshakeHash {
-    println!("hash raw {} bytes", buf.len());
-    dump("hash init", buf);
     self.ctx.update(buf);
     self
   }

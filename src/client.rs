@@ -5,6 +5,7 @@ use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct};
 use msgs::enums::{ContentType, AlertDescription, AlertLevel};
 use msgs::deframer::MessageDeframer;
+use msgs::hsjoiner::HandshakeJoiner;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
@@ -104,6 +105,7 @@ pub struct ClientSession {
   read_seq: u64,
   peer_eof: bool,
   pub message_deframer: MessageDeframer,
+  pub handshake_joiner: HandshakeJoiner,
   pub message_fragmenter: MessageFragmenter,
   pub sendable_plaintext: Vec<u8>,
   pub received_plaintext: Vec<u8>,
@@ -123,6 +125,7 @@ impl ClientSession {
       read_seq: 0,
       peer_eof: false,
       message_deframer: MessageDeframer::new(),
+      handshake_joiner: HandshakeJoiner::new(),
       message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),
       sendable_plaintext: Vec::new(),
       received_plaintext: Vec::new(),
@@ -186,14 +189,6 @@ impl ClientSession {
   }
 
   fn process_alert(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
-    /* Decrypt it if needed. */
-    if self.state.is_encrypted() {
-      let mut dm = try!(self.decrypt_incoming(msg)
-                        .ok_or(HandshakeError::DecryptError));
-      dm.decode_payload();
-      *msg = dm;
-    }
-
     /* Log it. */
     println!("Alert received: {:?}", msg);
 
@@ -217,14 +212,45 @@ impl ClientSession {
   }
 
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
-    if !self.state.is_encrypted() {
-      msg.decode_payload();
+    /* Decrypt if demanded by current state. */
+    if self.state.is_encrypted() {
+      let dm = try!(self.decrypt_incoming(msg)
+                    .ok_or(HandshakeError::DecryptError));
+      *msg = dm;
     }
 
+    /* For handshake messages, we need to join them before parsing
+     * and processing. */
+    if self.handshake_joiner.want_message(msg) {
+      self.handshake_joiner.take_message(msg);
+      return self.process_new_handshake_messages();
+    }
+
+    /* Now we can fully parse the message payload. */
+    msg.decode_payload();
+
+    /* For alerts, we have separate logic. */
     if msg.is_content_type(ContentType::Alert) {
       return self.process_alert(msg);
     }
 
+    return self.process_main_protocol(msg);
+  }
+
+  fn process_new_handshake_messages(&mut self) -> Result<(), HandshakeError> {
+    loop {
+      match self.handshake_joiner.frames.pop_front() {
+        Some(mut msg) => try!(self.process_main_protocol(&mut msg)),
+        None => break
+      }
+    }
+
+    Ok(())
+  }
+
+  /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
+  /// that Handler expects.  Finally, we ask the handler to handle the message.
+  fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
     let handler = self.get_handler();
     let expects = (handler.expect)();
     try!(expects.check_message(msg));
@@ -274,10 +300,7 @@ impl ClientSession {
 
     let mut data = Vec::new();
     let msg = msg_maybe.unwrap();
-    println!("writing {:?}", msg);
     msg.encode(&mut data);
-
-    println!("write {:?}", data);
 
     wr.write_all(&data)
   }
@@ -323,6 +346,13 @@ impl ClientSession {
   pub fn take_received_plaintext(&mut self, bytes: Payload) {
     self.received_plaintext.extend_from_slice(&bytes.body);
   }
+
+  /// Are we done? ie, have we processed all received messages,
+  /// and received a close_notify to indicate that no new messages
+  /// will arrive?
+  fn connection_at_eof(&self) -> bool {
+    self.peer_eof && !self.message_deframer.has_pending()
+  }
 }
 
 impl io::Read for ClientSession {
@@ -330,10 +360,10 @@ impl io::Read for ClientSession {
     let len = try!(self.received_plaintext.as_slice().read(buf));
     self.received_plaintext.drain(0..len);
 
-    if len == 0 && self.peer_eof {
+    if len == 0 && self.connection_at_eof() && self.received_plaintext.len() == 0 {
       return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));
     }
-
+    
     Ok(len)
   }
 }

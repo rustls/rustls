@@ -12,6 +12,7 @@ pub mod ccs;
 pub mod message;
 pub mod deframer;
 pub mod fragmenter;
+pub mod hsjoiner;
 
 #[cfg(test)]
 mod test {

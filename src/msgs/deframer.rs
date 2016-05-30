@@ -7,9 +7,18 @@ use msgs::message::Message;
 
 static HEADER_SIZE: usize = 1 + 2 + 2;
 
+/// This deframer works to reconstruct TLS messages
+/// from arbitrary-sized reads, buffering as neccessary.
+/// The input is `read()`, the output is the `frames` deque.
 pub struct MessageDeframer {
+  /// Completed frames for output.
   pub frames: VecDeque<Message>,
+
+  /// A variable-size buffer containing the currently-
+  /// accumulating TLS message.
   buf: Vec<u8>,
+
+  /// A buffer into which we read.
   chunk: [u8; 2048]
 }
 
@@ -22,6 +31,9 @@ impl MessageDeframer {
     }
   }
 
+  /// Read some bytes from `rd`, and add them to our internal
+  /// buffer.  If this means our internal buffer contains
+  /// full messages, decode them all.
   pub fn read(&mut self, rd: &mut io::Read) -> io::Result<usize> {
     let rc = rd.read(&mut self.chunk);
 
@@ -39,11 +51,22 @@ impl MessageDeframer {
     Ok(len)
   }
 
+  /// Returns true if we have messages for the caller
+  /// to process, either whole messages in our output
+  /// queue or partial messages in our buffer.
+  pub fn has_pending(&self) -> bool {
+    self.frames.len() > 0 || self.buf.len() > 0
+  }
+
+  /// Does our `buf` contain a full message?  It does if it is big enough to
+  /// contain a header, and that header has a length which falls within `buf`.
   fn buf_contains_message(&self) -> bool {
     self.buf.len() >= HEADER_SIZE &&
       self.buf.len() >= (codec::decode_u16(&self.buf[3..5]).unwrap() as usize) + HEADER_SIZE
   }
 
+  /// Take a TLS message off the front of `buf`, and put it onto the back
+  /// of our `frames` deque.
   fn deframe_one(&mut self) {
     let used = {
       let mut rd = codec::Reader::init(&self.buf);
@@ -100,6 +123,7 @@ mod tests {
 
     for i in 0..bytes.len() {
       assert_len(1, input_bytes(d, &bytes[i..i+1]));
+      assert_eq!(d.has_pending(), true);
 
       if i < bytes.len() - 1 {
         assert_eq!(frames_before, d.frames.len());
@@ -132,36 +156,49 @@ mod tests {
   #[test]
   fn check_incremental() {
     let mut d = MessageDeframer::new();
+    assert_eq!(d.has_pending(), false);
     input_whole_incremental(&mut d, FIRST_MESSAGE);
+    assert_eq!(d.has_pending(), true);
     assert_eq!(1, d.frames.len());
     pop_first(&mut d);
+    assert_eq!(d.has_pending(), false);
   }
 
   #[test]
   fn check_incremental_2() {
     let mut d = MessageDeframer::new();
+    assert_eq!(d.has_pending(), false);
     input_whole_incremental(&mut d, FIRST_MESSAGE);
+    assert_eq!(d.has_pending(), true);
     input_whole_incremental(&mut d, SECOND_MESSAGE);
+    assert_eq!(d.has_pending(), true);
     assert_eq!(2, d.frames.len());
     pop_first(&mut d);
+    assert_eq!(d.has_pending(), true);
     pop_second(&mut d);
+    assert_eq!(d.has_pending(), false);
   }
 
   #[test]
   fn check_whole() {
     let mut d = MessageDeframer::new();
+    assert_eq!(d.has_pending(), false);
     assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
+    assert_eq!(d.has_pending(), true);
     assert_eq!(d.frames.len(), 1);
     pop_first(&mut d);
+    assert_eq!(d.has_pending(), false);
   }
 
   #[test]
   fn check_whole_2() {
     let mut d = MessageDeframer::new();
+    assert_eq!(d.has_pending(), false);
     assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
     assert_len(SECOND_MESSAGE.len(), input_bytes(&mut d, SECOND_MESSAGE));
     assert_eq!(d.frames.len(), 2);
     pop_first(&mut d);
     pop_second(&mut d);
+    assert_eq!(d.has_pending(), false);
   }
 }

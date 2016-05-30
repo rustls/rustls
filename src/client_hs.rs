@@ -81,8 +81,6 @@ fn expect_server_hello() -> Expectation {
 fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
 
-  println!("we have server hello {:?}", server_hello);
-
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
     return Err(HandshakeError::General("server does not support TLSv1_2".to_string()));
   }
@@ -129,7 +127,6 @@ fn handle_certificate(sess: &mut ClientSession, m: &Message) -> Result<ConnState
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
   sess.handshake_data.hash_message(m);
   sess.handshake_data.server_cert_chain = cert_chain.clone();
-  println!("we have server cert {:?}", cert_chain);
   Ok(ConnState::ExpectServerKX)
 }
 
@@ -155,7 +152,6 @@ fn handle_server_kx(sess: &mut ClientSession, m: &Message) -> Result<ConnState, 
   }
 
   let decoded_kx = maybe_decoded_kx.unwrap();
-  println!("we have serverkx {:?}", decoded_kx);
 
   /* Save the signature and signed parameters for later verification. */
   sess.handshake_data.server_kx_sig = decoded_kx.get_sig();
@@ -198,8 +194,6 @@ fn emit_clientkx(sess: &mut ClientSession, kxd: &suites::KeyExchangeResult) {
     )
   };
 
-  println!("sending ckx {:?}", ckx);
-
   sess.handshake_data.hash_message(&ckx);
   sess.tls_queue.push_back(ckx);
 }
@@ -238,7 +232,6 @@ fn emit_finished(sess: &mut ClientSession) {
 }
 
 fn handle_server_hello_done(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
-  println!("we have serverhellodone");
   sess.handshake_data.hash_message(m);
 
   /* 1. Verify the cert chain.
@@ -309,7 +302,6 @@ fn expect_ccs() -> Expectation {
 
 fn handle_ccs(_sess: &mut ClientSession, _m: &Message) -> Result<ConnState, HandshakeError> {
   /* nb. msgs layer validates trivial contents of CCS */
-  println!("got server CCS");
   Ok(ConnState::ExpectFinished)
 }
 
@@ -327,11 +319,7 @@ fn expect_finished() -> Expectation {
 }
 
 fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
-  let mut dm = try!(sess.decrypt_incoming(m)
-                    .ok_or(HandshakeError::DecryptError));
-  dm.decode_payload();
-
-  let finished = try!(extract_handshake!(dm, HandshakePayload::Finished)
+  let finished = try!(extract_handshake!(m, HandshakePayload::Finished)
     .ok_or(HandshakeError::General("finished message missing".to_string()))
   );
 
@@ -346,7 +334,6 @@ fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, H
     .map_err(|_| HandshakeError::DecryptError)
     .unwrap();
 
-  println!("got finished {:?}", finished);
   Ok(ConnState::Traffic)
 }
 
@@ -364,9 +351,7 @@ fn expect_traffic() -> Expectation {
 }
 
 fn handle_traffic(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
-  let dm = try!(sess.decrypt_incoming(m)
-                .ok_or(HandshakeError::DecryptError));
-  sess.take_received_plaintext(dm.get_opaque_payload().unwrap());
+  sess.take_received_plaintext(m.get_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
 
