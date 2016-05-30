@@ -71,7 +71,7 @@ impl io::Read for TlsClient {
 impl TlsClient {
   fn new(sock: TcpStream, hostname: &str) -> TlsClient {
     let mut config = rustls::client::ClientConfig::default();
-    let certfile = std::fs::File::open("certs.pem")
+    let certfile = std::fs::File::open("/etc/ssl/certs/ca-certificates.crt")
       .unwrap();
     let mut reader = BufReader::new(certfile);
     config.root_store.add_pem_file(&mut reader)
