@@ -68,15 +68,6 @@ impl io::Read for TlsClient {
   }
 }
 
-fn read_file(filename: &str) -> Vec<u8> {
-  use std::io::Read;
-
-  let mut r = Vec::new();
-  let mut f = std::fs::File::open(filename).unwrap();
-  f.read_to_end(&mut r).unwrap();
-  r
-}
-
 impl TlsClient {
   fn new(sock: TcpStream, hostname: &str) -> TlsClient {
     let mut config = rustls::client::ClientConfig::default();

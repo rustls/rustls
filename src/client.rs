@@ -2,7 +2,7 @@ use msgs::enums::CipherSuite;
 use session::SessionSecrets;
 use session::MessageCipher;
 use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
-use msgs::handshake::{CertificatePayload, ClientExtension, DigitallySignedStruct};
+use msgs::handshake::{CertificatePayload, DigitallySignedStruct};
 use msgs::enums::{ContentType, AlertDescription, AlertLevel};
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};

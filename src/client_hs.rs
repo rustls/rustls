@@ -374,21 +374,3 @@ pub static TRAFFIC: Handler = Handler {
   expect: expect_traffic,
   handle: handle_traffic
 };
-
-/* -- Generic invalid state -- */
-fn expect_invalid() -> Expectation {
-  Expectation {
-    content_types: Vec::new(),
-    handshake_types: Vec::new()
-  }
-}
-
-fn handle_invalid(_sess: &mut ClientSession, _m: &Message) -> Result<ConnState, HandshakeError> {
-  Err(HandshakeError::General("bad state".to_string()))
-}
-
-pub static INVALID_STATE: Handler = Handler {
-  expect: expect_invalid,
-  handle: handle_invalid
-};
-
