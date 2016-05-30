@@ -9,3 +9,4 @@ webpki = { version = "0.1.0", git = "file:///home/jbp/webpki/" }
 
 mio = "0.5.1"
 time = "0.1.35"
+rustc-serialize = "0.3"
