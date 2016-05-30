@@ -110,7 +110,7 @@ impl TlsClient {
     /* We might have new plaintext as a result. */
     let mut plaintext = Vec::new();
     let rc = self.tls_session.read_to_end(&mut plaintext);
-    if rc.is_ok() && plaintext.len() > 0 {
+    if plaintext.len() > 0 {
       println!("got {}", str::from_utf8(&plaintext).unwrap());
     }
 
@@ -123,7 +123,7 @@ impl TlsClient {
 
   fn do_write(&mut self) {
     let rc = self.tls_session.write_tls(&mut self.socket);
-    println!("write rc {:?}", rc);
+    println!("write rc={:?}", rc);
   }
 
   fn register(&self, event_loop: &mut mio::EventLoop<TlsClient>) {
@@ -180,7 +180,7 @@ fn main() {
   let sock = TcpStream::connect(&addr).unwrap();
   let mut event_loop = mio::EventLoop::new().unwrap();
   let mut tlsclient = TlsClient::new(sock, &hostname);
-  tlsclient.write(format!("GET / HTTP/1.1\r\nHost: {}\r\n\r\n", hostname).as_bytes()).unwrap();
+  tlsclient.write(format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", hostname).as_bytes()).unwrap();
   tlsclient.register(&mut event_loop);
   event_loop.run(&mut tlsclient).unwrap();
 }
