@@ -8,6 +8,9 @@ use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::SignatureAndHashAlgorithm;
 use handshake::HandshakeError;
+use pemfile;
+
+use std::io;
 
 /* Which signature verification mechanisms we support.  No particular
  * order. */
@@ -63,6 +66,7 @@ impl RootCertStore {
     RootCertStore { roots: Vec::new() }
   }
 
+  /// Add a single DER-encoded certificate to the store.
   pub fn add(&mut self, der: &[u8]) -> Result<(), webpki::Error> {
     let ta = try!(
       webpki::trust_anchor_util::cert_der_as_trust_anchor(Input::new(der).unwrap())
@@ -71,6 +75,31 @@ impl RootCertStore {
     let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
     self.roots.push(ota);
     Ok(())
+  }
+
+  /// Parse a PEM file and add all certificates found inside.
+  /// Errors are non-specific; they may be io errors in `rd` and
+  /// PEM format errors, but not certificate validity errors.
+  ///
+  /// This is because large collections of root certificates often
+  /// include ancient or syntactictally invalid certificates.  CAs
+  /// are competent like that.
+  ///
+  /// Returns the number of certificates added, and the number
+  /// which were extracted from the PEM but ultimately unsuitable.
+  pub fn add_pem_file(&mut self, rd: &mut io::BufRead) -> Result<(usize, usize), ()> {
+    let ders = try!(pemfile::certs(rd));
+    let mut valid_count = 0;
+    let mut invalid_count = 0;
+
+    for der in ders {
+      match self.add(&der) {
+        Ok(_) => valid_count += 1,
+        Err(_) => invalid_count += 1
+      }
+    }
+
+    Ok((valid_count, invalid_count))
   }
 }
 
