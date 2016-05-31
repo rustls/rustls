@@ -8,6 +8,10 @@ use std::str;
 use std::io;
 use std::io::{Read, Write, BufReader};
 
+extern crate rustc_serialize;
+extern crate docopt;
+use docopt::Docopt;
+
 extern crate rustls;
 
 const CLIENT: mio::Token = mio::Token(0);
@@ -37,7 +41,7 @@ impl mio::Handler for TlsClient {
     }
 
     if self.is_closed() {
-      println!("closing connection");
+      println!("Connection closed");
       process::exit(1);
     }
 
@@ -69,9 +73,9 @@ impl io::Read for TlsClient {
 }
 
 impl TlsClient {
-  fn new(sock: TcpStream, hostname: &str) -> TlsClient {
+  fn new(sock: TcpStream, hostname: &str, cafile: &str) -> TlsClient {
     let mut config = rustls::client::ClientConfig::default();
-    let certfile = std::fs::File::open("/etc/ssl/certs/ca-certificates.crt")
+    let certfile = std::fs::File::open(cafile)
       .unwrap();
     let mut reader = BufReader::new(certfile);
     config.root_store.add_pem_file(&mut reader)
@@ -86,23 +90,30 @@ impl TlsClient {
     }
   }
 
+  fn read_source_to_end(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    let mut buf = Vec::new();
+    let len = try!(rd.read_to_end(&mut buf));
+    self.tls_session.write(&buf).unwrap();
+    Ok(len)
+  }
+
   fn do_read(&mut self) {
     let rc = self.tls_session.read_tls(&mut self.socket);
     if rc.is_err() {
-      println!("read error {:?}", rc);
+      println!("TLS read error: {:?}", rc);
       self.closing = true;
       return;
     }
 
     if rc.unwrap() == 0 {
-      println!("eof");
+      println!("EOF");
       self.closing = true;
       return;
     }
 
     let processed = self.tls_session.process_new_packets();
     if processed.is_err() {
-      println!("cannot process packet: {:?}", processed);
+      println!("TLS error: {:?}", processed.unwrap_err());
       self.closing = true;
       return;
     }
@@ -111,19 +122,18 @@ impl TlsClient {
     let mut plaintext = Vec::new();
     let rc = self.tls_session.read_to_end(&mut plaintext);
     if plaintext.len() > 0 {
-      println!("got {}", str::from_utf8(&plaintext).unwrap());
+      io::stdout().write(&plaintext).unwrap();
     }
 
     if rc.is_err() {
-      println!("plaintext read error {:?}", rc.unwrap_err());
+      println!("Plaintext read error: {:?}", rc.unwrap_err());
       self.closing = true;
       return;
     }
   }
 
   fn do_write(&mut self) {
-    let rc = self.tls_session.write_tls(&mut self.socket);
-    println!("write rc={:?}", rc);
+    self.tls_session.write_tls(&mut self.socket).unwrap();
   }
 
   fn register(&self, event_loop: &mut mio::EventLoop<TlsClient>) {
@@ -160,27 +170,65 @@ impl TlsClient {
   }
 }
 
+const USAGE: &'static str = "
+Connects to the TLS server at hostname:PORT.  The default PORT
+is 443.  By default, this reads a request from stdin (to EOF)
+before making the connection.  --http replaces this with a
+basic HTTP GET request for /.
+
+Usage:
+  tlsclient [-p PORT] [--http] [--cafile CAFILE] <hostname>
+  tlsclient --version
+  tlsclient --help
+
+Options:
+    -p, --port PORT     Connect to PORT. Default is 443.
+    --http              Send a basic HTTP GET request for /.
+    --cafile CAFILE     Read root certificates from CAFILE.
+    --version           Show tool version.
+    --help              Show this screen.
+";
+
+#[derive(Debug, RustcDecodable)]
+struct Args {
+  flag_port: Option<u16>,
+  flag_http: bool,
+  flag_cafile: Option<String>,
+  arg_hostname: String
+}
+
 fn main() {
   use std::net::ToSocketAddrs;
-  use std::env;
-  use std::process;
 
-  let args: Vec<String> = env::args().collect();
+  let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
 
-  if args.len() != 2 {
-    println!("usage: {} hostname", args[0]);
-    println!("connects to <hostname> port 443, and sends a trivial HTTP request");
-    process::exit(1);
-  }
+  let args: Args = Docopt::new(USAGE)
+    .and_then(|d| Ok(d.help(true)))
+    .and_then(|d| Ok(d.version(Some(version))))
+    .and_then(|d| d.decode())
+    .unwrap_or_else(|e| e.exit());
 
-  let hostname = &args[1];
-  let port = 443;
+  let port = args.flag_port.unwrap_or(443);
 
-  let addr = (hostname.as_str(), port).to_socket_addrs().unwrap().next().unwrap();
+  let addr = (args.arg_hostname.as_str(), port).to_socket_addrs()
+    .unwrap()
+    .next()
+    .unwrap();
+  
+  let cafile = args.flag_cafile.unwrap_or("/etc/ssl/certs/ca-certificates.crt".to_string());
+
   let sock = TcpStream::connect(&addr).unwrap();
+  let mut tlsclient = TlsClient::new(sock, &args.arg_hostname, &cafile);
+
+  if args.flag_http {
+    let httpreq = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", args.arg_hostname);
+    tlsclient.write(httpreq.as_bytes()).unwrap();
+  } else {
+    let mut stdin = io::stdin();
+    tlsclient.read_source_to_end(&mut stdin).unwrap();
+  }
+    
   let mut event_loop = mio::EventLoop::new().unwrap();
-  let mut tlsclient = TlsClient::new(sock, &hostname);
-  tlsclient.write(format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", hostname).as_bytes()).unwrap();
   tlsclient.register(&mut event_loop);
   event_loop.run(&mut tlsclient).unwrap();
 }

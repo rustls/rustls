@@ -9,7 +9,10 @@ ring = { version = "0.1.0", git = "https://github.com/briansmith/ring" }
 # pointed at my fork for the moment
 webpki = { version = "0.1.0", git = "https://github.com/ctz/webpki" }
 
-mio = "0.5.1"
 time = "0.1.35"
 rustc-serialize = "0.3"
 log = "0.3.6"
+
+[dev-dependencies]
+mio = "0.5.1"
+docopt = "0.6"
