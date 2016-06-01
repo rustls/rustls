@@ -19,6 +19,7 @@ const CLIENT: mio::Token = mio::Token(0);
 struct TlsClient {
   socket: TcpStream,
   closing: bool,
+  clean_closure: bool,
   tls_session: rustls::client::ClientSession
 }
 
@@ -42,7 +43,7 @@ impl mio::Handler for TlsClient {
 
     if self.is_closed() {
       println!("Connection closed");
-      process::exit(1);
+      process::exit(if self.clean_closure { 0 } else { 1 });
     }
 
     self.reregister(event_loop);
@@ -86,6 +87,7 @@ impl TlsClient {
     TlsClient {
       socket: sock,
       closing: false,
+      clean_closure: false,
       tls_session: rustls::client::ClientSession::new(&cfg, hostname)
     }
   }
@@ -126,7 +128,9 @@ impl TlsClient {
     }
 
     if rc.is_err() {
-      println!("Plaintext read error: {:?}", rc.unwrap_err());
+      let err = rc.unwrap_err();
+      println!("Plaintext read error: {:?}", err);
+      self.clean_closure = err.kind() == io::ErrorKind::ConnectionAborted;
       self.closing = true;
       return;
     }
