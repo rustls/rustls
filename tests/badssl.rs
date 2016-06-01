@@ -37,7 +37,7 @@ impl SClientTest {
              .output()
              .unwrap());
 
-    let output = process::Command::new("target/debug/examples/s_client")
+    let output = process::Command::new("target/debug/examples/tlsclient")
       .arg("--http")
       .arg(&self.hostname)
       .output()

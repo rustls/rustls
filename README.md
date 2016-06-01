@@ -35,16 +35,16 @@ following ciphersuites are supported:
 For ECDHE, the `nistp256` and `nistp384` curves are supported,
 as well as `curve25519`.
 
-The client test program is named `s_client`.  It expects to
+The client test program is named `tlsclient`.  It expects to
 find root certificates in `/etc/ssl/certs/ca-certificates.crt`
 and be given a hostname as its single argument.  It connects
 to that host and issues a basic HTTP request, eg:
 
 ```
-$ ./target/debug/s_client mozilla-modern.badssl.com
-got HTTP/1.1 200 OK
+$ ./target/debug/examples/tlsclient --http mozilla-modern.badssl.com
+HTTP/1.1 200 OK
 Server: nginx/1.6.2 (Ubuntu)
-Date: Mon, 30 May 2016 20:13:22 GMT
+Date: Wed, 01 Jun 2016 18:44:00 GMT
 Content-Type: text/html
 Content-Length: 644
 Last-Modified: Tue, 12 Apr 2016 01:21:49 GMT
@@ -77,18 +77,16 @@ Accept-Ranges: bytes
 
 </body>
 </html>
-
-plaintext read error Error { repr: Custom(Custom { kind: ConnectionAborted, error: StringError("CloseNotify alert received") }) }
-closing connection
+Plaintext read error: Error { repr: Custom(Custom { kind: ConnectionAborted, error: StringError("CloseNotify alert received") }) }
+Connection closed
 ```
 
 or
 
 ```
-$ ./target/debug/s_client expired.badssl.com
-write rc=Ok(())
-cannot process packet: Err(WebPKIError(CertExpired))
-closing connection
+$ ./target/debug/examples/tlsclient --http expired.badssl.com
+TLS error: WebPKIError(CertExpired)
+Connection closed
 ```
 
 # TODO list
