@@ -181,8 +181,8 @@ impl OpenSSLServer {
       .arg("-cert").arg(&self.cert)
       .arg("-CAfile").arg(&self.chain)
       .args(&extra_args)
-//      .stdout(process::Stdio::null())
-//      .stderr(process::Stdio::null())
+      .stdout(process::Stdio::null())
+      .stderr(process::Stdio::null())
       .spawn()
       .expect("cannot run openssl server");
 
