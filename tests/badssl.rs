@@ -4,69 +4,12 @@
  * each test.
  */
 
-use std::process;
+#[allow(dead_code)]
+mod common;
+use common::{TlsClient, polite};
 
-struct SClientTest {
-  hostname: String,
-  expect_fails: bool,
-  expect_output: Option<String>
-}
-
-fn connect(hostname: &str) -> SClientTest {
-  SClientTest {
-    hostname: hostname.to_string(),
-    expect_fails: false,
-    expect_output: None
-  }
-}
-
-impl SClientTest {
-  fn expect(&mut self, expect: &str) -> &mut SClientTest {
-    self.expect_output = Some(expect.to_string());
-    self
-  }
-
-  fn fails(&mut self) -> &mut SClientTest {
-    self.expect_fails = true;
-    self
-  }
-
-  fn go(&mut self) -> Option<()> {
-    println!("cwd {:?}",
-             process::Command::new("pwd")
-             .output()
-             .unwrap());
-
-    let output = process::Command::new("target/debug/examples/tlsclient")
-      .arg("--http")
-      .arg(&self.hostname)
-      .output()
-      .unwrap_or_else(|e| { panic!("failed to execute: {}", e) });
-
-    if self.expect_fails {
-      assert!(output.status.code().unwrap() != 0);
-    } else {
-      assert!(output.status.success());
-    }
-
-    let stdout_str = String::from_utf8(output.stdout.clone()).unwrap();
-
-    if self.expect_output.is_some() && stdout_str.find(self.expect_output.as_ref().unwrap()).is_none() {
-      println!("We expected to find '{}' in the following output:", self.expect_output.as_ref().unwrap());
-      println!("{:?}", output);
-      panic!("Test failed");
-    }
-
-    Some(())
-  }
-}
-
-/* For tests which connect to internet servers, don't go crazy. */
-fn polite() {
-  use std::thread;
-  use std::time;
-
-  thread::sleep(time::Duration::from_secs(1));
+fn connect(hostname: &str) -> TlsClient {
+  TlsClient::new(hostname)
 }
 
 #[test]

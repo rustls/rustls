@@ -8,6 +8,7 @@ use msgs::handshake::ClientExtension;
 use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
+use msgs::handshake::ServerKeyExchangePayload;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::{ClientSession, ConnState};
 use suites;
@@ -155,6 +156,11 @@ fn handle_server_kx(sess: &mut ClientSession, m: &Message) -> Result<ConnState, 
   /* Save the signature and signed parameters for later verification. */
   sess.handshake_data.server_kx_sig = decoded_kx.get_sig();
   decoded_kx.encode_params(&mut sess.handshake_data.server_kx_params);
+
+  match decoded_kx {
+    ServerKeyExchangePayload::ECDHE(ecdhe) => info!("ECDHE curve is {:?}", ecdhe.params.curve_params),
+    _ => ()
+  }
 
   Ok(ConnState::ExpectServerHelloDone)
 }

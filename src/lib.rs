@@ -14,6 +14,6 @@ mod verify;
 mod handshake;
 mod server_hs;
 mod client_hs;
-mod suites;
+pub mod suites;
 pub mod server;
 pub mod client;

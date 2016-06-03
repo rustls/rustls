@@ -15,4 +15,4 @@ keyUsage = cRLSign, keyCertSign, digitalSignature, nonRepudiation,keyEnciphermen
 [ alt_names ]
 DNS.1 = testserver.com
 DNS.2 = second.testserver.com
-
+DNS.3 = localhost

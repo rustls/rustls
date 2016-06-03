@@ -14,5 +14,6 @@ rustc-serialize = "0.3"
 log = "0.3.6"
 
 [dev-dependencies]
+env_logger = "0.3.3"
 mio = "0.5.1"
 docopt = "0.6"
