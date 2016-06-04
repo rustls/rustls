@@ -239,6 +239,9 @@ fn emit_finished(sess: &mut ClientSession) {
 fn handle_server_hello_done(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
   sess.handshake_data.hash_message(m);
 
+  info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
+  info!("Server DNS name is {:?}", sess.handshake_data.dns_name);
+
   /* 1. Verify the cert chain.
    * 2. Verify that the top certificate signed their kx.
    * 3. Complete the key exchange:

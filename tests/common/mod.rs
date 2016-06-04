@@ -133,6 +133,7 @@ pub struct OpenSSLServer {
   pub key: String,
   pub cert: String,
   pub chain: String,
+  pub cacert: String,
   pub extra_args: Vec<&'static str>,
   pub child: Option<process::Child>
 }
@@ -148,16 +149,25 @@ fn unused_port(mut port: u16) -> u16 {
 }
 
 impl OpenSSLServer {
-  pub fn new(start_port: u16) -> OpenSSLServer {
+  pub fn new(keytype: &str, start_port: u16) -> OpenSSLServer {
     OpenSSLServer {
       port: unused_port(start_port),
       http: true,
-      key: "test-ca/end.key".to_string(),
-      cert: "test-ca/end.cert".to_string(),
-      chain: "test-ca/end.chain".to_string(),
+      key: format!("test-ca/{}/end.key", keytype),
+      cert: format!("test-ca/{}/end.cert", keytype),
+      chain: format!("test-ca/{}/end.chain", keytype),
+      cacert: format!("test-ca/{}/ca.cert", keytype),
       extra_args: Vec::new(),
       child: None
     }
+  }
+
+  pub fn new_rsa(start_port: u16) -> OpenSSLServer {
+    OpenSSLServer::new("rsa", start_port)
+  }
+
+  pub fn new_ecdsa(start_port: u16) -> OpenSSLServer {
+    OpenSSLServer::new("ecdsa", start_port)
   }
 
   pub fn arg(&mut self, arg: &'static str) -> &mut Self {
@@ -199,7 +209,7 @@ impl OpenSSLServer {
   pub fn client(&self) -> TlsClient {
     let mut c = TlsClient::new("localhost");
     c.port(self.port);
-    c.cafile("test-ca/ca.cert");
+    c.cafile(&self.cacert);
     c
   }
 
