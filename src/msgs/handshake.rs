@@ -267,6 +267,35 @@ impl Codec for ServerNameRequest {
   }
 }
 
+pub type ProtocolName = PayloadU8;
+pub type ProtocolNameList = Vec<ProtocolName>;
+
+impl Codec for ProtocolNameList {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    codec::encode_vec_u16(bytes, self);
+  }
+
+  fn read(r: &mut Reader) -> Option<ProtocolNameList> {
+    codec::read_vec_u16::<ProtocolName>(r)
+  }
+}
+
+pub trait ConvertProtocolNameList {
+  fn convert(names: &[String]) -> Self;
+}
+
+impl ConvertProtocolNameList for ProtocolNameList {
+  fn convert(names: &[String]) -> ProtocolNameList {
+    let mut ret = Vec::new();
+
+    for name in names {
+      ret.push(PayloadU8 { body: name.as_bytes().to_vec().into_boxed_slice() });
+    }
+
+    ret
+  }
+}
+
 #[derive(Debug)]
 pub enum ClientExtension {
   ECPointFormats(ECPointFormatList),
@@ -276,6 +305,7 @@ pub enum ClientExtension {
   ServerName(ServerNameRequest),
   SessionTicketRequest,
   SessionTicketOffer(Payload),
+  Protocols(ProtocolNameList),
   Unknown(UnknownExtension)
 }
 
@@ -289,6 +319,7 @@ impl ClientExtension {
       ClientExtension::ServerName(_) => ExtensionType::ServerName,
       ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket,
       ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
+      ClientExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
       ClientExtension::Unknown(ref r) => r.typ.clone()
     }
   }
@@ -307,6 +338,7 @@ impl Codec for ClientExtension {
       ClientExtension::ServerName(ref r) => r.encode(&mut sub),
       ClientExtension::SessionTicketRequest => (),
       ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
+      ClientExtension::Protocols(ref r) => r.encode(&mut sub),
       ClientExtension::Unknown(ref r) => r.encode(&mut sub)
     }
 
@@ -336,6 +368,8 @@ impl Codec for ClientExtension {
         } else {
           ClientExtension::SessionTicketRequest
         },
+      ExtensionType::ALProtocolNegotiation =>
+        ClientExtension::Protocols(try_ret!(ProtocolNameList::read(&mut sub))),
       _ =>
         ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub)))
     })
@@ -363,6 +397,7 @@ pub enum ServerExtension {
   ServerNameAcknowledgement,
   SessionTicketAcknowledgement,
   RenegotiationInfo(PayloadU8),
+  Protocols(ProtocolNameList),
   Unknown(UnknownExtension)
 }
 
@@ -374,6 +409,7 @@ impl ServerExtension {
       ServerExtension::ServerNameAcknowledgement => ExtensionType::ServerName,
       ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket,
       ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
+      ServerExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
       ServerExtension::Unknown(ref r) => r.typ.clone()
     }
   }
@@ -390,6 +426,7 @@ impl Codec for ServerExtension {
       ServerExtension::ServerNameAcknowledgement => (),
       ServerExtension::SessionTicketAcknowledgement => (),
       ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
+      ServerExtension::Protocols(ref r) => r.encode(&mut sub),
       ServerExtension::Unknown(ref r) => r.encode(&mut sub)
     }
 
@@ -413,6 +450,8 @@ impl Codec for ServerExtension {
         ServerExtension::SessionTicketAcknowledgement,
       ExtensionType::RenegotiationInfo =>
         ServerExtension::RenegotiationInfo(try_ret!(PayloadU8::read(&mut sub))),
+      ExtensionType::ALProtocolNegotiation =>
+        ServerExtension::Protocols(try_ret!(ProtocolNameList::read(&mut sub))),
       _ =>
         ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub)))
     })
@@ -533,6 +572,22 @@ impl Codec for ServerHelloPayload {
     }
 
     Some(ret)
+  }
+}
+
+impl ServerHelloPayload {
+  pub fn get_alpn_protocol(&self) -> Option<String> {
+    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ALProtocolNegotiation));
+    match *ext {
+      ServerExtension::Protocols(ref protos) => {
+        if protos.len() == 1 {
+          String::from_utf8(protos[0].body.to_vec()).ok()
+        } else {
+          None
+        }
+      },
+      _ => None
+    }
   }
 }
 

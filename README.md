@@ -90,8 +90,9 @@ Connection closed
 ```
 
 # TODO list
-- [ ] Improve testing.
-- [ ] ALPN.
+- [x] Improve testing.
+- [ ] Improve testing some more.
+- [x] ALPN.
 - [ ] Tickets.
 - [ ] Resumption.
 - [ ] chacha20poly1305 bulk encryption support.

@@ -16,6 +16,7 @@ extern crate docopt;
 use docopt::Docopt;
 
 extern crate rustls;
+use rustls::client::{ClientConfig, ClientSession};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -23,7 +24,7 @@ struct TlsClient {
   socket: TcpStream,
   closing: bool,
   clean_closure: bool,
-  tls_session: rustls::client::ClientSession
+  tls_session: ClientSession
 }
 
 impl mio::Handler for TlsClient {
@@ -76,48 +77,8 @@ impl io::Read for TlsClient {
   }
 }
 
-fn find_suite(name: &str) -> Option<&'static rustls::suites::SupportedCipherSuite> {
-  for suite in rustls::suites::DEFAULT_CIPHERSUITES.iter() {
-    let sname = format!("{:?}", suite.suite).to_lowercase();
-
-    if sname == name.to_string().to_lowercase() {
-      return Some(suite);
-    }
-  }
-
-  None
-}
-
-fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::suites::SupportedCipherSuite> {
-  let mut out = Vec::new();
-
-  for csname in suites {
-    let scs = find_suite(csname);
-    match scs {
-      Some(s) => out.push(s),
-      None => panic!("cannot look up ciphersuite '{}'", csname)
-    }
-  }
-
-  out
-}
-
 impl TlsClient {
-  fn new(sock: TcpStream, hostname: &str, cafile: &str, suites: &Vec<String>) -> TlsClient {
-    let mut config = rustls::client::ClientConfig::default();
-
-    if suites.len() != 0 {
-      config.ciphersuites = lookup_suites(suites);
-    }
-
-    let certfile = std::fs::File::open(cafile)
-      .unwrap();
-    let mut reader = BufReader::new(certfile);
-    config.root_store.add_pem_file(&mut reader)
-      .unwrap();
-
-    let cfg = Arc::new(config);
-
+  fn new(sock: TcpStream, hostname: &str, cfg: Arc<rustls::client::ClientConfig>) -> TlsClient {
     TlsClient {
       socket: sock,
       closing: false,
@@ -216,7 +177,7 @@ before making the connection.  --http replaces this with a
 basic HTTP GET request for /.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http] [--cafile CAFILE] [--suite SUITE...] <hostname>
+  tlsclient [--verbose] [-p PORT] [--http] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
   tlsclient --version
   tlsclient --help
 
@@ -226,6 +187,7 @@ Options:
     --cafile CAFILE     Read root certificates from CAFILE.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
+    --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
     --verbose           Emit log output.
     --version           Show tool version.
     --help              Show this screen.
@@ -237,6 +199,7 @@ struct Args {
   flag_http: bool,
   flag_verbose: bool,
   flag_suite: Vec<String>,
+  flag_proto: Vec<String>,
   flag_cafile: Option<String>,
   arg_hostname: String
 }
@@ -252,6 +215,54 @@ fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
   }
 
   unreachable!("Cannot lookup address");
+}
+
+fn find_suite(name: &str) -> Option<&'static rustls::suites::SupportedCipherSuite> {
+  for suite in rustls::suites::DEFAULT_CIPHERSUITES.iter() {
+    let sname = format!("{:?}", suite.suite).to_lowercase();
+
+    if sname == name.to_string().to_lowercase() {
+      return Some(suite);
+    }
+  }
+
+  None
+}
+
+fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::suites::SupportedCipherSuite> {
+  let mut out = Vec::new();
+
+  for csname in suites {
+    let scs = find_suite(csname);
+    match scs {
+      Some(s) => out.push(s),
+      None => panic!("cannot look up ciphersuite '{}'", csname)
+    }
+  }
+
+  out
+}
+
+fn make_config(args: &Args) -> Arc<ClientConfig> {
+  let mut config = ClientConfig::default();
+
+  if args.flag_suite.len() != 0 {
+    config.ciphersuites = lookup_suites(&args.flag_suite);
+  }
+
+  let cafile = match args.flag_cafile {
+    Some(ref cafile) => cafile.clone(),
+    None => "/etc/ssl/certs/ca-certificates.crt".to_string()
+  };
+  let certfile = std::fs::File::open(cafile)
+    .unwrap();
+  let mut reader = BufReader::new(certfile);
+  config.root_store.add_pem_file(&mut reader)
+    .unwrap();
+
+  config.set_protocols(&args.flag_proto);
+
+  Arc::new(config)
 }
 
 fn main() {
@@ -271,11 +282,11 @@ fn main() {
 
   let port = args.flag_port.unwrap_or(443);
   let addr = lookup_ipv4(args.arg_hostname.as_str(), port);
-  
-  let cafile = args.flag_cafile.unwrap_or("/etc/ssl/certs/ca-certificates.crt".to_string());
+
+  let config = make_config(&args);
 
   let sock = TcpStream::connect(&addr).unwrap();
-  let mut tlsclient = TlsClient::new(sock, &args.arg_hostname, &cafile, &args.flag_suite);
+  let mut tlsclient = TlsClient::new(sock, &args.arg_hostname, config);
 
   if args.flag_http {
     let httpreq = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n", args.arg_hostname);
@@ -284,7 +295,7 @@ fn main() {
     let mut stdin = io::stdin();
     tlsclient.read_source_to_end(&mut stdin).unwrap();
   }
-    
+
   let mut event_loop = mio::EventLoop::new().unwrap();
   tlsclient.register(&mut event_loop);
   event_loop.run(&mut tlsclient).unwrap();

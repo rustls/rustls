@@ -20,20 +20,41 @@ use std::io;
 use std::collections::VecDeque;
 use std::mem;
 
+/// Common configuration for all connections made by
+/// a program.
+///
+/// Making one of these can be expensive, and should be
+/// once per process rather than once per connection.
 pub struct ClientConfig {
-  /* List of ciphersuites, in preference order. */
+  /// List of ciphersuites, in preference order.
   pub ciphersuites: Vec<&'static SupportedCipherSuite>,
 
-  /* Collection of root certificates. */
-  pub root_store: verify::RootCertStore
+  /// Collection of root certificates.
+  pub root_store: verify::RootCertStore,
+
+  /// Which ALPN protocols we include in our client hello.
+  /// If empty, no ALPN extension is sent.
+  pub alpn_protocols: Vec<String>
 }
 
 impl ClientConfig {
+  /// Make a `ClientConfig` with a default set of ciphersuites,
+  /// no root certificates, and no ALPN protocols.
   pub fn default() -> ClientConfig {
     ClientConfig {
       ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
-      root_store: verify::RootCertStore::empty()
+      root_store: verify::RootCertStore::empty(),
+      alpn_protocols: Vec::new()
     }
+  }
+
+  /// Set the ALPN protocol list to the given protocol names.
+  /// Overwrites any existing configured protocols.
+  /// The first element in the `protocols` list is the most
+  /// preferred, the last is the least preferred.
+  pub fn set_protocols(&mut self, protocols: &[String]) {
+    self.alpn_protocols.clear();
+    self.alpn_protocols.extend_from_slice(protocols);
   }
 }
 
@@ -104,6 +125,7 @@ pub struct ClientSession {
   write_seq: u64,
   read_seq: u64,
   peer_eof: bool,
+  pub alpn_protocol: Option<String>,
   pub message_deframer: MessageDeframer,
   pub handshake_joiner: HandshakeJoiner,
   pub message_fragmenter: MessageFragmenter,
@@ -124,6 +146,7 @@ impl ClientSession {
       write_seq: 0,
       read_seq: 0,
       peer_eof: false,
+      alpn_protocol: None,
       message_deframer: MessageDeframer::new(),
       handshake_joiner: HandshakeJoiner::new(),
       message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),

@@ -15,6 +15,7 @@ pub struct TlsClient {
   pub http: bool,
   pub cafile: Option<String>,
   pub suites: Vec<String>,
+  pub protos: Vec<String>,
   pub verbose: bool,
   pub expect_fails: bool,
   pub expect_output: Option<String>,
@@ -30,6 +31,7 @@ impl TlsClient {
       cafile: None,
       verbose: false,
       suites: Vec::new(),
+      protos: Vec::new(),
       expect_fails: false,
       expect_output: None,
       expect_log: None
@@ -55,7 +57,7 @@ impl TlsClient {
     self.expect_output = Some(expect.to_string());
     self
   }
-  
+
   pub fn expect_log(&mut self, expect: &str) -> &mut TlsClient {
     self.expect_log = Some(expect.to_string());
     self
@@ -63,6 +65,11 @@ impl TlsClient {
 
   pub fn suite(&mut self, suite: &str) -> &mut TlsClient {
     self.suites.push(suite.to_string());
+    self
+  }
+
+  pub fn proto(&mut self, proto: &str) -> &mut TlsClient {
+    self.protos.push(proto.to_string());
     self
   }
 
@@ -75,7 +82,7 @@ impl TlsClient {
     let portstring = self.port.to_string();
     let mut args = Vec::<&str>::new();
     args.push(&self.hostname);
-    
+
     args.push("--port");
     args.push(&portstring);
 
@@ -91,6 +98,11 @@ impl TlsClient {
     for suite in &self.suites {
       args.push("--suite");
       args.push(suite.as_ref());
+    }
+
+    for proto in &self.protos {
+      args.push("--proto");
+      args.push(proto.as_ref());
     }
 
     if self.verbose {
@@ -110,13 +122,13 @@ impl TlsClient {
       println!("{:?}", output);
       panic!("Test failed");
     }
-    
+
     if self.expect_log.is_some() && stderr_str.find(self.expect_log.as_ref().unwrap()).is_none() {
       println!("We expected to find '{}' in the following output:", self.expect_log.as_ref().unwrap());
       println!("{:?}", output);
       panic!("Test failed");
     }
-    
+
     if self.expect_fails {
       assert!(output.status.code().unwrap() != 0);
     } else {

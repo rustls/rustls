@@ -8,6 +8,7 @@ use msgs::handshake::ClientExtension;
 use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
+use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::{ClientSession, ConnState};
@@ -47,6 +48,10 @@ pub fn emit_client_hello(sess: &mut ClientSession) {
   exts.push(ClientExtension::EllipticCurves(EllipticCurveList::supported()));
   exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported()));
 
+  if sess.config.alpn_protocols.len() > 0 {
+    exts.push(ClientExtension::Protocols(ProtocolNameList::convert(&sess.config.alpn_protocols)));
+  }
+
   let sh = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
@@ -67,6 +72,8 @@ pub fn emit_client_hello(sess: &mut ClientSession) {
     )
   };
 
+  debug!("Sending ClientHello {:?}", sh);
+
   sh.payload.encode(&mut sess.handshake_data.client_hello);
   sess.tls_queue.push_back(sh);
 }
@@ -80,6 +87,7 @@ fn expect_server_hello() -> Expectation {
 
 fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
+  debug!("We got ServerHello {:?}", server_hello);
 
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
     return Err(HandshakeError::General("server does not support TLSv1_2".to_string()));
@@ -88,6 +96,10 @@ fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnStat
   if server_hello.compression_method != Compression::Null {
     return Err(HandshakeError::General("server chose non-Null compression".to_string()));
   }
+
+  /* Extract ALPN protocol */
+  sess.alpn_protocol = server_hello.get_alpn_protocol();
+  info!("ALPN protocol is {:?}", sess.alpn_protocol);
 
   let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
 
