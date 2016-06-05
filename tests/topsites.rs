@@ -64,8 +64,8 @@ fn wikipedia() {
 }
 
 #[test]
-fn letsencrypt() {
-  connect("letsencrypt.org")
+fn hello_letsencrypt() {
+  connect("helloworld.letsencrypt.org")
     .expect("HTTP/1.1 200 OK")
     .go()
     .unwrap();
@@ -98,7 +98,7 @@ fn baidu() {
 #[test]
 fn netflix() {
   connect("www.netflix.com")
-    .expect("HTTP/1.1 200 OK")
+    .expect("HTTP/1.1 ")
     .go()
     .unwrap();
 }

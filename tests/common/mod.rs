@@ -133,6 +133,7 @@ pub struct OpenSSLServer {
   pub key: String,
   pub cert: String,
   pub chain: String,
+  pub intermediate: String,
   pub cacert: String,
   pub extra_args: Vec<&'static str>,
   pub child: Option<process::Child>
@@ -157,6 +158,7 @@ impl OpenSSLServer {
       cert: format!("test-ca/{}/end.cert", keytype),
       chain: format!("test-ca/{}/end.chain", keytype),
       cacert: format!("test-ca/{}/ca.cert", keytype),
+      intermediate: format!("test-ca/{}/inter.cert", keytype),
       extra_args: Vec::new(),
       child: None
     }
@@ -168,6 +170,11 @@ impl OpenSSLServer {
 
   pub fn new_ecdsa(start_port: u16) -> OpenSSLServer {
     OpenSSLServer::new("ecdsa", start_port)
+  }
+
+  pub fn partial_chain(&mut self) -> &mut Self {
+    self.chain = self.intermediate.clone();
+    self
   }
 
   pub fn arg(&mut self, arg: &'static str) -> &mut Self {
@@ -182,18 +189,17 @@ impl OpenSSLServer {
       extra_args.push("-www");
     }
 
-    println!("args = {:?}", extra_args);
+    let mut subp = process::Command::new("openssl");
+    subp.arg("s_server")
+        .arg("-accept").arg(self.port.to_string())
+        .arg("-key").arg(&self.key)
+        .arg("-cert").arg(&self.cert)
+        .arg("-CAfile").arg(&self.chain)
+        .args(&extra_args)
+        .stdout(process::Stdio::null())
+        .stderr(process::Stdio::null());
 
-    let child = process::Command::new("openssl")
-      .arg("s_server")
-      .arg("-accept").arg(self.port.to_string())
-      .arg("-key").arg(&self.key)
-      .arg("-cert").arg(&self.cert)
-      .arg("-CAfile").arg(&self.chain)
-      .args(&extra_args)
-      .stdout(process::Stdio::null())
-      .stderr(process::Stdio::null())
-      .spawn()
+    let child = subp.spawn()
       .expect("cannot run openssl server");
 
     self.wait_for_port().expect("server did not come up");
