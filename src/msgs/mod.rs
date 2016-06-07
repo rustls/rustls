@@ -10,6 +10,7 @@ pub mod alert;
 pub mod handshake;
 pub mod ccs;
 pub mod message;
+pub mod persist;
 pub mod deframer;
 pub mod fragmenter;
 pub mod hsjoiner;

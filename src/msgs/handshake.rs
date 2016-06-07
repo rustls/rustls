@@ -44,7 +44,7 @@ impl Random {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SessionID {
   pub bytes: Vec<u8>
 }

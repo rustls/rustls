@@ -7,6 +7,8 @@ use mio::tcp::TcpStream;
 use std::net::SocketAddr;
 use std::str;
 use std::io;
+use std::fs;
+use std::collections;
 use std::io::{Read, Write, BufReader};
 
 extern crate env_logger;
@@ -16,7 +18,7 @@ extern crate docopt;
 use docopt::Docopt;
 
 extern crate rustls;
-use rustls::client::{ClientConfig, ClientSession};
+use rustls::client::{ClientConfig, ClientSession, StoresSessions};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -170,6 +172,74 @@ impl TlsClient {
   }
 }
 
+struct PersistCache {
+  cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+  filename: Option<String>
+}
+
+impl PersistCache {
+  fn new(filename: &Option<String>) -> PersistCache {
+    let mut cache = PersistCache { cache: collections::HashMap::new(), filename: filename.clone() };
+    if cache.filename.is_some() {
+      cache.load();
+    }
+    cache
+  }
+
+  fn save(&mut self) {
+    use rustls::msgs::codec::Codec;
+    use rustls::msgs::base::PayloadU16;
+
+    if self.filename.is_none() {
+      return;
+    }
+
+    let mut file = fs::File::create(self.filename.as_ref().unwrap()).unwrap();
+
+    for (key, val) in &self.cache {
+      let mut item = Vec::new();
+      let key_pl = PayloadU16 { body: key.clone().into_boxed_slice() };
+      let val_pl = PayloadU16 { body: val.clone().into_boxed_slice() };
+      key_pl.encode(&mut item);
+      val_pl.encode(&mut item);
+      file.write_all(&item).unwrap();
+    }
+  }
+
+  fn load(&mut self) {
+    use rustls::msgs::codec::{Codec, Reader};
+    use rustls::msgs::base::PayloadU16;
+
+    let mut file = match fs::File::open(self.filename.as_ref().unwrap()) {
+      Ok(f) => f,
+      Err(_) => return
+    };
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).unwrap();
+
+    self.cache.clear();
+    let mut rd = Reader::init(&data);
+
+    while rd.any_left() {
+      let key_pl = PayloadU16::read(&mut rd).unwrap();
+      let val_pl = PayloadU16::read(&mut rd).unwrap();
+      self.cache.insert(key_pl.body.to_vec(), val_pl.body.to_vec());
+    }
+  }
+}
+
+impl StoresSessions for PersistCache {
+  fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
+    self.cache.insert(key, value);
+    self.save();
+    true
+  }
+
+  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>> {
+    self.cache.get(key).map(|x| x.clone())
+  }
+}
+
 const USAGE: &'static str = "
 Connects to the TLS server at hostname:PORT.  The default PORT
 is 443.  By default, this reads a request from stdin (to EOF)
@@ -177,7 +247,7 @@ before making the connection.  --http replaces this with a
 basic HTTP GET request for /.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
+  tlsclient [--verbose] [-p PORT] [--http] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
   tlsclient --version
   tlsclient --help
 
@@ -188,6 +258,7 @@ Options:
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
+    --cache CACHE       Save session cache to file CACHE.
     --verbose           Emit log output.
     --version           Show tool version.
     --help              Show this screen.
@@ -201,6 +272,7 @@ struct Args {
   flag_suite: Vec<String>,
   flag_proto: Vec<String>,
   flag_cafile: Option<String>,
+  flag_cache: Option<String>,
   arg_hostname: String
 }
 
@@ -260,7 +332,10 @@ fn make_config(args: &Args) -> Arc<ClientConfig> {
   config.root_store.add_pem_file(&mut reader)
     .unwrap();
 
+  let persist = Box::new(PersistCache::new(&args.flag_cache));
+
   config.set_protocols(&args.flag_proto);
+  config.set_persistence(persist);
 
   Arc::new(config)
 }

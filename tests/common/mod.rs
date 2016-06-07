@@ -14,12 +14,13 @@ pub struct TlsClient {
   pub port: u16,
   pub http: bool,
   pub cafile: Option<String>,
+  pub cache: Option<String>,
   pub suites: Vec<String>,
   pub protos: Vec<String>,
   pub verbose: bool,
   pub expect_fails: bool,
-  pub expect_output: Option<String>,
-  pub expect_log: Option<String>
+  pub expect_output: Vec<String>,
+  pub expect_log: Vec<String>
 }
 
 impl TlsClient {
@@ -29,17 +30,23 @@ impl TlsClient {
       port: 443,
       http: true,
       cafile: None,
+      cache: None,
       verbose: false,
       suites: Vec::new(),
       protos: Vec::new(),
       expect_fails: false,
-      expect_output: None,
-      expect_log: None
+      expect_output: Vec::new(),
+      expect_log: Vec::new()
     }
   }
 
   pub fn cafile(&mut self, cafile: &str) -> &mut TlsClient {
     self.cafile = Some(cafile.to_string());
+    self
+  }
+
+  pub fn cache(&mut self, cache: &str) -> &mut TlsClient {
+    self.cache = Some(cache.to_string());
     self
   }
 
@@ -54,12 +61,12 @@ impl TlsClient {
   }
 
   pub fn expect(&mut self, expect: &str) -> &mut TlsClient {
-    self.expect_output = Some(expect.to_string());
+    self.expect_output.push(expect.to_string());
     self
   }
 
   pub fn expect_log(&mut self, expect: &str) -> &mut TlsClient {
-    self.expect_log = Some(expect.to_string());
+    self.expect_log.push(expect.to_string());
     self
   }
 
@@ -90,6 +97,11 @@ impl TlsClient {
       args.push("--http");
     }
 
+    if self.cache.is_some() {
+      args.push("--cache");
+      args.push(self.cache.as_ref().unwrap());
+    }
+
     if self.cafile.is_some() {
       args.push("--cafile");
       args.push(self.cafile.as_ref().unwrap());
@@ -117,16 +129,20 @@ impl TlsClient {
     let stdout_str = String::from_utf8(output.stdout.clone()).unwrap();
     let stderr_str = String::from_utf8(output.stderr.clone()).unwrap();
 
-    if self.expect_output.is_some() && stdout_str.find(self.expect_output.as_ref().unwrap()).is_none() {
-      println!("We expected to find '{}' in the following output:", self.expect_output.as_ref().unwrap());
-      println!("{:?}", output);
-      panic!("Test failed");
+    for expect in &self.expect_output {
+      if stdout_str.find(expect).is_none() {
+        println!("We expected to find '{}' in the following output:", expect);
+        println!("{:?}", output);
+        panic!("Test failed");
+      }
     }
 
-    if self.expect_log.is_some() && stderr_str.find(self.expect_log.as_ref().unwrap()).is_none() {
-      println!("We expected to find '{}' in the following output:", self.expect_log.as_ref().unwrap());
-      println!("{:?}", output);
-      panic!("Test failed");
+    for expect in &self.expect_log {
+      if stderr_str.find(expect).is_none() {
+        println!("We expected to find '{}' in the following output:", expect);
+        println!("{:?}", output);
+        panic!("Test failed");
+      }
     }
 
     if self.expect_fails {

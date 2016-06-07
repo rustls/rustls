@@ -40,6 +40,12 @@ impl SessionSecrets {
     ret
   }
 
+  pub fn get_master_secret(&self) -> Vec<u8> {
+    let mut ret = Vec::new();
+    ret.extend_from_slice(&self.master_secret);
+    ret
+  }
+
   pub fn init(&mut self,
               hs_rands: &SessionSecrets,
               hashalg: &'static ring::digest::Algorithm,
@@ -60,6 +66,21 @@ impl SessionSecrets {
              b"master secret",
              &randoms);
     dumphex("master", &self.master_secret);
+  }
+
+  pub fn init_resume(&mut self,
+                     hs_rands: &SessionSecrets,
+                     hashalg: &'static ring::digest::Algorithm,
+                     master_secret: &[u8]) {
+    self.client_random.as_mut().write(&hs_rands.client_random).unwrap();
+    self.server_random.as_mut().write(&hs_rands.server_random).unwrap();
+    self.hash = Some(hashalg);
+    self.master_secret.as_mut().write(master_secret).unwrap();
+
+    println!("resumed secrets:");
+    dumphex("client_random", &self.client_random);
+    dumphex("server_random", &self.server_random);
+    dumphex("master_secret", &self.master_secret);
   }
 
   pub fn make_key_block(&self, len: usize) -> Vec<u8> {

@@ -2,13 +2,14 @@ use msgs::enums::CipherSuite;
 use session::SessionSecrets;
 use session::MessageCipher;
 use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
-use msgs::handshake::{CertificatePayload, DigitallySignedStruct};
+use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
 use msgs::enums::{ContentType, AlertDescription, AlertLevel};
 use msgs::deframer::MessageDeframer;
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
+use msgs::persist;
 use client_hs;
 use hash_hs;
 use verify;
@@ -19,6 +20,33 @@ use std::sync::Arc;
 use std::io;
 use std::collections::VecDeque;
 use std::mem;
+use std::cell;
+
+/// A trait for the ability to store session data.
+/// The keys and values are opaque.
+pub trait StoresSessions {
+  /// Stores a new `value` for `key`.  Returns `true`
+  /// if the value was stored.
+  fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool;
+
+  /// Returns the latest value for `key`.  Returns `None`
+  /// if there's no such value.
+  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>>;
+}
+
+struct NoSessionStorage {}
+
+impl StoresSessions for NoSessionStorage {
+  fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> bool {
+    println!("cache put {:?} = {:?}", _key, _value);
+    false
+  }
+
+  fn get(&mut self, _key: &Vec<u8>) -> Option<Vec<u8>> {
+    println!("cache get {:?}", _key);
+    None
+  }
+}
 
 /// Common configuration for all connections made by
 /// a program.
@@ -34,17 +62,22 @@ pub struct ClientConfig {
 
   /// Which ALPN protocols we include in our client hello.
   /// If empty, no ALPN extension is sent.
-  pub alpn_protocols: Vec<String>
+  pub alpn_protocols: Vec<String>,
+
+  /// How we store session data or tickets.
+  pub session_persistence: cell::RefCell<Box<StoresSessions>>
 }
 
 impl ClientConfig {
   /// Make a `ClientConfig` with a default set of ciphersuites,
-  /// no root certificates, and no ALPN protocols.
+  /// no root certificates, no ALPN protocols, and no
+  /// session persistence.
   pub fn default() -> ClientConfig {
     ClientConfig {
       ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
       root_store: verify::RootCertStore::empty(),
-      alpn_protocols: Vec::new()
+      alpn_protocols: Vec::new(),
+      session_persistence: cell::RefCell::new(Box::new(NoSessionStorage {}))
     }
   }
 
@@ -56,6 +89,10 @@ impl ClientConfig {
     self.alpn_protocols.clear();
     self.alpn_protocols.extend_from_slice(protocols);
   }
+
+  pub fn set_persistence(&mut self, persist: Box<StoresSessions>) {
+    self.session_persistence = cell::RefCell::new(persist);
+  }
 }
 
 pub struct ClientHandshakeData {
@@ -63,9 +100,11 @@ pub struct ClientHandshakeData {
   pub server_cert_chain: CertificatePayload,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub dns_name: String,
+  pub session_id: SessionID,
   pub server_kx_params: Vec<u8>,
   pub server_kx_sig: Option<DigitallySignedStruct>,
   pub handshake_hash: Option<hash_hs::HandshakeHash>,
+  pub resuming_session: Option<persist::ClientSessionValue>,
   pub secrets: SessionSecrets
 }
 
@@ -76,9 +115,11 @@ impl ClientHandshakeData {
       server_cert_chain: Vec::new(),
       ciphersuite: None,
       dns_name: host_name.to_string(),
+      session_id: SessionID::empty(),
       server_kx_params: Vec::new(),
       server_kx_sig: None,
       handshake_hash: None,
+      resuming_session: None,
       secrets: SessionSecrets::for_client()
     }
   }
@@ -104,6 +145,8 @@ pub enum ConnState {
   ExpectServerHelloDone,
   ExpectCCS,
   ExpectFinished,
+  ExpectCCSResume,
+  ExpectFinishedResume,
   Traffic
 }
 
@@ -111,6 +154,7 @@ impl ConnState {
   fn is_encrypted(&self) -> bool {
     match *self {
       ConnState::ExpectFinished
+        | ConnState::ExpectFinishedResume
         | ConnState::Traffic => true,
       _ => false
     }
@@ -295,6 +339,8 @@ impl ClientSession {
       ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
       ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
       ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,
+      ConnState::ExpectCCSResume => &client_hs::EXPECT_CCS_RESUME,
+      ConnState::ExpectFinishedResume => &client_hs::EXPECT_FINISHED_RESUME,
       ConnState::Traffic => &client_hs::TRAFFIC
     }
   }

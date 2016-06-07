@@ -10,6 +10,7 @@ use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::ServerKeyExchangePayload;
+use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::{ClientSession, ConnState};
 use suites;
@@ -39,8 +40,34 @@ pub struct Handler {
   pub handle: HandleFunction
 }
 
+fn find_session(sess: &mut ClientSession) -> Option<persist::ClientSessionValue> {
+  let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
+  let key_buf = key.get_encoding();
+
+  let mut persist = sess.config.session_persistence.borrow_mut();
+  let maybe_value = persist.get(&key_buf);
+
+  if maybe_value.is_none() {
+    info!("No cached session for {:?}", sess.handshake_data.dns_name);
+    return None
+  }
+
+  let value = maybe_value.unwrap();
+  persist::ClientSessionValue::read_bytes(&value)
+}
+
 pub fn emit_client_hello(sess: &mut ClientSession) {
   sess.handshake_data.generate_client_random();
+
+  /* Do we have a SessionID cached for this host? */
+  sess.handshake_data.resuming_session = find_session(sess);
+  let session_id = if let Some(resuming) = sess.handshake_data.resuming_session.as_ref() {
+    info!("Resuming session");
+    resuming.session_id.clone()
+  } else {
+    info!("Not resuming any session");
+    SessionID::empty()
+  };
 
   let mut exts = Vec::new();
   exts.push(ClientExtension::make_sni(&sess.handshake_data.dns_name));
@@ -62,7 +89,7 @@ pub fn emit_client_hello(sess: &mut ClientSession) {
           ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&sess.handshake_data.secrets.client_random),
-            session_id: SessionID::empty(),
+            session_id: session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts
@@ -117,10 +144,34 @@ fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnStat
 
   sess.handshake_data.ciphersuite = scs;
 
-  /* Save ServerRandom */
+  /* Save ServerRandom and SessionID */
   server_hello.random.write_slice(&mut sess.handshake_data.secrets.server_random);
+  sess.handshake_data.session_id = server_hello.session_id.clone();
 
-  Ok(ConnState::ExpectCertificate)
+  /* See if we're successfully resuming. */
+  let mut abbreviated_handshake = false;
+  if let Some(ref resuming) = sess.handshake_data.resuming_session {
+    if resuming.session_id.bytes == sess.handshake_data.session_id.bytes {
+      info!("Server agreed to resume");
+      abbreviated_handshake = true;
+
+      /* Is the server telling lies about the ciphersuite? */
+      if resuming.cipher_suite != scs.unwrap().suite {
+        return Err(HandshakeError::General("abbreviated handshake offered, but with varied cs".to_string()));
+      }
+
+      sess.secrets_current.init_resume(&sess.handshake_data.secrets,
+                                       scs.unwrap().get_hash(),
+                                       &resuming.master_secret.body);
+    }
+  }
+
+  if abbreviated_handshake {
+    sess.start_encryption();
+    Ok(ConnState::ExpectCCSResume)
+  } else {
+    Ok(ConnState::ExpectCertificate)
+  }
 }
 
 pub static EXPECT_SERVER_HELLO: Handler = Handler {
@@ -330,11 +381,46 @@ pub static EXPECT_CCS: Handler = Handler {
   handle: handle_ccs
 };
 
+fn handle_ccs_resume(_sess: &mut ClientSession, _m: &Message) -> Result<ConnState, HandshakeError> {
+  /* nb. msgs layer validates trivial contents of CCS */
+  Ok(ConnState::ExpectFinishedResume)
+}
+
+pub static EXPECT_CCS_RESUME: Handler = Handler {
+  expect: expect_ccs,
+  handle: handle_ccs_resume
+};
+
 /* -- Waiting for their finished -- */
 fn expect_finished() -> Expectation {
   Expectation {
     content_types: vec![ContentType::Handshake],
     handshake_types: vec![] /* we need to decrypt before we can check this */
+  }
+}
+
+fn save_session(sess: &mut ClientSession) {
+  if sess.handshake_data.session_id.bytes.len() == 0 {
+    info!("Session not saved: server didn't allocate id");
+    return;
+  }
+
+  let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
+  let key_buf = key.get_encoding();
+
+  let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+  let value = persist::ClientSessionValue::new(&scs.suite,
+                                               &sess.handshake_data.session_id,
+                                               sess.secrets_current.get_master_secret());
+  let value_buf = value.get_encoding();
+
+  let mut persist = sess.config.session_persistence.borrow_mut();
+  let worked = persist.put(key_buf, value_buf);
+
+  if worked {
+    info!("Session saved");
+  } else {
+    info!("Session not saved");
   }
 }
 
@@ -354,12 +440,30 @@ fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, H
     .map_err(|_| HandshakeError::DecryptError)
     .unwrap();
 
+  /* Hash this message too. */
+  sess.handshake_data.hash_message(m);
+
+  save_session(sess);
+
   Ok(ConnState::Traffic)
+}
+
+fn handle_finished_resume(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+  let next_state = try!(handle_finished(sess, m));
+
+  emit_ccs(sess);
+  emit_finished(sess);
+  Ok(next_state)
 }
 
 pub static EXPECT_FINISHED: Handler = Handler {
   expect: expect_finished,
   handle: handle_finished
+};
+
+pub static EXPECT_FINISHED_RESUME: Handler = Handler {
+  expect: expect_finished,
+  handle: handle_finished_resume
 };
 
 /* -- Traffic transit state -- */
