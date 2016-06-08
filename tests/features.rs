@@ -8,8 +8,14 @@ use std::fs;
 fn alpn_offer() {
   let mut server = OpenSSLServer::new_rsa(8100);
   server.arg("-alpn")
-        .arg("ponytown,breakfast,edgware");
+        .arg("ponytown,breakfast,edgware")
+        .args_need_openssl_1_0_2();
   server.run();
+
+  if !server.running() {
+    println!("skipping test, couldn't start openssl with -alpn");
+    return;
+  }
 
   // Basic workingness.
   server.client()

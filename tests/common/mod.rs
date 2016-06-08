@@ -163,6 +163,7 @@ pub struct OpenSSLServer {
   pub chain: String,
   pub intermediate: String,
   pub cacert: String,
+  pub soft_fail: bool,
   pub extra_args: Vec<&'static str>,
   pub child: Option<process::Child>
 }
@@ -187,6 +188,7 @@ impl OpenSSLServer {
       chain: format!("test-ca/{}/end.chain", keytype),
       cacert: format!("test-ca/{}/ca.cert", keytype),
       intermediate: format!("test-ca/{}/inter.cert", keytype),
+      soft_fail: false,
       extra_args: Vec::new(),
       child: None
     }
@@ -210,6 +212,11 @@ impl OpenSSLServer {
     self
   }
 
+  pub fn args_need_openssl_1_0_2(&mut self) -> &mut Self {
+    self.soft_fail = true;
+    self
+  }
+
   pub fn run(&mut self) -> &mut Self {
     let mut extra_args = Vec::<&'static str>::new();
     extra_args.extend(&self.extra_args);
@@ -230,9 +237,19 @@ impl OpenSSLServer {
     let child = subp.spawn()
       .expect("cannot run openssl server");
 
-    self.wait_for_port().expect("server did not come up");
-    self.child = Some(child);
+    let port_up = self.wait_for_port();
+    if self.soft_fail && port_up.is_none() {
+      println!("server did not come up, treating as nonfatal");
+    } else {
+      port_up.expect("server did not come up");
+      self.child = Some(child);
+    }
+
     self
+  }
+
+  pub fn running(&self) -> bool {
+    self.child.is_some()
   }
 
   pub fn kill(&mut self) {
