@@ -94,7 +94,7 @@ Connection closed
 - [ ] Improve testing some more.
 - [x] ALPN.
 - [ ] Tickets.
-- [ ] Resumption.
+- [x] Resumption.
 - [ ] chacha20poly1305 bulk encryption support.
 - [ ] Signing support in *ring* to unblock server work.
 - [ ] Server support.
