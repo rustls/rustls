@@ -38,12 +38,10 @@ struct NoSessionStorage {}
 
 impl StoresSessions for NoSessionStorage {
   fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> bool {
-    println!("cache put {:?} = {:?}", _key, _value);
     false
   }
 
   fn get(&mut self, _key: &Vec<u8>) -> Option<Vec<u8>> {
-    println!("cache get {:?}", _key);
     None
   }
 }

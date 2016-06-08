@@ -240,14 +240,16 @@ fn expect_server_hello_done() -> Expectation {
   }
 }
 
-fn dumphex(label: &str, bytes: &[u8]) {
-  print!("{}: ", label);
+fn dumphex(_label: &str, _bytes: &[u8]) {
+  /*
+  print!("{}: ", _label);
 
-  for b in bytes {
+  for b in _bytes {
     print!("{:02x}", b);
   }
 
   println!("");
+  */
 }
 
 fn emit_clientkx(sess: &mut ClientSession, kxd: &suites::KeyExchangeResult) {

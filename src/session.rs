@@ -77,7 +77,6 @@ impl SessionSecrets {
     self.hash = Some(hashalg);
     self.master_secret.as_mut().write(master_secret).unwrap();
 
-    println!("resumed secrets:");
     dumphex("client_random", &self.client_random);
     dumphex("server_random", &self.server_random);
     dumphex("master_secret", &self.master_secret);
@@ -174,13 +173,15 @@ pub struct GCMMessageCipher {
 const EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = EXPLICIT_NONCE_LEN + 16;
 
-fn dumphex(why: &str, buf: &[u8]) {
-  print!("{}: ", why);
+fn dumphex(_why: &str, _buf: &[u8]) {
+  /*
+  print!("{}: ", _why);
 
-  for b in buf {
+  for b in _buf {
     print!("{:02x}", b);
   }
   println!("");
+  */
 }
 
 impl MessageCipher for GCMMessageCipher {
@@ -250,7 +251,6 @@ impl MessageCipher for GCMMessageCipher {
                                    &aad));
 
     buf[0..8].as_mut().write(&nonce[4..]).unwrap();
-    println!("payload len {}\n", buf.len());
     dumphex("outgoing", &buf);
 
     Ok(Message {
