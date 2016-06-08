@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 
 [dependencies]
+untrusted = { version = "0.1.0", git = "https://github.com/briansmith/untrusted" }
 ring = { version = "0.1.0", git = "https://github.com/briansmith/ring" }
 
 # pointed at my fork for the moment

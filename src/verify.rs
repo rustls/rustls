@@ -1,8 +1,7 @@
 extern crate webpki;
 extern crate ring;
 extern crate time;
-
-use ring::input::Input;
+extern crate untrusted;
 
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
@@ -69,7 +68,7 @@ impl RootCertStore {
   /// Add a single DER-encoded certificate to the store.
   pub fn add(&mut self, der: &[u8]) -> Result<(), webpki::Error> {
     let ta = try!(
-      webpki::trust_anchor_util::cert_der_as_trust_anchor(Input::new(der).unwrap())
+      webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::new(der).unwrap())
     );
 
     let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
@@ -121,11 +120,11 @@ pub fn verify_cert(roots: &RootCertStore,
   }
 
   /* EE cert must appear first. */
-  let ee = Input::new(&presented_certs[0].body).unwrap();
+  let ee = untrusted::Input::new(&presented_certs[0].body).unwrap();
 
-  let chain: Vec<Input> = presented_certs.iter()
+  let chain: Vec<untrusted::Input> = presented_certs.iter()
     .skip(1)
-    .map(|cert| Input::new(&cert.body).unwrap())
+    .map(|cert| untrusted::Input::new(&cert.body).unwrap())
     .collect();
 
   let trustroots: Vec<webpki::TrustAnchor> = roots.roots.iter()
@@ -138,7 +137,7 @@ pub fn verify_cert(roots: &RootCertStore,
                           ee,
                           time::get_time())
     .and_then(|_| webpki::verify_cert_dns_name(ee,
-                          Input::new(dns_name.as_bytes()).unwrap()))
+                          untrusted::Input::new(dns_name.as_bytes()).unwrap()))
     .map_err(|err| HandshakeError::WebPKIError(err))
 }
 
@@ -181,16 +180,16 @@ pub fn verify_kx(message: &[u8],
   let alg = try!(convert_alg(&dss.alg));
 
   let signed_data = webpki::signed_data::SignedData {
-    data: Input::new(message).unwrap(),
-    algorithm: Input::new(alg).unwrap(),
-    signature: Input::new(&dss.sig.body).unwrap()
+    data: untrusted::Input::new(message).unwrap(),
+    algorithm: untrusted::Input::new(alg).unwrap(),
+    signature: untrusted::Input::new(&dss.sig.body).unwrap()
   };
 
-  let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(Input::new(&cert.body).unwrap())
+  let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::new(&cert.body).unwrap())
                   .map_err(|err| HandshakeError::WebPKIError(err)));
 
   webpki::signed_data::verify_signed_data(&SUPPORTED_SIG_ALGS,
-                                          Input::new(cert.spki).unwrap(),
+                                          untrusted::Input::new(cert.spki).unwrap(),
                                           &signed_data)
     .map_err(|err| HandshakeError::WebPKIError(err))
 }

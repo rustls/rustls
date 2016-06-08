@@ -6,6 +6,7 @@ use msgs::base::{Payload, PayloadU8};
 use msgs::codec::{Reader, Codec};
 
 extern crate ring;
+extern crate untrusted;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug)]
@@ -45,7 +46,7 @@ impl KeyExchangeResult {
     let secret = ring::agreement::agree_ephemeral(
       ours,
       alg,
-      ring::input::Input::new(&ecdh_params.public.body).unwrap(),
+      untrusted::Input::new(&ecdh_params.public.body).unwrap(),
       (),
       |v| { let mut r = Vec::new(); r.extend_from_slice(v); Ok(r) }
     );
