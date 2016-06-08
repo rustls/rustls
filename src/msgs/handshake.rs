@@ -636,7 +636,7 @@ impl Codec for ECParameters {
 
   fn read(r: &mut Reader) -> Option<ECParameters> {
     let ct = try_ret!(ECCurveType::read(r));
-    
+
     if ct != ECCurveType::NamedCurve {
       return None;
     }

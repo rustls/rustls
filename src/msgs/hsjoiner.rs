@@ -115,7 +115,7 @@ mod tests {
     let (mut left, mut right) = (Vec::new(), Vec::new());
     got.payload.encode(&mut left);
     expect.payload.encode(&mut right);
-    
+
     assert_eq!(left, right);
   }
 

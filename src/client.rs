@@ -431,7 +431,7 @@ impl io::Read for ClientSession {
     if len == 0 && self.connection_at_eof() && self.received_plaintext.len() == 0 {
       return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));
     }
-    
+
     Ok(len)
   }
 }
