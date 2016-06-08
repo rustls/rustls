@@ -16,7 +16,7 @@ Rustls is built to a few rules:
   - No RC4, no DES.
   - No discrete-log DH or DSA.
 - No discredited, little-used or legacy SSL/TLS features:
-  - No CBC-mode EtM ciphersuites.
+  - No CBC-mode mac-then-encrypt ciphersuites.
   - No unneccessary 'national pride' block ciphers like Camellia or ARIA.
   - No renegotiation.
   - No client authentication.
@@ -90,6 +90,7 @@ Connection closed
 ```
 
 # TODO list
+- [ ] Choose a license.
 - [x] Improve testing.
 - [ ] Improve testing some more.
 - [x] ALPN.
