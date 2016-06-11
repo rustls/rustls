@@ -109,14 +109,20 @@ pub fn read_u32(r: &mut Reader) -> Option<u32> {
 }
 
 pub fn encode_u64(v: u64, bytes: &mut Vec<u8>) {
-  bytes.push((v >> 56) as u8);
-  bytes.push((v >> 48) as u8);
-  bytes.push((v >> 40) as u8);
-  bytes.push((v >> 32) as u8);
-  bytes.push((v >> 24) as u8);
-  bytes.push((v >> 16) as u8);
-  bytes.push((v >> 8) as u8);
-  bytes.push(v as u8);
+  let mut b64 = [0u8; 8];
+  put_u64(v, &mut b64);
+  bytes.extend_from_slice(&b64);
+}
+
+pub fn put_u64(v: u64, bytes: &mut [u8]) {
+  bytes[0] = (v >> 56) as u8;
+  bytes[1] = (v >> 48) as u8;
+  bytes[2] = (v >> 40) as u8;
+  bytes[3] = (v >> 32) as u8;
+  bytes[4] = (v >> 24) as u8;
+  bytes[5] = (v >> 16) as u8;
+  bytes[6] = (v >> 8) as u8;
+  bytes[7] = v as u8;
 }
 
 pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {

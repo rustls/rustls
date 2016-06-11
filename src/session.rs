@@ -1,6 +1,5 @@
 extern crate ring;
 use prf;
-use rand;
 use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
@@ -221,9 +220,15 @@ impl MessageCipher for GCMMessageCipher {
   }
 
   fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
+    /* The GCM nonce is constructed from a 32-bit 'salt' derived
+     * from the master-secret, and a 64-bit explicit part,
+     * with no specified construction.  Thanks for that.
+     *
+     * We use the sequence number, which is the only safe-
+     * by-construction option. */
     let mut nonce = [0u8; 12];
     nonce.as_mut().write(&self.enc_salt).unwrap();
-    rand::fill_random(&mut nonce[4..]);
+    codec::put_u64(seq, &mut nonce[4..]);
 
     let mut buf = Vec::new();
     buf.resize(EXPLICIT_NONCE_LEN, 0u8);
