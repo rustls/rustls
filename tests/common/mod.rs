@@ -18,6 +18,7 @@ pub struct TlsClient {
   pub suites: Vec<String>,
   pub protos: Vec<String>,
   pub verbose: bool,
+  pub mtu: Option<usize>,
   pub expect_fails: bool,
   pub expect_output: Vec<String>,
   pub expect_log: Vec<String>
@@ -32,6 +33,7 @@ impl TlsClient {
       cafile: None,
       cache: None,
       verbose: false,
+      mtu: None,
       suites: Vec::new(),
       protos: Vec::new(),
       expect_fails: false,
@@ -52,6 +54,11 @@ impl TlsClient {
 
   pub fn verbose(&mut self) -> &mut TlsClient {
     self.verbose = true;
+    self
+  }
+
+  pub fn mtu(&mut self, mtu: usize) -> &mut TlsClient {
+    self.mtu = Some(mtu);
     self
   }
 
@@ -86,6 +93,7 @@ impl TlsClient {
   }
 
   pub fn go(&mut self) -> Option<()> {
+    let mut mtustring = "".to_string();
     let portstring = self.port.to_string();
     let mut args = Vec::<&str>::new();
     args.push(&self.hostname);
@@ -119,6 +127,12 @@ impl TlsClient {
 
     if self.verbose {
       args.push("--verbose");
+    }
+
+    if self.mtu.is_some() {
+      args.push("--mtu");
+      mtustring = self.mtu.unwrap().to_string();
+      args.push(&mtustring);
     }
 
     let output = process::Command::new("target/debug/examples/tlsclient")

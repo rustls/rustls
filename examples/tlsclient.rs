@@ -247,7 +247,7 @@ before making the connection.  --http replaces this with a
 basic HTTP GET request for /.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
+  tlsclient [--verbose] [-p PORT] [--http] [--mtu MTU] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
   tlsclient --version
   tlsclient --help
 
@@ -260,6 +260,7 @@ Options:
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
     --cache CACHE       Save session cache to file CACHE.
     --verbose           Emit log output.
+    --mtu MTU           Limit outgoing messages to MTU bytes.
     --version           Show tool version.
     --help              Show this screen.
 ";
@@ -271,6 +272,7 @@ struct Args {
   flag_verbose: bool,
   flag_suite: Vec<String>,
   flag_proto: Vec<String>,
+  flag_mtu: Option<usize>,
   flag_cafile: Option<String>,
   flag_cache: Option<String>,
   arg_hostname: String
@@ -336,6 +338,7 @@ fn make_config(args: &Args) -> Arc<ClientConfig> {
 
   config.set_protocols(&args.flag_proto);
   config.set_persistence(persist);
+  config.set_mtu(&args.flag_mtu);
 
   Arc::new(config)
 }

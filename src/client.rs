@@ -63,7 +63,10 @@ pub struct ClientConfig {
   pub alpn_protocols: Vec<String>,
 
   /// How we store session data or tickets.
-  pub session_persistence: cell::RefCell<Box<StoresSessions>>
+  pub session_persistence: cell::RefCell<Box<StoresSessions>>,
+
+  /// Our MTU.  If None, we don't limit TLS message sizes.
+  pub mtu: Option<usize>
 }
 
 impl ClientConfig {
@@ -75,7 +78,8 @@ impl ClientConfig {
       ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
       root_store: verify::RootCertStore::empty(),
       alpn_protocols: Vec::new(),
-      session_persistence: cell::RefCell::new(Box::new(NoSessionStorage {}))
+      session_persistence: cell::RefCell::new(Box::new(NoSessionStorage {})),
+      mtu: None
     }
   }
 
@@ -88,8 +92,15 @@ impl ClientConfig {
     self.alpn_protocols.extend_from_slice(protocols);
   }
 
+  /// Sets persistence layer to `persist`.
   pub fn set_persistence(&mut self, persist: Box<StoresSessions>) {
     self.session_persistence = cell::RefCell::new(persist);
+  }
+
+  /// Sets MTU to `mtu`.  If None, the default is used.
+  /// If Some(x) then x must be greater than 5 bytes.
+  pub fn set_mtu(&mut self, mtu: &Option<usize>) {
+    self.mtu = mtu.clone();
   }
 }
 
@@ -173,7 +184,7 @@ pub struct ClientSession {
   pub message_fragmenter: MessageFragmenter,
   pub sendable_plaintext: Vec<u8>,
   pub received_plaintext: Vec<u8>,
-  pub tls_queue: VecDeque<Message>,
+  tls_queue: VecDeque<Message>,
   pub state: ConnState
 }
 
@@ -191,7 +202,8 @@ impl ClientSession {
       alpn_protocol: None,
       message_deframer: MessageDeframer::new(),
       handshake_joiner: HandshakeJoiner::new(),
-      message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),
+      message_fragmenter: MessageFragmenter::new(client_config.mtu
+                                                 .unwrap_or(MAX_FRAGMENT_LEN)),
       sendable_plaintext: Vec::new(),
       received_plaintext: Vec::new(),
       tls_queue: VecDeque::new(),
@@ -264,11 +276,11 @@ impl ClientSession {
 
       /* Warnings are nonfatal. */
       if alert.level == AlertLevel::Warning {
-        warn!("TLS alert warning received: {:?}", msg);
+        warn!("TLS alert warning received: {:#?}", msg);
         return Ok(())
       }
 
-      error!("TLS alert received: {:?}", msg);
+      error!("TLS alert received: {:#?}", msg);
       return Err(HandshakeError::AlertReceived(alert.description.clone()));
     } else {
       unreachable!();
@@ -371,6 +383,17 @@ impl ClientSession {
     wr.write_all(&data)
   }
 
+  /// Send a raw TLS message, fragmenting it if needed.
+  pub fn send_msg(&mut self, m: &Message, must_encrypt: bool) {
+    if !must_encrypt {
+      self.message_fragmenter.fragment(m, &mut self.tls_queue);
+    } else {
+      self.send_msg_encrypt(m);
+    }
+  }
+
+  /// Send plaintext application data, fragmenting and
+  /// encrypting it as it goes out.
   pub fn send_plain(&mut self, data: &[u8]) {
     use msgs::enums::{ContentType, ProtocolVersion};
 
@@ -391,8 +414,14 @@ impl ClientSession {
       payload: MessagePayload::opaque(data.to_vec())
     };
 
+    self.send_msg_encrypt(&m);
+  }
+
+  /// Fragment `m`, encrypt the fragments, and then queue
+  /// the encrypted fragments for sending.
+  pub fn send_msg_encrypt(&mut self, m: &Message) {
     let mut plain_messages = VecDeque::new();
-    self.message_fragmenter.fragment(&m, &mut plain_messages);
+    self.message_fragmenter.fragment(m, &mut plain_messages);
 
     for m in plain_messages {
       let em = self.encrypt_outgoing(&m);
@@ -400,6 +429,8 @@ impl ClientSession {
     }
   }
 
+  /// Send any buffered plaintext.  Plaintext is buffered if
+  /// written during handshake.
   pub fn flush_plaintext(&mut self) {
     if self.state != ConnState::Traffic {
       return;

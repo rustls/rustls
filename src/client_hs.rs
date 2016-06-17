@@ -99,10 +99,10 @@ pub fn emit_client_hello(sess: &mut ClientSession) {
     )
   };
 
-  debug!("Sending ClientHello {:?}", sh);
+  debug!("Sending ClientHello {:#?}", sh);
 
   sh.payload.encode(&mut sess.handshake_data.client_hello);
-  sess.tls_queue.push_back(sh);
+  sess.send_msg(&sh, false);
 }
 
 fn expect_server_hello() -> Expectation {
@@ -114,7 +114,7 @@ fn expect_server_hello() -> Expectation {
 
 fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
-  debug!("We got ServerHello {:?}", server_hello);
+  debug!("We got ServerHello {:#?}", server_hello);
 
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
     return Err(HandshakeError::General("server does not support TLSv1_2".to_string()));
@@ -265,7 +265,7 @@ fn emit_clientkx(sess: &mut ClientSession, kxd: &suites::KeyExchangeResult) {
   };
 
   sess.handshake_data.hash_message(&ckx);
-  sess.tls_queue.push_back(ckx);
+  sess.send_msg(&ckx, false);
 }
 
 fn emit_ccs(sess: &mut ClientSession) {
@@ -275,7 +275,7 @@ fn emit_ccs(sess: &mut ClientSession) {
     payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
   };
 
-  sess.tls_queue.push_back(ccs);
+  sess.send_msg(&ccs, false);
 }
 
 fn emit_finished(sess: &mut ClientSession) {
@@ -297,8 +297,7 @@ fn emit_finished(sess: &mut ClientSession) {
   };
 
   sess.handshake_data.hash_message(&f);
-  let ef = sess.encrypt_outgoing(&f);
-  sess.tls_queue.push_back(ef);
+  sess.send_msg(&f, true);
 }
 
 fn handle_server_hello_done(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {

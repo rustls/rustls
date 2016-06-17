@@ -77,3 +77,25 @@ fn resumption() {
     .expect("1 session cache hits")
     .go();
 }
+
+#[test]
+fn recv_low_mtu() {
+  let mut server = OpenSSLServer::new_rsa(8300);
+  server.arg("-mtu").arg("32");
+  server.run();
+
+  server.client()
+    .expect("Ciphers common between both SSL end points")
+    .go();
+}
+
+#[test]
+fn send_low_mtu() {
+  let mut server = OpenSSLServer::new_rsa(8400);
+  server.run();
+
+  server.client()
+    .mtu(128)
+    .expect("Ciphers common between both SSL end points")
+    .go();
+}
