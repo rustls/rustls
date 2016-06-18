@@ -93,7 +93,7 @@ impl TlsClient {
   }
 
   pub fn go(&mut self) -> Option<()> {
-    let mut mtustring = "".to_string();
+    let mtustring;
     let portstring = self.port.to_string();
     let mut args = Vec::<&str>::new();
     args.push(&self.hostname);
