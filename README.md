@@ -89,8 +89,20 @@ TLS error: WebPKIError(CertExpired)
 Connection closed
 ```
 
+# License
+
+Rustls is distributed under the following three licenses:
+
+- Apache License version 2.0.
+- MIT license.
+- ISC license.
+
+These are included as LICENSE-APACHE, LICENSE-MIT and LICENSE-ISC
+respectively.  You may use this software under the terms of any
+of these licenses, at your option.
+
 # TODO list
-- [ ] Choose a license.
+- [x] Choose a license.
 - [x] Improve testing.
 - [ ] Improve testing some more.
 - [x] ALPN.
