@@ -6,7 +6,7 @@ extern crate untrusted;
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::SignatureAndHashAlgorithm;
-use handshake::HandshakeError;
+use error::TLSError;
 use pemfile;
 
 use std::io;
@@ -56,11 +56,14 @@ impl OwnedTrustAnchor {
   }
 }
 
+/// A container for root certificates able to provide a root-of-trust
+/// for connection authentication.
 pub struct RootCertStore {
   roots: Vec<OwnedTrustAnchor>
 }
 
 impl RootCertStore {
+  /// Make a new, empty `RootCertStore`.
   pub fn empty() -> RootCertStore {
     RootCertStore { roots: Vec::new() }
   }
@@ -114,9 +117,9 @@ impl RootCertStore {
  * the top certificate in the chain. */
 pub fn verify_cert(roots: &RootCertStore,
                    presented_certs: &Vec<ASN1Cert>,
-                   dns_name: &str) -> Result<(), HandshakeError> {
+                   dns_name: &str) -> Result<(), TLSError> {
   if presented_certs.len() == 0 {
-    return Err(HandshakeError::NoCertificatesPresented);
+    return Err(TLSError::NoCertificatesPresented);
   }
 
   /* EE cert must appear first. */
@@ -138,7 +141,7 @@ pub fn verify_cert(roots: &RootCertStore,
                           time::get_time())
     .and_then(|_| webpki::verify_cert_dns_name(ee,
                           untrusted::Input::new(dns_name.as_bytes()).unwrap()))
-    .map_err(|err| HandshakeError::WebPKIError(err))
+    .map_err(|err| TLSError::WebPKIError(err))
 }
 
 /* TODO: this is a bit gross. consider doing it another way */
@@ -152,7 +155,7 @@ static RSA_SHA384: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0
 static RSA_SHA512: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0d";
 
 
-fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<&'static [u8], HandshakeError> {
+fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<&'static [u8], TLSError> {
   use msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
   use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
@@ -165,18 +168,18 @@ fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<&'static [u8], Handshak
     (&RSA, &SHA256) => Ok(RSA_SHA256),
     (&RSA, &SHA384) => Ok(RSA_SHA384),
     (&RSA, &SHA512) => Ok(RSA_SHA512),
-    _ => Err(HandshakeError::General("convert_alg cannot map to oid".to_string()))
+    _ => Err(TLSError::General("convert_alg cannot map to oid".to_string()))
   }
 }
 
-/* Verify the signed `message` using the public key quoted in
- * `cert` and algorithm and signature in `dss`.
- *
- * `cert` MUST have been authenticated before using this function,
- * typically using `verify_cert`. */
+/// Verify the signed `message` using the public key quoted in
+/// `cert` and algorithm and signature in `dss`.
+///
+/// `cert` MUST have been authenticated before using this function,
+/// typically using `verify_cert`.
 pub fn verify_kx(message: &[u8],
                  cert: &ASN1Cert,
-                 dss: &DigitallySignedStruct) -> Result<(), HandshakeError> {
+                 dss: &DigitallySignedStruct) -> Result<(), TLSError> {
   let alg = try!(convert_alg(&dss.alg));
 
   let signed_data = webpki::signed_data::SignedData {
@@ -185,11 +188,12 @@ pub fn verify_kx(message: &[u8],
     signature: untrusted::Input::new(&dss.sig.body).unwrap()
   };
 
-  let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::new(&cert.body).unwrap())
-                  .map_err(|err| HandshakeError::WebPKIError(err)));
+  let cert_in = untrusted::Input::new(&cert.body).unwrap();
+  let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(cert_in)
+                  .map_err(|err| TLSError::WebPKIError(err)));
 
   webpki::signed_data::verify_signed_data(&SUPPORTED_SIG_ALGS,
                                           untrusted::Input::new(cert.spki).unwrap(),
                                           &signed_data)
-    .map_err(|err| HandshakeError::WebPKIError(err))
+    .map_err(|err| TLSError::WebPKIError(err))
 }

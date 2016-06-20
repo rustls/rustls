@@ -1,12 +1,12 @@
 use session::SessionSecrets;
-use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
-use msgs::handshake::{SessionID, CertificatePayload};
+use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
 use msgs::deframer::MessageDeframer;
 use msgs::message::Message;
 use server_hs;
-use handshake::HandshakeError;
+use error::TLSError;
 use rand;
 
 use std::sync::Arc;
@@ -82,8 +82,12 @@ struct AlwaysResolvesChain {
 }
 
 impl AlwaysResolvesChain {
-  fn chain(chain: &CertificatePayload) -> AlwaysResolvesChain {
-    AlwaysResolvesChain { chain: (*chain).clone() }
+  fn chain(chain: Vec<Vec<u8>>) -> AlwaysResolvesChain {
+    let mut payload = Vec::new();
+    for cert in chain {
+      payload.push(ASN1Cert { body: cert.into_boxed_slice() });
+    }
+    AlwaysResolvesChain { chain: payload }
   }
 }
 
@@ -100,14 +104,14 @@ impl ResolvesCert for AlwaysResolvesChain {
 impl ServerConfig {
   pub fn default() -> ServerConfig {
     ServerConfig {
-      ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
+      ciphersuites: ALL_CIPHERSUITES.to_vec(),
       ignore_client_order: false,
       session_storage: Box::new(NoSessionStorage {}),
       cert_resolver: Box::new(FailResolveChain {})
     }
   }
 
-  pub fn set_cert_chain(&mut self, cert_chain: &CertificatePayload) {
+  pub fn set_cert_chain(&mut self, cert_chain: Vec<Vec<u8>>) {
     self.cert_resolver = Box::new(AlwaysResolvesChain::chain(cert_chain));
   }
 }
@@ -169,7 +173,7 @@ impl ServerSession {
     !self.tls_queue.is_empty()
   }
 
-  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
+  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     msg.decode_payload();
 
     let handler = self.get_handler();
@@ -189,7 +193,7 @@ impl ServerSession {
     }
   }
 
-  pub fn process_new_packets(&mut self) -> Result<(), HandshakeError> {
+  pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
     loop {
       match self.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),

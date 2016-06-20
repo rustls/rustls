@@ -1,7 +1,7 @@
 use msgs::enums::CipherSuite;
 use session::SessionSecrets;
 use session::MessageCipher;
-use suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
+use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
 use msgs::enums::{ContentType, AlertDescription, AlertLevel};
 use msgs::deframer::MessageDeframer;
@@ -13,7 +13,7 @@ use msgs::persist;
 use client_hs;
 use hash_hs;
 use verify;
-use handshake::HandshakeError;
+use error::TLSError;
 use rand;
 
 use std::sync::Arc;
@@ -22,9 +22,13 @@ use std::collections::VecDeque;
 use std::mem;
 use std::cell;
 
-/// A trait for the ability to store session data.
+/// A trait for the ability to store client session data.
 /// The keys and values are opaque.
-pub trait StoresSessions {
+///
+/// Both the keys and values should be treated as
+/// **highly sensitive data**, containing enough key material
+/// to break all security of the corresponding session.
+pub trait StoresClientSessions {
   /// Stores a new `value` for `key`.  Returns `true`
   /// if the value was stored.
   fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool;
@@ -36,7 +40,7 @@ pub trait StoresSessions {
 
 struct NoSessionStorage {}
 
-impl StoresSessions for NoSessionStorage {
+impl StoresClientSessions for NoSessionStorage {
   fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> bool {
     false
   }
@@ -63,7 +67,7 @@ pub struct ClientConfig {
   pub alpn_protocols: Vec<String>,
 
   /// How we store session data or tickets.
-  pub session_persistence: cell::RefCell<Box<StoresSessions>>,
+  pub session_persistence: cell::RefCell<Box<StoresClientSessions>>,
 
   /// Our MTU.  If None, we don't limit TLS message sizes.
   pub mtu: Option<usize>
@@ -75,7 +79,7 @@ impl ClientConfig {
   /// session persistence.
   pub fn default() -> ClientConfig {
     ClientConfig {
-      ciphersuites: DEFAULT_CIPHERSUITES.to_vec(),
+      ciphersuites: ALL_CIPHERSUITES.to_vec(),
       root_store: verify::RootCertStore::empty(),
       alpn_protocols: Vec::new(),
       session_persistence: cell::RefCell::new(Box::new(NoSessionStorage {})),
@@ -93,7 +97,7 @@ impl ClientConfig {
   }
 
   /// Sets persistence layer to `persist`.
-  pub fn set_persistence(&mut self, persist: Box<StoresSessions>) {
+  pub fn set_persistence(&mut self, persist: Box<StoresClientSessions>) {
     self.session_persistence = cell::RefCell::new(persist);
   }
 
@@ -170,7 +174,7 @@ impl ConnState {
   }
 }
 
-pub struct ClientSession {
+pub struct ClientSessionImpl {
   pub config: Arc<ClientConfig>,
   pub handshake_data: ClientHandshakeData,
   pub secrets_current: SessionSecrets,
@@ -188,11 +192,11 @@ pub struct ClientSession {
   pub state: ConnState
 }
 
-impl ClientSession {
-  pub fn new(client_config: &Arc<ClientConfig>,
-             hostname: &str) -> ClientSession {
-    let mut cs = ClientSession {
-      config: client_config.clone(),
+impl ClientSessionImpl {
+  pub fn new(config: &Arc<ClientConfig>,
+             hostname: &str) -> ClientSessionImpl {
+    let mut cs = ClientSessionImpl {
+      config: config.clone(),
       handshake_data: ClientHandshakeData::new(hostname),
       secrets_current: SessionSecrets::for_client(),
       message_cipher: MessageCipher::invalid(),
@@ -202,7 +206,7 @@ impl ClientSession {
       alpn_protocol: None,
       message_deframer: MessageDeframer::new(),
       handshake_joiner: HandshakeJoiner::new(),
-      message_fragmenter: MessageFragmenter::new(client_config.mtu
+      message_fragmenter: MessageFragmenter::new(config.mtu
                                                  .unwrap_or(MAX_FRAGMENT_LEN)),
       sendable_plaintext: Vec::new(),
       received_plaintext: Vec::new(),
@@ -265,7 +269,7 @@ impl ClientSession {
     !self.tls_queue.is_empty()
   }
 
-  fn process_alert(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
+  fn process_alert(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     if let MessagePayload::Alert(ref alert) = msg.payload {
       /* If we get a CloseNotify, make a note to declare EOF to our
        * caller. */
@@ -281,17 +285,17 @@ impl ClientSession {
       }
 
       error!("TLS alert received: {:#?}", msg);
-      return Err(HandshakeError::AlertReceived(alert.description.clone()));
+      return Err(TLSError::AlertReceived(alert.description.clone()));
     } else {
       unreachable!();
     }
   }
 
-  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
+  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.state.is_encrypted() {
       let dm = try!(self.decrypt_incoming(msg)
-                    .ok_or(HandshakeError::DecryptError));
+                    .ok_or(TLSError::DecryptError));
       *msg = dm;
     }
 
@@ -313,7 +317,7 @@ impl ClientSession {
     return self.process_main_protocol(msg);
   }
 
-  fn process_new_handshake_messages(&mut self) -> Result<(), HandshakeError> {
+  fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
     loop {
       match self.handshake_joiner.frames.pop_front() {
         Some(mut msg) => try!(self.process_main_protocol(&mut msg)),
@@ -326,7 +330,7 @@ impl ClientSession {
 
   /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
   /// that Handler expects.  Finally, we ask the handler to handle the message.
-  fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), HandshakeError> {
+  fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     let handler = self.get_handler();
     let expects = (handler.expect)();
     try!(expects.check_message(msg));
@@ -355,7 +359,7 @@ impl ClientSession {
     }
   }
 
-  pub fn process_new_packets(&mut self) -> Result<(), HandshakeError> {
+  pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
     loop {
       match self.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),
@@ -366,6 +370,9 @@ impl ClientSession {
     Ok(())
   }
 
+  /// Read TLS content from `rd`.  This method does internal
+  /// buffering, so `rd` can supply TLS messages in arbitrary-
+  /// sized chunks (like a socket or pipe might).
   pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
     self.message_deframer.read(rd)
   }
@@ -450,10 +457,9 @@ impl ClientSession {
   fn connection_at_eof(&self) -> bool {
     self.peer_eof && !self.message_deframer.has_pending()
   }
-}
 
-impl io::Read for ClientSession {
-  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+  pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    use std::io::Read;
     let len = try!(self.received_plaintext.as_slice().read(buf));
     self.received_plaintext.drain(0..len);
 
@@ -465,14 +471,87 @@ impl io::Read for ClientSession {
   }
 }
 
+/// This represents a single TLS client session.
+pub struct ClientSession {
+  /* We use the pimpl idiom to hide unimportant details. */
+  imp: ClientSessionImpl
+}
+
+impl ClientSession {
+  /// Make a new ClientSession.  `config` controls how
+  /// we behave in the TLS protocol, `hostname` is the
+  /// hostname of who we want to talk to.
+  pub fn new(config: &Arc<ClientConfig>,
+             hostname: &str) -> ClientSession {
+    ClientSession { imp: ClientSessionImpl::new(config, hostname) }
+  }
+  
+  /// Read TLS content from `rd`.  This method does internal
+  /// buffering, so `rd` can supply TLS messages in arbitrary-
+  /// sized chunks (like a socket or pipe might).
+  ///
+  /// You should call `process_new_packets` each time a call to
+  /// this function succeeds.
+  ///
+  /// The returned error only relates to IO on `rd`.  TLS-level
+  /// errors are emitted from `process_new_packets`.
+  pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    self.imp.read_tls(rd)
+  }
+
+  /// Writes TLS messages to `wr`.
+  pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
+    self.imp.write_tls(wr)
+  }
+  
+  /// Processes any new packets read by a previous call to `read_tls`.
+  /// Errors from this function relate to TLS protocol errors, and
+  /// are generally fatal to the session.
+  ///
+  /// Success from this function can mean new plaintext is available:
+  /// obtain it using `read`.
+  pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    self.imp.process_new_packets()
+  }
+
+  /// Returns true if the caller should call `read_tls` as soon
+  /// as possible.
+  pub fn wants_read(&self) -> bool {
+    self.imp.wants_read()
+  }
+
+  /// Returns true if the caller should call `write_tls` as soon
+  /// as possible.
+  pub fn wants_write(&self) -> bool {
+    self.imp.wants_write()
+  }
+}
+
+impl io::Read for ClientSession {
+  /// Obtain plaintext data received from the peer over
+  /// this TLS connection.
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    self.imp.read(buf)
+  }
+}
+
 impl io::Write for ClientSession {
+  /// Send the plaintext `buf` to the peer, encrypting
+  /// and authenticating it.  Once this function succeeds
+  /// you should call `write_tls` which will output
+  ///
+  /// This function buffers plaintext sent before the
+  /// TLS handshake completes, and sends it as soon
+  /// as it can.  This buffer is of *unlimited size* so
+  /// writing much data before it can be sent will
+  /// cause excess memory usage.
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    self.send_plain(buf);
+    self.imp.send_plain(buf);
     Ok(buf.len())
   }
 
   fn flush(&mut self) -> io::Result<()> {
-    self.flush_plaintext();
+    self.imp.flush_plaintext();
     Ok(())
   }
 }

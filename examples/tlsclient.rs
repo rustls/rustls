@@ -18,7 +18,6 @@ extern crate docopt;
 use docopt::Docopt;
 
 extern crate rustls;
-use rustls::client::{ClientConfig, ClientSession, StoresSessions};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -26,7 +25,7 @@ struct TlsClient {
   socket: TcpStream,
   closing: bool,
   clean_closure: bool,
-  tls_session: ClientSession
+  tls_session: rustls::ClientSession
 }
 
 impl mio::Handler for TlsClient {
@@ -80,12 +79,12 @@ impl io::Read for TlsClient {
 }
 
 impl TlsClient {
-  fn new(sock: TcpStream, hostname: &str, cfg: Arc<rustls::client::ClientConfig>) -> TlsClient {
+  fn new(sock: TcpStream, hostname: &str, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
     TlsClient {
       socket: sock,
       closing: false,
       clean_closure: false,
-      tls_session: rustls::client::ClientSession::new(&cfg, hostname)
+      tls_session: rustls::ClientSession::new(&cfg, hostname)
     }
   }
 
@@ -187,8 +186,8 @@ impl PersistCache {
   }
 
   fn save(&mut self) {
-    use rustls::msgs::codec::Codec;
-    use rustls::msgs::base::PayloadU16;
+    use rustls::internal::msgs::codec::Codec;
+    use rustls::internal::msgs::base::PayloadU16;
 
     if self.filename.is_none() {
       return;
@@ -207,8 +206,8 @@ impl PersistCache {
   }
 
   fn load(&mut self) {
-    use rustls::msgs::codec::{Codec, Reader};
-    use rustls::msgs::base::PayloadU16;
+    use rustls::internal::msgs::codec::{Codec, Reader};
+    use rustls::internal::msgs::base::PayloadU16;
 
     let mut file = match fs::File::open(self.filename.as_ref().unwrap()) {
       Ok(f) => f,
@@ -228,7 +227,7 @@ impl PersistCache {
   }
 }
 
-impl StoresSessions for PersistCache {
+impl rustls::StoresClientSessions for PersistCache {
   fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
     self.cache.insert(key, value);
     self.save();
@@ -291,8 +290,8 @@ fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
   unreachable!("Cannot lookup address");
 }
 
-fn find_suite(name: &str) -> Option<&'static rustls::suites::SupportedCipherSuite> {
-  for suite in rustls::suites::DEFAULT_CIPHERSUITES.iter() {
+fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
+  for suite in rustls::ALL_CIPHERSUITES.iter() {
     let sname = format!("{:?}", suite.suite).to_lowercase();
 
     if sname == name.to_string().to_lowercase() {
@@ -303,7 +302,7 @@ fn find_suite(name: &str) -> Option<&'static rustls::suites::SupportedCipherSuit
   None
 }
 
-fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::suites::SupportedCipherSuite> {
+fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSuite> {
   let mut out = Vec::new();
 
   for csname in suites {
@@ -317,8 +316,8 @@ fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::suites::Supported
   out
 }
 
-fn make_config(args: &Args) -> Arc<ClientConfig> {
-  let mut config = ClientConfig::default();
+fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
+  let mut config = rustls::ClientConfig::default();
 
   if args.flag_suite.len() != 0 {
     config.ciphersuites = lookup_suites(&args.flag_suite);

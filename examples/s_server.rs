@@ -11,18 +11,18 @@ const LISTENER: mio::Token = mio::Token(0);
 struct TlsServer {
   server: TcpListener,
   connections: Slab<Connection>,
-  tls_config: Arc<rustls::server::ServerConfig>
+  tls_config: Arc<rustls::ServerConfig>
 }
 
 impl TlsServer {
   fn new(server: TcpListener) -> TlsServer {
     let slab = Slab::new_starting_at(mio::Token(1), 256);
-    let mut config = rustls::server::ServerConfig::default();
+    let mut config = rustls::ServerConfig::default();
 
     let cert_chain = vec![
-      rustls::msgs::handshake::ASN1Cert { body: Box::new([0u8; 1]) }
+      Vec::new()
     ];
-    config.set_cert_chain(&cert_chain);
+    config.set_cert_chain(cert_chain);
 
     TlsServer {
       server: server,
@@ -46,7 +46,7 @@ impl mio::Handler for TlsServer {
           Ok(Some((socket, addr))) => {
             println!("accepting new connection from {:?}", addr);
 
-            let tls_session = rustls::server::ServerSession::new(&self.tls_config);
+            let tls_session = rustls::ServerSession::new(&self.tls_config);
             let token = self.connections
               .insert_with(|token| Connection::new(socket, token, tls_session))
               .unwrap();
@@ -78,12 +78,12 @@ struct Connection {
   socket: TcpStream,
   token: mio::Token,
   closing: bool,
-  tls_session: rustls::server::ServerSession
+  tls_session: rustls::ServerSession
 }
 
 impl Connection {
   fn new(socket: TcpStream, token: mio::Token,
-         tls_session: rustls::server::ServerSession) -> Connection {
+         tls_session: rustls::ServerSession) -> Connection {
     Connection {
       socket: socket,
       token: token,

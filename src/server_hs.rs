@@ -5,7 +5,8 @@ use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use server::{ServerSession, ConnState};
 use suites;
-use handshake::{HandshakeError, Expectation, ExpectFunction};
+use error::TLSError;
+use handshake::{Expectation, ExpectFunction};
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -19,7 +20,7 @@ macro_rules! extract_handshake(
   )
 );
 
-pub type HandleFunction = fn(&mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError>;
+pub type HandleFunction = fn(&mut ServerSession, m: &Message) -> Result<ConnState, TLSError>;
 
 /* These are effectively operations on the ServerSession, variant on the
  * connection state. They must not have state of their own -- so they're
@@ -84,15 +85,15 @@ fn expect_client_hello() -> Expectation {
   }
 }
 
-fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnState, TLSError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
   if client_hello.client_version != ProtocolVersion::TLSv1_2 {
-    return Err(HandshakeError::General("client does not support TLSv1_2".to_string()));
+    return Err(TLSError::General("client does not support TLSv1_2".to_string()));
   }
 
   if !client_hello.compression_methods.contains(&Compression::Null) {
-    return Err(HandshakeError::General("client did not offer Null compression".to_string()));
+    return Err(TLSError::General("client did not offer Null compression".to_string()));
   }
 
   let default_sigalgs_ext = SupportedSignatureAlgorithms::default();
@@ -116,7 +117,7 @@ fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnStat
   /* Choose a certificate. */
   let maybe_cert_chain = sess.config.cert_resolver.resolve(sni_ext, sigalgs_ext, eccurves_ext, ecpoints_ext);
   if maybe_cert_chain.is_err() {
-    return Err(HandshakeError::General("no server certificate chain resolved".to_string()));
+    return Err(TLSError::General("no server certificate chain resolved".to_string()));
   }
   let cert_chain = maybe_cert_chain.unwrap();
 
@@ -134,7 +135,7 @@ fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnStat
   };
 
   if maybe_ciphersuite.is_none() {
-    return Err(HandshakeError::General("no ciphersuites in common".to_string()));
+    return Err(TLSError::General("no ciphersuites in common".to_string()));
   }
 
   sess.handshake_data.ciphersuite = maybe_ciphersuite;
@@ -159,8 +160,8 @@ fn expect_client_kx() -> Expectation {
   }
 }
 
-fn handle_client_kx(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, HandshakeError> {
-  Err(HandshakeError::General("ExpectClientKeyExchange nyi".to_string()))
+fn handle_client_kx(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, TLSError> {
+  Err(TLSError::General("ExpectClientKeyExchange nyi".to_string()))
 }
 
 pub static EXPECT_CLIENT_KX: Handler = Handler {
@@ -175,8 +176,8 @@ fn expect_invalid() -> Expectation {
   }
 }
 
-fn handle_invalid(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, HandshakeError> {
-  Err(HandshakeError::General("bad state".to_string()))
+fn handle_invalid(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, TLSError> {
+  Err(TLSError::General("bad state".to_string()))
 }
 
 pub static INVALID_STATE: Handler = Handler {

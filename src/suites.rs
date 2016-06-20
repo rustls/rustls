@@ -67,8 +67,10 @@ impl KeyExchangeResult {
   }
 }
 
+/// A cipher suite supported by rustls.
 #[derive(Debug)]
 pub struct SupportedCipherSuite {
+  /// The TLS enumeration naming this cipher suite.
   pub suite: CipherSuite,
   pub kx: KeyExchangeAlgorithm,
   pub bulk: BulkAlgorithm,
@@ -159,7 +161,8 @@ SupportedCipherSuite {
   fixed_iv_len: 4
 };
 
-pub static DEFAULT_CIPHERSUITES: [&'static SupportedCipherSuite; 4] = [
+/// A list of all the cipher suites supported by rustls.
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 4] = [
   &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
   &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
   &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,

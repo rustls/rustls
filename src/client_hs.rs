@@ -12,11 +12,12 @@ use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
-use client::{ClientSession, ConnState};
+use client::{ClientSessionImpl, ConnState};
 use suites;
 use hash_hs;
 use verify;
-use handshake::{HandshakeError, Expectation, ExpectFunction};
+use error::TLSError;
+use handshake::{Expectation, ExpectFunction};
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -30,9 +31,9 @@ macro_rules! extract_handshake(
   )
 );
 
-pub type HandleFunction = fn(&mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError>;
+pub type HandleFunction = fn(&mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError>;
 
-/* These are effectively operations on the ClientSession, variant on the
+/* These are effectively operations on the ClientSessionImpl, variant on the
  * connection state. They must not have state of their own -- so they're
  * functions rather than a trait. */
 pub struct Handler {
@@ -40,7 +41,7 @@ pub struct Handler {
   pub handle: HandleFunction
 }
 
-fn find_session(sess: &mut ClientSession) -> Option<persist::ClientSessionValue> {
+fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionValue> {
   let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
   let key_buf = key.get_encoding();
 
@@ -56,7 +57,7 @@ fn find_session(sess: &mut ClientSession) -> Option<persist::ClientSessionValue>
   persist::ClientSessionValue::read_bytes(&value)
 }
 
-pub fn emit_client_hello(sess: &mut ClientSession) {
+pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   sess.handshake_data.generate_client_random();
 
   /* Do we have a SessionID cached for this host? */
@@ -112,16 +113,16 @@ fn expect_server_hello() -> Expectation {
   }
 }
 
-fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
   debug!("We got ServerHello {:#?}", server_hello);
 
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
-    return Err(HandshakeError::General("server does not support TLSv1_2".to_string()));
+    return Err(TLSError::General("server does not support TLSv1_2".to_string()));
   }
 
   if server_hello.compression_method != Compression::Null {
-    return Err(HandshakeError::General("server chose non-Null compression".to_string()));
+    return Err(TLSError::General("server chose non-Null compression".to_string()));
   }
 
   /* Extract ALPN protocol */
@@ -131,7 +132,7 @@ fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnStat
   let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
 
   if scs.is_none() {
-    return Err(HandshakeError::General("server chose non-offered ciphersuite".to_string()));
+    return Err(TLSError::General("server chose non-offered ciphersuite".to_string()));
   }
 
   /* Start our handshake hash, and input the client hello we sent, and this reply. */
@@ -157,7 +158,7 @@ fn handle_server_hello(sess: &mut ClientSession, m: &Message) -> Result<ConnStat
 
       /* Is the server telling lies about the ciphersuite? */
       if resuming.cipher_suite != scs.unwrap().suite {
-        return Err(HandshakeError::General("abbreviated handshake offered, but with varied cs".to_string()));
+        return Err(TLSError::General("abbreviated handshake offered, but with varied cs".to_string()));
       }
 
       sess.secrets_current.init_resume(&sess.handshake_data.secrets,
@@ -186,7 +187,7 @@ fn expect_certificate() -> Expectation {
   }
 }
 
-fn handle_certificate(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_certificate(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
   sess.handshake_data.hash_message(m);
   sess.handshake_data.server_cert_chain = cert_chain.clone();
@@ -205,13 +206,13 @@ fn expect_server_kx() -> Expectation {
   }
 }
 
-fn handle_server_kx(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
   let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.handshake_data.ciphersuite.unwrap().kx);
   sess.handshake_data.hash_message(m);
 
   if maybe_decoded_kx.is_none() {
-    return Err(HandshakeError::General("cannot decode server's kx".to_string()));
+    return Err(TLSError::General("cannot decode server's kx".to_string()));
   }
 
   let decoded_kx = maybe_decoded_kx.unwrap();
@@ -252,7 +253,7 @@ fn dumphex(_label: &str, _bytes: &[u8]) {
   */
 }
 
-fn emit_clientkx(sess: &mut ClientSession, kxd: &suites::KeyExchangeResult) {
+fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) {
   let ckx = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
@@ -268,7 +269,7 @@ fn emit_clientkx(sess: &mut ClientSession, kxd: &suites::KeyExchangeResult) {
   sess.send_msg(&ckx, false);
 }
 
-fn emit_ccs(sess: &mut ClientSession) {
+fn emit_ccs(sess: &mut ClientSessionImpl) {
   let ccs = Message {
     typ: ContentType::ChangeCipherSpec,
     version: ProtocolVersion::TLSv1_2,
@@ -278,7 +279,7 @@ fn emit_ccs(sess: &mut ClientSession) {
   sess.send_msg(&ccs, false);
 }
 
-fn emit_finished(sess: &mut ClientSession) {
+fn emit_finished(sess: &mut ClientSessionImpl) {
   let vh = sess.handshake_data.get_verify_hash();
   dumphex("finished vh", &vh);
   let verify_data = sess.secrets_current.client_verify_data(&vh);
@@ -300,7 +301,7 @@ fn emit_finished(sess: &mut ClientSession) {
   sess.send_msg(&f, true);
 }
 
-fn handle_server_hello_done(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   sess.handshake_data.hash_message(m);
 
   info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
@@ -338,7 +339,7 @@ fn handle_server_hello_done(sess: &mut ClientSession, m: &Message) -> Result<Con
   /* 3a. */
   let kxd = try!(sess.handshake_data.ciphersuite.as_ref().unwrap()
     .do_client_kx(&sess.handshake_data.server_kx_params)
-    .ok_or_else(|| HandshakeError::General("key exchange failed".to_string()))
+    .ok_or_else(|| TLSError::General("key exchange failed".to_string()))
   );
 
   /* 3b. */
@@ -372,7 +373,7 @@ fn expect_ccs() -> Expectation {
   }
 }
 
-fn handle_ccs(_sess: &mut ClientSession, _m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_ccs(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
   /* nb. msgs layer validates trivial contents of CCS */
   Ok(ConnState::ExpectFinished)
 }
@@ -382,7 +383,7 @@ pub static EXPECT_CCS: Handler = Handler {
   handle: handle_ccs
 };
 
-fn handle_ccs_resume(_sess: &mut ClientSession, _m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_ccs_resume(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
   /* nb. msgs layer validates trivial contents of CCS */
   Ok(ConnState::ExpectFinishedResume)
 }
@@ -400,7 +401,7 @@ fn expect_finished() -> Expectation {
   }
 }
 
-fn save_session(sess: &mut ClientSession) {
+fn save_session(sess: &mut ClientSessionImpl) {
   if sess.handshake_data.session_id.bytes.len() == 0 {
     info!("Session not saved: server didn't allocate id");
     return;
@@ -425,9 +426,9 @@ fn save_session(sess: &mut ClientSession) {
   }
 }
 
-fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let finished = try!(extract_handshake!(m, HandshakePayload::Finished)
-    .ok_or(HandshakeError::General("finished message missing".to_string()))
+    .ok_or(TLSError::General("finished message missing".to_string()))
   );
 
   /* Work out what verify_data we expect. */
@@ -438,7 +439,7 @@ fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, H
    * get one chance.  But it can't hurt. */
   use ring;
   ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
-    .map_err(|_| HandshakeError::DecryptError)
+    .map_err(|_| TLSError::DecryptError)
     .unwrap();
 
   /* Hash this message too. */
@@ -449,7 +450,7 @@ fn handle_finished(sess: &mut ClientSession, m: &Message) -> Result<ConnState, H
   Ok(ConnState::Traffic)
 }
 
-fn handle_finished_resume(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_finished_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let next_state = try!(handle_finished(sess, m));
 
   emit_ccs(sess);
@@ -475,7 +476,7 @@ fn expect_traffic() -> Expectation {
   }
 }
 
-fn handle_traffic(sess: &mut ClientSession, m: &Message) -> Result<ConnState, HandshakeError> {
+fn handle_traffic(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   sess.take_received_plaintext(m.get_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
