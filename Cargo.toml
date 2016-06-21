@@ -2,6 +2,11 @@
 name = "rustls"
 version = "0.1.0"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
+license = "Apache-2.0/ISC/MIT"
+readme = "README.md"
+description = "Rustls is a modern TLS library written in Rust."
+homepage = "https://github.com/ctz/rustls"
+repository = "https://github.com/ctz/rustls"
 
 [dependencies]
 untrusted = { version = "0.1.0", git = "https://github.com/briansmith/untrusted" }
