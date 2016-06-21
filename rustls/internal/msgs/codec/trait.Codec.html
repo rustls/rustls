@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Codec` trait in crate `rustls`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Codec">
+
+    <title>rustls::internal::msgs::codec::Codec - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../../../index.html'>rustls</a>::<wbr><a href='../../index.html'>internal</a>::<wbr><a href='../index.html'>msgs</a>::<wbr><a href='index.html'>codec</a></p><script>window.sidebarCurrent = {name: 'Codec', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../../../index.html'>rustls</a>::<wbr><a href='../../index.html'>internal</a>::<wbr><a href='../index.html'>msgs</a>::<wbr><a href='index.html'>codec</a>::<wbr><a class='trait' href=''>Codec</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-40' class='srclink' href='../../../../src/rustls/src/msgs/codec.rs.html#46-49' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Codec: <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a> {
+    fn <a href='#tymethod.encode' class='fnname'>encode</a>(&amp;self, bytes: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;);
+    fn <a href='#tymethod.read' class='fnname'>read</a>(&amp;mut <a class='struct' href='../../../../rustls/internal/msgs/codec/struct.Reader.html' title='rustls::internal::msgs::codec::Reader'>Reader</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;;
+}</pre>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.encode' class='method stab '><code>fn <a href='#tymethod.encode' class='fnname'>encode</a>(&amp;self, bytes: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;)</code></h3><h3 id='tymethod.read' class='method stab '><code>fn <a href='#tymethod.read' class='fnname'>read</a>(&amp;mut <a class='struct' href='../../../../rustls/internal/msgs/codec/struct.Reader.html' title='rustls::internal::msgs::codec::Reader'>Reader</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;Self&gt;</code></h3></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    <li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/base/struct.Payload.html' title='rustls::internal::msgs::base::Payload'>Payload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/base/struct.PayloadU24.html' title='rustls::internal::msgs::base::PayloadU24'>PayloadU24</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/base/struct.PayloadU16.html' title='rustls::internal::msgs::base::PayloadU16'>PayloadU16</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/base/struct.PayloadU8.html' title='rustls::internal::msgs::base::PayloadU8'>PayloadU8</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ProtocolVersion.html' title='rustls::internal::msgs::enums::ProtocolVersion'>ProtocolVersion</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.HashAlgorithm.html' title='rustls::internal::msgs::enums::HashAlgorithm'>HashAlgorithm</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.SignatureAlgorithm.html' title='rustls::internal::msgs::enums::SignatureAlgorithm'>SignatureAlgorithm</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ClientCertificateType.html' title='rustls::internal::msgs::enums::ClientCertificateType'>ClientCertificateType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.Compression.html' title='rustls::internal::msgs::enums::Compression'>Compression</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ContentType.html' title='rustls::internal::msgs::enums::ContentType'>ContentType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.HandshakeType.html' title='rustls::internal::msgs::enums::HandshakeType'>HandshakeType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.AlertLevel.html' title='rustls::internal::msgs::enums::AlertLevel'>AlertLevel</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.AlertDescription.html' title='rustls::internal::msgs::enums::AlertDescription'>AlertDescription</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.HeartbeatMessageType.html' title='rustls::internal::msgs::enums::HeartbeatMessageType'>HeartbeatMessageType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ExtensionType.html' title='rustls::internal::msgs::enums::ExtensionType'>ExtensionType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ServerNameType.html' title='rustls::internal::msgs::enums::ServerNameType'>ServerNameType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.NamedCurve.html' title='rustls::internal::msgs::enums::NamedCurve'>NamedCurve</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.CipherSuite.html' title='rustls::internal::msgs::enums::CipherSuite'>CipherSuite</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ECPointFormat.html' title='rustls::internal::msgs::enums::ECPointFormat'>ECPointFormat</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.HeartbeatMode.html' title='rustls::internal::msgs::enums::HeartbeatMode'>HeartbeatMode</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/enums/enum.ECCurveType.html' title='rustls::internal::msgs::enums::ECCurveType'>ECCurveType</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/alert/struct.AlertMessagePayload.html' title='rustls::internal::msgs::alert::AlertMessagePayload'>AlertMessagePayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.Random.html' title='rustls::internal::msgs::handshake::Random'>Random</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.SessionID.html' title='rustls::internal::msgs::handshake::SessionID'>SessionID</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='type' href='../../../../rustls/internal/msgs/handshake/type.ECPointFormatList.html' title='rustls::internal::msgs::handshake::ECPointFormatList'>ECPointFormatList</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='type' href='../../../../rustls/internal/msgs/handshake/type.EllipticCurveList.html' title='rustls::internal::msgs::handshake::EllipticCurveList'>EllipticCurveList</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.SignatureAndHashAlgorithm.html' title='rustls::internal::msgs::handshake::SignatureAndHashAlgorithm'>SignatureAndHashAlgorithm</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='type' href='../../../../rustls/internal/msgs/handshake/type.SupportedSignatureAlgorithms.html' title='rustls::internal::msgs::handshake::SupportedSignatureAlgorithms'>SupportedSignatureAlgorithms</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ServerName.html' title='rustls::internal::msgs::handshake::ServerName'>ServerName</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='type' href='../../../../rustls/internal/msgs/handshake/type.ServerNameRequest.html' title='rustls::internal::msgs::handshake::ServerNameRequest'>ServerNameRequest</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='type' href='../../../../rustls/internal/msgs/handshake/type.ProtocolNameList.html' title='rustls::internal::msgs::handshake::ProtocolNameList'>ProtocolNameList</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.ClientExtension.html' title='rustls::internal::msgs::handshake::ClientExtension'>ClientExtension</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.ServerExtension.html' title='rustls::internal::msgs::handshake::ServerExtension'>ServerExtension</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ClientHelloPayload.html' title='rustls::internal::msgs::handshake::ClientHelloPayload'>ClientHelloPayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ServerHelloPayload.html' title='rustls::internal::msgs::handshake::ServerHelloPayload'>ServerHelloPayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='type' href='../../../../rustls/internal/msgs/handshake/type.CertificatePayload.html' title='rustls::internal::msgs::handshake::CertificatePayload'>CertificatePayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ECParameters.html' title='rustls::internal::msgs::handshake::ECParameters'>ECParameters</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.DigitallySignedStruct.html' title='rustls::internal::msgs::handshake::DigitallySignedStruct'>DigitallySignedStruct</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ServerECDHParams.html' title='rustls::internal::msgs::handshake::ServerECDHParams'>ServerECDHParams</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ECDHEServerKeyExchange.html' title='rustls::internal::msgs::handshake::ECDHEServerKeyExchange'>ECDHEServerKeyExchange</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.ServerKeyExchangePayload.html' title='rustls::internal::msgs::handshake::ServerKeyExchangePayload'>ServerKeyExchangePayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.HandshakeMessagePayload.html' title='rustls::internal::msgs::handshake::HandshakeMessagePayload'>HandshakeMessagePayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/ccs/struct.ChangeCipherSpecPayload.html' title='rustls::internal::msgs::ccs::ChangeCipherSpecPayload'>ChangeCipherSpecPayload</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/persist/struct.ClientSessionKey.html' title='rustls::internal::msgs::persist::ClientSessionKey'>ClientSessionKey</a></code></li>
+<li><code>impl <a class='trait' href='../../../../rustls/internal/msgs/codec/trait.Codec.html' title='rustls::internal::msgs::codec::Codec'>Codec</a> for <a class='struct' href='../../../../rustls/internal/msgs/persist/struct.ClientSessionValue.html' title='rustls::internal::msgs::persist::ClientSessionValue'>ClientSessionValue</a></code></li>
+</ul><script type="text/javascript" async
+                         src="../../../../implementors/rustls/internal/msgs/codec/trait.Codec.js">
+                 </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../../../";
+        window.currentCrate = "rustls";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../../../jquery.js"></script>
+    <script src="../../../../main.js"></script>
+    
+    <script defer src="../../../../search-index.js"></script>
+</body>
+</html>

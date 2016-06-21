@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `ServerSession` struct in crate `rustls`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, ServerSession">
+
+    <title>rustls::ServerSession - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>rustls</a></p><script>window.sidebarCurrent = {name: 'ServerSession', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>rustls</a>::<wbr><a class='struct' href=''>ServerSession</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-3875' class='srclink' href='../src/rustls/src/server.rs.html#147-154' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct ServerSession {
+    pub config: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;<a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a>&gt;,
+    pub handshake_data: ServerHandshakeData,
+    pub secrets_current: SessionSecrets,
+    pub message_deframer: <a class='struct' href='../rustls/internal/msgs/deframer/struct.MessageDeframer.html' title='rustls::internal::msgs::deframer::MessageDeframer'>MessageDeframer</a>,
+    pub tls_queue: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec_deque/struct.VecDeque.html' title='collections::vec_deque::VecDeque'>VecDeque</a>&lt;<a class='struct' href='../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>&gt;,
+    pub state: ConnState,
+}</pre><h2 class='fields'>Fields</h2>
+<table><tr class='stab '>
+                             <td id='structfield.config'><code>config</code></td><td></td></tr><tr class='stab '>
+                             <td id='structfield.handshake_data'><code>handshake_data</code></td><td></td></tr><tr class='stab '>
+                             <td id='structfield.secrets_current'><code>secrets_current</code></td><td></td></tr><tr class='stab '>
+                             <td id='structfield.message_deframer'><code>message_deframer</code></td><td></td></tr><tr class='stab '>
+                             <td id='structfield.tls_queue'><code>tls_queue</code></td><td></td></tr><tr class='stab '>
+                             <td id='structfield.state'><code>state</code></td><td></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.ServerSession.html' title='rustls::ServerSession'>ServerSession</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(server_config: &amp;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;<a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a>&gt;) -&gt; <a class='struct' href='../rustls/struct.ServerSession.html' title='rustls::ServerSession'>ServerSession</a></code></h4>
+<h4 id='method.wants_read' class='method'><code>fn <a href='#method.wants_read' class='fnname'>wants_read</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></h4>
+<h4 id='method.wants_write' class='method'><code>fn <a href='#method.wants_write' class='fnname'>wants_write</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></h4>
+<h4 id='method.process_msg' class='method'><code>fn <a href='#method.process_msg' class='fnname'>process_msg</a>(&amp;mut self, msg: &amp;mut <a class='struct' href='../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='enum' href='../rustls/enum.TLSError.html' title='rustls::TLSError'>TLSError</a>&gt;</code></h4>
+<h4 id='method.process_new_packets' class='method'><code>fn <a href='#method.process_new_packets' class='fnname'>process_new_packets</a>(&amp;mut self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='enum' href='../rustls/enum.TLSError.html' title='rustls::TLSError'>TLSError</a>&gt;</code></h4>
+<h4 id='method.read_tls' class='method'><code>fn <a href='#method.read_tls' class='fnname'>read_tls</a>(&amp;mut self, rd: &amp;mut <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Read.html' title='std::io::Read'>Read</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;</code></h4>
+<h4 id='method.write_tls' class='method'><code>fn <a href='#method.write_tls' class='fnname'>write_tls</a>(&amp;mut self, wr: &amp;mut <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "rustls";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

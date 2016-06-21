@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["certs","Extract all the certificates from rd, and return a vec of bytevecs containing the der-format contents."]]});

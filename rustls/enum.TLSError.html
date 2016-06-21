@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `TLSError` enum in crate `rustls`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, TLSError">
+
+    <title>rustls::TLSError - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>rustls</a></p><script>window.sidebarCurrent = {name: 'TLSError', ty: 'enum', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content enum">
+<h1 class='fqn'><span class='in-band'>Enum <a href='index.html'>rustls</a>::<wbr><a class='enum' href=''>TLSError</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-3032' class='srclink' href='../src/rustls/src/error.rs.html#6-33' title='goto source code'>[src]</a></span></h1>
+<pre class='rust enum'>pub enum TLSError {
+    InappropriateMessage {
+        expect_types: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='enum' href='../rustls/internal/msgs/enums/enum.ContentType.html' title='rustls::internal::msgs::enums::ContentType'>ContentType</a>&gt;,
+        got_type: <a class='enum' href='../rustls/internal/msgs/enums/enum.ContentType.html' title='rustls::internal::msgs::enums::ContentType'>ContentType</a>,
+    },
+    InappropriateHandshakeMessage {
+        expect_types: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='enum' href='../rustls/internal/msgs/enums/enum.HandshakeType.html' title='rustls::internal::msgs::enums::HandshakeType'>HandshakeType</a>&gt;,
+        got_type: <a class='enum' href='../rustls/internal/msgs/enums/enum.HandshakeType.html' title='rustls::internal::msgs::enums::HandshakeType'>HandshakeType</a>,
+    },
+    NoCertificatesPresented,
+    DecryptError,
+    AlertReceived(<a class='enum' href='../rustls/internal/msgs/enums/enum.AlertDescription.html' title='rustls::internal::msgs::enums::AlertDescription'>AlertDescription</a>),
+    WebPKIError(Error),
+    General(<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>),
+}</pre><div class='docblock'><p>rustls reports protocol errors using this type.</p>
+</div><h2 class='variants'>Variants</h2>
+<table class='variants_table'><tr><td id='variant.InappropriateMessage'><code>InappropriateMessage</code></td><td><div class='docblock'><p>We received a TLS message that isn&#39;t valid right now.
+<code>expect_types</code> lists the message types we can expect right now.
+<code>got_type</code> is the type we found.  This error is typically
+caused by a buggy TLS stack (the peer or this one), a broken
+network, or an attack.</p>
+</div><h3 class='fields'>Fields</h3>
+
+                           <table><tr><td id='variant.InappropriateMessage.field.expect_types'><code>expect_types</code></td><td></td></tr><tr><td id='variant.InappropriateMessage.field.got_type'><code>got_type</code></td><td></td></tr></table></td><td></td></tr><tr><td id='variant.InappropriateHandshakeMessage'><code>InappropriateHandshakeMessage</code></td><td><div class='docblock'><p>We received a TLS handshake message that isn&#39;t valid right now.
+<code>expect_types</code> lists the handshake message types we can expect
+right now.  <code>got_type</code> is the type we found.</p>
+</div><h3 class='fields'>Fields</h3>
+
+                           <table><tr><td id='variant.InappropriateHandshakeMessage.field.expect_types'><code>expect_types</code></td><td></td></tr><tr><td id='variant.InappropriateHandshakeMessage.field.got_type'><code>got_type</code></td><td></td></tr></table></td><td></td></tr><tr><td id='variant.NoCertificatesPresented'><code>NoCertificatesPresented</code></td><td><div class='docblock'><p>The peer didn&#39;t give us any certificates.</p>
+</div></td><td></td></tr><tr><td id='variant.DecryptError'><code>DecryptError</code></td><td><div class='docblock'><p>We couldn&#39;t decrypt a message.  This is invariably fatal.</p>
+</div></td><td></td></tr><tr><td id='variant.AlertReceived'><code>AlertReceived</code></td><td><div class='docblock'><p>We received a fatal.  This means the peer is unhappy.</p>
+</div></td><td></td></tr><tr><td id='variant.WebPKIError'><code>WebPKIError</code></td><td><div class='docblock'><p>The presented certificate chain is invalid.</p>
+</div></td><td></td></tr><tr><td id='variant.General'><code>General</code></td><td><div class='docblock'><p>A catch-all error for unlikely errors.</p>
+</div></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../rustls/enum.TLSError.html' title='rustls::TLSError'>TLSError</a></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "rustls";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>
