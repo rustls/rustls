@@ -9,6 +9,9 @@ Rustls is currently in development and hence unstable.
 
 [![Build Status](https://travis-ci.org/ctz/rustls.svg?branch=master)](https://travis-ci.org/ctz/rustls)
 
+# Documentation
+Lives here: https://jbp.io/rustls/rustls/
+
 # Approach
 Rustls is built to a few rules:
 
