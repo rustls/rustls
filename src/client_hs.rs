@@ -17,7 +17,7 @@ use suites;
 use hash_hs;
 use verify;
 use error::TLSError;
-use handshake::{Expectation, ExpectFunction};
+use handshake::Expectation;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -37,7 +37,7 @@ pub type HandleFunction = fn(&mut ClientSessionImpl, m: &Message) -> Result<Conn
  * connection state. They must not have state of their own -- so they're
  * functions rather than a trait. */
 pub struct Handler {
-  pub expect: ExpectFunction,
+  pub expect: Expectation,
   pub handle: HandleFunction
 }
 
@@ -106,13 +106,6 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   sess.send_msg(&sh, false);
 }
 
-fn expect_server_hello() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::ServerHello]
-  }
-}
-
 fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
   debug!("We got ServerHello {:#?}", server_hello);
@@ -176,16 +169,12 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 }
 
 pub static EXPECT_SERVER_HELLO: Handler = Handler {
-  expect: expect_server_hello,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::ServerHello]
+  },
   handle: handle_server_hello
 };
-
-fn expect_certificate() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::Certificate]
-  }
-}
 
 fn handle_certificate(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
@@ -195,16 +184,12 @@ fn handle_certificate(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnS
 }
 
 pub static EXPECT_CERTIFICATE: Handler = Handler {
-  expect: expect_certificate,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::Certificate]
+  },
   handle: handle_certificate
 };
-
-fn expect_server_kx() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::ServerKeyExchange]
-  }
-}
 
 fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
@@ -230,16 +215,12 @@ fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnSta
 }
 
 pub static EXPECT_SERVER_KX: Handler = Handler {
-  expect: expect_server_kx,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::ServerKeyExchange]
+  },
   handle: handle_server_kx
 };
-
-fn expect_server_hello_done() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::ServerHelloDone]
-  }
-}
 
 fn dumphex(_label: &str, _bytes: &[u8]) {
   /*
@@ -361,25 +342,24 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
 }
 
 pub static EXPECT_SERVER_HELLO_DONE: Handler = Handler {
-  expect: expect_server_hello_done,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::ServerHelloDone]
+  },
   handle: handle_server_hello_done
 };
 
 /* -- Waiting for their CCS -- */
-fn expect_ccs() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::ChangeCipherSpec],
-    handshake_types: vec![]
-  }
-}
-
 fn handle_ccs(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
   /* nb. msgs layer validates trivial contents of CCS */
   Ok(ConnState::ExpectFinished)
 }
 
 pub static EXPECT_CCS: Handler = Handler {
-  expect: expect_ccs,
+  expect: Expectation {
+    content_types: &[ContentType::ChangeCipherSpec],
+    handshake_types: &[]
+  },
   handle: handle_ccs
 };
 
@@ -389,18 +369,14 @@ fn handle_ccs_resume(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<Conn
 }
 
 pub static EXPECT_CCS_RESUME: Handler = Handler {
-  expect: expect_ccs,
+  expect: Expectation {
+    content_types: &[ContentType::ChangeCipherSpec],
+    handshake_types: &[]
+  },
   handle: handle_ccs_resume
 };
 
 /* -- Waiting for their finished -- */
-fn expect_finished() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![] /* we need to decrypt before we can check this */
-  }
-}
-
 fn save_session(sess: &mut ClientSessionImpl) {
   if sess.handshake_data.session_id.bytes.len() == 0 {
     info!("Session not saved: server didn't allocate id");
@@ -459,29 +435,31 @@ fn handle_finished_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<C
 }
 
 pub static EXPECT_FINISHED: Handler = Handler {
-  expect: expect_finished,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[] /* we need to decrypt before we can check this */
+  },
   handle: handle_finished
 };
 
 pub static EXPECT_FINISHED_RESUME: Handler = Handler {
-  expect: expect_finished,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[]
+  },
   handle: handle_finished_resume
 };
 
 /* -- Traffic transit state -- */
-fn expect_traffic() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::ApplicationData],
-    handshake_types: Vec::new()
-  }
-}
-
 fn handle_traffic(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   sess.take_received_plaintext(m.get_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
 
 pub static TRAFFIC: Handler = Handler {
-  expect: expect_traffic,
+  expect: Expectation {
+    content_types: &[ContentType::ApplicationData],
+    handshake_types: &[]
+  },
   handle: handle_traffic
 };

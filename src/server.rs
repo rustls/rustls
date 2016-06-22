@@ -177,8 +177,7 @@ impl ServerSession {
     msg.decode_payload();
 
     let handler = self.get_handler();
-    let expects = (handler.expect)();
-    try!(expects.check_message(msg));
+    try!(handler.expect.check_message(msg));
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
 

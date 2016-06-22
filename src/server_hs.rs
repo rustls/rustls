@@ -6,7 +6,7 @@ use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use server::{ServerSession, ConnState};
 use suites;
 use error::TLSError;
-use handshake::{Expectation, ExpectFunction};
+use handshake::Expectation;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -26,7 +26,7 @@ pub type HandleFunction = fn(&mut ServerSession, m: &Message) -> Result<ConnStat
  * connection state. They must not have state of their own -- so they're
  * functions rather than a trait. */
 pub struct Handler {
-  pub expect: ExpectFunction,
+  pub expect: Expectation,
   pub handle: HandleFunction
 }
 
@@ -76,13 +76,6 @@ fn emit_certificate(sess: &mut ServerSession) {
 
 fn emit_server_kx(_sess: &mut ServerSession) {
   println!("emit_server_kx");
-}
-
-fn expect_client_hello() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::ClientHello]
-  }
 }
 
 fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnState, TLSError> {
@@ -149,39 +142,34 @@ fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnStat
 }
 
 pub static EXPECT_CLIENT_HELLO: Handler = Handler {
-  expect: expect_client_hello,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::ClientHello]
+  },
   handle: handle_client_hello
 };
-
-fn expect_client_kx() -> Expectation {
-  Expectation {
-    content_types: vec![ContentType::Handshake],
-    handshake_types: vec![HandshakeType::ClientKeyExchange]
-  }
-}
 
 fn handle_client_kx(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, TLSError> {
   Err(TLSError::General("ExpectClientKeyExchange nyi".to_string()))
 }
 
 pub static EXPECT_CLIENT_KX: Handler = Handler {
-  expect: expect_client_kx,
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::ClientKeyExchange]
+  },
   handle: handle_client_kx
 };
-
-fn expect_invalid() -> Expectation {
-  Expectation {
-    content_types: Vec::new(),
-    handshake_types: Vec::new()
-  }
-}
 
 fn handle_invalid(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, TLSError> {
   Err(TLSError::General("bad state".to_string()))
 }
 
 pub static INVALID_STATE: Handler = Handler {
-  expect: expect_invalid,
+  expect: Expectation {
+    content_types: &[],
+    handshake_types: &[]
+  },
   handle: handle_invalid
 };
 
