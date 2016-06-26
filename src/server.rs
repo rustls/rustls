@@ -1,14 +1,10 @@
-use session::{SessionSecrets, MessageCipher};
+use session::{SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
-use msgs::enums::{ContentType, AlertDescription, AlertLevel};
+use msgs::enums::ContentType;
 use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
-use msgs::deframer::MessageDeframer;
-use msgs::hsjoiner::HandshakeJoiner;
-use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
-use msgs::message::{Message, MessagePayload};
-use msgs::base::Payload;
+use msgs::message::Message;
 use hash_hs;
 use server_hs;
 use error::TLSError;
@@ -17,7 +13,6 @@ use sign;
 
 use std::sync::Arc;
 use std::io;
-use std::collections::VecDeque;
 
 pub trait StoresSessions {
   /* Generate a session ID. */
@@ -179,42 +174,28 @@ pub enum ConnState {
 impl ConnState {
   fn is_encrypted(&self) -> bool {
     match *self {
-      ConnState::ExpectFinished |
-        ConnState::Traffic => true,
+      ConnState::ExpectFinished
+        | ConnState::Traffic => true,
       _ => false
     }
   }
 }
 
-pub struct ServerSession {
+pub struct ServerSessionImpl {
   pub config: Arc<ServerConfig>,
   pub handshake_data: ServerHandshakeData,
   pub secrets_current: SessionSecrets,
-  message_cipher: Box<MessageCipher>,
-  write_seq: u64,
-  read_seq: u64,
-  peer_eof: bool,
-  pub message_deframer: MessageDeframer,
-  pub handshake_joiner: HandshakeJoiner,
-  pub message_fragmenter: MessageFragmenter,
-  tls_queue: VecDeque<Message>,
+  pub common: SessionCommon,
   pub state: ConnState,
 }
 
-impl ServerSession {
-  pub fn new(server_config: &Arc<ServerConfig>) -> ServerSession {
-    ServerSession {
+impl ServerSessionImpl {
+  pub fn new(server_config: &Arc<ServerConfig>) -> ServerSessionImpl {
+    ServerSessionImpl {
       config: server_config.clone(),
       handshake_data: ServerHandshakeData::new(),
       secrets_current: SessionSecrets::for_server(),
-      message_cipher: MessageCipher::invalid(),
-      write_seq: 0,
-      read_seq: 0,
-      peer_eof: false,
-      message_deframer: MessageDeframer::new(),
-      handshake_joiner: HandshakeJoiner::new(),
-      message_fragmenter: MessageFragmenter::new(MAX_FRAGMENT_LEN),
-      tls_queue: VecDeque::new(),
+      common: SessionCommon::new(None),
       state: ConnState::ExpectClientHello
     }
   }
@@ -224,44 +205,22 @@ impl ServerSession {
   }
 
   pub fn wants_write(&self) -> bool {
-    !self.tls_queue.is_empty()
-  }
-
-  pub fn process_alert(&mut self, msg: &mut Message) -> Result<(), TLSError> {
-    if let MessagePayload::Alert(ref alert) = msg.payload {
-      /* If we get a CloseNotify, make a note to declare EOF to our
-       * caller. */
-      if alert.description == AlertDescription::CloseNotify {
-        self.peer_eof = true;
-        return Ok(())
-      }
-
-      /* Warnings are nonfatal. */
-      if alert.level == AlertLevel::Warning {
-        warn!("TLS alert warning received: {:#?}", msg);
-        return Ok(())
-      }
-
-      error!("TLS alert received: {:#?}", msg);
-      return Err(TLSError::AlertReceived(alert.description.clone()));
-    } else {
-      unreachable!();
-    }
+    !self.common.tls_queue.is_empty()
   }
 
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
-    if self.state.is_encrypted() {
+    if self.common.peer_encrypting {
       println!("decrypt incoming {:?}", msg);
-      let dm = try!(self.decrypt_incoming(msg)
+      let dm = try!(self.common.decrypt_incoming(msg)
                     .ok_or(TLSError::DecryptError));
       *msg = dm;
     }
 
     /* For handshake messages, we need to join them before parsing
      * and processing. */
-    if self.handshake_joiner.want_message(msg) {
-      self.handshake_joiner.take_message(msg);
+    if self.common.handshake_joiner.want_message(msg) {
+      self.common.handshake_joiner.take_message(msg);
       return self.process_new_handshake_messages();
     }
 
@@ -269,7 +228,7 @@ impl ServerSession {
     msg.decode_payload();
 
     if msg.is_content_type(ContentType::Alert) {
-      return self.process_alert(msg);
+      return self.common.process_alert(msg);
     }
 
     return self.process_main_protocol(msg);
@@ -277,7 +236,7 @@ impl ServerSession {
 
   fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
     loop {
-      match self.handshake_joiner.frames.pop_front() {
+      match self.common.handshake_joiner.frames.pop_front() {
         Some(mut msg) => try!(self.process_main_protocol(&mut msg)),
         None => break
       }
@@ -292,8 +251,12 @@ impl ServerSession {
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
 
-    if self.state == ConnState::Traffic {
-      self.flush_plaintext();
+    if self.state.is_encrypted() && !self.common.peer_encrypting {
+      self.common.peer_now_encrypting();
+    }
+
+    if self.state == ConnState::Traffic && !self.common.traffic {
+      self.common.start_traffic();
     }
 
     Ok(())
@@ -311,7 +274,7 @@ impl ServerSession {
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
     loop {
-      match self.message_deframer.frames.pop_front() {
+      match self.common.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),
         None => break
       }
@@ -320,71 +283,91 @@ impl ServerSession {
     Ok(())
   }
 
-  pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
-    self.message_deframer.read(rd)
-  }
-
-  pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
-    let msg_maybe = self.tls_queue.pop_front();
-    if msg_maybe.is_none() {
-      return Ok(());
-    }
-
-    let mut data = Vec::new();
-    let msg = msg_maybe.unwrap();
-    println!("writing {:?}", msg);
-    msg.encode(&mut data);
-
-    println!("write {:?}", data);
-
-    wr.write_all(&data)
-  }
-
   pub fn start_encryption(&mut self) {
     let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-    self.message_cipher = MessageCipher::new(scs, &self.secrets_current);
-  }
-
-  /// Send a raw TLS message, fragmenting it if needed.
-  pub fn send_msg(&mut self, m: &Message, must_encrypt: bool) {
-    if !must_encrypt {
-      self.message_fragmenter.fragment(m, &mut self.tls_queue);
-    } else {
-      self.send_msg_encrypt(m);
-    }
-  }
-
-  /// Fragment `m`, encrypt the fragments, and then queue
-  /// the encrypted fragments for sending.
-  pub fn send_msg_encrypt(&mut self, m: &Message) {
-    let mut plain_messages = VecDeque::new();
-    self.message_fragmenter.fragment(m, &mut plain_messages);
-
-    for m in plain_messages {
-      let em = self.encrypt_outgoing(&m);
-      self.tls_queue.push_back(em);
-    }
-  }
-
-  pub fn encrypt_outgoing(&mut self, plain: &Message) -> Message {
-    let seq = self.write_seq;
-    self.write_seq += 1;
-    assert!(self.write_seq != 0);
-    self.message_cipher.encrypt(plain, seq).unwrap()
-  }
-
-  pub fn decrypt_incoming(&mut self, plain: &Message) -> Option<Message> {
-    let seq = self.read_seq;
-    self.read_seq += 1;
-    assert!(self.read_seq != 0);
-    self.message_cipher.decrypt(plain, seq).ok()
-  }
-
-  pub fn flush_plaintext(&mut self) {
-  }
-
-  pub fn take_received_plaintext(&mut self, bytes: Payload) {
-    println!("plaintext {:?}", bytes);
+    self.common.start_encryption(scs, &self.secrets_current);
   }
 }
 
+/// This represents a single TLS server session.
+pub struct ServerSession {
+  /* We use the pimpl idiom to hide unimportant details. */
+  imp: ServerSessionImpl
+}
+
+impl ServerSession {
+  /// Make a new ServerSession.  `config` controls how
+  /// we behave in the TLS protocol.
+  pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
+    ServerSession { imp: ServerSessionImpl::new(config) }
+  }
+
+  /// Read TLS content from `rd`.  This method does internal
+  /// buffering, so `rd` can supply TLS messages in arbitrary-
+  /// sized chunks (like a socket or pipe might).
+  ///
+  /// You should call `process_new_packets` each time a call to
+  /// this function succeeds.
+  ///
+  /// The returned error only relates to IO on `rd`.  TLS-level
+  /// errors are emitted from `process_new_packets`.
+  pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    self.imp.common.read_tls(rd)
+  }
+
+  /// Writes TLS messages to `wr`.
+  pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
+    self.imp.common.write_tls(wr)
+  }
+
+  /// Processes any new packets read by a previous call to `read_tls`.
+  /// Errors from this function relate to TLS protocol errors, and
+  /// are generally fatal to the session.
+  ///
+  /// Success from this function can mean new plaintext is available:
+  /// obtain it using `read`.
+  pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    self.imp.process_new_packets()
+  }
+
+  /// Returns true if the caller should call `read_tls` as soon
+  /// as possible.
+  pub fn wants_read(&self) -> bool {
+    self.imp.wants_read()
+  }
+
+  /// Returns true if the caller should call `write_tls` as soon
+  /// as possible.
+  pub fn wants_write(&self) -> bool {
+    self.imp.wants_write()
+  }
+}
+
+impl io::Read for ServerSession {
+  /// Obtain plaintext data received from the peer over
+  /// this TLS connection.
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    self.imp.common.read(buf)
+  }
+}
+
+impl io::Write for ServerSession {
+  /// Send the plaintext `buf` to the peer, encrypting
+  /// and authenticating it.  Once this function succeeds
+  /// you should call `write_tls` which will output
+  ///
+  /// This function buffers plaintext sent before the
+  /// TLS handshake completes, and sends it as soon
+  /// as it can.  This buffer is of *unlimited size* so
+  /// writing much data before it can be sent will
+  /// cause excess memory usage.
+  fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    self.imp.common.send_plain(buf);
+    Ok(buf.len())
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    self.imp.common.flush_plaintext();
+    Ok(())
+  }
+}

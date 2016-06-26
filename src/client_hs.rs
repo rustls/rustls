@@ -104,7 +104,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   debug!("Sending ClientHello {:#?}", sh);
 
   sh.payload.encode(&mut sess.handshake_data.client_hello);
-  sess.send_msg(&sh, false);
+  sess.common.send_msg(&sh, false);
 }
 
 fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
@@ -253,7 +253,7 @@ fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) 
   };
 
   sess.handshake_data.hash_message(&ckx);
-  sess.send_msg(&ckx, false);
+  sess.common.send_msg(&ckx, false);
 }
 
 fn emit_ccs(sess: &mut ClientSessionImpl) {
@@ -263,7 +263,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
     payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
   };
 
-  sess.send_msg(&ccs, false);
+  sess.common.send_msg(&ccs, false);
 }
 
 fn emit_finished(sess: &mut ClientSessionImpl) {
@@ -285,7 +285,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
   };
 
   sess.handshake_data.hash_message(&f);
-  sess.send_msg(&f, true);
+  sess.common.send_msg(&f, true);
 }
 
 fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
@@ -457,7 +457,7 @@ pub static EXPECT_FINISHED_RESUME: Handler = Handler {
 
 /* -- Traffic transit state -- */
 fn handle_traffic(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  sess.take_received_plaintext(m.get_opaque_payload().unwrap());
+  sess.common.take_received_plaintext(m.get_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
 

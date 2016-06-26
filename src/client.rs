@@ -1,14 +1,9 @@
 use msgs::enums::CipherSuite;
-use session::SessionSecrets;
-use session::MessageCipher;
+use session::{SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
-use msgs::enums::{ContentType, AlertDescription, AlertLevel};
-use msgs::deframer::MessageDeframer;
-use msgs::hsjoiner::HandshakeJoiner;
-use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
-use msgs::message::{Message, MessagePayload};
-use msgs::base::Payload;
+use msgs::enums::ContentType;
+use msgs::message::Message;
 use msgs::persist;
 use client_hs;
 use hash_hs;
@@ -18,8 +13,6 @@ use rand;
 
 use std::sync::Arc;
 use std::io;
-use std::collections::VecDeque;
-use std::mem;
 use std::cell;
 
 /// A trait for the ability to store client session data.
@@ -178,17 +171,8 @@ pub struct ClientSessionImpl {
   pub config: Arc<ClientConfig>,
   pub handshake_data: ClientHandshakeData,
   pub secrets_current: SessionSecrets,
-  message_cipher: Box<MessageCipher>,
-  write_seq: u64,
-  read_seq: u64,
-  peer_eof: bool,
   pub alpn_protocol: Option<String>,
-  pub message_deframer: MessageDeframer,
-  pub handshake_joiner: HandshakeJoiner,
-  pub message_fragmenter: MessageFragmenter,
-  pub sendable_plaintext: Vec<u8>,
-  pub received_plaintext: Vec<u8>,
-  tls_queue: VecDeque<Message>,
+  pub common: SessionCommon,
   pub state: ConnState
 }
 
@@ -199,18 +183,8 @@ impl ClientSessionImpl {
       config: config.clone(),
       handshake_data: ClientHandshakeData::new(hostname),
       secrets_current: SessionSecrets::for_client(),
-      message_cipher: MessageCipher::invalid(),
-      write_seq: 0,
-      read_seq: 0,
-      peer_eof: false,
       alpn_protocol: None,
-      message_deframer: MessageDeframer::new(),
-      handshake_joiner: HandshakeJoiner::new(),
-      message_fragmenter: MessageFragmenter::new(config.mtu
-                                                 .unwrap_or(MAX_FRAGMENT_LEN)),
-      sendable_plaintext: Vec::new(),
-      received_plaintext: Vec::new(),
-      tls_queue: VecDeque::new(),
+      common: SessionCommon::new(config.mtu),
       state: ConnState::ExpectServerHello
     };
 
@@ -233,21 +207,7 @@ impl ClientSessionImpl {
 
   pub fn start_encryption(&mut self) {
     let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-    self.message_cipher = MessageCipher::new(scs, &self.secrets_current);
-  }
-
-  pub fn encrypt_outgoing(&mut self, plain: &Message) -> Message {
-    let seq = self.write_seq;
-    self.write_seq += 1;
-    assert!(self.write_seq != 0);
-    self.message_cipher.encrypt(plain, seq).unwrap()
-  }
-
-  pub fn decrypt_incoming(&mut self, plain: &Message) -> Option<Message> {
-    let seq = self.read_seq;
-    self.read_seq += 1;
-    assert!(self.read_seq != 0);
-    self.message_cipher.decrypt(plain, seq).ok()
+    self.common.start_encryption(scs, &self.secrets_current);
   }
 
   pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
@@ -266,43 +226,21 @@ impl ClientSessionImpl {
   }
 
   pub fn wants_write(&self) -> bool {
-    !self.tls_queue.is_empty()
-  }
-
-  fn process_alert(&mut self, msg: &mut Message) -> Result<(), TLSError> {
-    if let MessagePayload::Alert(ref alert) = msg.payload {
-      /* If we get a CloseNotify, make a note to declare EOF to our
-       * caller. */
-      if alert.description == AlertDescription::CloseNotify {
-        self.peer_eof = true;
-        return Ok(())
-      }
-
-      /* Warnings are nonfatal. */
-      if alert.level == AlertLevel::Warning {
-        warn!("TLS alert warning received: {:#?}", msg);
-        return Ok(())
-      }
-
-      error!("TLS alert received: {:#?}", msg);
-      return Err(TLSError::AlertReceived(alert.description.clone()));
-    } else {
-      unreachable!();
-    }
+    !self.common.tls_queue.is_empty()
   }
 
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
-    if self.state.is_encrypted() {
-      let dm = try!(self.decrypt_incoming(msg)
+    if self.common.peer_encrypting {
+      let dm = try!(self.common.decrypt_incoming(msg)
                     .ok_or(TLSError::DecryptError));
       *msg = dm;
     }
 
     /* For handshake messages, we need to join them before parsing
      * and processing. */
-    if self.handshake_joiner.want_message(msg) {
-      self.handshake_joiner.take_message(msg);
+    if self.common.handshake_joiner.want_message(msg) {
+      self.common.handshake_joiner.take_message(msg);
       return self.process_new_handshake_messages();
     }
 
@@ -311,7 +249,7 @@ impl ClientSessionImpl {
 
     /* For alerts, we have separate logic. */
     if msg.is_content_type(ContentType::Alert) {
-      return self.process_alert(msg);
+      return self.common.process_alert(msg);
     }
 
     return self.process_main_protocol(msg);
@@ -319,7 +257,7 @@ impl ClientSessionImpl {
 
   fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
     loop {
-      match self.handshake_joiner.frames.pop_front() {
+      match self.common.handshake_joiner.frames.pop_front() {
         Some(mut msg) => try!(self.process_main_protocol(&mut msg)),
         None => break
       }
@@ -336,9 +274,14 @@ impl ClientSessionImpl {
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
 
+    /* Start decrypting incoming messages at the right time. */
+    if self.state.is_encrypted() && !self.common.peer_encrypting {
+      self.common.peer_now_encrypting();
+    }
+
     /* Once we're connected, start flushing sendable_plaintext. */
-    if self.state == ConnState::Traffic {
-      self.flush_plaintext();
+    if self.state == ConnState::Traffic && !self.common.traffic {
+      self.common.start_traffic();
     }
 
     Ok(())
@@ -360,113 +303,13 @@ impl ClientSessionImpl {
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
     loop {
-      match self.message_deframer.frames.pop_front() {
+      match self.common.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),
         None => break
       }
     }
 
     Ok(())
-  }
-
-  /// Read TLS content from `rd`.  This method does internal
-  /// buffering, so `rd` can supply TLS messages in arbitrary-
-  /// sized chunks (like a socket or pipe might).
-  pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
-    self.message_deframer.read(rd)
-  }
-
-  pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
-    let msg_maybe = self.tls_queue.pop_front();
-    if msg_maybe.is_none() {
-      return Ok(());
-    }
-
-    let mut data = Vec::new();
-    let msg = msg_maybe.unwrap();
-    msg.encode(&mut data);
-
-    wr.write_all(&data)
-  }
-
-  /// Send a raw TLS message, fragmenting it if needed.
-  pub fn send_msg(&mut self, m: &Message, must_encrypt: bool) {
-    if !must_encrypt {
-      self.message_fragmenter.fragment(m, &mut self.tls_queue);
-    } else {
-      self.send_msg_encrypt(m);
-    }
-  }
-
-  /// Send plaintext application data, fragmenting and
-  /// encrypting it as it goes out.
-  pub fn send_plain(&mut self, data: &[u8]) {
-    use msgs::enums::{ContentType, ProtocolVersion};
-
-    if self.state != ConnState::Traffic {
-      /* If we haven't completed handshaking, buffer
-       * plaintext to send once we do. */
-      self.sendable_plaintext.extend_from_slice(data);
-      return;
-    }
-
-    assert!(self.state.is_encrypted());
-
-    /* Make one giant message, then have the fragmenter chop
-     * it into bits.  Then encrypt and queue those bits. */
-    let m = Message {
-      typ: ContentType::ApplicationData,
-      version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(data.to_vec())
-    };
-
-    self.send_msg_encrypt(&m);
-  }
-
-  /// Fragment `m`, encrypt the fragments, and then queue
-  /// the encrypted fragments for sending.
-  pub fn send_msg_encrypt(&mut self, m: &Message) {
-    let mut plain_messages = VecDeque::new();
-    self.message_fragmenter.fragment(m, &mut plain_messages);
-
-    for m in plain_messages {
-      let em = self.encrypt_outgoing(&m);
-      self.tls_queue.push_back(em);
-    }
-  }
-
-  /// Send any buffered plaintext.  Plaintext is buffered if
-  /// written during handshake.
-  pub fn flush_plaintext(&mut self) {
-    if self.state != ConnState::Traffic {
-      return;
-    }
-
-    let buf = mem::replace(&mut self.sendable_plaintext, Vec::new());
-    self.send_plain(&buf);
-  }
-
-  pub fn take_received_plaintext(&mut self, bytes: Payload) {
-    self.received_plaintext.extend_from_slice(&bytes.body);
-  }
-
-  /// Are we done? ie, have we processed all received messages,
-  /// and received a close_notify to indicate that no new messages
-  /// will arrive?
-  fn connection_at_eof(&self) -> bool {
-    self.peer_eof && !self.message_deframer.has_pending()
-  }
-
-  pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    use std::io::Read;
-    let len = try!(self.received_plaintext.as_slice().read(buf));
-    self.received_plaintext.drain(0..len);
-
-    if len == 0 && self.connection_at_eof() && self.received_plaintext.len() == 0 {
-      return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));
-    }
-
-    Ok(len)
   }
 }
 
@@ -495,12 +338,12 @@ impl ClientSession {
   /// The returned error only relates to IO on `rd`.  TLS-level
   /// errors are emitted from `process_new_packets`.
   pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
-    self.imp.read_tls(rd)
+    self.imp.common.read_tls(rd)
   }
 
   /// Writes TLS messages to `wr`.
   pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
-    self.imp.write_tls(wr)
+    self.imp.common.write_tls(wr)
   }
 
   /// Processes any new packets read by a previous call to `read_tls`.
@@ -530,7 +373,7 @@ impl io::Read for ClientSession {
   /// Obtain plaintext data received from the peer over
   /// this TLS connection.
   fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    self.imp.read(buf)
+    self.imp.common.read(buf)
   }
 }
 
@@ -545,12 +388,12 @@ impl io::Write for ClientSession {
   /// writing much data before it can be sent will
   /// cause excess memory usage.
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    self.imp.send_plain(buf);
+    self.imp.common.send_plain(buf);
     Ok(buf.len())
   }
 
   fn flush(&mut self) -> io::Result<()> {
-    self.imp.flush_plaintext();
+    self.imp.common.flush_plaintext();
     Ok(())
   }
 }

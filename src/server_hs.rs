@@ -11,7 +11,7 @@ use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
-use server::{ServerSession, ConnState};
+use server::{ServerSessionImpl, ConnState};
 use suites;
 use sign;
 use error::TLSError;
@@ -32,9 +32,9 @@ macro_rules! extract_handshake(
   )
 );
 
-pub type HandleFunction = fn(&mut ServerSession, m: &Message) -> Result<ConnState, TLSError>;
+pub type HandleFunction = fn(&mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError>;
 
-/* These are effectively operations on the ServerSession, variant on the
+/* These are effectively operations on the ServerSessionImpl, variant on the
  * connection state. They must not have state of their own -- so they're
  * functions rather than a trait. */
 pub struct Handler {
@@ -42,7 +42,7 @@ pub struct Handler {
   pub handle: HandleFunction
 }
 
-fn emit_server_hello(sess: &mut ServerSession) {
+fn emit_server_hello(sess: &mut ServerSessionImpl) {
   sess.handshake_data.generate_server_random();
   let sessid = sess.config.session_storage.generate();
 
@@ -67,10 +67,10 @@ fn emit_server_hello(sess: &mut ServerSession) {
   };
 
   sess.handshake_data.hash_message(&sh);
-  sess.send_msg(&sh, false);
+  sess.common.send_msg(&sh, false);
 }
 
-fn emit_certificate(sess: &mut ServerSession) {
+fn emit_certificate(sess: &mut ServerSessionImpl) {
   let cert_chain = sess.handshake_data.server_cert_chain.as_ref().unwrap().clone();
 
   let c = Message {
@@ -85,10 +85,10 @@ fn emit_certificate(sess: &mut ServerSession) {
   };
 
   sess.handshake_data.hash_message(&c);
-  sess.send_msg(&c, false);
+  sess.common.send_msg(&c, false);
 }
 
-fn emit_server_kx(sess: &mut ServerSession,
+fn emit_server_kx(sess: &mut ServerSessionImpl,
                   sigalg: &SignatureAndHashAlgorithm,
                   curve: &NamedCurve,
                   signer: Arc<Box<sign::Signer>>) -> Result<(), TLSError> {
@@ -128,11 +128,11 @@ fn emit_server_kx(sess: &mut ServerSession,
 
   sess.handshake_data.kx_data = Some(kx);
   sess.handshake_data.hash_message(&m);
-  sess.send_msg(&m, false);
+  sess.common.send_msg(&m, false);
   Ok(())
 }
 
-fn emit_server_hello_done(sess: &mut ServerSession) {
+fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
   let m = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
@@ -145,10 +145,10 @@ fn emit_server_hello_done(sess: &mut ServerSession) {
   };
 
   sess.handshake_data.hash_message(&m);
-  sess.send_msg(&m, false);
+  sess.common.send_msg(&m, false);
 }
 
-fn handle_client_hello(sess: &mut ServerSession, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
   if client_hello.client_version != ProtocolVersion::TLSv1_2 {
@@ -247,7 +247,7 @@ pub static EXPECT_CLIENT_HELLO: Handler = Handler {
   handle: handle_client_hello
 };
 
-fn handle_client_kx(sess: &mut ServerSession, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
   sess.handshake_data.hash_message(m);
 
@@ -275,7 +275,7 @@ pub static EXPECT_CLIENT_KX: Handler = Handler {
 };
 
 /* --- Process client's ChangeCipherSpec --- */
-fn handle_ccs(_sess: &mut ServerSession, _m: &Message) -> Result<ConnState, TLSError> {
+fn handle_ccs(_sess: &mut ServerSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
   Ok(ConnState::ExpectFinished)
 }
 
@@ -288,17 +288,17 @@ pub static EXPECT_CCS: Handler = Handler {
 };
 
 /* --- Process client's Finished --- */
-fn emit_ccs(sess: &mut ServerSession) {
+fn emit_ccs(sess: &mut ServerSessionImpl) {
   let m = Message {
     typ: ContentType::ChangeCipherSpec,
     version: ProtocolVersion::TLSv1_2,
     payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
   };
 
-  sess.send_msg(&m, false);
+  sess.common.send_msg(&m, false);
 }
 
-fn emit_finished(sess: &mut ServerSession) {
+fn emit_finished(sess: &mut ServerSessionImpl) {
   let vh = sess.handshake_data.get_verify_hash();
   let verify_data = sess.secrets_current.server_verify_data(&vh);
   let verify_data_payload = Payload { body: verify_data.into_boxed_slice() };
@@ -314,10 +314,10 @@ fn emit_finished(sess: &mut ServerSession) {
     )
   };
 
-  sess.send_msg(&f, true);
+  sess.common.send_msg(&f, true);
 }
 
-fn handle_finished(sess: &mut ServerSession, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
   let vh = sess.handshake_data.get_verify_hash();
@@ -347,8 +347,8 @@ pub static EXPECT_FINISHED: Handler = Handler {
 };
 
 /* --- Process traffic --- */
-fn handle_traffic(sess: &mut ServerSession, m: &Message) -> Result<ConnState, TLSError> {
-  sess.take_received_plaintext(m.get_opaque_payload().unwrap());
+fn handle_traffic(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  sess.common.take_received_plaintext(m.get_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
 
