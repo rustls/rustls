@@ -11,6 +11,7 @@ mod hash_hs;
 mod prf;
 mod session;
 mod pemfile;
+mod sign;
 mod verify;
 mod handshake;
 mod server_hs;
@@ -22,9 +23,9 @@ mod client;
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
-  /// Functions for parsing PEM files containing certificates.
+  /// Functions for parsing PEM files containing certificates/keys.
   pub mod pemfile {
-    pub use pemfile::certs;
+    pub use pemfile::{certs, rsa_private_keys};
   }
 
   /// Low-level TLS message parsing and encoding functions.

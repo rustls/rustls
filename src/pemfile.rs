@@ -1,12 +1,9 @@
 use std::io;
 use rustc_serialize::base64::FromBase64;
 
-static START_MARKER: &'static str = "-----BEGIN CERTIFICATE-----";
-static END_MARKER: &'static str = "-----END CERTIFICATE-----";
-
-/// Extract all the certificates from rd, and return a vec of bytevecs
-/// containing the der-format contents.
-pub fn certs(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
+fn extract(rd: &mut io::BufRead,
+           start_mark: &str,
+           end_mark: &str) -> Result<Vec<Vec<u8>>, ()> {
   let mut ders = Vec::new();
   let mut b64buf = String::new();
   let mut take_base64 = false;
@@ -20,12 +17,12 @@ pub fn certs(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
       return Ok(ders);
     }
 
-    if line.starts_with(START_MARKER) {
+    if line.starts_with(start_mark) {
       take_base64 = true;
       continue;
     }
 
-    if line.starts_with(END_MARKER) {
+    if line.starts_with(end_mark) {
       take_base64 = false;
       let der = try!(b64buf.from_base64()
                      .map_err(|_| ()));
@@ -38,4 +35,20 @@ pub fn certs(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
       b64buf.push_str(&line.trim());
     }
   }
+}
+
+/// Extract all the certificates from rd, and return a vec of bytevecs
+/// containing the der-format contents.
+pub fn certs(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
+  extract(rd,
+          "-----BEGIN CERTIFICATE-----",
+          "-----END CERTIFICATE-----")
+}
+
+/// Extract all RSA private keys from rd, and return a vec of bytevecs
+/// containing the der-format contents.
+pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
+  extract(rd,
+          "-----BEGIN RSA PRIVATE KEY-----",
+          "-----END RSA PRIVATE KEY-----")
 }

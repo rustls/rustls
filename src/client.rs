@@ -484,7 +484,7 @@ impl ClientSession {
              hostname: &str) -> ClientSession {
     ClientSession { imp: ClientSessionImpl::new(config, hostname) }
   }
-  
+
   /// Read TLS content from `rd`.  This method does internal
   /// buffering, so `rd` can supply TLS messages in arbitrary-
   /// sized chunks (like a socket or pipe might).
@@ -502,7 +502,7 @@ impl ClientSession {
   pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
     self.imp.write_tls(wr)
   }
-  
+
   /// Processes any new packets read by a previous call to `read_tls`.
   /// Errors from this function relate to TLS protocol errors, and
   /// are generally fatal to the session.

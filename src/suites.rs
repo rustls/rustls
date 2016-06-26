@@ -1,8 +1,8 @@
-use msgs::enums::{CipherSuite, HashAlgorithm, NamedCurve};
-use msgs::handshake::KeyExchangeAlgorithm;
+use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, NamedCurve};
+use msgs::handshake::{SignatureAndHashAlgorithm, KeyExchangeAlgorithm};
+use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
 use msgs::handshake::CertificatePayload;
-use msgs::handshake::ServerECDHParams;
-use msgs::base::{Payload, PayloadU8};
+use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
 
 extern crate ring;
@@ -15,38 +15,65 @@ pub enum BulkAlgorithm {
   AES_256_GCM
 }
 
-/* The result of a key exchange.  This has our public key,
- * and the agreed premaster secret. */
+/// The result of a key exchange.  This has our public key,
+/// and the agreed premaster secret.
 pub struct KeyExchangeResult {
   pub pubkey: Vec<u8>,
   pub premaster_secret: Vec<u8>
 }
 
-impl KeyExchangeResult {
-  pub fn ecdhe(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
+/// An in-progress key exchange.  This has the algorithm,
+/// our private key, and our public key.
+pub struct KeyExchange {
+  alg: &'static ring::agreement::Algorithm,
+  privkey: ring::agreement::EphemeralPrivateKey,
+  pub pubkey: Vec<u8>
+}
+
+impl KeyExchange {
+  pub fn named_curve_to_ecdh_alg(named_curve: &NamedCurve) -> &'static ring::agreement::Algorithm {
+    match named_curve {
+      &NamedCurve::X25519 => &ring::agreement::X25519,
+      &NamedCurve::secp256r1 => &ring::agreement::ECDH_P256,
+      &NamedCurve::secp384r1 => &ring::agreement::ECDH_P384,
+      _ => unreachable!()
+    }
+  }
+
+  pub fn client_ecdhe(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
     let mut rd = Reader::init(&kx_params);
     let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
 
-    let alg = match ecdh_params.curve_params.named_curve {
-      NamedCurve::X25519 => &ring::agreement::X25519,
-      NamedCurve::secp256r1 => &ring::agreement::ECDH_P256,
-      NamedCurve::secp384r1 => &ring::agreement::ECDH_P384,
-      _ => unreachable!()
-    };
+    KeyExchange::start_ecdhe(&ecdh_params.curve_params.named_curve)
+      .complete(&ecdh_params.public.body)
+  }
 
+  pub fn start_ecdhe(named_curve: &NamedCurve) -> KeyExchange {
+    let alg = KeyExchange::named_curve_to_ecdh_alg(named_curve);
     let rng = ring::rand::SystemRandom::new();
-    let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng).unwrap();
+    let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng)
+      .unwrap();
 
-    /* Encode our public key. */
     let mut pubkey = Vec::new();
     pubkey.resize(ours.public_key_len(), 0u8);
     ours.compute_public_key(pubkey.as_mut_slice()).unwrap();
 
-    /* Do the key agreement. */
+    KeyExchange { alg: alg, privkey: ours, pubkey: pubkey }
+  }
+
+  pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
+    let mut rd = Reader::init(kx_params);
+    let ecdh_params = ClientECDHParams::read(&mut rd).unwrap();
+
+    self.complete(&ecdh_params.public.body)
+  }
+
+  fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
+    println!("complete pubkey {:?}", peer);
     let secret = ring::agreement::agree_ephemeral(
-      ours,
-      alg,
-      untrusted::Input::new(&ecdh_params.public.body).unwrap(),
+      self.privkey,
+      self.alg,
+      untrusted::Input::new(peer).unwrap(),
       (),
       |v| { let mut r = Vec::new(); r.extend_from_slice(v); Ok(r) }
     );
@@ -55,15 +82,7 @@ impl KeyExchangeResult {
       return None;
     }
 
-    Some(KeyExchangeResult { pubkey: pubkey, premaster_secret: secret.unwrap() })
-  }
-
-  pub fn encode_public(&self) -> Payload {
-    /* This is a bodgey way of making an ECPoint. */
-    let ecpoint = PayloadU8 { body: self.pubkey.clone().into_boxed_slice() };
-    let mut body = Vec::new();
-    ecpoint.encode(&mut body);
-    Payload { body: body.into_boxed_slice() }
+    Some(KeyExchangeResult { pubkey: self.pubkey, premaster_secret: secret.unwrap() })
   }
 }
 
@@ -75,6 +94,7 @@ pub struct SupportedCipherSuite {
   pub kx: KeyExchangeAlgorithm,
   pub bulk: BulkAlgorithm,
   pub hash: HashAlgorithm,
+  pub sign: SignatureAlgorithm,
   pub mac_key_len: usize,
   pub enc_key_len: usize,
   pub fixed_iv_len: usize
@@ -97,12 +117,41 @@ impl SupportedCipherSuite {
     }
   }
 
+  /// We have parameters and a verified public key in `kx_params`.
+  /// Generate an ephemeral key, generate the shared secret, and
+  /// return it and the public half in a `KeyExchangeResult`.
   pub fn do_client_kx(&self, kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
     match &self.kx {
-      &KeyExchangeAlgorithm::ECDHE_ECDSA |
-        &KeyExchangeAlgorithm::ECDHE_RSA => KeyExchangeResult::ecdhe(kx_params),
+      &KeyExchangeAlgorithm::ECDHE => KeyExchange::client_ecdhe(kx_params),
       _ => unreachable!()
     }
+  }
+
+  pub fn start_server_kx(&self, named_curve: &NamedCurve) -> KeyExchange {
+    match &self.kx {
+      &KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_curve),
+      _ => unreachable!()
+    }
+  }
+
+  /// Resolve a single supported `SignatureAndHashAlgorithm` from the
+  /// offered `SupportedSignatureAlgorithms`.  If we return None,
+  /// the handshake terminates.
+  pub fn resolve_sig_alg(&self, sigalgs: &SupportedSignatureAlgorithms) -> Option<SignatureAndHashAlgorithm> {
+    let our_preference = vec![
+      // Prefer the designated hash algorithm of this suite, for
+      // security level consistency.
+      SignatureAndHashAlgorithm { hash: self.hash.clone(), sign: self.sign.clone() },
+
+      // Then prefer the right sign algorithm, with the best hashes
+      // first.
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: self.sign.clone() },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: self.sign.clone() },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: self.sign.clone() },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: self.sign.clone() }
+    ];
+
+    our_preference.first_appearing_in(sigalgs)
   }
 
   pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
@@ -120,7 +169,8 @@ impl SupportedCipherSuite {
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
 SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-  kx: KeyExchangeAlgorithm::ECDHE_RSA,
+  kx: KeyExchangeAlgorithm::ECDHE,
+  sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::AES_128_GCM,
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
@@ -131,7 +181,8 @@ SupportedCipherSuite {
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
 SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-  kx: KeyExchangeAlgorithm::ECDHE_RSA,
+  kx: KeyExchangeAlgorithm::ECDHE,
+  sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::AES_256_GCM,
   hash: HashAlgorithm::SHA384,
   mac_key_len: 0,
@@ -142,7 +193,8 @@ SupportedCipherSuite {
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
 SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-  kx: KeyExchangeAlgorithm::ECDHE_ECDSA,
+  kx: KeyExchangeAlgorithm::ECDHE,
+  sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::AES_128_GCM,
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
@@ -153,7 +205,8 @@ SupportedCipherSuite {
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
 SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-  kx: KeyExchangeAlgorithm::ECDHE_ECDSA,
+  kx: KeyExchangeAlgorithm::ECDHE,
+  sign: SignatureAlgorithm::RSA,
   bulk: BulkAlgorithm::AES_256_GCM,
   hash: HashAlgorithm::SHA384,
   mac_key_len: 0,

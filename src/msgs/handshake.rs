@@ -8,6 +8,17 @@ use msgs::codec::{Codec, Reader};
 
 use std::io::Write;
 
+/// Return the first member of `prefs` that appears in `avail`.
+fn first_pref_in<T: Clone + PartialEq>(prefs: &[T], avail: &[T]) -> Option<T> {
+  for p in prefs {
+    if avail.contains(p) {
+      return Some(p.clone());
+    }
+  }
+
+  None
+}
+
 #[derive(Debug)]
 pub struct Random {
   pub gmt_unix_time: u32,
@@ -102,11 +113,16 @@ impl Codec for ECPointFormatList {
 
 pub trait SupportedPointFormats {
   fn supported() -> ECPointFormatList;
+  fn first_appearing_in(&self, other: &ECPointFormatList) -> Option<ECPointFormat>;
 }
 
 impl SupportedPointFormats for ECPointFormatList {
   fn supported() -> ECPointFormatList {
     vec![ECPointFormat::Uncompressed]
+  }
+  
+  fn first_appearing_in(&self, other: &ECPointFormatList) -> Option<ECPointFormat> {
+    first_pref_in(self.as_slice(), other.as_slice())
   }
 }
 
@@ -124,15 +140,20 @@ impl Codec for EllipticCurveList {
 
 pub trait SupportedCurves {
   fn supported() -> EllipticCurveList;
+  fn first_appearing_in(&self, other: &EllipticCurveList) -> Option<NamedCurve>;
 }
 
 impl SupportedCurves for EllipticCurveList {
   fn supported() -> EllipticCurveList {
     vec![ NamedCurve::X25519, NamedCurve::secp256r1, NamedCurve::secp384r1 ]
   }
+  
+  fn first_appearing_in(&self, other: &EllipticCurveList) -> Option<NamedCurve> {
+    first_pref_in(self.as_slice(), other.as_slice())
+  }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SignatureAndHashAlgorithm {
   pub hash: HashAlgorithm,
   pub sign: SignatureAlgorithm
@@ -157,6 +178,7 @@ pub type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
 pub trait SupportedMandatedSignatureAlgorithms {
   fn mandated() -> SupportedSignatureAlgorithms;
   fn supported() -> SupportedSignatureAlgorithms;
+  fn first_appearing_in(&self, avail: &SupportedSignatureAlgorithms) -> Option<SignatureAndHashAlgorithm>;
 }
 
 impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
@@ -185,6 +207,10 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
     ]
+  }
+
+  fn first_appearing_in(&self, avail: &SupportedSignatureAlgorithms) -> Option<SignatureAndHashAlgorithm> {
+    first_pref_in(self.as_slice(), avail.as_slice())
   }
 }
 
@@ -606,17 +632,11 @@ impl Codec for CertificatePayload {
 
 #[derive(Debug)]
 pub enum KeyExchangeAlgorithm {
-  DHE_DSS,
-  DHE_RSA,
-  DH_ANON,
+  DH,
+  DHE,
   RSA,
-  DH_DSS,
-  DH_RSA,
-  ECDH_ECDSA,
-  ECDHE_ECDSA,
-  ECDH_RSA,
-  ECDHE_RSA,
-  ECDH_anon
+  ECDH,
+  ECDHE
 }
 
 /* We don't support arbitrary curves.  It's a terrible
@@ -653,6 +673,12 @@ pub struct DigitallySignedStruct {
   pub sig: PayloadU16
 }
 
+impl DigitallySignedStruct {
+  pub fn new(alg: &SignatureAndHashAlgorithm, sig: Vec<u8>) -> DigitallySignedStruct {
+    DigitallySignedStruct { alg: alg.clone(), sig: PayloadU16 { body: sig.into_boxed_slice() } }
+  }
+}
+
 impl Codec for DigitallySignedStruct {
   fn encode(&self, bytes: &mut Vec<u8>) {
     self.alg.encode(bytes);
@@ -668,9 +694,37 @@ impl Codec for DigitallySignedStruct {
 }
 
 #[derive(Debug)]
+pub struct ClientECDHParams {
+  pub public: PayloadU8
+}
+
+impl Codec for ClientECDHParams {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.public.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<ClientECDHParams> {
+    let pb = try_ret!(PayloadU8::read(r));
+    Some(ClientECDHParams { public: pb })
+  }
+}
+
+#[derive(Debug)]
 pub struct ServerECDHParams {
   pub curve_params: ECParameters,
   pub public: PayloadU8
+}
+
+impl ServerECDHParams {
+  pub fn new(named_curve: &NamedCurve, pubkey: &Vec<u8>) -> ServerECDHParams {
+    ServerECDHParams {
+      curve_params: ECParameters {
+        curve_type: ECCurveType::NamedCurve,
+        named_curve: named_curve.clone()
+      },
+      public: PayloadU8 { body: pubkey.clone().into_boxed_slice() }
+    }
+  }
 }
 
 impl Codec for ServerECDHParams {
@@ -734,7 +788,7 @@ impl ServerKeyExchangePayload {
       let mut rd = Reader::init(&unk.body);
 
       return match *kxa {
-        KeyExchangeAlgorithm::ECDHE_ECDSA | KeyExchangeAlgorithm::ECDHE_RSA =>
+        KeyExchangeAlgorithm::ECDHE =>
           ECDHEServerKeyExchange::read(&mut rd).and_then(|x| Some(ServerKeyExchangePayload::ECDHE(x))),
         _ => None
       };

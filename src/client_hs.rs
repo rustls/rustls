@@ -1,7 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType};
 use msgs::enums::{Compression, ProtocolVersion};
 use msgs::message::{Message, MessagePayload};
-use msgs::base::Payload;
+use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random};
 use msgs::handshake::ClientExtension;
@@ -10,6 +10,7 @@ use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::ServerKeyExchangePayload;
+use msgs::codec::Codec;
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::{ClientSessionImpl, ConnState};
@@ -235,13 +236,18 @@ fn dumphex(_label: &str, _bytes: &[u8]) {
 }
 
 fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) {
+  let mut buf = Vec::new();
+  let ecpoint = PayloadU8 { body: kxd.pubkey.clone().into_boxed_slice() };
+  ecpoint.encode(&mut buf);
+  let pubkey = Payload { body: buf.into_boxed_slice() };
+
   let ckx = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
     payload: MessagePayload::Handshake(
       HandshakeMessagePayload {
         typ: HandshakeType::ClientKeyExchange,
-        payload: HandshakePayload::ClientKeyExchange(kxd.encode_public())
+        payload: HandshakePayload::ClientKeyExchange(pubkey)
       }
     )
   };
@@ -403,9 +409,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
 }
 
 fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  let finished = try!(extract_handshake!(m, HandshakePayload::Finished)
-    .ok_or(TLSError::General("finished message missing".to_string()))
-  );
+  let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
   /* Work out what verify_data we expect. */
   let vh = sess.handshake_data.get_verify_hash();
@@ -414,9 +418,10 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnStat
   /* Constant-time verification of this is relatively unimportant: they only
    * get one chance.  But it can't hurt. */
   use ring;
-  ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
-    .map_err(|_| TLSError::DecryptError)
-    .unwrap();
+  try!(
+    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
+      .map_err(|_| TLSError::DecryptError)
+  );
 
   /* Hash this message too. */
   sess.handshake_data.hash_message(m);
@@ -437,7 +442,7 @@ fn handle_finished_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<C
 pub static EXPECT_FINISHED: Handler = Handler {
   expect: Expectation {
     content_types: &[ContentType::Handshake],
-    handshake_types: &[] /* we need to decrypt before we can check this */
+    handshake_types: &[HandshakeType::Finished]
   },
   handle: handle_finished
 };

@@ -4,6 +4,9 @@ extern crate mio;
 use mio::util::Slab;
 use mio::tcp::{TcpListener, TcpStream};
 
+use std::fs;
+use std::io::BufReader;
+
 extern crate rustls;
 
 const LISTENER: mio::Token = mio::Token(0);
@@ -14,15 +17,33 @@ struct TlsServer {
   tls_config: Arc<rustls::ServerConfig>
 }
 
+fn load_certs(filename: &str) -> Vec<Vec<u8>> {
+  let certfile = fs::File::open(filename)
+    .unwrap();
+  let mut reader = BufReader::new(certfile);
+  rustls::internal::pemfile::certs(&mut reader)
+    .unwrap()
+}
+
+fn load_private_key(filename: &str) -> Vec<u8> {
+  let keyfile = fs::File::open(filename)
+    .unwrap();
+  let mut reader = BufReader::new(keyfile);
+  let keys = rustls::internal::pemfile::rsa_private_keys(&mut reader)
+    .unwrap();
+  assert!(keys.len() == 1);
+  keys[0].clone()
+}
+
 impl TlsServer {
   fn new(server: TcpListener) -> TlsServer {
     let slab = Slab::new_starting_at(mio::Token(1), 256);
     let mut config = rustls::ServerConfig::default();
 
-    let cert_chain = vec![
-      Vec::new()
-    ];
-    config.set_cert_chain(cert_chain);
+    let certs = load_certs("test-ca/rsa/end.fullchain");
+    println!("we have {:?} certs", certs.len());
+    let privkey = load_private_key("test-ca/rsa/end.rsa");
+    config.set_single_cert(certs, privkey);
 
     TlsServer {
       server: server,
@@ -166,7 +187,6 @@ impl Connection {
     self.closing
   }
 }
-
 
 fn main() {
   let addr = "127.0.0.1:8443".parse().unwrap();

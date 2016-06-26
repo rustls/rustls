@@ -30,6 +30,10 @@ openssl req -nodes \
           -batch \
           -subj "/CN=testserver.com"
 
+openssl rsa -nodes \
+          -in rsa/end.key \
+          -out rsa/end.rsa
+
 # ecdsa
 openssl ecparam -name prime256v1 -out ecdsa/nistp256.pem
 openssl ecparam -name secp384r1 -out ecdsa/nistp384.pem
@@ -79,5 +83,6 @@ for kt in rsa ecdsa ; do
             -extensions v3_end -extfile openssl.cnf
 
   cat $kt/inter.cert $kt/ca.cert > $kt/end.chain
+  cat $kt/end.cert $kt/inter.cert $kt/ca.cert > $kt/end.fullchain
   openssl asn1parse -in $kt/ca.cert -out $kt/ca.der > /dev/null
 done
