@@ -1,8 +1,9 @@
 use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, NamedCurve};
 use msgs::handshake::{SignatureAndHashAlgorithm, KeyExchangeAlgorithm};
-use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
+use msgs::handshake::SupportedSignatureAlgorithms;
 use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
+use util;
 
 extern crate ring;
 extern crate untrusted;
@@ -149,7 +150,8 @@ impl SupportedCipherSuite {
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: self.sign.clone() }
     ];
 
-    our_preference.first_appearing_in(sigalgs)
+    util::first_in_both(our_preference.as_slice(),
+                        sigalgs.as_slice())
   }
 
   pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {

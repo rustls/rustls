@@ -8,17 +8,6 @@ use msgs::codec::{Codec, Reader};
 
 use std::io::Write;
 
-/// Return the first member of `prefs` that appears in `avail`.
-fn first_pref_in<T: Clone + PartialEq>(prefs: &[T], avail: &[T]) -> Option<T> {
-  for p in prefs {
-    if avail.contains(p) {
-      return Some(p.clone());
-    }
-  }
-
-  None
-}
-
 #[derive(Debug)]
 pub struct Random {
   pub gmt_unix_time: u32,
@@ -112,16 +101,11 @@ impl Codec for ECPointFormatList {
 
 pub trait SupportedPointFormats {
   fn supported() -> ECPointFormatList;
-  fn first_appearing_in(&self, other: &ECPointFormatList) -> Option<ECPointFormat>;
 }
 
 impl SupportedPointFormats for ECPointFormatList {
   fn supported() -> ECPointFormatList {
     vec![ECPointFormat::Uncompressed]
-  }
-
-  fn first_appearing_in(&self, other: &ECPointFormatList) -> Option<ECPointFormat> {
-    first_pref_in(self.as_slice(), other.as_slice())
   }
 }
 
@@ -139,16 +123,11 @@ impl Codec for EllipticCurveList {
 
 pub trait SupportedCurves {
   fn supported() -> EllipticCurveList;
-  fn first_appearing_in(&self, other: &EllipticCurveList) -> Option<NamedCurve>;
 }
 
 impl SupportedCurves for EllipticCurveList {
   fn supported() -> EllipticCurveList {
     vec![ NamedCurve::X25519, NamedCurve::secp256r1, NamedCurve::secp384r1 ]
-  }
-
-  fn first_appearing_in(&self, other: &EllipticCurveList) -> Option<NamedCurve> {
-    first_pref_in(self.as_slice(), other.as_slice())
   }
 }
 
@@ -177,7 +156,6 @@ pub type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
 pub trait SupportedMandatedSignatureAlgorithms {
   fn mandated() -> SupportedSignatureAlgorithms;
   fn supported() -> SupportedSignatureAlgorithms;
-  fn first_appearing_in(&self, avail: &SupportedSignatureAlgorithms) -> Option<SignatureAndHashAlgorithm>;
 }
 
 impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
@@ -206,10 +184,6 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
     ]
-  }
-
-  fn first_appearing_in(&self, avail: &SupportedSignatureAlgorithms) -> Option<SignatureAndHashAlgorithm> {
-    first_pref_in(self.as_slice(), avail.as_slice())
   }
 }
 
@@ -306,11 +280,13 @@ impl Codec for ProtocolNameList {
 }
 
 pub trait ConvertProtocolNameList {
-  fn convert(names: &[String]) -> Self;
+  fn from_strings(names: &[String]) -> Self;
+  fn to_strings(&self) -> Vec<String>;
+  fn to_single_string(&self) -> Option<String>;
 }
 
 impl ConvertProtocolNameList for ProtocolNameList {
-  fn convert(names: &[String]) -> ProtocolNameList {
+  fn from_strings(names: &[String]) -> ProtocolNameList {
     let mut ret = Vec::new();
 
     for name in names {
@@ -318,6 +294,25 @@ impl ConvertProtocolNameList for ProtocolNameList {
     }
 
     ret
+  }
+
+  fn to_strings(&self) -> Vec<String> {
+    let mut ret = Vec::new();
+    for proto in self {
+      match String::from_utf8(proto.body.to_vec()).ok() {
+        Some(st) => ret.push(st),
+        _ => {}
+      }
+    }
+    ret
+  }
+
+  fn to_single_string(&self) -> Option<String> {
+    if self.len() == 1 {
+      String::from_utf8(self[0].body.to_vec()).ok()
+    } else {
+      None
+    }
   }
 }
 
@@ -483,6 +478,12 @@ impl Codec for ServerExtension {
   }
 }
 
+impl ServerExtension {
+  pub fn make_alpn(proto: String) -> ServerExtension {
+    ServerExtension::Protocols(ProtocolNameList::from_strings(&[proto]))
+  }
+}
+
 #[derive(Debug)]
 pub struct ClientHelloPayload {
   pub client_version: ProtocolVersion,
@@ -526,8 +527,12 @@ impl Codec for ClientHelloPayload {
 }
 
 impl ClientHelloPayload {
+  pub fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
+    self.extensions.iter().find(|x| x.get_type() == ext)
+  }
+
   pub fn get_sni_extension(&self) -> Option<&ServerNameRequest> {
-    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ServerName));
+    let ext = try_ret!(self.find_extension(ExtensionType::ServerName));
     match *ext {
       ClientExtension::ServerName(ref req) => Some(req),
       _ => None
@@ -535,7 +540,7 @@ impl ClientHelloPayload {
   }
 
   pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureAlgorithms> {
-    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::SignatureAlgorithms));
+    let ext = try_ret!(self.find_extension(ExtensionType::SignatureAlgorithms));
     match *ext {
       ClientExtension::SignatureAlgorithms(ref req) => Some(req),
       _ => None
@@ -543,7 +548,7 @@ impl ClientHelloPayload {
   }
 
   pub fn get_eccurves_extension(&self) -> Option<&EllipticCurveList> {
-    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::EllipticCurves));
+    let ext = try_ret!(self.find_extension(ExtensionType::EllipticCurves));
     match *ext {
       ClientExtension::EllipticCurves(ref req) => Some(req),
       _ => None
@@ -551,9 +556,17 @@ impl ClientHelloPayload {
   }
 
   pub fn get_ecpoints_extension(&self) -> Option<&ECPointFormatList> {
-    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ECPointFormats));
+    let ext = try_ret!(self.find_extension(ExtensionType::ECPointFormats));
     match *ext {
       ClientExtension::ECPointFormats(ref req) => Some(req),
+      _ => None
+    }
+  }
+
+  pub fn get_alpn_extension(&self) -> Option<&ProtocolNameList> {
+    let ext = try_ret!(self.find_extension(ExtensionType::ALProtocolNegotiation));
+    match *ext {
+      ClientExtension::Protocols(ref req) => Some(req),
       _ => None
     }
   }
@@ -601,16 +614,14 @@ impl Codec for ServerHelloPayload {
 }
 
 impl ServerHelloPayload {
+  pub fn find_extension(&self, ext: ExtensionType) -> Option<&ServerExtension> {
+    self.extensions.iter().find(|x| x.get_type() == ext)
+  }
+
   pub fn get_alpn_protocol(&self) -> Option<String> {
-    let ext = try_ret!(self.extensions.iter().find(|x| x.get_type() == ExtensionType::ALProtocolNegotiation));
+    let ext = try_ret!(self.find_extension(ExtensionType::ALProtocolNegotiation));
     match *ext {
-      ServerExtension::Protocols(ref protos) => {
-        if protos.len() == 1 {
-          String::from_utf8(protos[0].body.to_vec()).ok()
-        } else {
-          None
-        }
-      },
+      ServerExtension::Protocols(ref protos) => protos.to_single_string(),
       _ => None
     }
   }

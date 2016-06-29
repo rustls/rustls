@@ -112,7 +112,7 @@ of these licenses, at your option.
 - [ ] Tickets.
 - [x] Resumption.
 - [ ] chacha20poly1305 bulk encryption support.
-- [ ] Signing support in *ring* to unblock server work.
-- [ ] Server support.
+- [x] Signing support in *ring* to unblock server work. (done upstream, thanks!)
+- [x] Server support.
 - [ ] Write some more sample programs.
 - [ ] Stabilise and document public API.

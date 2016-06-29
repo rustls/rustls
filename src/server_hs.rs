@@ -6,6 +6,8 @@ use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
 use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
+use msgs::handshake::{ClientHelloPayload, ServerExtension};
+use msgs::handshake::ConvertProtocolNameList;
 use msgs::handshake::SignatureAndHashAlgorithm;
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
@@ -16,6 +18,7 @@ use msgs::codec::Codec;
 use server::{ServerSessionImpl, ConnState};
 use suites;
 use sign;
+use util;
 use error::TLSError;
 use handshake::Expectation;
 
@@ -44,9 +47,30 @@ pub struct Handler {
   pub handle: HandleFunction
 }
 
-fn emit_server_hello(sess: &mut ServerSessionImpl) {
+fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -> Vec<ServerExtension> {
+  let mut ret = Vec::new();
+
+  /* ALPN */
+  let our_protocols = &sess.config.alpn_protocols;
+  let maybe_their_protocols = hello.get_alpn_extension();
+  if let Some(their_protocols) = maybe_their_protocols {
+    sess.alpn_protocol = util::first_in_both(&our_protocols, &their_protocols.to_strings());
+    match sess.alpn_protocol {
+      Some(ref selected_protocol) => {
+        info!("Chosen ALPN protocol {:?}", selected_protocol);
+        ret.push(ServerExtension::make_alpn(selected_protocol.clone()))
+      },
+      _ => {}
+    };
+  }
+
+  ret
+}
+
+fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) {
   sess.handshake_data.generate_server_random();
   let sessid = sess.config.session_storage.generate();
+  let extensions = process_extensions(sess, hello);
 
   let sh = Message {
     typ: ContentType::Handshake,
@@ -61,7 +85,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl) {
             session_id: sessid,
             cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite.clone(),
             compression_method: Compression::Null,
-            extensions: Vec::new()
+            extensions: extensions
           }
         )
       }
@@ -223,19 +247,19 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
       .ok_or_else(|| TLSError::General("no supported sigalg".to_string()))
   );
   let eccurve = try!(
-    EllipticCurveList::supported()
-      .first_appearing_in(eccurves_ext)
+    util::first_in_both(EllipticCurveList::supported().as_slice(),
+                        eccurves_ext.as_slice())
       .ok_or_else(|| TLSError::General("no supported curve".to_string()))
   );
   let ecpoint = try!(
-    ECPointFormatList::supported()
-      .first_appearing_in(ecpoints_ext)
+    util::first_in_both(ECPointFormatList::supported().as_slice(),
+                        ecpoints_ext.as_slice())
       .ok_or_else(|| TLSError::General("no supported point format".to_string()))
   );
 
   assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-  emit_server_hello(sess);
+  emit_server_hello(sess, client_hello);
   emit_certificate(sess);
   try!(emit_server_kx(sess, &sigalg, &eccurve, private_key));
   emit_server_hello_done(sess);

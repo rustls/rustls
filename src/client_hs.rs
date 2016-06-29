@@ -78,7 +78,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported()));
 
   if sess.config.alpn_protocols.len() > 0 {
-    exts.push(ClientExtension::Protocols(ProtocolNameList::convert(&sess.config.alpn_protocols)));
+    exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));
   }
 
   let sh = Message {

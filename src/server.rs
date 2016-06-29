@@ -55,7 +55,11 @@ pub struct ServerConfig {
   pub session_storage: Box<StoresSessions>,
 
   /* How to choose a server cert and key. */
-  pub cert_resolver: Box<ResolvesCert>
+  pub cert_resolver: Box<ResolvesCert>,
+
+  /* Protocol names we support, most preferred first.
+   * If empty we don't do ALPN at all. */
+  pub alpn_protocols: Vec<String>
 }
 
 struct NoSessionStorage {}
@@ -113,6 +117,7 @@ impl ServerConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       ignore_client_order: false,
       session_storage: Box::new(NoSessionStorage {}),
+      alpn_protocols: Vec::new(),
       cert_resolver: Box::new(FailResolveChain {})
     }
   }
@@ -122,6 +127,11 @@ impl ServerConfig {
   /// irrespective of things like SNI hostname.
   pub fn set_single_cert(&mut self, cert_chain: Vec<Vec<u8>>, key_der: Vec<u8>) {
     self.cert_resolver = Box::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
+  }
+
+  pub fn set_protocols(&mut self, protocols: &[String]) {
+    self.alpn_protocols.clear();
+    self.alpn_protocols.extend_from_slice(protocols);
   }
 }
 
@@ -186,6 +196,7 @@ pub struct ServerSessionImpl {
   pub handshake_data: ServerHandshakeData,
   pub secrets_current: SessionSecrets,
   pub common: SessionCommon,
+  pub alpn_protocol: Option<String>,
   pub state: ConnState,
 }
 
@@ -196,6 +207,7 @@ impl ServerSessionImpl {
       handshake_data: ServerHandshakeData::new(),
       secrets_current: SessionSecrets::for_server(),
       common: SessionCommon::new(None),
+      alpn_protocol: None,
       state: ConnState::ExpectClientHello
     }
   }

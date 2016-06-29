@@ -333,9 +333,9 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver echo --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...]
-  tlsserver http --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...]
-  tlsserver forward --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] <fport>
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] [--proto PROTOCOL...] echo
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] [--proto PROTOCOL...] http
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
   tlsserver --version
   tlsserver --help
 
@@ -349,6 +349,7 @@ Options:
                         in PEM format.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
+    --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
     --version           Show tool version.
@@ -363,6 +364,7 @@ struct Args {
   flag_port: Option<u16>,
   flag_verbose: bool,
   flag_suite: Vec<String>,
+  flag_proto: Vec<String>,
   flag_mtu: Option<usize>,
   flag_certs: Option<String>,
   flag_key: Option<String>,
@@ -423,6 +425,8 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
   if args.flag_suite.len() != 0 {
     config.ciphersuites = lookup_suites(&args.flag_suite);
   }
+
+  config.set_protocols(&args.flag_proto);
 
   Arc::new(config)
 }
