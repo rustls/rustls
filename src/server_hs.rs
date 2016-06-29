@@ -1,5 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use msgs::enums::{Compression, NamedCurve, ECPointFormat};
+use msgs::enums::{AlertLevel, AlertDescription};
+use msgs::alert::AlertMessagePayload;
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
 use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
@@ -66,6 +68,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl) {
     )
   };
 
+  debug!("sending server hello {:?}", sh);
   sess.handshake_data.hash_message(&sh);
   sess.common.send_msg(&sh, false);
 }
@@ -172,11 +175,11 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   let ecpoints_ext = try!(client_hello.get_ecpoints_extension()
                           .ok_or(TLSError::General("client didn't describe ec points".to_string())));
 
-  println!("we got a clienthello {:?}", client_hello);
-  println!("sni {:?}", sni_ext);
-  println!("sigalgs {:?}", sigalgs_ext);
-  println!("eccurves {:?}", eccurves_ext);
-  println!("ecpoints {:?}", ecpoints_ext);
+  debug!("we got a clienthello {:?}", client_hello);
+  debug!("sni {:?}", sni_ext);
+  debug!("sigalgs {:?}", sigalgs_ext);
+  debug!("eccurves {:?}", eccurves_ext);
+  debug!("ecpoints {:?}", ecpoints_ext);
 
   if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
     return Err(TLSError::General("client didn't support uncompressed ec points".to_string()));
@@ -190,8 +193,8 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   let (cert_chain, private_key) = maybe_cert_key.unwrap();
 
   /* Reduce our supported ciphersuites by the certificate. */
-  let ciphersuites_suitable_for_cert = suites::reduce_given_cert(&sess.config.ciphersuites,
-                                                                 &cert_chain);
+  let ciphersuites_suitable_for_cert = suites::reduce_given_sigalg(&sess.config.ciphersuites,
+                                                                   &private_key.algorithm());
   sess.handshake_data.server_cert_chain = Some(cert_chain);
 
   let maybe_ciphersuite = if sess.config.ignore_client_order {
@@ -207,6 +210,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   }
 
   sess.handshake_data.ciphersuite = maybe_ciphersuite;
+  info!("decided upon suite {:?}", maybe_ciphersuite.as_ref().unwrap());
 
   /* Start handshake hash. */
   sess.handshake_data.start_handshake_hash();
@@ -323,13 +327,10 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
   let vh = sess.handshake_data.get_verify_hash();
   let expect_verify_data = sess.secrets_current.client_verify_data(&vh);
 
-  println!("evd {:?}", expect_verify_data);
-  println!("fin {:?}", finished.body);
-
   use ring;
   try!(
     ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
-      .map_err(|_| TLSError::DecryptError)
+      .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
   );
 
   sess.handshake_data.hash_message(m);
@@ -359,3 +360,19 @@ pub static TRAFFIC: Handler = Handler {
   },
   handle: handle_traffic
 };
+
+/* --- Send a close_notify --- */
+pub fn emit_close_notify(sess: &mut ServerSessionImpl) {
+  info!("Sending close_notify");
+  let m = Message {
+    typ: ContentType::Alert,
+    version: ProtocolVersion::TLSv1_2,
+    payload: MessagePayload::Alert(
+      AlertMessagePayload {
+        level: AlertLevel::Warning,
+        description: AlertDescription::CloseNotify
+      }
+    )
+  };
+  sess.common.send_msg(&m, true);
+}

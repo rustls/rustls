@@ -357,7 +357,6 @@ impl SessionCommon {
     let seq = self.read_seq;
     self.read_seq += 1;
     assert!(self.read_seq != 0);
-    println!("decrypt {:?}", plain);
     self.message_cipher.decrypt(plain, seq).ok()
   }
 

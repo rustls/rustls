@@ -1,7 +1,6 @@
 use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, NamedCurve};
 use msgs::handshake::{SignatureAndHashAlgorithm, KeyExchangeAlgorithm};
 use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
-use msgs::handshake::CertificatePayload;
 use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
 
@@ -69,7 +68,6 @@ impl KeyExchange {
   }
 
   fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
-    println!("complete pubkey {:?}", peer);
     let secret = ring::agreement::agree_ephemeral(
       self.privkey,
       self.alg,
@@ -194,7 +192,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
 SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
   kx: KeyExchangeAlgorithm::ECDHE,
-  sign: SignatureAlgorithm::RSA,
+  sign: SignatureAlgorithm::ECDSA,
   bulk: BulkAlgorithm::AES_128_GCM,
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
@@ -206,7 +204,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
 SupportedCipherSuite {
   suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
   kx: KeyExchangeAlgorithm::ECDHE,
-  sign: SignatureAlgorithm::RSA,
+  sign: SignatureAlgorithm::ECDSA,
   bulk: BulkAlgorithm::AES_256_GCM,
   hash: HashAlgorithm::SHA384,
   mac_key_len: 0,
@@ -245,10 +243,12 @@ pub fn choose_ciphersuite_preferring_server(
   None
 }
 
-pub fn reduce_given_cert(all: &Vec<&'static SupportedCipherSuite>, _certs: &CertificatePayload)
+pub fn reduce_given_sigalg(all: &Vec<&'static SupportedCipherSuite>, sigalg: &SignatureAlgorithm)
   -> Vec<&'static SupportedCipherSuite> {
-  /* NYI */
-  all.clone()
+  all.iter()
+     .filter(|&&suite| &suite.sign == sigalg)
+     .cloned()
+     .collect()
 }
 
 #[cfg(test)]

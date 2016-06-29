@@ -89,7 +89,6 @@ pub struct UnknownExtension {
 
 impl UnknownExtension {
   fn encode(&self, bytes: &mut Vec<u8>) {
-    self.typ.encode(bytes);
     self.payload.encode(bytes);
   }
 
@@ -120,7 +119,7 @@ impl SupportedPointFormats for ECPointFormatList {
   fn supported() -> ECPointFormatList {
     vec![ECPointFormat::Uncompressed]
   }
-  
+
   fn first_appearing_in(&self, other: &ECPointFormatList) -> Option<ECPointFormat> {
     first_pref_in(self.as_slice(), other.as_slice())
   }
@@ -147,7 +146,7 @@ impl SupportedCurves for EllipticCurveList {
   fn supported() -> EllipticCurveList {
     vec![ NamedCurve::X25519, NamedCurve::secp256r1, NamedCurve::secp384r1 ]
   }
-  
+
   fn first_appearing_in(&self, other: &EllipticCurveList) -> Option<NamedCurve> {
     first_pref_in(self.as_slice(), other.as_slice())
   }

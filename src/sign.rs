@@ -1,4 +1,4 @@
-use msgs::enums::HashAlgorithm;
+use msgs::enums::{HashAlgorithm, SignatureAlgorithm};
 
 extern crate ring;
 extern crate untrusted;
@@ -7,6 +7,9 @@ extern crate untrusted;
 pub trait Signer {
   /// Signs `message`, hashing it with `hash_alg` first.
   fn sign(&self, hash_alg: &HashAlgorithm, message: &[u8]) -> Result<Vec<u8>, ()>;
+
+  /// What kind of key we have.
+  fn algorithm(&self) -> SignatureAlgorithm;
 }
 
 /// A Signer for RSA-PKCS1
@@ -33,5 +36,9 @@ impl Signer for RSASigner {
     let rng = ring::rand::SystemRandom::new();
     self.key.sign(pad, &rng, message, &mut sig)
       .map(|_| sig)
+  }
+
+  fn algorithm(&self) -> SignatureAlgorithm {
+    SignatureAlgorithm::RSA
   }
 }

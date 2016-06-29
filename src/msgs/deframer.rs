@@ -71,6 +71,9 @@ impl MessageDeframer {
     let used = {
       let mut rd = codec::Reader::init(&self.buf);
       let m = Message::read(&mut rd).unwrap();
+      let mut check = Vec::new();
+      m.encode(&mut check);
+      assert_eq!(check.as_slice(), &self.buf[..rd.used()]);
       self.frames.push_back(m);
       rd.used()
     };

@@ -211,7 +211,6 @@ impl ServerSessionImpl {
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.common.peer_encrypting {
-      println!("decrypt incoming {:?}", msg);
       let dm = try!(self.common.decrypt_incoming(msg)
                     .ok_or(TLSError::DecryptError));
       *msg = dm;
@@ -287,6 +286,10 @@ impl ServerSessionImpl {
     let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
     self.common.start_encryption(scs, &self.secrets_current);
   }
+
+  pub fn send_close_notify(&mut self) {
+    server_hs::emit_close_notify(self);
+  }
 }
 
 /// This represents a single TLS server session.
@@ -340,6 +343,13 @@ impl ServerSession {
   /// as possible.
   pub fn wants_write(&self) -> bool {
     self.imp.wants_write()
+  }
+
+  /// Queues a close_notify fatal alert to be sent in the next
+  /// `write_tls` call.  This informs the peer that the
+  /// connection is being closed.
+  pub fn send_close_notify(&mut self) {
+    self.imp.send_close_notify();
   }
 }
 
