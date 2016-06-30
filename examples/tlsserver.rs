@@ -416,7 +416,7 @@ fn load_private_key(filename: &str) -> Vec<u8> {
 }
 
 fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
-  let mut config = rustls::ServerConfig::default();
+  let mut config = rustls::ServerConfig::new();
 
   let certs = load_certs(&args.flag_certs.as_ref().expect("--certs option missing"));
   let privkey = load_private_key(&args.flag_key.as_ref().expect("--key option missing"));

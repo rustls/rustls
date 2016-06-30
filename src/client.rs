@@ -70,7 +70,7 @@ impl ClientConfig {
   /// Make a `ClientConfig` with a default set of ciphersuites,
   /// no root certificates, no ALPN protocols, and no
   /// session persistence.
-  pub fn default() -> ClientConfig {
+  pub fn new() -> ClientConfig {
     ClientConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       root_store: verify::RootCertStore::empty(),

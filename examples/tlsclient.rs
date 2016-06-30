@@ -317,7 +317,7 @@ fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSu
 }
 
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
-  let mut config = rustls::ClientConfig::default();
+  let mut config = rustls::ClientConfig::new();
 
   if args.flag_suite.len() != 0 {
     config.ciphersuites = lookup_suites(&args.flag_suite);

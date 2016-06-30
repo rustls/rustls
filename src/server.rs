@@ -42,7 +42,7 @@ pub trait ResolvesCert {
              ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer>>), ()>;
 }
 
-/// Common configuration for a set of sessions.
+/// Common configuration for a set of server sessions.
 ///
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
@@ -96,7 +96,8 @@ struct AlwaysResolvesChain {
 
 impl AlwaysResolvesChain {
   fn new_rsa(chain: Vec<Vec<u8>>, priv_key: &[u8]) -> AlwaysResolvesChain {
-    let key = sign::RSASigner::new(priv_key).unwrap();
+    let key = sign::RSASigner::new(priv_key)
+      .expect("Invalid RSA private key");
     let mut payload = Vec::new();
     for cert in chain {
       payload.push(ASN1Cert { body: cert.into_boxed_slice() });
@@ -119,7 +120,7 @@ impl ServerConfig {
   /// Make a `ServerConfig` with a default set of ciphersuites,
   /// no keys/certificates, no ALPN protocols, and no
   /// session persistence.
-  pub fn default() -> ServerConfig {
+  pub fn new() -> ServerConfig {
     ServerConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       ignore_client_order: false,
@@ -132,12 +133,16 @@ impl ServerConfig {
   /// Sets a single certificate chain and matching private key.  This
   /// certificate and key is used for all subsequent connections,
   /// irrespective of things like SNI hostname.
+  ///
+  /// `cert_chain` is a vector of DER-encoded certificates.
+  /// `key_der` is a DER-encoded RSA private key.
   pub fn set_single_cert(&mut self, cert_chain: Vec<Vec<u8>>, key_der: Vec<u8>) {
     self.cert_resolver = Box::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
   }
 
   /// Set the ALPN protocol list to the given protocol names.
   /// Overwrites any existing configured protocols.
+  ///
   /// The first element in the `protocols` list is the most
   /// preferred, the last is the least preferred.
   pub fn set_protocols(&mut self, protocols: &[String]) {
@@ -316,6 +321,9 @@ impl ServerSessionImpl {
 }
 
 /// This represents a single TLS server session.
+///
+/// Send TLS-protected data to the peer using the io::Write trait implementation.
+/// Read data from the peer using the io::Read trait implementation.
 pub struct ServerSession {
   /* We use the pimpl idiom to hide unimportant details. */
   imp: ServerSessionImpl

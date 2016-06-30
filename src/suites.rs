@@ -86,6 +86,9 @@ impl KeyExchange {
 }
 
 /// A cipher suite supported by rustls.
+///
+/// All possible instances of this class are provided by the library in
+/// the ALL_CIPHERSUITES array.
 #[derive(Debug)]
 pub struct SupportedCipherSuite {
   /// The TLS enumeration naming this cipher suite.
