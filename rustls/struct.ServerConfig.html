@@ -54,7 +54,7 @@
     pub session_storage: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;StoresSessions&gt;,
     pub cert_resolver: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;ResolvesCert&gt;,
     pub alpn_protocols: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>&gt;,
-}</pre><div class='docblock'><p>Common configuration for a set of sessions.</p>
+}</pre><div class='docblock'><p>Common configuration for a set of server sessions.</p>
 
 <p>Making one of these can be expensive, and should be
 once per process rather than once per connection.</p>
@@ -72,7 +72,7 @@ which is supported by the client.</p>
 </div></td></tr><tr class='stab '>
                              <td id='structfield.alpn_protocols'><code>alpn_protocols</code></td><td><div class='docblock'><p>Protocol names we support, most preferred first.
 If empty we don&#39;t do ALPN at all.</p>
-</div></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h3><div class='impl-items'><h4 id='method.default' class='method'><code>fn <a href='#method.default' class='fnname'>default</a>() -&gt; <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h4>
+</div></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h4>
 <div class='docblock'><p>Make a <code>ServerConfig</code> with a default set of ciphersuites,
 no keys/certificates, no ALPN protocols, and no
 session persistence.</p>
@@ -80,10 +80,14 @@ session persistence.</p>
 <div class='docblock'><p>Sets a single certificate chain and matching private key.  This
 certificate and key is used for all subsequent connections,
 irrespective of things like SNI hostname.</p>
+
+<p><code>cert_chain</code> is a vector of DER-encoded certificates.
+<code>key_der</code> is a DER-encoded RSA private key.</p>
 </div><h4 id='method.set_protocols' class='method'><code>fn <a href='#method.set_protocols' class='fnname'>set_protocols</a>(&amp;mut self, protocols: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>)</code></h4>
 <div class='docblock'><p>Set the ALPN protocol list to the given protocol names.
-Overwrites any existing configured protocols.
-The first element in the <code>protocols</code> list is the most
+Overwrites any existing configured protocols.</p>
+
+<p>The first element in the <code>protocols</code> list is the most
 preferred, the last is the least preferred.</p>
 </div></div></section>
     <section id='search' class="content hidden"></section>

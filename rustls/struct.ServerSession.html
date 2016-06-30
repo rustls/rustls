@@ -47,10 +47,13 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4303' class='srclink' href='../src/rustls/src/server.rs.html#319-322' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-4303' class='srclink' href='../src/rustls/src/server.rs.html#327-330' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct ServerSession {
     // some fields omitted
 }</pre><div class='docblock'><p>This represents a single TLS server session.</p>
+
+<p>Send TLS-protected data to the peer using the io::Write trait implementation.
+Read data from the peer using the io::Read trait implementation.</p>
 </div><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.ServerSession.html' title='rustls::ServerSession'>ServerSession</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(config: &amp;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;<a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a>&gt;) -&gt; <a class='struct' href='../rustls/struct.ServerSession.html' title='rustls::ServerSession'>ServerSession</a></code></h4>
 <div class='docblock'><p>Make a new ServerSession.  <code>config</code> controls how
 we behave in the TLS protocol.</p>

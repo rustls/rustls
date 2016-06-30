@@ -47,8 +47,165 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/rustls/src/lib.rs.html#1-43' title='goto source code'>[src]</a></span></h1>
-<h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+               </span><a id='src-0' class='srclink' href='../src/rustls/src/lib.rs.html#1-216' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'>
+<h1 id='rustls---a-modern-tls-library' class='section-header'><a href='#rustls---a-modern-tls-library'>Rustls - a modern TLS library</a></h1>
+<p>Rustls is a TLS library that aims to provide a good level of cryptographic security,
+requires no configuration to achieve that security, and provides no unsafe features or
+obsolete cryptography.</p>
+
+<h2 id='current-features' class='section-header'><a href='#current-features'>Current features</a></h2>
+<ul>
+<li>TLS1.2 only.</li>
+<li>ECDSA or RSA server authentication by clients.</li>
+<li>RSA server authentication by servers.</li>
+<li>Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.</li>
+<li>AES128-GCM and AES256-GCM bulk encryption, with safe nonces.</li>
+<li>ALPN support.</li>
+<li>SNI support.</li>
+<li>Tunable MTU to make TLS messages match size of underlying transport.</li>
+<li>Resumption.</li>
+</ul>
+
+<h2 id='possible-future-features' class='section-header'><a href='#possible-future-features'>Possible future features</a></h2>
+<ul>
+<li>ECDSA server authentication by servers.</li>
+<li>PSK support.</li>
+<li>TLS1.3.</li>
+<li>Resumption via tickets.</li>
+<li>Chacha20Poly1305 bulk encryption.</li>
+<li>OCSP stapling.</li>
+<li>Certificate pinning.</li>
+</ul>
+
+<h2 id='non-features' class='section-header'><a href='#non-features'>Non-features</a></h2>
+<p>The following things are broken, obsolete, badly designed, dangerous and/or insane.
+Rustls will never support:</p>
+
+<ul>
+<li>SSL1, SSL2, SSL3, TLS1 or TLS1.1.</li>
+<li>RC4.</li>
+<li>DES or triple DES.</li>
+<li>EXPORT ciphersuites.</li>
+<li>MAC-then-encrypt ciphersuites.</li>
+<li>Renegotiation.</li>
+<li>Client authentication.</li>
+<li>Kerberos.</li>
+<li>Compression.</li>
+<li>Discrete-log Diffie-Hellman.</li>
+<li>Automatic protocol version downgrade.</li>
+<li>AES-GCM with unsafe nonces.</li>
+</ul>
+
+<p>There are plenty of existing libraries that provide these features should you
+need them.</p>
+
+<h2 id='design-overview' class='section-header'><a href='#design-overview'>Design Overview</a></h2>
+<h3 id='rustls-does-not-take-care-of-network-io' class='section-header'><a href='#rustls-does-not-take-care-of-network-io'>Rustls does not take care of network IO</a></h3>
+<p>It doesn&#39;t make or accept TCP connections, or do DNS, or read or write files.</p>
+
+<p>There&#39;s example client and server code which uses mio to do all needed network
+IO.</p>
+
+<h3 id='rustls-provides-encrypted-pipes' class='section-header'><a href='#rustls-provides-encrypted-pipes'>Rustls provides encrypted pipes</a></h3>
+<p>These are the <code>ServerSession</code> and <code>ClientSession</code> types.  You supply raw TLS traffic
+on the left (via the <code>read_tls()</code> and <code>write_tls()</code> methods) and then read/write the
+plaintext on the right:</p>
+
+<pre><code class="language-text">         TLS                                   Plaintext
+         ===                                   =========
+    read_tls()      +-----------------------+      io::Read
+                    |                       |
+          +---------&gt;     ClientSession     +---------&gt;
+                    |          or           |
+          &lt;---------+     ServerSession     &lt;---------+
+                    |                       |
+    write_tls()     +-----------------------+      io::Write
+</code></pre>
+
+<p>These objects are not <code>Send</code> or <code>Sync</code>, so exist in one thread unless you make
+your own arrangements.</p>
+
+<h3 id='rustls-takes-care-of-server-certificate-verification' class='section-header'><a href='#rustls-takes-care-of-server-certificate-verification'>Rustls takes care of server certificate verification</a></h3>
+<p>You do not need to provide anything other than a set of root certificates to trust.
+Certificate verification cannot be turned off or disabled.</p>
+
+<h2 id='getting-started' class='section-header'><a href='#getting-started'>Getting started</a></h2>
+<p>This is the minimum you need to do to make a TLS client connection.</p>
+
+<p>First, we make a <code>ClientConfig</code>.  You&#39;re likely to make one of these per process,
+and use it for all connections made by that process.</p>
+
+<pre class='rust rust-example-rendered'>
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>config</span> <span class='op'>=</span> <span class='ident'>rustls</span>::<span class='ident'>ClientConfig</span>::<span class='ident'>new</span>();</pre>
+
+<p>Next we load some root certificates.  These are used to authenticate the server.
+This step is system-specific, but this sample will run on Debian-derived Linux.</p>
+
+<pre class='rust rust-example-rendered'>
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>fs</span>::<span class='ident'>File</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>::<span class='ident'>BufReader</span>;
+
+<span class='kw'>let</span> <span class='ident'>certfile</span> <span class='op'>=</span> <span class='ident'>File</span>::<span class='ident'>open</span>(<span class='string'>&quot;/etc/ssl/certs/ca-certificates.crt&quot;</span>)
+  .<span class='ident'>unwrap</span>();
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>reader</span> <span class='op'>=</span> <span class='ident'>BufReader</span>::<span class='ident'>new</span>(<span class='ident'>certfile</span>);
+<span class='ident'>config</span>.<span class='ident'>root_store</span>.<span class='ident'>add_pem_file</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>reader</span>)
+  .<span class='ident'>unwrap</span>();</pre>
+
+<p>Now we can make a session.  You need to provide the server&#39;s hostname we
+know what to expect to find in the server&#39;s certificate.</p>
+
+<pre class='rust rust-example-rendered'>
+<span class='kw'>let</span> <span class='ident'>rc_config</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>config</span>);
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>client</span> <span class='op'>=</span> <span class='ident'>rustls</span>::<span class='ident'>ClientSession</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>rc_config</span>, <span class='string'>&quot;example.com&quot;</span>);</pre>
+
+<p>Now you should do appropriate IO for the <code>client</code> object.  If <code>client.wants_read()</code> yields
+true, you should call <code>client.read_tls()</code> when the underlying connection has data.
+Likewise, if <code>client.wants_write()</code> yields true, you should call <code>client.write_tls()</code>
+when the underlying connection is able to send data.  You should continue doing this
+as long as the connection is valid.</p>
+
+<p>The return types of <code>read_tls()</code> and <code>write_tls()</code> only tell you if the IO worked.  No
+parsing or processing of the TLS messages is done.  After each <code>read_tls()</code> you should
+therefore call <code>client.process_new_packets()</code> which parses and processes the messages.
+Any error returned from <code>process_new_packets</code> is fatal to the session, and will tell you
+why.  For example, if the server&#39;s certificate is expired <code>process_new_packets</code> will
+return <code>Err(WebPKIError(CertExpired))</code>.</p>
+
+<p>You can extract newly received data by calling <code>client.read()</code> (via the <code>io::Read</code>
+trait).  You can send data to the peer by calling <code>client.write()</code> (via the <code>io::Write</code>
+trait).  Note that <code>client.write()</code> buffers data you send if the TLS session is not
+yet established: this is useful for writing (say) a HTTP request, but don&#39;t write huge
+amounts of data.</p>
+
+<p>The following code uses a fictional socket IO API for illustration, and does not handle
+errors.</p>
+
+<pre><code class="language-text">use std::io;
+
+client.write(b&quot;GET / HTTP/1.0\r\n\r\n&quot;).unwrap();
+let mut socket = connect(&quot;example.com&quot;, 443);
+loop {
+  if client.wants_read() &amp;&amp; socket.ready_for_read() {
+    client.read_tls(&amp;mut socket).unwrap();
+    client.process_new_packets().unwrap();
+
+    let mut plaintext = Vec::new();
+    client.read_to_end(&amp;mut plaintext).unwrap();
+    io::stdout().write(&amp;plaintext).unwrap();
+  }
+
+  if client.wants_write() &amp;&amp; socket.ready_for_write() {
+    client.write_tls(&amp;mut socket).unwrap();
+  }
+
+  socket.wait_for_something_to_happen();
+}
+</code></pre>
+
+<h1 id='examples' class='section-header'><a href='#examples'>Examples</a></h1>
+<p><code>tlsserver</code> and <code>tlsclient</code> are full worked examples.  These both use mio.</p>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
 <table>
                        <tr class=' module-item'>
                            <td><a class='mod' href='internal/index.html'
@@ -86,7 +243,7 @@ for connection authentication.</p>
                            <td><a class='struct' href='struct.ServerConfig.html'
                                   title='rustls::ServerConfig'>ServerConfig</a></td>
                            <td class='docblock short'>
-                                <p>Common configuration for a set of sessions.</p>
+                                <p>Common configuration for a set of server sessions.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>

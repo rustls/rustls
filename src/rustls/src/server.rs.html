@@ -448,6 +448,14 @@
 <span id="404">404</span>
 <span id="405">405</span>
 <span id="406">406</span>
+<span id="407">407</span>
+<span id="408">408</span>
+<span id="409">409</span>
+<span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>session</span>::{<span class='ident'>SessionSecrets</span>, <span class='ident'>SessionCommon</span>};
 <span class='kw'>use</span> <span class='ident'>suites</span>::{<span class='ident'>SupportedCipherSuite</span>, <span class='ident'>ALL_CIPHERSUITES</span>, <span class='ident'>KeyExchange</span>};
@@ -493,7 +501,7 @@
              <span class='ident'>ec_pointfmts</span>: <span class='kw-2'>&amp;</span><span class='ident'>ECPointFormatList</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>CertificatePayload</span>, <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>sign</span>::<span class='ident'>Signer</span><span class='op'>&gt;&gt;</span>), ()<span class='op'>&gt;</span>;
 }
 
-<span class='doccomment'>/// Common configuration for a set of sessions.</span>
+<span class='doccomment'>/// Common configuration for a set of server sessions.</span>
 <span class='doccomment'>///</span>
 <span class='doccomment'>/// Making one of these can be expensive, and should be</span>
 <span class='doccomment'>/// once per process rather than once per connection.</span>
@@ -547,7 +555,8 @@
 
 <span class='kw'>impl</span> <span class='ident'>AlwaysResolvesChain</span> {
   <span class='kw'>fn</span> <span class='ident'>new_rsa</span>(<span class='ident'>chain</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, <span class='ident'>priv_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='ident'>AlwaysResolvesChain</span> {
-    <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>sign</span>::<span class='ident'>RSASigner</span>::<span class='ident'>new</span>(<span class='ident'>priv_key</span>).<span class='ident'>unwrap</span>();
+    <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>sign</span>::<span class='ident'>RSASigner</span>::<span class='ident'>new</span>(<span class='ident'>priv_key</span>)
+      .<span class='ident'>expect</span>(<span class='string'>&quot;Invalid RSA private key&quot;</span>);
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>payload</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
     <span class='kw'>for</span> <span class='ident'>cert</span> <span class='kw'>in</span> <span class='ident'>chain</span> {
       <span class='ident'>payload</span>.<span class='ident'>push</span>(<span class='ident'>ASN1Cert</span> { <span class='ident'>body</span>: <span class='ident'>cert</span>.<span class='ident'>into_boxed_slice</span>() });
@@ -570,7 +579,7 @@
   <span class='doccomment'>/// Make a `ServerConfig` with a default set of ciphersuites,</span>
   <span class='doccomment'>/// no keys/certificates, no ALPN protocols, and no</span>
   <span class='doccomment'>/// session persistence.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>default</span>() <span class='op'>-&gt;</span> <span class='ident'>ServerConfig</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>ServerConfig</span> {
     <span class='ident'>ServerConfig</span> {
       <span class='ident'>ciphersuites</span>: <span class='ident'>ALL_CIPHERSUITES</span>.<span class='ident'>to_vec</span>(),
       <span class='ident'>ignore_client_order</span>: <span class='boolval'>false</span>,
@@ -583,12 +592,16 @@
   <span class='doccomment'>/// Sets a single certificate chain and matching private key.  This</span>
   <span class='doccomment'>/// certificate and key is used for all subsequent connections,</span>
   <span class='doccomment'>/// irrespective of things like SNI hostname.</span>
+  <span class='doccomment'>///</span>
+  <span class='doccomment'>/// `cert_chain` is a vector of DER-encoded certificates.</span>
+  <span class='doccomment'>/// `key_der` is a DER-encoded RSA private key.</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_single_cert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>cert_chain</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, <span class='ident'>key_der</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) {
     <span class='self'>self</span>.<span class='ident'>cert_resolver</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>AlwaysResolvesChain</span>::<span class='ident'>new_rsa</span>(<span class='ident'>cert_chain</span>, <span class='kw-2'>&amp;</span><span class='ident'>key_der</span>));
   }
 
   <span class='doccomment'>/// Set the ALPN protocol list to the given protocol names.</span>
   <span class='doccomment'>/// Overwrites any existing configured protocols.</span>
+  <span class='doccomment'>///</span>
   <span class='doccomment'>/// The first element in the `protocols` list is the most</span>
   <span class='doccomment'>/// preferred, the last is the least preferred.</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_protocols</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>protocols</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>String</span>]) {
@@ -767,6 +780,9 @@
 }
 
 <span class='doccomment'>/// This represents a single TLS server session.</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// Send TLS-protected data to the peer using the io::Write trait implementation.</span>
+<span class='doccomment'>/// Read data from the peer using the io::Read trait implementation.</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>ServerSession</span> {
   <span class='comment'>/* We use the pimpl idiom to hide unimportant details. */</span>
   <span class='ident'>imp</span>: <span class='ident'>ServerSessionImpl</span>

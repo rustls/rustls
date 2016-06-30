@@ -514,7 +514,7 @@
   <span class='doccomment'>/// Make a `ClientConfig` with a default set of ciphersuites,</span>
   <span class='doccomment'>/// no root certificates, no ALPN protocols, and no</span>
   <span class='doccomment'>/// session persistence.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>default</span>() <span class='op'>-&gt;</span> <span class='ident'>ClientConfig</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>ClientConfig</span> {
     <span class='ident'>ClientConfig</span> {
       <span class='ident'>ciphersuites</span>: <span class='ident'>ALL_CIPHERSUITES</span>.<span class='ident'>to_vec</span>(),
       <span class='ident'>root_store</span>: <span class='ident'>verify</span>::<span class='ident'>RootCertStore</span>::<span class='ident'>empty</span>(),
