@@ -482,6 +482,11 @@ impl ServerExtension {
   pub fn make_alpn(proto: String) -> ServerExtension {
     ServerExtension::Protocols(ProtocolNameList::from_strings(&[proto]))
   }
+
+  pub fn make_empty_renegotiation_info() -> ServerExtension {
+    let empty = Vec::new();
+    ServerExtension::RenegotiationInfo(PayloadU8 { body: empty.into_boxed_slice() })
+  }
 }
 
 #[derive(Debug)]

@@ -1,6 +1,7 @@
 #!/bin/sh
 
-./target/debug/examples/tlsserver &
+./target/debug/examples/tlsserver --verbose \
+    --key test-ca/rsa/end.rsa --certs test-ca/rsa/end.fullchain --port 8443 http &
 server=$!
 sleep 1
 

@@ -1,6 +1,6 @@
 use msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
-use msgs::enums::{Compression, NamedCurve, ECPointFormat};
-use msgs::enums::{AlertLevel, AlertDescription};
+use msgs::enums::{Compression, NamedCurve, ECPointFormat, CipherSuite};
+use msgs::enums::{AlertLevel, AlertDescription, ExtensionType};
 use msgs::alert::AlertMessagePayload;
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
@@ -62,6 +62,16 @@ fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) 
       },
       _ => {}
     };
+  }
+
+  /* Renegotiation.
+   * (We don't do reneg at all, but would support the secure version if we did.) */
+  let secure_reneg_offered =
+    hello.find_extension(ExtensionType::RenegotiationInfo).is_some() ||
+    hello.cipher_suites.contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+
+  if secure_reneg_offered {
+    ret.push(ServerExtension::make_empty_renegotiation_info());
   }
 
   ret
