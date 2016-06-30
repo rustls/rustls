@@ -246,6 +246,9 @@
 <span id="202">202</span>
 <span id="203">203</span>
 <span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
 </pre><pre class='rust '>
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
@@ -320,6 +323,9 @@
     <span class='kw'>let</span> <span class='ident'>used</span> <span class='op'>=</span> {
       <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>rd</span> <span class='op'>=</span> <span class='ident'>codec</span>::<span class='ident'>Reader</span>::<span class='ident'>init</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>buf</span>);
       <span class='kw'>let</span> <span class='ident'>m</span> <span class='op'>=</span> <span class='ident'>Message</span>::<span class='ident'>read</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rd</span>).<span class='ident'>unwrap</span>();
+      <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>check</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+      <span class='ident'>m</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>check</span>);
+      <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>check</span>.<span class='ident'>as_slice</span>(), <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>buf</span>[..<span class='ident'>rd</span>.<span class='ident'>used</span>()]);
       <span class='self'>self</span>.<span class='ident'>frames</span>.<span class='ident'>push_back</span>(<span class='ident'>m</span>);
       <span class='ident'>rd</span>.<span class='ident'>used</span>()
     };

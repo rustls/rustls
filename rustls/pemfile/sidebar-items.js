@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["certs","Extract all the certificates from rd, and return a vec of bytevecs containing the der-format contents."]]});
+initSidebarItems({"fn":[["certs","Extract all the certificates from rd, and return a vec of bytevecs containing the der-format contents."],["rsa_private_keys","Extract all RSA private keys from rd, and return a vec of bytevecs containing the der-format contents."]]});

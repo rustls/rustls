@@ -47,20 +47,45 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3813' class='srclink' href='../src/rustls/src/server.rs.html#41-55' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-4166' class='srclink' href='../src/rustls/src/server.rs.html#49-67' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct ServerConfig {
     pub ciphersuites: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;&amp;'static <a class='struct' href='../rustls/struct.SupportedCipherSuite.html' title='rustls::SupportedCipherSuite'>SupportedCipherSuite</a>&gt;,
     pub ignore_client_order: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>,
     pub session_storage: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;StoresSessions&gt;,
     pub cert_resolver: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;ResolvesCert&gt;,
-}</pre><h2 class='fields'>Fields</h2>
+    pub alpn_protocols: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>&gt;,
+}</pre><div class='docblock'><p>Common configuration for a set of sessions.</p>
+
+<p>Making one of these can be expensive, and should be
+once per process rather than once per connection.</p>
+</div><h2 class='fields'>Fields</h2>
 <table><tr class='stab '>
-                             <td id='structfield.ciphersuites'><code>ciphersuites</code></td><td></td></tr><tr class='stab '>
-                             <td id='structfield.ignore_client_order'><code>ignore_client_order</code></td><td></td></tr><tr class='stab '>
-                             <td id='structfield.session_storage'><code>session_storage</code></td><td></td></tr><tr class='stab '>
-                             <td id='structfield.cert_resolver'><code>cert_resolver</code></td><td></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h3><div class='impl-items'><h4 id='method.default' class='method'><code>fn <a href='#method.default' class='fnname'>default</a>() -&gt; <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h4>
-<h4 id='method.set_cert_chain' class='method'><code>fn <a href='#method.set_cert_chain' class='fnname'>set_cert_chain</a>(&amp;mut self, cert_chain: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;&gt;)</code></h4>
-</div></section>
+                             <td id='structfield.ciphersuites'><code>ciphersuites</code></td><td><div class='docblock'><p>List of ciphersuites, in preference order.</p>
+</div></td></tr><tr class='stab '>
+                             <td id='structfield.ignore_client_order'><code>ignore_client_order</code></td><td><div class='docblock'><p>Ignore the client&#39;s ciphersuite order. Instead,
+choose the top ciphersuite in the server list
+which is supported by the client.</p>
+</div></td></tr><tr class='stab '>
+                             <td id='structfield.session_storage'><code>session_storage</code></td><td><div class='docblock'><p>How to store client sessions.</p>
+</div></td></tr><tr class='stab '>
+                             <td id='structfield.cert_resolver'><code>cert_resolver</code></td><td><div class='docblock'><p>How to choose a server cert and key.</p>
+</div></td></tr><tr class='stab '>
+                             <td id='structfield.alpn_protocols'><code>alpn_protocols</code></td><td><div class='docblock'><p>Protocol names we support, most preferred first.
+If empty we don&#39;t do ALPN at all.</p>
+</div></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h3><div class='impl-items'><h4 id='method.default' class='method'><code>fn <a href='#method.default' class='fnname'>default</a>() -&gt; <a class='struct' href='../rustls/struct.ServerConfig.html' title='rustls::ServerConfig'>ServerConfig</a></code></h4>
+<div class='docblock'><p>Make a <code>ServerConfig</code> with a default set of ciphersuites,
+no keys/certificates, no ALPN protocols, and no
+session persistence.</p>
+</div><h4 id='method.set_single_cert' class='method'><code>fn <a href='#method.set_single_cert' class='fnname'>set_single_cert</a>(&amp;mut self, cert_chain: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;&gt;, key_der: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;)</code></h4>
+<div class='docblock'><p>Sets a single certificate chain and matching private key.  This
+certificate and key is used for all subsequent connections,
+irrespective of things like SNI hostname.</p>
+</div><h4 id='method.set_protocols' class='method'><code>fn <a href='#method.set_protocols' class='fnname'>set_protocols</a>(&amp;mut self, protocols: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>)</code></h4>
+<div class='docblock'><p>Set the ALPN protocol list to the given protocol names.
+Overwrites any existing configured protocols.
+The first element in the <code>protocols</code> list is the most
+preferred, the last is the least preferred.</p>
+</div></div></section>
     <section id='search' class="content hidden"></section>
 
     <section class="footer"></section>

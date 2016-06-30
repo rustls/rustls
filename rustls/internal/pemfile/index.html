@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4186' class='srclink' href='../../../src/rustls/src/lib.rs.html#26-28' title='goto source code'>[src]</a></span></h1>
-<div class='docblock'><p>Functions for parsing PEM files containing certificates.</p>
+               </span><a id='src-4514' class='srclink' href='../../../src/rustls/src/lib.rs.html#28-30' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>Functions for parsing PEM files containing certificates/keys.</p>
 </div><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
 <table>
                        <tr class=' module-item'>
@@ -56,6 +56,14 @@
                                   title='rustls::internal::pemfile::certs'>certs</a></td>
                            <td class='docblock short'>
                                 <p>Extract all the certificates from rd, and return a vec of bytevecs
+containing the der-format contents.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='fn' href='fn.rsa_private_keys.html'
+                                  title='rustls::internal::pemfile::rsa_private_keys'>rsa_private_keys</a></td>
+                           <td class='docblock short'>
+                                <p>Extract all RSA private keys from rd, and return a vec of bytevecs
 containing the der-format contents.</p>
                            </td>
                        </tr></table></section>

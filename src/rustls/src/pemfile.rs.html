@@ -83,16 +83,26 @@
 <span id="39">39</span>
 <span id="40">40</span>
 <span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>rustc_serialize</span>::<span class='ident'>base64</span>::<span class='ident'>FromBase64</span>;
 
-<span class='kw'>static</span> <span class='ident'>START_MARKER</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>str</span> <span class='op'>=</span> <span class='string'>&quot;-----BEGIN CERTIFICATE-----&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>END_MARKER</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>str</span> <span class='op'>=</span> <span class='string'>&quot;-----END CERTIFICATE-----&quot;</span>;
-
-<span class='doccomment'>/// Extract all the certificates from rd, and return a vec of bytevecs</span>
-<span class='doccomment'>/// containing the der-format contents.</span>
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>certs</span>(<span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>BufRead</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, ()<span class='op'>&gt;</span> {
+<span class='kw'>fn</span> <span class='ident'>extract</span>(<span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>BufRead</span>,
+           <span class='ident'>start_mark</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>,
+           <span class='ident'>end_mark</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, ()<span class='op'>&gt;</span> {
   <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ders</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
   <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>b64buf</span> <span class='op'>=</span> <span class='ident'>String</span>::<span class='ident'>new</span>();
   <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>take_base64</span> <span class='op'>=</span> <span class='boolval'>false</span>;
@@ -106,12 +116,12 @@
       <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(<span class='ident'>ders</span>);
     }
 
-    <span class='kw'>if</span> <span class='ident'>line</span>.<span class='ident'>starts_with</span>(<span class='ident'>START_MARKER</span>) {
+    <span class='kw'>if</span> <span class='ident'>line</span>.<span class='ident'>starts_with</span>(<span class='ident'>start_mark</span>) {
       <span class='ident'>take_base64</span> <span class='op'>=</span> <span class='boolval'>true</span>;
       <span class='kw'>continue</span>;
     }
 
-    <span class='kw'>if</span> <span class='ident'>line</span>.<span class='ident'>starts_with</span>(<span class='ident'>END_MARKER</span>) {
+    <span class='kw'>if</span> <span class='ident'>line</span>.<span class='ident'>starts_with</span>(<span class='ident'>end_mark</span>) {
       <span class='ident'>take_base64</span> <span class='op'>=</span> <span class='boolval'>false</span>;
       <span class='kw'>let</span> <span class='ident'>der</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>b64buf</span>.<span class='ident'>from_base64</span>()
                      .<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> ()));
@@ -124,6 +134,22 @@
       <span class='ident'>b64buf</span>.<span class='ident'>push_str</span>(<span class='kw-2'>&amp;</span><span class='ident'>line</span>.<span class='ident'>trim</span>());
     }
   }
+}
+
+<span class='doccomment'>/// Extract all the certificates from rd, and return a vec of bytevecs</span>
+<span class='doccomment'>/// containing the der-format contents.</span>
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>certs</span>(<span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>BufRead</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, ()<span class='op'>&gt;</span> {
+  <span class='ident'>extract</span>(<span class='ident'>rd</span>,
+          <span class='string'>&quot;-----BEGIN CERTIFICATE-----&quot;</span>,
+          <span class='string'>&quot;-----END CERTIFICATE-----&quot;</span>)
+}
+
+<span class='doccomment'>/// Extract all RSA private keys from rd, and return a vec of bytevecs</span>
+<span class='doccomment'>/// containing the der-format contents.</span>
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>rsa_private_keys</span>(<span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>BufRead</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, ()<span class='op'>&gt;</span> {
+  <span class='ident'>extract</span>(<span class='ident'>rd</span>,
+          <span class='string'>&quot;-----BEGIN RSA PRIVATE KEY-----&quot;</span>,
+          <span class='string'>&quot;-----END RSA PRIVATE KEY-----&quot;</span>)
 }
 </pre>
 </section>

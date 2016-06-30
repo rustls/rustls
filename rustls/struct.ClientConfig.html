@@ -47,14 +47,14 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3961' class='srclink' href='../src/rustls/src/client.rs.html#58-74' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-4366' class='srclink' href='../src/rustls/src/client.rs.html#51-67' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct ClientConfig {
     pub ciphersuites: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;&amp;'static <a class='struct' href='../rustls/struct.SupportedCipherSuite.html' title='rustls::SupportedCipherSuite'>SupportedCipherSuite</a>&gt;,
     pub root_store: <a class='struct' href='../rustls/struct.RootCertStore.html' title='rustls::RootCertStore'>RootCertStore</a>,
     pub alpn_protocols: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>&gt;,
     pub session_persistence: <a class='struct' href='https://doc.rust-lang.org/nightly/core/cell/struct.RefCell.html' title='core::cell::RefCell'>RefCell</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='../rustls/trait.StoresClientSessions.html' title='rustls::StoresClientSessions'>StoresClientSessions</a>&gt;&gt;,
     pub mtu: <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;,
-}</pre><div class='docblock'><p>Common configuration for all connections made by
+}</pre><div class='docblock'><p>Common configuration for (typically) all connections made by
 a program.</p>
 
 <p>Making one of these can be expensive, and should be

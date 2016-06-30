@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["ServerConfig",""],["ServerSession",""]]});
+initSidebarItems({"struct":[["ServerConfig","Common configuration for a set of sessions."],["ServerSession","This represents a single TLS server session."]]});

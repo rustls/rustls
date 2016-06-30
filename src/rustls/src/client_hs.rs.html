@@ -512,28 +512,11 @@
 <span id="468">468</span>
 <span id="469">469</span>
 <span id="470">470</span>
-<span id="471">471</span>
-<span id="472">472</span>
-<span id="473">473</span>
-<span id="474">474</span>
-<span id="475">475</span>
-<span id="476">476</span>
-<span id="477">477</span>
-<span id="478">478</span>
-<span id="479">479</span>
-<span id="480">480</span>
-<span id="481">481</span>
-<span id="482">482</span>
-<span id="483">483</span>
-<span id="484">484</span>
-<span id="485">485</span>
-<span id="486">486</span>
-<span id="487">487</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>HandshakeType</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>Compression</span>, <span class='ident'>ProtocolVersion</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>Message</span>, <span class='ident'>MessagePayload</span>};
-<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>base</span>::<span class='ident'>Payload</span>;
+<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>base</span>::{<span class='ident'>Payload</span>, <span class='ident'>PayloadU8</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>HandshakePayload</span>, <span class='ident'>HandshakeMessagePayload</span>, <span class='ident'>ClientHelloPayload</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>SessionID</span>, <span class='ident'>Random</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::<span class='ident'>ClientExtension</span>;
@@ -542,6 +525,7 @@
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>ECPointFormatList</span>, <span class='ident'>SupportedPointFormats</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>ProtocolNameList</span>, <span class='ident'>ConvertProtocolNameList</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::<span class='ident'>ServerKeyExchangePayload</span>;
+<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::<span class='ident'>Codec</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>persist</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>ccs</span>::<span class='ident'>ChangeCipherSpecPayload</span>;
 <span class='kw'>use</span> <span class='ident'>client</span>::{<span class='ident'>ClientSessionImpl</span>, <span class='ident'>ConnState</span>};
@@ -549,7 +533,7 @@
 <span class='kw'>use</span> <span class='ident'>hash_hs</span>;
 <span class='kw'>use</span> <span class='ident'>verify</span>;
 <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
-<span class='kw'>use</span> <span class='ident'>handshake</span>::{<span class='ident'>Expectation</span>, <span class='ident'>ExpectFunction</span>};
+<span class='kw'>use</span> <span class='ident'>handshake</span>::<span class='ident'>Expectation</span>;
 
 <span class='macro'>macro_rules</span><span class='macro'>!</span> <span class='ident'>extract_handshake</span>(
   ( <span class='macro-nonterminal'>$</span><span class='macro-nonterminal'>m</span>:<span class='ident'>expr</span>, <span class='macro-nonterminal'>$</span><span class='macro-nonterminal'>t</span>:<span class='ident'>path</span> ) <span class='op'>=&gt;</span> (
@@ -569,7 +553,7 @@
  * connection state. They must not have state of their own -- so they&#39;re
  * functions rather than a trait. */</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Handler</span> {
-  <span class='kw'>pub</span> <span class='ident'>expect</span>: <span class='ident'>ExpectFunction</span>,
+  <span class='kw'>pub</span> <span class='ident'>expect</span>: <span class='ident'>Expectation</span>,
   <span class='kw'>pub</span> <span class='ident'>handle</span>: <span class='ident'>HandleFunction</span>
 }
 
@@ -609,7 +593,7 @@
   <span class='ident'>exts</span>.<span class='ident'>push</span>(<span class='ident'>ClientExtension</span>::<span class='ident'>SignatureAlgorithms</span>(<span class='ident'>SupportedSignatureAlgorithms</span>::<span class='ident'>supported</span>()));
 
   <span class='kw'>if</span> <span class='ident'>sess</span>.<span class='ident'>config</span>.<span class='ident'>alpn_protocols</span>.<span class='ident'>len</span>() <span class='op'>&gt;</span> <span class='number'>0</span> {
-    <span class='ident'>exts</span>.<span class='ident'>push</span>(<span class='ident'>ClientExtension</span>::<span class='ident'>Protocols</span>(<span class='ident'>ProtocolNameList</span>::<span class='ident'>convert</span>(<span class='kw-2'>&amp;</span><span class='ident'>sess</span>.<span class='ident'>config</span>.<span class='ident'>alpn_protocols</span>)));
+    <span class='ident'>exts</span>.<span class='ident'>push</span>(<span class='ident'>ClientExtension</span>::<span class='ident'>Protocols</span>(<span class='ident'>ProtocolNameList</span>::<span class='ident'>from_strings</span>(<span class='kw-2'>&amp;</span><span class='ident'>sess</span>.<span class='ident'>config</span>.<span class='ident'>alpn_protocols</span>)));
   }
 
   <span class='kw'>let</span> <span class='ident'>sh</span> <span class='op'>=</span> <span class='ident'>Message</span> {
@@ -635,14 +619,7 @@
   <span class='macro'>debug</span><span class='macro'>!</span>(<span class='string'>&quot;Sending ClientHello {:#?}&quot;</span>, <span class='ident'>sh</span>);
 
   <span class='ident'>sh</span>.<span class='ident'>payload</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>client_hello</span>);
-  <span class='ident'>sess</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>sh</span>, <span class='boolval'>false</span>);
-}
-
-<span class='kw'>fn</span> <span class='ident'>expect_server_hello</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
-    <span class='ident'>handshake_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>ServerHello</span>]
-  }
+  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>sh</span>, <span class='boolval'>false</span>);
 }
 
 <span class='kw'>fn</span> <span class='ident'>handle_server_hello</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
@@ -708,16 +685,12 @@
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_SERVER_HELLO</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_server_hello</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>ServerHello</span>]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_server_hello</span>
 };
-
-<span class='kw'>fn</span> <span class='ident'>expect_certificate</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
-    <span class='ident'>handshake_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>Certificate</span>]
-  }
-}
 
 <span class='kw'>fn</span> <span class='ident'>handle_certificate</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
   <span class='kw'>let</span> <span class='ident'>cert_chain</span> <span class='op'>=</span> <span class='macro'>extract_handshake</span><span class='macro'>!</span>(<span class='ident'>m</span>, <span class='ident'>HandshakePayload</span>::<span class='ident'>Certificate</span>).<span class='ident'>unwrap</span>();
@@ -727,16 +700,12 @@
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_CERTIFICATE</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_certificate</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>Certificate</span>]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_certificate</span>
 };
-
-<span class='kw'>fn</span> <span class='ident'>expect_server_kx</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
-    <span class='ident'>handshake_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>ServerKeyExchange</span>]
-  }
-}
 
 <span class='kw'>fn</span> <span class='ident'>handle_server_kx</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
   <span class='kw'>let</span> <span class='ident'>opaque_kx</span> <span class='op'>=</span> <span class='macro'>extract_handshake</span><span class='macro'>!</span>(<span class='ident'>m</span>, <span class='ident'>HandshakePayload</span>::<span class='ident'>ServerKeyExchange</span>).<span class='ident'>unwrap</span>();
@@ -762,16 +731,12 @@
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_SERVER_KX</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_server_kx</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>ServerKeyExchange</span>]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_server_kx</span>
 };
-
-<span class='kw'>fn</span> <span class='ident'>expect_server_hello_done</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
-    <span class='ident'>handshake_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>ServerHelloDone</span>]
-  }
-}
 
 <span class='kw'>fn</span> <span class='ident'>dumphex</span>(<span class='ident'>_label</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>, <span class='ident'>_bytes</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) {
   <span class='comment'>/*
@@ -786,19 +751,24 @@
 }
 
 <span class='kw'>fn</span> <span class='ident'>emit_clientkx</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>kxd</span>: <span class='kw-2'>&amp;</span><span class='ident'>suites</span>::<span class='ident'>KeyExchangeResult</span>) {
+  <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+  <span class='kw'>let</span> <span class='ident'>ecpoint</span> <span class='op'>=</span> <span class='ident'>PayloadU8</span> { <span class='ident'>body</span>: <span class='ident'>kxd</span>.<span class='ident'>pubkey</span>.<span class='ident'>clone</span>().<span class='ident'>into_boxed_slice</span>() };
+  <span class='ident'>ecpoint</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>);
+  <span class='kw'>let</span> <span class='ident'>pubkey</span> <span class='op'>=</span> <span class='ident'>Payload</span> { <span class='ident'>body</span>: <span class='ident'>buf</span>.<span class='ident'>into_boxed_slice</span>() };
+
   <span class='kw'>let</span> <span class='ident'>ckx</span> <span class='op'>=</span> <span class='ident'>Message</span> {
     <span class='ident'>typ</span>: <span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>,
     <span class='ident'>version</span>: <span class='ident'>ProtocolVersion</span>::<span class='ident'>TLSv1_2</span>,
     <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>Handshake</span>(
       <span class='ident'>HandshakeMessagePayload</span> {
         <span class='ident'>typ</span>: <span class='ident'>HandshakeType</span>::<span class='ident'>ClientKeyExchange</span>,
-        <span class='ident'>payload</span>: <span class='ident'>HandshakePayload</span>::<span class='ident'>ClientKeyExchange</span>(<span class='ident'>kxd</span>.<span class='ident'>encode_public</span>())
+        <span class='ident'>payload</span>: <span class='ident'>HandshakePayload</span>::<span class='ident'>ClientKeyExchange</span>(<span class='ident'>pubkey</span>)
       }
     )
   };
 
   <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>hash_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>ckx</span>);
-  <span class='ident'>sess</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>ckx</span>, <span class='boolval'>false</span>);
+  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>ckx</span>, <span class='boolval'>false</span>);
 }
 
 <span class='kw'>fn</span> <span class='ident'>emit_ccs</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>) {
@@ -808,7 +778,7 @@
     <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>ChangeCipherSpec</span>(<span class='ident'>ChangeCipherSpecPayload</span> {})
   };
 
-  <span class='ident'>sess</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>ccs</span>, <span class='boolval'>false</span>);
+  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>ccs</span>, <span class='boolval'>false</span>);
 }
 
 <span class='kw'>fn</span> <span class='ident'>emit_finished</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>) {
@@ -830,7 +800,7 @@
   };
 
   <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>hash_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>f</span>);
-  <span class='ident'>sess</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>f</span>, <span class='boolval'>true</span>);
+  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>f</span>, <span class='boolval'>true</span>);
 }
 
 <span class='kw'>fn</span> <span class='ident'>handle_server_hello_done</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
@@ -893,25 +863,24 @@
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_SERVER_HELLO_DONE</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_server_hello_done</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>ServerHelloDone</span>]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_server_hello_done</span>
 };
 
 <span class='comment'>/* -- Waiting for their CCS -- */</span>
-<span class='kw'>fn</span> <span class='ident'>expect_ccs</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>ChangeCipherSpec</span>],
-    <span class='ident'>handshake_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[]
-  }
-}
-
 <span class='kw'>fn</span> <span class='ident'>handle_ccs</span>(<span class='ident'>_sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>_m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
   <span class='comment'>/* nb. msgs layer validates trivial contents of CCS */</span>
   <span class='prelude-val'>Ok</span>(<span class='ident'>ConnState</span>::<span class='ident'>ExpectFinished</span>)
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_CCS</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_ccs</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>ChangeCipherSpec</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_ccs</span>
 };
 
@@ -921,18 +890,14 @@
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_CCS_RESUME</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_ccs</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>ChangeCipherSpec</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_ccs_resume</span>
 };
 
 <span class='comment'>/* -- Waiting for their finished -- */</span>
-<span class='kw'>fn</span> <span class='ident'>expect_finished</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
-    <span class='ident'>handshake_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[] <span class='comment'>/* we need to decrypt before we can check this */</span>
-  }
-}
-
 <span class='kw'>fn</span> <span class='ident'>save_session</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>) {
   <span class='kw'>if</span> <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>session_id</span>.<span class='ident'>bytes</span>.<span class='ident'>len</span>() <span class='op'>==</span> <span class='number'>0</span> {
     <span class='macro'>info</span><span class='macro'>!</span>(<span class='string'>&quot;Session not saved: server didn&#39;t allocate id&quot;</span>);
@@ -959,9 +924,7 @@
 }
 
 <span class='kw'>fn</span> <span class='ident'>handle_finished</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
-  <span class='kw'>let</span> <span class='ident'>finished</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='macro'>extract_handshake</span><span class='macro'>!</span>(<span class='ident'>m</span>, <span class='ident'>HandshakePayload</span>::<span class='ident'>Finished</span>)
-    .<span class='ident'>ok_or</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;finished message missing&quot;</span>.<span class='ident'>to_string</span>()))
-  );
+  <span class='kw'>let</span> <span class='ident'>finished</span> <span class='op'>=</span> <span class='macro'>extract_handshake</span><span class='macro'>!</span>(<span class='ident'>m</span>, <span class='ident'>HandshakePayload</span>::<span class='ident'>Finished</span>).<span class='ident'>unwrap</span>();
 
   <span class='comment'>/* Work out what verify_data we expect. */</span>
   <span class='kw'>let</span> <span class='ident'>vh</span> <span class='op'>=</span> <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>get_verify_hash</span>();
@@ -970,9 +933,10 @@
   <span class='comment'>/* Constant-time verification of this is relatively unimportant: they only
    * get one chance.  But it can&#39;t hurt. */</span>
   <span class='kw'>use</span> <span class='ident'>ring</span>;
-  <span class='ident'>ring</span>::<span class='ident'>constant_time</span>::<span class='ident'>verify_slices_are_equal</span>(<span class='kw-2'>&amp;</span><span class='ident'>expect_verify_data</span>, <span class='kw-2'>&amp;</span><span class='ident'>finished</span>.<span class='ident'>body</span>)
-    .<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>DecryptError</span>)
-    .<span class='ident'>unwrap</span>();
+  <span class='macro'>try</span><span class='macro'>!</span>(
+    <span class='ident'>ring</span>::<span class='ident'>constant_time</span>::<span class='ident'>verify_slices_are_equal</span>(<span class='kw-2'>&amp;</span><span class='ident'>expect_verify_data</span>, <span class='kw-2'>&amp;</span><span class='ident'>finished</span>.<span class='ident'>body</span>)
+      .<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>DecryptError</span>)
+  );
 
   <span class='comment'>/* Hash this message too. */</span>
   <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>hash_message</span>(<span class='ident'>m</span>);
@@ -991,30 +955,32 @@
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_FINISHED</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_finished</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>HandshakeType</span>::<span class='ident'>Finished</span>]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_finished</span>
 };
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>EXPECT_FINISHED_RESUME</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_finished</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>Handshake</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_finished_resume</span>
 };
 
 <span class='comment'>/* -- Traffic transit state -- */</span>
-<span class='kw'>fn</span> <span class='ident'>expect_traffic</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span> {
-  <span class='ident'>Expectation</span> {
-    <span class='ident'>content_types</span>: <span class='macro'>vec</span><span class='macro'>!</span>[<span class='ident'>ContentType</span>::<span class='ident'>ApplicationData</span>],
-    <span class='ident'>handshake_types</span>: <span class='ident'>Vec</span>::<span class='ident'>new</span>()
-  }
-}
-
 <span class='kw'>fn</span> <span class='ident'>handle_traffic</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ClientSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
-  <span class='ident'>sess</span>.<span class='ident'>take_received_plaintext</span>(<span class='ident'>m</span>.<span class='ident'>get_opaque_payload</span>().<span class='ident'>unwrap</span>());
+  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>take_received_plaintext</span>(<span class='ident'>m</span>.<span class='ident'>get_opaque_payload</span>().<span class='ident'>unwrap</span>());
   <span class='prelude-val'>Ok</span>(<span class='ident'>ConnState</span>::<span class='ident'>Traffic</span>)
 }
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TRAFFIC</span>: <span class='ident'>Handler</span> <span class='op'>=</span> <span class='ident'>Handler</span> {
-  <span class='ident'>expect</span>: <span class='ident'>expect_traffic</span>,
+  <span class='ident'>expect</span>: <span class='ident'>Expectation</span> {
+    <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>ContentType</span>::<span class='ident'>ApplicationData</span>],
+    <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span>[]
+  },
   <span class='ident'>handle</span>: <span class='ident'>handle_traffic</span>
 };
 </pre>

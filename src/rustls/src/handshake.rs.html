@@ -75,23 +75,22 @@
 <span id="31">31</span>
 <span id="32">32</span>
 <span id="33">33</span>
-<span id="34">34</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>HandshakeType</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>Message</span>, <span class='ident'>MessagePayload</span>};
 <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
 
-<span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>)]</span>
+<span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>, <span class='ident'>Clone</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Expectation</span> {
-  <span class='kw'>pub</span> <span class='ident'>content_types</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>ContentType</span><span class='op'>&gt;</span>,
-  <span class='kw'>pub</span> <span class='ident'>handshake_types</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>HandshakeType</span><span class='op'>&gt;</span>
+  <span class='kw'>pub</span> <span class='ident'>content_types</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>ContentType</span>],
+  <span class='kw'>pub</span> <span class='ident'>handshake_types</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>HandshakeType</span>]
 }
 
 <span class='kw'>impl</span> <span class='ident'>Expectation</span> {
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>check_message</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
     <span class='kw'>if</span> <span class='op'>!</span><span class='self'>self</span>.<span class='ident'>content_types</span>.<span class='ident'>contains</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>) {
       <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>InappropriateMessage</span> {
-        <span class='ident'>expect_types</span>: <span class='self'>self</span>.<span class='ident'>content_types</span>.<span class='ident'>clone</span>(),
+        <span class='ident'>expect_types</span>: <span class='self'>self</span>.<span class='ident'>content_types</span>.<span class='ident'>to_vec</span>(),
         <span class='ident'>got_type</span>: <span class='ident'>m</span>.<span class='ident'>typ</span>.<span class='ident'>clone</span>()
       });
     }
@@ -100,7 +99,7 @@
       <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>handshake_types</span>.<span class='ident'>len</span>() <span class='op'>&gt;</span> <span class='number'>0</span>
         <span class='op'>&amp;&amp;</span> <span class='op'>!</span><span class='self'>self</span>.<span class='ident'>handshake_types</span>.<span class='ident'>contains</span>(<span class='kw-2'>&amp;</span><span class='ident'>hsp</span>.<span class='ident'>typ</span>) {
         <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>InappropriateHandshakeMessage</span> {
-          <span class='ident'>expect_types</span>: <span class='self'>self</span>.<span class='ident'>handshake_types</span>.<span class='ident'>clone</span>(),
+          <span class='ident'>expect_types</span>: <span class='self'>self</span>.<span class='ident'>handshake_types</span>.<span class='ident'>to_vec</span>(),
           <span class='ident'>got_type</span>: <span class='ident'>hsp</span>.<span class='ident'>typ</span>.<span class='ident'>clone</span>()
         });
       }
@@ -110,7 +109,6 @@
   }
 }
 
-<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>ExpectFunction</span> <span class='op'>=</span> <span class='kw'>fn</span>() <span class='op'>-&gt;</span> <span class='ident'>Expectation</span>;
 </pre>
 </section>
     <section id='search' class="content hidden"></section>

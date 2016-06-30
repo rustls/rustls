@@ -83,6 +83,8 @@
 <span id="39">39</span>
 <span id="40">40</span>
 <span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>webpki</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
@@ -90,6 +92,7 @@
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>log</span>;
 
+<span class='kw'>mod</span> <span class='ident'>util</span>;
 <span class='kw'>mod</span> <span class='ident'>msgs</span>;
 <span class='kw'>mod</span> <span class='ident'>error</span>;
 <span class='kw'>mod</span> <span class='ident'>rand</span>;
@@ -97,6 +100,7 @@
 <span class='kw'>mod</span> <span class='ident'>prf</span>;
 <span class='kw'>mod</span> <span class='ident'>session</span>;
 <span class='kw'>mod</span> <span class='ident'>pemfile</span>;
+<span class='kw'>mod</span> <span class='ident'>sign</span>;
 <span class='kw'>mod</span> <span class='ident'>verify</span>;
 <span class='kw'>mod</span> <span class='ident'>handshake</span>;
 <span class='kw'>mod</span> <span class='ident'>server_hs</span>;
@@ -108,9 +112,9 @@
 <span class='doccomment'>/// Internal classes which may be useful outside the library.</span>
 <span class='doccomment'>/// The contents of this section DO NOT form part of the stable interface.</span>
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>internal</span> {
-  <span class='doccomment'>/// Functions for parsing PEM files containing certificates.</span>
+  <span class='doccomment'>/// Functions for parsing PEM files containing certificates/keys.</span>
   <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>pemfile</span> {
-    <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>pemfile</span>::<span class='ident'>certs</span>;
+    <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>pemfile</span>::{<span class='ident'>certs</span>, <span class='ident'>rsa_private_keys</span>};
   }
 
   <span class='doccomment'>/// Low-level TLS message parsing and encoding functions.</span>
