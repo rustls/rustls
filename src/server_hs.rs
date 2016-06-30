@@ -188,7 +188,7 @@ fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
 fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
-  if client_hello.client_version != ProtocolVersion::TLSv1_2 {
+  if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
     return Err(TLSError::General("client does not support TLSv1_2".to_string()));
   }
 
