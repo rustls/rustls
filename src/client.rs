@@ -43,7 +43,7 @@ impl StoresClientSessions for NoSessionStorage {
   }
 }
 
-/// Common configuration for all connections made by
+/// Common configuration for (typically) all connections made by
 /// a program.
 ///
 /// Making one of these can be expensive, and should be

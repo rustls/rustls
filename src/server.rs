@@ -42,23 +42,27 @@ pub trait ResolvesCert {
              ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer>>), ()>;
 }
 
+/// Common configuration for a set of sessions.
+///
+/// Making one of these can be expensive, and should be
+/// once per process rather than once per connection.
 pub struct ServerConfig {
-  /* List of ciphersuites, in preference order. */
+  /// List of ciphersuites, in preference order.
   pub ciphersuites: Vec<&'static SupportedCipherSuite>,
 
-  /* Ignore the client's ciphersuite order. Instead,
-   * choose the top ciphersuite in the server list
-   * which is supported by the client. */
+  /// Ignore the client's ciphersuite order. Instead,
+  /// choose the top ciphersuite in the server list
+  /// which is supported by the client.
   pub ignore_client_order: bool,
 
-  /* How to store client sessions. */
+  /// How to store client sessions.
   pub session_storage: Box<StoresSessions>,
 
-  /* How to choose a server cert and key. */
+  /// How to choose a server cert and key.
   pub cert_resolver: Box<ResolvesCert>,
 
-  /* Protocol names we support, most preferred first.
-   * If empty we don't do ALPN at all. */
+  /// Protocol names we support, most preferred first.
+  /// If empty we don't do ALPN at all.
   pub alpn_protocols: Vec<String>
 }
 
@@ -112,6 +116,9 @@ impl ResolvesCert for AlwaysResolvesChain {
 }
 
 impl ServerConfig {
+  /// Make a `ServerConfig` with a default set of ciphersuites,
+  /// no keys/certificates, no ALPN protocols, and no
+  /// session persistence.
   pub fn default() -> ServerConfig {
     ServerConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
@@ -129,6 +136,10 @@ impl ServerConfig {
     self.cert_resolver = Box::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
   }
 
+  /// Set the ALPN protocol list to the given protocol names.
+  /// Overwrites any existing configured protocols.
+  /// The first element in the `protocols` list is the most
+  /// preferred, the last is the least preferred.
   pub fn set_protocols(&mut self, protocols: &[String]) {
     self.alpn_protocols.clear();
     self.alpn_protocols.extend_from_slice(protocols);
