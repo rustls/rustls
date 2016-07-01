@@ -19,7 +19,7 @@ pub struct RSASigner {
 
 impl RSASigner {
   pub fn new(der: &[u8]) -> Result<RSASigner, ()> {
-    let key = ring::signature::RSAKeyPair::from_der(untrusted::Input::new(der).unwrap());
+    let key = ring::signature::RSAKeyPair::from_der(untrusted::Input::from(der));
     key.map(|k| RSASigner { key: k })
   }
 }

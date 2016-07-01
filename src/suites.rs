@@ -72,7 +72,7 @@ impl KeyExchange {
     let secret = ring::agreement::agree_ephemeral(
       self.privkey,
       self.alg,
-      untrusted::Input::new(peer).unwrap(),
+      untrusted::Input::from(peer),
       (),
       |v| { let mut r = Vec::new(); r.extend_from_slice(v); Ok(r) }
     );

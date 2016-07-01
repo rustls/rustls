@@ -71,7 +71,7 @@ impl RootCertStore {
   /// Add a single DER-encoded certificate to the store.
   pub fn add(&mut self, der: &[u8]) -> Result<(), webpki::Error> {
     let ta = try!(
-      webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::new(der).unwrap())
+      webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::from(der))
     );
 
     let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
@@ -123,11 +123,11 @@ pub fn verify_cert(roots: &RootCertStore,
   }
 
   /* EE cert must appear first. */
-  let ee = untrusted::Input::new(&presented_certs[0].body).unwrap();
+  let ee = untrusted::Input::from(&presented_certs[0].body);
 
   let chain: Vec<untrusted::Input> = presented_certs.iter()
     .skip(1)
-    .map(|cert| untrusted::Input::new(&cert.body).unwrap())
+    .map(|cert| untrusted::Input::from(&cert.body))
     .collect();
 
   let trustroots: Vec<webpki::TrustAnchor> = roots.roots.iter()
@@ -140,7 +140,7 @@ pub fn verify_cert(roots: &RootCertStore,
                           ee,
                           time::get_time())
     .and_then(|_| webpki::verify_cert_dns_name(ee,
-                          untrusted::Input::new(dns_name.as_bytes()).unwrap()))
+                          untrusted::Input::from(dns_name.as_bytes())))
     .map_err(|err| TLSError::WebPKIError(err))
 }
 
@@ -183,17 +183,17 @@ pub fn verify_kx(message: &[u8],
   let alg = try!(convert_alg(&dss.alg));
 
   let signed_data = webpki::signed_data::SignedData {
-    data: untrusted::Input::new(message).unwrap(),
-    algorithm: untrusted::Input::new(alg).unwrap(),
-    signature: untrusted::Input::new(&dss.sig.body).unwrap()
+    data: untrusted::Input::from(message),
+    algorithm: untrusted::Input::from(alg),
+    signature: untrusted::Input::from(&dss.sig.body)
   };
 
-  let cert_in = untrusted::Input::new(&cert.body).unwrap();
+  let cert_in = untrusted::Input::from(&cert.body);
   let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(cert_in)
                   .map_err(|err| TLSError::WebPKIError(err)));
 
   webpki::signed_data::verify_signed_data(&SUPPORTED_SIG_ALGS,
-                                          untrusted::Input::new(cert.spki).unwrap(),
+                                          untrusted::Input::from(cert.spki),
                                           &signed_data)
     .map_err(|err| TLSError::WebPKIError(err))
 }
