@@ -127,7 +127,7 @@ pub trait SupportedCurves {
 
 impl SupportedCurves for EllipticCurveList {
   fn supported() -> EllipticCurveList {
-    vec![ NamedCurve::X25519, NamedCurve::secp256r1, NamedCurve::secp384r1 ]
+    vec![ NamedCurve::X25519, NamedCurve::secp384r1, NamedCurve::secp256r1 ]
   }
 }
 
