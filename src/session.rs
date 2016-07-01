@@ -10,7 +10,7 @@ use msgs::hsjoiner::HandshakeJoiner;
 use msgs::base::Payload;
 use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use error::TLSError;
-use suites::SupportedCipherSuite;
+use suites::{SupportedCipherSuite, BulkAlgorithm};
 
 use std::io;
 use std::mem;
@@ -66,15 +66,11 @@ impl SessionSecrets {
     self.hash = Some(hashalg);
 
     let randoms = join_randoms(&self.client_random, &self.server_random);
-    dumphex("clientrand", &self.client_random);
-    dumphex("serverrand", &self.server_random);
-    dumphex("premaster", pms);
     prf::prf(&mut self.master_secret,
              hashalg,
              pms,
              b"master secret",
              &randoms);
-    dumphex("master", &self.master_secret);
   }
 
   pub fn init_resume(&mut self,
@@ -85,10 +81,6 @@ impl SessionSecrets {
     self.server_random.as_mut().write(&hs_rands.server_random).unwrap();
     self.hash = Some(hashalg);
     self.master_secret.as_mut().write(master_secret).unwrap();
-
-    dumphex("client_random", &self.client_random);
-    dumphex("server_random", &self.server_random);
-    dumphex("master_secret", &self.master_secret);
   }
 
   pub fn make_key_block(&self, len: usize) -> Vec<u8> {
@@ -104,7 +96,6 @@ impl SessionSecrets {
              b"key expansion",
              &randoms);
 
-    dumphex("key block", &out);
     out
   }
 
@@ -112,16 +103,11 @@ impl SessionSecrets {
     let mut out = Vec::new();
     out.resize(12, 0u8);
 
-    dumphex("label", label);
-    dumphex("master secret", &self.master_secret);
-    dumphex("handshake hash", &handshake_hash);
-
     prf::prf(&mut out,
              self.hash.unwrap(),
              &self.master_secret,
              label,
              &handshake_hash);
-    dumphex("fin", &out);
     out
   }
 
@@ -157,20 +143,35 @@ impl MessageCipher {
     let client_write_iv = &key_block[offs..offs+scs.fixed_iv_len]; offs += scs.fixed_iv_len;
     let server_write_iv = &key_block[offs..offs+scs.fixed_iv_len];
 
+    let (write_mac_key, write_key, write_iv) = if secrets.we_are_client {
+      (client_write_mac_key, client_write_key, client_write_iv)
+    } else {
+      (server_write_mac_key, server_write_key, server_write_iv)
+    };
+
+    let (read_mac_key, read_key, read_iv) = if secrets.we_are_client {
+      (server_write_mac_key, server_write_key, server_write_iv)
+    } else {
+      (client_write_mac_key, client_write_key, client_write_iv)
+    };
+
     let aead_alg = scs.get_aead_alg();
 
-    if secrets.we_are_client {
-      Box::new(GCMMessageCipher::new(aead_alg,
-                                     client_write_mac_key, client_write_key, client_write_iv,
-                                     server_write_mac_key, server_write_key, server_write_iv))
+    if scs.bulk == BulkAlgorithm::CHACHA20_POLY1305 {
+      Box::new(ChaCha20Poly1305MessageCipher::new(aead_alg,
+                                                  write_mac_key, write_key, write_iv,
+                                                  read_mac_key, read_key, read_iv))
     } else {
       Box::new(GCMMessageCipher::new(aead_alg,
-                                     server_write_mac_key, server_write_key, server_write_iv,
-                                     client_write_mac_key, client_write_key, client_write_iv))
+                                     write_mac_key, write_key, write_iv,
+                                     read_mac_key, read_key, read_iv))
     }
   }
 }
 
+/*
+ * AES-GCM
+ */
 pub struct GCMMessageCipher {
   alg: &'static ring::aead::Algorithm,
   enc_key: ring::aead::SealingKey,
@@ -179,19 +180,8 @@ pub struct GCMMessageCipher {
   dec_salt: [u8; 4]
 }
 
-const EXPLICIT_NONCE_LEN: usize = 8;
-const GCM_OVERHEAD: usize = EXPLICIT_NONCE_LEN + 16;
-
-fn dumphex(_why: &str, _buf: &[u8]) {
-  /*
-  print!("{}: ", _why);
-
-  for b in _buf {
-    print!("{:02x}", b);
-  }
-  println!("");
-  */
-}
+const GCM_EXPLICIT_NONCE_LEN: usize = 8;
+const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageCipher for GCMMessageCipher {
   fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
@@ -214,7 +204,7 @@ impl MessageCipher for GCMMessageCipher {
 
     let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
                                                    &nonce,
-                                                   EXPLICIT_NONCE_LEN,
+                                                   GCM_EXPLICIT_NONCE_LEN,
                                                    &mut buf,
                                                    &aad));
 
@@ -241,9 +231,9 @@ impl MessageCipher for GCMMessageCipher {
     codec::put_u64(seq, &mut nonce[4..]);
 
     let mut buf = Vec::new();
-    buf.resize(EXPLICIT_NONCE_LEN, 0u8);
+    buf.resize(GCM_EXPLICIT_NONCE_LEN, 0u8);
     msg.payload.encode(&mut buf);
-    let payload_len = buf.len() - EXPLICIT_NONCE_LEN;
+    let payload_len = buf.len() - GCM_EXPLICIT_NONCE_LEN;
 
     /* make room for tag */
     let tag_len = self.alg.max_overhead_len();
@@ -256,17 +246,13 @@ impl MessageCipher for GCMMessageCipher {
     msg.version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
-    dumphex("plain", &buf[EXPLICIT_NONCE_LEN..want_len - tag_len]);
-    dumphex("aad", &aad);
-
     try!(ring::aead::seal_in_place(&self.enc_key,
                                    &nonce,
-                                   &mut buf[EXPLICIT_NONCE_LEN..],
+                                   &mut buf[GCM_EXPLICIT_NONCE_LEN..],
                                    tag_len,
                                    &aad));
 
     buf[0..8].as_mut().write(&nonce[4..]).unwrap();
-    dumphex("outgoing", &buf);
 
     Ok(Message {
       typ: msg.typ.clone(),
@@ -288,14 +274,115 @@ impl GCMMessageCipher {
       dec_salt: [0u8; 4]
     };
 
-    dumphex("enc_key", enc_key);
-    dumphex("enc_iv ", enc_iv);
-    dumphex("dec_key", dec_key);
-    dumphex("dec_iv ", dec_iv);
-
     ret.enc_salt.as_mut().write(enc_iv).unwrap();
     ret.dec_salt.as_mut().write(dec_iv).unwrap();
     ret
+  }
+}
+
+/// The RFC7905/RFC7539 ChaCha20Poly1305 construction
+pub struct ChaCha20Poly1305MessageCipher {
+  alg: &'static ring::aead::Algorithm,
+  enc_key: ring::aead::SealingKey,
+  enc_offset: [u8; 12],
+  dec_key: ring::aead::OpeningKey,
+  dec_offset: [u8; 12]
+}
+
+impl ChaCha20Poly1305MessageCipher {
+  fn new(alg: &'static ring::aead::Algorithm,
+         _enc_mac_key: &[u8], enc_key: &[u8], enc_iv: &[u8],
+         _dec_mac_key: &[u8], dec_key: &[u8], dec_iv: &[u8]) -> ChaCha20Poly1305MessageCipher {
+    let mut ret = ChaCha20Poly1305MessageCipher {
+      alg: alg,
+      enc_key: ring::aead::SealingKey::new(alg, enc_key).unwrap(),
+      enc_offset: [0u8; 12],
+      dec_key: ring::aead::OpeningKey::new(alg, dec_key).unwrap(),
+      dec_offset: [0u8; 12]
+    };
+
+    ret.enc_offset.as_mut().write(enc_iv).unwrap();
+    ret.dec_offset.as_mut().write(dec_iv).unwrap();
+    ret
+  }
+}
+
+fn xor(accum: &mut [u8], offset: &[u8]) {
+  for i in 0..accum.len() {
+    accum[i] ^= offset[i];
+  }
+}
+
+const CP_OVERHEAD: usize = 16;
+
+impl MessageCipher for ChaCha20Poly1305MessageCipher {
+  fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
+    let payload = try!(msg.get_opaque_payload().ok_or(()));
+    let mut buf = payload.body.to_vec();
+
+    if buf.len() < CP_OVERHEAD {
+      return Err(());
+    }
+
+    /* Nonce is offset_96 ^ (0_32 || seq_64) */
+    let mut nonce = [0u8; 12];
+    codec::put_u64(seq, &mut nonce[4..]);
+    xor(&mut nonce, &self.dec_offset);
+
+    let mut aad = Vec::new();
+    codec::encode_u64(seq, &mut aad);
+    msg.typ.encode(&mut aad);
+    msg.version.encode(&mut aad);
+    codec::encode_u16((buf.len() - CP_OVERHEAD) as u16, &mut aad);
+
+    let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
+                                                   &nonce,
+                                                   0,
+                                                   &mut buf,
+                                                   &aad));
+
+    buf.truncate(plain_len);
+
+    Ok(
+      Message {
+        typ: msg.typ.clone(),
+        version: msg.version.clone(),
+        payload: MessagePayload::opaque(buf)
+      }
+    )
+  }
+
+  fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
+    let mut nonce = [0u8; 12];
+    codec::put_u64(seq, &mut nonce[4..]);
+    xor(&mut nonce, &self.enc_offset);
+
+    let mut buf = Vec::new();
+    msg.payload.encode(&mut buf);
+    let payload_len = buf.len();
+
+    /* make room for tag */
+    let tag_len = self.alg.max_overhead_len();
+    let want_len = buf.len() + tag_len;
+    buf.resize(want_len, 0u8);
+
+    let mut aad = Vec::new();
+    codec::encode_u64(seq, &mut aad);
+    msg.typ.encode(&mut aad);
+    msg.version.encode(&mut aad);
+    codec::encode_u16(payload_len as u16, &mut aad);
+
+    try!(ring::aead::seal_in_place(&self.enc_key,
+                                   &nonce,
+                                   &mut buf,
+                                   tag_len,
+                                   &aad));
+
+    Ok(Message {
+      typ: msg.typ.clone(),
+      version: msg.version.clone(),
+      payload: MessagePayload::opaque(buf)
+    })
   }
 }
 

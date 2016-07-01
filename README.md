@@ -30,8 +30,10 @@ Rustls is built to a few rules:
 Client connections work to assorted internet servers.  The
 following ciphersuites are supported:
 
+- `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256`
 - `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`
 - `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384`
+- `TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256`
 - `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`
 - `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`
 
@@ -111,7 +113,7 @@ of these licenses, at your option.
 - [x] ALPN.
 - [ ] Tickets.
 - [x] Resumption.
-- [ ] chacha20poly1305 bulk encryption support.
+- [x] chacha20poly1305 bulk encryption support.
 - [x] Signing support in *ring* to unblock server work. (done upstream, thanks!)
 - [x] Server support.
 - [ ] Write some more sample programs.

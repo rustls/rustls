@@ -9,10 +9,11 @@ extern crate ring;
 extern crate untrusted;
 
 #[allow(non_camel_case_types)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BulkAlgorithm {
   AES_128_GCM,
-  AES_256_GCM
+  AES_256_GCM,
+  CHACHA20_POLY1305
 }
 
 /// The result of a key exchange.  This has our public key,
@@ -160,7 +161,8 @@ impl SupportedCipherSuite {
   pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
     match &self.bulk {
       &BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
-      &BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM
+      &BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM,
+      &BulkAlgorithm::CHACHA20_POLY1305 => &ring::aead::CHACHA20_POLY1305
     }
   }
 
@@ -168,6 +170,30 @@ impl SupportedCipherSuite {
     (self.mac_key_len + self.enc_key_len + self.fixed_iv_len) * 2
   }
 }
+
+pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+  kx: KeyExchangeAlgorithm::ECDHE,
+  sign: SignatureAlgorithm::ECDSA,
+  bulk: BulkAlgorithm::CHACHA20_POLY1305,
+  hash: HashAlgorithm::SHA256,
+  mac_key_len: 0,
+  enc_key_len: 32,
+  fixed_iv_len: 12
+};
+
+pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+SupportedCipherSuite {
+  suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+  kx: KeyExchangeAlgorithm::ECDHE,
+  sign: SignatureAlgorithm::RSA,
+  bulk: BulkAlgorithm::CHACHA20_POLY1305,
+  hash: HashAlgorithm::SHA256,
+  mac_key_len: 0,
+  enc_key_len: 32,
+  fixed_iv_len: 12
+};
 
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
 SupportedCipherSuite {
@@ -218,7 +244,9 @@ SupportedCipherSuite {
 };
 
 /// A list of all the cipher suites supported by rustls.
-pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 4] = [
+pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 6] = [
+  &TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+  &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
   &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
   &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
   &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
