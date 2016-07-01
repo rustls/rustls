@@ -129,6 +129,8 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
     return Err(TLSError::General("server chose non-offered ciphersuite".to_string()));
   }
 
+  info!("Using ciphersuite {:?}", server_hello.cipher_suite);
+
   /* Start our handshake hash, and input the client hello we sent, and this reply. */
   sess.handshake_data.handshake_hash = Some(
     hash_hs::HandshakeHash::new(scs.as_ref().unwrap().get_hash())

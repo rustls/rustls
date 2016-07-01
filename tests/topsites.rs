@@ -25,8 +25,12 @@ fn joe() {
 
 #[test]
 fn google() {
+  /* Test we agree chacha20-poly1305 and curve25519 */
   connect("google.com")
+    .verbose()
     .expect("HTTP/1.1 ") // currently 302 redirects
+    .expect_log("Using ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")
+    .expect_log("ECDHE curve is ECParameters { curve_type: NamedCurve, named_curve: X25519 }")
     .go()
     .unwrap();
 }
@@ -74,7 +78,7 @@ fn hello_letsencrypt() {
 #[test]
 fn twitter() {
   connect("twitter.com")
-    .expect("HTTP/1.1 200 OK")
+    .expect("HTTP/1.1 ")
     .go()
     .unwrap();
 }
