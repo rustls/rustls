@@ -97,7 +97,18 @@ impl ClientConfig {
   /// Sets MTU to `mtu`.  If None, the default is used.
   /// If Some(x) then x must be greater than 5 bytes.
   pub fn set_mtu(&mut self, mtu: &Option<usize>) {
-    self.mtu = mtu.clone();
+    /* Internally our MTU relates to fragment size, and does
+     * not include the TLS header overhead.
+     *
+     * Externally the MTU is the whole packet size.  The difference
+     * is PACKET_OVERHEAD. */
+    if let Some(x) = *mtu {
+      use msgs::fragmenter;
+      assert!(x > fragmenter::PACKET_OVERHEAD);
+      self.mtu = Some(x - fragmenter::PACKET_OVERHEAD);
+    } else {
+      self.mtu = None;
+    }
   }
 }
 
