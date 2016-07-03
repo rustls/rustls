@@ -13,7 +13,7 @@ pub fn polite() {
 fn wait_for_port(port: u16) -> Option<()> {
   let mut count = 0;
   loop {
-    thread::sleep(time::Duration::from_millis(100));
+    thread::sleep(time::Duration::from_millis(500));
     if let Ok(_) = net::TcpStream::connect(("127.0.0.1", port)) {
       return Some(())
     }
