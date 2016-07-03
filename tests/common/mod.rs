@@ -35,6 +35,40 @@ fn unused_port(mut port: u16) -> u16 {
   }
 }
 
+/* Note we skipped this test. */
+pub fn skipped(why: &str) {
+  use std::io::{self, Write};
+  let mut stdout = io::stdout();
+  write!(&mut stdout, "[  SKIPPED  ]        because: {}\n -- UNTESTED: ", why)
+    .unwrap();
+}
+
+/* Does openssl s_client support -alpn? */
+pub fn openssl_client_supports_alpn() -> bool {
+  let output = process::Command::new("openssl")
+    .arg("s_client")
+    .arg("-help")
+    .output()
+    .unwrap();
+
+  String::from_utf8(output.stderr)
+    .unwrap()
+    .contains(" -alpn ")
+}
+
+/* Does openssl s_client support -alpn? */
+pub fn openssl_server_supports_alpn() -> bool {
+  let output = process::Command::new("openssl")
+    .arg("s_server")
+    .arg("-help")
+    .output()
+    .unwrap();
+
+  String::from_utf8(output.stderr)
+    .unwrap()
+    .contains(" -alpn ")
+}
+
 pub struct TlsClient {
   pub hostname: String,
   pub port: u16,
@@ -203,7 +237,6 @@ pub struct OpenSSLServer {
   pub chain: String,
   pub intermediate: String,
   pub cacert: String,
-  pub soft_fail: bool,
   pub extra_args: Vec<&'static str>,
   pub child: Option<process::Child>
 }
@@ -218,7 +251,6 @@ impl OpenSSLServer {
       chain: format!("test-ca/{}/end.chain", keytype),
       cacert: format!("test-ca/{}/ca.cert", keytype),
       intermediate: format!("test-ca/{}/inter.cert", keytype),
-      soft_fail: false,
       extra_args: Vec::new(),
       child: None
     }
@@ -239,11 +271,6 @@ impl OpenSSLServer {
 
   pub fn arg(&mut self, arg: &'static str) -> &mut Self {
     self.extra_args.push(arg);
-    self
-  }
-
-  pub fn args_need_openssl_1_0_2(&mut self) -> &mut Self {
-    self.soft_fail = true;
     self
   }
 
@@ -268,12 +295,8 @@ impl OpenSSLServer {
       .expect("cannot run openssl server");
 
     let port_up = wait_for_port(self.port);
-    if self.soft_fail && port_up.is_none() {
-      println!("server did not come up, treating as nonfatal");
-    } else {
-      port_up.expect("server did not come up");
-      self.child = Some(child);
-    }
+    port_up.expect("server did not come up");
+    self.child = Some(child);
 
     self
   }

@@ -7,11 +7,15 @@ use std::fs;
 
 #[test]
 fn alpn_offer() {
+  if !common::openssl_server_supports_alpn() {
+    common::skipped("needs openssl s_server with -alpn");
+    return;
+  }
+
   let mut server = OpenSSLServer::new_rsa(8100);
   server.arg("-alpn")
         .arg("ponytown,breakfast,edgware")
-        .args_need_openssl_1_0_2();
-  server.run();
+        .run();
 
   if !server.running() {
     println!("skipping test, couldn't start openssl with -alpn");
@@ -47,6 +51,11 @@ fn alpn_offer() {
 
 #[test]
 fn alpn_agree() {
+  if !common::openssl_client_supports_alpn() {
+    common::skipped("needs openssl s_client with -alpn");
+    return;
+  }
+
   let mut server = TlsServer::new(7100);
   server.proto("connaught")
         .proto("bonjour")
