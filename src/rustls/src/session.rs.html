@@ -537,6 +537,93 @@
 <span id="493">493</span>
 <span id="494">494</span>
 <span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
+<span id="542">542</span>
+<span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 <span class='kw'>use</span> <span class='ident'>prf</span>;
@@ -550,7 +637,7 @@
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>base</span>::<span class='ident'>Payload</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>ProtocolVersion</span>, <span class='ident'>AlertDescription</span>, <span class='ident'>AlertLevel</span>};
 <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
-<span class='kw'>use</span> <span class='ident'>suites</span>::<span class='ident'>SupportedCipherSuite</span>;
+<span class='kw'>use</span> <span class='ident'>suites</span>::{<span class='ident'>SupportedCipherSuite</span>, <span class='ident'>BulkAlgorithm</span>};
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
@@ -606,15 +693,11 @@
     <span class='self'>self</span>.<span class='ident'>hash</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>hashalg</span>);
 
     <span class='kw'>let</span> <span class='ident'>randoms</span> <span class='op'>=</span> <span class='ident'>join_randoms</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>client_random</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>server_random</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;clientrand&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>client_random</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;serverrand&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>server_random</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;premaster&quot;</span>, <span class='ident'>pms</span>);
     <span class='ident'>prf</span>::<span class='ident'>prf</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>.<span class='ident'>master_secret</span>,
              <span class='ident'>hashalg</span>,
              <span class='ident'>pms</span>,
              <span class='string'>b&quot;master secret&quot;</span>,
              <span class='kw-2'>&amp;</span><span class='ident'>randoms</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;master&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>master_secret</span>);
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>init_resume</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>,
@@ -625,10 +708,6 @@
     <span class='self'>self</span>.<span class='ident'>server_random</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='kw-2'>&amp;</span><span class='ident'>hs_rands</span>.<span class='ident'>server_random</span>).<span class='ident'>unwrap</span>();
     <span class='self'>self</span>.<span class='ident'>hash</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>hashalg</span>);
     <span class='self'>self</span>.<span class='ident'>master_secret</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>master_secret</span>).<span class='ident'>unwrap</span>();
-
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;client_random&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>client_random</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;server_random&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>server_random</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;master_secret&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>master_secret</span>);
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>make_key_block</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>len</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span> {
@@ -644,7 +723,6 @@
              <span class='string'>b&quot;key expansion&quot;</span>,
              <span class='kw-2'>&amp;</span><span class='ident'>randoms</span>);
 
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;key block&quot;</span>, <span class='kw-2'>&amp;</span><span class='ident'>out</span>);
     <span class='ident'>out</span>
   }
 
@@ -652,16 +730,11 @@
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>out</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
     <span class='ident'>out</span>.<span class='ident'>resize</span>(<span class='number'>12</span>, <span class='number'>0u8</span>);
 
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;label&quot;</span>, <span class='ident'>label</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;master secret&quot;</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>master_secret</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;handshake hash&quot;</span>, <span class='kw-2'>&amp;</span><span class='ident'>handshake_hash</span>);
-
     <span class='ident'>prf</span>::<span class='ident'>prf</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>out</span>,
              <span class='self'>self</span>.<span class='ident'>hash</span>.<span class='ident'>unwrap</span>(),
              <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>master_secret</span>,
              <span class='ident'>label</span>,
              <span class='kw-2'>&amp;</span><span class='ident'>handshake_hash</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;fin&quot;</span>, <span class='kw-2'>&amp;</span><span class='ident'>out</span>);
     <span class='ident'>out</span>
   }
 
@@ -697,20 +770,35 @@
     <span class='kw'>let</span> <span class='ident'>client_write_iv</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>]; <span class='ident'>offs</span> <span class='op'>+=</span> <span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>;
     <span class='kw'>let</span> <span class='ident'>server_write_iv</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>];
 
+    <span class='kw'>let</span> (<span class='ident'>write_mac_key</span>, <span class='ident'>write_key</span>, <span class='ident'>write_iv</span>) <span class='op'>=</span> <span class='kw'>if</span> <span class='ident'>secrets</span>.<span class='ident'>we_are_client</span> {
+      (<span class='ident'>client_write_mac_key</span>, <span class='ident'>client_write_key</span>, <span class='ident'>client_write_iv</span>)
+    } <span class='kw'>else</span> {
+      (<span class='ident'>server_write_mac_key</span>, <span class='ident'>server_write_key</span>, <span class='ident'>server_write_iv</span>)
+    };
+
+    <span class='kw'>let</span> (<span class='ident'>read_mac_key</span>, <span class='ident'>read_key</span>, <span class='ident'>read_iv</span>) <span class='op'>=</span> <span class='kw'>if</span> <span class='ident'>secrets</span>.<span class='ident'>we_are_client</span> {
+      (<span class='ident'>server_write_mac_key</span>, <span class='ident'>server_write_key</span>, <span class='ident'>server_write_iv</span>)
+    } <span class='kw'>else</span> {
+      (<span class='ident'>client_write_mac_key</span>, <span class='ident'>client_write_key</span>, <span class='ident'>client_write_iv</span>)
+    };
+
     <span class='kw'>let</span> <span class='ident'>aead_alg</span> <span class='op'>=</span> <span class='ident'>scs</span>.<span class='ident'>get_aead_alg</span>();
 
-    <span class='kw'>if</span> <span class='ident'>secrets</span>.<span class='ident'>we_are_client</span> {
-      <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>GCMMessageCipher</span>::<span class='ident'>new</span>(<span class='ident'>aead_alg</span>,
-                                     <span class='ident'>client_write_mac_key</span>, <span class='ident'>client_write_key</span>, <span class='ident'>client_write_iv</span>,
-                                     <span class='ident'>server_write_mac_key</span>, <span class='ident'>server_write_key</span>, <span class='ident'>server_write_iv</span>))
+    <span class='kw'>if</span> <span class='ident'>scs</span>.<span class='ident'>bulk</span> <span class='op'>==</span> <span class='ident'>BulkAlgorithm</span>::<span class='ident'>CHACHA20_POLY1305</span> {
+      <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>ChaCha20Poly1305MessageCipher</span>::<span class='ident'>new</span>(<span class='ident'>aead_alg</span>,
+                                                  <span class='ident'>write_mac_key</span>, <span class='ident'>write_key</span>, <span class='ident'>write_iv</span>,
+                                                  <span class='ident'>read_mac_key</span>, <span class='ident'>read_key</span>, <span class='ident'>read_iv</span>))
     } <span class='kw'>else</span> {
       <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>GCMMessageCipher</span>::<span class='ident'>new</span>(<span class='ident'>aead_alg</span>,
-                                     <span class='ident'>server_write_mac_key</span>, <span class='ident'>server_write_key</span>, <span class='ident'>server_write_iv</span>,
-                                     <span class='ident'>client_write_mac_key</span>, <span class='ident'>client_write_key</span>, <span class='ident'>client_write_iv</span>))
+                                     <span class='ident'>write_mac_key</span>, <span class='ident'>write_key</span>, <span class='ident'>write_iv</span>,
+                                     <span class='ident'>read_mac_key</span>, <span class='ident'>read_key</span>, <span class='ident'>read_iv</span>))
     }
   }
 }
 
+<span class='comment'>/*
+ * AES-GCM
+ */</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>GCMMessageCipher</span> {
   <span class='ident'>alg</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>Algorithm</span>,
   <span class='ident'>enc_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>SealingKey</span>,
@@ -719,19 +807,8 @@
   <span class='ident'>dec_salt</span>: [<span class='ident'>u8</span>; <span class='number'>4</span>]
 }
 
-<span class='kw'>const</span> <span class='ident'>EXPLICIT_NONCE_LEN</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>8</span>;
-<span class='kw'>const</span> <span class='ident'>GCM_OVERHEAD</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='ident'>EXPLICIT_NONCE_LEN</span> <span class='op'>+</span> <span class='number'>16</span>;
-
-<span class='kw'>fn</span> <span class='ident'>dumphex</span>(<span class='ident'>_why</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>, <span class='ident'>_buf</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) {
-  <span class='comment'>/*
-  print!(&quot;{}: &quot;, _why);
-
-  for b in _buf {
-    print!(&quot;{:02x}&quot;, b);
-  }
-  println!(&quot;&quot;);
-  */</span>
-}
+<span class='kw'>const</span> <span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>8</span>;
+<span class='kw'>const</span> <span class='ident'>GCM_OVERHEAD</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='ident'>GCM_EXPLICIT_NONCE_LEN</span> <span class='op'>+</span> <span class='number'>16</span>;
 
 <span class='kw'>impl</span> <span class='ident'>MessageCipher</span> <span class='kw'>for</span> <span class='ident'>GCMMessageCipher</span> {
   <span class='kw'>fn</span> <span class='ident'>decrypt</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>msg</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>, <span class='ident'>seq</span>: <span class='ident'>u64</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Message</span>, ()<span class='op'>&gt;</span> {
@@ -754,7 +831,7 @@
 
     <span class='kw'>let</span> <span class='ident'>plain_len</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>open_in_place</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>dec_key</span>,
                                                    <span class='kw-2'>&amp;</span><span class='ident'>nonce</span>,
-                                                   <span class='ident'>EXPLICIT_NONCE_LEN</span>,
+                                                   <span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>,
                                                    <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>,
                                                    <span class='kw-2'>&amp;</span><span class='ident'>aad</span>));
 
@@ -781,9 +858,9 @@
     <span class='ident'>codec</span>::<span class='ident'>put_u64</span>(<span class='ident'>seq</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>[<span class='number'>4</span>..]);
 
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
-    <span class='ident'>buf</span>.<span class='ident'>resize</span>(<span class='ident'>EXPLICIT_NONCE_LEN</span>, <span class='number'>0u8</span>);
+    <span class='ident'>buf</span>.<span class='ident'>resize</span>(<span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>, <span class='number'>0u8</span>);
     <span class='ident'>msg</span>.<span class='ident'>payload</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>);
-    <span class='kw'>let</span> <span class='ident'>payload_len</span> <span class='op'>=</span> <span class='ident'>buf</span>.<span class='ident'>len</span>() <span class='op'>-</span> <span class='ident'>EXPLICIT_NONCE_LEN</span>;
+    <span class='kw'>let</span> <span class='ident'>payload_len</span> <span class='op'>=</span> <span class='ident'>buf</span>.<span class='ident'>len</span>() <span class='op'>-</span> <span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>;
 
     <span class='comment'>/* make room for tag */</span>
     <span class='kw'>let</span> <span class='ident'>tag_len</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>alg</span>.<span class='ident'>max_overhead_len</span>();
@@ -796,17 +873,13 @@
     <span class='ident'>msg</span>.<span class='ident'>version</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
     <span class='ident'>codec</span>::<span class='ident'>encode_u16</span>(<span class='ident'>payload_len</span> <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
 
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;plain&quot;</span>, <span class='kw-2'>&amp;</span><span class='ident'>buf</span>[<span class='ident'>EXPLICIT_NONCE_LEN</span>..<span class='ident'>want_len</span> <span class='op'>-</span> <span class='ident'>tag_len</span>]);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;aad&quot;</span>, <span class='kw-2'>&amp;</span><span class='ident'>aad</span>);
-
     <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>seal_in_place</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>enc_key</span>,
                                    <span class='kw-2'>&amp;</span><span class='ident'>nonce</span>,
-                                   <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>[<span class='ident'>EXPLICIT_NONCE_LEN</span>..],
+                                   <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>[<span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>..],
                                    <span class='ident'>tag_len</span>,
                                    <span class='kw-2'>&amp;</span><span class='ident'>aad</span>));
 
     <span class='ident'>buf</span>[<span class='number'>0</span>..<span class='number'>8</span>].<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='kw-2'>&amp;</span><span class='ident'>nonce</span>[<span class='number'>4</span>..]).<span class='ident'>unwrap</span>();
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;outgoing&quot;</span>, <span class='kw-2'>&amp;</span><span class='ident'>buf</span>);
 
     <span class='prelude-val'>Ok</span>(<span class='ident'>Message</span> {
       <span class='ident'>typ</span>: <span class='ident'>msg</span>.<span class='ident'>typ</span>.<span class='ident'>clone</span>(),
@@ -828,14 +901,115 @@
       <span class='ident'>dec_salt</span>: [<span class='number'>0u8</span>; <span class='number'>4</span>]
     };
 
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;enc_key&quot;</span>, <span class='ident'>enc_key</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;enc_iv &quot;</span>, <span class='ident'>enc_iv</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;dec_key&quot;</span>, <span class='ident'>dec_key</span>);
-    <span class='ident'>dumphex</span>(<span class='string'>&quot;dec_iv &quot;</span>, <span class='ident'>dec_iv</span>);
-
     <span class='ident'>ret</span>.<span class='ident'>enc_salt</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>enc_iv</span>).<span class='ident'>unwrap</span>();
     <span class='ident'>ret</span>.<span class='ident'>dec_salt</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>dec_iv</span>).<span class='ident'>unwrap</span>();
     <span class='ident'>ret</span>
+  }
+}
+
+<span class='doccomment'>/// The RFC7905/RFC7539 ChaCha20Poly1305 construction</span>
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>ChaCha20Poly1305MessageCipher</span> {
+  <span class='ident'>alg</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>Algorithm</span>,
+  <span class='ident'>enc_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>SealingKey</span>,
+  <span class='ident'>enc_offset</span>: [<span class='ident'>u8</span>; <span class='number'>12</span>],
+  <span class='ident'>dec_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>OpeningKey</span>,
+  <span class='ident'>dec_offset</span>: [<span class='ident'>u8</span>; <span class='number'>12</span>]
+}
+
+<span class='kw'>impl</span> <span class='ident'>ChaCha20Poly1305MessageCipher</span> {
+  <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>alg</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>Algorithm</span>,
+         <span class='ident'>_enc_mac_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>enc_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>enc_iv</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>],
+         <span class='ident'>_dec_mac_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>dec_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>dec_iv</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='ident'>ChaCha20Poly1305MessageCipher</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ret</span> <span class='op'>=</span> <span class='ident'>ChaCha20Poly1305MessageCipher</span> {
+      <span class='ident'>alg</span>: <span class='ident'>alg</span>,
+      <span class='ident'>enc_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>SealingKey</span>::<span class='ident'>new</span>(<span class='ident'>alg</span>, <span class='ident'>enc_key</span>).<span class='ident'>unwrap</span>(),
+      <span class='ident'>enc_offset</span>: [<span class='number'>0u8</span>; <span class='number'>12</span>],
+      <span class='ident'>dec_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>OpeningKey</span>::<span class='ident'>new</span>(<span class='ident'>alg</span>, <span class='ident'>dec_key</span>).<span class='ident'>unwrap</span>(),
+      <span class='ident'>dec_offset</span>: [<span class='number'>0u8</span>; <span class='number'>12</span>]
+    };
+
+    <span class='ident'>ret</span>.<span class='ident'>enc_offset</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>enc_iv</span>).<span class='ident'>unwrap</span>();
+    <span class='ident'>ret</span>.<span class='ident'>dec_offset</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>dec_iv</span>).<span class='ident'>unwrap</span>();
+    <span class='ident'>ret</span>
+  }
+}
+
+<span class='kw'>fn</span> <span class='ident'>xor</span>(<span class='ident'>accum</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> [<span class='ident'>u8</span>], <span class='ident'>offset</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) {
+  <span class='kw'>for</span> <span class='ident'>i</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>accum</span>.<span class='ident'>len</span>() {
+    <span class='ident'>accum</span>[<span class='ident'>i</span>] <span class='op'>^=</span> <span class='ident'>offset</span>[<span class='ident'>i</span>];
+  }
+}
+
+<span class='kw'>const</span> <span class='ident'>CP_OVERHEAD</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>16</span>;
+
+<span class='kw'>impl</span> <span class='ident'>MessageCipher</span> <span class='kw'>for</span> <span class='ident'>ChaCha20Poly1305MessageCipher</span> {
+  <span class='kw'>fn</span> <span class='ident'>decrypt</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>msg</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>, <span class='ident'>seq</span>: <span class='ident'>u64</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Message</span>, ()<span class='op'>&gt;</span> {
+    <span class='kw'>let</span> <span class='ident'>payload</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>msg</span>.<span class='ident'>get_opaque_payload</span>().<span class='ident'>ok_or</span>(()));
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>payload</span>.<span class='ident'>body</span>.<span class='ident'>to_vec</span>();
+
+    <span class='kw'>if</span> <span class='ident'>buf</span>.<span class='ident'>len</span>() <span class='op'>&lt;</span> <span class='ident'>CP_OVERHEAD</span> {
+      <span class='kw'>return</span> <span class='prelude-val'>Err</span>(());
+    }
+
+    <span class='comment'>/* Nonce is offset_96 ^ (0_32 || seq_64) */</span>
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>nonce</span> <span class='op'>=</span> [<span class='number'>0u8</span>; <span class='number'>12</span>];
+    <span class='ident'>codec</span>::<span class='ident'>put_u64</span>(<span class='ident'>seq</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>[<span class='number'>4</span>..]);
+    <span class='ident'>xor</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>dec_offset</span>);
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>aad</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+    <span class='ident'>codec</span>::<span class='ident'>encode_u64</span>(<span class='ident'>seq</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+    <span class='ident'>msg</span>.<span class='ident'>typ</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+    <span class='ident'>msg</span>.<span class='ident'>version</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+    <span class='ident'>codec</span>::<span class='ident'>encode_u16</span>((<span class='ident'>buf</span>.<span class='ident'>len</span>() <span class='op'>-</span> <span class='ident'>CP_OVERHEAD</span>) <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+
+    <span class='kw'>let</span> <span class='ident'>plain_len</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>open_in_place</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>dec_key</span>,
+                                                   <span class='kw-2'>&amp;</span><span class='ident'>nonce</span>,
+                                                   <span class='number'>0</span>,
+                                                   <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>,
+                                                   <span class='kw-2'>&amp;</span><span class='ident'>aad</span>));
+
+    <span class='ident'>buf</span>.<span class='ident'>truncate</span>(<span class='ident'>plain_len</span>);
+
+    <span class='prelude-val'>Ok</span>(
+      <span class='ident'>Message</span> {
+        <span class='ident'>typ</span>: <span class='ident'>msg</span>.<span class='ident'>typ</span>.<span class='ident'>clone</span>(),
+        <span class='ident'>version</span>: <span class='ident'>msg</span>.<span class='ident'>version</span>.<span class='ident'>clone</span>(),
+        <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='ident'>buf</span>)
+      }
+    )
+  }
+
+  <span class='kw'>fn</span> <span class='ident'>encrypt</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>msg</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>, <span class='ident'>seq</span>: <span class='ident'>u64</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>Message</span>, ()<span class='op'>&gt;</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>nonce</span> <span class='op'>=</span> [<span class='number'>0u8</span>; <span class='number'>12</span>];
+    <span class='ident'>codec</span>::<span class='ident'>put_u64</span>(<span class='ident'>seq</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>[<span class='number'>4</span>..]);
+    <span class='ident'>xor</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>, <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>enc_offset</span>);
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+    <span class='ident'>msg</span>.<span class='ident'>payload</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>);
+    <span class='kw'>let</span> <span class='ident'>payload_len</span> <span class='op'>=</span> <span class='ident'>buf</span>.<span class='ident'>len</span>();
+
+    <span class='comment'>/* make room for tag */</span>
+    <span class='kw'>let</span> <span class='ident'>tag_len</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>alg</span>.<span class='ident'>max_overhead_len</span>();
+    <span class='kw'>let</span> <span class='ident'>want_len</span> <span class='op'>=</span> <span class='ident'>buf</span>.<span class='ident'>len</span>() <span class='op'>+</span> <span class='ident'>tag_len</span>;
+    <span class='ident'>buf</span>.<span class='ident'>resize</span>(<span class='ident'>want_len</span>, <span class='number'>0u8</span>);
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>aad</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+    <span class='ident'>codec</span>::<span class='ident'>encode_u64</span>(<span class='ident'>seq</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+    <span class='ident'>msg</span>.<span class='ident'>typ</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+    <span class='ident'>msg</span>.<span class='ident'>version</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+    <span class='ident'>codec</span>::<span class='ident'>encode_u16</span>(<span class='ident'>payload_len</span> <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>aad</span>);
+
+    <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>seal_in_place</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>enc_key</span>,
+                                   <span class='kw-2'>&amp;</span><span class='ident'>nonce</span>,
+                                   <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>,
+                                   <span class='ident'>tag_len</span>,
+                                   <span class='kw-2'>&amp;</span><span class='ident'>aad</span>));
+
+    <span class='prelude-val'>Ok</span>(<span class='ident'>Message</span> {
+      <span class='ident'>typ</span>: <span class='ident'>msg</span>.<span class='ident'>typ</span>.<span class='ident'>clone</span>(),
+      <span class='ident'>version</span>: <span class='ident'>msg</span>.<span class='ident'>version</span>.<span class='ident'>clone</span>(),
+      <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='ident'>buf</span>)
+    })
   }
 }
 

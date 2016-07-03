@@ -315,7 +315,7 @@
   <span class='doccomment'>/// Add a single DER-encoded certificate to the store.</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>add</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>der</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>webpki</span>::<span class='ident'>Error</span><span class='op'>&gt;</span> {
     <span class='kw'>let</span> <span class='ident'>ta</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(
-      <span class='ident'>webpki</span>::<span class='ident'>trust_anchor_util</span>::<span class='ident'>cert_der_as_trust_anchor</span>(<span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>der</span>).<span class='ident'>unwrap</span>())
+      <span class='ident'>webpki</span>::<span class='ident'>trust_anchor_util</span>::<span class='ident'>cert_der_as_trust_anchor</span>(<span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>der</span>))
     );
 
     <span class='kw'>let</span> <span class='ident'>ota</span> <span class='op'>=</span> <span class='ident'>OwnedTrustAnchor</span>::<span class='ident'>from_trust_anchor</span>(<span class='kw-2'>&amp;</span><span class='ident'>ta</span>);
@@ -367,11 +367,11 @@
   }
 
   <span class='comment'>/* EE cert must appear first. */</span>
-  <span class='kw'>let</span> <span class='ident'>ee</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>presented_certs</span>[<span class='number'>0</span>].<span class='ident'>body</span>).<span class='ident'>unwrap</span>();
+  <span class='kw'>let</span> <span class='ident'>ee</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>presented_certs</span>[<span class='number'>0</span>].<span class='ident'>body</span>);
 
   <span class='kw'>let</span> <span class='ident'>chain</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>untrusted</span>::<span class='ident'>Input</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>presented_certs</span>.<span class='ident'>iter</span>()
     .<span class='ident'>skip</span>(<span class='number'>1</span>)
-    .<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>cert</span><span class='op'>|</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='ident'>body</span>).<span class='ident'>unwrap</span>())
+    .<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>cert</span><span class='op'>|</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='ident'>body</span>))
     .<span class='ident'>collect</span>();
 
   <span class='kw'>let</span> <span class='ident'>trustroots</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>webpki</span>::<span class='ident'>TrustAnchor</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>roots</span>.<span class='ident'>roots</span>.<span class='ident'>iter</span>()
@@ -384,7 +384,7 @@
                           <span class='ident'>ee</span>,
                           <span class='ident'>time</span>::<span class='ident'>get_time</span>())
     .<span class='ident'>and_then</span>(<span class='op'>|</span>_<span class='op'>|</span> <span class='ident'>webpki</span>::<span class='ident'>verify_cert_dns_name</span>(<span class='ident'>ee</span>,
-                          <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>dns_name</span>.<span class='ident'>as_bytes</span>()).<span class='ident'>unwrap</span>()))
+                          <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>dns_name</span>.<span class='ident'>as_bytes</span>())))
     .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>))
 }
 
@@ -427,17 +427,17 @@
   <span class='kw'>let</span> <span class='ident'>alg</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>convert_alg</span>(<span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>alg</span>));
 
   <span class='kw'>let</span> <span class='ident'>signed_data</span> <span class='op'>=</span> <span class='ident'>webpki</span>::<span class='ident'>signed_data</span>::<span class='ident'>SignedData</span> {
-    <span class='ident'>data</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>message</span>).<span class='ident'>unwrap</span>(),
-    <span class='ident'>algorithm</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>alg</span>).<span class='ident'>unwrap</span>(),
-    <span class='ident'>signature</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>sig</span>.<span class='ident'>body</span>).<span class='ident'>unwrap</span>()
+    <span class='ident'>data</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>message</span>),
+    <span class='ident'>algorithm</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>alg</span>),
+    <span class='ident'>signature</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>sig</span>.<span class='ident'>body</span>)
   };
 
-  <span class='kw'>let</span> <span class='ident'>cert_in</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='ident'>body</span>).<span class='ident'>unwrap</span>();
+  <span class='kw'>let</span> <span class='ident'>cert_in</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='ident'>body</span>);
   <span class='kw'>let</span> <span class='ident'>cert</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>webpki</span>::<span class='ident'>trust_anchor_util</span>::<span class='ident'>cert_der_as_trust_anchor</span>(<span class='ident'>cert_in</span>)
                   .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>)));
 
   <span class='ident'>webpki</span>::<span class='ident'>signed_data</span>::<span class='ident'>verify_signed_data</span>(<span class='kw-2'>&amp;</span><span class='ident'>SUPPORTED_SIG_ALGS</span>,
-                                          <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>cert</span>.<span class='ident'>spki</span>).<span class='ident'>unwrap</span>(),
+                                          <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>cert</span>.<span class='ident'>spki</span>),
                                           <span class='kw-2'>&amp;</span><span class='ident'>signed_data</span>)
     .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>))
 }

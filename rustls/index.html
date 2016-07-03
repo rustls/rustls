@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/rustls/src/lib.rs.html#1-216' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-0' class='srclink' href='../src/rustls/src/lib.rs.html#1-217' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'>
 <h1 id='rustls---a-modern-tls-library' class='section-header'><a href='#rustls---a-modern-tls-library'>Rustls - a modern TLS library</a></h1>
 <p>Rustls is a TLS library that aims to provide a good level of cryptographic security,
@@ -61,6 +61,7 @@ obsolete cryptography.</p>
 <li>RSA server authentication by servers.</li>
 <li>Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.</li>
 <li>AES128-GCM and AES256-GCM bulk encryption, with safe nonces.</li>
+<li>Chacha20Poly1305 bulk encryption.</li>
 <li>ALPN support.</li>
 <li>SNI support.</li>
 <li>Tunable MTU to make TLS messages match size of underlying transport.</li>
@@ -73,14 +74,13 @@ obsolete cryptography.</p>
 <li>PSK support.</li>
 <li>TLS1.3.</li>
 <li>Resumption via tickets.</li>
-<li>Chacha20Poly1305 bulk encryption.</li>
 <li>OCSP stapling.</li>
 <li>Certificate pinning.</li>
 </ul>
 
 <h2 id='non-features' class='section-header'><a href='#non-features'>Non-features</a></h2>
-<p>The following things are broken, obsolete, badly designed, dangerous and/or insane.
-Rustls will never support:</p>
+<p>The following things are broken, obsolete, badly designed, underspecified,
+dangerous and/or insane. Rustls does not support:</p>
 
 <ul>
 <li>SSL1, SSL2, SSL3, TLS1 or TLS1.1.</li>
@@ -88,6 +88,7 @@ Rustls will never support:</p>
 <li>DES or triple DES.</li>
 <li>EXPORT ciphersuites.</li>
 <li>MAC-then-encrypt ciphersuites.</li>
+<li>Ciphersuites without forward secrecy.</li>
 <li>Renegotiation.</li>
 <li>Client authentication.</li>
 <li>Kerberos.</li>
@@ -97,7 +98,7 @@ Rustls will never support:</p>
 <li>AES-GCM with unsafe nonces.</li>
 </ul>
 
-<p>There are plenty of existing libraries that provide these features should you
+<p>There are plenty of other libraries that provide these features should you
 need them.</p>
 
 <h2 id='design-overview' class='section-header'><a href='#design-overview'>Design Overview</a></h2>

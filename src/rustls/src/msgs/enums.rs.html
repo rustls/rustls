@@ -2059,6 +2059,27 @@
 <span id="2015">2015</span>
 <span id="2016">2016</span>
 <span id="2017">2017</span>
+<span id="2018">2018</span>
+<span id="2019">2019</span>
+<span id="2020">2020</span>
+<span id="2021">2021</span>
+<span id="2022">2022</span>
+<span id="2023">2023</span>
+<span id="2024">2024</span>
+<span id="2025">2025</span>
+<span id="2026">2026</span>
+<span id="2027">2027</span>
+<span id="2028">2028</span>
+<span id="2029">2029</span>
+<span id="2030">2030</span>
+<span id="2031">2031</span>
+<span id="2032">2032</span>
+<span id="2033">2033</span>
+<span id="2034">2034</span>
+<span id="2035">2035</span>
+<span id="2036">2036</span>
+<span id="2037">2037</span>
+<span id="2038">2038</span>
 </pre><pre class='rust '>
 
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::{<span class='ident'>encode_u8</span>, <span class='ident'>read_u8</span>, <span class='ident'>encode_u16</span>, <span class='ident'>read_u16</span>, <span class='ident'>Reader</span>, <span class='ident'>Codec</span>};
@@ -3210,6 +3231,13 @@
   <span class='ident'>TLS_PSK_WITH_AES_256_CCM_8</span>,
   <span class='ident'>TLS_PSK_DHE_WITH_AES_128_CCM_8</span>,
   <span class='ident'>TLS_PSK_DHE_WITH_AES_256_CCM_8</span>,
+  <span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>TLS_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
   <span class='ident'>SSL_RSA_FIPS_WITH_DES_CBC_SHA</span>,
   <span class='ident'>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</span>,
   <span class='ident'>Unknown</span>(<span class='ident'>u16</span>)
@@ -3586,6 +3614,13 @@
       <span class='number'>0xc0a9</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_WITH_AES_256_CCM_8</span>,
       <span class='number'>0xc0aa</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_DHE_WITH_AES_128_CCM_8</span>,
       <span class='number'>0xc0ab</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_DHE_WITH_AES_256_CCM_8</span>,
+      <span class='number'>0xcca8</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+      <span class='number'>0xcca9</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+      <span class='number'>0xccaa</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+      <span class='number'>0xccab</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
+      <span class='number'>0xccac</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
+      <span class='number'>0xccad</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
+      <span class='number'>0xccae</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256</span>,
       <span class='number'>0xfefe</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>SSL_RSA_FIPS_WITH_DES_CBC_SHA</span>,
       <span class='number'>0xfeff</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</span>,
       <span class='ident'>x</span> <span class='op'>=&gt;</span> <span class='ident'>CipherSuite</span>::<span class='ident'>Unknown</span>(<span class='ident'>x</span>)
@@ -3954,6 +3989,13 @@
       <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_WITH_AES_256_CCM_8</span> <span class='op'>=&gt;</span> <span class='number'>0xc0a9</span>,
       <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_DHE_WITH_AES_128_CCM_8</span> <span class='op'>=&gt;</span> <span class='number'>0xc0aa</span>,
       <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_DHE_WITH_AES_256_CCM_8</span> <span class='op'>=&gt;</span> <span class='number'>0xc0ab</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xcca8</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xcca9</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xccaa</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_PSK_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xccab</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xccac</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xccad</span>,
+      <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256</span> <span class='op'>=&gt;</span> <span class='number'>0xccae</span>,
       <span class='ident'>CipherSuite</span>::<span class='ident'>SSL_RSA_FIPS_WITH_DES_CBC_SHA</span> <span class='op'>=&gt;</span> <span class='number'>0xfefe</span>,
       <span class='ident'>CipherSuite</span>::<span class='ident'>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</span> <span class='op'>=&gt;</span> <span class='number'>0xfeff</span>,
       <span class='ident'>CipherSuite</span>::<span class='ident'>Unknown</span>(<span class='ident'>v</span>) <span class='op'>=&gt;</span> <span class='ident'>v</span>

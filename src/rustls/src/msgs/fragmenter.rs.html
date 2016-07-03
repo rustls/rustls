@@ -110,18 +110,32 @@
 <span id="66">66</span>
 <span id="67">67</span>
 <span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
 </pre><pre class='rust '>
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>Message</span>, <span class='ident'>MessagePayload</span>};
 
 <span class='kw'>pub</span> <span class='kw'>const</span> <span class='ident'>MAX_FRAGMENT_LEN</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>16384</span>;
+<span class='kw'>pub</span> <span class='kw'>const</span> <span class='ident'>PACKET_OVERHEAD</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>1</span> <span class='op'>+</span> <span class='number'>2</span> <span class='op'>+</span> <span class='number'>2</span>;
 
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>MessageFragmenter</span> {
   <span class='ident'>max_frag</span>: <span class='ident'>usize</span>
 }
 
 <span class='kw'>impl</span> <span class='ident'>MessageFragmenter</span> {
+  <span class='doccomment'>/// Make a new fragmenter.  `max_fragment_len` is the maximum</span>
+  <span class='doccomment'>/// fragment size that will be produced -- this does not</span>
+  <span class='doccomment'>/// include overhead (so a `max_fragment_len` of 5 will produce</span>
+  <span class='doccomment'>/// 10 byte packets).</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>max_fragment_len</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>MessageFragmenter</span> {
     <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>max_fragment_len</span> <span class='op'>&lt;=</span> <span class='ident'>MAX_FRAGMENT_LEN</span>);
     <span class='ident'>MessageFragmenter</span> {
@@ -149,17 +163,21 @@
 
 <span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>test</span>)]</span>
 <span class='kw'>mod</span> <span class='ident'>tests</span> {
-  <span class='kw'>use</span> <span class='ident'>super</span>::<span class='ident'>MessageFragmenter</span>;
+  <span class='kw'>use</span> <span class='ident'>super</span>::{<span class='ident'>MessageFragmenter</span>, <span class='ident'>PACKET_OVERHEAD</span>};
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>MessagePayload</span>, <span class='ident'>Message</span>};
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>ProtocolVersion</span>};
   <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
 
-  <span class='kw'>fn</span> <span class='ident'>msg_eq</span>(<span class='ident'>mm</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Message</span><span class='op'>&gt;</span>, <span class='ident'>typ</span>: <span class='kw-2'>&amp;</span><span class='ident'>ContentType</span>, <span class='ident'>version</span>: <span class='kw-2'>&amp;</span><span class='ident'>ProtocolVersion</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) {
+  <span class='kw'>fn</span> <span class='ident'>msg_eq</span>(<span class='ident'>mm</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Message</span><span class='op'>&gt;</span>, <span class='ident'>total_len</span>: <span class='ident'>usize</span>, <span class='ident'>typ</span>: <span class='kw-2'>&amp;</span><span class='ident'>ContentType</span>, <span class='ident'>version</span>: <span class='kw-2'>&amp;</span><span class='ident'>ProtocolVersion</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) {
     <span class='kw'>let</span> <span class='ident'>m</span> <span class='op'>=</span> <span class='ident'>mm</span>.<span class='ident'>unwrap</span>();
 
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='ident'>typ</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='ident'>version</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>m</span>.<span class='ident'>get_opaque_payload</span>().<span class='ident'>unwrap</span>().<span class='ident'>body</span>.<span class='ident'>to_vec</span>(), <span class='ident'>bytes</span>.<span class='ident'>to_vec</span>());
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+    <span class='ident'>m</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>total_len</span>, <span class='ident'>buf</span>.<span class='ident'>len</span>());
   }
 
   <span class='attribute'>#[<span class='ident'>test</span>]</span>
@@ -173,9 +191,9 @@
     <span class='kw'>let</span> <span class='ident'>frag</span> <span class='op'>=</span> <span class='ident'>MessageFragmenter</span>::<span class='ident'>new</span>(<span class='number'>3</span>);
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>q</span> <span class='op'>=</span> <span class='ident'>VecDeque</span>::<span class='ident'>new</span>();
     <span class='ident'>frag</span>.<span class='ident'>fragment</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>q</span>);
-    <span class='ident'>msg_eq</span>(<span class='ident'>q</span>.<span class='ident'>pop_front</span>(), <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='string'>b&quot;\x01\x02\x03&quot;</span>);
-    <span class='ident'>msg_eq</span>(<span class='ident'>q</span>.<span class='ident'>pop_front</span>(), <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='string'>b&quot;\x04\x05\x06&quot;</span>);
-    <span class='ident'>msg_eq</span>(<span class='ident'>q</span>.<span class='ident'>pop_front</span>(), <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='string'>b&quot;\x07\x08&quot;</span>);
+    <span class='ident'>msg_eq</span>(<span class='ident'>q</span>.<span class='ident'>pop_front</span>(), <span class='ident'>PACKET_OVERHEAD</span> <span class='op'>+</span> <span class='number'>3</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='string'>b&quot;\x01\x02\x03&quot;</span>);
+    <span class='ident'>msg_eq</span>(<span class='ident'>q</span>.<span class='ident'>pop_front</span>(), <span class='ident'>PACKET_OVERHEAD</span> <span class='op'>+</span> <span class='number'>3</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='string'>b&quot;\x04\x05\x06&quot;</span>);
+    <span class='ident'>msg_eq</span>(<span class='ident'>q</span>.<span class='ident'>pop_front</span>(), <span class='ident'>PACKET_OVERHEAD</span> <span class='op'>+</span> <span class='number'>2</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>typ</span>, <span class='kw-2'>&amp;</span><span class='ident'>m</span>.<span class='ident'>version</span>, <span class='string'>b&quot;\x07\x08&quot;</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>q</span>.<span class='ident'>len</span>(), <span class='number'>0</span>);
   }
 }

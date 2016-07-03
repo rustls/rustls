@@ -512,6 +512,8 @@
 <span id="468">468</span>
 <span id="469">469</span>
 <span id="470">470</span>
+<span id="471">471</span>
+<span id="472">472</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>HandshakeType</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>Compression</span>, <span class='ident'>ProtocolVersion</span>};
@@ -643,6 +645,8 @@
   <span class='kw'>if</span> <span class='ident'>scs</span>.<span class='ident'>is_none</span>() {
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;server chose non-offered ciphersuite&quot;</span>.<span class='ident'>to_string</span>()));
   }
+
+  <span class='macro'>info</span><span class='macro'>!</span>(<span class='string'>&quot;Using ciphersuite {:?}&quot;</span>, <span class='ident'>server_hello</span>.<span class='ident'>cipher_suite</span>);
 
   <span class='comment'>/* Start our handshake hash, and input the client hello we sent, and this reply. */</span>
   <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>handshake_hash</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(

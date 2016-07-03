@@ -108,7 +108,7 @@
 
 <span class='kw'>impl</span> <span class='ident'>RSASigner</span> {
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>der</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>RSASigner</span>, ()<span class='op'>&gt;</span> {
-    <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>ring</span>::<span class='ident'>signature</span>::<span class='ident'>RSAKeyPair</span>::<span class='ident'>from_der</span>(<span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>der</span>).<span class='ident'>unwrap</span>());
+    <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>ring</span>::<span class='ident'>signature</span>::<span class='ident'>RSAKeyPair</span>::<span class='ident'>from_der</span>(<span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>der</span>));
     <span class='ident'>key</span>.<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>k</span><span class='op'>|</span> <span class='ident'>RSASigner</span> { <span class='ident'>key</span>: <span class='ident'>k</span> })
   }
 }

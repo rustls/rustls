@@ -334,6 +334,34 @@
 <span id="290">290</span>
 <span id="291">291</span>
 <span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>CipherSuite</span>, <span class='ident'>HashAlgorithm</span>, <span class='ident'>SignatureAlgorithm</span>, <span class='ident'>NamedCurve</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>SignatureAndHashAlgorithm</span>, <span class='ident'>KeyExchangeAlgorithm</span>};
@@ -346,10 +374,11 @@
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>untrusted</span>;
 
 <span class='attribute'>#[<span class='ident'>allow</span>(<span class='ident'>non_camel_case_types</span>)]</span>
-<span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>)]</span>
+<span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>, <span class='ident'>PartialEq</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>BulkAlgorithm</span> {
   <span class='ident'>AES_128_GCM</span>,
-  <span class='ident'>AES_256_GCM</span>
+  <span class='ident'>AES_256_GCM</span>,
+  <span class='ident'>CHACHA20_POLY1305</span>
 }
 
 <span class='doccomment'>/// The result of a key exchange.  This has our public key,</span>
@@ -409,7 +438,7 @@
     <span class='kw'>let</span> <span class='ident'>secret</span> <span class='op'>=</span> <span class='ident'>ring</span>::<span class='ident'>agreement</span>::<span class='ident'>agree_ephemeral</span>(
       <span class='self'>self</span>.<span class='ident'>privkey</span>,
       <span class='self'>self</span>.<span class='ident'>alg</span>,
-      <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>new</span>(<span class='ident'>peer</span>).<span class='ident'>unwrap</span>(),
+      <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>peer</span>),
       (),
       <span class='op'>|</span><span class='ident'>v</span><span class='op'>|</span> { <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>r</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>(); <span class='ident'>r</span>.<span class='ident'>extend_from_slice</span>(<span class='ident'>v</span>); <span class='prelude-val'>Ok</span>(<span class='ident'>r</span>) }
     );
@@ -497,7 +526,8 @@
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_aead_alg</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>Algorithm</span> {
     <span class='kw'>match</span> <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>bulk</span> {
       <span class='kw-2'>&amp;</span><span class='ident'>BulkAlgorithm</span>::<span class='ident'>AES_128_GCM</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>AES_128_GCM</span>,
-      <span class='kw-2'>&amp;</span><span class='ident'>BulkAlgorithm</span>::<span class='ident'>AES_256_GCM</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>AES_256_GCM</span>
+      <span class='kw-2'>&amp;</span><span class='ident'>BulkAlgorithm</span>::<span class='ident'>AES_256_GCM</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>AES_256_GCM</span>,
+      <span class='kw-2'>&amp;</span><span class='ident'>BulkAlgorithm</span>::<span class='ident'>CHACHA20_POLY1305</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>CHACHA20_POLY1305</span>
     }
   }
 
@@ -505,6 +535,30 @@
     (<span class='self'>self</span>.<span class='ident'>mac_key_len</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>enc_key_len</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>fixed_iv_len</span>) <span class='op'>*</span> <span class='number'>2</span>
   }
 }
+
+<span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
+<span class='ident'>SupportedCipherSuite</span> {
+  <span class='ident'>suite</span>: <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>kx</span>: <span class='ident'>KeyExchangeAlgorithm</span>::<span class='ident'>ECDHE</span>,
+  <span class='ident'>sign</span>: <span class='ident'>SignatureAlgorithm</span>::<span class='ident'>ECDSA</span>,
+  <span class='ident'>bulk</span>: <span class='ident'>BulkAlgorithm</span>::<span class='ident'>CHACHA20_POLY1305</span>,
+  <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA256</span>,
+  <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
+  <span class='ident'>enc_key_len</span>: <span class='number'>32</span>,
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>12</span>
+};
+
+<span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
+<span class='ident'>SupportedCipherSuite</span> {
+  <span class='ident'>suite</span>: <span class='ident'>CipherSuite</span>::<span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='ident'>kx</span>: <span class='ident'>KeyExchangeAlgorithm</span>::<span class='ident'>ECDHE</span>,
+  <span class='ident'>sign</span>: <span class='ident'>SignatureAlgorithm</span>::<span class='ident'>RSA</span>,
+  <span class='ident'>bulk</span>: <span class='ident'>BulkAlgorithm</span>::<span class='ident'>CHACHA20_POLY1305</span>,
+  <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA256</span>,
+  <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
+  <span class='ident'>enc_key_len</span>: <span class='number'>32</span>,
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>12</span>
+};
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
 <span class='ident'>SupportedCipherSuite</span> {
@@ -555,7 +609,9 @@
 };
 
 <span class='doccomment'>/// A list of all the cipher suites supported by rustls.</span>
-<span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>ALL_CIPHERSUITES</span>: [<span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span>; <span class='number'>4</span>] <span class='op'>=</span> [
+<span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>ALL_CIPHERSUITES</span>: [<span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span>; <span class='number'>6</span>] <span class='op'>=</span> [
+  <span class='kw-2'>&amp;</span><span class='ident'>TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</span>,
+  <span class='kw-2'>&amp;</span><span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>,
   <span class='kw-2'>&amp;</span><span class='ident'>TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384</span>,
   <span class='kw-2'>&amp;</span><span class='ident'>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256</span>,
   <span class='kw-2'>&amp;</span><span class='ident'>TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384</span>,

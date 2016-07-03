@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="rustdoc">
-    <meta name="description" content="API documentation for the Rust `KeyExchangeAlgorithm` enum in crate `rustls`.">
-    <meta name="keywords" content="rust, rustlang, rust-lang, KeyExchangeAlgorithm">
+    <meta name="description" content="API documentation for the Rust `PACKET_OVERHEAD` constant in crate `rustls`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, PACKET_OVERHEAD">
 
-    <title>rustls::internal::msgs::handshake::KeyExchangeAlgorithm - Rust</title>
+    <title>rustls::internal::msgs::fragmenter::PACKET_OVERHEAD - Rust</title>
 
     <link rel="stylesheet" type="text/css" href="../../../../rustdoc.css">
     <link rel="stylesheet" type="text/css" href="../../../../main.css">
@@ -28,7 +28,7 @@
 
     <nav class="sidebar">
         
-        <p class='location'><a href='../../../index.html'>rustls</a>::<wbr><a href='../../index.html'>internal</a>::<wbr><a href='../index.html'>msgs</a>::<wbr><a href='index.html'>handshake</a></p><script>window.sidebarCurrent = {name: 'KeyExchangeAlgorithm', ty: 'enum', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+        <p class='location'><a href='../../../index.html'>rustls</a>::<wbr><a href='../../index.html'>internal</a>::<wbr><a href='../index.html'>msgs</a>::<wbr><a href='index.html'>fragmenter</a></p><script>window.sidebarCurrent = {name: 'PACKET_OVERHEAD', ty: 'constant', relpath: ''};</script><script defer src="sidebar-items.js"></script>
     </nav>
 
     <nav class="sub">
@@ -42,21 +42,13 @@
         </form>
     </nav>
 
-    <section id='main' class="content enum">
-<h1 class='fqn'><span class='in-band'>Enum <a href='../../../index.html'>rustls</a>::<wbr><a href='../../index.html'>internal</a>::<wbr><a href='../index.html'>msgs</a>::<wbr><a href='index.html'>handshake</a>::<wbr><a class='enum' href=''>KeyExchangeAlgorithm</a></span><span class='out-of-band'><span id='render-detail'>
+    <section id='main' class="content constant">
+<h1 class='fqn'><span class='in-band'><a href='../../../index.html'>rustls</a>::<wbr><a href='../../index.html'>internal</a>::<wbr><a href='../index.html'>msgs</a>::<wbr><a href='index.html'>fragmenter</a>::<wbr><a class='constant' href=''>PACKET_OVERHEAD</a></span><span class='out-of-band'><span id='render-detail'>
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-2590' class='srclink' href='../../../../src/rustls/src/msgs/handshake.rs.html#649-655' title='goto source code'>[src]</a></span></h1>
-<pre class='rust enum'>pub enum KeyExchangeAlgorithm {
-    DH,
-    DHE,
-    RSA,
-    ECDH,
-    ECDHE,
-}</pre><h2 class='variants'>Variants</h2>
-<table class='variants_table'><tr><td id='variant.DH'><code>DH</code></td><td></td><td></td></tr><tr><td id='variant.DHE'><code>DHE</code></td><td></td><td></td></tr><tr><td id='variant.RSA'><code>RSA</code></td><td></td><td></td></tr><tr><td id='variant.ECDH'><code>ECDH</code></td><td></td><td></td></tr><tr><td id='variant.ECDHE'><code>ECDHE</code></td><td></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.KeyExchangeAlgorithm.html' title='rustls::internal::msgs::handshake::KeyExchangeAlgorithm'>KeyExchangeAlgorithm</a></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>
-</div></section>
+               </span><a id='src-3065' class='srclink' href='../../../../src/rustls/src/msgs/fragmenter.rs.html#6' title='goto source code'>[src]</a></span></h1>
+<pre class='rust const'>pub const PACKET_OVERHEAD: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a><code> = </code><code>1 + 2 + 2</code></pre></section>
     <section id='search' class="content hidden"></section>
 
     <section class="footer"></section>
