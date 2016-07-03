@@ -13,22 +13,56 @@ Rustls is currently in development and hence unstable.
 Lives here: https://jbp.io/rustls/rustls/
 
 # Approach
-Rustls is built to a few rules:
+Rustls is a TLS library that aims to provide a good level of cryptographic security,
+requires no configuration to achieve that security, and provides no unsafe features or
+obsolete cryptography.
 
-- Modern, strong cryptography only:
-  - No RC4, no DES.
-  - No discrete-log DH or DSA.
-- No discredited, little-used or legacy SSL/TLS features:
-  - No CBC-mode mac-then-encrypt ciphersuites.
-  - No unneccessary 'national pride' block ciphers like Camellia or ARIA.
-  - No renegotiation.
-  - No client authentication.
-  - No discrete-log DH.  It's misdesigned in TLS.
-- TLS1.2 or later only.
+## Current features
+
+* TLS1.2 only.
+* ECDSA or RSA server authentication by clients.
+* RSA server authentication by servers.
+* Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
+* AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
+* Chacha20Poly1305 bulk encryption.
+* ALPN support.
+* SNI support.
+* Tunable MTU to make TLS messages match size of underlying transport.
+* Resumption.
+
+## Possible future features
+
+* ECDSA server authentication by servers.
+* PSK support.
+* TLS1.3.
+* Resumption via tickets.
+* OCSP stapling.
+* Certificate pinning.
+
+## Non-features
+
+The following things are broken, obsolete, badly designed, underspecified,
+dangerous and/or insane. Rustls does not support:
+
+* SSL1, SSL2, SSL3, TLS1 or TLS1.1.
+* RC4.
+* DES or triple DES.
+* EXPORT ciphersuites.
+* MAC-then-encrypt ciphersuites.
+* Ciphersuites without forward secrecy.
+* Renegotiation.
+* Client authentication.
+* Kerberos.
+* Compression.
+* Discrete-log Diffie-Hellman.
+* Automatic protocol version downgrade.
+* AES-GCM with unsafe nonces.
+
+There are plenty of other libraries that provide these features should you
+need them.
 
 # Currently implemented
-Client connections work to assorted internet servers.  The
-following ciphersuites are supported:
+The following ciphersuites are supported:
 
 - `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256`
 - `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`
@@ -40,50 +74,49 @@ following ciphersuites are supported:
 For ECDHE, the `nistp256` and `nistp384` curves are supported,
 as well as `curve25519`.
 
-The client test program is named `tlsclient`.  It expects to
-find root certificates in `/etc/ssl/certs/ca-certificates.crt`
-and be given a hostname as its single argument.  It connects
-to that host and issues a basic HTTP request, eg:
+## Client example program
+The client example program is named `tlsclient`.  The interface looks like:
 
 ```
-$ ./target/debug/examples/tlsclient --http mozilla-modern.badssl.com
+Connects to the TLS server at hostname:PORT.  The default PORT
+is 443.  By default, this reads a request from stdin (to EOF)
+before making the connection.  --http replaces this with a
+basic HTTP GET request for /.
+
+If --cafile is not supplied, CA certificates are read from
+`/etc/ssl/certs/ca-certificates.crt'.
+
+Usage:
+  tlsclient [--verbose] [-p PORT] [--http] [--mtu MTU] [--cache CACHE]
+    [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
+  tlsclient --version
+  tlsclient --help
+
+Options:
+    -p, --port PORT     Connect to PORT. Default is 443.
+    --http              Send a basic HTTP GET request for /.
+    --cafile CAFILE     Read root certificates from CAFILE.
+    --suite SUITE       Disable default cipher suite list, and use
+                        SUITE instead.
+    --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
+    --cache CACHE       Save session cache to file CACHE.
+    --verbose           Emit log output.
+    --mtu MTU           Limit outgoing messages to MTU bytes.
+    --version           Show tool version.
+    --help              Show this screen.
+
+```
+
+Some sample runs:
+
+```
+$ ./tlsclient --http mozilla-modern.badssl.com
 HTTP/1.1 200 OK
 Server: nginx/1.6.2 (Ubuntu)
 Date: Wed, 01 Jun 2016 18:44:00 GMT
 Content-Type: text/html
 Content-Length: 644
-Last-Modified: Tue, 12 Apr 2016 01:21:49 GMT
-Connection: close
-ETag: "570c4dad-284"
-Strict-Transport-Security: max-age=15768000
-Cache-Control: no-store
-Accept-Ranges: bytes
-
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="shortcut icon" href="/icons/favicon-green.ico"/>
-  <link rel="apple-touch-icon" href="/icons/icon-green.png"/>
-  <title>mozilla-modern.badssl.com</title>
-  <link rel="stylesheet" href="/style.css">
-  <style>body { background: green; }</style>
-</head>
-<body>
-<div id="content">
-  <h1>
-    mozilla-modern.<br>badssl.com
-  </h1>
-</div>
-
-<div id="footer">
-  This site uses the Mozilla &ldquo;<a href="https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility">Modern</a>&rdquo; TLS configuration.
-</div>
-
-</body>
-</html>
-Plaintext read error: Error { repr: Custom(Custom { kind: ConnectionAborted, error: StringError("CloseNotify alert received") }) }
-Connection closed
+(...)
 ```
 
 or
@@ -92,6 +125,60 @@ or
 $ ./target/debug/examples/tlsclient --http expired.badssl.com
 TLS error: WebPKIError(CertExpired)
 Connection closed
+```
+
+## Server example program
+The server example program is named `tlsserver`.  The interface looks like:
+
+```
+Runs a TLS server on :PORT.  The default PORT is 443.
+
+`echo' mode means the server echoes received data on each connection.
+
+`http' mode means the server blindly sends a HTTP response on each connection.
+
+`forward' means the server forwards plaintext to a connection made to
+localhost:fport.
+
+`--certs' names the full certificate chain, `--key' provides the RSA private
+key.
+
+Usage:
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] echo
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] http
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
+  tlsserver --version
+  tlsserver --help
+
+Options:
+    -p, --port PORT     Listen on PORT. Default is 443.
+    --certs CERTFILE    Read server certificates from CERTFILE.
+                        This should contain PEM-format certificates
+                        in the right order (the first certificate should
+                        certify KEYFILE, the last should be a root CA).
+    --key KEYFILE       Read private key from KEYFILE.  This should be a RSA private key,
+                        in PEM format.
+    --suite SUITE       Disable default cipher suite list, and use
+                        SUITE instead.
+    --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
+    --verbose           Emit log output.
+    --version           Show tool version.
+    --help              Show this screen.
+```
+
+Here's a sample run; we start a TLS echo server, then connect to it with
+openssl and tlsclient:
+
+```
+$ ./tlsserver --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443 echo &
+$ echo hello world | openssl s_client -ign_eof -quiet -connect localhost:8443
+depth=2 CN = ponytown RSA CA
+verify error:num=19:self signed certificate in certificate chain
+hello world
+^C
+$ echo hello world | ./tlsclient --cafile test-ca/rsa/ca.cert -p 8443 localhost
+hello world
+^C
 ```
 
 # License

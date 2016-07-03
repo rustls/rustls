@@ -10,6 +10,7 @@
 //! * RSA server authentication by servers.
 //! * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
 //! * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
+//! * Chacha20Poly1305 bulk encryption.
 //! * ALPN support.
 //! * SNI support.
 //! * Tunable MTU to make TLS messages match size of underlying transport.
@@ -21,20 +22,20 @@
 //! * PSK support.
 //! * TLS1.3.
 //! * Resumption via tickets.
-//! * Chacha20Poly1305 bulk encryption.
 //! * OCSP stapling.
 //! * Certificate pinning.
 //!
 //! ## Non-features
 //!
-//! The following things are broken, obsolete, badly designed, dangerous and/or insane.
-//! Rustls will never support:
+//! The following things are broken, obsolete, badly designed, underspecified,
+//! dangerous and/or insane. Rustls does not support:
 //!
 //! * SSL1, SSL2, SSL3, TLS1 or TLS1.1.
 //! * RC4.
 //! * DES or triple DES.
 //! * EXPORT ciphersuites.
 //! * MAC-then-encrypt ciphersuites.
+//! * Ciphersuites without forward secrecy.
 //! * Renegotiation.
 //! * Client authentication.
 //! * Kerberos.
@@ -43,7 +44,7 @@
 //! * Automatic protocol version downgrade.
 //! * AES-GCM with unsafe nonces.
 //!
-//! There are plenty of existing libraries that provide these features should you
+//! There are plenty of other libraries that provide these features should you
 //! need them.
 //!
 //! ## Design Overview

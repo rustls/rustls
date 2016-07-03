@@ -245,6 +245,9 @@ is 443.  By default, this reads a request from stdin (to EOF)
 before making the connection.  --http replaces this with a
 basic HTTP GET request for /.
 
+If --cafile is not supplied, CA certificates are read from
+`/etc/ssl/certs/ca-certificates.crt'.
+
 Usage:
   tlsclient [--verbose] [-p PORT] [--http] [--mtu MTU] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
   tlsclient --version

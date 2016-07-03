@@ -333,9 +333,9 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] [--proto PROTOCOL...] echo
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] [--proto PROTOCOL...] http
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--mtu MTU] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] echo
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] http
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
   tlsserver --version
   tlsserver --help
 
@@ -351,7 +351,6 @@ Options:
                         SUITE instead.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
     --verbose           Emit log output.
-    --mtu MTU           Limit outgoing messages to MTU bytes.
     --version           Show tool version.
     --help              Show this screen.
 ";
