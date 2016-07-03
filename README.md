@@ -61,18 +61,8 @@ dangerous and/or insane. Rustls does not support:
 There are plenty of other libraries that provide these features should you
 need them.
 
-# Currently implemented
-The following ciphersuites are supported:
-
-- `TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256`
-- `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`
-- `TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384`
-- `TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256`
-- `TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384`
-- `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`
-
-For ECDHE, the `nistp256` and `nistp384` curves are supported,
-as well as `curve25519`.
+# Example code
+There are two example programs which use mio to do asynchronous IO.
 
 ## Client example program
 The client example program is named `tlsclient`.  The interface looks like:
