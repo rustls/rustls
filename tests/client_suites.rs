@@ -1,4 +1,5 @@
-/* Engineer a handshake using each suite. */
+/* Engineer a handshake using each suite supported by both
+ * us and openssl */
 
 #[allow(dead_code)]
 mod common;

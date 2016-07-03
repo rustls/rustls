@@ -9,6 +9,32 @@ pub fn polite() {
   thread::sleep(time::Duration::from_secs(1));
 }
 
+/* Wait until we can connect to localhost:port. */
+fn wait_for_port(port: u16) -> Option<()> {
+  let mut count = 0;
+  loop {
+    thread::sleep(time::Duration::from_millis(100));
+    if let Ok(_) = net::TcpStream::connect(("127.0.0.1", port)) {
+      return Some(())
+    }
+    count += 1;
+    if count == 10 {
+      return None
+    }
+  }
+}
+
+/* Find an unused port */
+fn unused_port(mut port: u16) -> u16 {
+  loop {
+    if let Err(_) = net::TcpStream::connect(("127.0.0.1", port)) {
+      return port;
+    }
+
+    port += 1;
+  }
+}
+
 pub struct TlsClient {
   pub hostname: String,
   pub port: u16,
@@ -182,16 +208,6 @@ pub struct OpenSSLServer {
   pub child: Option<process::Child>
 }
 
-fn unused_port(mut port: u16) -> u16 {
-  loop {
-    if let Err(_) = net::TcpStream::connect(("127.0.0.1", port)) {
-      return port;
-    }
-
-    port += 1;
-  }
-}
-
 impl OpenSSLServer {
   pub fn new(keytype: &str, start_port: u16) -> OpenSSLServer {
     OpenSSLServer {
@@ -251,7 +267,7 @@ impl OpenSSLServer {
     let child = subp.spawn()
       .expect("cannot run openssl server");
 
-    let port_up = self.wait_for_port();
+    let port_up = wait_for_port(self.port);
     if self.soft_fail && port_up.is_none() {
       println!("server did not come up, treating as nonfatal");
     } else {
@@ -277,18 +293,219 @@ impl OpenSSLServer {
     c.cafile(&self.cacert);
     c
   }
+}
 
-  fn wait_for_port(&self) -> Option<()> {
-    let mut count = 0;
-    loop {
-      thread::sleep(time::Duration::from_millis(100));
-      if let Ok(_) = net::TcpStream::connect(("127.0.0.1", self.port)) {
-        return Some(())
-      }
-      count += 1;
-      if count == 10 {
-        return None
+pub struct TlsServer {
+  pub port: u16,
+  pub http: bool,
+  pub echo: bool,
+  pub certs: String,
+  pub key: String,
+  pub cafile: String,
+  pub suites: Vec<String>,
+  pub protos: Vec<String>,
+  used_suites: Vec<String>,
+  used_protos: Vec<String>,
+  pub verbose: bool,
+  pub child: Option<process::Child>
+}
+
+impl TlsServer {
+  pub fn new(port: u16) -> Self {
+    let keytype = "rsa";
+    TlsServer {
+      port: unused_port(port),
+      http: false,
+      echo: false,
+      key: format!("test-ca/{}/end.rsa", keytype),
+      certs: format!("test-ca/{}/end.fullchain", keytype),
+      cafile: format!("test-ca/{}/ca.cert", keytype),
+      verbose: false,
+      suites: Vec::new(),
+      protos: Vec::new(),
+      used_suites: Vec::new(),
+      used_protos: Vec::new(),
+      child: None
+    }
+  }
+
+  pub fn echo_mode(&mut self) -> &mut Self {
+    self.echo = true;
+    self.http = false;
+    self
+  }
+
+  pub fn http_mode(&mut self) -> &mut Self {
+    self.echo = false;
+    self.http = true;
+    self
+  }
+
+  pub fn verbose(&mut self) -> &mut Self {
+    self.verbose = true;
+    self
+  }
+
+  pub fn port(&mut self, port: u16) -> &mut Self {
+    self.port = port;
+    self
+  }
+
+  pub fn suite(&mut self, suite: &str) -> &mut Self {
+    self.suites.push(suite.to_string());
+    self
+  }
+
+  pub fn proto(&mut self, proto: &str) -> &mut Self {
+    self.protos.push(proto.to_string());
+    self
+  }
+
+  pub fn run(&mut self) {
+    let portstring = self.port.to_string();
+    let mut args = Vec::<&str>::new();
+    args.push("--port");
+    args.push(&portstring);
+    args.push("--key");
+    args.push(&self.key);
+    args.push("--certs");
+    args.push(&self.certs);
+
+    self.used_suites = self.suites.clone();
+    for suite in &self.used_suites {
+      args.push("--suite");
+      args.push(suite.as_ref());
+    }
+
+    self.used_protos = self.protos.clone();
+    for proto in &self.used_protos {
+      args.push("--proto");
+      args.push(proto.as_ref());
+    }
+
+    if self.verbose {
+      args.push("--verbose");
+    }
+
+    if self.http {
+      args.push("http");
+    } else if self.echo {
+      args.push("echo");
+    } else {
+      assert!(false, "specify http/echo mode");
+    }
+
+    println!("args {:?}", args);
+
+    let child = process::Command::new("target/debug/examples/tlsserver")
+      .args(&args)
+      .spawn()
+      .expect("cannot run tlsserver");
+
+    wait_for_port(self.port).expect("tlsserver didn't come up");
+    self.child = Some(child);
+  }
+
+  pub fn kill(&mut self) {
+    self.child.as_mut().unwrap().kill().unwrap();
+    self.child = None;
+  }
+
+  pub fn client(&self) -> OpenSSLClient {
+    let mut c = OpenSSLClient::new(self.port);
+    c.cafile(&self.cafile);
+    c
+  }
+}
+
+pub struct OpenSSLClient {
+  pub port: u16,
+  pub cafile: String,
+  pub extra_args: Vec<&'static str>,
+  pub expect_fails: bool,
+  pub expect_output: Vec<String>,
+  pub expect_log: Vec<String>
+}
+
+impl OpenSSLClient {
+  pub fn new(port: u16) -> OpenSSLClient {
+    OpenSSLClient {
+      port: port,
+      cafile: "".to_string(),
+      extra_args: Vec::new(),
+      expect_fails: false,
+      expect_output: Vec::new(),
+      expect_log: Vec::new()
+    }
+  }
+
+  pub fn arg(&mut self, arg: &'static str) -> &mut Self {
+    self.extra_args.push(arg);
+    self
+  }
+
+  pub fn cafile(&mut self, cafile: &str) -> &mut Self {
+    self.cafile = cafile.to_string();
+    self
+  }
+
+  pub fn expect(&mut self, expect: &str) -> &mut Self {
+    self.expect_output.push(expect.to_string());
+    self
+  }
+
+  pub fn expect_log(&mut self, expect: &str) -> &mut Self {
+    self.expect_log.push(expect.to_string());
+    self
+  }
+
+  pub fn fails(&mut self) -> &mut Self {
+    self.expect_fails = true;
+    self
+  }
+
+  pub fn go(&mut self) -> Option<()> {
+    let mut extra_args = Vec::<&'static str>::new();
+    extra_args.extend(&self.extra_args);
+
+    let mut subp = process::Command::new("openssl");
+    subp.arg("s_client")
+        .arg("-host").arg("localhost")
+        .arg("-port").arg(self.port.to_string())
+        .arg("-CAfile").arg(&self.cafile)
+        .args(&extra_args);
+
+    let output = subp.output()
+        .unwrap_or_else(|e| { panic!("failed to execute: {}", e) });
+
+    let stdout_str = unsafe { String::from_utf8_unchecked(output.stdout.clone()) };
+    let stderr_str = unsafe { String::from_utf8_unchecked(output.stderr.clone()) };
+
+    print!("{}", stdout_str);
+    print!("{}", stderr_str);
+
+    for expect in &self.expect_output {
+      if stdout_str.find(expect).is_none() {
+        println!("We expected to find '{}' in the following output:", expect);
+        println!("{:?}", output);
+        panic!("Test failed");
       }
     }
+
+    for expect in &self.expect_log {
+      if stderr_str.find(expect).is_none() {
+        println!("We expected to find '{}' in the following output:", expect);
+        println!("{:?}", output);
+        panic!("Test failed");
+      }
+    }
+
+    if self.expect_fails {
+      assert!(output.status.code().unwrap() != 0);
+    } else {
+      assert!(output.status.success());
+    }
+
+    Some(())
   }
 }

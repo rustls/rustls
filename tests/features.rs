@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 mod common;
 use common::OpenSSLServer;
+use common::TlsServer;
 
 use std::fs;
 
@@ -33,12 +34,42 @@ fn alpn_offer() {
     .go();
 
   // No overlap should fail with an alert.
-  // Except it doesn't, because OpenSSL doesn't work correctly.
+  // (Except it doesn't, because openssl rightly ignores this part
+  // of the RFC.)
   server.client()
     .verbose()
     .proto("mayfair")
     .expect_log("ALPN protocol is None")
     .go();
+
+  server.kill();
+}
+
+#[test]
+fn alpn_agree() {
+  let mut server = TlsServer::new(7100);
+  server.proto("connaught")
+        .proto("bonjour")
+        .proto("egg")
+        .http_mode()
+        .run();
+
+  /* Like openssl we don't fail a handshake for no ALPN overlap. */
+  server.client()
+        .arg("-alpn").arg("coburn")
+        .expect("No ALPN negotiated")
+        .go();
+
+  server.client()
+        .arg("-alpn").arg("bonjour")
+        .expect("ALPN protocol: bonjour")
+        .go();
+
+  /* client pref ignored */
+  server.client()
+        .arg("-alpn").arg("bonjour,connaught")
+        .expect("ALPN protocol: connaught")
+        .go();
 
   server.kill();
 }

@@ -193,5 +193,6 @@ of these licenses, at your option.
 - [x] chacha20poly1305 bulk encryption support.
 - [x] Signing support in *ring* to unblock server work. (done upstream, thanks!)
 - [x] Server support.
-- [ ] Write some more sample programs.
-- [ ] Stabilise and document public API.
+- [x] Write some more sample programs.
+- [x] Stabilise and document public API.
+- [ ] Optimise internals to reduce copies.
