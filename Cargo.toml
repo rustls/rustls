@@ -10,7 +10,7 @@ repository = "https://github.com/ctz/rustls"
 
 [dependencies]
 untrusted = "0.2.0"
-ring = { version = "0.1.0", git = "https://github.com/briansmith/ring" }
+ring = { version = "0.1.0", git = "https://github.com/briansmith/ring", features = ["rsa_signing"] }
 
 # pointed at my fork for the moment
 webpki = { version = "0.1.0", git = "https://github.com/ctz/webpki" }
