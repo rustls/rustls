@@ -7,6 +7,7 @@ mkdir -p rsa/ ecdsa/
 
 openssl req -nodes \
           -x509 \
+          -days 3650 \
           -newkey rsa:8192 \
           -keyout rsa/ca.key \
           -out rsa/ca.cert \
@@ -30,7 +31,7 @@ openssl req -nodes \
           -batch \
           -subj "/CN=testserver.com"
 
-openssl rsa -nodes \
+openssl rsa \
           -in rsa/end.key \
           -out rsa/end.rsa
 
@@ -45,6 +46,7 @@ openssl req -nodes \
           -out ecdsa/ca.cert \
           -sha256 \
           -batch \
+          -days 3650 \
           -subj "/CN=ponytown ECDSA CA"
 
 openssl req -nodes \
@@ -53,6 +55,7 @@ openssl req -nodes \
           -out ecdsa/inter.req \
           -sha256 \
           -batch \
+          -days 3000 \
           -subj "/CN=ponytown ECDSA level 2 intermediate"
 
 openssl req -nodes \
@@ -61,6 +64,7 @@ openssl req -nodes \
           -out ecdsa/end.req \
           -sha256 \
           -batch \
+          -days 2000 \
           -subj "/CN=testserver.com"
 
 for kt in rsa ecdsa ; do
@@ -70,6 +74,7 @@ for kt in rsa ecdsa ; do
             -CA $kt/ca.cert \
             -CAkey $kt/ca.key \
             -sha256 \
+            -days 3650 \
             -set_serial 123 \
             -extensions v3_inter -extfile openssl.cnf
 
@@ -79,6 +84,7 @@ for kt in rsa ecdsa ; do
             -CA $kt/inter.cert \
             -CAkey $kt/inter.key \
             -sha256 \
+            -days 2000 \
             -set_serial 456 \
             -extensions v3_end -extfile openssl.cnf
 
