@@ -1,6 +1,7 @@
 use session::{SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
+use msgs::enums::AlertDescription;
 use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
@@ -316,7 +317,7 @@ impl ServerSessionImpl {
   }
 
   pub fn send_close_notify(&mut self) {
-    server_hs::emit_close_notify(self);
+    self.common.send_warning_alert(AlertDescription::CloseNotify)
   }
 }
 
@@ -379,8 +380,12 @@ impl ServerSession {
   /// Queues a close_notify fatal alert to be sent in the next
   /// `write_tls` call.  This informs the peer that the
   /// connection is being closed.
+  ///
+  /// Returns false if an alert cannot be sent thanks to the
+  /// current state of the connection (ie, they cannot be sent
+  /// during handshake).
   pub fn send_close_notify(&mut self) {
-    self.imp.send_close_notify();
+    self.imp.send_close_notify()
   }
 }
 

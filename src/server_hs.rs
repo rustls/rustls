@@ -1,7 +1,6 @@
 use msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use msgs::enums::{Compression, NamedCurve, ECPointFormat, CipherSuite};
-use msgs::enums::{AlertLevel, AlertDescription, ExtensionType};
-use msgs::alert::AlertMessagePayload;
+use msgs::enums::{ExtensionType, AlertDescription};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
 use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
@@ -185,14 +184,21 @@ fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
   sess.common.send_msg(&m, false);
 }
 
+fn hsfail(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
+  sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
+  TLSError::General(why.to_string())
+}
+
 fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
   if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
+    sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
     return Err(TLSError::General("client does not support TLSv1_2".to_string()));
   }
 
   if !client_hello.compression_methods.contains(&Compression::Null) {
+    sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
     return Err(TLSError::General("client did not offer Null compression".to_string()));
   }
 
@@ -205,9 +211,9 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   let sigalgs_ext = client_hello.get_sigalgs_extension()
     .unwrap_or(&default_sigalgs_ext);
   let eccurves_ext = try!(client_hello.get_eccurves_extension()
-                          .ok_or(TLSError::General("client didn't describe ec curves".to_string())));
+                          .ok_or_else(|| hsfail(sess, "client didn't describe ec curves")));
   let ecpoints_ext = try!(client_hello.get_ecpoints_extension()
-                          .ok_or(TLSError::General("client didn't describe ec points".to_string())));
+                          .ok_or_else(|| hsfail(sess, "client didn't describe ec points")));
 
   debug!("we got a clienthello {:?}", client_hello);
   debug!("sni {:?}", sni_ext);
@@ -216,12 +222,14 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   debug!("ecpoints {:?}", ecpoints_ext);
 
   if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
+    sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
     return Err(TLSError::General("client didn't support uncompressed ec points".to_string()));
   }
 
   /* Choose a certificate. */
   let maybe_cert_key = sess.config.cert_resolver.resolve(sni_ext, sigalgs_ext, eccurves_ext, ecpoints_ext);
   if maybe_cert_key.is_err() {
+    sess.common.send_fatal_alert(AlertDescription::AccessDenied);
     return Err(TLSError::General("no server certificate chain resolved".to_string()));
   }
   let (cert_chain, private_key) = maybe_cert_key.unwrap();
@@ -240,6 +248,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   };
 
   if maybe_ciphersuite.is_none() {
+    sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
     return Err(TLSError::General("no ciphersuites in common".to_string()));
   }
 
@@ -254,17 +263,17 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   let sigalg = try!(
     sess.handshake_data.ciphersuite.as_ref().unwrap()
       .resolve_sig_alg(sigalgs_ext)
-      .ok_or_else(|| TLSError::General("no supported sigalg".to_string()))
+      .ok_or_else(|| hsfail(sess, "no supported sigalg"))
   );
   let eccurve = try!(
     util::first_in_both(EllipticCurveList::supported().as_slice(),
                         eccurves_ext.as_slice())
-      .ok_or_else(|| TLSError::General("no supported curve".to_string()))
+      .ok_or_else(|| hsfail(sess, "no supported curve"))
   );
   let ecpoint = try!(
     util::first_in_both(ECPointFormatList::supported().as_slice(),
                         ecpoints_ext.as_slice())
-      .ok_or_else(|| TLSError::General("no supported point format".to_string()))
+      .ok_or_else(|| hsfail(sess, "no supported point format"))
   );
 
   assert_eq!(ecpoint, ECPointFormat::Uncompressed);
@@ -294,7 +303,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
   let kx = mem::replace(&mut sess.handshake_data.kx_data, None).unwrap();
   let kxd = try!(
     kx.server_complete(&client_kx.body)
-    .ok_or_else(|| TLSError::General("kx failed".to_string()))
+    .ok_or_else(|| hsfail(sess, "kx failed"))
   );
 
   sess.secrets_current.init(&sess.handshake_data.secrets,
@@ -394,19 +403,3 @@ pub static TRAFFIC: Handler = Handler {
   },
   handle: handle_traffic
 };
-
-/* --- Send a close_notify --- */
-pub fn emit_close_notify(sess: &mut ServerSessionImpl) {
-  info!("Sending close_notify");
-  let m = Message {
-    typ: ContentType::Alert,
-    version: ProtocolVersion::TLSv1_2,
-    payload: MessagePayload::Alert(
-      AlertMessagePayload {
-        level: AlertLevel::Warning,
-        description: AlertDescription::CloseNotify
-      }
-    )
-  };
-  sess.common.send_msg(&m, true);
-}

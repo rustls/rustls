@@ -1,5 +1,5 @@
 use msgs::enums::{ContentType, HandshakeType};
-use msgs::enums::{Compression, ProtocolVersion};
+use msgs::enums::{Compression, ProtocolVersion, AlertDescription};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
@@ -112,10 +112,12 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
   debug!("We got ServerHello {:#?}", server_hello);
 
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
+    sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
     return Err(TLSError::General("server does not support TLSv1_2".to_string()));
   }
 
   if server_hello.compression_method != Compression::Null {
+    sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
     return Err(TLSError::General("server chose non-Null compression".to_string()));
   }
 
@@ -126,6 +128,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
   let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
 
   if scs.is_none() {
+    sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
     return Err(TLSError::General("server chose non-offered ciphersuite".to_string()));
   }
 

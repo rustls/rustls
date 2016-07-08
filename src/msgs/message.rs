@@ -5,6 +5,7 @@ use msgs::alert::AlertMessagePayload;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
+use msgs::enums::{AlertLevel, AlertDescription};
 
 #[derive(Debug)]
 pub enum MessagePayload {
@@ -92,6 +93,19 @@ impl Message {
       Some(op.clone())
     } else {
       None
+    }
+  }
+
+  pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message {
+    Message {
+      typ: ContentType::Alert,
+      version: ProtocolVersion::TLSv1_2,
+      payload: MessagePayload::Alert(
+        AlertMessagePayload {
+          level: level,
+          description: desc
+        }
+      )
     }
   }
 }

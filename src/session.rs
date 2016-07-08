@@ -579,4 +579,16 @@ impl SessionCommon {
   pub fn peer_now_encrypting(&mut self) {
     self.peer_encrypting = true;
   }
+
+  pub fn send_warning_alert(&mut self, desc: AlertDescription) {
+    let m = Message::build_alert(AlertLevel::Warning, desc);
+    let enc = self.peer_encrypting;
+    self.send_msg(&m, enc);
+  }
+
+  pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
+    let m = Message::build_alert(AlertLevel::Fatal, desc);
+    let enc = self.peer_encrypting;
+    self.send_msg(&m, enc);
+  }
 }
