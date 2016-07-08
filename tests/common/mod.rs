@@ -232,6 +232,7 @@ impl TlsClient {
 pub struct OpenSSLServer {
   pub port: u16,
   pub http: bool,
+  pub quiet: bool,
   pub key: String,
   pub cert: String,
   pub chain: String,
@@ -246,6 +247,7 @@ impl OpenSSLServer {
     OpenSSLServer {
       port: unused_port(start_port),
       http: true,
+      quiet: true,
       key: format!("test-ca/{}/end.key", keytype),
       cert: format!("test-ca/{}/end.cert", keytype),
       chain: format!("test-ca/{}/end.chain", keytype),
@@ -287,9 +289,12 @@ impl OpenSSLServer {
         .arg("-key").arg(&self.key)
         .arg("-cert").arg(&self.cert)
         .arg("-CAfile").arg(&self.chain)
-        .args(&extra_args)
-        .stdout(process::Stdio::null())
-        .stderr(process::Stdio::null());
+        .args(&extra_args);
+
+    if self.quiet {
+      subp.stdout(process::Stdio::null())
+          .stderr(process::Stdio::null());
+    }
 
     let child = subp.spawn()
       .expect("cannot run openssl server");
@@ -315,6 +320,14 @@ impl OpenSSLServer {
     c.port(self.port);
     c.cafile(&self.cacert);
     c
+  }
+}
+
+impl Drop for OpenSSLServer {
+  fn drop(&mut self) {
+    if self.running() {
+      self.kill();
+    }
   }
 }
 
@@ -434,10 +447,22 @@ impl TlsServer {
     self.child = None;
   }
 
+  pub fn running(&self) -> bool {
+    self.child.is_some()
+  }
+
   pub fn client(&self) -> OpenSSLClient {
     let mut c = OpenSSLClient::new(self.port);
     c.cafile(&self.cafile);
     c
+  }
+}
+
+impl Drop for TlsServer {
+  fn drop(&mut self) {
+    if self.running() {
+      self.kill();
+    }
   }
 }
 
