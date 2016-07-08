@@ -447,18 +447,10 @@
 <span id="403">403</span>
 <span id="404">404</span>
 <span id="405">405</span>
-<span id="406">406</span>
-<span id="407">407</span>
-<span id="408">408</span>
-<span id="409">409</span>
-<span id="410">410</span>
-<span id="411">411</span>
-<span id="412">412</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>HandshakeType</span>, <span class='ident'>ProtocolVersion</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>Compression</span>, <span class='ident'>NamedCurve</span>, <span class='ident'>ECPointFormat</span>, <span class='ident'>CipherSuite</span>};
-<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>AlertLevel</span>, <span class='ident'>AlertDescription</span>, <span class='ident'>ExtensionType</span>};
-<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>alert</span>::<span class='ident'>AlertMessagePayload</span>;
+<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ExtensionType</span>, <span class='ident'>AlertDescription</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>Message</span>, <span class='ident'>MessagePayload</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>base</span>::<span class='ident'>Payload</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>HandshakePayload</span>, <span class='ident'>SupportedSignatureAlgorithms</span>};
@@ -642,14 +634,21 @@
   <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>, <span class='boolval'>false</span>);
 }
 
+<span class='kw'>fn</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ServerSessionImpl</span>, <span class='ident'>why</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='ident'>TLSError</span> {
+  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_fatal_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>HandshakeFailure</span>);
+  <span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='ident'>why</span>.<span class='ident'>to_string</span>())
+}
+
 <span class='kw'>fn</span> <span class='ident'>handle_client_hello</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ServerSessionImpl</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ConnState</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
   <span class='kw'>let</span> <span class='ident'>client_hello</span> <span class='op'>=</span> <span class='macro'>extract_handshake</span><span class='macro'>!</span>(<span class='ident'>m</span>, <span class='ident'>HandshakePayload</span>::<span class='ident'>ClientHello</span>).<span class='ident'>unwrap</span>();
 
   <span class='kw'>if</span> <span class='ident'>client_hello</span>.<span class='ident'>client_version</span>.<span class='ident'>get_u16</span>() <span class='op'>&lt;</span> <span class='ident'>ProtocolVersion</span>::<span class='ident'>TLSv1_2</span>.<span class='ident'>get_u16</span>() {
+    <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_fatal_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>ProtocolVersion</span>);
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;client does not support TLSv1_2&quot;</span>.<span class='ident'>to_string</span>()));
   }
 
   <span class='kw'>if</span> <span class='op'>!</span><span class='ident'>client_hello</span>.<span class='ident'>compression_methods</span>.<span class='ident'>contains</span>(<span class='kw-2'>&amp;</span><span class='ident'>Compression</span>::<span class='ident'>Null</span>) {
+    <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_fatal_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>IllegalParameter</span>);
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;client did not offer Null compression&quot;</span>.<span class='ident'>to_string</span>()));
   }
 
@@ -662,9 +661,9 @@
   <span class='kw'>let</span> <span class='ident'>sigalgs_ext</span> <span class='op'>=</span> <span class='ident'>client_hello</span>.<span class='ident'>get_sigalgs_extension</span>()
     .<span class='ident'>unwrap_or</span>(<span class='kw-2'>&amp;</span><span class='ident'>default_sigalgs_ext</span>);
   <span class='kw'>let</span> <span class='ident'>eccurves_ext</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>client_hello</span>.<span class='ident'>get_eccurves_extension</span>()
-                          .<span class='ident'>ok_or</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;client didn&#39;t describe ec curves&quot;</span>.<span class='ident'>to_string</span>())));
+                          .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>, <span class='string'>&quot;client didn&#39;t describe ec curves&quot;</span>)));
   <span class='kw'>let</span> <span class='ident'>ecpoints_ext</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>client_hello</span>.<span class='ident'>get_ecpoints_extension</span>()
-                          .<span class='ident'>ok_or</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;client didn&#39;t describe ec points&quot;</span>.<span class='ident'>to_string</span>())));
+                          .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>, <span class='string'>&quot;client didn&#39;t describe ec points&quot;</span>)));
 
   <span class='macro'>debug</span><span class='macro'>!</span>(<span class='string'>&quot;we got a clienthello {:?}&quot;</span>, <span class='ident'>client_hello</span>);
   <span class='macro'>debug</span><span class='macro'>!</span>(<span class='string'>&quot;sni {:?}&quot;</span>, <span class='ident'>sni_ext</span>);
@@ -673,12 +672,14 @@
   <span class='macro'>debug</span><span class='macro'>!</span>(<span class='string'>&quot;ecpoints {:?}&quot;</span>, <span class='ident'>ecpoints_ext</span>);
 
   <span class='kw'>if</span> <span class='op'>!</span><span class='ident'>ecpoints_ext</span>.<span class='ident'>contains</span>(<span class='kw-2'>&amp;</span><span class='ident'>ECPointFormat</span>::<span class='ident'>Uncompressed</span>) {
+    <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_fatal_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>IllegalParameter</span>);
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;client didn&#39;t support uncompressed ec points&quot;</span>.<span class='ident'>to_string</span>()));
   }
 
   <span class='comment'>/* Choose a certificate. */</span>
   <span class='kw'>let</span> <span class='ident'>maybe_cert_key</span> <span class='op'>=</span> <span class='ident'>sess</span>.<span class='ident'>config</span>.<span class='ident'>cert_resolver</span>.<span class='ident'>resolve</span>(<span class='ident'>sni_ext</span>, <span class='ident'>sigalgs_ext</span>, <span class='ident'>eccurves_ext</span>, <span class='ident'>ecpoints_ext</span>);
   <span class='kw'>if</span> <span class='ident'>maybe_cert_key</span>.<span class='ident'>is_err</span>() {
+    <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_fatal_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>AccessDenied</span>);
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;no server certificate chain resolved&quot;</span>.<span class='ident'>to_string</span>()));
   }
   <span class='kw'>let</span> (<span class='ident'>cert_chain</span>, <span class='ident'>private_key</span>) <span class='op'>=</span> <span class='ident'>maybe_cert_key</span>.<span class='ident'>unwrap</span>();
@@ -697,6 +698,7 @@
   };
 
   <span class='kw'>if</span> <span class='ident'>maybe_ciphersuite</span>.<span class='ident'>is_none</span>() {
+    <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_fatal_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>HandshakeFailure</span>);
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;no ciphersuites in common&quot;</span>.<span class='ident'>to_string</span>()));
   }
 
@@ -711,17 +713,17 @@
   <span class='kw'>let</span> <span class='ident'>sigalg</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(
     <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>ciphersuite</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>()
       .<span class='ident'>resolve_sig_alg</span>(<span class='ident'>sigalgs_ext</span>)
-      .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;no supported sigalg&quot;</span>.<span class='ident'>to_string</span>()))
+      .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>, <span class='string'>&quot;no supported sigalg&quot;</span>))
   );
   <span class='kw'>let</span> <span class='ident'>eccurve</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(
     <span class='ident'>util</span>::<span class='ident'>first_in_both</span>(<span class='ident'>EllipticCurveList</span>::<span class='ident'>supported</span>().<span class='ident'>as_slice</span>(),
                         <span class='ident'>eccurves_ext</span>.<span class='ident'>as_slice</span>())
-      .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;no supported curve&quot;</span>.<span class='ident'>to_string</span>()))
+      .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>, <span class='string'>&quot;no supported curve&quot;</span>))
   );
   <span class='kw'>let</span> <span class='ident'>ecpoint</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(
     <span class='ident'>util</span>::<span class='ident'>first_in_both</span>(<span class='ident'>ECPointFormatList</span>::<span class='ident'>supported</span>().<span class='ident'>as_slice</span>(),
                         <span class='ident'>ecpoints_ext</span>.<span class='ident'>as_slice</span>())
-      .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;no supported point format&quot;</span>.<span class='ident'>to_string</span>()))
+      .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>, <span class='string'>&quot;no supported point format&quot;</span>))
   );
 
   <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>ecpoint</span>, <span class='ident'>ECPointFormat</span>::<span class='ident'>Uncompressed</span>);
@@ -751,7 +753,7 @@
   <span class='kw'>let</span> <span class='ident'>kx</span> <span class='op'>=</span> <span class='ident'>mem</span>::<span class='ident'>replace</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>kx_data</span>, <span class='prelude-val'>None</span>).<span class='ident'>unwrap</span>();
   <span class='kw'>let</span> <span class='ident'>kxd</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(
     <span class='ident'>kx</span>.<span class='ident'>server_complete</span>(<span class='kw-2'>&amp;</span><span class='ident'>client_kx</span>.<span class='ident'>body</span>)
-    .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;kx failed&quot;</span>.<span class='ident'>to_string</span>()))
+    .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>hsfail</span>(<span class='ident'>sess</span>, <span class='string'>&quot;kx failed&quot;</span>))
   );
 
   <span class='ident'>sess</span>.<span class='ident'>secrets_current</span>.<span class='ident'>init</span>(<span class='kw-2'>&amp;</span><span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>secrets</span>,
@@ -851,22 +853,6 @@
   },
   <span class='ident'>handle</span>: <span class='ident'>handle_traffic</span>
 };
-
-<span class='comment'>/* --- Send a close_notify --- */</span>
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>emit_close_notify</span>(<span class='ident'>sess</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ServerSessionImpl</span>) {
-  <span class='macro'>info</span><span class='macro'>!</span>(<span class='string'>&quot;Sending close_notify&quot;</span>);
-  <span class='kw'>let</span> <span class='ident'>m</span> <span class='op'>=</span> <span class='ident'>Message</span> {
-    <span class='ident'>typ</span>: <span class='ident'>ContentType</span>::<span class='ident'>Alert</span>,
-    <span class='ident'>version</span>: <span class='ident'>ProtocolVersion</span>::<span class='ident'>TLSv1_2</span>,
-    <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>Alert</span>(
-      <span class='ident'>AlertMessagePayload</span> {
-        <span class='ident'>level</span>: <span class='ident'>AlertLevel</span>::<span class='ident'>Warning</span>,
-        <span class='ident'>description</span>: <span class='ident'>AlertDescription</span>::<span class='ident'>CloseNotify</span>
-      }
-    )
-  };
-  <span class='ident'>sess</span>.<span class='ident'>common</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>, <span class='boolval'>true</span>);
-}
 </pre>
 </section>
     <section id='search' class="content hidden"></section>

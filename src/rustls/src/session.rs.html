@@ -624,6 +624,18 @@
 <span id="580">580</span>
 <span id="581">581</span>
 <span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 <span class='kw'>use</span> <span class='ident'>prf</span>;
@@ -1205,6 +1217,18 @@
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>peer_now_encrypting</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
     <span class='self'>self</span>.<span class='ident'>peer_encrypting</span> <span class='op'>=</span> <span class='boolval'>true</span>;
+  }
+
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>send_warning_alert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>desc</span>: <span class='ident'>AlertDescription</span>) {
+    <span class='kw'>let</span> <span class='ident'>m</span> <span class='op'>=</span> <span class='ident'>Message</span>::<span class='ident'>build_alert</span>(<span class='ident'>AlertLevel</span>::<span class='ident'>Warning</span>, <span class='ident'>desc</span>);
+    <span class='kw'>let</span> <span class='ident'>enc</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>peer_encrypting</span>;
+    <span class='self'>self</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>, <span class='ident'>enc</span>);
+  }
+
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>send_fatal_alert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>desc</span>: <span class='ident'>AlertDescription</span>) {
+    <span class='kw'>let</span> <span class='ident'>m</span> <span class='op'>=</span> <span class='ident'>Message</span>::<span class='ident'>build_alert</span>(<span class='ident'>AlertLevel</span>::<span class='ident'>Fatal</span>, <span class='ident'>desc</span>);
+    <span class='kw'>let</span> <span class='ident'>enc</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>peer_encrypting</span>;
+    <span class='self'>self</span>.<span class='ident'>send_msg</span>(<span class='kw-2'>&amp;</span><span class='ident'>m</span>, <span class='ident'>enc</span>);
   }
 }
 </pre>

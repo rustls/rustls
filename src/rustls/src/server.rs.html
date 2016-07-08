@@ -456,10 +456,16 @@
 <span id="412">412</span>
 <span id="413">413</span>
 <span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>session</span>::{<span class='ident'>SessionSecrets</span>, <span class='ident'>SessionCommon</span>};
 <span class='kw'>use</span> <span class='ident'>suites</span>::{<span class='ident'>SupportedCipherSuite</span>, <span class='ident'>ALL_CIPHERSUITES</span>, <span class='ident'>KeyExchange</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>ContentType</span>;
+<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>AlertDescription</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>SessionID</span>, <span class='ident'>CertificatePayload</span>, <span class='ident'>ASN1Cert</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>ServerNameRequest</span>, <span class='ident'>SupportedSignatureAlgorithms</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>EllipticCurveList</span>, <span class='ident'>ECPointFormatList</span>};
@@ -775,7 +781,7 @@
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
-    <span class='ident'>server_hs</span>::<span class='ident'>emit_close_notify</span>(<span class='self'>self</span>);
+    <span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>send_warning_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>CloseNotify</span>)
   }
 }
 
@@ -838,8 +844,12 @@
   <span class='doccomment'>/// Queues a close_notify fatal alert to be sent in the next</span>
   <span class='doccomment'>/// `write_tls` call.  This informs the peer that the</span>
   <span class='doccomment'>/// connection is being closed.</span>
+  <span class='doccomment'>///</span>
+  <span class='doccomment'>/// Returns false if an alert cannot be sent thanks to the</span>
+  <span class='doccomment'>/// current state of the connection (ie, they cannot be sent</span>
+  <span class='doccomment'>/// during handshake).</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
-    <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>send_close_notify</span>();
+    <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>send_close_notify</span>()
   }
 }
 
