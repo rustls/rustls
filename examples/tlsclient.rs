@@ -21,6 +21,8 @@ extern crate rustls;
 
 const CLIENT: mio::Token = mio::Token(0);
 
+/// This encapsulates the TCP-level connection, some connection
+/// state, and the underlying TLS-level session.
 struct TlsClient {
   socket: TcpStream,
   closing: bool,
@@ -32,6 +34,7 @@ impl mio::Handler for TlsClient {
   type Timeout = ();
   type Message = ();
 
+  /// Called by mio each time events we register() for happen.
   fn ready(&mut self,
            event_loop: &mut mio::EventLoop<TlsClient>,
            token: mio::Token,
@@ -54,6 +57,8 @@ impl mio::Handler for TlsClient {
     self.reregister(event_loop);
   }
 
+  /* XXX: this won't be called currently, but could be used in the future
+   * to have timeout behaviour. */
   fn timeout(&mut self,
              _event_loop: &mut mio::EventLoop<TlsClient>,
              _timeout: <TlsClient as mio::Handler>::Timeout) {
@@ -62,6 +67,7 @@ impl mio::Handler for TlsClient {
   }
 }
 
+/// We implement io::Write and pass through to the TLS session
 impl io::Write for TlsClient {
   fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
     self.tls_session.write(bytes)
@@ -95,7 +101,10 @@ impl TlsClient {
     Ok(len)
   }
 
+  /// We're ready to do a read.
   fn do_read(&mut self) {
+    /* Read TLS data.  This fails if the underlying TCP connection
+     * is broken. */
     let rc = self.tls_session.read_tls(&mut self.socket);
     if rc.is_err() {
       println!("TLS read error: {:?}", rc);
@@ -103,6 +112,7 @@ impl TlsClient {
       return;
     }
 
+    /* If we're ready but there's no data: EOF. */
     if rc.unwrap() == 0 {
       println!("EOF");
       self.closing = true;
@@ -110,6 +120,9 @@ impl TlsClient {
       return;
     }
 
+    /* Reading some TLS data might have yielded new TLS
+     * messages to process.  Errors from this indicate
+     * TLS protocol problems and are fatal. */
     let processed = self.tls_session.process_new_packets();
     if processed.is_err() {
       println!("TLS error: {:?}", processed.unwrap_err());
@@ -117,13 +130,18 @@ impl TlsClient {
       return;
     }
 
-    /* We might have new plaintext as a result. */
+    /* Having read some TLS data, and processed any new messages,
+     * we might have new plaintext as a result.
+     *
+     * Read it and then write it to stdout. */
     let mut plaintext = Vec::new();
     let rc = self.tls_session.read_to_end(&mut plaintext);
     if plaintext.len() > 0 {
       io::stdout().write(&plaintext).unwrap();
     }
 
+    /* If that fails, the peer might have started a clean TLS-level
+     * session closure. */
     if rc.is_err() {
       let err = rc.unwrap_err();
       println!("Plaintext read error: {:?}", err);
@@ -153,6 +171,8 @@ impl TlsClient {
       .unwrap();
   }
 
+  /* Use wants_read/wants_write to register for different mio-level
+   * IO readiness events. */
   fn event_set(&self) -> mio::EventSet {
     let rd = self.tls_session.wants_read();
     let wr = self.tls_session.wants_write();
@@ -171,12 +191,20 @@ impl TlsClient {
   }
 }
 
+/// This is an example cache for client session data.
+/// It optionally dumps cached data to a file, but otherwise
+/// is just in-memory.
+///
+/// Note that the contents of such a file are extremely sensitive.
+/// Don't write this stuff to disk in production code.
 struct PersistCache {
   cache: collections::HashMap<Vec<u8>, Vec<u8>>,
   filename: Option<String>
 }
 
 impl PersistCache {
+  /// Make a new cache.  If filename is Some, load the cache
+  /// from it and flush changes back to that file.
   fn new(filename: &Option<String>) -> PersistCache {
     let mut cache = PersistCache { cache: collections::HashMap::new(), filename: filename.clone() };
     if cache.filename.is_some() {
@@ -185,6 +213,7 @@ impl PersistCache {
     cache
   }
 
+  /// If we have a filename, save the cache contents to it.
   fn save(&mut self) {
     use rustls::internal::msgs::codec::Codec;
     use rustls::internal::msgs::base::PayloadU16;
@@ -205,6 +234,7 @@ impl PersistCache {
     }
   }
 
+  /// We have a filename, so replace the cache contents from it.
   fn load(&mut self) {
     use rustls::internal::msgs::codec::{Codec, Reader};
     use rustls::internal::msgs::base::PayloadU16;
@@ -228,12 +258,14 @@ impl PersistCache {
 }
 
 impl rustls::StoresClientSessions for PersistCache {
+  /// put: insert into in-memory cache, and perhaps persist to disk.
   fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
     self.cache.insert(key, value);
     self.save();
     true
   }
 
+  /// get: from in-memory cache
   fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>> {
     self.cache.get(key).map(|x| x.clone())
   }
@@ -280,6 +312,9 @@ struct Args {
   arg_hostname: String
 }
 
+/* TODO: um, well, it turns out that openssl s_client/s_server
+ * that we use for testing doesn't do ipv6.  So we can't actually
+ * test ipv6 and hence kill this. */
 fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
   use std::net::ToSocketAddrs;
 
@@ -293,6 +328,7 @@ fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
   unreachable!("Cannot lookup address");
 }
 
+/// Find a ciphersuite with the given name
 fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
   for suite in rustls::ALL_CIPHERSUITES.iter() {
     let sname = format!("{:?}", suite.suite).to_lowercase();
@@ -305,6 +341,7 @@ fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
   None
 }
 
+/// Make a vector of ciphersuites named in `suites`
 fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSuite> {
   let mut out = Vec::new();
 
@@ -319,6 +356,7 @@ fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSu
   out
 }
 
+/// Build a ClientConfig from our arguments
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
   let mut config = rustls::ClientConfig::new();
 
@@ -345,6 +383,8 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
   Arc::new(config)
 }
 
+/// Parse some arguments, then make a TLS client connection
+/// somewhere.
 fn main() {
   let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
 

@@ -21,15 +21,25 @@ extern crate env_logger;
 
 extern crate rustls;
 
+/* Token for our listening socket. */
 const LISTENER: mio::Token = mio::Token(0);
 
+/* Which mode the server operates in. */
 #[derive(Clone)]
 enum ServerMode {
+  /// Write back received bytes
   Echo,
+
+  /// Do one read, then write a bodged HTTP response and
+  /// cleanly close the connection.
   Http,
+
+  /// Forward traffic to/from given port on localhost.
   Forward(u16)
 }
 
+/// This binds together a TCP listening socket, some outstanding
+/// connections, and a TLS server configuration.
 struct TlsServer {
   server: TcpListener,
   connections: Slab<Connection>,
@@ -59,6 +69,7 @@ impl mio::Handler for TlsServer {
            token: mio::Token,
            events: mio::EventSet) {
     match token {
+      /* Our listening socket: we have a new connection. */
       LISTENER => {
         match self.server.accept() {
           Ok(Some((socket, addr))) => {
@@ -81,6 +92,7 @@ impl mio::Handler for TlsServer {
         }
       }
 
+      /* A connection socket. */
       _ => {
         self.connections[token].ready(event_loop, events);
 
@@ -93,6 +105,11 @@ impl mio::Handler for TlsServer {
   }
 }
 
+/// This is a connection which has been accepted by the server,
+/// and is currently being served.
+///
+/// It has a TCP-level stream, a TLS-level session, and some
+/// other state/metadata.
 struct Connection {
   socket: TcpStream,
   token: mio::Token,
@@ -103,6 +120,7 @@ struct Connection {
   sent_http_response: bool
 }
 
+/// Open a plaintext TCP-level connection for forwarded connections.
 fn open_back(mode: &ServerMode) -> Option<TcpStream> {
   match *mode {
     ServerMode::Forward(ref port) => {
@@ -130,9 +148,13 @@ impl Connection {
     }
   }
 
+  /// We're a connection, and we have something to do.
   fn ready(&mut self,
            event_loop: &mut mio::EventLoop<TlsServer>,
            events: mio::EventSet) {
+    /* If we're readable: read some TLS.  Then
+     * see if that yielded new plaintext.  Then
+     * see if the backend is readable too. */
     if events.is_readable() {
       self.do_tls_read();
       self.try_plain_read();
@@ -151,6 +173,7 @@ impl Connection {
     }
   }
 
+  /// Close the backend connection for forwarded sessions.
   fn close_back(&mut self) {
     if self.back.is_some() {
       let back = self.back.as_mut().unwrap();
@@ -160,6 +183,7 @@ impl Connection {
   }
 
   fn do_tls_read(&mut self) {
+    /* Read some TLS data. */
     let rc = self.tls_session.read_tls(&mut self.socket);
     if rc.is_err() {
       let err = rc.unwrap_err();
@@ -179,6 +203,7 @@ impl Connection {
       return;
     }
 
+    /* Process newly-received TLS messages. */
     let processed = self.tls_session.process_new_packets();
     if processed.is_err() {
       error!("cannot process packet: {:?}", processed);
@@ -188,23 +213,19 @@ impl Connection {
   }
 
   fn try_plain_read(&mut self) {
-    let mut buf = [0u8; 1024];
+    /* Read and process all available plaintext. */
+    let mut buf = Vec::new();
 
-    loop {
-      let rc = self.tls_session.read(&mut buf);
-      if rc.is_err() {
-        error!("plaintext read failed: {:?}", rc);
-        self.closing = true;
-        return;
-      }
+    let rc = self.tls_session.read_to_end(&mut buf);
+    if rc.is_err() {
+      error!("plaintext read failed: {:?}", rc);
+      self.closing = true;
+      return;
+    }
 
-      let len = rc.unwrap();
-      if len == 0 {
-        return;
-      }
-
-      info!("plaintext read {:?}", len);
-      self.incoming_plaintext(&buf[..len]);
+    if buf.len() > 0 {
+      info!("plaintext read {:?}", buf.len());
+      self.incoming_plaintext(&buf);
     }
   }
 
@@ -213,6 +234,7 @@ impl Connection {
       return;
     }
 
+    /* Try a non-blocking read. */
     let mut buf = [0u8; 1024];
     let back = self.back.as_mut().unwrap();
     let rc = back.try_read(&mut buf);
@@ -225,6 +247,8 @@ impl Connection {
 
     let maybe_len = rc.unwrap();
 
+    /* If we have a successful but empty read, that's an EOF.
+     * Otherwise, we shove the data into the TLS session. */
     match maybe_len {
       Some(len) if len == 0 => { info!("back eof"); self.closing = true; },
       Some(len) => { self.tls_session.write(&buf[..len]).unwrap(); },
@@ -232,6 +256,7 @@ impl Connection {
     };
   }
 
+  /// Process some amount of received plaintext.
   fn incoming_plaintext(&mut self, buf: &[u8]) {
     match self.mode {
       ServerMode::Echo => { self.tls_session.write(buf).unwrap(); },
@@ -301,6 +326,8 @@ impl Connection {
     }
   }
 
+  /// What IO events we're currently waiting for,
+  /// based on wants_read/wants_write.
   fn event_set(&self) -> mio::EventSet {
     let rd = self.tls_session.wants_read();
     let wr = self.tls_session.wants_write();
@@ -364,7 +391,6 @@ struct Args {
   flag_verbose: bool,
   flag_suite: Vec<String>,
   flag_proto: Vec<String>,
-  flag_mtu: Option<usize>,
   flag_certs: Option<String>,
   flag_key: Option<String>,
   arg_fport: Option<u16>
