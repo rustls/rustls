@@ -100,7 +100,13 @@ pub struct SupportedCipherSuite {
   pub sign: SignatureAlgorithm,
   pub mac_key_len: usize,
   pub enc_key_len: usize,
-  pub fixed_iv_len: usize
+  pub fixed_iv_len: usize,
+
+  /// This is a non-standard extension which extends the
+  /// key block to provide an initial explicit nonce offset,
+  /// in a deterministic and safe way.  GCM needs this,
+  /// chacha20poly1305 works this way by design.
+  pub explicit_nonce_len: usize
 }
 
 impl PartialEq for SupportedCipherSuite {
@@ -167,7 +173,7 @@ impl SupportedCipherSuite {
   }
 
   pub fn key_block_len(&self) -> usize {
-    (self.mac_key_len + self.enc_key_len + self.fixed_iv_len) * 2
+    (self.mac_key_len + self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
   }
 }
 
@@ -180,7 +186,8 @@ SupportedCipherSuite {
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
   enc_key_len: 32,
-  fixed_iv_len: 12
+  fixed_iv_len: 12,
+  explicit_nonce_len: 0
 };
 
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
@@ -192,7 +199,8 @@ SupportedCipherSuite {
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
   enc_key_len: 32,
-  fixed_iv_len: 12
+  fixed_iv_len: 12,
+  explicit_nonce_len: 0
 };
 
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
@@ -204,7 +212,8 @@ SupportedCipherSuite {
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
   enc_key_len: 16,
-  fixed_iv_len: 4
+  fixed_iv_len: 4,
+  explicit_nonce_len: 8
 };
 
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
@@ -216,7 +225,8 @@ SupportedCipherSuite {
   hash: HashAlgorithm::SHA384,
   mac_key_len: 0,
   enc_key_len: 32,
-  fixed_iv_len: 4
+  fixed_iv_len: 4,
+  explicit_nonce_len: 8
 };
 
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
@@ -228,7 +238,8 @@ SupportedCipherSuite {
   hash: HashAlgorithm::SHA256,
   mac_key_len: 0,
   enc_key_len: 16,
-  fixed_iv_len: 4
+  fixed_iv_len: 4,
+  explicit_nonce_len: 8
 };
 
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
@@ -240,7 +251,8 @@ SupportedCipherSuite {
   hash: HashAlgorithm::SHA384,
   mac_key_len: 0,
   enc_key_len: 32,
-  fixed_iv_len: 4
+  fixed_iv_len: 4,
+  explicit_nonce_len: 8
 };
 
 /// A list of all the cipher suites supported by rustls.
@@ -276,6 +288,8 @@ pub fn choose_ciphersuite_preferring_server(
   None
 }
 
+/// Return a list of the ciphersuites in `all` with the suites
+/// incompatible with SignatureAlgorithm `sigalg` removed.
 pub fn reduce_given_sigalg(all: &Vec<&'static SupportedCipherSuite>, sigalg: &SignatureAlgorithm)
   -> Vec<&'static SupportedCipherSuite> {
   all.iter()

@@ -141,7 +141,8 @@ impl MessageCipher {
     let client_write_key = &key_block[offs..offs+scs.enc_key_len]; offs += scs.enc_key_len;
     let server_write_key = &key_block[offs..offs+scs.enc_key_len]; offs += scs.enc_key_len;
     let client_write_iv = &key_block[offs..offs+scs.fixed_iv_len]; offs += scs.fixed_iv_len;
-    let server_write_iv = &key_block[offs..offs+scs.fixed_iv_len];
+    let server_write_iv = &key_block[offs..offs+scs.fixed_iv_len]; offs += scs.fixed_iv_len;
+    let explicit_nonce_offs = &key_block[offs..offs+scs.explicit_nonce_len];
 
     let (write_mac_key, write_key, write_iv) = if secrets.we_are_client {
       (client_write_mac_key, client_write_key, client_write_iv)
@@ -164,7 +165,8 @@ impl MessageCipher {
     } else {
       Box::new(GCMMessageCipher::new(aead_alg,
                                      write_mac_key, write_key, write_iv,
-                                     read_mac_key, read_key, read_iv))
+                                     read_mac_key, read_key, read_iv,
+                                     explicit_nonce_offs))
     }
   }
 }
@@ -177,7 +179,8 @@ pub struct GCMMessageCipher {
   enc_key: ring::aead::SealingKey,
   enc_salt: [u8; 4],
   dec_key: ring::aead::OpeningKey,
-  dec_salt: [u8; 4]
+  dec_salt: [u8; 4],
+  nonce_offset: [u8; 8]
 }
 
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
@@ -224,11 +227,14 @@ impl MessageCipher for GCMMessageCipher {
      * from the master-secret, and a 64-bit explicit part,
      * with no specified construction.  Thanks for that.
      *
-     * We use the sequence number, which is the only safe-
-     * by-construction option. */
+     * We use the same construction as TLS1.3/ChaCha20Poly1305:
+     * a starting point extracted from the key block, xored with
+     * the sequence number.
+     */
     let mut nonce = [0u8; 12];
     nonce.as_mut().write(&self.enc_salt).unwrap();
     codec::put_u64(seq, &mut nonce[4..]);
+    xor(&mut nonce[4..], &self.nonce_offset);
 
     let mut buf = Vec::new();
     buf.resize(GCM_EXPLICIT_NONCE_LEN, 0u8);
@@ -265,17 +271,24 @@ impl MessageCipher for GCMMessageCipher {
 impl GCMMessageCipher {
   fn new(alg: &'static ring::aead::Algorithm,
          _enc_mac_key: &[u8], enc_key: &[u8], enc_iv: &[u8],
-         _dec_mac_key: &[u8], dec_key: &[u8], dec_iv: &[u8]) -> GCMMessageCipher {
+         _dec_mac_key: &[u8], dec_key: &[u8], dec_iv: &[u8],
+         nonce_offset: &[u8]) -> GCMMessageCipher {
     let mut ret = GCMMessageCipher {
       alg: alg,
       enc_key: ring::aead::SealingKey::new(alg, enc_key).unwrap(),
       enc_salt: [0u8; 4],
       dec_key: ring::aead::OpeningKey::new(alg, dec_key).unwrap(),
-      dec_salt: [0u8; 4]
+      dec_salt: [0u8; 4],
+      nonce_offset: [0u8; 8]
     };
+
+    assert_eq!(enc_iv.len(), 4);
+    assert_eq!(dec_iv.len(), 4);
+    assert_eq!(nonce_offset.len(), 8);
 
     ret.enc_salt.as_mut().write(enc_iv).unwrap();
     ret.dec_salt.as_mut().write(dec_iv).unwrap();
+    ret.nonce_offset.as_mut().write(nonce_offset).unwrap();
     ret
   }
 }
