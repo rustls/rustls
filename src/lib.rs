@@ -103,7 +103,7 @@
 //!   .unwrap();
 //! ```
 //!
-//! Now we can make a session.  You need to provide the server's hostname we
+//! Now we can make a session.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
 //! ```no_run
