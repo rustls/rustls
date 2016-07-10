@@ -362,6 +362,20 @@
 <span id="318">318</span>
 <span id="319">319</span>
 <span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>CipherSuite</span>, <span class='ident'>HashAlgorithm</span>, <span class='ident'>SignatureAlgorithm</span>, <span class='ident'>NamedCurve</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>SignatureAndHashAlgorithm</span>, <span class='ident'>KeyExchangeAlgorithm</span>};
@@ -465,7 +479,13 @@
   <span class='kw'>pub</span> <span class='ident'>sign</span>: <span class='ident'>SignatureAlgorithm</span>,
   <span class='kw'>pub</span> <span class='ident'>mac_key_len</span>: <span class='ident'>usize</span>,
   <span class='kw'>pub</span> <span class='ident'>enc_key_len</span>: <span class='ident'>usize</span>,
-  <span class='kw'>pub</span> <span class='ident'>fixed_iv_len</span>: <span class='ident'>usize</span>
+  <span class='kw'>pub</span> <span class='ident'>fixed_iv_len</span>: <span class='ident'>usize</span>,
+
+  <span class='doccomment'>/// This is a non-standard extension which extends the</span>
+  <span class='doccomment'>/// key block to provide an initial explicit nonce offset,</span>
+  <span class='doccomment'>/// in a deterministic and safe way.  GCM needs this,</span>
+  <span class='doccomment'>/// chacha20poly1305 works this way by design.</span>
+  <span class='kw'>pub</span> <span class='ident'>explicit_nonce_len</span>: <span class='ident'>usize</span>
 }
 
 <span class='kw'>impl</span> <span class='ident'>PartialEq</span> <span class='kw'>for</span> <span class='ident'>SupportedCipherSuite</span> {
@@ -532,7 +552,7 @@
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>key_block_len</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
-    (<span class='self'>self</span>.<span class='ident'>mac_key_len</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>enc_key_len</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>fixed_iv_len</span>) <span class='op'>*</span> <span class='number'>2</span>
+    (<span class='self'>self</span>.<span class='ident'>mac_key_len</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>enc_key_len</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>fixed_iv_len</span>) <span class='op'>*</span> <span class='number'>2</span> <span class='op'>+</span> <span class='self'>self</span>.<span class='ident'>explicit_nonce_len</span>
   }
 }
 
@@ -545,7 +565,8 @@
   <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA256</span>,
   <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
   <span class='ident'>enc_key_len</span>: <span class='number'>32</span>,
-  <span class='ident'>fixed_iv_len</span>: <span class='number'>12</span>
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>12</span>,
+  <span class='ident'>explicit_nonce_len</span>: <span class='number'>0</span>
 };
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
@@ -557,7 +578,8 @@
   <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA256</span>,
   <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
   <span class='ident'>enc_key_len</span>: <span class='number'>32</span>,
-  <span class='ident'>fixed_iv_len</span>: <span class='number'>12</span>
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>12</span>,
+  <span class='ident'>explicit_nonce_len</span>: <span class='number'>0</span>
 };
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
@@ -569,7 +591,8 @@
   <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA256</span>,
   <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
   <span class='ident'>enc_key_len</span>: <span class='number'>16</span>,
-  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>,
+  <span class='ident'>explicit_nonce_len</span>: <span class='number'>8</span>
 };
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
@@ -581,7 +604,8 @@
   <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA384</span>,
   <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
   <span class='ident'>enc_key_len</span>: <span class='number'>32</span>,
-  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>,
+  <span class='ident'>explicit_nonce_len</span>: <span class='number'>8</span>
 };
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
@@ -593,7 +617,8 @@
   <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA256</span>,
   <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
   <span class='ident'>enc_key_len</span>: <span class='number'>16</span>,
-  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>,
+  <span class='ident'>explicit_nonce_len</span>: <span class='number'>8</span>
 };
 
 <span class='kw'>pub</span> <span class='kw'>static</span> <span class='ident'>TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384</span>: <span class='ident'>SupportedCipherSuite</span> <span class='op'>=</span>
@@ -605,7 +630,8 @@
   <span class='ident'>hash</span>: <span class='ident'>HashAlgorithm</span>::<span class='ident'>SHA384</span>,
   <span class='ident'>mac_key_len</span>: <span class='number'>0</span>,
   <span class='ident'>enc_key_len</span>: <span class='number'>32</span>,
-  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>
+  <span class='ident'>fixed_iv_len</span>: <span class='number'>4</span>,
+  <span class='ident'>explicit_nonce_len</span>: <span class='number'>8</span>
 };
 
 <span class='doccomment'>/// A list of all the cipher suites supported by rustls.</span>
@@ -641,6 +667,8 @@
   <span class='prelude-val'>None</span>
 }
 
+<span class='doccomment'>/// Return a list of the ciphersuites in `all` with the suites</span>
+<span class='doccomment'>/// incompatible with SignatureAlgorithm `sigalg` removed.</span>
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>reduce_given_sigalg</span>(<span class='ident'>all</span>: <span class='kw-2'>&amp;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span><span class='op'>&gt;</span>, <span class='ident'>sigalg</span>: <span class='kw-2'>&amp;</span><span class='ident'>SignatureAlgorithm</span>)
   <span class='op'>-&gt;</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span><span class='op'>&gt;</span> {
   <span class='ident'>all</span>.<span class='ident'>iter</span>()

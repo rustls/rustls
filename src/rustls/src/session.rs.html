@@ -636,6 +636,19 @@
 <span id="592">592</span>
 <span id="593">593</span>
 <span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
+<span id="607">607</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 <span class='kw'>use</span> <span class='ident'>prf</span>;
@@ -780,7 +793,8 @@
     <span class='kw'>let</span> <span class='ident'>client_write_key</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>enc_key_len</span>]; <span class='ident'>offs</span> <span class='op'>+=</span> <span class='ident'>scs</span>.<span class='ident'>enc_key_len</span>;
     <span class='kw'>let</span> <span class='ident'>server_write_key</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>enc_key_len</span>]; <span class='ident'>offs</span> <span class='op'>+=</span> <span class='ident'>scs</span>.<span class='ident'>enc_key_len</span>;
     <span class='kw'>let</span> <span class='ident'>client_write_iv</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>]; <span class='ident'>offs</span> <span class='op'>+=</span> <span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>;
-    <span class='kw'>let</span> <span class='ident'>server_write_iv</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>];
+    <span class='kw'>let</span> <span class='ident'>server_write_iv</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>]; <span class='ident'>offs</span> <span class='op'>+=</span> <span class='ident'>scs</span>.<span class='ident'>fixed_iv_len</span>;
+    <span class='kw'>let</span> <span class='ident'>explicit_nonce_offs</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>key_block</span>[<span class='ident'>offs</span>..<span class='ident'>offs</span><span class='op'>+</span><span class='ident'>scs</span>.<span class='ident'>explicit_nonce_len</span>];
 
     <span class='kw'>let</span> (<span class='ident'>write_mac_key</span>, <span class='ident'>write_key</span>, <span class='ident'>write_iv</span>) <span class='op'>=</span> <span class='kw'>if</span> <span class='ident'>secrets</span>.<span class='ident'>we_are_client</span> {
       (<span class='ident'>client_write_mac_key</span>, <span class='ident'>client_write_key</span>, <span class='ident'>client_write_iv</span>)
@@ -803,7 +817,8 @@
     } <span class='kw'>else</span> {
       <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>GCMMessageCipher</span>::<span class='ident'>new</span>(<span class='ident'>aead_alg</span>,
                                      <span class='ident'>write_mac_key</span>, <span class='ident'>write_key</span>, <span class='ident'>write_iv</span>,
-                                     <span class='ident'>read_mac_key</span>, <span class='ident'>read_key</span>, <span class='ident'>read_iv</span>))
+                                     <span class='ident'>read_mac_key</span>, <span class='ident'>read_key</span>, <span class='ident'>read_iv</span>,
+                                     <span class='ident'>explicit_nonce_offs</span>))
     }
   }
 }
@@ -816,7 +831,8 @@
   <span class='ident'>enc_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>SealingKey</span>,
   <span class='ident'>enc_salt</span>: [<span class='ident'>u8</span>; <span class='number'>4</span>],
   <span class='ident'>dec_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>OpeningKey</span>,
-  <span class='ident'>dec_salt</span>: [<span class='ident'>u8</span>; <span class='number'>4</span>]
+  <span class='ident'>dec_salt</span>: [<span class='ident'>u8</span>; <span class='number'>4</span>],
+  <span class='ident'>nonce_offset</span>: [<span class='ident'>u8</span>; <span class='number'>8</span>]
 }
 
 <span class='kw'>const</span> <span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>8</span>;
@@ -863,11 +879,14 @@
      * from the master-secret, and a 64-bit explicit part,
      * with no specified construction.  Thanks for that.
      *
-     * We use the sequence number, which is the only safe-
-     * by-construction option. */</span>
+     * We use the same construction as TLS1.3/ChaCha20Poly1305:
+     * a starting point extracted from the key block, xored with
+     * the sequence number.
+     */</span>
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>nonce</span> <span class='op'>=</span> [<span class='number'>0u8</span>; <span class='number'>12</span>];
     <span class='ident'>nonce</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>enc_salt</span>).<span class='ident'>unwrap</span>();
     <span class='ident'>codec</span>::<span class='ident'>put_u64</span>(<span class='ident'>seq</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>[<span class='number'>4</span>..]);
+    <span class='ident'>xor</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>nonce</span>[<span class='number'>4</span>..], <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>nonce_offset</span>);
 
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
     <span class='ident'>buf</span>.<span class='ident'>resize</span>(<span class='ident'>GCM_EXPLICIT_NONCE_LEN</span>, <span class='number'>0u8</span>);
@@ -904,17 +923,24 @@
 <span class='kw'>impl</span> <span class='ident'>GCMMessageCipher</span> {
   <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>alg</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>Algorithm</span>,
          <span class='ident'>_enc_mac_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>enc_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>enc_iv</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>],
-         <span class='ident'>_dec_mac_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>dec_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>dec_iv</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='ident'>GCMMessageCipher</span> {
+         <span class='ident'>_dec_mac_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>dec_key</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>dec_iv</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>],
+         <span class='ident'>nonce_offset</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='ident'>GCMMessageCipher</span> {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ret</span> <span class='op'>=</span> <span class='ident'>GCMMessageCipher</span> {
       <span class='ident'>alg</span>: <span class='ident'>alg</span>,
       <span class='ident'>enc_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>SealingKey</span>::<span class='ident'>new</span>(<span class='ident'>alg</span>, <span class='ident'>enc_key</span>).<span class='ident'>unwrap</span>(),
       <span class='ident'>enc_salt</span>: [<span class='number'>0u8</span>; <span class='number'>4</span>],
       <span class='ident'>dec_key</span>: <span class='ident'>ring</span>::<span class='ident'>aead</span>::<span class='ident'>OpeningKey</span>::<span class='ident'>new</span>(<span class='ident'>alg</span>, <span class='ident'>dec_key</span>).<span class='ident'>unwrap</span>(),
-      <span class='ident'>dec_salt</span>: [<span class='number'>0u8</span>; <span class='number'>4</span>]
+      <span class='ident'>dec_salt</span>: [<span class='number'>0u8</span>; <span class='number'>4</span>],
+      <span class='ident'>nonce_offset</span>: [<span class='number'>0u8</span>; <span class='number'>8</span>]
     };
+
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>enc_iv</span>.<span class='ident'>len</span>(), <span class='number'>4</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>dec_iv</span>.<span class='ident'>len</span>(), <span class='number'>4</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>nonce_offset</span>.<span class='ident'>len</span>(), <span class='number'>8</span>);
 
     <span class='ident'>ret</span>.<span class='ident'>enc_salt</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>enc_iv</span>).<span class='ident'>unwrap</span>();
     <span class='ident'>ret</span>.<span class='ident'>dec_salt</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>dec_iv</span>).<span class='ident'>unwrap</span>();
+    <span class='ident'>ret</span>.<span class='ident'>nonce_offset</span>.<span class='ident'>as_mut</span>().<span class='ident'>write</span>(<span class='ident'>nonce_offset</span>).<span class='ident'>unwrap</span>();
     <span class='ident'>ret</span>
   }
 }
