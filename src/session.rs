@@ -127,11 +127,11 @@ pub trait MessageCipher {
 }
 
 impl MessageCipher {
-  pub fn invalid() -> Box<MessageCipher> {
+  pub fn invalid() -> Box<MessageCipher + Send + Sync> {
     Box::new(InvalidMessageCipher {})
   }
 
-  pub fn new(scs: &'static SupportedCipherSuite, secrets: &SessionSecrets) -> Box<MessageCipher> {
+  pub fn new(scs: &'static SupportedCipherSuite, secrets: &SessionSecrets) -> Box<MessageCipher + Send + Sync> {
     /* Make a key block, and chop it up. */
     let key_block = secrets.make_key_block(scs.key_block_len());
 
@@ -414,7 +414,7 @@ impl MessageCipher for InvalidMessageCipher {
 
 /* --- Common (to client and server) session functions --- */
 pub struct SessionCommon {
-  message_cipher: Box<MessageCipher>,
+  message_cipher: Box<MessageCipher + Send + Sync>,
   write_seq: u64,
   read_seq: u64,
   peer_eof: bool,

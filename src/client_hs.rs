@@ -46,7 +46,7 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
   let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
   let key_buf = key.get_encoding();
 
-  let mut persist = sess.config.session_persistence.borrow_mut();
+  let mut persist = sess.config.session_persistence.lock().expect("");
   let maybe_value = persist.get(&key_buf);
 
   if maybe_value.is_none() {
@@ -403,7 +403,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
                                                sess.secrets_current.get_master_secret());
   let value_buf = value.get_encoding();
 
-  let mut persist = sess.config.session_persistence.borrow_mut();
+  let mut persist = sess.config.session_persistence.lock().expect("");
   let worked = persist.put(key_buf, value_buf);
 
   if worked {

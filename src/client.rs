@@ -11,9 +11,8 @@ use verify;
 use error::TLSError;
 use rand;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::io;
-use std::cell;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -60,7 +59,7 @@ pub struct ClientConfig {
   pub alpn_protocols: Vec<String>,
 
   /// How we store session data or tickets.
-  pub session_persistence: cell::RefCell<Box<StoresClientSessions>>,
+  pub session_persistence: Mutex<Box<StoresClientSessions + Send + Sync>>,
 
   /// Our MTU.  If None, we don't limit TLS message sizes.
   pub mtu: Option<usize>
@@ -75,7 +74,7 @@ impl ClientConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       root_store: verify::RootCertStore::empty(),
       alpn_protocols: Vec::new(),
-      session_persistence: cell::RefCell::new(Box::new(NoSessionStorage {})),
+      session_persistence: Mutex::new(Box::new(NoSessionStorage {})),
       mtu: None
     }
   }
@@ -90,8 +89,8 @@ impl ClientConfig {
   }
 
   /// Sets persistence layer to `persist`.
-  pub fn set_persistence(&mut self, persist: Box<StoresClientSessions>) {
-    self.session_persistence = cell::RefCell::new(persist);
+  pub fn set_persistence(&mut self, persist: Box<StoresClientSessions + Send + Sync>) {
+    self.session_persistence = Mutex::new(persist);
   }
 
   /// Sets MTU to `mtu`.  If None, the default is used.
