@@ -37,7 +37,11 @@ impl HandshakeJoiner {
   /// Take the message, and join/split it as needed.
   /// Return the number of new messages added to the
   /// output deque as a result of this message.
-  pub fn take_message(&mut self, msg: &Message) -> usize {
+  ///
+  /// Returns None if msg or a preceding message was corrupt.
+  /// You cannot recover from this situation.  Otherwise returns
+  /// a count of how many messages we queued.
+  pub fn take_message(&mut self, msg: &Message) -> Option<usize> {
     // Input must be opaque, otherwise we might have already
     // lost information!
     let payload = msg.get_opaque_payload().unwrap();
@@ -46,11 +50,14 @@ impl HandshakeJoiner {
 
     let mut count = 0;
     while self.buf_contains_message() {
-      self.deframe_one();
+      if !self.deframe_one() {
+        return None;
+      }
+
       count += 1;
     }
 
-    count
+    Some(count)
   }
 
   /// Does our `buf` contain a full handshake payload?  It does if it is big
@@ -63,19 +70,28 @@ impl HandshakeJoiner {
 
   /// Take a TLS handshake payload off the front of `buf`, and put it onto
   /// the back of our `frames` deque inside a normal `Message`.
-  fn deframe_one(&mut self) {
+  ///
+  /// Returns false if the stream is desynchronised beyond repair.
+  fn deframe_one(&mut self) -> bool {
     let used = {
       let mut rd = codec::Reader::init(&self.buf);
-      let payload = HandshakeMessagePayload::read(&mut rd).unwrap();
+      let payload = HandshakeMessagePayload::read(&mut rd);
+
+      if payload.is_none() {
+        return false;
+      }
+
       let m = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(payload)
+        payload: MessagePayload::Handshake(payload.unwrap())
       };
+
       self.frames.push_back(m);
       rd.used()
     };
     self.buf.drain(..used);
+    true
   }
 }
 
@@ -131,7 +147,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), 2);
+    assert_eq!(hj.take_message(&msg), Some(2));
 
     let expect = Message {
       typ: ContentType::Handshake,
@@ -148,6 +164,21 @@ mod tests {
   }
 
   #[test]
+  fn broken() {
+    /* Check obvious crap payloads are reported as errors, not panics. */
+    let mut hj = HandshakeJoiner::new();
+
+    let msg = Message {
+      typ: ContentType::Handshake,
+      version: ProtocolVersion::TLSv1_2,
+      payload: MessagePayload::opaque(b"\x01\x00\x00\x02\xff\xff".to_vec()) /* short ClientHello. */
+    };
+
+    assert_eq!(hj.want_message(&msg), true);
+    assert_eq!(hj.take_message(&msg), None);
+  }
+
+  #[test]
   fn join() {
     /* Check we join one handshake message split over two PDUs. */
     let mut hj = HandshakeJoiner::new();
@@ -160,7 +191,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), 0);
+    assert_eq!(hj.take_message(&msg), Some(0));
 
     /* 11 more bytes. */
     msg = Message {
@@ -170,7 +201,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), 0);
+    assert_eq!(hj.take_message(&msg), Some(0));
 
     /* Final 1 byte. */
     msg = Message {
@@ -180,7 +211,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), 1);
+    assert_eq!(hj.take_message(&msg), Some(1));
 
     let expect = Message {
       typ: ContentType::Handshake,

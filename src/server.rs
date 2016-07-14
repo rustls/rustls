@@ -248,7 +248,10 @@ impl ServerSessionImpl {
     /* For handshake messages, we need to join them before parsing
      * and processing. */
     if self.common.handshake_joiner.want_message(msg) {
-      self.common.handshake_joiner.take_message(msg);
+      try!(
+        self.common.handshake_joiner.take_message(msg)
+        .ok_or_else(|| TLSError::CorruptMessage)
+      );
       return self.process_new_handshake_messages();
     }
 

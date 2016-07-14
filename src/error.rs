@@ -16,13 +16,16 @@ pub enum TLSError {
   /// right now.  `got_type` is the type we found.
   InappropriateHandshakeMessage { expect_types: Vec<HandshakeType>, got_type: HandshakeType },
 
+  /// The peer sent us a syntactically incorrect TLS message.
+  CorruptMessage,
+
   /// The peer didn't give us any certificates.
   NoCertificatesPresented,
 
   /// We couldn't decrypt a message.  This is invariably fatal.
   DecryptError,
 
-  /// We received a fatal.  This means the peer is unhappy.
+  /// We received a fatal alert.  This means the peer is unhappy.
   AlertReceived(AlertDescription),
 
   /// The presented certificate chain is invalid.
