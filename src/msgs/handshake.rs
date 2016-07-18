@@ -1,12 +1,45 @@
 use msgs::enums::{ProtocolVersion, HandshakeType};
 use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedCurve};
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
-use msgs::enums::{ECCurveType};
+use msgs::enums::ClientCertificateType;
+use msgs::enums::ECCurveType;
 use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
 use std::io::Write;
+
+macro_rules! declare_u8_vec(
+  ($name:ident, $itemtype:ty) => {
+    pub type $name = Vec<$itemtype>;
+
+    impl Codec for $name {
+      fn encode(&self, bytes: &mut Vec<u8>) {
+        codec::encode_vec_u8(bytes, self);
+      }
+
+      fn read(r: &mut Reader) -> Option<$name> {
+        codec::read_vec_u8::<$itemtype>(r)
+      }
+    }
+  }
+);
+
+macro_rules! declare_u16_vec(
+  ($name:ident, $itemtype:ty) => {
+    pub type $name = Vec<$itemtype>;
+
+    impl Codec for $name {
+      fn encode(&self, bytes: &mut Vec<u8>) {
+        codec::encode_vec_u16(bytes, self);
+      }
+
+      fn read(r: &mut Reader) -> Option<$name> {
+        codec::read_vec_u16::<$itemtype>(r)
+      }
+    }
+  }
+);
 
 #[derive(Debug)]
 pub struct Random {
@@ -87,17 +120,7 @@ impl UnknownExtension {
   }
 }
 
-pub type ECPointFormatList = Vec<ECPointFormat>;
-
-impl Codec for ECPointFormatList {
-  fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_vec_u8(bytes, self);
-  }
-
-  fn read(r: &mut Reader) -> Option<ECPointFormatList> {
-    codec::read_vec_u8::<ECPointFormat>(r)
-  }
-}
+declare_u8_vec!(ECPointFormatList, ECPointFormat);
 
 pub trait SupportedPointFormats {
   fn supported() -> ECPointFormatList;
@@ -109,17 +132,7 @@ impl SupportedPointFormats for ECPointFormatList {
   }
 }
 
-pub type EllipticCurveList = Vec<NamedCurve>;
-
-impl Codec for EllipticCurveList {
-  fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_vec_u16(bytes, self);
-  }
-
-  fn read(r: &mut Reader) -> Option<EllipticCurveList> {
-    codec::read_vec_u16::<NamedCurve>(r)
-  }
-}
+declare_u16_vec!(EllipticCurveList, NamedCurve);
 
 pub trait SupportedCurves {
   fn supported() -> EllipticCurveList;
@@ -151,7 +164,7 @@ impl Codec for SignatureAndHashAlgorithm {
   }
 }
 
-pub type SupportedSignatureAlgorithms = Vec<SignatureAndHashAlgorithm>;
+declare_u16_vec!(SupportedSignatureAlgorithms, SignatureAndHashAlgorithm);
 
 pub trait SupportedMandatedSignatureAlgorithms {
   fn mandated() -> SupportedSignatureAlgorithms;
@@ -184,16 +197,6 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
     ]
-  }
-}
-
-impl Codec for SupportedSignatureAlgorithms {
-  fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_vec_u16(bytes, self);
-  }
-
-  fn read(r: &mut Reader) -> Option<SupportedSignatureAlgorithms> {
-    codec::read_vec_u16::<SignatureAndHashAlgorithm>(r)
   }
 }
 
@@ -254,30 +257,10 @@ impl Codec for ServerName {
   }
 }
 
-pub type ServerNameRequest = Vec<ServerName>;
-
-impl Codec for ServerNameRequest {
-  fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_vec_u16(bytes, self);
-  }
-
-  fn read(r: &mut Reader) -> Option<ServerNameRequest> {
-    codec::read_vec_u16::<ServerName>(r)
-  }
-}
+declare_u16_vec!(ServerNameRequest, ServerName);
 
 pub type ProtocolName = PayloadU8;
-pub type ProtocolNameList = Vec<ProtocolName>;
-
-impl Codec for ProtocolNameList {
-  fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_vec_u16(bytes, self);
-  }
-
-  fn read(r: &mut Reader) -> Option<ProtocolNameList> {
-    codec::read_vec_u16::<ProtocolName>(r)
-  }
-}
+declare_u16_vec!(ProtocolNameList, ProtocolName);
 
 pub trait ConvertProtocolNameList {
   fn from_strings(names: &[String]) -> Self;
@@ -829,6 +812,38 @@ impl ServerKeyExchangePayload {
   }
 }
 
+/* -- CertificateRequest and sundries -- */
+declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
+pub type DistinguishedName = PayloadU16;
+declare_u16_vec!(DistinguishedNames, DistinguishedName);
+
+#[derive(Debug)]
+pub struct CertificateRequestPayload {
+  pub certtypes: ClientCertificateTypes,
+  pub sigalgs: SupportedSignatureAlgorithms,
+  pub canames: DistinguishedNames
+}
+
+impl Codec for CertificateRequestPayload {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.certtypes.encode(bytes);
+    self.sigalgs.encode(bytes);
+    self.canames.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<CertificateRequestPayload> {
+    let certtypes = try_ret!(ClientCertificateTypes::read(r));
+    let sigalgs = try_ret!(SupportedSignatureAlgorithms::read(r));
+    let canames = try_ret!(DistinguishedNames::read(r));
+
+    Some(CertificateRequestPayload {
+      certtypes: certtypes,
+      sigalgs: sigalgs,
+      canames: canames
+    })
+  }
+}
+
 #[derive(Debug)]
 pub enum HandshakePayload {
   HelloRequest,
@@ -836,6 +851,8 @@ pub enum HandshakePayload {
   ServerHello(ServerHelloPayload),
   Certificate(CertificatePayload),
   ServerKeyExchange(ServerKeyExchangePayload),
+  CertificateRequest(CertificateRequestPayload),
+  CertificateVerify(DigitallySignedStruct),
   ServerHelloDone,
   ClientKeyExchange(Payload),
   Finished(Payload),
@@ -852,6 +869,8 @@ impl HandshakePayload {
       HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
       HandshakePayload::ServerHelloDone => {},
       HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
+      HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
+      HandshakePayload::CertificateVerify(ref x) => x.encode(bytes),
       HandshakePayload::Finished(ref x) => x.encode(bytes),
       HandshakePayload::Unknown(ref x) => x.encode(bytes)
     }
@@ -896,6 +915,10 @@ impl Codec for HandshakeMessagePayload {
         HandshakePayload::ServerHelloDone,
       HandshakeType::ClientKeyExchange =>
         HandshakePayload::ClientKeyExchange(try_ret!(Payload::read(&mut sub))),
+      HandshakeType::CertificateRequest =>
+        HandshakePayload::CertificateRequest(try_ret!(CertificateRequestPayload::read(&mut sub))),
+      HandshakeType::CertificateVerify =>
+        HandshakePayload::CertificateVerify(try_ret!(DigitallySignedStruct::read(&mut sub))),
       HandshakeType::Finished =>
         HandshakePayload::Finished(try_ret!(Payload::read(&mut sub))),
       _ =>
