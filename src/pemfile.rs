@@ -9,13 +9,14 @@ fn extract(rd: &mut io::BufRead,
   let mut take_base64 = false;
 
   loop {
-    let mut line = String::new();
-    let len = try!(rd.read_line(&mut line)
+    let mut raw_line = Vec::<u8>::new();
+    let len = try!(rd.read_until(b'\n', &mut raw_line)
                    .map_err(|_| ()));
 
     if len == 0 {
       return Ok(ders);
     }
+    let line = String::from_utf8_lossy(&raw_line);
 
     if line.starts_with(start_mark) {
       take_base64 = true;
