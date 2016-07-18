@@ -74,6 +74,8 @@ pub struct TlsClient {
   pub port: u16,
   pub http: bool,
   pub cafile: Option<String>,
+  pub client_auth_key: Option<String>,
+  pub client_auth_certs: Option<String>,
   pub cache: Option<String>,
   pub suites: Vec<String>,
   pub protos: Vec<String>,
@@ -91,6 +93,8 @@ impl TlsClient {
       port: 443,
       http: true,
       cafile: None,
+      client_auth_key: None,
+      client_auth_certs: None,
       cache: None,
       verbose: false,
       mtu: None,
@@ -100,6 +104,12 @@ impl TlsClient {
       expect_output: Vec::new(),
       expect_log: Vec::new()
     }
+  }
+
+  pub fn client_auth(&mut self, certs: &str, key: &str) -> &mut Self {
+    self.client_auth_key = Some(key.to_string());
+    self.client_auth_certs = Some(certs.to_string());
+    self
   }
 
   pub fn cafile(&mut self, cafile: &str) -> &mut TlsClient {
@@ -173,6 +183,16 @@ impl TlsClient {
     if self.cafile.is_some() {
       args.push("--cafile");
       args.push(self.cafile.as_ref().unwrap());
+    }
+
+    if self.client_auth_key.is_some() {
+      args.push("--auth-key");
+      args.push(self.client_auth_key.as_ref().unwrap());
+    }
+
+    if self.client_auth_certs.is_some() {
+      args.push("--auth-certs");
+      args.push(self.client_auth_certs.as_ref().unwrap());
     }
 
     for suite in &self.suites {

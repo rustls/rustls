@@ -283,7 +283,7 @@ If --cafile is not supplied, CA certificates are read from
 `/etc/ssl/certs/ca-certificates.crt'.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http] [--mtu MTU] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
+  tlsclient [--verbose] [-p PORT] [--http] [--auth-key KEY --auth-certs CERTS] [--mtu MTU] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
   tlsclient --version
   tlsclient --help
 
@@ -291,6 +291,9 @@ Options:
     -p, --port PORT     Connect to PORT. Default is 443.
     --http              Send a basic HTTP GET request for /.
     --cafile CAFILE     Read root certificates from CAFILE.
+    --auth-key KEY      Read client authentication key from KEY.
+    --auth-certs CERTS  Read client authentication certificates from CERTS.
+                        CERTS must match up with KEY.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
@@ -311,6 +314,8 @@ struct Args {
   flag_mtu: Option<usize>,
   flag_cafile: Option<String>,
   flag_cache: Option<String>,
+  flag_auth_key: Option<String>,
+  flag_auth_certs: Option<String>,
   arg_hostname: String
 }
 
@@ -358,6 +363,34 @@ fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSu
   out
 }
 
+fn load_certs(filename: &str) -> Vec<Vec<u8>> {
+  let certfile = fs::File::open(filename)
+    .expect("cannot open certificate file");
+  let mut reader = BufReader::new(certfile);
+  rustls::internal::pemfile::certs(&mut reader)
+    .unwrap()
+}
+
+fn load_private_key(filename: &str) -> Vec<u8> {
+  let keyfile = fs::File::open(filename)
+    .expect("cannot open private key file");
+  let mut reader = BufReader::new(keyfile);
+  let keys = rustls::internal::pemfile::rsa_private_keys(&mut reader)
+    .unwrap();
+  assert!(keys.len() == 1);
+  keys[0].clone()
+}
+
+fn load_key_and_cert(config: &mut rustls::ClientConfig,
+                     keyfile: &str,
+                     certsfile: &str)
+{
+  let certs = load_certs(certsfile);
+  let privkey = load_private_key(keyfile);
+
+  config.set_single_client_cert(certs, privkey);
+}
+
 /// Build a ClientConfig from our arguments
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
   let mut config = rustls::ClientConfig::new();
@@ -383,6 +416,14 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
   config.set_protocols(&args.flag_proto);
   config.set_persistence(persist);
   config.set_mtu(&args.flag_mtu);
+
+  if args.flag_auth_key.is_some() || args.flag_auth_certs.is_some() {
+    load_key_and_cert(&mut config,
+                      args.flag_auth_key.as_ref()
+                        .expect("must provide --auth-key with --auth-certs"),
+                      args.flag_auth_certs.as_ref()
+                        .expect("must provide --auth-certs with --auth-key"));
+  }
 
   Arc::new(config)
 }

@@ -84,6 +84,58 @@ fn alpn_agree() {
 }
 
 #[test]
+fn client_auth_by_client() {
+  let mut server = OpenSSLServer::new_rsa(8500);
+  server.arg("-verify").arg("0");
+  server.run();
+
+  server.client()
+    .verbose()
+    .client_auth("test-ca/rsa/end.fullchain", "test-ca/rsa/end.rsa")
+    .expect_log("Got CertificateRequest")
+    .expect_log("Attempting client auth")
+    .expect("Client certificate\n")
+    .expect("Ciphers common between both SSL end points:\n")
+    .go();
+
+  server.kill();
+}
+
+#[test]
+fn client_auth_requested_but_unsupported() {
+  let mut server = OpenSSLServer::new_rsa(8600);
+  server.arg("-verify").arg("0");
+  server.run();
+
+  server.client()
+    .verbose()
+    .expect_log("Got CertificateRequest")
+    .expect_log("Client auth requested but no cert/sigalg available")
+    .expect("no client certificate available\n")
+    .expect("Ciphers common between both SSL end points:\n")
+    .go();
+
+  server.kill();
+}
+
+#[test]
+fn client_auth_required_but_unsupported() {
+  let mut server = OpenSSLServer::new_rsa(8700);
+  server.arg("-Verify").arg("0");
+  server.run();
+
+  server.client()
+    .verbose()
+    .expect_log("Got CertificateRequest")
+    .expect_log("Client auth requested but no cert/sigalg available")
+    .expect("TLS error: AlertReceived(HandshakeFailure)")
+    .fails()
+    .go();
+
+  server.kill();
+}
+
+#[test]
 fn resumption() {
   let mut server = OpenSSLServer::new_rsa(8200);
   server.run();
