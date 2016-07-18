@@ -3,12 +3,15 @@ use msgs::enums::AlertDescription;
 use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
+use msgs::handshake::{DistinguishedNames, SupportedSignatureAlgorithms, ASN1Cert};
+use msgs::handshake::SignatureAndHashAlgorithm;
 use msgs::enums::ContentType;
 use msgs::message::Message;
 use msgs::persist;
 use client_hs;
 use hash_hs;
 use verify;
+use sign;
 use error::TLSError;
 use rand;
 
@@ -43,6 +46,62 @@ impl StoresClientSessions for NoSessionStorage {
   }
 }
 
+/// A trait for the ability to choose a certificate chain and
+/// private key for the purposes of client authentication.
+pub trait ResolvesClientCert {
+  /// With the server-supplied acceptable issuers in `acceptable_issuers`,
+  /// the server's supported signature algorithms in `sigalgs`,
+  /// return a certificate chain and signing key to authenticate.
+  ///
+  /// Return None to continue the handshake without any client
+  /// authentication.  The server may reject the handshake later
+  /// if it requires authentication.
+  fn resolve(&self,
+             acceptable_issuers: &DistinguishedNames,
+             sigalgs: &SupportedSignatureAlgorithms)
+    -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>;
+}
+
+struct FailResolveClientCert {}
+
+impl ResolvesClientCert for FailResolveClientCert {
+  fn resolve(&self,
+             _acceptable_issuers: &DistinguishedNames,
+             _sigalgs: &SupportedSignatureAlgorithms)
+    -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>
+  {
+    None
+  }
+}
+
+struct AlwaysResolvesClientCert {
+  chain: CertificatePayload,
+  key: Arc<Box<sign::Signer>>
+}
+
+impl AlwaysResolvesClientCert {
+  fn new_rsa(chain: Vec<Vec<u8>>, priv_key: &[u8]) -> AlwaysResolvesClientCert {
+    let key = sign::RSASigner::new(priv_key)
+      .expect("Invalid RSA private key");
+    let mut payload = Vec::new();
+    for cert in chain {
+      payload.push(ASN1Cert { body: cert.into_boxed_slice() });
+    }
+
+    AlwaysResolvesClientCert { chain: payload, key: Arc::new(Box::new(key)) }
+  }
+}
+
+impl ResolvesClientCert for AlwaysResolvesClientCert {
+  fn resolve(&self,
+             _acceptable_issuers: &DistinguishedNames,
+             _sigalgs: &SupportedSignatureAlgorithms)
+    -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>
+  {
+    Some((self.chain.clone(), self.key.clone()))
+  }
+}
+
 /// Common configuration for (typically) all connections made by
 /// a program.
 ///
@@ -63,20 +122,24 @@ pub struct ClientConfig {
   pub session_persistence: Mutex<Box<StoresClientSessions + Send + Sync>>,
 
   /// Our MTU.  If None, we don't limit TLS message sizes.
-  pub mtu: Option<usize>
+  pub mtu: Option<usize>,
+
+  /// How to decide what client auth certificate/keys to use.
+  pub client_auth_cert_resolver: Box<ResolvesClientCert>
 }
 
 impl ClientConfig {
   /// Make a `ClientConfig` with a default set of ciphersuites,
-  /// no root certificates, no ALPN protocols, and no
-  /// session persistence.
+  /// no root certificates, no ALPN protocols, no
+  /// session persistence, and no client auth.
   pub fn new() -> ClientConfig {
     ClientConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       root_store: verify::RootCertStore::empty(),
       alpn_protocols: Vec::new(),
       session_persistence: Mutex::new(Box::new(NoSessionStorage {})),
-      mtu: None
+      mtu: None,
+      client_auth_cert_resolver: Box::new(FailResolveClientCert {})
     }
   }
 
@@ -110,6 +173,18 @@ impl ClientConfig {
       self.mtu = None;
     }
   }
+
+  /// Sets a single client authentication certificate and private key.
+  /// This is blindly used for all servers that ask for client auth.
+  ///
+  /// `cert_chain` is a vector of DER-encoded certificates,
+  /// `key_der` is a DER-encoded RSA private key.
+  pub fn set_single_client_cert(&mut self, cert_chain: Vec<Vec<u8>>,
+                                key_der: Vec<u8>) {
+    self.client_auth_cert_resolver = Box::new(
+      AlwaysResolvesClientCert::new_rsa(cert_chain, &key_der)
+    );
+  }
 }
 
 pub struct ClientHandshakeData {
@@ -122,7 +197,11 @@ pub struct ClientHandshakeData {
   pub server_kx_sig: Option<DigitallySignedStruct>,
   pub handshake_hash: Option<hash_hs::HandshakeHash>,
   pub resuming_session: Option<persist::ClientSessionValue>,
-  pub secrets: SessionSecrets
+  pub secrets: SessionSecrets,
+  pub doing_client_auth: bool,
+  pub client_auth_sigalg: Option<SignatureAndHashAlgorithm>,
+  pub client_auth_cert: Option<CertificatePayload>,
+  pub client_auth_key: Option<Arc<Box<sign::Signer>>>
 }
 
 impl ClientHandshakeData {
@@ -137,7 +216,11 @@ impl ClientHandshakeData {
       server_kx_sig: None,
       handshake_hash: None,
       resuming_session: None,
-      secrets: SessionSecrets::for_client()
+      secrets: SessionSecrets::for_client(),
+      doing_client_auth: false,
+      client_auth_sigalg: None,
+      client_auth_cert: None,
+      client_auth_key: None
     }
   }
 
@@ -159,6 +242,7 @@ pub enum ConnState {
   ExpectServerHello,
   ExpectCertificate,
   ExpectServerKX,
+  ExpectServerHelloDoneOrCertRequest,
   ExpectServerHelloDone,
   ExpectCCS,
   ExpectFinished,
@@ -312,6 +396,7 @@ impl ClientSessionImpl {
       ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
       ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
       ConnState::ExpectServerKX => &client_hs::EXPECT_SERVER_KX,
+      ConnState::ExpectServerHelloDoneOrCertRequest => &client_hs::EXPECT_DONE_OR_CERTREQ,
       ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
       ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
       ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,

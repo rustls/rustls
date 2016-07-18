@@ -10,6 +10,8 @@ use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::ServerKeyExchangePayload;
+use msgs::handshake::DigitallySignedStruct;
+use msgs::enums::ClientCertificateType;
 use msgs::codec::Codec;
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
@@ -19,6 +21,8 @@ use hash_hs;
 use verify;
 use error::TLSError;
 use handshake::Expectation;
+
+use std::mem;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -217,7 +221,7 @@ fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnSta
     _ => ()
   }
 
-  Ok(ConnState::ExpectServerHelloDone)
+  Ok(ConnState::ExpectServerHelloDoneOrCertRequest)
 }
 
 pub static EXPECT_SERVER_KX: Handler = Handler {
@@ -240,6 +244,26 @@ fn dumphex(_label: &str, _bytes: &[u8]) {
   */
 }
 
+fn emit_certificate(sess: &mut ClientSessionImpl) {
+  let chosen_cert = mem::replace(&mut sess.handshake_data.client_auth_cert, None);
+
+  let cert = Message {
+    typ: ContentType::Handshake,
+    version: ProtocolVersion::TLSv1_2,
+    payload: MessagePayload::Handshake(
+      HandshakeMessagePayload {
+        typ: HandshakeType::Certificate,
+        payload: HandshakePayload::Certificate(
+          chosen_cert.unwrap_or_else(|| Vec::new())
+        )
+      }
+    )
+  };
+
+  sess.handshake_data.hash_message(&cert);
+  sess.common.send_msg(&cert, false);
+}
+
 fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) {
   let mut buf = Vec::new();
   let ecpoint = PayloadU8 { body: kxd.pubkey.clone().into_boxed_slice() };
@@ -259,6 +283,40 @@ fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) 
 
   sess.handshake_data.hash_message(&ckx);
   sess.common.send_msg(&ckx, false);
+}
+
+fn emit_certverify(sess: &mut ClientSessionImpl) {
+  let message = sess.handshake_data.handshake_hash
+    .as_mut()
+    .unwrap()
+    .take_handshake_buf();
+
+  if sess.handshake_data.client_auth_key.is_none() {
+    debug!("Not sending CertificateVerify, no key");
+    return;
+  }
+
+  let key = mem::replace(&mut sess.handshake_data.client_auth_key, None).unwrap();
+  let sigalg = sess.handshake_data.client_auth_sigalg
+    .clone()
+    .unwrap();
+  let sig = key.sign(&sigalg.hash, &message)
+    .expect("client auth signing failed unexpectedly");
+  let body = DigitallySignedStruct::new(&sigalg, sig);
+
+  let m = Message {
+    typ: ContentType::Handshake,
+    version: ProtocolVersion::TLSv1_2,
+    payload: MessagePayload::Handshake(
+      HandshakeMessagePayload {
+        typ: HandshakeType::CertificateVerify,
+        payload: HandshakePayload::CertificateVerify(body)
+      }
+    )
+  };
+
+  sess.handshake_data.hash_message(&m);
+  sess.common.send_msg(&m, false);
 }
 
 fn emit_ccs(sess: &mut ClientSessionImpl) {
@@ -293,6 +351,61 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
   sess.common.send_msg(&f, true);
 }
 
+/* --- Either a CertificateRequest, or a ServerHelloDone. ---
+ * Existence of the CertificateRequest tells us the server is asking for
+ * client auth.  Otherwise we go straight to ServerHelloDone. */
+fn handle_certificate_req(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
+  sess.handshake_data.hash_message(m);
+  sess.handshake_data.doing_client_auth = true;
+  info!("Got CertificateRequest {:?}", certreq);
+
+  /* The RFC jovially describes the design here as 'somewhat complicated'
+   * and 'somewhat underspecified'.  So thanks for that. */
+
+  /* We only support RSA signing at the moment.  If you don't support that,
+   * we're not doing client auth. */
+  if !certreq.certtypes.contains(&ClientCertificateType::RSASign) {
+    warn!("Server asked for client auth but without RSASign");
+    return Ok(ConnState::ExpectServerHelloDone);
+  }
+
+  let maybe_certkey = sess.config.client_auth_cert_resolver.resolve(
+    &certreq.canames, &certreq.sigalgs
+  );
+
+  let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+  let maybe_sigalg = scs.resolve_sig_alg(&certreq.sigalgs);
+
+  if maybe_certkey.is_some() && maybe_sigalg.is_some() {
+    let (cert, key) = maybe_certkey.unwrap();
+    info!("Attempting client auth, will use {:?}", maybe_sigalg.as_ref().unwrap());
+    sess.handshake_data.client_auth_cert = Some(cert);
+    sess.handshake_data.client_auth_key = Some(key);
+    sess.handshake_data.client_auth_sigalg = maybe_sigalg;
+  } else {
+    info!("Client auth requested but no cert/sigalg available");
+  }
+
+  Ok(ConnState::ExpectServerHelloDone)
+}
+
+fn handle_done_or_certreq(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  if extract_handshake!(m, HandshakePayload::CertificateRequest).is_some() {
+    handle_certificate_req(sess, m)
+  } else {
+    handle_server_hello_done(sess, m)
+  }
+}
+
+pub static EXPECT_DONE_OR_CERTREQ: Handler = Handler {
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::CertificateRequest, HandshakeType::ServerHelloDone]
+  },
+  handle: handle_done_or_certreq
+};
+
 fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   sess.handshake_data.hash_message(m);
 
@@ -301,12 +414,14 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
 
   /* 1. Verify the cert chain.
    * 2. Verify that the top certificate signed their kx.
-   * 3. Complete the key exchange:
+   * 3. If doing client auth, send our Certificate.
+   * 4. Complete the key exchange:
    *    a) generate our kx pair
    *    b) emit a ClientKeyExchange containing it
-   *    c) emit a CCS
-   *    d) derive the shared keys, and start encryption
-   * 4. emit a Finished, our first encrypted message under the new keys. */
+   *    c) if doing client auth, emit a CertificateVerify
+   *    d) emit a CCS
+   *    e) derive the shared keys, and start encryption
+   * 5. emit a Finished, our first encrypted message under the new keys. */
 
   /* 1. */
   try!(verify::verify_cert(&sess.config.root_store,
@@ -328,25 +443,35 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
                          &sess.handshake_data.server_cert_chain[0],
                          sess.handshake_data.server_kx_sig.as_ref().unwrap()));
 
-  /* 3a. */
+  /* 3. */
+  if sess.handshake_data.doing_client_auth {
+    emit_certificate(sess);
+  }
+
+  /* 4a. */
   let kxd = try!(sess.handshake_data.ciphersuite.as_ref().unwrap()
     .do_client_kx(&sess.handshake_data.server_kx_params)
     .ok_or_else(|| TLSError::General("key exchange failed".to_string()))
   );
 
-  /* 3b. */
+  /* 4b. */
   emit_clientkx(sess, &kxd);
 
-  /* 3c. */
+  /* 4c. */
+  if sess.handshake_data.doing_client_auth {
+    emit_certverify(sess);
+  }
+
+  /* 4d. */
   emit_ccs(sess);
 
-  /* 3d. Now commit secrets. */
+  /* 4e. Now commit secrets. */
   sess.secrets_current.init(&sess.handshake_data.secrets,
                             sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
                             &kxd.premaster_secret);
   sess.start_encryption();
 
-  /* 4. */
+  /* 5. */
   emit_finished(sess);
 
   Ok(ConnState::ExpectCCS)
