@@ -156,8 +156,7 @@ impl SupportedCipherSuite {
       // first.
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: self.sign.clone() },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: self.sign.clone() },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: self.sign.clone() },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: self.sign.clone() }
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: self.sign.clone() }
     ];
 
     util::first_in_both(our_preference.as_slice(),
