@@ -368,8 +368,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     Some(ref cafile) => cafile.clone(),
     None => "/etc/ssl/certs/ca-certificates.crt".to_string()
   };
-  let certfile = std::fs::File::open(cafile)
-    .unwrap();
+  let certfile = match std::fs::File::open(&cafile) {
+    Ok(file) => file,
+    Err(e) => panic!("cannot open CA file '{}': {:?}\nConsider using the --cafile option to provide a valid CA file.", cafile, e)
+  };
   let mut reader = BufReader::new(certfile);
   config.root_store.add_pem_file(&mut reader)
     .unwrap();
