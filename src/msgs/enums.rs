@@ -151,6 +151,9 @@ pub enum ClientCertificateType {
   RSAEphemeralDH,
   DSSEphemeralDH,
   FortezzaDMS,
+  ECDSASign,
+  RSAFixedECDH,
+  ECDSAFixedECDH,
   Unknown(u8)
 }
 
@@ -174,6 +177,9 @@ impl Codec for ClientCertificateType {
       0x05 => ClientCertificateType::RSAEphemeralDH,
       0x06 => ClientCertificateType::DSSEphemeralDH,
       0x14 => ClientCertificateType::FortezzaDMS,
+      0x40 => ClientCertificateType::ECDSASign,
+      0x41 => ClientCertificateType::RSAFixedECDH,
+      0x42 => ClientCertificateType::ECDSAFixedECDH,
       x => ClientCertificateType::Unknown(x)
     })
   }
@@ -189,6 +195,9 @@ impl ClientCertificateType {
       ClientCertificateType::RSAEphemeralDH => 0x05,
       ClientCertificateType::DSSEphemeralDH => 0x06,
       ClientCertificateType::FortezzaDMS => 0x14,
+      ClientCertificateType::ECDSASign => 0x40,
+      ClientCertificateType::RSAFixedECDH => 0x41,
+      ClientCertificateType::ECDSAFixedECDH => 0x42,
       ClientCertificateType::Unknown(v) => v
     }
   }
