@@ -1,6 +1,6 @@
 extern crate ring;
 use prf;
-use std::io::Write;
+use std::io::{Read, Write};
 use msgs::codec;
 use msgs::codec::Codec;
 use msgs::message::{Message, MessagePayload};
@@ -15,6 +15,43 @@ use suites::{SupportedCipherSuite, BulkAlgorithm};
 use std::io;
 use std::mem;
 use std::collections::VecDeque;
+
+pub trait Session : Read + Write {
+  /// Read TLS content from `rd`.  This method does internal
+  /// buffering, so `rd` can supply TLS messages in arbitrary-
+  /// sized chunks (like a socket or pipe might).
+  ///
+  /// You should call `process_new_packets` each time a call to
+  /// this function succeeds.
+  ///
+  /// The returned error only relates to IO on `rd`.  TLS-level
+  /// errors are emitted from `process_new_packets`.
+  fn read_tls(&mut self, rd: &mut Read) -> Result<usize, io::Error>;
+
+  /// Writes TLS messages to `wr`.
+  fn write_tls(&mut self, wr: &mut Write) -> Result<(), io::Error>;
+
+  /// Processes any new packets read by a previous call to `read_tls`.
+  /// Errors from this function relate to TLS protocol errors, and
+  /// are generally fatal to the session.
+  ///
+  /// Success from this function can mean new plaintext is available:
+  /// obtain it using `read`.
+  fn process_new_packets(&mut self) -> Result<(), TLSError>;
+
+  /// Returns true if the caller should call `read_tls` as soon
+  /// as possible.
+  fn wants_read(&self) -> bool;
+
+  /// Returns true if the caller should call `write_tls` as soon
+  /// as possible.
+  fn wants_write(&self) -> bool;
+
+  /// Queues a close_notify fatal alert to be sent in the next
+  /// `write_tls` call.  This informs the peer that the
+  /// connection is being closed.
+  fn send_close_notify(&mut self);
+}
 
 pub struct SessionSecrets {
   pub we_are_client: bool,

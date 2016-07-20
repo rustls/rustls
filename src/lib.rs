@@ -211,6 +211,7 @@ pub mod internal {
 
 /* The public interface is: */
 pub use error::TLSError;
+pub use session::Session;
 pub use client::{StoresClientSessions, ClientConfig, ClientSession};
 pub use verify::{RootCertStore};
 pub use server::{ServerConfig, ServerSession};
