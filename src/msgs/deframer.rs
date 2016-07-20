@@ -19,7 +19,7 @@ pub struct MessageDeframer {
   buf: Vec<u8>,
 
   /// A buffer into which we read.
-  chunk: [u8; 2048]
+  chunk: [u8; 16384]
 }
 
 impl MessageDeframer {
@@ -27,7 +27,7 @@ impl MessageDeframer {
     MessageDeframer {
       frames: VecDeque::new(),
       buf: Vec::new(),
-      chunk: [0u8; 2048]
+      chunk: [0u8; 16384]
     }
   }
 
