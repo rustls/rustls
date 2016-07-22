@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3119' class='srclink' href='../src/rustls/src/error.rs.html#6-33' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-3121' class='srclink' href='../src/rustls/src/error.rs.html#6-36' title='goto source code'>[src]</a></span></h1>
 <pre class='rust enum'>pub enum TLSError {
     InappropriateMessage {
         expect_types: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='enum' href='../rustls/internal/msgs/enums/enum.ContentType.html' title='rustls::internal::msgs::enums::ContentType'>ContentType</a>&gt;,
@@ -57,6 +57,7 @@
         expect_types: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='enum' href='../rustls/internal/msgs/enums/enum.HandshakeType.html' title='rustls::internal::msgs::enums::HandshakeType'>HandshakeType</a>&gt;,
         got_type: <a class='enum' href='../rustls/internal/msgs/enums/enum.HandshakeType.html' title='rustls::internal::msgs::enums::HandshakeType'>HandshakeType</a>,
     },
+    CorruptMessage,
     NoCertificatesPresented,
     DecryptError,
     AlertReceived(<a class='enum' href='../rustls/internal/msgs/enums/enum.AlertDescription.html' title='rustls::internal::msgs::enums::AlertDescription'>AlertDescription</a>),
@@ -76,9 +77,10 @@ network, or an attack.</p>
 right now.  <code>got_type</code> is the type we found.</p>
 </div><h3 class='fields'>Fields</h3>
 
-                           <table><tr><td id='variant.InappropriateHandshakeMessage.field.expect_types'><code>expect_types</code></td><td></td></tr><tr><td id='variant.InappropriateHandshakeMessage.field.got_type'><code>got_type</code></td><td></td></tr></table></td><td></td></tr><tr><td id='variant.NoCertificatesPresented'><code>NoCertificatesPresented</code></td><td><div class='docblock'><p>The peer didn&#39;t give us any certificates.</p>
+                           <table><tr><td id='variant.InappropriateHandshakeMessage.field.expect_types'><code>expect_types</code></td><td></td></tr><tr><td id='variant.InappropriateHandshakeMessage.field.got_type'><code>got_type</code></td><td></td></tr></table></td><td></td></tr><tr><td id='variant.CorruptMessage'><code>CorruptMessage</code></td><td><div class='docblock'><p>The peer sent us a syntactically incorrect TLS message.</p>
+</div></td><td></td></tr><tr><td id='variant.NoCertificatesPresented'><code>NoCertificatesPresented</code></td><td><div class='docblock'><p>The peer didn&#39;t give us any certificates.</p>
 </div></td><td></td></tr><tr><td id='variant.DecryptError'><code>DecryptError</code></td><td><div class='docblock'><p>We couldn&#39;t decrypt a message.  This is invariably fatal.</p>
-</div></td><td></td></tr><tr><td id='variant.AlertReceived'><code>AlertReceived</code></td><td><div class='docblock'><p>We received a fatal.  This means the peer is unhappy.</p>
+</div></td><td></td></tr><tr><td id='variant.AlertReceived'><code>AlertReceived</code></td><td><div class='docblock'><p>We received a fatal alert.  This means the peer is unhappy.</p>
 </div></td><td></td></tr><tr><td id='variant.WebPKIError'><code>WebPKIError</code></td><td><div class='docblock'><p>The presented certificate chain is invalid.</p>
 </div></td><td></td></tr><tr><td id='variant.General'><code>General</code></td><td><div class='docblock'><p>A catch-all error for unlikely errors.</p>
 </div></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../rustls/enum.TLSError.html' title='rustls::TLSError'>TLSError</a></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>

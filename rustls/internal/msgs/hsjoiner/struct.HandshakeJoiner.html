@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3094' class='srclink' href='../../../../src/rustls/src/msgs/hsjoiner.rs.html#16-22' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-3096' class='srclink' href='../../../../src/rustls/src/msgs/hsjoiner.rs.html#16-22' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct HandshakeJoiner {
     pub frames: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec_deque/struct.VecDeque.html' title='collections::vec_deque::VecDeque'>VecDeque</a>&lt;<a class='struct' href='../../../../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>&gt;,
     // some fields omitted
@@ -61,10 +61,14 @@ one handshake payload.</p>
 </div></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../../../../rustls/internal/msgs/hsjoiner/struct.HandshakeJoiner.html' title='rustls::internal::msgs::hsjoiner::HandshakeJoiner'>HandshakeJoiner</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../../../../rustls/internal/msgs/hsjoiner/struct.HandshakeJoiner.html' title='rustls::internal::msgs::hsjoiner::HandshakeJoiner'>HandshakeJoiner</a></code></h4>
 <h4 id='method.want_message' class='method'><code>fn <a href='#method.want_message' class='fnname'>want_message</a>(&amp;self, msg: &amp;<a class='struct' href='../../../../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></h4>
 <div class='docblock'><p>Do we want to process this message?</p>
-</div><h4 id='method.take_message' class='method'><code>fn <a href='#method.take_message' class='fnname'>take_message</a>(&amp;mut self, msg: &amp;<a class='struct' href='../../../../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a></code></h4>
+</div><h4 id='method.take_message' class='method'><code>fn <a href='#method.take_message' class='fnname'>take_message</a>(&amp;mut self, msg: &amp;<a class='struct' href='../../../../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;</code></h4>
 <div class='docblock'><p>Take the message, and join/split it as needed.
 Return the number of new messages added to the
 output deque as a result of this message.</p>
+
+<p>Returns None if msg or a preceding message was corrupt.
+You cannot recover from this situation.  Otherwise returns
+a count of how many messages we queued.</p>
 </div></div></section>
     <section id='search' class="content hidden"></section>
 

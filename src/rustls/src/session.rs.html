@@ -649,10 +649,47 @@
 <span id="605">605</span>
 <span id="606">606</span>
 <span id="607">607</span>
+<span id="608">608</span>
+<span id="609">609</span>
+<span id="610">610</span>
+<span id="611">611</span>
+<span id="612">612</span>
+<span id="613">613</span>
+<span id="614">614</span>
+<span id="615">615</span>
+<span id="616">616</span>
+<span id="617">617</span>
+<span id="618">618</span>
+<span id="619">619</span>
+<span id="620">620</span>
+<span id="621">621</span>
+<span id="622">622</span>
+<span id="623">623</span>
+<span id="624">624</span>
+<span id="625">625</span>
+<span id="626">626</span>
+<span id="627">627</span>
+<span id="628">628</span>
+<span id="629">629</span>
+<span id="630">630</span>
+<span id="631">631</span>
+<span id="632">632</span>
+<span id="633">633</span>
+<span id="634">634</span>
+<span id="635">635</span>
+<span id="636">636</span>
+<span id="637">637</span>
+<span id="638">638</span>
+<span id="639">639</span>
+<span id="640">640</span>
+<span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 <span class='kw'>use</span> <span class='ident'>prf</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>::<span class='ident'>Write</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>::{<span class='ident'>Read</span>, <span class='ident'>Write</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::<span class='ident'>Codec</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>Message</span>, <span class='ident'>MessagePayload</span>};
@@ -667,6 +704,43 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
+
+<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Session</span> : <span class='ident'>Read</span> <span class='op'>+</span> <span class='ident'>Write</span> {
+  <span class='doccomment'>/// Read TLS content from `rd`.  This method does internal</span>
+  <span class='doccomment'>/// buffering, so `rd` can supply TLS messages in arbitrary-</span>
+  <span class='doccomment'>/// sized chunks (like a socket or pipe might).</span>
+  <span class='doccomment'>///</span>
+  <span class='doccomment'>/// You should call `process_new_packets` each time a call to</span>
+  <span class='doccomment'>/// this function succeeds.</span>
+  <span class='doccomment'>///</span>
+  <span class='doccomment'>/// The returned error only relates to IO on `rd`.  TLS-level</span>
+  <span class='doccomment'>/// errors are emitted from `process_new_packets`.</span>
+  <span class='kw'>fn</span> <span class='ident'>read_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Read</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>usize</span>, <span class='ident'>io</span>::<span class='ident'>Error</span><span class='op'>&gt;</span>;
+
+  <span class='doccomment'>/// Writes TLS messages to `wr`.</span>
+  <span class='kw'>fn</span> <span class='ident'>write_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>wr</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Write</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>io</span>::<span class='ident'>Error</span><span class='op'>&gt;</span>;
+
+  <span class='doccomment'>/// Processes any new packets read by a previous call to `read_tls`.</span>
+  <span class='doccomment'>/// Errors from this function relate to TLS protocol errors, and</span>
+  <span class='doccomment'>/// are generally fatal to the session.</span>
+  <span class='doccomment'>///</span>
+  <span class='doccomment'>/// Success from this function can mean new plaintext is available:</span>
+  <span class='doccomment'>/// obtain it using `read`.</span>
+  <span class='kw'>fn</span> <span class='ident'>process_new_packets</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span>;
+
+  <span class='doccomment'>/// Returns true if the caller should call `read_tls` as soon</span>
+  <span class='doccomment'>/// as possible.</span>
+  <span class='kw'>fn</span> <span class='ident'>wants_read</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span>;
+
+  <span class='doccomment'>/// Returns true if the caller should call `write_tls` as soon</span>
+  <span class='doccomment'>/// as possible.</span>
+  <span class='kw'>fn</span> <span class='ident'>wants_write</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span>;
+
+  <span class='doccomment'>/// Queues a close_notify fatal alert to be sent in the next</span>
+  <span class='doccomment'>/// `write_tls` call.  This informs the peer that the</span>
+  <span class='doccomment'>/// connection is being closed.</span>
+  <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>);
+}
 
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>SessionSecrets</span> {
   <span class='kw'>pub</span> <span class='ident'>we_are_client</span>: <span class='ident'>bool</span>,
@@ -779,11 +853,11 @@
 }
 
 <span class='kw'>impl</span> <span class='ident'>MessageCipher</span> {
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>invalid</span>() <span class='op'>-&gt;</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>MessageCipher</span><span class='op'>&gt;</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>invalid</span>() <span class='op'>-&gt;</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>MessageCipher</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Sync</span><span class='op'>&gt;</span> {
     <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>InvalidMessageCipher</span> {})
   }
 
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>scs</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span>, <span class='ident'>secrets</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionSecrets</span>) <span class='op'>-&gt;</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>MessageCipher</span><span class='op'>&gt;</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>scs</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span>, <span class='ident'>secrets</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionSecrets</span>) <span class='op'>-&gt;</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>MessageCipher</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Sync</span><span class='op'>&gt;</span> {
     <span class='comment'>/* Make a key block, and chop it up. */</span>
     <span class='kw'>let</span> <span class='ident'>key_block</span> <span class='op'>=</span> <span class='ident'>secrets</span>.<span class='ident'>make_key_block</span>(<span class='ident'>scs</span>.<span class='ident'>key_block_len</span>());
 
@@ -1066,7 +1140,7 @@
 
 <span class='comment'>/* --- Common (to client and server) session functions --- */</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>SessionCommon</span> {
-  <span class='ident'>message_cipher</span>: <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>MessageCipher</span><span class='op'>&gt;</span>,
+  <span class='ident'>message_cipher</span>: <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>MessageCipher</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Sync</span><span class='op'>&gt;</span>,
   <span class='ident'>write_seq</span>: <span class='ident'>u64</span>,
   <span class='ident'>read_seq</span>: <span class='ident'>u64</span>,
   <span class='ident'>peer_eof</span>: <span class='ident'>bool</span>,

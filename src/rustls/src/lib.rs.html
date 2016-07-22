@@ -259,6 +259,7 @@
 <span id="215">215</span>
 <span id="216">216</span>
 <span id="217">217</span>
+<span id="218">218</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//! # Rustls - a modern TLS library</span>
 <span class='doccomment'>//! Rustls is a TLS library that aims to provide a good level of cryptographic security,</span>
@@ -473,6 +474,7 @@
 
 <span class='comment'>/* The public interface is: */</span>
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>session</span>::<span class='ident'>Session</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>client</span>::{<span class='ident'>StoresClientSessions</span>, <span class='ident'>ClientConfig</span>, <span class='ident'>ClientSession</span>};
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>verify</span>::{<span class='ident'>RootCertStore</span>};
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>server</span>::{<span class='ident'>ServerConfig</span>, <span class='ident'>ServerSession</span>};

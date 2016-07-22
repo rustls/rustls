@@ -452,9 +452,26 @@
 <span id="408">408</span>
 <span id="409">409</span>
 <span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>CipherSuite</span>;
-<span class='kw'>use</span> <span class='ident'>session</span>::{<span class='ident'>SessionSecrets</span>, <span class='ident'>SessionCommon</span>};
+<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>AlertDescription</span>;
+<span class='kw'>use</span> <span class='ident'>session</span>::{<span class='ident'>Session</span>, <span class='ident'>SessionSecrets</span>, <span class='ident'>SessionCommon</span>};
 <span class='kw'>use</span> <span class='ident'>suites</span>::{<span class='ident'>SupportedCipherSuite</span>, <span class='ident'>ALL_CIPHERSUITES</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>CertificatePayload</span>, <span class='ident'>DigitallySignedStruct</span>, <span class='ident'>SessionID</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>ContentType</span>;
@@ -466,9 +483,8 @@
 <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
 <span class='kw'>use</span> <span class='ident'>rand</span>;
 
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Arc</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::{<span class='ident'>Arc</span>, <span class='ident'>Mutex</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>cell</span>;
 
 <span class='doccomment'>/// A trait for the ability to store client session data.</span>
 <span class='doccomment'>/// The keys and values are opaque.</span>
@@ -515,7 +531,7 @@
   <span class='kw'>pub</span> <span class='ident'>alpn_protocols</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>String</span><span class='op'>&gt;</span>,
 
   <span class='doccomment'>/// How we store session data or tickets.</span>
-  <span class='kw'>pub</span> <span class='ident'>session_persistence</span>: <span class='ident'>cell</span>::<span class='ident'>RefCell</span><span class='op'>&lt;</span><span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>StoresClientSessions</span><span class='op'>&gt;&gt;</span>,
+  <span class='kw'>pub</span> <span class='ident'>session_persistence</span>: <span class='ident'>Mutex</span><span class='op'>&lt;</span><span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>StoresClientSessions</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Sync</span><span class='op'>&gt;&gt;</span>,
 
   <span class='doccomment'>/// Our MTU.  If None, we don&#39;t limit TLS message sizes.</span>
   <span class='kw'>pub</span> <span class='ident'>mtu</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span>
@@ -530,7 +546,7 @@
       <span class='ident'>ciphersuites</span>: <span class='ident'>ALL_CIPHERSUITES</span>.<span class='ident'>to_vec</span>(),
       <span class='ident'>root_store</span>: <span class='ident'>verify</span>::<span class='ident'>RootCertStore</span>::<span class='ident'>empty</span>(),
       <span class='ident'>alpn_protocols</span>: <span class='ident'>Vec</span>::<span class='ident'>new</span>(),
-      <span class='ident'>session_persistence</span>: <span class='ident'>cell</span>::<span class='ident'>RefCell</span>::<span class='ident'>new</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>NoSessionStorage</span> {})),
+      <span class='ident'>session_persistence</span>: <span class='ident'>Mutex</span>::<span class='ident'>new</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>NoSessionStorage</span> {})),
       <span class='ident'>mtu</span>: <span class='prelude-val'>None</span>
     }
   }
@@ -545,8 +561,8 @@
   }
 
   <span class='doccomment'>/// Sets persistence layer to `persist`.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_persistence</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>persist</span>: <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>StoresClientSessions</span><span class='op'>&gt;</span>) {
-    <span class='self'>self</span>.<span class='ident'>session_persistence</span> <span class='op'>=</span> <span class='ident'>cell</span>::<span class='ident'>RefCell</span>::<span class='ident'>new</span>(<span class='ident'>persist</span>);
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_persistence</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>persist</span>: <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>StoresClientSessions</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Sync</span><span class='op'>&gt;</span>) {
+    <span class='self'>self</span>.<span class='ident'>session_persistence</span> <span class='op'>=</span> <span class='ident'>Mutex</span>::<span class='ident'>new</span>(<span class='ident'>persist</span>);
   }
 
   <span class='doccomment'>/// Sets MTU to `mtu`.  If None, the default is used.</span>
@@ -706,7 +722,10 @@
     <span class='comment'>/* For handshake messages, we need to join them before parsing
      * and processing. */</span>
     <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>handshake_joiner</span>.<span class='ident'>want_message</span>(<span class='ident'>msg</span>) {
-      <span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>handshake_joiner</span>.<span class='ident'>take_message</span>(<span class='ident'>msg</span>);
+      <span class='macro'>try</span><span class='macro'>!</span>(
+        <span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>handshake_joiner</span>.<span class='ident'>take_message</span>(<span class='ident'>msg</span>)
+        .<span class='ident'>ok_or_else</span>(<span class='op'>||</span> <span class='ident'>TLSError</span>::<span class='ident'>CorruptMessage</span>)
+      );
       <span class='kw'>return</span> <span class='self'>self</span>.<span class='ident'>process_new_handshake_messages</span>();
     }
 
@@ -777,6 +796,10 @@
 
     <span class='prelude-val'>Ok</span>(())
   }
+
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
+    <span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>send_warning_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>CloseNotify</span>)
+  }
 }
 
 <span class='doccomment'>/// This represents a single TLS client session.</span>
@@ -793,7 +816,9 @@
              <span class='ident'>hostname</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='ident'>ClientSession</span> {
     <span class='ident'>ClientSession</span> { <span class='ident'>imp</span>: <span class='ident'>ClientSessionImpl</span>::<span class='ident'>new</span>(<span class='ident'>config</span>, <span class='ident'>hostname</span>) }
   }
+}
 
+<span class='kw'>impl</span> <span class='ident'>Session</span> <span class='kw'>for</span> <span class='ident'>ClientSession</span> {
   <span class='doccomment'>/// Read TLS content from `rd`.  This method does internal</span>
   <span class='doccomment'>/// buffering, so `rd` can supply TLS messages in arbitrary-</span>
   <span class='doccomment'>/// sized chunks (like a socket or pipe might).</span>
@@ -803,12 +828,12 @@
   <span class='doccomment'>///</span>
   <span class='doccomment'>/// The returned error only relates to IO on `rd`.  TLS-level</span>
   <span class='doccomment'>/// errors are emitted from `process_new_packets`.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>read_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>Read</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span> {
+  <span class='kw'>fn</span> <span class='ident'>read_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>Read</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>common</span>.<span class='ident'>read_tls</span>(<span class='ident'>rd</span>)
   }
 
   <span class='doccomment'>/// Writes TLS messages to `wr`.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>write_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>wr</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>Write</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span> {
+  <span class='kw'>fn</span> <span class='ident'>write_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>wr</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>Write</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>common</span>.<span class='ident'>write_tls</span>(<span class='ident'>wr</span>)
   }
 
@@ -818,20 +843,27 @@
   <span class='doccomment'>///</span>
   <span class='doccomment'>/// Success from this function can mean new plaintext is available:</span>
   <span class='doccomment'>/// obtain it using `read`.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>process_new_packets</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
+  <span class='kw'>fn</span> <span class='ident'>process_new_packets</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>process_new_packets</span>()
   }
 
   <span class='doccomment'>/// Returns true if the caller should call `read_tls` as soon</span>
   <span class='doccomment'>/// as possible.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>wants_read</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
+  <span class='kw'>fn</span> <span class='ident'>wants_read</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>wants_read</span>()
   }
 
   <span class='doccomment'>/// Returns true if the caller should call `write_tls` as soon</span>
   <span class='doccomment'>/// as possible.</span>
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>wants_write</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
+  <span class='kw'>fn</span> <span class='ident'>wants_write</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>wants_write</span>()
+  }
+
+  <span class='doccomment'>/// Queues a close_notify fatal alert to be sent in the next</span>
+  <span class='doccomment'>/// `write_tls` call.  This informs the peer that the</span>
+  <span class='doccomment'>/// connection is being closed.</span>
+  <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
+    <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>send_close_notify</span>()
   }
 }
 

@@ -47,12 +47,12 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4486' class='srclink' href='../src/rustls/src/client.rs.html#51-67' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-4510' class='srclink' href='../src/rustls/src/client.rs.html#51-67' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct ClientConfig {
     pub ciphersuites: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;&amp;'static <a class='struct' href='../rustls/struct.SupportedCipherSuite.html' title='rustls::SupportedCipherSuite'>SupportedCipherSuite</a>&gt;,
     pub root_store: <a class='struct' href='../rustls/struct.RootCertStore.html' title='rustls::RootCertStore'>RootCertStore</a>,
     pub alpn_protocols: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/string/struct.String.html' title='collections::string::String'>String</a>&gt;,
-    pub session_persistence: <a class='struct' href='https://doc.rust-lang.org/nightly/core/cell/struct.RefCell.html' title='core::cell::RefCell'>RefCell</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='../rustls/trait.StoresClientSessions.html' title='rustls::StoresClientSessions'>StoresClientSessions</a>&gt;&gt;,
+    pub session_persistence: <a class='struct' href='https://doc.rust-lang.org/nightly/std/sync/mutex/struct.Mutex.html' title='std::sync::mutex::Mutex'>Mutex</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='../rustls/trait.StoresClientSessions.html' title='rustls::StoresClientSessions'>StoresClientSessions</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html' title='core::marker::Sync'>Sync</a>&gt;&gt;,
     pub mtu: <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;,
 }</pre><div class='docblock'><p>Common configuration for (typically) all connections made by
 a program.</p>
@@ -80,7 +80,7 @@ session persistence.</p>
 Overwrites any existing configured protocols.
 The first element in the <code>protocols</code> list is the most
 preferred, the last is the least preferred.</p>
-</div><h4 id='method.set_persistence' class='method'><code>fn <a href='#method.set_persistence' class='fnname'>set_persistence</a>(&amp;mut self, persist: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='../rustls/trait.StoresClientSessions.html' title='rustls::StoresClientSessions'>StoresClientSessions</a>&gt;)</code></h4>
+</div><h4 id='method.set_persistence' class='method'><code>fn <a href='#method.set_persistence' class='fnname'>set_persistence</a>(&amp;mut self, persist: <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/boxed/struct.Box.html' title='alloc::boxed::Box'>Box</a>&lt;<a class='trait' href='../rustls/trait.StoresClientSessions.html' title='rustls::StoresClientSessions'>StoresClientSessions</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html' title='core::marker::Sync'>Sync</a>&gt;)</code></h4>
 <div class='docblock'><p>Sets persistence layer to <code>persist</code>.</p>
 </div><h4 id='method.set_mtu' class='method'><code>fn <a href='#method.set_mtu' class='fnname'>set_mtu</a>(&amp;mut self, mtu: &amp;<a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;)</code></h4>
 <div class='docblock'><p>Sets MTU to <code>mtu</code>.  If None, the default is used.

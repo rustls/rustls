@@ -75,6 +75,9 @@
 <span id="31">31</span>
 <span id="32">32</span>
 <span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ContentType</span>, <span class='ident'>HandshakeType</span>, <span class='ident'>AlertDescription</span>};
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>webpki</span>;
@@ -94,13 +97,16 @@
   <span class='doccomment'>/// right now.  `got_type` is the type we found.</span>
   <span class='ident'>InappropriateHandshakeMessage</span> { <span class='ident'>expect_types</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>HandshakeType</span><span class='op'>&gt;</span>, <span class='ident'>got_type</span>: <span class='ident'>HandshakeType</span> },
 
+  <span class='doccomment'>/// The peer sent us a syntactically incorrect TLS message.</span>
+  <span class='ident'>CorruptMessage</span>,
+
   <span class='doccomment'>/// The peer didn&#39;t give us any certificates.</span>
   <span class='ident'>NoCertificatesPresented</span>,
 
   <span class='doccomment'>/// We couldn&#39;t decrypt a message.  This is invariably fatal.</span>
   <span class='ident'>DecryptError</span>,
 
-  <span class='doccomment'>/// We received a fatal.  This means the peer is unhappy.</span>
+  <span class='doccomment'>/// We received a fatal alert.  This means the peer is unhappy.</span>
   <span class='ident'>AlertReceived</span>(<span class='ident'>AlertDescription</span>),
 
   <span class='doccomment'>/// The presented certificate chain is invalid.</span>
