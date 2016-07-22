@@ -686,6 +686,7 @@
 <span id="642">642</span>
 <span id="643">643</span>
 <span id="644">644</span>
+<span id="645">645</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 <span class='kw'>use</span> <span class='ident'>prf</span>;
@@ -705,6 +706,7 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
 
+<span class='doccomment'>/// Generalises ClientSession and ServerSession</span>
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Session</span> : <span class='ident'>Read</span> <span class='op'>+</span> <span class='ident'>Write</span> {
   <span class='doccomment'>/// Read TLS content from `rd`.  This method does internal</span>
   <span class='doccomment'>/// buffering, so `rd` can supply TLS messages in arbitrary-</span>
