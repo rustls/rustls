@@ -5,7 +5,12 @@ use std::io;
 use msgs::codec;
 use msgs::message::Message;
 
-static HEADER_SIZE: usize = 1 + 2 + 2;
+const HEADER_SIZE: usize = 1 + 2 + 2;
+
+/* This is the maximum on-the-wire size of a TLSCiphertext.
+ * That's 2^14 payload bytes, a header, and a 2KB allowance
+ * for ciphertext overheads. */
+const MAX_MESSAGE: usize = 16384 + 2048 + HEADER_SIZE;
 
 /// This deframer works to reconstruct TLS messages
 /// from arbitrary-sized reads, buffering as neccessary.
@@ -16,18 +21,14 @@ pub struct MessageDeframer {
 
   /// A variable-size buffer containing the currently-
   /// accumulating TLS message.
-  buf: Vec<u8>,
-
-  /// A buffer into which we read.
-  chunk: [u8; 2048]
+  buf: Vec<u8>
 }
 
 impl MessageDeframer {
   pub fn new() -> MessageDeframer {
     MessageDeframer {
       frames: VecDeque::new(),
-      buf: Vec::new(),
-      chunk: [0u8; 2048]
+      buf: Vec::with_capacity(MAX_MESSAGE)
     }
   }
 
@@ -35,20 +36,28 @@ impl MessageDeframer {
   /// buffer.  If this means our internal buffer contains
   /// full messages, decode them all.
   pub fn read(&mut self, rd: &mut io::Read) -> io::Result<usize> {
-    let rc = rd.read(&mut self.chunk);
+    /* Try to do the largest reads possible.  Note that if
+     * we get a message with a length field out of range here,
+     * we do a zero length read.  That looks like an EOF to
+     * the next layer up, which is fine. */
+    let used = self.buf.len();
+    self.buf.resize(MAX_MESSAGE, 0u8);
+    let rc = rd.read(&mut self.buf[used..MAX_MESSAGE]);
 
     if rc.is_err() {
+      /* Discard indeterminate bytes. */
+      self.buf.truncate(used);
       return rc;
     }
 
-    let len = rc.unwrap();
-    self.buf.extend_from_slice(&self.chunk[..len]);
+    let new_bytes = rc.unwrap();
+    self.buf.truncate(used + new_bytes);
 
     while self.buf_contains_message() {
       self.deframe_one();
     }
 
-    Ok(len)
+    Ok(new_bytes)
   }
 
   /// Returns true if we have messages for the caller
@@ -61,8 +70,12 @@ impl MessageDeframer {
   /// Does our `buf` contain a full message?  It does if it is big enough to
   /// contain a header, and that header has a length which falls within `buf`.
   fn buf_contains_message(&self) -> bool {
-    self.buf.len() >= HEADER_SIZE &&
-      self.buf.len() >= (codec::decode_u16(&self.buf[3..5]).unwrap() as usize) + HEADER_SIZE
+    if self.buf.len() < HEADER_SIZE {
+      return false;
+    }
+
+    let msg_len = codec::decode_u16(&self.buf[3..5]).unwrap() as usize;
+    self.buf.len() >= msg_len + HEADER_SIZE
   }
 
   /// Take a TLS message off the front of `buf`, and put it onto the back
