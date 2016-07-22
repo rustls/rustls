@@ -19,6 +19,8 @@ use docopt::Docopt;
 
 extern crate rustls;
 
+use rustls::Session;
+
 const CLIENT: mio::Token = mio::Token(0);
 
 /// This encapsulates the TCP-level connection, some connection

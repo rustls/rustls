@@ -21,6 +21,8 @@ extern crate env_logger;
 
 extern crate rustls;
 
+use rustls::Session;
+
 /* Token for our listening socket. */
 const LISTENER: mio::Token = mio::Token(0);
 
