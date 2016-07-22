@@ -16,6 +16,7 @@ use std::io;
 use std::mem;
 use std::collections::VecDeque;
 
+/// Generalises ClientSession and ServerSession
 pub trait Session : Read + Write {
   /// Read TLS content from `rd`.  This method does internal
   /// buffering, so `rd` can supply TLS messages in arbitrary-
