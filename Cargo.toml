@@ -16,10 +16,11 @@ ring = { version = "0.1.0", git = "https://github.com/ctz/ring", features = ["rs
 webpki = { version = "0.1.0", git = "https://github.com/ctz/webpki" }
 
 time = "0.1.35"
-rustc-serialize = "0.3"
+base64 = "~0.2.0"
 log = "0.3.6"
 
 [dev-dependencies]
 env_logger = "0.3.3"
 mio = "0.5.1"
 docopt = "0.6"
+rustc-serialize = "0.3"

@@ -172,9 +172,8 @@ extern crate webpki;
 /* *ring* for cryptography. */
 extern crate ring;
 
-/* rustc_serialize for base64 deserialisation, for pemfile.
- * XXX: kill off? */
-extern crate rustc_serialize;
+/* rust-base64 for pemfile module. */
+extern crate base64;
 
 /* log for logging. */
 #[macro_use]

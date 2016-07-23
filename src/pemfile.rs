@@ -1,5 +1,5 @@
 use std::io;
-use rustc_serialize::base64::FromBase64;
+use base64;
 
 fn extract(rd: &mut io::BufRead,
            start_mark: &str,
@@ -25,7 +25,7 @@ fn extract(rd: &mut io::BufRead,
 
     if line.starts_with(end_mark) {
       take_base64 = false;
-      let der = try!(b64buf.from_base64()
+      let der = try!(base64::decode_ws(&b64buf)
                      .map_err(|_| ()));
       ders.push(der);
       b64buf = String::new();
