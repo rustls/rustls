@@ -1,0 +1,9 @@
+#!/bin/sh
+# Extract the introductory documentation into the README.md
+
+set -e
+
+awk 'BEGIN { take=1 }/# Approach/{take=0;print}take' < README.md > README.md.new
+grep '^//!' src/lib.rs | sed -e 's@^\/\/\! *@@g' | awk '/# Rustls - a modern TLS library/{take=1;next}/## Design Overview/{take=0}take' >> README.md.new
+awk '/# Example code/{take=1}take' < README.md >> README.md.new
+mv README.md.new README.md

@@ -14,10 +14,13 @@
 //! * ALPN support.
 //! * SNI support.
 //! * Tunable MTU to make TLS messages match size of underlying transport.
-//! * Resumption.
+//! * Resumption by clients.
 //!
 //! ## Possible future features
 //!
+//! * Resumption by servers.
+//! * Client authentication by clients.
+//! * Client authentication by servers.
 //! * ECDSA server authentication by servers.
 //! * PSK support.
 //! * TLS1.3.
@@ -37,7 +40,6 @@
 //! * MAC-then-encrypt ciphersuites.
 //! * Ciphersuites without forward secrecy.
 //! * Renegotiation.
-//! * Client authentication.
 //! * Kerberos.
 //! * Compression.
 //! * Discrete-log Diffie-Hellman.
