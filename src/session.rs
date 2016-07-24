@@ -484,6 +484,10 @@ impl SessionCommon {
     }
   }
 
+  pub fn has_readable_plaintext(&self) -> bool {
+    self.received_plaintext.len() != 0
+  }
+
   pub fn encrypt_outgoing(&mut self, plain: &Message) -> Message {
     let seq = self.write_seq;
     self.write_seq += 1;
