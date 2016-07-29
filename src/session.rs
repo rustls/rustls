@@ -30,7 +30,7 @@ pub trait Session : Read + Write {
   fn read_tls(&mut self, rd: &mut Read) -> Result<usize, io::Error>;
 
   /// Writes TLS messages to `wr`.
-  fn write_tls(&mut self, wr: &mut Write) -> Result<(), io::Error>;
+  fn write_tls(&mut self, wr: &mut Write) -> Result<usize, io::Error>;
 
   /// Processes any new packets read by a previous call to `read_tls`.
   /// Errors from this function relate to TLS protocol errors, and
@@ -497,7 +497,7 @@ pub struct SessionCommon {
   pub message_fragmenter: MessageFragmenter,
   received_plaintext: Vec<u8>,
   sendable_plaintext: Vec<u8>,
-  pub tls_queue: VecDeque<Message>
+  pub sendable_tls: Vec<u8>
 }
 
 impl SessionCommon {
@@ -515,7 +515,7 @@ impl SessionCommon {
       message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
       received_plaintext: Vec::new(),
       sendable_plaintext: Vec::new(),
-      tls_queue: VecDeque::new()
+      sendable_tls: Vec::new(),
     }
   }
 
@@ -566,8 +566,10 @@ impl SessionCommon {
     self.message_fragmenter.fragment(m, &mut plain_messages);
 
     for m in plain_messages {
+      let mut buf = Vec::new();
+      m.encode(&mut buf);
       let em = self.encrypt_outgoing(&m);
-      self.tls_queue.push_back(em);
+      self.queue_tls_message(em);
     }
   }
 
@@ -585,17 +587,10 @@ impl SessionCommon {
     self.message_deframer.read(rd)
   }
 
-  pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
-    let msg_maybe = self.tls_queue.pop_front();
-    if msg_maybe.is_none() {
-      return Ok(());
-    }
-
-    let mut data = Vec::new();
-    let msg = msg_maybe.unwrap();
-    msg.encode(&mut data);
-
-    wr.write_all(&data)
+  pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
+    let written = try!(wr.write(&self.sendable_tls));
+    self.sendable_tls = self.sendable_tls.split_off(written);
+    Ok(written)
   }
 
   /// Send plaintext application data, fragmenting and
@@ -642,10 +637,19 @@ impl SessionCommon {
     self.send_plain(&buf);
   }
 
+  // Put m into sendable_tls for writing.
+  fn queue_tls_message(&mut self, m: Message) {
+    m.encode(&mut self.sendable_tls);
+  }
+
   /// Send a raw TLS message, fragmenting it if needed.
   pub fn send_msg(&mut self, m: &Message, must_encrypt: bool) {
     if !must_encrypt {
-      self.message_fragmenter.fragment(m, &mut self.tls_queue);
+      let mut to_send = VecDeque::new();
+      self.message_fragmenter.fragment(m, &mut to_send);
+      for m in to_send {
+        self.queue_tls_message(m);
+      }
     } else {
       self.send_msg_encrypt(m);
     }

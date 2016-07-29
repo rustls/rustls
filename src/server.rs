@@ -261,7 +261,7 @@ impl ServerSessionImpl {
   }
 
   pub fn wants_write(&self) -> bool {
-    !self.common.tls_queue.is_empty()
+    !self.common.sendable_tls.is_empty()
   }
 
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
@@ -398,7 +398,8 @@ impl Session for ServerSession {
     self.imp.common.read_tls(rd)
   }
 
-  fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
+  /// Writes TLS messages to `wr`.
+  fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
     self.imp.common.write_tls(wr)
   }
 
