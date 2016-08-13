@@ -618,7 +618,7 @@ impl SessionCommon {
   pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
     use std::io::Read;
     let len = try!(self.received_plaintext.as_slice().read(buf));
-    self.received_plaintext.drain(0..len);
+    self.received_plaintext = self.received_plaintext.split_off(len);
 
     if len == 0 && self.connection_at_eof() && self.received_plaintext.len() == 0 {
       return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));

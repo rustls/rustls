@@ -90,7 +90,7 @@ impl HandshakeJoiner {
       self.frames.push_back(m);
       rd.used()
     };
-    self.buf.drain(..used);
+    self.buf = self.buf.split_off(used);
     true
   }
 }
