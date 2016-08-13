@@ -70,14 +70,6 @@ fn wikipedia() {
 }
 
 #[test]
-fn hello_letsencrypt() {
-  connect("helloworld.letsencrypt.org")
-    .expect("HTTP/1.1 200 OK")
-    .go()
-    .unwrap();
-}
-
-#[test]
 fn twitter() {
   connect("twitter.com")
     .expect("HTTP/1.1 ")
