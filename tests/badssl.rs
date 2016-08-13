@@ -6,7 +6,9 @@
 
 #[allow(dead_code)]
 mod common;
-use common::{TlsClient, polite};
+
+mod online {
+use super::common::{TlsClient, polite};
 
 fn connect(hostname: &str) -> TlsClient {
   TlsClient::new(hostname)
@@ -144,4 +146,6 @@ fn sha1_2016() {
     .expect("<title>sha1-2016.badssl.com</title>")
     .go()
     .unwrap();
+}
+
 }

@@ -9,7 +9,9 @@
 
 #[allow(dead_code)]
 mod common;
-use common::TlsClient;
+
+mod online {
+use super::common::TlsClient;
 
 fn connect(hostname: &str) -> TlsClient {
   TlsClient::new(hostname)
@@ -129,4 +131,6 @@ fn wordpress() {
     .expect("HTTP/1.1 200 OK")
     .go()
     .unwrap();
+}
+
 }
