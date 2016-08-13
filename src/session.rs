@@ -575,6 +575,11 @@ impl SessionCommon {
 
     assert!(self.peer_encrypting);
 
+    if data.len() == 0 {
+      /* Don't send empty fragments. */
+      return;
+    }
+
     /* Make one giant message, then have the fragmenter chop
      * it into bits.  Then encrypt and queue those bits. */
     let m = Message {
