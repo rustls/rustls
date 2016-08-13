@@ -102,6 +102,17 @@ impl Message {
     }
   }
 
+  pub fn to_opaque(&self) -> Message {
+    let mut buf = Vec::new();
+    self.payload.encode(&mut buf);
+
+    Message {
+      typ: self.typ.clone(),
+      version: self.version.clone(),
+      payload: MessagePayload::opaque(buf)
+    }
+  }
+
   pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message {
     Message {
       typ: ContentType::Alert,
