@@ -43,6 +43,15 @@ impl MessagePayload {
     }
   }
 
+  pub fn len(&self) -> usize {
+    match *self {
+      MessagePayload::Alert(ref x) => x.len(),
+      MessagePayload::Handshake(ref x) => x.len(),
+      MessagePayload::ChangeCipherSpec(ref x) => x.len(),
+      MessagePayload::Opaque(ref x) => x.len()
+    }
+  }
+
   pub fn opaque(data: Vec<u8>) -> MessagePayload {
     MessagePayload::Opaque(Payload { body: data.into_boxed_slice() })
   }
@@ -71,11 +80,8 @@ impl Message {
   pub fn encode(&self, bytes: &mut Vec<u8>) {
     self.typ.encode(bytes);
     self.version.encode(bytes);
-
-    let mut sub = Vec::new();
-    self.payload.encode(&mut sub);
-    encode_u16(sub.len() as u16, bytes);
-    bytes.extend(sub);
+    encode_u16(self.payload.len() as u16, bytes);
+    self.payload.encode(bytes);
   }
 
   pub fn is_content_type(&self, typ: ContentType) -> bool {

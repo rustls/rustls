@@ -905,3 +905,11 @@ impl Codec for HandshakeMessagePayload {
     Some(HandshakeMessagePayload { typ: typ, payload: payload })
   }
 }
+
+impl HandshakeMessagePayload {
+  pub fn len(&self) -> usize {
+    let mut buf = Vec::new();
+    self.encode(&mut buf);
+    buf.len()
+  }
+}

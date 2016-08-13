@@ -17,6 +17,10 @@ impl Codec for Payload {
   }
 }
 
+impl Payload {
+  pub fn len(&self) -> usize { self.body.len() }
+}
+
 /* An arbitrary, unknown-content, u24-length-prefixed payload */
 #[derive(Debug, Clone)]
 pub struct PayloadU24 {
