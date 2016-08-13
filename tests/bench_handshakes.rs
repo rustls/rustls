@@ -4,7 +4,7 @@
 use std::time::{Duration, Instant};
 use std::sync::Arc;
 use std::fs;
-use std::io::{self, Write, Read};
+use std::io::{self, Write};
 
 extern crate rustls;
 use rustls::{ClientConfig, ClientSession};
@@ -16,16 +16,7 @@ fn duration_nanos(d: Duration) -> f64 {
   (d.as_secs() as f64) + (d.subsec_nanos() as f64) / 1e9
 }
 
-fn dumphex(why: &str, buf: &[u8]) {
-  print!("{}: ", why);
-
-  for byte in buf {
-    print!("{:02x}", byte);
-  }
-  println!("");
-}
-
-fn bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_test: Ftest)
+fn _bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_test: Ftest)
   where Fsetup: Fn() -> S, Ftest: Fn(S) {
   let mut times = Vec::new();
 
@@ -104,7 +95,7 @@ fn make_client_config() -> ClientConfig {
   let mut rootbuf = io::BufReader::new(
     fs::File::open("test-ca/rsa/ca.cert").unwrap()
   );
-  cfg.root_store.add_pem_file(&mut rootbuf);
+  cfg.root_store.add_pem_file(&mut rootbuf).unwrap();
   cfg
 }
 
@@ -117,20 +108,20 @@ fn bench_hs() {
   let mut server = ServerSession::new(&server_config);
 
   transfer(&mut client, &mut server);
-  time("process ClientHello", || server.process_new_packets().unwrap());
+  time("srv recv ClientHello", || server.process_new_packets().unwrap());
   transfer(&mut server, &mut client);
-  time("process ServerHello", || client.process_new_packets().unwrap());
+  time("cli recv ServerHello", || client.process_new_packets().unwrap());
   transfer(&mut client, &mut server);
-  time("process ClientKX", || server.process_new_packets().unwrap());
+  time("srv recv ClientKX", || server.process_new_packets().unwrap());
   transfer(&mut server, &mut client);
-  time("process Finished", || client.process_new_packets().unwrap());
+  time("cli recv Finished", || client.process_new_packets().unwrap());
   transfer(&mut client, &mut server);
 
   let buf = [0u8; 1024 * 1024];
-  for _ in 0..4 {
-    server.write(&buf).unwrap();
+  for _ in 0..8 {
+    time("srv send 1MB data", || { server.write(&buf).unwrap(); () } );
     transfer(&mut server, &mut client);
-    time("process 1MB data", || client.process_new_packets().unwrap());
+    time("cli recv 1MB data", || client.process_new_packets().unwrap());
     drain(&mut client, buf.len());
   }
 }
