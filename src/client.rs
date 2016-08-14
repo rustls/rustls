@@ -453,49 +453,26 @@ impl ClientSession {
 }
 
 impl Session for ClientSession {
-  /// Read TLS content from `rd`.  This method does internal
-  /// buffering, so `rd` can supply TLS messages in arbitrary-
-  /// sized chunks (like a socket or pipe might).
-  ///
-  /// You should call `process_new_packets` each time a call to
-  /// this function succeeds.
-  ///
-  /// The returned error only relates to IO on `rd`.  TLS-level
-  /// errors are emitted from `process_new_packets`.
   fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
     self.imp.common.read_tls(rd)
   }
 
-  /// Writes TLS messages to `wr`.
   fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<()> {
     self.imp.common.write_tls(wr)
   }
 
-  /// Processes any new packets read by a previous call to `read_tls`.
-  /// Errors from this function relate to TLS protocol errors, and
-  /// are generally fatal to the session.
-  ///
-  /// Success from this function can mean new plaintext is available:
-  /// obtain it using `read`.
   fn process_new_packets(&mut self) -> Result<(), TLSError> {
     self.imp.process_new_packets()
   }
 
-  /// Returns true if the caller should call `read_tls` as soon
-  /// as possible.
   fn wants_read(&self) -> bool {
     self.imp.wants_read()
   }
 
-  /// Returns true if the caller should call `write_tls` as soon
-  /// as possible.
   fn wants_write(&self) -> bool {
     self.imp.wants_write()
   }
 
-  /// Queues a close_notify fatal alert to be sent in the next
-  /// `write_tls` call.  This informs the peer that the
-  /// connection is being closed.
   fn send_close_notify(&mut self) {
     self.imp.send_close_notify()
   }
