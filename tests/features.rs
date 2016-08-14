@@ -138,7 +138,6 @@ fn client_auth_by_server_accepted() {
 
   /* Handshake works without client auth. */
   server.client()
-    .expect("Client Certificate Types: RSA sign")
     .expect("Acceptable client certificate CA names")
     .go();
 
@@ -146,7 +145,6 @@ fn client_auth_by_server_accepted() {
   server.client()
     .arg("-key").arg("test-ca/rsa/client.key")
     .arg("-cert").arg("test-ca/rsa/client.fullchain")
-    .expect("Client Certificate Types: RSA sign")
     .expect("Acceptable client certificate CA names")
     .go();
 
@@ -171,7 +169,6 @@ fn client_auth_by_server_required() {
   server.client()
     .arg("-key").arg("test-ca/rsa/client.key")
     .arg("-cert").arg("test-ca/rsa/client.fullchain")
-    .expect("Client Certificate Types: RSA sign")
     .expect("Acceptable client certificate CA names")
     .go();
   
