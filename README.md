@@ -190,18 +190,18 @@ of these licenses, at your option.
 
 - [x] Choose a license.
 - [x] Improve testing.
-- [ ] Improve testing some more.
 - [x] ALPN.
-- [ ] Tickets.
 - [x] Resumption by client.
 - [x] chacha20poly1305 bulk encryption support.
 - [x] Signing support in *ring* to unblock server work. (done upstream, thanks!)
 - [x] Server support.
 - [x] Write some more sample programs.
 - [x] Stabilise and document public API.
+- [x] Client authentication by client.
+- [x] Client authentication by server.
+- [ ] Improve testing some more.
 - [ ] Benchmarks.
 - [ ] Optimise internals to reduce copies.
 - [ ] Resumption by server.
-- [ ] Client authentication by client.
-- [ ] Client authentication by server.
+- [ ] Tickets.
 - [ ] Promote mio integration to a first-class feature.
