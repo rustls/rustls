@@ -35,6 +35,14 @@ openssl rsa \
           -in rsa/end.key \
           -out rsa/end.rsa
 
+openssl req -nodes \
+          -newkey rsa:2560 \
+          -keyout rsa/client.key \
+          -out rsa/client.req \
+          -sha256 \
+          -batch \
+          -subj "/CN=ponytown client"
+
 # ecdsa
 openssl ecparam -name prime256v1 -out ecdsa/nistp256.pem
 openssl ecparam -name secp384r1 -out ecdsa/nistp384.pem
@@ -67,6 +75,15 @@ openssl req -nodes \
           -days 2000 \
           -subj "/CN=testserver.com"
 
+openssl req -nodes \
+          -newkey ec:ecdsa/nistp384.pem \
+          -keyout ecdsa/client.key \
+          -out ecdsa/client.req \
+          -sha256 \
+          -batch \
+          -days 2000 \
+          -subj "/CN=ponytown client"
+
 for kt in rsa ecdsa ; do
   openssl x509 -req \
             -in $kt/inter.req \
@@ -87,8 +104,22 @@ for kt in rsa ecdsa ; do
             -days 2000 \
             -set_serial 456 \
             -extensions v3_end -extfile openssl.cnf
+  
+  openssl x509 -req \
+            -in $kt/client.req \
+            -out $kt/client.cert \
+            -CA $kt/inter.cert \
+            -CAkey $kt/inter.key \
+            -sha256 \
+            -days 2000 \
+            -set_serial 789 \
+            -extensions v3_client -extfile openssl.cnf
 
   cat $kt/inter.cert $kt/ca.cert > $kt/end.chain
   cat $kt/end.cert $kt/inter.cert $kt/ca.cert > $kt/end.fullchain
+  
+  cat $kt/inter.cert $kt/ca.cert > $kt/client.chain
+  cat $kt/client.cert $kt/inter.cert $kt/ca.cert > $kt/client.fullchain
+
   openssl asn1parse -in $kt/ca.cert -out $kt/ca.der > /dev/null
 done

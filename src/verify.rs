@@ -6,8 +6,10 @@ extern crate untrusted;
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::SignatureAndHashAlgorithm;
+use msgs::handshake::{DistinguishedName, DistinguishedNames};
 use error::TLSError;
 use pemfile;
+use x509;
 
 use std::io;
 
@@ -68,6 +70,25 @@ impl RootCertStore {
     RootCertStore { roots: Vec::new() }
   }
 
+  /// Say how many certificates are in the container.
+  pub fn len(&self) -> usize {
+    self.roots.len()
+  }
+
+  /// Return the Subject Names for certificates in the container.
+  pub fn get_subjects(&self) -> DistinguishedNames {
+    let mut r = DistinguishedNames::new();
+
+    for ota in &self.roots {
+      let mut name = Vec::new();
+      name.extend_from_slice(&ota.subject);
+      x509::wrap_in_sequence(&mut name);
+      r.push(DistinguishedName::new(name));
+    }
+
+    r
+  }
+
   /// Add a single DER-encoded certificate to the store.
   pub fn add(&mut self, der: &[u8]) -> Result<(), webpki::Error> {
     let ta = try!(
@@ -112,12 +133,9 @@ impl RootCertStore {
   }
 }
 
-/* Verify a the certificate chain `presented_certs` against the roots
- * configured in `roots`.  Make sure that `dns_name` is quoted by
- * the top certificate in the chain. */
-pub fn verify_cert(roots: &RootCertStore,
-                   presented_certs: &Vec<ASN1Cert>,
-                   dns_name: &str) -> Result<(), TLSError> {
+/// Check `presented_certs` is non-empty and rooted in `roots`.
+fn verify_common_cert(roots: &RootCertStore,
+                      presented_certs: &Vec<ASN1Cert>) -> Result<(), TLSError> {
   if presented_certs.len() == 0 {
     return Err(TLSError::NoCertificatesPresented);
   }
@@ -139,9 +157,29 @@ pub fn verify_cert(roots: &RootCertStore,
                           &chain,
                           ee,
                           time::get_time())
-    .and_then(|_| webpki::verify_cert_dns_name(ee,
-                          untrusted::Input::from(dns_name.as_bytes())))
     .map_err(|err| TLSError::WebPKIError(err))
+}
+
+/// Verify a the certificate chain `presented_certs` against the roots
+/// configured in `roots`.  Make sure that `dns_name` is quoted by
+/// the top certificate in the chain.
+pub fn verify_server_cert(roots: &RootCertStore,
+                          presented_certs: &Vec<ASN1Cert>,
+                          dns_name: &str) -> Result<(), TLSError> {
+  try!(verify_common_cert(roots, presented_certs));
+
+  webpki::verify_cert_dns_name(
+    untrusted::Input::from(&presented_certs[0].body),
+    untrusted::Input::from(dns_name.as_bytes())
+  )
+  .map_err(|err| TLSError::WebPKIError(err))
+}
+
+/// Verify a certificate chain `presented_certs` is rooted in `roots`.
+/// Does no further checking of the certificate.
+pub fn verify_client_cert(roots: &RootCertStore,
+                          presented_certs: &Vec<ASN1Cert>) -> Result<(), TLSError> {
+  verify_common_cert(roots, presented_certs)
 }
 
 /* TODO: this is a bit gross. consider doing it another way */
@@ -177,9 +215,10 @@ fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<&'static [u8], TLSError
 ///
 /// `cert` MUST have been authenticated before using this function,
 /// typically using `verify_cert`.
-pub fn verify_kx(message: &[u8],
-                 cert: &ASN1Cert,
-                 dss: &DigitallySignedStruct) -> Result<(), TLSError> {
+pub fn verify_signed_struct(message: &[u8],
+                            cert: &ASN1Cert,
+                            dss: &DigitallySignedStruct) -> Result<(), TLSError> {
+
   let alg = try!(convert_alg(&dss.alg));
 
   let signed_data = webpki::signed_data::SignedData {
@@ -197,3 +236,4 @@ pub fn verify_kx(message: &[u8],
                                           &signed_data)
     .map_err(|err| TLSError::WebPKIError(err))
 }
+

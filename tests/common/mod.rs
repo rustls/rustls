@@ -143,6 +143,7 @@ impl TlsClient {
   }
 
   pub fn expect_log(&mut self, expect: &str) -> &mut TlsClient {
+    self.verbose = true;
     self.expect_log.push(expect.to_string());
     self
   }
@@ -362,6 +363,8 @@ pub struct TlsServer {
   pub protos: Vec<String>,
   used_suites: Vec<String>,
   used_protos: Vec<String>,
+  pub client_auth_roots: String,
+  pub client_auth_required: bool,
   pub verbose: bool,
   pub child: Option<process::Child>
 }
@@ -381,6 +384,8 @@ impl TlsServer {
       protos: Vec::new(),
       used_suites: Vec::new(),
       used_protos: Vec::new(),
+      client_auth_roots: String::new(),
+      client_auth_required: false,
       child: None
     }
   }
@@ -417,6 +422,16 @@ impl TlsServer {
     self
   }
 
+  pub fn client_auth_roots(&mut self, cafile: &str) -> &mut Self {
+    self.client_auth_roots = cafile.to_string();
+    self
+  }
+
+  pub fn client_auth_required(&mut self) -> &mut Self {
+    self.client_auth_required = true;
+    self
+  }
+
   pub fn run(&mut self) {
     let portstring = self.port.to_string();
     let mut args = Vec::<&str>::new();
@@ -437,6 +452,15 @@ impl TlsServer {
     for proto in &self.used_protos {
       args.push("--proto");
       args.push(proto.as_ref());
+    }
+
+    if self.client_auth_roots.len() > 0 {
+      args.push("--auth");
+      args.push(&self.client_auth_roots);
+
+      if self.client_auth_required {
+        args.push("--require-auth");
+      }
     }
 
     if self.verbose {

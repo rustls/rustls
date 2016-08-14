@@ -5,8 +5,8 @@ use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
 use util;
 
-extern crate ring;
-extern crate untrusted;
+use ring;
+use untrusted;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, PartialEq)]

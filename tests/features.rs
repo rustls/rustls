@@ -24,14 +24,12 @@ fn alpn_offer() {
 
   // Basic workingness.
   server.client()
-    .verbose()
     .proto("breakfast")
     .expect_log("ALPN protocol is Some(\"breakfast\")")
     .go();
 
   // Client preference has little effect (we're testing openssl here really)
   server.client()
-    .verbose()
     .proto("edgware")
     .proto("ponytown")
     .expect_log("ALPN protocol is Some(\"ponytown\")")
@@ -41,7 +39,6 @@ fn alpn_offer() {
   // (Except it doesn't, because openssl rightly ignores this part
   // of the RFC.)
   server.client()
-    .verbose()
     .proto("mayfair")
     .expect_log("ALPN protocol is None")
     .go();
@@ -56,7 +53,7 @@ fn alpn_agree() {
     return;
   }
 
-  let mut server = TlsServer::new(7100);
+  let mut server = TlsServer::new(9100);
   server.proto("connaught")
         .proto("bonjour")
         .proto("egg")
@@ -90,7 +87,6 @@ fn client_auth_by_client() {
   server.run();
 
   server.client()
-    .verbose()
     .client_auth("test-ca/rsa/end.fullchain", "test-ca/rsa/end.rsa")
     .expect_log("Got CertificateRequest")
     .expect_log("Attempting client auth")
@@ -108,7 +104,6 @@ fn client_auth_requested_but_unsupported() {
   server.run();
 
   server.client()
-    .verbose()
     .expect_log("Got CertificateRequest")
     .expect_log("Client auth requested but no cert/sigalg available")
     .expect("no client certificate available\n")
@@ -125,13 +120,61 @@ fn client_auth_required_but_unsupported() {
   server.run();
 
   server.client()
-    .verbose()
     .expect_log("Got CertificateRequest")
     .expect_log("Client auth requested but no cert/sigalg available")
     .expect("TLS error: AlertReceived(HandshakeFailure)")
     .fails()
     .go();
 
+  server.kill();
+}
+
+#[test]
+fn client_auth_by_server_accepted() {
+  let mut server = TlsServer::new(9200);
+  server.client_auth_roots("test-ca/rsa/client.chain")
+        .http_mode()
+        .run();
+
+  /* Handshake works without client auth. */
+  server.client()
+    .expect("Client Certificate Types: RSA sign")
+    .expect("Acceptable client certificate CA names")
+    .go();
+
+  /* And with */
+  server.client()
+    .arg("-key").arg("test-ca/rsa/client.key")
+    .arg("-cert").arg("test-ca/rsa/client.fullchain")
+    .expect("Client Certificate Types: RSA sign")
+    .expect("Acceptable client certificate CA names")
+    .go();
+
+  server.kill();
+}
+
+#[test]
+fn client_auth_by_server_required() {
+  let mut server = TlsServer::new(9300);
+  server.client_auth_roots("test-ca/rsa/client.chain")
+        .client_auth_required()
+        .http_mode()
+        .run();
+
+  /* Handshake *doesn't* work without client auth. */
+  server.client()
+    .fails()
+    .expect_log("ssl handshake failure")
+    .go();
+
+  /* ... but does with. */
+  server.client()
+    .arg("-key").arg("test-ca/rsa/client.key")
+    .arg("-cert").arg("test-ca/rsa/client.fullchain")
+    .expect("Client Certificate Types: RSA sign")
+    .expect("Acceptable client certificate CA names")
+    .go();
+  
   server.kill();
 }
 
@@ -143,7 +186,6 @@ fn resumption() {
   // no resumption without client support
   for _ in 0..2 {
     server.client()
-      .verbose()
       .expect_log("No cached session for")
       .expect_log("Not resuming any session")
       .go();
@@ -153,7 +195,6 @@ fn resumption() {
   let _ = fs::remove_file(cache_filename);
 
   server.client()
-    .verbose()
     .cache(cache_filename)
     .expect_log("No cached session for")
     .expect_log("Not resuming any session")
@@ -162,7 +203,6 @@ fn resumption() {
     .go();
 
   server.client()
-    .verbose()
     .cache(cache_filename)
     .expect_log("Resuming session")
     .expect_log("Server agreed to resume")

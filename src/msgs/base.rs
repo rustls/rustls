@@ -18,6 +18,10 @@ impl Codec for Payload {
 }
 
 impl Payload {
+  pub fn new(bytes: Vec<u8>) -> Payload {
+    Payload { body: bytes.into_boxed_slice() }
+  }
+
   pub fn len(&self) -> usize { self.body.len() }
 }
 
@@ -25,6 +29,12 @@ impl Payload {
 #[derive(Debug, Clone)]
 pub struct PayloadU24 {
   pub body: Box<[u8]>
+}
+
+impl PayloadU24 {
+  pub fn new(bytes: Vec<u8>) -> PayloadU24 {
+    PayloadU24 { body: bytes.into_boxed_slice() }
+  }
 }
 
 impl Codec for PayloadU24 {
@@ -47,6 +57,12 @@ pub struct PayloadU16 {
   pub body: Box<[u8]>
 }
 
+impl PayloadU16 {
+  pub fn new(bytes: Vec<u8>) -> PayloadU16 {
+    PayloadU16 { body: bytes.into_boxed_slice() }
+  }
+}
+
 impl Codec for PayloadU16 {
   fn encode(&self, bytes: &mut Vec<u8>) {
     codec::encode_u16(self.body.len() as u16, bytes);
@@ -65,6 +81,12 @@ impl Codec for PayloadU16 {
 #[derive(Debug, Clone)]
 pub struct PayloadU8 {
   pub body: Box<[u8]>
+}
+
+impl PayloadU8 {
+  pub fn new(bytes: Vec<u8>) -> PayloadU8 {
+    PayloadU8 { body: bytes.into_boxed_slice() }
+  }
 }
 
 impl Codec for PayloadU8 {

@@ -172,6 +172,9 @@ extern crate webpki;
 /* *ring* for cryptography. */
 extern crate ring;
 
+/* untrusted for feeding ring and webpki. */
+extern crate untrusted;
+
 /* rust-base64 for pemfile module. */
 extern crate base64;
 
@@ -187,6 +190,7 @@ mod hash_hs;
 mod prf;
 mod session;
 mod pemfile;
+mod x509;
 mod sign;
 mod verify;
 mod handshake;

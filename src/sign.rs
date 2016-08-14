@@ -1,7 +1,6 @@
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm};
-
-extern crate ring;
-extern crate untrusted;
+use untrusted;
+use ring;
 
 /// A thing that can sign a message.
 pub trait Signer {

@@ -424,9 +424,9 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
    * 5. emit a Finished, our first encrypted message under the new keys. */
 
   /* 1. */
-  try!(verify::verify_cert(&sess.config.root_store,
-                           &sess.handshake_data.server_cert_chain,
-                           &sess.handshake_data.dns_name));
+  try!(verify::verify_server_cert(&sess.config.root_store,
+                                  &sess.handshake_data.server_cert_chain,
+                                  &sess.handshake_data.dns_name));
 
   /* 2. */
   /* Build up the contents of the signed message.
@@ -439,9 +439,9 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   dumphex("verify message", &message);
   dumphex("verify sig", &sess.handshake_data.server_kx_sig.as_ref().unwrap().sig.body);
 
-  try!(verify::verify_kx(&message,
-                         &sess.handshake_data.server_cert_chain[0],
-                         sess.handshake_data.server_kx_sig.as_ref().unwrap()));
+  try!(verify::verify_signed_struct(&message,
+                                    &sess.handshake_data.server_cert_chain[0],
+                                    sess.handshake_data.server_kx_sig.as_ref().unwrap()));
 
   /* 3. */
   if sess.handshake_data.doing_client_auth {

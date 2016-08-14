@@ -362,9 +362,9 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] echo
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] http
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] echo
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] http
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
   tlsserver --version
   tlsserver --help
 
@@ -376,6 +376,10 @@ Options:
                         certify KEYFILE, the last should be a root CA).
     --key KEYFILE       Read private key from KEYFILE.  This should be a RSA private key,
                         in PEM format.
+    --auth CERTFILE     Enable client authentication, and accept certificates
+                        signed by those roots provided in CERTFILE.
+    --require-auth      Send a fatal alert if the client does not complete client
+                        authentication.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
@@ -395,6 +399,8 @@ struct Args {
   flag_proto: Vec<String>,
   flag_certs: Option<String>,
   flag_key: Option<String>,
+  flag_auth: Option<String>,
+  flag_require_auth: bool,
   arg_fport: Option<u16>
 }
 
@@ -448,6 +454,11 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
   let certs = load_certs(&args.flag_certs.as_ref().expect("--certs option missing"));
   let privkey = load_private_key(&args.flag_key.as_ref().expect("--key option missing"));
   config.set_single_cert(certs, privkey);
+
+  if args.flag_auth.is_some() {
+    let client_auth_roots = load_certs(&args.flag_auth.as_ref().unwrap());
+    config.set_client_auth_roots(client_auth_roots, args.flag_require_auth);
+  }
 
   if args.flag_suite.len() != 0 {
     config.ciphersuites = lookup_suites(&args.flag_suite);

@@ -11,6 +11,7 @@ use server_hs;
 use error::TLSError;
 use rand;
 use sign;
+use verify;
 
 use std::sync::Arc;
 use std::io;
@@ -64,7 +65,16 @@ pub struct ServerConfig {
 
   /// Protocol names we support, most preferred first.
   /// If empty we don't do ALPN at all.
-  pub alpn_protocols: Vec<String>
+  pub alpn_protocols: Vec<String>,
+
+  /// List of client authentication root certificates.
+  /// If this list is empty, no client authentication is
+  /// performed.
+  pub client_auth_roots: verify::RootCertStore,
+
+  /// Whether to complete handshakes with clients which
+  /// don't do client auth.
+  pub client_auth_mandatory: bool
 }
 
 struct NoSessionStorage {}
@@ -119,15 +129,17 @@ impl ResolvesCert for AlwaysResolvesChain {
 
 impl ServerConfig {
   /// Make a `ServerConfig` with a default set of ciphersuites,
-  /// no keys/certificates, no ALPN protocols, and no
-  /// session persistence.
+  /// no keys/certificates, no ALPN protocols, no client auth, and
+  /// no session persistence.
   pub fn new() -> ServerConfig {
     ServerConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       ignore_client_order: false,
       session_storage: Box::new(NoSessionStorage {}),
       alpn_protocols: Vec::new(),
-      cert_resolver: Box::new(FailResolveChain {})
+      cert_resolver: Box::new(FailResolveChain {}),
+      client_auth_roots: verify::RootCertStore::empty(),
+      client_auth_mandatory: false
     }
   }
 
@@ -150,6 +162,18 @@ impl ServerConfig {
     self.alpn_protocols.clear();
     self.alpn_protocols.extend_from_slice(protocols);
   }
+
+  /// Enables client authentication.  The server will ask for
+  /// and validate certificates to the given list of root
+  /// `certs`.  If `mandatory` is true, the server will fail
+  /// to handshake with a client if it does not do client auth.
+  pub fn set_client_auth_roots(&mut self, certs: Vec<Vec<u8>>, mandatory: bool) {
+    for cert in certs {
+      self.client_auth_roots.add(&cert)
+        .unwrap()
+    }
+    self.client_auth_mandatory = mandatory;
+  }
 }
 
 pub struct ServerHandshakeData {
@@ -157,7 +181,9 @@ pub struct ServerHandshakeData {
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub secrets: SessionSecrets,
   pub handshake_hash: Option<hash_hs::HandshakeHash>,
-  pub kx_data: Option<KeyExchange>
+  pub kx_data: Option<KeyExchange>,
+  pub doing_client_auth: bool,
+  pub valid_client_cert: Option<ASN1Cert>
 }
 
 impl ServerHandshakeData {
@@ -167,7 +193,9 @@ impl ServerHandshakeData {
       ciphersuite: None,
       secrets: SessionSecrets::for_server(),
       handshake_hash: None,
-      kx_data: None
+      kx_data: None,
+      doing_client_auth: false,
+      valid_client_cert: None
     }
   }
 
@@ -192,7 +220,9 @@ impl ServerHandshakeData {
 #[derive(PartialEq)]
 pub enum ConnState {
   ExpectClientHello,
+  ExpectCertificate,
   ExpectClientKX,
+  ExpectCertificateVerify,
   ExpectCCS,
   ExpectFinished,
   Traffic
@@ -302,7 +332,9 @@ impl ServerSessionImpl {
   fn get_handler(&self) -> &'static server_hs::Handler {
     match self.state {
       ConnState::ExpectClientHello => &server_hs::EXPECT_CLIENT_HELLO,
+      ConnState::ExpectCertificate => &server_hs::EXPECT_CERTIFICATE,
       ConnState::ExpectClientKX => &server_hs::EXPECT_CLIENT_KX,
+      ConnState::ExpectCertificateVerify => &server_hs::EXPECT_CERTIFICATE_VERIFY,
       ConnState::ExpectCCS => &server_hs::EXPECT_CCS,
       ConnState::ExpectFinished => &server_hs::EXPECT_FINISHED,
       ConnState::Traffic => &server_hs::TRAFFIC

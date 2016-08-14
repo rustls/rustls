@@ -1,6 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use msgs::enums::{Compression, NamedCurve, ECPointFormat, CipherSuite};
 use msgs::enums::{ExtensionType, AlertDescription};
+use msgs::enums::ClientCertificateType;
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
 use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
@@ -12,11 +13,14 @@ use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
+use msgs::handshake::CertificateRequestPayload;
+use msgs::handshake::SupportedMandatedSignatureAlgorithms;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use server::{ServerSessionImpl, ConnState};
 use suites;
 use sign;
+use verify;
 use util;
 use error::TLSError;
 use handshake::Expectation;
@@ -168,6 +172,36 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
   Ok(())
 }
 
+fn emit_certificate_req(sess: &mut ServerSessionImpl) {
+  if sess.config.client_auth_roots.len() == 0 {
+    return;
+  }
+
+  let names = sess.config.client_auth_roots.get_subjects();
+
+  let cr = CertificateRequestPayload {
+    certtypes: vec![ ClientCertificateType::RSASign ],
+    sigalgs: SupportedSignatureAlgorithms::supported(),
+    canames: names
+  };
+
+  let m = Message {
+    typ: ContentType::Handshake,
+    version: ProtocolVersion::TLSv1_2,
+    payload: MessagePayload::Handshake(
+      HandshakeMessagePayload {
+        typ: HandshakeType::CertificateRequest,
+        payload: HandshakePayload::CertificateRequest(cr)
+      }
+    )
+  };
+
+  debug!("Sending CertificateRequest {:?}", m);
+  sess.handshake_data.hash_message(&m);
+  sess.common.send_msg(&m, false);
+  sess.handshake_data.doing_client_auth = true;
+}
+
 fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
   let m = Message {
     typ: ContentType::Handshake,
@@ -281,9 +315,14 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   emit_server_hello(sess, client_hello);
   emit_certificate(sess);
   try!(emit_server_kx(sess, &sigalg, &eccurve, private_key));
+  emit_certificate_req(sess);
   emit_server_hello_done(sess);
 
-  Ok(ConnState::ExpectClientKX)
+  if sess.handshake_data.doing_client_auth {
+    Ok(ConnState::ExpectCertificate)
+  } else {
+    Ok(ConnState::ExpectClientKX)
+  }
 }
 
 pub static EXPECT_CLIENT_HELLO: Handler = Handler {
@@ -294,6 +333,37 @@ pub static EXPECT_CLIENT_HELLO: Handler = Handler {
   handle: handle_client_hello
 };
 
+/* --- Process client's Certificate for client auth --- */
+fn handle_certificate(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  sess.handshake_data.hash_message(m);
+  let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
+
+  if cert_chain.len() == 0 && !sess.config.client_auth_mandatory {
+    info!("client auth requested but no certificate supplied");
+    sess.handshake_data.doing_client_auth = false;
+    return Ok(ConnState::ExpectClientKX);
+  }
+
+  debug!("certs {:?}", cert_chain);
+
+  try!(
+    verify::verify_client_cert(&sess.config.client_auth_roots,
+                               &cert_chain)
+  );
+
+  sess.handshake_data.valid_client_cert = Some(cert_chain[0].clone());
+  Ok(ConnState::ExpectClientKX)
+}
+
+pub static EXPECT_CERTIFICATE: Handler = Handler {
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::Certificate]
+  },
+  handle: handle_certificate
+};
+
+/* --- Process client's KeyExchange --- */
 fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
   sess.handshake_data.hash_message(m);
@@ -309,8 +379,12 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
   sess.secrets_current.init(&sess.handshake_data.secrets,
                             sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
                             &kxd.premaster_secret);
-  sess.start_encryption();
-  Ok(ConnState::ExpectCCS)
+
+  if sess.handshake_data.doing_client_auth {
+    Ok(ConnState::ExpectCertificateVerify)
+  } else {
+    Ok(ConnState::ExpectCCS)
+  }
 }
 
 pub static EXPECT_CLIENT_KX: Handler = Handler {
@@ -321,8 +395,38 @@ pub static EXPECT_CLIENT_KX: Handler = Handler {
   handle: handle_client_kx
 };
 
+/* --- Process client's certificate proof --- */
+fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  let rc = {
+    let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
+    let end_cert = sess.handshake_data.valid_client_cert.as_ref().unwrap();
+    let handshake_msgs = sess.handshake_data.handshake_hash.as_mut().unwrap().take_handshake_buf();
+
+    verify::verify_signed_struct(&handshake_msgs, end_cert, &sig)
+  };
+
+  if rc.is_err() {
+    hsfail(sess, "invalid client certverify");
+    return Err(rc.unwrap_err());
+  } else {
+    debug!("client CertificateVerify OK");
+  }
+
+  sess.handshake_data.hash_message(m);
+  Ok(ConnState::ExpectCCS)
+}
+
+pub static EXPECT_CERTIFICATE_VERIFY: Handler = Handler {
+  expect: Expectation {
+    content_types: &[ContentType::Handshake],
+    handshake_types: &[HandshakeType::CertificateVerify]
+  },
+  handle: handle_certificate_verify
+};
+
 /* --- Process client's ChangeCipherSpec --- */
-fn handle_ccs(_sess: &mut ServerSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+fn handle_ccs(sess: &mut ServerSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+  sess.start_encryption();
   Ok(ConnState::ExpectFinished)
 }
 
