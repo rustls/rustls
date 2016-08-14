@@ -46,7 +46,7 @@ impl KeyExchange {
     let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
 
     KeyExchange::start_ecdhe(&ecdh_params.curve_params.named_curve)
-      .complete(&ecdh_params.public.body)
+      .complete(&ecdh_params.public.0)
   }
 
   pub fn start_ecdhe(named_curve: &NamedCurve) -> KeyExchange {
@@ -66,7 +66,7 @@ impl KeyExchange {
     let mut rd = Reader::init(kx_params);
     let ecdh_params = ClientECDHParams::read(&mut rd).unwrap();
 
-    self.complete(&ecdh_params.public.body)
+    self.complete(&ecdh_params.public.0)
   }
 
   fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {

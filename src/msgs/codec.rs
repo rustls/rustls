@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-/* Read from a byte slice. */
+/// Read from a byte slice.
 pub struct Reader<'a> {
   buf: &'a [u8],
   offs: usize
@@ -42,7 +42,7 @@ impl<'a> Reader<'a> {
   }
 }
 
-/* Things we can encode and read from a Reader. */
+/// Things we can encode and read from a Reader.
 pub trait Codec : Debug + Sized {
   fn encode(&self, bytes: &mut Vec<u8>);
   fn read(&mut Reader) -> Option<Self>;

@@ -17,16 +17,16 @@ use std::sync::Arc;
 use std::io;
 
 pub trait StoresSessions {
-  /* Generate a session ID. */
+  /// Generate a session ID.
   fn generate(&self) -> SessionID;
 
-  /* Store session secrets. */
+  /// Store session secrets.
   fn store(&self, id: &SessionID, sec: &SessionSecrets) -> bool;
 
-  /* Find a session with the given id. */
+  /// Find a session with the given id.
   fn find(&self, id: &SessionID) -> Option<SessionSecrets>;
 
-  /* Erase a session with the given id. */
+  /// Erase a session with the given id.
   fn erase(&self, id: &SessionID) -> bool;
 }
 
@@ -86,7 +86,7 @@ impl StoresSessions for NoSessionStorage {
   fn erase(&self, _id: &SessionID) -> bool { false }
 }
 
-/* Something which never resolves a certificate. */
+/// Something which never resolves a certificate.
 struct FailResolveChain {}
 
 impl ResolvesCert for FailResolveChain {
@@ -99,7 +99,7 @@ impl ResolvesCert for FailResolveChain {
   }
 }
 
-/* Something which always resolves to the same cert chain. */
+/// Something which always resolves to the same cert chain.
 struct AlwaysResolvesChain {
   chain: CertificatePayload,
   key: Arc<Box<sign::Signer>>
@@ -111,7 +111,7 @@ impl AlwaysResolvesChain {
       .expect("Invalid RSA private key");
     let mut payload = Vec::new();
     for cert in chain {
-      payload.push(ASN1Cert { body: cert.into_boxed_slice() });
+      payload.push(ASN1Cert::new(cert));
     }
     AlwaysResolvesChain { chain: payload, key: Arc::new(Box::new(key)) }
   }

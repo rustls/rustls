@@ -46,7 +46,7 @@ impl HandshakeJoiner {
     // lost information!
     let payload = msg.get_opaque_payload().unwrap();
 
-    self.buf.extend_from_slice(&payload.body[..]);
+    self.buf.extend_from_slice(&payload.0[..]);
 
     let mut count = 0;
     while self.buf_contains_message() {
@@ -220,7 +220,7 @@ mod tests {
         HandshakeMessagePayload {
           typ: HandshakeType::Finished,
           payload: HandshakePayload::Finished(
-            Payload { body: b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec().into_boxed_slice() }
+            Payload::new(b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec())
           )
         }
       )

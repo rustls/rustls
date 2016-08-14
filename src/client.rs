@@ -90,7 +90,7 @@ impl AlwaysResolvesClientCert {
       .expect("Invalid RSA private key");
     let mut payload = Vec::new();
     for cert in chain {
-      payload.push(ASN1Cert { body: cert.into_boxed_slice() });
+      payload.push(ASN1Cert::new(cert));
     }
 
     AlwaysResolvesClientCert { chain: payload, key: Arc::new(Box::new(key)) }

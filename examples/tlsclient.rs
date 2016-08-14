@@ -228,8 +228,8 @@ impl PersistCache {
 
     for (key, val) in &self.cache {
       let mut item = Vec::new();
-      let key_pl = PayloadU16 { body: key.clone().into_boxed_slice() };
-      let val_pl = PayloadU16 { body: val.clone().into_boxed_slice() };
+      let key_pl = PayloadU16::new(key.clone());
+      let val_pl = PayloadU16::new(val.clone());
       key_pl.encode(&mut item);
       val_pl.encode(&mut item);
       file.write_all(&item).unwrap();
@@ -254,7 +254,7 @@ impl PersistCache {
     while rd.any_left() {
       let key_pl = PayloadU16::read(&mut rd).unwrap();
       let val_pl = PayloadU16::read(&mut rd).unwrap();
-      self.cache.insert(key_pl.body.to_vec(), val_pl.body.to_vec());
+      self.cache.insert(key_pl.0, val_pl.0);
     }
   }
 }

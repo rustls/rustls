@@ -172,8 +172,8 @@ pub trait SupportedMandatedSignatureAlgorithms {
 }
 
 impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
-  /* What SupportedSignatureAlgorithms are hardcoded in the RFC.
-   * Yes, you cannot avoid SHA1 in standard TLS. */
+  /// What SupportedSignatureAlgorithms are hardcoded in the RFC.
+  /// Yes, you cannot avoid SHA1 in standard TLS.
   fn mandated() -> SupportedSignatureAlgorithms {
     vec![
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
@@ -182,8 +182,8 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
     ]
   }
 
+  /// Supported signature algorithms in decreasing order of expected security.
   fn supported() -> SupportedSignatureAlgorithms {
-    /* In approximate decreasing order of security. */
     vec![
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::ECDSA },
@@ -273,7 +273,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
     let mut ret = Vec::new();
 
     for name in names {
-      ret.push(PayloadU8 { body: name.as_bytes().to_vec().into_boxed_slice() });
+      ret.push(PayloadU8::new(name.as_bytes().to_vec()));
     }
 
     ret
@@ -282,7 +282,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
   fn to_strings(&self) -> Vec<String> {
     let mut ret = Vec::new();
     for proto in self {
-      match String::from_utf8(proto.body.to_vec()).ok() {
+      match String::from_utf8(proto.0.clone()).ok() {
         Some(st) => ret.push(st),
         _ => {}
       }
@@ -292,7 +292,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
 
   fn to_single_string(&self) -> Option<String> {
     if self.len() == 1 {
-      String::from_utf8(self[0].body.to_vec()).ok()
+      String::from_utf8(self[0].0.clone()).ok()
     } else {
       None
     }
@@ -468,7 +468,7 @@ impl ServerExtension {
 
   pub fn make_empty_renegotiation_info() -> ServerExtension {
     let empty = Vec::new();
-    ServerExtension::RenegotiationInfo(PayloadU8 { body: empty.into_boxed_slice() })
+    ServerExtension::RenegotiationInfo(PayloadU8::new(empty))
   }
 }
 
@@ -673,7 +673,7 @@ pub struct DigitallySignedStruct {
 
 impl DigitallySignedStruct {
   pub fn new(alg: &SignatureAndHashAlgorithm, sig: Vec<u8>) -> DigitallySignedStruct {
-    DigitallySignedStruct { alg: alg.clone(), sig: PayloadU16 { body: sig.into_boxed_slice() } }
+    DigitallySignedStruct { alg: alg.clone(), sig: PayloadU16::new(sig) }
   }
 }
 
@@ -720,7 +720,7 @@ impl ServerECDHParams {
         curve_type: ECCurveType::NamedCurve,
         named_curve: named_curve.clone()
       },
-      public: PayloadU8 { body: pubkey.clone().into_boxed_slice() }
+      public: PayloadU8::new(pubkey.clone())
     }
   }
 }
@@ -783,7 +783,7 @@ impl Codec for ServerKeyExchangePayload {
 impl ServerKeyExchangePayload {
   pub fn unwrap_given_kxa(&self, kxa: &KeyExchangeAlgorithm) -> Option<ServerKeyExchangePayload> {
     if let ServerKeyExchangePayload::Unknown(ref unk) = *self {
-      let mut rd = Reader::init(&unk.body);
+      let mut rd = Reader::init(&unk.0);
 
       return match *kxa {
         KeyExchangeAlgorithm::ECDHE =>

@@ -13,8 +13,8 @@ use x509;
 
 use std::io;
 
-/* Which signature verification mechanisms we support.  No particular
- * order. */
+/// Which signature verification mechanisms we support.  No particular
+/// order.
 static SUPPORTED_SIG_ALGS: &'static [&'static webpki::SignatureAlgorithm] = &[
   &webpki::ECDSA_P256_SHA1,
   &webpki::ECDSA_P256_SHA256,
@@ -31,9 +31,9 @@ static SUPPORTED_SIG_ALGS: &'static [&'static webpki::SignatureAlgorithm] = &[
   &webpki::RSA_PKCS1_3072_8192_SHA384
 ];
 
-/* This is like a webpki::TrustAnchor, except it owns
- * rather than borrows its memory.  That prevents lifetimes
- * leaking up the object tree. */
+/// This is like a webpki::TrustAnchor, except it owns
+/// rather than borrows its memory.  That prevents lifetimes
+/// leaking up the object tree.
 struct OwnedTrustAnchor {
   subject: Vec<u8>,
   spki: Vec<u8>,
@@ -141,11 +141,11 @@ fn verify_common_cert(roots: &RootCertStore,
   }
 
   /* EE cert must appear first. */
-  let ee = untrusted::Input::from(&presented_certs[0].body);
+  let ee = untrusted::Input::from(&presented_certs[0].0);
 
   let chain: Vec<untrusted::Input> = presented_certs.iter()
     .skip(1)
-    .map(|cert| untrusted::Input::from(&cert.body))
+    .map(|cert| untrusted::Input::from(&cert.0))
     .collect();
 
   let trustroots: Vec<webpki::TrustAnchor> = roots.roots.iter()
@@ -169,7 +169,7 @@ pub fn verify_server_cert(roots: &RootCertStore,
   try!(verify_common_cert(roots, presented_certs));
 
   webpki::verify_cert_dns_name(
-    untrusted::Input::from(&presented_certs[0].body),
+    untrusted::Input::from(&presented_certs[0].0),
     untrusted::Input::from(dns_name.as_bytes())
   )
   .map_err(|err| TLSError::WebPKIError(err))
@@ -224,10 +224,10 @@ pub fn verify_signed_struct(message: &[u8],
   let signed_data = webpki::signed_data::SignedData {
     data: untrusted::Input::from(message),
     algorithm: untrusted::Input::from(alg),
-    signature: untrusted::Input::from(&dss.sig.body)
+    signature: untrusted::Input::from(&dss.sig.0)
   };
 
-  let cert_in = untrusted::Input::from(&cert.body);
+  let cert_in = untrusted::Input::from(&cert.0);
   let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(cert_in)
                   .map_err(|err| TLSError::WebPKIError(err)));
 

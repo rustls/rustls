@@ -24,7 +24,7 @@ impl Codec for ClientSessionKey {
 impl ClientSessionKey {
   pub fn for_dns_name(dns_name: &str) -> ClientSessionKey {
     ClientSessionKey {
-      dns_name: PayloadU8 { body: dns_name.as_bytes().to_vec().into_boxed_slice() }
+      dns_name: PayloadU8::new(dns_name.as_bytes().to_vec())
     }
   }
 
@@ -67,7 +67,7 @@ impl ClientSessionValue {
     ClientSessionValue {
       cipher_suite: cs.clone(),
       session_id: sessid.clone(),
-      master_secret: PayloadU8 { body: ms.into_boxed_slice() }
+      master_secret: PayloadU8::new(ms)
     }
   }
 

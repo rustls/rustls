@@ -7,9 +7,9 @@ use msgs::message::Message;
 
 const HEADER_SIZE: usize = 1 + 2 + 2;
 
-/* This is the maximum on-the-wire size of a TLSCiphertext.
- * That's 2^14 payload bytes, a header, and a 2KB allowance
- * for ciphertext overheads. */
+/// This is the maximum on-the-wire size of a TLSCiphertext.
+/// That's 2^14 payload bytes, a header, and a 2KB allowance
+/// for ciphertext overheads.
 const MAX_MESSAGE: usize = 16384 + 2048 + HEADER_SIZE;
 
 /// This deframer works to reconstruct TLS messages

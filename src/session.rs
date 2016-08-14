@@ -227,7 +227,7 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 impl MessageCipher for GCMMessageCipher {
   fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
     let payload = try!(msg.get_opaque_payload().ok_or(()));
-    let mut buf = payload.body.to_vec();
+    let mut buf = payload.0.clone();
 
     if buf.len() < GCM_OVERHEAD {
       return Err(());
@@ -369,7 +369,7 @@ const CP_OVERHEAD: usize = 16;
 impl MessageCipher for ChaCha20Poly1305MessageCipher {
   fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
     let payload = try!(msg.get_opaque_payload().ok_or(()));
-    let mut buf = payload.body.to_vec();
+    let mut buf = payload.0.clone();
 
     if buf.len() < CP_OVERHEAD {
       return Err(());
@@ -617,7 +617,7 @@ impl SessionCommon {
   }
 
   pub fn take_received_plaintext(&mut self, bytes: Payload) {
-    self.received_plaintext.extend_from_slice(&bytes.body);
+    self.received_plaintext.extend_from_slice(&bytes.0);
   }
 
   pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {

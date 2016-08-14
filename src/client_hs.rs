@@ -161,7 +161,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
       sess.secrets_current.init_resume(&sess.handshake_data.secrets,
                                        scs.unwrap().get_hash(),
-                                       &resuming.master_secret.body);
+                                       &resuming.master_secret.0);
     }
   }
 
@@ -227,18 +227,6 @@ pub static EXPECT_SERVER_KX: Handler = Handler {
   handle: handle_server_kx
 };
 
-fn dumphex(_label: &str, _bytes: &[u8]) {
-  /*
-  print!("{}: ", _label);
-
-  for b in _bytes {
-    print!("{:02x}", b);
-  }
-
-  println!("");
-  */
-}
-
 fn emit_certificate(sess: &mut ClientSessionImpl) {
   let chosen_cert = mem::replace(&mut sess.handshake_data.client_auth_cert, None);
 
@@ -261,9 +249,9 @@ fn emit_certificate(sess: &mut ClientSessionImpl) {
 
 fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) {
   let mut buf = Vec::new();
-  let ecpoint = PayloadU8 { body: kxd.pubkey.clone().into_boxed_slice() };
+  let ecpoint = PayloadU8::new(kxd.pubkey.clone());
   ecpoint.encode(&mut buf);
-  let pubkey = Payload { body: buf.into_boxed_slice() };
+  let pubkey = Payload::new(buf);
 
   let ckx = Message {
     typ: ContentType::Handshake,
@@ -323,10 +311,8 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
 
 fn emit_finished(sess: &mut ClientSessionImpl) {
   let vh = sess.handshake_data.transcript.get_current_hash();
-  dumphex("finished vh", &vh);
   let verify_data = sess.secrets_current.client_verify_data(&vh);
-  dumphex("finished verify", &verify_data);
-  let verify_data_payload = Payload { body: verify_data.into_boxed_slice() };
+  let verify_data_payload = Payload::new(verify_data);
 
   let f = Message {
     typ: ContentType::Handshake,
@@ -428,9 +414,6 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   message.extend_from_slice(&sess.handshake_data.secrets.client_random);
   message.extend_from_slice(&sess.handshake_data.secrets.server_random);
   message.extend_from_slice(&sess.handshake_data.server_kx_params);
-
-  dumphex("verify message", &message);
-  dumphex("verify sig", &sess.handshake_data.server_kx_sig.as_ref().unwrap().sig.body);
 
   try!(verify::verify_signed_struct(&message,
                                     &sess.handshake_data.server_cert_chain[0],
@@ -542,7 +525,7 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnStat
    * get one chance.  But it can't hurt. */
   use ring;
   try!(
-    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
+    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
       .map_err(|_| TLSError::DecryptError)
   );
 

@@ -373,7 +373,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
    * resulting premaster secret. */
   let kx = mem::replace(&mut sess.handshake_data.kx_data, None).unwrap();
   let kxd = try!(
-    kx.server_complete(&client_kx.body)
+    kx.server_complete(&client_kx.0)
     .ok_or_else(|| hsfail(sess, "kx failed"))
   );
 
@@ -400,10 +400,10 @@ pub static EXPECT_CLIENT_KX: Handler = Handler {
 fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let rc = {
     let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
-    let end_cert = sess.handshake_data.valid_client_cert.as_ref().unwrap();
+    let certs = sess.handshake_data.valid_client_cert_chain.as_ref().unwrap();
     let handshake_msgs = sess.handshake_data.transcript.take_handshake_buf();
 
-    verify::verify_signed_struct(&handshake_msgs, end_cert, &sig)
+    verify::verify_signed_struct(&handshake_msgs, &certs[0], &sig)
   };
 
   if rc.is_err() {
@@ -453,7 +453,7 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
 fn emit_finished(sess: &mut ServerSessionImpl) {
   let vh = sess.handshake_data.transcript.get_current_hash();
   let verify_data = sess.secrets_current.server_verify_data(&vh);
-  let verify_data_payload = Payload { body: verify_data.into_boxed_slice() };
+  let verify_data_payload = Payload::new(verify_data);
 
   let f = Message {
     typ: ContentType::Handshake,
@@ -477,7 +477,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
 
   use ring;
   try!(
-    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.body)
+    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
       .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
   );
 

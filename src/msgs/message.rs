@@ -27,7 +27,7 @@ impl MessagePayload {
 
   pub fn decode_given_type(&self, typ: &ContentType) -> Option<MessagePayload> {
     if let MessagePayload::Opaque(ref payload) = *self {
-      let mut r = Reader::init(&payload.body);
+      let mut r = Reader::init(&payload.0);
       match *typ {
         ContentType::Alert =>
           Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r)))),
@@ -53,11 +53,11 @@ impl MessagePayload {
   }
 
   pub fn opaque(data: Vec<u8>) -> MessagePayload {
-    MessagePayload::Opaque(Payload { body: data.into_boxed_slice() })
+    MessagePayload::Opaque(Payload::new(data))
   }
 }
 
-/* aka TLSPlaintext */
+/// A TLS frame, named TLSPlaintext in the standard
 #[derive(Debug)]
 pub struct Message {
   pub typ: ContentType,

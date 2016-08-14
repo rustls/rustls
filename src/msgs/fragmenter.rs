@@ -57,7 +57,7 @@ mod tests {
 
     assert_eq!(&m.typ, typ);
     assert_eq!(&m.version, version);
-    assert_eq!(m.get_opaque_payload().unwrap().body.to_vec(), bytes.to_vec());
+    assert_eq!(m.get_opaque_payload().unwrap().0, bytes.to_vec());
 
     let mut buf = Vec::new();
     m.encode(&mut buf);
