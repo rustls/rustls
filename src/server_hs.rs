@@ -341,6 +341,7 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnS
   if cert_chain.len() == 0 && !sess.config.client_auth_mandatory {
     info!("client auth requested but no certificate supplied");
     sess.handshake_data.doing_client_auth = false;
+    sess.handshake_data.transcript.abandon_client_auth();
     return Ok(ConnState::ExpectClientKX);
   }
 

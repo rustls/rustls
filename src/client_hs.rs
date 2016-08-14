@@ -283,6 +283,7 @@ fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) 
 fn emit_certverify(sess: &mut ClientSessionImpl) {
   if sess.handshake_data.client_auth_key.is_none() {
     debug!("Not sending CertificateVerify, no key");
+    sess.handshake_data.transcript.abandon_client_auth();
     return;
   }
 
@@ -385,6 +386,7 @@ fn handle_done_or_certreq(sess: &mut ClientSessionImpl, m: &Message) -> Result<C
   if extract_handshake!(m, HandshakePayload::CertificateRequest).is_some() {
     handle_certificate_req(sess, m)
   } else {
+    sess.handshake_data.transcript.abandon_client_auth();
     handle_server_hello_done(sess, m)
   }
 }

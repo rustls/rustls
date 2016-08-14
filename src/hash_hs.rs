@@ -39,6 +39,13 @@ impl HandshakeHash {
     self.client_auth_enabled = true;
   }
 
+  /// We decided not to do client auth after all, so discard
+  /// the transcript.
+  pub fn abandon_client_auth(&mut self) {
+    self.client_auth_enabled = false;
+    self.buffer.drain(..);
+  }
+
   /// We now know what hash function the verify_data will use.
   pub fn start_hash(&mut self, alg: &'static digest::Algorithm) {
     assert!(self.ctx.is_none());
@@ -93,5 +100,64 @@ impl HandshakeHash {
   pub fn take_handshake_buf(&mut self) -> Vec<u8> {
     assert!(self.client_auth_enabled);
     mem::replace(&mut self.buffer, Vec::new())
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::HandshakeHash;
+  use super::ring;
+
+  #[test]
+  fn hashes_correctly() {
+    let mut hh = HandshakeHash::new();
+    hh.update_raw(b"hello");
+    assert_eq!(hh.buffer.len(), 5);
+    hh.start_hash(&ring::digest::SHA256);
+    assert_eq!(hh.buffer.len(), 0);
+    hh.update_raw(b"world");
+    let h = hh.get_current_hash();
+    assert_eq!(h[0], 0x93);
+    assert_eq!(h[1], 0x6a);
+    assert_eq!(h[2], 0x18);
+    assert_eq!(h[3], 0x5c);
+  }
+
+  #[test]
+  fn buffers_correctly() {
+    let mut hh = HandshakeHash::new();
+    hh.set_client_auth_enabled();
+    hh.update_raw(b"hello");
+    assert_eq!(hh.buffer.len(), 5);
+    hh.start_hash(&ring::digest::SHA256);
+    assert_eq!(hh.buffer.len(), 5);
+    hh.update_raw(b"world");
+    assert_eq!(hh.buffer.len(), 10);
+    let h = hh.get_current_hash();
+    assert_eq!(h[0], 0x93);
+    assert_eq!(h[1], 0x6a);
+    assert_eq!(h[2], 0x18);
+    assert_eq!(h[3], 0x5c);
+    let buf = hh.take_handshake_buf();
+    assert_eq!(b"helloworld".to_vec(), buf);
+  }
+
+  #[test]
+  fn abandon() {
+    let mut hh = HandshakeHash::new();
+    hh.set_client_auth_enabled();
+    hh.update_raw(b"hello");
+    assert_eq!(hh.buffer.len(), 5);
+    hh.start_hash(&ring::digest::SHA256);
+    assert_eq!(hh.buffer.len(), 5);
+    hh.abandon_client_auth();
+    assert_eq!(hh.buffer.len(), 0);
+    hh.update_raw(b"world");
+    assert_eq!(hh.buffer.len(), 0);
+    let h = hh.get_current_hash();
+    assert_eq!(h[0], 0x93);
+    assert_eq!(h[1], 0x6a);
+    assert_eq!(h[2], 0x18);
+    assert_eq!(h[3], 0x5c);
   }
 }
