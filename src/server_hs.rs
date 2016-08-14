@@ -181,7 +181,7 @@ fn emit_certificate_req(sess: &mut ServerSessionImpl) {
 
   let cr = CertificateRequestPayload {
     certtypes: vec![ ClientCertificateType::RSASign ],
-    sigalgs: SupportedSignatureAlgorithms::supported(),
+    sigalgs: SupportedSignatureAlgorithms::supported_verify(),
     canames: names
   };
 

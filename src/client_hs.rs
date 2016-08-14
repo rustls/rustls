@@ -78,7 +78,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   exts.push(ClientExtension::make_sni(&sess.handshake_data.dns_name));
   exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
   exts.push(ClientExtension::EllipticCurves(EllipticCurveList::supported()));
-  exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported()));
+  exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported_verify()));
 
   if sess.config.alpn_protocols.len() > 0 {
     exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));

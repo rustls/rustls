@@ -168,7 +168,7 @@ declare_u16_vec!(SupportedSignatureAlgorithms, SignatureAndHashAlgorithm);
 
 pub trait SupportedMandatedSignatureAlgorithms {
   fn mandated() -> SupportedSignatureAlgorithms;
-  fn supported() -> SupportedSignatureAlgorithms;
+  fn supported_verify() -> SupportedSignatureAlgorithms;
 }
 
 impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
@@ -182,8 +182,8 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
     ]
   }
 
-  /// Supported signature algorithms in decreasing order of expected security.
-  fn supported() -> SupportedSignatureAlgorithms {
+  /// Supported signature verification algorithms in decreasing order of expected security.
+  fn supported_verify() -> SupportedSignatureAlgorithms {
     vec![
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::ECDSA },
