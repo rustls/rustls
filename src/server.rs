@@ -183,7 +183,7 @@ pub struct ServerHandshakeData {
   pub transcript: hash_hs::HandshakeHash,
   pub kx_data: Option<KeyExchange>,
   pub doing_client_auth: bool,
-  pub valid_client_cert: Option<ASN1Cert>
+  pub valid_client_cert_chain: Option<Vec<ASN1Cert>>
 }
 
 impl ServerHandshakeData {
@@ -195,7 +195,7 @@ impl ServerHandshakeData {
       transcript: hash_hs::HandshakeHash::new(),
       kx_data: None,
       doing_client_auth: false,
-      valid_client_cert: None
+      valid_client_cert_chain: None
     }
   }
 
@@ -358,6 +358,20 @@ impl ServerSessionImpl {
   pub fn send_close_notify(&mut self) {
     self.common.send_warning_alert(AlertDescription::CloseNotify)
   }
+
+  pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
+    if self.handshake_data.valid_client_cert_chain.is_none() {
+      return None;
+    }
+
+    let mut r = Vec::new();
+
+    for cert in self.handshake_data.valid_client_cert_chain.as_ref().unwrap() {
+      r.push(cert.0.clone());
+    }
+
+    Some(r)
+  }
 }
 
 /// This represents a single TLS server session.
@@ -427,6 +441,10 @@ impl Session for ServerSession {
   /// during handshake).
   fn send_close_notify(&mut self) {
     self.imp.send_close_notify()
+  }
+
+  fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
+    self.imp.get_peer_certificates()
   }
 }
 

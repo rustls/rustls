@@ -52,6 +52,16 @@ pub trait Session : Read + Write {
   /// `write_tls` call.  This informs the peer that the
   /// connection is being closed.
   fn send_close_notify(&mut self);
+
+  /// Retrieves the certificate chain used by the peer to authenticate.
+  ///
+  /// For clients, this is the certificate chain of the server.
+  ///
+  /// For servers, this is the certificate chain of the client,
+  /// if client authentication was completed.
+  ///
+  /// The return value is None until this value is available.
+  fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>>;
 }
 
 pub struct SessionSecrets {

@@ -352,7 +352,7 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnS
                                &cert_chain)
   );
 
-  sess.handshake_data.valid_client_cert = Some(cert_chain[0].clone());
+  sess.handshake_data.valid_client_cert_chain = Some(cert_chain.clone());
   Ok(ConnState::ExpectClientKX)
 }
 

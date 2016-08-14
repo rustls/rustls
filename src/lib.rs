@@ -15,12 +15,12 @@
 //! * SNI support.
 //! * Tunable MTU to make TLS messages match size of underlying transport.
 //! * Resumption by clients.
+//! * Client authentication by clients.
+//! * Client authentication by servers.
 //!
 //! ## Possible future features
 //!
 //! * Resumption by servers.
-//! * Client authentication by clients.
-//! * Client authentication by servers.
 //! * ECDSA server authentication by servers.
 //! * PSK support.
 //! * TLS1.3.

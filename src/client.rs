@@ -421,6 +421,19 @@ impl ClientSessionImpl {
   pub fn send_close_notify(&mut self) {
     self.common.send_warning_alert(AlertDescription::CloseNotify)
   }
+
+  pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
+    if self.handshake_data.server_cert_chain.len() == 0 {
+      return None;
+    }
+
+    let mut r = Vec::new();
+    for cert in &self.handshake_data.server_cert_chain {
+      r.push(cert.0.clone());
+    }
+
+    Some(r)
+  }
 }
 
 /// This represents a single TLS client session.
@@ -485,6 +498,10 @@ impl Session for ClientSession {
   /// connection is being closed.
   fn send_close_notify(&mut self) {
     self.imp.send_close_notify()
+  }
+
+  fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
+    self.imp.get_peer_certificates()
   }
 }
 
