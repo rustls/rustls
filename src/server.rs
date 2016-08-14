@@ -180,7 +180,7 @@ pub struct ServerHandshakeData {
   pub server_cert_chain: Option<CertificatePayload>,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub secrets: SessionSecrets,
-  pub handshake_hash: Option<hash_hs::HandshakeHash>,
+  pub transcript: hash_hs::HandshakeHash,
   pub kx_data: Option<KeyExchange>,
   pub doing_client_auth: bool,
   pub valid_client_cert: Option<ASN1Cert>
@@ -192,7 +192,7 @@ impl ServerHandshakeData {
       server_cert_chain: None,
       ciphersuite: None,
       secrets: SessionSecrets::for_server(),
-      handshake_hash: None,
+      transcript: hash_hs::HandshakeHash::new(),
       kx_data: None,
       doing_client_auth: false,
       valid_client_cert: None
@@ -205,15 +205,7 @@ impl ServerHandshakeData {
 
   pub fn start_handshake_hash(&mut self) {
     let hash = self.ciphersuite.as_ref().unwrap().get_hash();
-    self.handshake_hash = Some(hash_hs::HandshakeHash::new(hash));
-  }
-
-  pub fn hash_message(&mut self, m: &Message) {
-    self.handshake_hash.as_mut().unwrap().update(m);
-  }
-
-  pub fn get_verify_hash(&self) -> Vec<u8> {
-    self.handshake_hash.as_ref().unwrap().get_current_hash()
+    self.transcript.start_hash(hash);
   }
 }
 
@@ -249,14 +241,20 @@ pub struct ServerSessionImpl {
 
 impl ServerSessionImpl {
   pub fn new(server_config: &Arc<ServerConfig>) -> ServerSessionImpl {
-    ServerSessionImpl {
+    let mut sess = ServerSessionImpl {
       config: server_config.clone(),
       handshake_data: ServerHandshakeData::new(),
       secrets_current: SessionSecrets::for_server(),
       common: SessionCommon::new(None),
       alpn_protocol: None,
       state: ConnState::ExpectClientHello
+    };
+
+    if sess.config.client_auth_roots.len() > 0 {
+      sess.handshake_data.transcript.set_client_auth_enabled();
     }
+
+    sess
   }
 
   pub fn wants_read(&self) -> bool {

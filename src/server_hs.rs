@@ -106,7 +106,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) {
   };
 
   debug!("sending server hello {:?}", sh);
-  sess.handshake_data.hash_message(&sh);
+  sess.handshake_data.transcript.add_message(&sh);
   sess.common.send_msg(&sh, false);
 }
 
@@ -124,7 +124,7 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
     )
   };
 
-  sess.handshake_data.hash_message(&c);
+  sess.handshake_data.transcript.add_message(&c);
   sess.common.send_msg(&c, false);
 }
 
@@ -167,7 +167,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
   };
 
   sess.handshake_data.kx_data = Some(kx);
-  sess.handshake_data.hash_message(&m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.common.send_msg(&m, false);
   Ok(())
 }
@@ -197,7 +197,7 @@ fn emit_certificate_req(sess: &mut ServerSessionImpl) {
   };
 
   debug!("Sending CertificateRequest {:?}", m);
-  sess.handshake_data.hash_message(&m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.common.send_msg(&m, false);
   sess.handshake_data.doing_client_auth = true;
 }
@@ -214,7 +214,7 @@ fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
     )
   };
 
-  sess.handshake_data.hash_message(&m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.common.send_msg(&m, false);
 }
 
@@ -291,7 +291,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
 
   /* Start handshake hash. */
   sess.handshake_data.start_handshake_hash();
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
 
   /* Now we have chosen a ciphersuite, we can make kx decisions. */
   let sigalg = try!(
@@ -335,7 +335,7 @@ pub static EXPECT_CLIENT_HELLO: Handler = Handler {
 
 /* --- Process client's Certificate for client auth --- */
 fn handle_certificate(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
 
   if cert_chain.len() == 0 && !sess.config.client_auth_mandatory {
@@ -366,7 +366,7 @@ pub static EXPECT_CERTIFICATE: Handler = Handler {
 /* --- Process client's KeyExchange --- */
 fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
 
   /* Complete key agreement, and set up encryption with the
    * resulting premaster secret. */
@@ -400,7 +400,7 @@ fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: &Message) -> Resul
   let rc = {
     let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
     let end_cert = sess.handshake_data.valid_client_cert.as_ref().unwrap();
-    let handshake_msgs = sess.handshake_data.handshake_hash.as_mut().unwrap().take_handshake_buf();
+    let handshake_msgs = sess.handshake_data.transcript.take_handshake_buf();
 
     verify::verify_signed_struct(&handshake_msgs, end_cert, &sig)
   };
@@ -412,7 +412,7 @@ fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: &Message) -> Resul
     debug!("client CertificateVerify OK");
   }
 
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
   Ok(ConnState::ExpectCCS)
 }
 
@@ -450,7 +450,7 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
 }
 
 fn emit_finished(sess: &mut ServerSessionImpl) {
-  let vh = sess.handshake_data.get_verify_hash();
+  let vh = sess.handshake_data.transcript.get_current_hash();
   let verify_data = sess.secrets_current.server_verify_data(&vh);
   let verify_data_payload = Payload { body: verify_data.into_boxed_slice() };
 
@@ -471,7 +471,7 @@ fn emit_finished(sess: &mut ServerSessionImpl) {
 fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
-  let vh = sess.handshake_data.get_verify_hash();
+  let vh = sess.handshake_data.transcript.get_current_hash();
   let expect_verify_data = sess.secrets_current.client_verify_data(&vh);
 
   use ring;
@@ -480,7 +480,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
       .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
   );
 
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
   emit_ccs(sess);
   emit_finished(sess);
   Ok(ConnState::Traffic)

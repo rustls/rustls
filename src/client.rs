@@ -60,6 +60,9 @@ pub trait ResolvesClientCert {
              acceptable_issuers: &DistinguishedNames,
              sigalgs: &SupportedSignatureAlgorithms)
     -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>;
+
+  /// Return true if any certificates at all are available.
+  fn has_certs(&self) -> bool;
 }
 
 struct FailResolveClientCert {}
@@ -72,6 +75,8 @@ impl ResolvesClientCert for FailResolveClientCert {
   {
     None
   }
+
+  fn has_certs(&self) -> bool { false }
 }
 
 struct AlwaysResolvesClientCert {
@@ -100,6 +105,8 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
   {
     Some((self.chain.clone(), self.key.clone()))
   }
+
+  fn has_certs(&self) -> bool { true }
 }
 
 /// Common configuration for (typically) all connections made by
@@ -188,14 +195,13 @@ impl ClientConfig {
 }
 
 pub struct ClientHandshakeData {
-  pub client_hello: Vec<u8>,
   pub server_cert_chain: CertificatePayload,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub dns_name: String,
   pub session_id: SessionID,
   pub server_kx_params: Vec<u8>,
   pub server_kx_sig: Option<DigitallySignedStruct>,
-  pub handshake_hash: Option<hash_hs::HandshakeHash>,
+  pub transcript: hash_hs::HandshakeHash,
   pub resuming_session: Option<persist::ClientSessionValue>,
   pub secrets: SessionSecrets,
   pub doing_client_auth: bool,
@@ -207,14 +213,13 @@ pub struct ClientHandshakeData {
 impl ClientHandshakeData {
   fn new(host_name: &str) -> ClientHandshakeData {
     ClientHandshakeData {
-      client_hello: Vec::new(),
       server_cert_chain: Vec::new(),
       ciphersuite: None,
       dns_name: host_name.to_string(),
       session_id: SessionID::empty(),
       server_kx_params: Vec::new(),
       server_kx_sig: None,
-      handshake_hash: None,
+      transcript: hash_hs::HandshakeHash::new(),
       resuming_session: None,
       secrets: SessionSecrets::for_client(),
       doing_client_auth: false,
@@ -226,14 +231,6 @@ impl ClientHandshakeData {
 
   pub fn generate_client_random(&mut self) {
     rand::fill_random(&mut self.secrets.client_random);
-  }
-
-  pub fn hash_message(&mut self, m: &Message) {
-    self.handshake_hash.as_mut().unwrap().update(m);
-  }
-
-  pub fn get_verify_hash(&self) -> Vec<u8> {
-    self.handshake_hash.as_ref().unwrap().get_current_hash()
   }
 }
 
@@ -282,6 +279,10 @@ impl ClientSessionImpl {
       common: SessionCommon::new(config.mtu),
       state: ConnState::ExpectServerHello
     };
+
+    if cs.config.client_auth_cert_resolver.has_certs() {
+      cs.handshake_data.transcript.set_client_auth_enabled();
+    }
 
     client_hs::emit_client_hello(&mut cs);
     cs

@@ -17,7 +17,6 @@ use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::{ClientSessionImpl, ConnState};
 use suites;
-use hash_hs;
 use verify;
 use error::TLSError;
 use handshake::Expectation;
@@ -85,7 +84,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));
   }
 
-  let sh = Message {
+  let ch = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
     payload: MessagePayload::Handshake(
@@ -105,10 +104,10 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     )
   };
 
-  debug!("Sending ClientHello {:#?}", sh);
+  debug!("Sending ClientHello {:#?}", ch);
 
-  sh.payload.encode(&mut sess.handshake_data.client_hello);
-  sess.common.send_msg(&sh, false);
+  sess.handshake_data.transcript.add_message(&ch);
+  sess.common.send_msg(&ch, false);
 }
 
 fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
@@ -138,13 +137,9 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
   info!("Using ciphersuite {:?}", server_hello.cipher_suite);
 
-  /* Start our handshake hash, and input the client hello we sent, and this reply. */
-  sess.handshake_data.handshake_hash = Some(
-    hash_hs::HandshakeHash::new(scs.as_ref().unwrap().get_hash())
-  );
-  sess.handshake_data.handshake_hash.as_mut().unwrap()
-    .update_raw(&sess.handshake_data.client_hello)
-    .update(m);
+  /* Start our handshake hash, and input this reply. */
+  sess.handshake_data.transcript.start_hash(scs.as_ref().unwrap().get_hash());
+  sess.handshake_data.transcript.add_message(m);
 
   sess.handshake_data.ciphersuite = scs;
 
@@ -188,7 +183,7 @@ pub static EXPECT_SERVER_HELLO: Handler = Handler {
 
 fn handle_certificate(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
   sess.handshake_data.server_cert_chain = cert_chain.clone();
   Ok(ConnState::ExpectServerKX)
 }
@@ -204,7 +199,7 @@ pub static EXPECT_CERTIFICATE: Handler = Handler {
 fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
   let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.handshake_data.ciphersuite.unwrap().kx);
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
 
   if maybe_decoded_kx.is_none() {
     return Err(TLSError::General("cannot decode server's kx".to_string()));
@@ -260,7 +255,7 @@ fn emit_certificate(sess: &mut ClientSessionImpl) {
     )
   };
 
-  sess.handshake_data.hash_message(&cert);
+  sess.handshake_data.transcript.add_message(&cert);
   sess.common.send_msg(&cert, false);
 }
 
@@ -281,21 +276,17 @@ fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) 
     )
   };
 
-  sess.handshake_data.hash_message(&ckx);
+  sess.handshake_data.transcript.add_message(&ckx);
   sess.common.send_msg(&ckx, false);
 }
 
 fn emit_certverify(sess: &mut ClientSessionImpl) {
-  let message = sess.handshake_data.handshake_hash
-    .as_mut()
-    .unwrap()
-    .take_handshake_buf();
-
   if sess.handshake_data.client_auth_key.is_none() {
     debug!("Not sending CertificateVerify, no key");
     return;
   }
 
+  let message = sess.handshake_data.transcript.take_handshake_buf();
   let key = mem::replace(&mut sess.handshake_data.client_auth_key, None).unwrap();
   let sigalg = sess.handshake_data.client_auth_sigalg
     .clone()
@@ -315,7 +306,7 @@ fn emit_certverify(sess: &mut ClientSessionImpl) {
     )
   };
 
-  sess.handshake_data.hash_message(&m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.common.send_msg(&m, false);
 }
 
@@ -330,7 +321,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
 }
 
 fn emit_finished(sess: &mut ClientSessionImpl) {
-  let vh = sess.handshake_data.get_verify_hash();
+  let vh = sess.handshake_data.transcript.get_current_hash();
   dumphex("finished vh", &vh);
   let verify_data = sess.secrets_current.client_verify_data(&vh);
   dumphex("finished verify", &verify_data);
@@ -347,7 +338,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
     )
   };
 
-  sess.handshake_data.hash_message(&f);
+  sess.handshake_data.transcript.add_message(&f);
   sess.common.send_msg(&f, true);
 }
 
@@ -356,7 +347,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
  * client auth.  Otherwise we go straight to ServerHelloDone. */
 fn handle_certificate_req(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
   sess.handshake_data.doing_client_auth = true;
   info!("Got CertificateRequest {:?}", certreq);
 
@@ -407,7 +398,7 @@ pub static EXPECT_DONE_OR_CERTREQ: Handler = Handler {
 };
 
 fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
 
   info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
   info!("Server DNS name is {:?}", sess.handshake_data.dns_name);
@@ -542,7 +533,7 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnStat
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
   /* Work out what verify_data we expect. */
-  let vh = sess.handshake_data.get_verify_hash();
+  let vh = sess.handshake_data.transcript.get_current_hash();
   let expect_verify_data = sess.secrets_current.server_verify_data(&vh);
 
   /* Constant-time verification of this is relatively unimportant: they only
@@ -554,7 +545,7 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnStat
   );
 
   /* Hash this message too. */
-  sess.handshake_data.hash_message(m);
+  sess.handshake_data.transcript.add_message(m);
 
   save_session(sess);
 
