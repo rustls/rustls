@@ -13,9 +13,11 @@ use x509;
 
 use std::io;
 
+type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
+
 /// Which signature verification mechanisms we support.  No particular
 /// order.
-static SUPPORTED_SIG_ALGS: &'static [&'static webpki::SignatureAlgorithm] = &[
+static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
   &webpki::ECDSA_P256_SHA1,
   &webpki::ECDSA_P256_SHA256,
   &webpki::ECDSA_P256_SHA384,
@@ -134,14 +136,21 @@ impl RootCertStore {
 }
 
 /// Check `presented_certs` is non-empty and rooted in `roots`.
-fn verify_common_cert(roots: &RootCertStore,
-                      presented_certs: &Vec<ASN1Cert>) -> Result<(), TLSError> {
+/// Return the webpki::EndEntityCert for the top certificate
+/// in `presented_certs`.
+fn verify_common_cert<'a>(roots: &RootCertStore,
+                          presented_certs: &'a [ASN1Cert])
+    -> Result<webpki::EndEntityCert<'a>, TLSError> {
   if presented_certs.len() == 0 {
     return Err(TLSError::NoCertificatesPresented);
   }
 
   /* EE cert must appear first. */
-  let ee = untrusted::Input::from(&presented_certs[0].0);
+  let cert_der = untrusted::Input::from(&presented_certs[0].0);
+  let cert = try!(
+    webpki::EndEntityCert::from(cert_der)
+      .map_err(|err| TLSError::WebPKIError(err))
+  );
 
   let chain: Vec<untrusted::Input> = presented_certs.iter()
     .skip(1)
@@ -152,12 +161,12 @@ fn verify_common_cert(roots: &RootCertStore,
     .map(|x| x.to_trust_anchor())
     .collect();
 
-  webpki::verify_tls_cert(&SUPPORTED_SIG_ALGS,
-                          &trustroots,
-                          &chain,
-                          ee,
-                          time::get_time())
+  cert.verify_is_valid_tls_server_cert(&SUPPORTED_SIG_ALGS,
+                                       &trustroots,
+                                       &chain,
+                                       time::get_time())
     .map_err(|err| TLSError::WebPKIError(err))
+    .map(|_| cert)
 }
 
 /// Verify a the certificate chain `presented_certs` against the roots
@@ -166,13 +175,10 @@ fn verify_common_cert(roots: &RootCertStore,
 pub fn verify_server_cert(roots: &RootCertStore,
                           presented_certs: &Vec<ASN1Cert>,
                           dns_name: &str) -> Result<(), TLSError> {
-  try!(verify_common_cert(roots, presented_certs));
+  let cert = try!(verify_common_cert(roots, presented_certs));
 
-  webpki::verify_cert_dns_name(
-    untrusted::Input::from(&presented_certs[0].0),
-    untrusted::Input::from(dns_name.as_bytes())
-  )
-  .map_err(|err| TLSError::WebPKIError(err))
+  cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
+    .map_err(|err| TLSError::WebPKIError(err))
 }
 
 /// Verify a certificate chain `presented_certs` is rooted in `roots`.
@@ -180,34 +186,60 @@ pub fn verify_server_cert(roots: &RootCertStore,
 pub fn verify_client_cert(roots: &RootCertStore,
                           presented_certs: &Vec<ASN1Cert>) -> Result<(), TLSError> {
   verify_common_cert(roots, presented_certs)
+    .map(|_| ())
 }
 
-/* TODO: this is a bit gross. consider doing it another way */
-static ECDSA_SHA1: &'static [u8] = b"\x06\x07\x2a\x86\x48\xce\x3d\x04\x01";
-static ECDSA_SHA256: &'static [u8] = b"\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x02";
-static ECDSA_SHA384: &'static [u8] = b"\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x03";
-static ECDSA_SHA512: &'static [u8] = b"\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x04";
-static RSA_SHA1: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x05";
-static RSA_SHA256: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0b";
-static RSA_SHA384: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0c";
-static RSA_SHA512: &'static [u8] = b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0d";
+static ECDSA_SHA1: SignatureAlgorithms = &[
+  &webpki::ECDSA_P256_SHA1, &webpki::ECDSA_P384_SHA1
+];
+static ECDSA_SHA256: SignatureAlgorithms = &[
+  &webpki::ECDSA_P256_SHA256, &webpki::ECDSA_P384_SHA256
+];
+static ECDSA_SHA384: SignatureAlgorithms = &[
+  &webpki::ECDSA_P256_SHA384, &webpki::ECDSA_P384_SHA384
+];
+static ECDSA_SHA512: SignatureAlgorithms = &[
+  &webpki::ECDSA_P256_SHA512, &webpki::ECDSA_P384_SHA512
+];
 
+static RSA_SHA1: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA1 ];
+static RSA_SHA256: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA256 ];
+static RSA_SHA384: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA384 ];
+static RSA_SHA512: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA512 ];
 
-fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<&'static [u8], TLSError> {
+fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<SignatureAlgorithms, TLSError> {
   use msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
   use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
   match (&sh.sign, &sh.hash) {
-    (&ECDSA, &SHA1) => Ok(ECDSA_SHA1),
-    (&ECDSA, &SHA256) => Ok(ECDSA_SHA256),
-    (&ECDSA, &SHA384) => Ok(ECDSA_SHA384),
-    (&ECDSA, &SHA512) => Ok(ECDSA_SHA512),
-    (&RSA, &SHA1) => Ok(RSA_SHA1),
-    (&RSA, &SHA256) => Ok(RSA_SHA256),
-    (&RSA, &SHA384) => Ok(RSA_SHA384),
-    (&RSA, &SHA512) => Ok(RSA_SHA512),
-    _ => Err(TLSError::General("convert_alg cannot map to oid".to_string()))
+    (&ECDSA, &SHA1)   => Ok(&ECDSA_SHA1),
+    (&ECDSA, &SHA256) => Ok(&ECDSA_SHA256),
+    (&ECDSA, &SHA384) => Ok(&ECDSA_SHA384),
+    (&ECDSA, &SHA512) => Ok(&ECDSA_SHA512),
+    (&RSA, &SHA1)     => Ok(&RSA_SHA1),
+    (&RSA, &SHA256)   => Ok(&RSA_SHA256),
+    (&RSA, &SHA384)   => Ok(&RSA_SHA384),
+    (&RSA, &SHA512)   => Ok(&RSA_SHA512),
+    _ => Err(TLSError::General("cannot convert to webpki sigalg".to_string()))
   }
+}
+
+fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
+                            algs: SignatureAlgorithms,
+                            message: &[u8],
+                            sig: &[u8]) -> Result<(), webpki::Error> {
+  /* TLS doesn't itself give us enough info to map to a single webpki::SignatureAlgorithm.
+   * Therefore, in convert_algs maps to several and we try them all. */
+  for alg in algs {
+    match cert.verify_signature(alg,
+                                untrusted::Input::from(message),
+                                untrusted::Input::from(sig)) {
+      Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
+      res => return res
+    }
+  }
+
+  Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
 }
 
 /// Verify the signed `message` using the public key quoted in
@@ -219,21 +251,12 @@ pub fn verify_signed_struct(message: &[u8],
                             cert: &ASN1Cert,
                             dss: &DigitallySignedStruct) -> Result<(), TLSError> {
 
-  let alg = try!(convert_alg(&dss.alg));
-
-  let signed_data = webpki::signed_data::SignedData {
-    data: untrusted::Input::from(message),
-    algorithm: untrusted::Input::from(alg),
-    signature: untrusted::Input::from(&dss.sig.0)
-  };
-
+  let possible_algs = try!(convert_alg(&dss.alg));
   let cert_in = untrusted::Input::from(&cert.0);
-  let cert = try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(cert_in)
+  let cert = try!(webpki::EndEntityCert::from(cert_in)
                   .map_err(|err| TLSError::WebPKIError(err)));
 
-  webpki::signed_data::verify_signed_data(&SUPPORTED_SIG_ALGS,
-                                          untrusted::Input::from(cert.spki),
-                                          &signed_data)
+  verify_sig_using_any_alg(&cert, &possible_algs, message, &dss.sig.0)
     .map_err(|err| TLSError::WebPKIError(err))
 }
 

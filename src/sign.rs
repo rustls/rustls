@@ -19,7 +19,9 @@ pub struct RSASigner {
 impl RSASigner {
   pub fn new(der: &[u8]) -> Result<RSASigner, ()> {
     let key = ring::signature::RSAKeyPair::from_der(untrusted::Input::from(der));
-    key.map(|k| RSASigner { key: k })
+    key
+      .map(|k| RSASigner { key: k })
+      .map_err(|_| ())
   }
 }
 
@@ -35,6 +37,7 @@ impl Signer for RSASigner {
     let rng = ring::rand::SystemRandom::new();
     self.key.sign(pad, &rng, message, &mut sig)
       .map(|_| sig)
+      .map_err(|_| ())
   }
 
   fn algorithm(&self) -> SignatureAlgorithm {

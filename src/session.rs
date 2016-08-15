@@ -253,11 +253,14 @@ impl MessageCipher for GCMMessageCipher {
     msg.version.encode(&mut aad);
     codec::encode_u16((buf.len() - GCM_OVERHEAD) as u16, &mut aad);
 
-    let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
-                                                   &nonce,
-                                                   GCM_EXPLICIT_NONCE_LEN,
-                                                   &mut buf,
-                                                   &aad));
+    let plain_len = try!(
+      ring::aead::open_in_place(&self.dec_key,
+                                &nonce,
+                                GCM_EXPLICIT_NONCE_LEN,
+                                &mut buf,
+                                &aad)
+        .map_err(|_| ())
+    );
 
     buf.truncate(plain_len);
 
@@ -300,11 +303,14 @@ impl MessageCipher for GCMMessageCipher {
     msg.version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
-    try!(ring::aead::seal_in_place(&self.enc_key,
-                                   &nonce,
-                                   &mut buf[GCM_EXPLICIT_NONCE_LEN..],
-                                   tag_len,
-                                   &aad));
+    try!(
+      ring::aead::seal_in_place(&self.enc_key,
+                                &nonce,
+                                &mut buf[GCM_EXPLICIT_NONCE_LEN..],
+                                tag_len,
+                                &aad)
+        .map_err(|_| ())
+    );
 
     buf[0..8].as_mut().write(&nonce[4..]).unwrap();
 
@@ -396,11 +402,14 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     msg.version.encode(&mut aad);
     codec::encode_u16((buf.len() - CP_OVERHEAD) as u16, &mut aad);
 
-    let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
-                                                   &nonce,
-                                                   0,
-                                                   &mut buf,
-                                                   &aad));
+    let plain_len = try!(
+      ring::aead::open_in_place(&self.dec_key,
+                                &nonce,
+                                0,
+                                &mut buf,
+                                &aad)
+        .map_err(|_| ())
+    );
 
     buf.truncate(plain_len);
 
@@ -433,11 +442,14 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     msg.version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
-    try!(ring::aead::seal_in_place(&self.enc_key,
-                                   &nonce,
-                                   &mut buf,
-                                   tag_len,
-                                   &aad));
+    try!(
+      ring::aead::seal_in_place(&self.enc_key,
+                                &nonce,
+                                &mut buf,
+                                tag_len,
+                                &aad)
+        .map_err(|_| ())
+    );
 
     Ok(Message {
       typ: msg.typ.clone(),
