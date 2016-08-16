@@ -16,18 +16,15 @@ log = "0.3.6"
 
 [replace]
 "ring:0.2.0" = { git = "https://github.com/briansmith/ring", rev = "ec39fbd" }
-"webpki:0.1.0" = { git = "https://github.com/briansmith/webpki", rev = "0749501" }
 
 [dependencies.ring]
 git = "https://github.com/briansmith/ring"
-version = "0.2.0"
 features = [ "rsa_signing" ]
 rev = "ec39fbd"
 
 [dependencies.webpki]
-git = "https://github.com/briansmith/webpki"
-version = "0.1.0"
-rev = "0749501"
+git = "https://github.com/ctz/webpki"
+rev = "9c855fd"
 
 [dev-dependencies]
 env_logger = "0.3.3"
