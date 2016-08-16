@@ -50,8 +50,8 @@
 <span id="6">6</span>
 <span id="7">7</span>
 </pre><pre class='rust '>
-<span class='comment'>/* A macro which takes an Option&lt;T&gt; and returns None if it
- * is None, otherwise unwraps(). */</span>
+<span class='doccomment'>/// A macro which takes an Option&lt;T&gt; and returns None if it</span>
+<span class='doccomment'>/// is None, otherwise unwraps().</span>
 <span class='attribute'>#[<span class='ident'>export_macro</span>]</span>
 <span class='macro'>macro_rules</span><span class='macro'>!</span> <span class='ident'>try_ret</span>(
     (<span class='macro-nonterminal'>$</span><span class='macro-nonterminal'>e</span>:<span class='ident'>expr</span>) <span class='op'>=&gt;</span> (<span class='kw'>match</span> <span class='macro-nonterminal'>$</span><span class='macro-nonterminal'>e</span> { <span class='prelude-val'>Some</span>(<span class='ident'>e</span>) <span class='op'>=&gt;</span> <span class='ident'>e</span>, <span class='prelude-val'>None</span> <span class='op'>=&gt;</span> <span class='kw'>return</span> <span class='prelude-val'>None</span> })
@@ -81,6 +81,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

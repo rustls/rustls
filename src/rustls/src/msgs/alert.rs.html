@@ -64,6 +64,10 @@
 <span id="20">20</span>
 <span id="21">21</span>
 <span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>AlertLevel</span>, <span class='ident'>AlertDescription</span>};
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::{<span class='ident'>Codec</span>, <span class='ident'>Reader</span>};
@@ -86,6 +90,10 @@
 
     <span class='prelude-val'>Some</span>(<span class='ident'>AlertMessagePayload</span> { <span class='ident'>level</span>: <span class='ident'>level</span>, <span class='ident'>description</span>: <span class='ident'>desc</span> })
   }
+}
+
+<span class='kw'>impl</span> <span class='ident'>AlertMessagePayload</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>len</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> { <span class='number'>1</span> <span class='op'>+</span> <span class='number'>1</span> }
 }
 </pre>
 </section>
@@ -111,6 +119,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

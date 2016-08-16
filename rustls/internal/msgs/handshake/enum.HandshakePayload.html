@@ -47,20 +47,24 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-2761' class='srclink' href='../../../../src/rustls/src/msgs/handshake.rs.html#833-843' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-2823' class='srclink' href='../../../../src/rustls/src/msgs/handshake.rs.html#848-860' title='goto source code'>[src]</a></span></h1>
 <pre class='rust enum'>pub enum HandshakePayload {
     HelloRequest,
     ClientHello(<a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ClientHelloPayload.html' title='rustls::internal::msgs::handshake::ClientHelloPayload'>ClientHelloPayload</a>),
     ServerHello(<a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.ServerHelloPayload.html' title='rustls::internal::msgs::handshake::ServerHelloPayload'>ServerHelloPayload</a>),
     Certificate(<a class='type' href='../../../../rustls/internal/msgs/handshake/type.CertificatePayload.html' title='rustls::internal::msgs::handshake::CertificatePayload'>CertificatePayload</a>),
     ServerKeyExchange(<a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.ServerKeyExchangePayload.html' title='rustls::internal::msgs::handshake::ServerKeyExchangePayload'>ServerKeyExchangePayload</a>),
+    CertificateRequest(<a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.CertificateRequestPayload.html' title='rustls::internal::msgs::handshake::CertificateRequestPayload'>CertificateRequestPayload</a>),
+    CertificateVerify(<a class='struct' href='../../../../rustls/internal/msgs/handshake/struct.DigitallySignedStruct.html' title='rustls::internal::msgs::handshake::DigitallySignedStruct'>DigitallySignedStruct</a>),
     ServerHelloDone,
     ClientKeyExchange(<a class='struct' href='../../../../rustls/internal/msgs/base/struct.Payload.html' title='rustls::internal::msgs::base::Payload'>Payload</a>),
     Finished(<a class='struct' href='../../../../rustls/internal/msgs/base/struct.Payload.html' title='rustls::internal::msgs::base::Payload'>Payload</a>),
     Unknown(<a class='struct' href='../../../../rustls/internal/msgs/base/struct.Payload.html' title='rustls::internal::msgs::base::Payload'>Payload</a>),
 }</pre><h2 class='variants'>Variants</h2>
-<table class='variants_table'><tr><td id='variant.HelloRequest'><code>HelloRequest</code></td><td></td><td></td></tr><tr><td id='variant.ClientHello'><code>ClientHello</code></td><td></td><td></td></tr><tr><td id='variant.ServerHello'><code>ServerHello</code></td><td></td><td></td></tr><tr><td id='variant.Certificate'><code>Certificate</code></td><td></td><td></td></tr><tr><td id='variant.ServerKeyExchange'><code>ServerKeyExchange</code></td><td></td><td></td></tr><tr><td id='variant.ServerHelloDone'><code>ServerHelloDone</code></td><td></td><td></td></tr><tr><td id='variant.ClientKeyExchange'><code>ClientKeyExchange</code></td><td></td><td></td></tr><tr><td id='variant.Finished'><code>Finished</code></td><td></td><td></td></tr><tr><td id='variant.Unknown'><code>Unknown</code></td><td></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.HandshakePayload.html' title='rustls::internal::msgs::handshake::HandshakePayload'>HandshakePayload</a></code></h3><div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>
-</div></section>
+<table class='variants_table'><tr><td id='variant.HelloRequest'><code>HelloRequest</code></td><td></td><td></td></tr><tr><td id='variant.ClientHello'><code>ClientHello</code></td><td></td><td></td></tr><tr><td id='variant.ServerHello'><code>ServerHello</code></td><td></td><td></td></tr><tr><td id='variant.Certificate'><code>Certificate</code></td><td></td><td></td></tr><tr><td id='variant.ServerKeyExchange'><code>ServerKeyExchange</code></td><td></td><td></td></tr><tr><td id='variant.CertificateRequest'><code>CertificateRequest</code></td><td></td><td></td></tr><tr><td id='variant.CertificateVerify'><code>CertificateVerify</code></td><td></td><td></td></tr><tr><td id='variant.ServerHelloDone'><code>ServerHelloDone</code></td><td></td><td></td></tr><tr><td id='variant.ClientKeyExchange'><code>ClientKeyExchange</code></td><td></td><td></td></tr><tr><td id='variant.Finished'><code>Finished</code></td><td></td><td></td></tr><tr><td id='variant.Unknown'><code>Unknown</code></td><td></td><td></td></tr></table><h2 id='implementations'>Trait Implementations</h2><h3 id='derived_implementations'>Derived Implementations </h3><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='enum' href='../../../../rustls/internal/msgs/handshake/enum.HandshakePayload.html' title='rustls::internal::msgs::handshake::HandshakePayload'>HandshakePayload</a></code></span><span class='out-of-band'><div class='ghost'></div><a id='src-2844' class='srclink' href='../../../../src/rustls/src/msgs/handshake.rs.html#847' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.fmt' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></h4>
+<div class='docblock'><p>Formats the value using the given formatter.</p>
+</div></div></section>
     <section id='search' class="content hidden"></section>
 
     <section class="footer"></section>
@@ -83,6 +87,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

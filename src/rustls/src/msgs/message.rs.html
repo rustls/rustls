@@ -153,6 +153,23 @@
 <span id="109">109</span>
 <span id="110">110</span>
 <span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
 </pre><pre class='rust '>
 
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::{<span class='ident'>Codec</span>, <span class='ident'>Reader</span>, <span class='ident'>encode_u16</span>, <span class='ident'>read_u16</span>};
@@ -183,7 +200,7 @@
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>decode_given_type</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>typ</span>: <span class='kw-2'>&amp;</span><span class='ident'>ContentType</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>MessagePayload</span><span class='op'>&gt;</span> {
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='ident'>MessagePayload</span>::<span class='ident'>Opaque</span>(<span class='kw-2'>ref</span> <span class='ident'>payload</span>) <span class='op'>=</span> <span class='op'>*</span><span class='self'>self</span> {
-      <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>r</span> <span class='op'>=</span> <span class='ident'>Reader</span>::<span class='ident'>init</span>(<span class='kw-2'>&amp;</span><span class='ident'>payload</span>.<span class='ident'>body</span>);
+      <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>r</span> <span class='op'>=</span> <span class='ident'>Reader</span>::<span class='ident'>init</span>(<span class='kw-2'>&amp;</span><span class='ident'>payload</span>.<span class='number'>0</span>);
       <span class='kw'>match</span> <span class='op'>*</span><span class='ident'>typ</span> {
         <span class='ident'>ContentType</span>::<span class='ident'>Alert</span> <span class='op'>=&gt;</span>
           <span class='prelude-val'>Some</span>(<span class='ident'>MessagePayload</span>::<span class='ident'>Alert</span>(<span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>AlertMessagePayload</span>::<span class='ident'>read</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>r</span>)))),
@@ -199,12 +216,21 @@
     }
   }
 
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>len</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
+    <span class='kw'>match</span> <span class='op'>*</span><span class='self'>self</span> {
+      <span class='ident'>MessagePayload</span>::<span class='ident'>Alert</span>(<span class='kw-2'>ref</span> <span class='ident'>x</span>) <span class='op'>=&gt;</span> <span class='ident'>x</span>.<span class='ident'>len</span>(),
+      <span class='ident'>MessagePayload</span>::<span class='ident'>Handshake</span>(<span class='kw-2'>ref</span> <span class='ident'>x</span>) <span class='op'>=&gt;</span> <span class='ident'>x</span>.<span class='ident'>len</span>(),
+      <span class='ident'>MessagePayload</span>::<span class='ident'>ChangeCipherSpec</span>(<span class='kw-2'>ref</span> <span class='ident'>x</span>) <span class='op'>=&gt;</span> <span class='ident'>x</span>.<span class='ident'>len</span>(),
+      <span class='ident'>MessagePayload</span>::<span class='ident'>Opaque</span>(<span class='kw-2'>ref</span> <span class='ident'>x</span>) <span class='op'>=&gt;</span> <span class='ident'>x</span>.<span class='ident'>len</span>()
+    }
+  }
+
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>opaque</span>(<span class='ident'>data</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>MessagePayload</span> {
-    <span class='ident'>MessagePayload</span>::<span class='ident'>Opaque</span>(<span class='ident'>Payload</span> { <span class='ident'>body</span>: <span class='ident'>data</span>.<span class='ident'>into_boxed_slice</span>() })
+    <span class='ident'>MessagePayload</span>::<span class='ident'>Opaque</span>(<span class='ident'>Payload</span>::<span class='ident'>new</span>(<span class='ident'>data</span>))
   }
 }
 
-<span class='comment'>/* aka TLSPlaintext */</span>
+<span class='doccomment'>/// A TLS frame, named TLSPlaintext in the standard</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Message</span> {
   <span class='kw'>pub</span> <span class='ident'>typ</span>: <span class='ident'>ContentType</span>,
@@ -227,11 +253,8 @@
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) {
     <span class='self'>self</span>.<span class='ident'>typ</span>.<span class='ident'>encode</span>(<span class='ident'>bytes</span>);
     <span class='self'>self</span>.<span class='ident'>version</span>.<span class='ident'>encode</span>(<span class='ident'>bytes</span>);
-
-    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sub</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
-    <span class='self'>self</span>.<span class='ident'>payload</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>sub</span>);
-    <span class='ident'>encode_u16</span>(<span class='ident'>sub</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='ident'>bytes</span>);
-    <span class='ident'>bytes</span>.<span class='ident'>extend</span>(<span class='ident'>sub</span>);
+    <span class='ident'>encode_u16</span>(<span class='self'>self</span>.<span class='ident'>payload</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='ident'>bytes</span>);
+    <span class='self'>self</span>.<span class='ident'>payload</span>.<span class='ident'>encode</span>(<span class='ident'>bytes</span>);
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>is_content_type</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>typ</span>: <span class='ident'>ContentType</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
@@ -249,6 +272,17 @@
       <span class='prelude-val'>Some</span>(<span class='ident'>op</span>.<span class='ident'>clone</span>())
     } <span class='kw'>else</span> {
       <span class='prelude-val'>None</span>
+    }
+  }
+
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>to_opaque</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>Message</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+    <span class='self'>self</span>.<span class='ident'>payload</span>.<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>buf</span>);
+
+    <span class='ident'>Message</span> {
+      <span class='ident'>typ</span>: <span class='self'>self</span>.<span class='ident'>typ</span>.<span class='ident'>clone</span>(),
+      <span class='ident'>version</span>: <span class='self'>self</span>.<span class='ident'>version</span>.<span class='ident'>clone</span>(),
+      <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='ident'>buf</span>)
     }
   }
 
@@ -289,6 +323,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

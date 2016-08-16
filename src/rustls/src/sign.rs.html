@@ -86,11 +86,12 @@
 <span id="42">42</span>
 <span id="43">43</span>
 <span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>HashAlgorithm</span>, <span class='ident'>SignatureAlgorithm</span>};
-
-<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
-<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>untrusted</span>;
+<span class='kw'>use</span> <span class='ident'>untrusted</span>;
+<span class='kw'>use</span> <span class='ident'>ring</span>;
 
 <span class='doccomment'>/// A thing that can sign a message.</span>
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Signer</span> {
@@ -109,7 +110,9 @@
 <span class='kw'>impl</span> <span class='ident'>RSASigner</span> {
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>der</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>RSASigner</span>, ()<span class='op'>&gt;</span> {
     <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>ring</span>::<span class='ident'>signature</span>::<span class='ident'>RSAKeyPair</span>::<span class='ident'>from_der</span>(<span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>der</span>));
-    <span class='ident'>key</span>.<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>k</span><span class='op'>|</span> <span class='ident'>RSASigner</span> { <span class='ident'>key</span>: <span class='ident'>k</span> })
+    <span class='ident'>key</span>
+      .<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>k</span><span class='op'>|</span> <span class='ident'>RSASigner</span> { <span class='ident'>key</span>: <span class='ident'>k</span> })
+      .<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> ())
   }
 }
 
@@ -125,6 +128,7 @@
     <span class='kw'>let</span> <span class='ident'>rng</span> <span class='op'>=</span> <span class='ident'>ring</span>::<span class='ident'>rand</span>::<span class='ident'>SystemRandom</span>::<span class='ident'>new</span>();
     <span class='self'>self</span>.<span class='ident'>key</span>.<span class='ident'>sign</span>(<span class='ident'>pad</span>, <span class='kw-2'>&amp;</span><span class='ident'>rng</span>, <span class='ident'>message</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>sig</span>)
       .<span class='ident'>map</span>(<span class='op'>|</span>_<span class='op'>|</span> <span class='ident'>sig</span>)
+      .<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> ())
   }
 
   <span class='kw'>fn</span> <span class='ident'>algorithm</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>SignatureAlgorithm</span> {
@@ -155,6 +159,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

@@ -121,83 +121,119 @@
 <span id="77">77</span>
 <span id="78">78</span>
 <span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::{<span class='ident'>Codec</span>, <span class='ident'>Reader</span>};
 
-<span class='comment'>/* An externally length&#39;d payload */</span>
+<span class='doccomment'>/// An externally length&#39;d payload</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>, <span class='ident'>Clone</span>)]</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Payload</span> {
-  <span class='kw'>pub</span> <span class='ident'>body</span>: <span class='ident'>Box</span><span class='op'>&lt;</span>[<span class='ident'>u8</span>]<span class='op'>&gt;</span>
-}
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Payload</span>(<span class='kw'>pub</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>);
 
 <span class='kw'>impl</span> <span class='ident'>Codec</span> <span class='kw'>for</span> <span class='ident'>Payload</span> {
   <span class='kw'>fn</span> <span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) {
-    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>body</span>);
+    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='number'>0</span>);
   }
 
   <span class='kw'>fn</span> <span class='ident'>read</span>(<span class='ident'>r</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Reader</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Payload</span><span class='op'>&gt;</span> {
-    <span class='prelude-val'>Some</span>(<span class='ident'>Payload</span> { <span class='ident'>body</span>: <span class='ident'>r</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>().<span class='ident'>into_boxed_slice</span>() })
+    <span class='prelude-val'>Some</span>(<span class='ident'>Payload</span>(<span class='ident'>r</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>()))
   }
 }
 
-<span class='comment'>/* An arbitrary, unknown-content, u24-length-prefixed payload */</span>
+<span class='kw'>impl</span> <span class='ident'>Payload</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>bytes</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>Payload</span> {
+    <span class='ident'>Payload</span>(<span class='ident'>bytes</span>)
+  }
+
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>len</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> { <span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>len</span>() }
+}
+
+<span class='doccomment'>/// An arbitrary, unknown-content, u24-length-prefixed payload</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>, <span class='ident'>Clone</span>)]</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>PayloadU24</span> {
-  <span class='kw'>pub</span> <span class='ident'>body</span>: <span class='ident'>Box</span><span class='op'>&lt;</span>[<span class='ident'>u8</span>]<span class='op'>&gt;</span>
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>PayloadU24</span>(<span class='kw'>pub</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>);
+
+<span class='kw'>impl</span> <span class='ident'>PayloadU24</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>bytes</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>PayloadU24</span> {
+    <span class='ident'>PayloadU24</span>(<span class='ident'>bytes</span>)
+  }
 }
 
 <span class='kw'>impl</span> <span class='ident'>Codec</span> <span class='kw'>for</span> <span class='ident'>PayloadU24</span> {
   <span class='kw'>fn</span> <span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) {
-    <span class='ident'>codec</span>::<span class='ident'>encode_u24</span>(<span class='self'>self</span>.<span class='ident'>body</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u32</span>, <span class='ident'>bytes</span>);
-    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>body</span>);
+    <span class='ident'>codec</span>::<span class='ident'>encode_u24</span>(<span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u32</span>, <span class='ident'>bytes</span>);
+    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='number'>0</span>);
   }
 
   <span class='kw'>fn</span> <span class='ident'>read</span>(<span class='ident'>r</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Reader</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>PayloadU24</span><span class='op'>&gt;</span> {
     <span class='kw'>let</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>codec</span>::<span class='ident'>read_u24</span>(<span class='ident'>r</span>)) <span class='kw'>as</span> <span class='ident'>usize</span>;
     <span class='kw'>let</span> <span class='ident'>sub</span> <span class='op'>=</span> <span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>r</span>.<span class='ident'>sub</span>(<span class='ident'>len</span>));
-    <span class='kw'>let</span> <span class='ident'>body</span> <span class='op'>=</span> <span class='ident'>sub</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>().<span class='ident'>into_boxed_slice</span>();
-    <span class='prelude-val'>Some</span>(<span class='ident'>PayloadU24</span> { <span class='ident'>body</span>: <span class='ident'>body</span> })
+    <span class='kw'>let</span> <span class='ident'>body</span> <span class='op'>=</span> <span class='ident'>sub</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>();
+    <span class='prelude-val'>Some</span>(<span class='ident'>PayloadU24</span>(<span class='ident'>body</span>))
   }
 }
 
-<span class='comment'>/* An arbitrary, unknown-content, u16-length-prefixed payload */</span>
+<span class='doccomment'>/// An arbitrary, unknown-content, u16-length-prefixed payload</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>, <span class='ident'>Clone</span>)]</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>PayloadU16</span> {
-  <span class='kw'>pub</span> <span class='ident'>body</span>: <span class='ident'>Box</span><span class='op'>&lt;</span>[<span class='ident'>u8</span>]<span class='op'>&gt;</span>
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>PayloadU16</span>(<span class='kw'>pub</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>);
+
+<span class='kw'>impl</span> <span class='ident'>PayloadU16</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>bytes</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>PayloadU16</span> {
+    <span class='ident'>PayloadU16</span>(<span class='ident'>bytes</span>)
+  }
 }
 
 <span class='kw'>impl</span> <span class='ident'>Codec</span> <span class='kw'>for</span> <span class='ident'>PayloadU16</span> {
   <span class='kw'>fn</span> <span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) {
-    <span class='ident'>codec</span>::<span class='ident'>encode_u16</span>(<span class='self'>self</span>.<span class='ident'>body</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='ident'>bytes</span>);
-    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>body</span>);
+    <span class='ident'>codec</span>::<span class='ident'>encode_u16</span>(<span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u16</span>, <span class='ident'>bytes</span>);
+    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='number'>0</span>);
   }
 
   <span class='kw'>fn</span> <span class='ident'>read</span>(<span class='ident'>r</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Reader</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>PayloadU16</span><span class='op'>&gt;</span> {
     <span class='kw'>let</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>codec</span>::<span class='ident'>read_u16</span>(<span class='ident'>r</span>)) <span class='kw'>as</span> <span class='ident'>usize</span>;
     <span class='kw'>let</span> <span class='ident'>sub</span> <span class='op'>=</span> <span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>r</span>.<span class='ident'>sub</span>(<span class='ident'>len</span>));
-    <span class='kw'>let</span> <span class='ident'>body</span> <span class='op'>=</span> <span class='ident'>sub</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>().<span class='ident'>into_boxed_slice</span>();
-    <span class='prelude-val'>Some</span>(<span class='ident'>PayloadU16</span> { <span class='ident'>body</span>: <span class='ident'>body</span> })
+    <span class='kw'>let</span> <span class='ident'>body</span> <span class='op'>=</span> <span class='ident'>sub</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>();
+    <span class='prelude-val'>Some</span>(<span class='ident'>PayloadU16</span>(<span class='ident'>body</span>))
   }
 }
 
-<span class='comment'>/* An arbitrary, unknown-content, u8-length-prefixed payload */</span>
+<span class='doccomment'>/// An arbitrary, unknown-content, u8-length-prefixed payload</span>
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>, <span class='ident'>Clone</span>)]</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>PayloadU8</span> {
-  <span class='kw'>pub</span> <span class='ident'>body</span>: <span class='ident'>Box</span><span class='op'>&lt;</span>[<span class='ident'>u8</span>]<span class='op'>&gt;</span>
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>PayloadU8</span>(<span class='kw'>pub</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>);
+
+<span class='kw'>impl</span> <span class='ident'>PayloadU8</span> {
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>bytes</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>PayloadU8</span> {
+    <span class='ident'>PayloadU8</span>(<span class='ident'>bytes</span>)
+  }
 }
 
 <span class='kw'>impl</span> <span class='ident'>Codec</span> <span class='kw'>for</span> <span class='ident'>PayloadU8</span> {
   <span class='kw'>fn</span> <span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) {
-    <span class='ident'>codec</span>::<span class='ident'>encode_u8</span>(<span class='self'>self</span>.<span class='ident'>body</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u8</span>, <span class='ident'>bytes</span>);
-    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>body</span>);
+    <span class='ident'>codec</span>::<span class='ident'>encode_u8</span>(<span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>len</span>() <span class='kw'>as</span> <span class='ident'>u8</span>, <span class='ident'>bytes</span>);
+    <span class='ident'>bytes</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='number'>0</span>);
   }
 
   <span class='kw'>fn</span> <span class='ident'>read</span>(<span class='ident'>r</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Reader</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>PayloadU8</span><span class='op'>&gt;</span> {
     <span class='kw'>let</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>codec</span>::<span class='ident'>read_u8</span>(<span class='ident'>r</span>)) <span class='kw'>as</span> <span class='ident'>usize</span>;
     <span class='kw'>let</span> <span class='ident'>sub</span> <span class='op'>=</span> <span class='macro'>try_ret</span><span class='macro'>!</span>(<span class='ident'>r</span>.<span class='ident'>sub</span>(<span class='ident'>len</span>));
-    <span class='kw'>let</span> <span class='ident'>body</span> <span class='op'>=</span> <span class='ident'>sub</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>().<span class='ident'>into_boxed_slice</span>();
-    <span class='prelude-val'>Some</span>(<span class='ident'>PayloadU8</span> { <span class='ident'>body</span>: <span class='ident'>body</span> })
+    <span class='kw'>let</span> <span class='ident'>body</span> <span class='op'>=</span> <span class='ident'>sub</span>.<span class='ident'>rest</span>().<span class='ident'>to_vec</span>();
+    <span class='prelude-val'>Some</span>(<span class='ident'>PayloadU8</span>(<span class='ident'>body</span>))
   }
 }
 
@@ -225,6 +261,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

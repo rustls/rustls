@@ -260,6 +260,11 @@
 <span id="216">216</span>
 <span id="217">217</span>
 <span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//! # Rustls - a modern TLS library</span>
 <span class='doccomment'>//! Rustls is a TLS library that aims to provide a good level of cryptographic security,</span>
@@ -277,10 +282,13 @@
 <span class='doccomment'>//! * ALPN support.</span>
 <span class='doccomment'>//! * SNI support.</span>
 <span class='doccomment'>//! * Tunable MTU to make TLS messages match size of underlying transport.</span>
-<span class='doccomment'>//! * Resumption.</span>
+<span class='doccomment'>//! * Resumption by clients.</span>
+<span class='doccomment'>//! * Client authentication by clients.</span>
+<span class='doccomment'>//! * Client authentication by servers.</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! ## Possible future features</span>
 <span class='doccomment'>//!</span>
+<span class='doccomment'>//! * Resumption by servers.</span>
 <span class='doccomment'>//! * ECDSA server authentication by servers.</span>
 <span class='doccomment'>//! * PSK support.</span>
 <span class='doccomment'>//! * TLS1.3.</span>
@@ -300,7 +308,6 @@
 <span class='doccomment'>//! * MAC-then-encrypt ciphersuites.</span>
 <span class='doccomment'>//! * Ciphersuites without forward secrecy.</span>
 <span class='doccomment'>//! * Renegotiation.</span>
-<span class='doccomment'>//! * Client authentication.</span>
 <span class='doccomment'>//! * Kerberos.</span>
 <span class='doccomment'>//! * Compression.</span>
 <span class='doccomment'>//! * Discrete-log Diffie-Hellman.</span>
@@ -433,9 +440,11 @@
 <span class='comment'>/* *ring* for cryptography. */</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 
-<span class='comment'>/* rustc_serialize for base64 deserialisation, for pemfile.
- * XXX: kill off? */</span>
-<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rustc_serialize</span>;
+<span class='comment'>/* untrusted for feeding ring and webpki. */</span>
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>untrusted</span>;
+
+<span class='comment'>/* rust-base64 for pemfile module. */</span>
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>base64</span>;
 
 <span class='comment'>/* log for logging. */</span>
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
@@ -449,6 +458,7 @@
 <span class='kw'>mod</span> <span class='ident'>prf</span>;
 <span class='kw'>mod</span> <span class='ident'>session</span>;
 <span class='kw'>mod</span> <span class='ident'>pemfile</span>;
+<span class='kw'>mod</span> <span class='ident'>x509</span>;
 <span class='kw'>mod</span> <span class='ident'>sign</span>;
 <span class='kw'>mod</span> <span class='ident'>verify</span>;
 <span class='kw'>mod</span> <span class='ident'>handshake</span>;
@@ -503,6 +513,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

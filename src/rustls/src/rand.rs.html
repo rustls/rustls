@@ -58,13 +58,13 @@
 <span id="14">14</span>
 </pre><pre class='rust '>
 
-<span class='comment'>/* The single place where we generate random material
- * for our own use.  These functions never fail,
- * they panic on error. */</span>
+<span class='doccomment'>/// The single place where we generate random material</span>
+<span class='doccomment'>/// for our own use.  These functions never fail,</span>
+<span class='doccomment'>/// they panic on error.</span>
 
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
 
-<span class='comment'>/* Fill the whole slice with random material. */</span>
+<span class='doccomment'>/// Fill the whole slice with random material.</span>
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>fill_random</span>(<span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> [<span class='ident'>u8</span>]) {
   <span class='ident'>ring</span>::<span class='ident'>rand</span>::<span class='ident'>SystemRandom</span>::<span class='ident'>new</span>()
     .<span class='ident'>fill</span>(<span class='ident'>bytes</span>)
@@ -95,6 +95,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

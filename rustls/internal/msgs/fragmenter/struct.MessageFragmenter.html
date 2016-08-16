@@ -47,10 +47,11 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3072' class='srclink' href='../../../../src/rustls/src/msgs/fragmenter.rs.html#8-10' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-3163' class='srclink' href='../../../../src/rustls/src/msgs/fragmenter.rs.html#8-10' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct MessageFragmenter {
     // some fields omitted
-}</pre><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../../../../rustls/internal/msgs/fragmenter/struct.MessageFragmenter.html' title='rustls::internal::msgs::fragmenter::MessageFragmenter'>MessageFragmenter</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(max_fragment_len: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>) -&gt; <a class='struct' href='../../../../rustls/internal/msgs/fragmenter/struct.MessageFragmenter.html' title='rustls::internal::msgs::fragmenter::MessageFragmenter'>MessageFragmenter</a></code></h4>
+}</pre><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl <a class='struct' href='../../../../rustls/internal/msgs/fragmenter/struct.MessageFragmenter.html' title='rustls::internal::msgs::fragmenter::MessageFragmenter'>MessageFragmenter</a></code></span><span class='out-of-band'><div class='ghost'></div><a id='src-3165' class='srclink' href='../../../../src/rustls/src/msgs/fragmenter.rs.html#12-46' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(max_fragment_len: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>) -&gt; <a class='struct' href='../../../../rustls/internal/msgs/fragmenter/struct.MessageFragmenter.html' title='rustls::internal::msgs::fragmenter::MessageFragmenter'>MessageFragmenter</a></code></h4>
 <div class='docblock'><p>Make a new fragmenter.  <code>max_fragment_len</code> is the maximum
 fragment size that will be produced -- this does not
 include overhead (so a <code>max_fragment_len</code> of 5 will produce
@@ -82,6 +83,8 @@ The new messages are appended to the <code>out</code> deque.</p>
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

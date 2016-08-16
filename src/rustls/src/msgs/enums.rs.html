@@ -2080,6 +2080,15 @@
 <span id="2036">2036</span>
 <span id="2037">2037</span>
 <span id="2038">2038</span>
+<span id="2039">2039</span>
+<span id="2040">2040</span>
+<span id="2041">2041</span>
+<span id="2042">2042</span>
+<span id="2043">2043</span>
+<span id="2044">2044</span>
+<span id="2045">2045</span>
+<span id="2046">2046</span>
+<span id="2047">2047</span>
 </pre><pre class='rust '>
 
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>codec</span>::{<span class='ident'>encode_u8</span>, <span class='ident'>read_u8</span>, <span class='ident'>encode_u16</span>, <span class='ident'>read_u16</span>, <span class='ident'>Reader</span>, <span class='ident'>Codec</span>};
@@ -2234,6 +2243,9 @@
   <span class='ident'>RSAEphemeralDH</span>,
   <span class='ident'>DSSEphemeralDH</span>,
   <span class='ident'>FortezzaDMS</span>,
+  <span class='ident'>ECDSASign</span>,
+  <span class='ident'>RSAFixedECDH</span>,
+  <span class='ident'>ECDSAFixedECDH</span>,
   <span class='ident'>Unknown</span>(<span class='ident'>u8</span>)
 }
 
@@ -2257,6 +2269,9 @@
       <span class='number'>0x05</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>RSAEphemeralDH</span>,
       <span class='number'>0x06</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>DSSEphemeralDH</span>,
       <span class='number'>0x14</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>FortezzaDMS</span>,
+      <span class='number'>0x40</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>ECDSASign</span>,
+      <span class='number'>0x41</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>RSAFixedECDH</span>,
+      <span class='number'>0x42</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>ECDSAFixedECDH</span>,
       <span class='ident'>x</span> <span class='op'>=&gt;</span> <span class='ident'>ClientCertificateType</span>::<span class='ident'>Unknown</span>(<span class='ident'>x</span>)
     })
   }
@@ -2272,6 +2287,9 @@
       <span class='ident'>ClientCertificateType</span>::<span class='ident'>RSAEphemeralDH</span> <span class='op'>=&gt;</span> <span class='number'>0x05</span>,
       <span class='ident'>ClientCertificateType</span>::<span class='ident'>DSSEphemeralDH</span> <span class='op'>=&gt;</span> <span class='number'>0x06</span>,
       <span class='ident'>ClientCertificateType</span>::<span class='ident'>FortezzaDMS</span> <span class='op'>=&gt;</span> <span class='number'>0x14</span>,
+      <span class='ident'>ClientCertificateType</span>::<span class='ident'>ECDSASign</span> <span class='op'>=&gt;</span> <span class='number'>0x40</span>,
+      <span class='ident'>ClientCertificateType</span>::<span class='ident'>RSAFixedECDH</span> <span class='op'>=&gt;</span> <span class='number'>0x41</span>,
+      <span class='ident'>ClientCertificateType</span>::<span class='ident'>ECDSAFixedECDH</span> <span class='op'>=&gt;</span> <span class='number'>0x42</span>,
       <span class='ident'>ClientCertificateType</span>::<span class='ident'>Unknown</span>(<span class='ident'>v</span>) <span class='op'>=&gt;</span> <span class='ident'>v</span>
     }
   }
@@ -4143,6 +4161,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

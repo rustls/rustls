@@ -322,7 +322,7 @@
     <span class='comment'>// lost information!</span>
     <span class='kw'>let</span> <span class='ident'>payload</span> <span class='op'>=</span> <span class='ident'>msg</span>.<span class='ident'>get_opaque_payload</span>().<span class='ident'>unwrap</span>();
 
-    <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='ident'>payload</span>.<span class='ident'>body</span>[..]);
+    <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='ident'>payload</span>.<span class='number'>0</span>[..]);
 
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>count</span> <span class='op'>=</span> <span class='number'>0</span>;
     <span class='kw'>while</span> <span class='self'>self</span>.<span class='ident'>buf_contains_message</span>() {
@@ -354,7 +354,7 @@
       <span class='kw'>let</span> <span class='ident'>payload</span> <span class='op'>=</span> <span class='ident'>HandshakeMessagePayload</span>::<span class='ident'>read</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rd</span>);
 
       <span class='kw'>if</span> <span class='ident'>payload</span>.<span class='ident'>is_none</span>() {
-        <span class='kw'>return</span> <span class='boolval'>false</span>;
+        <span class='kw'>return</span> <span class='boolvalue'>false</span>;
       }
 
       <span class='kw'>let</span> <span class='ident'>m</span> <span class='op'>=</span> <span class='ident'>Message</span> {
@@ -366,14 +366,14 @@
       <span class='self'>self</span>.<span class='ident'>frames</span>.<span class='ident'>push_back</span>(<span class='ident'>m</span>);
       <span class='ident'>rd</span>.<span class='ident'>used</span>()
     };
-    <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>drain</span>(..<span class='ident'>used</span>);
-    <span class='boolval'>true</span>
+    <span class='self'>self</span>.<span class='ident'>buf</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>split_off</span>(<span class='ident'>used</span>);
+    <span class='boolvalue'>true</span>
   }
 }
 
 <span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>test</span>)]</span>
 <span class='kw'>mod</span> <span class='ident'>tests</span> {
-  <span class='kw'>use</span> <span class='ident'>super</span>::<span class='ident'>HandshakeJoiner</span>;
+  <span class='kw'>use</span> <span class='kw'>super</span>::<span class='ident'>HandshakeJoiner</span>;
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::{<span class='ident'>ProtocolVersion</span>, <span class='ident'>ContentType</span>, <span class='ident'>HandshakeType</span>};
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>HandshakeMessagePayload</span>, <span class='ident'>HandshakePayload</span>};
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>message</span>::{<span class='ident'>Message</span>, <span class='ident'>MessagePayload</span>};
@@ -395,8 +395,8 @@
       <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='string'>b&quot;ponytown&quot;</span>.<span class='ident'>to_vec</span>())
     };
 
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>wanted</span>), <span class='boolval'>true</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>unwanted</span>), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>wanted</span>), <span class='boolvalue'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>unwanted</span>), <span class='boolvalue'>false</span>);
   }
 
   <span class='kw'>fn</span> <span class='ident'>pop_eq</span>(<span class='ident'>expect</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>, <span class='ident'>hj</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>HandshakeJoiner</span>) {
@@ -422,7 +422,7 @@
       <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='string'>b&quot;\x00\x00\x00\x00\x00\x00\x00\x00&quot;</span>.<span class='ident'>to_vec</span>()) <span class='comment'>/* two HelloRequests. */</span>
     };
 
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>take_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='prelude-val'>Some</span>(<span class='number'>2</span>));
 
     <span class='kw'>let</span> <span class='ident'>expect</span> <span class='op'>=</span> <span class='ident'>Message</span> {
@@ -450,7 +450,7 @@
       <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='string'>b&quot;\x01\x00\x00\x02\xff\xff&quot;</span>.<span class='ident'>to_vec</span>()) <span class='comment'>/* short ClientHello. */</span>
     };
 
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>take_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='prelude-val'>None</span>);
   }
 
@@ -466,7 +466,7 @@
       <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='string'>b&quot;\x14\x00\x00\x10\x00\x01\x02\x03\x04&quot;</span>.<span class='ident'>to_vec</span>())
     };
 
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>take_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='prelude-val'>Some</span>(<span class='number'>0</span>));
 
     <span class='comment'>/* 11 more bytes. */</span>
@@ -476,7 +476,7 @@
       <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='string'>b&quot;\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e&quot;</span>.<span class='ident'>to_vec</span>())
     };
 
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>take_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='prelude-val'>Some</span>(<span class='number'>0</span>));
 
     <span class='comment'>/* Final 1 byte. */</span>
@@ -486,7 +486,7 @@
       <span class='ident'>payload</span>: <span class='ident'>MessagePayload</span>::<span class='ident'>opaque</span>(<span class='string'>b&quot;\x0f&quot;</span>.<span class='ident'>to_vec</span>())
     };
 
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>want_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>hj</span>.<span class='ident'>take_message</span>(<span class='kw-2'>&amp;</span><span class='ident'>msg</span>), <span class='prelude-val'>Some</span>(<span class='number'>1</span>));
 
     <span class='kw'>let</span> <span class='ident'>expect</span> <span class='op'>=</span> <span class='ident'>Message</span> {
@@ -496,7 +496,7 @@
         <span class='ident'>HandshakeMessagePayload</span> {
           <span class='ident'>typ</span>: <span class='ident'>HandshakeType</span>::<span class='ident'>Finished</span>,
           <span class='ident'>payload</span>: <span class='ident'>HandshakePayload</span>::<span class='ident'>Finished</span>(
-            <span class='ident'>Payload</span> { <span class='ident'>body</span>: <span class='string'>b&quot;\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f&quot;</span>.<span class='ident'>to_vec</span>().<span class='ident'>into_boxed_slice</span>() }
+            <span class='ident'>Payload</span>::<span class='ident'>new</span>(<span class='string'>b&quot;\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f&quot;</span>.<span class='ident'>to_vec</span>())
           )
         }
       )
@@ -529,6 +529,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

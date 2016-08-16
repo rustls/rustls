@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/rustls/src/lib.rs.html#1-218' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-0' class='srclink' href='../src/rustls/src/lib.rs.html#1-223' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'>
 <h1 id='rustls---a-modern-tls-library' class='section-header'><a href='#rustls---a-modern-tls-library'>Rustls - a modern TLS library</a></h1>
 <p>Rustls is a TLS library that aims to provide a good level of cryptographic security,
@@ -65,11 +65,14 @@ obsolete cryptography.</p>
 <li>ALPN support.</li>
 <li>SNI support.</li>
 <li>Tunable MTU to make TLS messages match size of underlying transport.</li>
-<li>Resumption.</li>
+<li>Resumption by clients.</li>
+<li>Client authentication by clients.</li>
+<li>Client authentication by servers.</li>
 </ul>
 
 <h2 id='possible-future-features' class='section-header'><a href='#possible-future-features'>Possible future features</a></h2>
 <ul>
+<li>Resumption by servers.</li>
 <li>ECDSA server authentication by servers.</li>
 <li>PSK support.</li>
 <li>TLS1.3.</li>
@@ -90,7 +93,6 @@ dangerous and/or insane. Rustls does not support:</p>
 <li>MAC-then-encrypt ciphersuites.</li>
 <li>Ciphersuites without forward secrecy.</li>
 <li>Renegotiation.</li>
-<li>Client authentication.</li>
 <li>Kerberos.</li>
 <li>Compression.</li>
 <li>Discrete-log Diffie-Hellman.</li>
@@ -315,6 +317,8 @@ The keys and values are opaque.</p>
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

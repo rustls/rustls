@@ -153,7 +153,7 @@
 <span class='kw'>impl</span> <span class='ident'>ClientSessionKey</span> {
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>for_dns_name</span>(<span class='ident'>dns_name</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='ident'>ClientSessionKey</span> {
     <span class='ident'>ClientSessionKey</span> {
-      <span class='ident'>dns_name</span>: <span class='ident'>PayloadU8</span> { <span class='ident'>body</span>: <span class='ident'>dns_name</span>.<span class='ident'>as_bytes</span>().<span class='ident'>to_vec</span>().<span class='ident'>into_boxed_slice</span>() }
+      <span class='ident'>dns_name</span>: <span class='ident'>PayloadU8</span>::<span class='ident'>new</span>(<span class='ident'>dns_name</span>.<span class='ident'>as_bytes</span>().<span class='ident'>to_vec</span>())
     }
   }
 
@@ -196,7 +196,7 @@
     <span class='ident'>ClientSessionValue</span> {
       <span class='ident'>cipher_suite</span>: <span class='ident'>cs</span>.<span class='ident'>clone</span>(),
       <span class='ident'>session_id</span>: <span class='ident'>sessid</span>.<span class='ident'>clone</span>(),
-      <span class='ident'>master_secret</span>: <span class='ident'>PayloadU8</span> { <span class='ident'>body</span>: <span class='ident'>ms</span>.<span class='ident'>into_boxed_slice</span>() }
+      <span class='ident'>master_secret</span>: <span class='ident'>PayloadU8</span>::<span class='ident'>new</span>(<span class='ident'>ms</span>)
     }
   }
 
@@ -235,6 +235,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

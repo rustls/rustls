@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3038' class='srclink' href='../../../../src/rustls/src/msgs/deframer.rs.html#18-25' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-3129' class='srclink' href='../../../../src/rustls/src/msgs/deframer.rs.html#18-25' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct MessageDeframer {
     pub frames: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec_deque/struct.VecDeque.html' title='collections::vec_deque::VecDeque'>VecDeque</a>&lt;<a class='struct' href='../../../../rustls/internal/msgs/message/struct.Message.html' title='rustls::internal::msgs::message::Message'>Message</a>&gt;,
     // some fields omitted
@@ -57,7 +57,8 @@ The input is <code>read()</code>, the output is the <code>frames</code> deque.</
 </div><h2 class='fields'>Fields</h2>
 <table><tr class='stab '>
                              <td id='structfield.frames'><code>frames</code></td><td><div class='docblock'><p>Completed frames for output.</p>
-</div></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../../../../rustls/internal/msgs/deframer/struct.MessageDeframer.html' title='rustls::internal::msgs::deframer::MessageDeframer'>MessageDeframer</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../../../../rustls/internal/msgs/deframer/struct.MessageDeframer.html' title='rustls::internal::msgs::deframer::MessageDeframer'>MessageDeframer</a></code></h4>
+</div></td></tr></table><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl <a class='struct' href='../../../../rustls/internal/msgs/deframer/struct.MessageDeframer.html' title='rustls::internal::msgs::deframer::MessageDeframer'>MessageDeframer</a></code></span><span class='out-of-band'><div class='ghost'></div><a id='src-3132' class='srclink' href='../../../../src/rustls/src/msgs/deframer.rs.html#27-95' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../../../../rustls/internal/msgs/deframer/struct.MessageDeframer.html' title='rustls::internal::msgs::deframer::MessageDeframer'>MessageDeframer</a></code></h4>
 <h4 id='method.read' class='method'><code>fn <a href='#method.read' class='fnname'>read</a>(&amp;mut self, rd: &amp;mut <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Read.html' title='std::io::Read'>Read</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;</code></h4>
 <div class='docblock'><p>Read some bytes from <code>rd</code>, and add them to our internal
 buffer.  If this means our internal buffer contains
@@ -89,6 +90,8 @@ queue or partial messages in our buffer.</p>
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

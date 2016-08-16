@@ -272,9 +272,9 @@
 
 <span class='kw'>const</span> <span class='ident'>HEADER_SIZE</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>1</span> <span class='op'>+</span> <span class='number'>2</span> <span class='op'>+</span> <span class='number'>2</span>;
 
-<span class='comment'>/* This is the maximum on-the-wire size of a TLSCiphertext.
- * That&#39;s 2^14 payload bytes, a header, and a 2KB allowance
- * for ciphertext overheads. */</span>
+<span class='doccomment'>/// This is the maximum on-the-wire size of a TLSCiphertext.</span>
+<span class='doccomment'>/// That&#39;s 2^14 payload bytes, a header, and a 2KB allowance</span>
+<span class='doccomment'>/// for ciphertext overheads.</span>
 <span class='kw'>const</span> <span class='ident'>MAX_MESSAGE</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>16384</span> <span class='op'>+</span> <span class='number'>2048</span> <span class='op'>+</span> <span class='ident'>HEADER_SIZE</span>;
 
 <span class='doccomment'>/// This deframer works to reconstruct TLS messages</span>
@@ -336,7 +336,7 @@
   <span class='doccomment'>/// contain a header, and that header has a length which falls within `buf`.</span>
   <span class='kw'>fn</span> <span class='ident'>buf_contains_message</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
     <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>len</span>() <span class='op'>&lt;</span> <span class='ident'>HEADER_SIZE</span> {
-      <span class='kw'>return</span> <span class='boolval'>false</span>;
+      <span class='kw'>return</span> <span class='boolvalue'>false</span>;
     }
 
     <span class='kw'>let</span> <span class='ident'>msg_len</span> <span class='op'>=</span> <span class='ident'>codec</span>::<span class='ident'>decode_u16</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>buf</span>[<span class='number'>3</span>..<span class='number'>5</span>]).<span class='ident'>unwrap</span>() <span class='kw'>as</span> <span class='ident'>usize</span>;
@@ -355,13 +355,13 @@
       <span class='self'>self</span>.<span class='ident'>frames</span>.<span class='ident'>push_back</span>(<span class='ident'>m</span>);
       <span class='ident'>rd</span>.<span class='ident'>used</span>()
     };
-    <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>drain</span>(..<span class='ident'>used</span>);
+    <span class='self'>self</span>.<span class='ident'>buf</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>buf</span>.<span class='ident'>split_off</span>(<span class='ident'>used</span>);
   }
 }
 
 <span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>test</span>)]</span>
 <span class='kw'>mod</span> <span class='ident'>tests</span> {
-  <span class='kw'>use</span> <span class='ident'>super</span>::<span class='ident'>MessageDeframer</span>;
+  <span class='kw'>use</span> <span class='kw'>super</span>::<span class='ident'>MessageDeframer</span>;
   <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
   <span class='kw'>use</span> <span class='ident'>msgs</span>;
 
@@ -404,7 +404,7 @@
 
     <span class='kw'>for</span> <span class='ident'>i</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>bytes</span>.<span class='ident'>len</span>() {
       <span class='ident'>assert_len</span>(<span class='number'>1</span>, <span class='ident'>input_bytes</span>(<span class='ident'>d</span>, <span class='kw-2'>&amp;</span><span class='ident'>bytes</span>[<span class='ident'>i</span>..<span class='ident'>i</span><span class='op'>+</span><span class='number'>1</span>]));
-      <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>true</span>);
+      <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>true</span>);
 
       <span class='kw'>if</span> <span class='ident'>i</span> <span class='op'>&lt;</span> <span class='ident'>bytes</span>.<span class='ident'>len</span>() <span class='op'>-</span> <span class='number'>1</span> {
         <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>frames_before</span>, <span class='ident'>d</span>.<span class='ident'>frames</span>.<span class='ident'>len</span>());
@@ -418,7 +418,7 @@
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>gotval</span>) <span class='op'>=</span> <span class='ident'>got</span> {
       <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>gotval</span>, <span class='ident'>want</span>);
     } <span class='kw'>else</span> {
-      <span class='macro'>assert</span><span class='macro'>!</span>(<span class='boolval'>false</span>, <span class='string'>&quot;read failed, expected {:?} bytes&quot;</span>, <span class='ident'>want</span>);
+      <span class='macro'>assert</span><span class='macro'>!</span>(<span class='boolvalue'>false</span>, <span class='string'>&quot;read failed, expected {:?} bytes&quot;</span>, <span class='ident'>want</span>);
     }
   }
 
@@ -437,50 +437,50 @@
   <span class='attribute'>#[<span class='ident'>test</span>]</span>
   <span class='kw'>fn</span> <span class='ident'>check_incremental</span>() {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>d</span> <span class='op'>=</span> <span class='ident'>MessageDeframer</span>::<span class='ident'>new</span>();
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
     <span class='ident'>input_whole_incremental</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>, <span class='ident'>FIRST_MESSAGE</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='number'>1</span>, <span class='ident'>d</span>.<span class='ident'>frames</span>.<span class='ident'>len</span>());
     <span class='ident'>pop_first</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
   }
 
   <span class='attribute'>#[<span class='ident'>test</span>]</span>
   <span class='kw'>fn</span> <span class='ident'>check_incremental_2</span>() {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>d</span> <span class='op'>=</span> <span class='ident'>MessageDeframer</span>::<span class='ident'>new</span>();
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
     <span class='ident'>input_whole_incremental</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>, <span class='ident'>FIRST_MESSAGE</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>true</span>);
     <span class='ident'>input_whole_incremental</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>, <span class='ident'>SECOND_MESSAGE</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='number'>2</span>, <span class='ident'>d</span>.<span class='ident'>frames</span>.<span class='ident'>len</span>());
     <span class='ident'>pop_first</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>true</span>);
     <span class='ident'>pop_second</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
   }
 
   <span class='attribute'>#[<span class='ident'>test</span>]</span>
   <span class='kw'>fn</span> <span class='ident'>check_whole</span>() {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>d</span> <span class='op'>=</span> <span class='ident'>MessageDeframer</span>::<span class='ident'>new</span>();
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
     <span class='ident'>assert_len</span>(<span class='ident'>FIRST_MESSAGE</span>.<span class='ident'>len</span>(), <span class='ident'>input_bytes</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>, <span class='ident'>FIRST_MESSAGE</span>));
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>true</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>true</span>);
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>frames</span>.<span class='ident'>len</span>(), <span class='number'>1</span>);
     <span class='ident'>pop_first</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
   }
 
   <span class='attribute'>#[<span class='ident'>test</span>]</span>
   <span class='kw'>fn</span> <span class='ident'>check_whole_2</span>() {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>d</span> <span class='op'>=</span> <span class='ident'>MessageDeframer</span>::<span class='ident'>new</span>();
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
     <span class='ident'>assert_len</span>(<span class='ident'>FIRST_MESSAGE</span>.<span class='ident'>len</span>(), <span class='ident'>input_bytes</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>, <span class='ident'>FIRST_MESSAGE</span>));
     <span class='ident'>assert_len</span>(<span class='ident'>SECOND_MESSAGE</span>.<span class='ident'>len</span>(), <span class='ident'>input_bytes</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>, <span class='ident'>SECOND_MESSAGE</span>));
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>frames</span>.<span class='ident'>len</span>(), <span class='number'>2</span>);
     <span class='ident'>pop_first</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>);
     <span class='ident'>pop_second</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>d</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolval'>false</span>);
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>d</span>.<span class='ident'>has_pending</span>(), <span class='boolvalue'>false</span>);
   }
 }
 </pre>
@@ -507,6 +507,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

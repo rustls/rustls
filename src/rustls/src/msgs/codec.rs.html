@@ -240,7 +240,7 @@
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>fmt</span>::<span class='ident'>Debug</span>;
 
-<span class='comment'>/* Read from a byte slice. */</span>
+<span class='doccomment'>/// Read from a byte slice.</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Reader</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span><span class='op'>&gt;</span> {
   <span class='ident'>buf</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> [<span class='ident'>u8</span>],
   <span class='ident'>offs</span>: <span class='ident'>usize</span>
@@ -282,10 +282,10 @@
   }
 }
 
-<span class='comment'>/* Things we can encode and read from a Reader. */</span>
+<span class='doccomment'>/// Things we can encode and read from a Reader.</span>
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Codec</span> : <span class='ident'>Debug</span> <span class='op'>+</span> <span class='ident'>Sized</span> {
   <span class='kw'>fn</span> <span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>bytes</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>);
-  <span class='kw'>fn</span> <span class='ident'>read</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Reader</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>;
+  <span class='kw'>fn</span> <span class='ident'>read</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Reader</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='self'>Self</span><span class='op'>&gt;</span>;
 }
 
 <span class='comment'>/* Encoding functions. */</span>
@@ -457,6 +457,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

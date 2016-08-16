@@ -466,6 +466,33 @@
 <span id="422">422</span>
 <span id="423">423</span>
 <span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+<span id="430">430</span>
+<span id="431">431</span>
+<span id="432">432</span>
+<span id="433">433</span>
+<span id="434">434</span>
+<span id="435">435</span>
+<span id="436">436</span>
+<span id="437">437</span>
+<span id="438">438</span>
+<span id="439">439</span>
+<span id="440">440</span>
+<span id="441">441</span>
+<span id="442">442</span>
+<span id="443">443</span>
+<span id="444">444</span>
+<span id="445">445</span>
+<span id="446">446</span>
+<span id="447">447</span>
+<span id="448">448</span>
+<span id="449">449</span>
+<span id="450">450</span>
+<span id="451">451</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>session</span>::{<span class='ident'>Session</span>, <span class='ident'>SessionSecrets</span>, <span class='ident'>SessionCommon</span>};
 <span class='kw'>use</span> <span class='ident'>suites</span>::{<span class='ident'>SupportedCipherSuite</span>, <span class='ident'>ALL_CIPHERSUITES</span>, <span class='ident'>KeyExchange</span>};
@@ -480,21 +507,22 @@
 <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
 <span class='kw'>use</span> <span class='ident'>rand</span>;
 <span class='kw'>use</span> <span class='ident'>sign</span>;
+<span class='kw'>use</span> <span class='ident'>verify</span>;
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Arc</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>StoresSessions</span> {
-  <span class='comment'>/* Generate a session ID. */</span>
+  <span class='doccomment'>/// Generate a session ID.</span>
   <span class='kw'>fn</span> <span class='ident'>generate</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>SessionID</span>;
 
-  <span class='comment'>/* Store session secrets. */</span>
+  <span class='doccomment'>/// Store session secrets.</span>
   <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>, <span class='ident'>sec</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionSecrets</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span>;
 
-  <span class='comment'>/* Find a session with the given id. */</span>
+  <span class='doccomment'>/// Find a session with the given id.</span>
   <span class='kw'>fn</span> <span class='ident'>find</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>SessionSecrets</span><span class='op'>&gt;</span>;
 
-  <span class='comment'>/* Erase a session with the given id. */</span>
+  <span class='doccomment'>/// Erase a session with the given id.</span>
   <span class='kw'>fn</span> <span class='ident'>erase</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span>;
 }
 
@@ -533,19 +561,28 @@
 
   <span class='doccomment'>/// Protocol names we support, most preferred first.</span>
   <span class='doccomment'>/// If empty we don&#39;t do ALPN at all.</span>
-  <span class='kw'>pub</span> <span class='ident'>alpn_protocols</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>String</span><span class='op'>&gt;</span>
+  <span class='kw'>pub</span> <span class='ident'>alpn_protocols</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>String</span><span class='op'>&gt;</span>,
+
+  <span class='doccomment'>/// List of client authentication root certificates.</span>
+  <span class='doccomment'>/// If this list is empty, no client authentication is</span>
+  <span class='doccomment'>/// performed.</span>
+  <span class='kw'>pub</span> <span class='ident'>client_auth_roots</span>: <span class='ident'>verify</span>::<span class='ident'>RootCertStore</span>,
+
+  <span class='doccomment'>/// Whether to complete handshakes with clients which</span>
+  <span class='doccomment'>/// don&#39;t do client auth.</span>
+  <span class='kw'>pub</span> <span class='ident'>client_auth_mandatory</span>: <span class='ident'>bool</span>
 }
 
 <span class='kw'>struct</span> <span class='ident'>NoSessionStorage</span> {}
 
 <span class='kw'>impl</span> <span class='ident'>StoresSessions</span> <span class='kw'>for</span> <span class='ident'>NoSessionStorage</span> {
   <span class='kw'>fn</span> <span class='ident'>generate</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>SessionID</span> { <span class='ident'>SessionID</span> { <span class='ident'>bytes</span>: <span class='ident'>Vec</span>::<span class='ident'>new</span>() } }
-  <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>_id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>, <span class='ident'>_sec</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionSecrets</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> { <span class='boolval'>false</span> }
+  <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>_id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>, <span class='ident'>_sec</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionSecrets</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> { <span class='boolvalue'>false</span> }
   <span class='kw'>fn</span> <span class='ident'>find</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>_id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>SessionSecrets</span><span class='op'>&gt;</span> { <span class='prelude-val'>None</span> }
-  <span class='kw'>fn</span> <span class='ident'>erase</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>_id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> { <span class='boolval'>false</span> }
+  <span class='kw'>fn</span> <span class='ident'>erase</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>_id</span>: <span class='kw-2'>&amp;</span><span class='ident'>SessionID</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> { <span class='boolvalue'>false</span> }
 }
 
-<span class='comment'>/* Something which never resolves a certificate. */</span>
+<span class='doccomment'>/// Something which never resolves a certificate.</span>
 <span class='kw'>struct</span> <span class='ident'>FailResolveChain</span> {}
 
 <span class='kw'>impl</span> <span class='ident'>ResolvesCert</span> <span class='kw'>for</span> <span class='ident'>FailResolveChain</span> {
@@ -558,7 +595,7 @@
   }
 }
 
-<span class='comment'>/* Something which always resolves to the same cert chain. */</span>
+<span class='doccomment'>/// Something which always resolves to the same cert chain.</span>
 <span class='kw'>struct</span> <span class='ident'>AlwaysResolvesChain</span> {
   <span class='ident'>chain</span>: <span class='ident'>CertificatePayload</span>,
   <span class='ident'>key</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>sign</span>::<span class='ident'>Signer</span><span class='op'>&gt;&gt;</span>
@@ -570,7 +607,7 @@
       .<span class='ident'>expect</span>(<span class='string'>&quot;Invalid RSA private key&quot;</span>);
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>payload</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
     <span class='kw'>for</span> <span class='ident'>cert</span> <span class='kw'>in</span> <span class='ident'>chain</span> {
-      <span class='ident'>payload</span>.<span class='ident'>push</span>(<span class='ident'>ASN1Cert</span> { <span class='ident'>body</span>: <span class='ident'>cert</span>.<span class='ident'>into_boxed_slice</span>() });
+      <span class='ident'>payload</span>.<span class='ident'>push</span>(<span class='ident'>ASN1Cert</span>::<span class='ident'>new</span>(<span class='ident'>cert</span>));
     }
     <span class='ident'>AlwaysResolvesChain</span> { <span class='ident'>chain</span>: <span class='ident'>payload</span>, <span class='ident'>key</span>: <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>key</span>)) }
   }
@@ -588,15 +625,17 @@
 
 <span class='kw'>impl</span> <span class='ident'>ServerConfig</span> {
   <span class='doccomment'>/// Make a `ServerConfig` with a default set of ciphersuites,</span>
-  <span class='doccomment'>/// no keys/certificates, no ALPN protocols, and no</span>
-  <span class='doccomment'>/// session persistence.</span>
+  <span class='doccomment'>/// no keys/certificates, no ALPN protocols, no client auth, and</span>
+  <span class='doccomment'>/// no session persistence.</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>ServerConfig</span> {
     <span class='ident'>ServerConfig</span> {
       <span class='ident'>ciphersuites</span>: <span class='ident'>ALL_CIPHERSUITES</span>.<span class='ident'>to_vec</span>(),
-      <span class='ident'>ignore_client_order</span>: <span class='boolval'>false</span>,
+      <span class='ident'>ignore_client_order</span>: <span class='boolvalue'>false</span>,
       <span class='ident'>session_storage</span>: <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>NoSessionStorage</span> {}),
       <span class='ident'>alpn_protocols</span>: <span class='ident'>Vec</span>::<span class='ident'>new</span>(),
-      <span class='ident'>cert_resolver</span>: <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>FailResolveChain</span> {})
+      <span class='ident'>cert_resolver</span>: <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>FailResolveChain</span> {}),
+      <span class='ident'>client_auth_roots</span>: <span class='ident'>verify</span>::<span class='ident'>RootCertStore</span>::<span class='ident'>empty</span>(),
+      <span class='ident'>client_auth_mandatory</span>: <span class='boolvalue'>false</span>
     }
   }
 
@@ -619,14 +658,28 @@
     <span class='self'>self</span>.<span class='ident'>alpn_protocols</span>.<span class='ident'>clear</span>();
     <span class='self'>self</span>.<span class='ident'>alpn_protocols</span>.<span class='ident'>extend_from_slice</span>(<span class='ident'>protocols</span>);
   }
+
+  <span class='doccomment'>/// Enables client authentication.  The server will ask for</span>
+  <span class='doccomment'>/// and validate certificates to the given list of root</span>
+  <span class='doccomment'>/// `certs`.  If `mandatory` is true, the server will fail</span>
+  <span class='doccomment'>/// to handshake with a client if it does not do client auth.</span>
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_client_auth_roots</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>certs</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, <span class='ident'>mandatory</span>: <span class='ident'>bool</span>) {
+    <span class='kw'>for</span> <span class='ident'>cert</span> <span class='kw'>in</span> <span class='ident'>certs</span> {
+      <span class='self'>self</span>.<span class='ident'>client_auth_roots</span>.<span class='ident'>add</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>)
+        .<span class='ident'>unwrap</span>()
+    }
+    <span class='self'>self</span>.<span class='ident'>client_auth_mandatory</span> <span class='op'>=</span> <span class='ident'>mandatory</span>;
+  }
 }
 
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>ServerHandshakeData</span> {
   <span class='kw'>pub</span> <span class='ident'>server_cert_chain</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>CertificatePayload</span><span class='op'>&gt;</span>,
   <span class='kw'>pub</span> <span class='ident'>ciphersuite</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>SupportedCipherSuite</span><span class='op'>&gt;</span>,
   <span class='kw'>pub</span> <span class='ident'>secrets</span>: <span class='ident'>SessionSecrets</span>,
-  <span class='kw'>pub</span> <span class='ident'>handshake_hash</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>hash_hs</span>::<span class='ident'>HandshakeHash</span><span class='op'>&gt;</span>,
-  <span class='kw'>pub</span> <span class='ident'>kx_data</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>KeyExchange</span><span class='op'>&gt;</span>
+  <span class='kw'>pub</span> <span class='ident'>transcript</span>: <span class='ident'>hash_hs</span>::<span class='ident'>HandshakeHash</span>,
+  <span class='kw'>pub</span> <span class='ident'>kx_data</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>KeyExchange</span><span class='op'>&gt;</span>,
+  <span class='kw'>pub</span> <span class='ident'>doing_client_auth</span>: <span class='ident'>bool</span>,
+  <span class='kw'>pub</span> <span class='ident'>valid_client_cert_chain</span>: <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>ASN1Cert</span><span class='op'>&gt;&gt;</span>
 }
 
 <span class='kw'>impl</span> <span class='ident'>ServerHandshakeData</span> {
@@ -635,8 +688,10 @@
       <span class='ident'>server_cert_chain</span>: <span class='prelude-val'>None</span>,
       <span class='ident'>ciphersuite</span>: <span class='prelude-val'>None</span>,
       <span class='ident'>secrets</span>: <span class='ident'>SessionSecrets</span>::<span class='ident'>for_server</span>(),
-      <span class='ident'>handshake_hash</span>: <span class='prelude-val'>None</span>,
-      <span class='ident'>kx_data</span>: <span class='prelude-val'>None</span>
+      <span class='ident'>transcript</span>: <span class='ident'>hash_hs</span>::<span class='ident'>HandshakeHash</span>::<span class='ident'>new</span>(),
+      <span class='ident'>kx_data</span>: <span class='prelude-val'>None</span>,
+      <span class='ident'>doing_client_auth</span>: <span class='boolvalue'>false</span>,
+      <span class='ident'>valid_client_cert_chain</span>: <span class='prelude-val'>None</span>
     }
   }
 
@@ -646,22 +701,16 @@
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>start_handshake_hash</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
     <span class='kw'>let</span> <span class='ident'>hash</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>ciphersuite</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>().<span class='ident'>get_hash</span>();
-    <span class='self'>self</span>.<span class='ident'>handshake_hash</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>hash_hs</span>::<span class='ident'>HandshakeHash</span>::<span class='ident'>new</span>(<span class='ident'>hash</span>));
-  }
-
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>hash_message</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>m</span>: <span class='kw-2'>&amp;</span><span class='ident'>Message</span>) {
-    <span class='self'>self</span>.<span class='ident'>handshake_hash</span>.<span class='ident'>as_mut</span>().<span class='ident'>unwrap</span>().<span class='ident'>update</span>(<span class='ident'>m</span>);
-  }
-
-  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_verify_hash</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span> {
-    <span class='self'>self</span>.<span class='ident'>handshake_hash</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>().<span class='ident'>get_current_hash</span>()
+    <span class='self'>self</span>.<span class='ident'>transcript</span>.<span class='ident'>start_hash</span>(<span class='ident'>hash</span>);
   }
 }
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>PartialEq</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>ConnState</span> {
   <span class='ident'>ExpectClientHello</span>,
+  <span class='ident'>ExpectCertificate</span>,
   <span class='ident'>ExpectClientKX</span>,
+  <span class='ident'>ExpectCertificateVerify</span>,
   <span class='ident'>ExpectCCS</span>,
   <span class='ident'>ExpectFinished</span>,
   <span class='ident'>Traffic</span>
@@ -671,8 +720,8 @@
   <span class='kw'>fn</span> <span class='ident'>is_encrypted</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
     <span class='kw'>match</span> <span class='op'>*</span><span class='self'>self</span> {
       <span class='ident'>ConnState</span>::<span class='ident'>ExpectFinished</span>
-        <span class='op'>|</span> <span class='ident'>ConnState</span>::<span class='ident'>Traffic</span> <span class='op'>=&gt;</span> <span class='boolval'>true</span>,
-      _ <span class='op'>=&gt;</span> <span class='boolval'>false</span>
+        <span class='op'>|</span> <span class='ident'>ConnState</span>::<span class='ident'>Traffic</span> <span class='op'>=&gt;</span> <span class='boolvalue'>true</span>,
+      _ <span class='op'>=&gt;</span> <span class='boolvalue'>false</span>
     }
   }
 }
@@ -688,18 +737,30 @@
 
 <span class='kw'>impl</span> <span class='ident'>ServerSessionImpl</span> {
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>server_config</span>: <span class='kw-2'>&amp;</span><span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>ServerConfig</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>ServerSessionImpl</span> {
-    <span class='ident'>ServerSessionImpl</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sess</span> <span class='op'>=</span> <span class='ident'>ServerSessionImpl</span> {
       <span class='ident'>config</span>: <span class='ident'>server_config</span>.<span class='ident'>clone</span>(),
       <span class='ident'>handshake_data</span>: <span class='ident'>ServerHandshakeData</span>::<span class='ident'>new</span>(),
       <span class='ident'>secrets_current</span>: <span class='ident'>SessionSecrets</span>::<span class='ident'>for_server</span>(),
       <span class='ident'>common</span>: <span class='ident'>SessionCommon</span>::<span class='ident'>new</span>(<span class='prelude-val'>None</span>),
       <span class='ident'>alpn_protocol</span>: <span class='prelude-val'>None</span>,
       <span class='ident'>state</span>: <span class='ident'>ConnState</span>::<span class='ident'>ExpectClientHello</span>
+    };
+
+    <span class='kw'>if</span> <span class='ident'>sess</span>.<span class='ident'>config</span>.<span class='ident'>client_auth_roots</span>.<span class='ident'>len</span>() <span class='op'>&gt;</span> <span class='number'>0</span> {
+      <span class='ident'>sess</span>.<span class='ident'>handshake_data</span>.<span class='ident'>transcript</span>.<span class='ident'>set_client_auth_enabled</span>();
     }
+
+    <span class='ident'>sess</span>
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>wants_read</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
-    <span class='boolval'>true</span>
+    <span class='comment'>// We want to read more data all the time, except when we</span>
+    <span class='comment'>// have unprocessed plaintext.  This provides back-pressure</span>
+    <span class='comment'>// to the TCP buffers.</span>
+    <span class='comment'>//</span>
+    <span class='comment'>// This also covers the handshake case, because we don&#39;t have</span>
+    <span class='comment'>// readable plaintext before handshake has completed.</span>
+    <span class='op'>!</span><span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>has_readable_plaintext</span>()
   }
 
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>wants_write</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
@@ -765,7 +826,9 @@
   <span class='kw'>fn</span> <span class='ident'>get_handler</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>server_hs</span>::<span class='ident'>Handler</span> {
     <span class='kw'>match</span> <span class='self'>self</span>.<span class='ident'>state</span> {
       <span class='ident'>ConnState</span>::<span class='ident'>ExpectClientHello</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>EXPECT_CLIENT_HELLO</span>,
+      <span class='ident'>ConnState</span>::<span class='ident'>ExpectCertificate</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>EXPECT_CERTIFICATE</span>,
       <span class='ident'>ConnState</span>::<span class='ident'>ExpectClientKX</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>EXPECT_CLIENT_KX</span>,
+      <span class='ident'>ConnState</span>::<span class='ident'>ExpectCertificateVerify</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>EXPECT_CERTIFICATE_VERIFY</span>,
       <span class='ident'>ConnState</span>::<span class='ident'>ExpectCCS</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>EXPECT_CCS</span>,
       <span class='ident'>ConnState</span>::<span class='ident'>ExpectFinished</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>EXPECT_FINISHED</span>,
       <span class='ident'>ConnState</span>::<span class='ident'>Traffic</span> <span class='op'>=&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>server_hs</span>::<span class='ident'>TRAFFIC</span>
@@ -791,6 +854,20 @@
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
     <span class='self'>self</span>.<span class='ident'>common</span>.<span class='ident'>send_warning_alert</span>(<span class='ident'>AlertDescription</span>::<span class='ident'>CloseNotify</span>)
   }
+
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_peer_certificates</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span><span class='op'>&gt;</span> {
+    <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>handshake_data</span>.<span class='ident'>valid_client_cert_chain</span>.<span class='ident'>is_none</span>() {
+      <span class='kw'>return</span> <span class='prelude-val'>None</span>;
+    }
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>r</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+
+    <span class='kw'>for</span> <span class='ident'>cert</span> <span class='kw'>in</span> <span class='self'>self</span>.<span class='ident'>handshake_data</span>.<span class='ident'>valid_client_cert_chain</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>() {
+      <span class='ident'>r</span>.<span class='ident'>push</span>(<span class='ident'>cert</span>.<span class='number'>0</span>.<span class='ident'>clone</span>());
+    }
+
+    <span class='prelude-val'>Some</span>(<span class='ident'>r</span>)
+  }
 }
 
 <span class='doccomment'>/// This represents a single TLS server session.</span>
@@ -811,55 +888,32 @@
 }
 
 <span class='kw'>impl</span> <span class='ident'>Session</span> <span class='kw'>for</span> <span class='ident'>ServerSession</span> {
-  <span class='doccomment'>/// Read TLS content from `rd`.  This method does internal</span>
-  <span class='doccomment'>/// buffering, so `rd` can supply TLS messages in arbitrary-</span>
-  <span class='doccomment'>/// sized chunks (like a socket or pipe might).</span>
-  <span class='doccomment'>///</span>
-  <span class='doccomment'>/// You should call `process_new_packets` each time a call to</span>
-  <span class='doccomment'>/// this function succeeds.</span>
-  <span class='doccomment'>///</span>
-  <span class='doccomment'>/// The returned error only relates to IO on `rd`.  TLS-level</span>
-  <span class='doccomment'>/// errors are emitted from `process_new_packets`.</span>
   <span class='kw'>fn</span> <span class='ident'>read_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>rd</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>Read</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>common</span>.<span class='ident'>read_tls</span>(<span class='ident'>rd</span>)
   }
 
-  <span class='doccomment'>/// Writes TLS messages to `wr`.</span>
   <span class='kw'>fn</span> <span class='ident'>write_tls</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>wr</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>io</span>::<span class='ident'>Write</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>common</span>.<span class='ident'>write_tls</span>(<span class='ident'>wr</span>)
   }
 
-  <span class='doccomment'>/// Processes any new packets read by a previous call to `read_tls`.</span>
-  <span class='doccomment'>/// Errors from this function relate to TLS protocol errors, and</span>
-  <span class='doccomment'>/// are generally fatal to the session.</span>
-  <span class='doccomment'>///</span>
-  <span class='doccomment'>/// Success from this function can mean new plaintext is available:</span>
-  <span class='doccomment'>/// obtain it using `read`.</span>
   <span class='kw'>fn</span> <span class='ident'>process_new_packets</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>process_new_packets</span>()
   }
 
-  <span class='doccomment'>/// Returns true if the caller should call `read_tls` as soon</span>
-  <span class='doccomment'>/// as possible.</span>
   <span class='kw'>fn</span> <span class='ident'>wants_read</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>wants_read</span>()
   }
 
-  <span class='doccomment'>/// Returns true if the caller should call `write_tls` as soon</span>
-  <span class='doccomment'>/// as possible.</span>
   <span class='kw'>fn</span> <span class='ident'>wants_write</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>wants_write</span>()
   }
 
-  <span class='doccomment'>/// Queues a close_notify fatal alert to be sent in the next</span>
-  <span class='doccomment'>/// `write_tls` call.  This informs the peer that the</span>
-  <span class='doccomment'>/// connection is being closed.</span>
-  <span class='doccomment'>///</span>
-  <span class='doccomment'>/// Returns false if an alert cannot be sent thanks to the</span>
-  <span class='doccomment'>/// current state of the connection (ie, they cannot be sent</span>
-  <span class='doccomment'>/// during handshake).</span>
   <span class='kw'>fn</span> <span class='ident'>send_close_notify</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) {
     <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>send_close_notify</span>()
+  }
+
+  <span class='kw'>fn</span> <span class='ident'>get_peer_certificates</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span><span class='op'>&gt;</span> {
+    <span class='self'>self</span>.<span class='ident'>imp</span>.<span class='ident'>get_peer_certificates</span>()
   }
 }
 
@@ -915,6 +969,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

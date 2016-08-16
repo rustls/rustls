@@ -47,14 +47,19 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3629' class='srclink' href='../src/rustls/src/verify.rs.html#61-63' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-3773' class='srclink' href='../src/rustls/src/verify.rs.html#65-67' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct RootCertStore {
     // some fields omitted
 }</pre><div class='docblock'><p>A container for root certificates able to provide a root-of-trust
 for connection authentication.</p>
-</div><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../rustls/struct.RootCertStore.html' title='rustls::RootCertStore'>RootCertStore</a></code></h3><div class='impl-items'><h4 id='method.empty' class='method'><code>fn <a href='#method.empty' class='fnname'>empty</a>() -&gt; <a class='struct' href='../rustls/struct.RootCertStore.html' title='rustls::RootCertStore'>RootCertStore</a></code></h4>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl <a class='struct' href='../rustls/struct.RootCertStore.html' title='rustls::RootCertStore'>RootCertStore</a></code></span><span class='out-of-band'><div class='ghost'></div><a id='src-3775' class='srclink' href='../src/rustls/src/verify.rs.html#69-136' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.empty' class='method'><code>fn <a href='#method.empty' class='fnname'>empty</a>() -&gt; <a class='struct' href='../rustls/struct.RootCertStore.html' title='rustls::RootCertStore'>RootCertStore</a></code></h4>
 <div class='docblock'><p>Make a new, empty <code>RootCertStore</code>.</p>
-</div><h4 id='method.add' class='method'><code>fn <a href='#method.add' class='fnname'>add</a>(&amp;mut self, der: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, Error&gt;</code></h4>
+</div><h4 id='method.len' class='method'><code>fn <a href='#method.len' class='fnname'>len</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a></code></h4>
+<div class='docblock'><p>Say how many certificates are in the container.</p>
+</div><h4 id='method.get_subjects' class='method'><code>fn <a href='#method.get_subjects' class='fnname'>get_subjects</a>(&amp;self) -&gt; <a class='type' href='../rustls/internal/msgs/handshake/type.DistinguishedNames.html' title='rustls::internal::msgs::handshake::DistinguishedNames'>DistinguishedNames</a></code></h4>
+<div class='docblock'><p>Return the Subject Names for certificates in the container.</p>
+</div><h4 id='method.add' class='method'><code>fn <a href='#method.add' class='fnname'>add</a>(&amp;mut self, der: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='enum' href='https://briansmith.org/rustdoc/webpki/enum.Error.html' title='webpki::Error'>Error</a>&gt;</code></h4>
 <div class='docblock'><p>Add a single DER-encoded certificate to the store.</p>
 </div><h4 id='method.add_pem_file' class='method'><code>fn <a href='#method.add_pem_file' class='fnname'>add_pem_file</a>(&amp;mut self, rd: &amp;mut <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.BufRead.html' title='std::io::BufRead'>BufRead</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>, <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>, <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</code></h4>
 <div class='docblock'><p>Parse a PEM file and add all certificates found inside.
@@ -90,6 +95,8 @@ which were extracted from the PEM but ultimately unsuitable.</p>
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

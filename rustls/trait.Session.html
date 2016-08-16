@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3234' class='srclink' href='../src/rustls/src/session.rs.html#20-55' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-3338' class='srclink' href='../src/rustls/src/session.rs.html#20-65' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Session: <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Read.html' title='std::io::Read'>Read</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a> {
     fn <a href='#tymethod.read_tls' class='fnname'>read_tls</a>(&amp;mut self, rd: &amp;mut <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Read.html' title='std::io::Read'>Read</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;;
     fn <a href='#tymethod.write_tls' class='fnname'>write_tls</a>(&amp;mut self, wr: &amp;mut <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;;
@@ -55,6 +55,7 @@
     fn <a href='#tymethod.wants_read' class='fnname'>wants_read</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>;
     fn <a href='#tymethod.wants_write' class='fnname'>wants_write</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>;
     fn <a href='#tymethod.send_close_notify' class='fnname'>send_close_notify</a>(&amp;mut self);
+    fn <a href='#tymethod.get_peer_certificates' class='fnname'>get_peer_certificates</a>(&amp;self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;&gt;&gt;;
 }</pre><div class='docblock'><p>Generalises ClientSession and ServerSession</p>
 </div>
             <h2 id='required-methods'>Required Methods</h2>
@@ -82,11 +83,19 @@ as possible.</p>
 </div><h3 id='tymethod.send_close_notify' class='method stab '><code>fn <a href='#tymethod.send_close_notify' class='fnname'>send_close_notify</a>(&amp;mut self)</code></h3><div class='docblock'><p>Queues a close_notify fatal alert to be sent in the next
 <code>write_tls</code> call.  This informs the peer that the
 connection is being closed.</p>
+</div><h3 id='tymethod.get_peer_certificates' class='method stab '><code>fn <a href='#tymethod.get_peer_certificates' class='fnname'>get_peer_certificates</a>(&amp;self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;&gt;&gt;</code></h3><div class='docblock'><p>Retrieves the certificate chain used by the peer to authenticate.</p>
+
+<p>For clients, this is the certificate chain of the server.</p>
+
+<p>For servers, this is the certificate chain of the client,
+if client authentication was completed.</p>
+
+<p>The return value is None until this value is available.</p>
 </div></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
-    <li><code>impl <a class='trait' href='../rustls/trait.Session.html' title='rustls::Session'>Session</a> for <a class='struct' href='../rustls/struct.ServerSession.html' title='rustls::ServerSession'>ServerSession</a></code></li>
-<li><code>impl <a class='trait' href='../rustls/trait.Session.html' title='rustls::Session'>Session</a> for <a class='struct' href='../rustls/struct.ClientSession.html' title='rustls::ClientSession'>ClientSession</a></code></li>
+    <li><code>impl Session for <a class='struct' href='../rustls/struct.ServerSession.html' title='rustls::ServerSession'>ServerSession</a></code></li>
+<li><code>impl Session for <a class='struct' href='../rustls/struct.ClientSession.html' title='rustls::ClientSession'>ClientSession</a></code></li>
 </ul><script type="text/javascript" async
                          src="../implementors/rustls/trait.Session.js">
                  </script></section>
@@ -112,6 +121,8 @@ connection is being closed.</p>
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 

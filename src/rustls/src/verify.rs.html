@@ -241,6 +241,69 @@
 <span id="197">197</span>
 <span id="198">198</span>
 <span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>webpki</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ring</span>;
@@ -250,14 +313,18 @@
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::<span class='ident'>ASN1Cert</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::<span class='ident'>DigitallySignedStruct</span>;
 <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::<span class='ident'>SignatureAndHashAlgorithm</span>;
+<span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>handshake</span>::{<span class='ident'>DistinguishedName</span>, <span class='ident'>DistinguishedNames</span>};
 <span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>TLSError</span>;
 <span class='kw'>use</span> <span class='ident'>pemfile</span>;
+<span class='kw'>use</span> <span class='ident'>x509</span>;
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 
-<span class='comment'>/* Which signature verification mechanisms we support.  No particular
- * order. */</span>
-<span class='kw'>static</span> <span class='ident'>SUPPORTED_SIG_ALGS</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>webpki</span>::<span class='ident'>SignatureAlgorithm</span>] <span class='op'>=</span> <span class='kw-2'>&amp;</span>[
+<span class='kw'>type</span> <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>webpki</span>::<span class='ident'>SignatureAlgorithm</span>];
+
+<span class='doccomment'>/// Which signature verification mechanisms we support.  No particular</span>
+<span class='doccomment'>/// order.</span>
+<span class='kw'>static</span> <span class='ident'>SUPPORTED_SIG_ALGS</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[
   <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA1</span>,
   <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA256</span>,
   <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA384</span>,
@@ -273,9 +340,9 @@
   <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>RSA_PKCS1_3072_8192_SHA384</span>
 ];
 
-<span class='comment'>/* This is like a webpki::TrustAnchor, except it owns
- * rather than borrows its memory.  That prevents lifetimes
- * leaking up the object tree. */</span>
+<span class='doccomment'>/// This is like a webpki::TrustAnchor, except it owns</span>
+<span class='doccomment'>/// rather than borrows its memory.  That prevents lifetimes</span>
+<span class='doccomment'>/// leaking up the object tree.</span>
 <span class='kw'>struct</span> <span class='ident'>OwnedTrustAnchor</span> {
   <span class='ident'>subject</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>,
   <span class='ident'>spki</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>,
@@ -310,6 +377,25 @@
   <span class='doccomment'>/// Make a new, empty `RootCertStore`.</span>
   <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>empty</span>() <span class='op'>-&gt;</span> <span class='ident'>RootCertStore</span> {
     <span class='ident'>RootCertStore</span> { <span class='ident'>roots</span>: <span class='ident'>Vec</span>::<span class='ident'>new</span>() }
+  }
+
+  <span class='doccomment'>/// Say how many certificates are in the container.</span>
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>len</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
+    <span class='self'>self</span>.<span class='ident'>roots</span>.<span class='ident'>len</span>()
+  }
+
+  <span class='doccomment'>/// Return the Subject Names for certificates in the container.</span>
+  <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_subjects</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>DistinguishedNames</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>r</span> <span class='op'>=</span> <span class='ident'>DistinguishedNames</span>::<span class='ident'>new</span>();
+
+    <span class='kw'>for</span> <span class='ident'>ota</span> <span class='kw'>in</span> <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>roots</span> {
+      <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>name</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+      <span class='ident'>name</span>.<span class='ident'>extend_from_slice</span>(<span class='kw-2'>&amp;</span><span class='ident'>ota</span>.<span class='ident'>subject</span>);
+      <span class='ident'>x509</span>::<span class='ident'>wrap_in_sequence</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>name</span>);
+      <span class='ident'>r</span>.<span class='ident'>push</span>(<span class='ident'>DistinguishedName</span>::<span class='ident'>new</span>(<span class='ident'>name</span>));
+    }
+
+    <span class='ident'>r</span>
   }
 
   <span class='doccomment'>/// Add a single DER-encoded certificate to the store.</span>
@@ -356,64 +442,111 @@
   }
 }
 
-<span class='comment'>/* Verify a the certificate chain `presented_certs` against the roots
- * configured in `roots`.  Make sure that `dns_name` is quoted by
- * the top certificate in the chain. */</span>
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>verify_cert</span>(<span class='ident'>roots</span>: <span class='kw-2'>&amp;</span><span class='ident'>RootCertStore</span>,
-                   <span class='ident'>presented_certs</span>: <span class='kw-2'>&amp;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>ASN1Cert</span><span class='op'>&gt;</span>,
-                   <span class='ident'>dns_name</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
+<span class='doccomment'>/// Check `presented_certs` is non-empty and rooted in `roots`.</span>
+<span class='doccomment'>/// Return the webpki::EndEntityCert for the top certificate</span>
+<span class='doccomment'>/// in `presented_certs`.</span>
+<span class='kw'>fn</span> <span class='ident'>verify_common_cert</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span><span class='op'>&gt;</span>(<span class='ident'>roots</span>: <span class='kw-2'>&amp;</span><span class='ident'>RootCertStore</span>,
+                          <span class='ident'>presented_certs</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> [<span class='ident'>ASN1Cert</span>])
+    <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>webpki</span>::<span class='ident'>EndEntityCert</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span><span class='op'>&gt;</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
   <span class='kw'>if</span> <span class='ident'>presented_certs</span>.<span class='ident'>len</span>() <span class='op'>==</span> <span class='number'>0</span> {
     <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>NoCertificatesPresented</span>);
   }
 
   <span class='comment'>/* EE cert must appear first. */</span>
-  <span class='kw'>let</span> <span class='ident'>ee</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>presented_certs</span>[<span class='number'>0</span>].<span class='ident'>body</span>);
+  <span class='kw'>let</span> <span class='ident'>cert_der</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>presented_certs</span>[<span class='number'>0</span>].<span class='number'>0</span>);
+  <span class='kw'>let</span> <span class='ident'>cert</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(
+    <span class='ident'>webpki</span>::<span class='ident'>EndEntityCert</span>::<span class='ident'>from</span>(<span class='ident'>cert_der</span>)
+      .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>))
+  );
 
   <span class='kw'>let</span> <span class='ident'>chain</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>untrusted</span>::<span class='ident'>Input</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>presented_certs</span>.<span class='ident'>iter</span>()
     .<span class='ident'>skip</span>(<span class='number'>1</span>)
-    .<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>cert</span><span class='op'>|</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='ident'>body</span>))
+    .<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>cert</span><span class='op'>|</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='number'>0</span>))
     .<span class='ident'>collect</span>();
 
   <span class='kw'>let</span> <span class='ident'>trustroots</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>webpki</span>::<span class='ident'>TrustAnchor</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>roots</span>.<span class='ident'>roots</span>.<span class='ident'>iter</span>()
     .<span class='ident'>map</span>(<span class='op'>|</span><span class='ident'>x</span><span class='op'>|</span> <span class='ident'>x</span>.<span class='ident'>to_trust_anchor</span>())
     .<span class='ident'>collect</span>();
 
-  <span class='ident'>webpki</span>::<span class='ident'>verify_tls_cert</span>(<span class='kw-2'>&amp;</span><span class='ident'>SUPPORTED_SIG_ALGS</span>,
-                          <span class='kw-2'>&amp;</span><span class='ident'>trustroots</span>,
-                          <span class='kw-2'>&amp;</span><span class='ident'>chain</span>,
-                          <span class='ident'>ee</span>,
-                          <span class='ident'>time</span>::<span class='ident'>get_time</span>())
-    .<span class='ident'>and_then</span>(<span class='op'>|</span>_<span class='op'>|</span> <span class='ident'>webpki</span>::<span class='ident'>verify_cert_dns_name</span>(<span class='ident'>ee</span>,
-                          <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>dns_name</span>.<span class='ident'>as_bytes</span>())))
+  <span class='ident'>cert</span>.<span class='ident'>verify_is_valid_tls_server_cert</span>(<span class='kw-2'>&amp;</span><span class='ident'>SUPPORTED_SIG_ALGS</span>,
+                                       <span class='kw-2'>&amp;</span><span class='ident'>trustroots</span>,
+                                       <span class='kw-2'>&amp;</span><span class='ident'>chain</span>,
+                                       <span class='ident'>time</span>::<span class='ident'>get_time</span>())
+    .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>))
+    .<span class='ident'>map</span>(<span class='op'>|</span>_<span class='op'>|</span> <span class='ident'>cert</span>)
+}
+
+<span class='doccomment'>/// Verify a the certificate chain `presented_certs` against the roots</span>
+<span class='doccomment'>/// configured in `roots`.  Make sure that `dns_name` is quoted by</span>
+<span class='doccomment'>/// the top certificate in the chain.</span>
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>verify_server_cert</span>(<span class='ident'>roots</span>: <span class='kw-2'>&amp;</span><span class='ident'>RootCertStore</span>,
+                          <span class='ident'>presented_certs</span>: <span class='kw-2'>&amp;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>ASN1Cert</span><span class='op'>&gt;</span>,
+                          <span class='ident'>dns_name</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
+  <span class='kw'>let</span> <span class='ident'>cert</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>verify_common_cert</span>(<span class='ident'>roots</span>, <span class='ident'>presented_certs</span>));
+
+  <span class='ident'>cert</span>.<span class='ident'>verify_is_valid_for_dns_name</span>(<span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>dns_name</span>.<span class='ident'>as_bytes</span>()))
     .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>))
 }
 
-<span class='comment'>/* TODO: this is a bit gross. consider doing it another way */</span>
-<span class='kw'>static</span> <span class='ident'>ECDSA_SHA1</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x07\x2a\x86\x48\xce\x3d\x04\x01&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>ECDSA_SHA256</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x02&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>ECDSA_SHA384</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x03&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>ECDSA_SHA512</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x08\x2a\x86\x48\xce\x3d\x04\x03\x04&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>RSA_SHA1</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x05&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>RSA_SHA256</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0b&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>RSA_SHA384</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0c&quot;</span>;
-<span class='kw'>static</span> <span class='ident'>RSA_SHA512</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>] <span class='op'>=</span> <span class='string'>b&quot;\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x01\x0d&quot;</span>;
+<span class='doccomment'>/// Verify a certificate chain `presented_certs` is rooted in `roots`.</span>
+<span class='doccomment'>/// Does no further checking of the certificate.</span>
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>verify_client_cert</span>(<span class='ident'>roots</span>: <span class='kw-2'>&amp;</span><span class='ident'>RootCertStore</span>,
+                          <span class='ident'>presented_certs</span>: <span class='kw-2'>&amp;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>ASN1Cert</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
+  <span class='ident'>verify_common_cert</span>(<span class='ident'>roots</span>, <span class='ident'>presented_certs</span>)
+    .<span class='ident'>map</span>(<span class='op'>|</span>_<span class='op'>|</span> ())
+}
 
+<span class='kw'>static</span> <span class='ident'>ECDSA_SHA1</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[
+  <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA1</span>, <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P384_SHA1</span>
+];
+<span class='kw'>static</span> <span class='ident'>ECDSA_SHA256</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[
+  <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA256</span>, <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P384_SHA256</span>
+];
+<span class='kw'>static</span> <span class='ident'>ECDSA_SHA384</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[
+  <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA384</span>, <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P384_SHA384</span>
+];
+<span class='kw'>static</span> <span class='ident'>ECDSA_SHA512</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[
+  <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P256_SHA512</span>, <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>ECDSA_P384_SHA512</span>
+];
 
-<span class='kw'>fn</span> <span class='ident'>convert_alg</span>(<span class='ident'>sh</span>: <span class='kw-2'>&amp;</span><span class='ident'>SignatureAndHashAlgorithm</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> [<span class='ident'>u8</span>], <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
+<span class='kw'>static</span> <span class='ident'>RSA_SHA1</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[ <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>RSA_PKCS1_2048_8192_SHA1</span> ];
+<span class='kw'>static</span> <span class='ident'>RSA_SHA256</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[ <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>RSA_PKCS1_2048_8192_SHA256</span> ];
+<span class='kw'>static</span> <span class='ident'>RSA_SHA384</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[ <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>RSA_PKCS1_2048_8192_SHA384</span> ];
+<span class='kw'>static</span> <span class='ident'>RSA_SHA512</span>: <span class='ident'>SignatureAlgorithms</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span>[ <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>RSA_PKCS1_2048_8192_SHA512</span> ];
+
+<span class='kw'>fn</span> <span class='ident'>convert_alg</span>(<span class='ident'>sh</span>: <span class='kw-2'>&amp;</span><span class='ident'>SignatureAndHashAlgorithm</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>SignatureAlgorithms</span>, <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>SignatureAlgorithm</span>::{<span class='ident'>ECDSA</span>, <span class='ident'>RSA</span>};
   <span class='kw'>use</span> <span class='ident'>msgs</span>::<span class='ident'>enums</span>::<span class='ident'>HashAlgorithm</span>::{<span class='ident'>SHA1</span>, <span class='ident'>SHA256</span>, <span class='ident'>SHA384</span>, <span class='ident'>SHA512</span>};
 
   <span class='kw'>match</span> (<span class='kw-2'>&amp;</span><span class='ident'>sh</span>.<span class='ident'>sign</span>, <span class='kw-2'>&amp;</span><span class='ident'>sh</span>.<span class='ident'>hash</span>) {
-    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA1</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>ECDSA_SHA1</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA256</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>ECDSA_SHA256</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA384</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>ECDSA_SHA384</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA512</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>ECDSA_SHA512</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA1</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>RSA_SHA1</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA256</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>RSA_SHA256</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA384</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>RSA_SHA384</span>),
-    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA512</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='ident'>RSA_SHA512</span>),
-    _ <span class='op'>=&gt;</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;convert_alg cannot map to oid&quot;</span>.<span class='ident'>to_string</span>()))
+    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA1</span>)   <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>ECDSA_SHA1</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA256</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>ECDSA_SHA256</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA384</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>ECDSA_SHA384</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>ECDSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA512</span>) <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>ECDSA_SHA512</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA1</span>)     <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>RSA_SHA1</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA256</span>)   <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>RSA_SHA256</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA384</span>)   <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>RSA_SHA384</span>),
+    (<span class='kw-2'>&amp;</span><span class='ident'>RSA</span>, <span class='kw-2'>&amp;</span><span class='ident'>SHA512</span>)   <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(<span class='kw-2'>&amp;</span><span class='ident'>RSA_SHA512</span>),
+    _ <span class='op'>=&gt;</span> <span class='prelude-val'>Err</span>(<span class='ident'>TLSError</span>::<span class='ident'>General</span>(<span class='string'>&quot;cannot convert to webpki sigalg&quot;</span>.<span class='ident'>to_string</span>()))
   }
+}
+
+<span class='kw'>fn</span> <span class='ident'>verify_sig_using_any_alg</span>(<span class='ident'>cert</span>: <span class='kw-2'>&amp;</span><span class='ident'>webpki</span>::<span class='ident'>EndEntityCert</span>,
+                            <span class='ident'>algs</span>: <span class='ident'>SignatureAlgorithms</span>,
+                            <span class='ident'>message</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>],
+                            <span class='ident'>sig</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>]) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>webpki</span>::<span class='ident'>Error</span><span class='op'>&gt;</span> {
+  <span class='comment'>/* TLS doesn&#39;t itself give us enough info to map to a single webpki::SignatureAlgorithm.
+   * Therefore, in convert_algs maps to several and we try them all. */</span>
+  <span class='kw'>for</span> <span class='ident'>alg</span> <span class='kw'>in</span> <span class='ident'>algs</span> {
+    <span class='kw'>match</span> <span class='ident'>cert</span>.<span class='ident'>verify_signature</span>(<span class='ident'>alg</span>,
+                                <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>message</span>),
+                                <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>sig</span>)) {
+      <span class='prelude-val'>Err</span>(<span class='ident'>webpki</span>::<span class='ident'>Error</span>::<span class='ident'>UnsupportedSignatureAlgorithmForPublicKey</span>) <span class='op'>=&gt;</span> <span class='kw'>continue</span>,
+      <span class='ident'>res</span> <span class='op'>=&gt;</span> <span class='kw'>return</span> <span class='ident'>res</span>
+    }
+  }
+
+  <span class='prelude-val'>Err</span>(<span class='ident'>webpki</span>::<span class='ident'>Error</span>::<span class='ident'>UnsupportedSignatureAlgorithmForPublicKey</span>)
 }
 
 <span class='doccomment'>/// Verify the signed `message` using the public key quoted in</span>
@@ -421,26 +554,19 @@
 <span class='doccomment'>///</span>
 <span class='doccomment'>/// `cert` MUST have been authenticated before using this function,</span>
 <span class='doccomment'>/// typically using `verify_cert`.</span>
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>verify_kx</span>(<span class='ident'>message</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>],
-                 <span class='ident'>cert</span>: <span class='kw-2'>&amp;</span><span class='ident'>ASN1Cert</span>,
-                 <span class='ident'>dss</span>: <span class='kw-2'>&amp;</span><span class='ident'>DigitallySignedStruct</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
-  <span class='kw'>let</span> <span class='ident'>alg</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>convert_alg</span>(<span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>alg</span>));
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>verify_signed_struct</span>(<span class='ident'>message</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>],
+                            <span class='ident'>cert</span>: <span class='kw-2'>&amp;</span><span class='ident'>ASN1Cert</span>,
+                            <span class='ident'>dss</span>: <span class='kw-2'>&amp;</span><span class='ident'>DigitallySignedStruct</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>TLSError</span><span class='op'>&gt;</span> {
 
-  <span class='kw'>let</span> <span class='ident'>signed_data</span> <span class='op'>=</span> <span class='ident'>webpki</span>::<span class='ident'>signed_data</span>::<span class='ident'>SignedData</span> {
-    <span class='ident'>data</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>message</span>),
-    <span class='ident'>algorithm</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>alg</span>),
-    <span class='ident'>signature</span>: <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>sig</span>.<span class='ident'>body</span>)
-  };
-
-  <span class='kw'>let</span> <span class='ident'>cert_in</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='ident'>body</span>);
-  <span class='kw'>let</span> <span class='ident'>cert</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>webpki</span>::<span class='ident'>trust_anchor_util</span>::<span class='ident'>cert_der_as_trust_anchor</span>(<span class='ident'>cert_in</span>)
+  <span class='kw'>let</span> <span class='ident'>possible_algs</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>convert_alg</span>(<span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>alg</span>));
+  <span class='kw'>let</span> <span class='ident'>cert_in</span> <span class='op'>=</span> <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>.<span class='number'>0</span>);
+  <span class='kw'>let</span> <span class='ident'>cert</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>webpki</span>::<span class='ident'>EndEntityCert</span>::<span class='ident'>from</span>(<span class='ident'>cert_in</span>)
                   .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>)));
 
-  <span class='ident'>webpki</span>::<span class='ident'>signed_data</span>::<span class='ident'>verify_signed_data</span>(<span class='kw-2'>&amp;</span><span class='ident'>SUPPORTED_SIG_ALGS</span>,
-                                          <span class='ident'>untrusted</span>::<span class='ident'>Input</span>::<span class='ident'>from</span>(<span class='ident'>cert</span>.<span class='ident'>spki</span>),
-                                          <span class='kw-2'>&amp;</span><span class='ident'>signed_data</span>)
+  <span class='ident'>verify_sig_using_any_alg</span>(<span class='kw-2'>&amp;</span><span class='ident'>cert</span>, <span class='kw-2'>&amp;</span><span class='ident'>possible_algs</span>, <span class='ident'>message</span>, <span class='kw-2'>&amp;</span><span class='ident'>dss</span>.<span class='ident'>sig</span>.<span class='number'>0</span>)
     .<span class='ident'>map_err</span>(<span class='op'>|</span><span class='ident'>err</span><span class='op'>|</span> <span class='ident'>TLSError</span>::<span class='ident'>WebPKIError</span>(<span class='ident'>err</span>))
 }
+
 </pre>
 </section>
     <section id='search' class="content hidden"></section>
@@ -465,6 +591,8 @@
                     <dd>Move down in search results</dd>
                     <dt>&#9166;</dt>
                     <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
                 </dl>
             </div>
 
