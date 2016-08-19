@@ -13,18 +13,8 @@ untrusted = "0.3.1"
 time = "0.1.35"
 base64 = "~0.2.0"
 log = "0.3.6"
-
-[replace]
-"ring:0.2.0" = { git = "https://github.com/briansmith/ring", rev = "ec39fbd" }
-
-[dependencies.ring]
-git = "https://github.com/briansmith/ring"
-features = [ "rsa_signing" ]
-rev = "ec39fbd"
-
-[dependencies.webpki]
-git = "https://github.com/ctz/webpki"
-rev = "9c855fd"
+ring = { version = "0.3", features = ["rsa_signing"] }
+webpki = "0.2.1"
 
 [dev-dependencies]
 env_logger = "0.3.3"
