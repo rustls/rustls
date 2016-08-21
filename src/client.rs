@@ -15,6 +15,7 @@ use sign;
 use error::TLSError;
 use rand;
 
+use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
 
@@ -34,6 +35,7 @@ pub trait StoresClientSessions {
   fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>>;
 }
 
+/// An implementor of StoresClientSessions which does nothing.
 struct NoSessionStorage {}
 
 impl StoresClientSessions for NoSessionStorage {
@@ -43,6 +45,43 @@ impl StoresClientSessions for NoSessionStorage {
 
   fn get(&mut self, _key: &Vec<u8>) -> Option<Vec<u8>> {
     None
+  }
+}
+
+/// An implementor of StoresClientSessions that stores everything
+/// in memory.  It enforces a limit on the number of sessions
+/// to bound memory usage.
+pub struct ClientSessionMemoryCache {
+  cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+  max_entries: usize
+}
+
+impl ClientSessionMemoryCache {
+  pub fn new(size: usize) -> Box<ClientSessionMemoryCache> {
+    assert!(size > 0);
+    Box::new(ClientSessionMemoryCache {
+      cache: collections::HashMap::new(),
+      max_entries: size
+    })
+  }
+
+  fn limit_size(&mut self) {
+    while self.cache.len() > self.max_entries {
+      let k = self.cache.keys().next().unwrap().clone();
+      self.cache.remove(&k);
+    }
+  }
+}
+
+impl StoresClientSessions for ClientSessionMemoryCache {
+  fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
+    self.cache.insert(key, value);
+    self.limit_size();
+    true
+  }
+
+  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>> {
+    self.cache.get(key).map(|x| x.clone())
   }
 }
 
