@@ -132,10 +132,11 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
                   sigalg: &SignatureAndHashAlgorithm,
                   curve: &NamedCurve,
                   signer: Arc<Box<sign::Signer>>) -> Result<(), TLSError> {
-  let kx = {
+  let kx = try!({
     let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
     scs.start_server_kx(curve)
-  };
+      .ok_or_else(|| TLSError::General("key exchange failed".to_string()))
+  });
   let secdh = ServerECDHParams::new(curve, &kx.pubkey);
 
   let mut msg = Vec::new();

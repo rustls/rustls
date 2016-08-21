@@ -183,6 +183,7 @@ extern crate base64;
 extern crate log;
 
 mod util;
+#[macro_use]
 mod msgs;
 mod error;
 mod rand;

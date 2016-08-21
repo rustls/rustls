@@ -32,12 +32,12 @@ pub struct KeyExchange {
 }
 
 impl KeyExchange {
-  pub fn named_curve_to_ecdh_alg(named_curve: &NamedCurve) -> &'static ring::agreement::Algorithm {
+  pub fn named_curve_to_ecdh_alg(named_curve: &NamedCurve) -> Option<&'static ring::agreement::Algorithm> {
     match named_curve {
-      &NamedCurve::X25519 => &ring::agreement::X25519,
-      &NamedCurve::secp256r1 => &ring::agreement::ECDH_P256,
-      &NamedCurve::secp384r1 => &ring::agreement::ECDH_P384,
-      _ => unreachable!()
+      &NamedCurve::X25519 => Some(&ring::agreement::X25519),
+      &NamedCurve::secp256r1 => Some(&ring::agreement::ECDH_P256),
+      &NamedCurve::secp384r1 => Some(&ring::agreement::ECDH_P384),
+      _ => None
     }
   }
 
@@ -45,12 +45,12 @@ impl KeyExchange {
     let mut rd = Reader::init(&kx_params);
     let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
 
-    KeyExchange::start_ecdhe(&ecdh_params.curve_params.named_curve)
+    try_ret!(KeyExchange::start_ecdhe(&ecdh_params.curve_params.named_curve))
       .complete(&ecdh_params.public.0)
   }
 
-  pub fn start_ecdhe(named_curve: &NamedCurve) -> KeyExchange {
-    let alg = KeyExchange::named_curve_to_ecdh_alg(named_curve);
+  pub fn start_ecdhe(named_curve: &NamedCurve) -> Option<KeyExchange> {
+    let alg = try_ret!(KeyExchange::named_curve_to_ecdh_alg(named_curve));
     let rng = ring::rand::SystemRandom::new();
     let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng)
       .unwrap();
@@ -59,7 +59,7 @@ impl KeyExchange {
     pubkey.resize(ours.public_key_len(), 0u8);
     ours.compute_public_key(pubkey.as_mut_slice()).unwrap();
 
-    KeyExchange { alg: alg, privkey: ours, pubkey: pubkey }
+    Some(KeyExchange { alg: alg, privkey: ours, pubkey: pubkey })
   }
 
   pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
@@ -136,10 +136,10 @@ impl SupportedCipherSuite {
     }
   }
 
-  pub fn start_server_kx(&self, named_curve: &NamedCurve) -> KeyExchange {
+  pub fn start_server_kx(&self, named_curve: &NamedCurve) -> Option<KeyExchange> {
     match &self.kx {
       &KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_curve),
-      _ => unreachable!()
+      _ => None
     }
   }
 
