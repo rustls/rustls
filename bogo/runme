@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# This script fetches, builds, and runs the BoringSSL
+# TLS test tool ('BoGo') against rustls.
+
+set -xe
+cargo build
+cargo test --no-run
+
+if [ ! -e bogo/ ] ; then
+  ./fetch-and-build
+fi
+
+cd ./bogo && ./bogo.test -shim-path ../../target/debug/examples/bogo_shim \
+     -shim-config ../config.json \
+     -pipe

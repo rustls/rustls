@@ -1,0 +1,50 @@
+{
+  "DisabledTests": {
+    "SendV2ClientHello-*": "only support TLS1.2",
+    "*SSL3*": "",
+    "*SSLv3*": "",
+    "*TLS1-*": "",
+    "*-TLS1": "",
+    "*TLS11-*": "",
+    "*-TLS11": "",
+    "*TLS13-*": "",
+    "*-TLS13": "",
+    "KeyUpdate": "",
+    "*DTLS*": "not supported",
+    "MTU*": "dtls only",
+    "CBCRecordSplitting*": "insane ciphersuites",
+    "*CBCPadding*": "",
+    "RSAEphemeralKey": "",
+    "BadRSAClientKeyExchange-*": "",
+    "SillyDH": "",
+    "DHPublicValuePadded": "",
+    "Basic-Server-RSA-*": "",
+    "*-RC4-*": "",
+    "*-3DES-*": "",
+    "*-AES128-SHA*": "",
+    "*-AES256-SHA*": "",
+    "*-CHACHA20-POLY1305-OLD-*": "",
+    "*-ECDSA-*-server": "ECDSA signing not yet implemented",
+    "ClientAuth-Sign-ECDSA-*": "",
+    "ServerAuth-Sign-ECDSA-*": "",
+    "*-Client-ClientAuth-ECDSA": "",
+    "Basic-Server-*-ECDSA-*": "",
+    "FallbackSCSV*": "fallback countermeasure not yet implemented",
+    "SupportTicketsWithSessionID": "tickets not yet implemented",
+    "SkipNewSessionTicket": "",
+    "SendEmptySessionTicket": ""
+  },
+  "ErrorMap": {
+    ":HTTP_REQUEST:": ":GARBAGE:",
+    ":HTTPS_PROXY_REQUEST:": ":GARBAGE:",
+    ":WRONG_VERSION_NUMBER:": ":GARBAGE:",
+    ":DECODE_ERROR:": ":NO_CERTS:",
+    ":PEER_DID_NOT_RETURN_A_CERTIFICATE:": ":NO_CERTS:",
+    ":UNEXPECTED_RECORD:": ":UNEXPECTED_MESSAGE:",
+    ":DIGEST_CHECK_FAILED:": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
+    ":ENCRYPTED_LENGTH_TOO_LONG:": ":GARBAGE:"
+  },
+  "TestErrorMap": {
+    "SendInvalidRecordType": ":GARBAGE:"
+  }
+}
