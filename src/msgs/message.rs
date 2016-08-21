@@ -77,6 +77,32 @@ impl Message {
     Some(Message { typ: typ, version: version, payload: MessagePayload::Opaque(payload) })
   }
 
+  /// Do some *very* lax checks on the header, and return
+  /// None if it looks really broken.  Otherwise, return
+  /// the length field.
+  pub fn check_header(bytes: &[u8]) -> Option<usize> {
+    let mut rd = Reader::init(bytes);
+
+    let typ = try_ret!(ContentType::read(&mut rd));
+    let version = try_ret!(ProtocolVersion::read(&mut rd));
+    let len = try_ret!(read_u16(&mut rd));
+
+    /* Don't accept any new content-types. */
+    if let ContentType::Unknown(_) = typ {
+      return None;
+    }
+
+    /* Accept only versions 0x03XX for any XX. */
+    match version {
+      ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
+        return None;
+      },
+      _ => ()
+    };
+
+    Some(len as usize)
+  }
+
   pub fn encode(&self, bytes: &mut Vec<u8>) {
     self.typ.encode(bytes);
     self.version.encode(bytes);

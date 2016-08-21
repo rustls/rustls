@@ -408,6 +408,10 @@ impl ClientSessionImpl {
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    if self.common.message_deframer.desynced {
+      return Err(TLSError::CorruptMessage);
+    }
+
     loop {
       match self.common.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),

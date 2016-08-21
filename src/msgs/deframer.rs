@@ -19,6 +19,11 @@ pub struct MessageDeframer {
   /// Completed frames for output.
   pub frames: VecDeque<Message>,
 
+  /// Set to true if the peer is not talking TLS, but some other
+  /// protocol.  The caller should abort the connection, because
+  /// the deframer cannot recover.
+  pub desynced: bool,
+
   /// A variable-size buffer containing the currently-
   /// accumulating TLS message.
   buf: Vec<u8>
@@ -28,6 +33,7 @@ impl MessageDeframer {
   pub fn new() -> MessageDeframer {
     MessageDeframer {
       frames: VecDeque::new(),
+      desynced: false,
       buf: Vec::with_capacity(MAX_MESSAGE)
     }
   }
@@ -53,8 +59,17 @@ impl MessageDeframer {
     let new_bytes = rc.unwrap();
     self.buf.truncate(used + new_bytes);
 
-    while self.buf_contains_message() {
-      self.deframe_one();
+    loop {
+      match self.buf_contains_message() {
+        None => {
+          self.desynced = true;
+          break;
+        },
+        Some(true) => {
+          self.deframe_one();
+        },
+        Some(false) => break
+      }
     }
 
     Ok(new_bytes)
@@ -69,13 +84,28 @@ impl MessageDeframer {
 
   /// Does our `buf` contain a full message?  It does if it is big enough to
   /// contain a header, and that header has a length which falls within `buf`.
-  fn buf_contains_message(&self) -> bool {
+  /// This returns None if it contains a header which is invalid.
+  fn buf_contains_message(&self) -> Option<bool> {
     if self.buf.len() < HEADER_SIZE {
-      return false;
+      return Some(false);
     }
 
-    let msg_len = codec::decode_u16(&self.buf[3..5]).unwrap() as usize;
-    self.buf.len() >= msg_len + HEADER_SIZE
+    let len_maybe = Message::check_header(&self.buf);
+
+    /* Header damaged. */
+    if len_maybe == None {
+      return None;
+    }
+
+    let len = len_maybe.unwrap();
+
+    /* This is just too large. */
+    if len >= MAX_MESSAGE - HEADER_SIZE {
+      return None;
+    }
+
+    let full_message = self.buf.len() >= len + HEADER_SIZE;
+    Some(full_message)
   }
 
   /// Take a TLS message off the front of `buf`, and put it onto the back
@@ -84,9 +114,6 @@ impl MessageDeframer {
     let used = {
       let mut rd = codec::Reader::init(&self.buf);
       let m = Message::read(&mut rd).unwrap();
-      let mut check = Vec::new();
-      m.encode(&mut check);
-      assert_eq!(check.as_slice(), &self.buf[..rd.used()]);
       self.frames.push_back(m);
       rd.used()
     };
