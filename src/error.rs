@@ -19,6 +19,9 @@ pub enum TLSError {
   /// The peer sent us a syntactically incorrect TLS message.
   CorruptMessage,
 
+  /// The peer sent us a TLS message with invalid contents.
+  CorruptMessagePayload(ContentType),
+
   /// The peer didn't give us any certificates.
   NoCertificatesPresented,
 

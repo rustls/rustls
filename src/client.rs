@@ -344,13 +344,15 @@ impl ClientSessionImpl {
     if self.common.handshake_joiner.want_message(msg) {
       try!(
         self.common.handshake_joiner.take_message(msg)
-        .ok_or_else(|| TLSError::CorruptMessage)
+        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
       );
       return self.process_new_handshake_messages();
     }
 
     /* Now we can fully parse the message payload. */
-    msg.decode_payload();
+    if !msg.decode_payload() {
+      return Err(TLSError::CorruptMessagePayload(msg.typ.clone()));
+    }
 
     /* For alerts, we have separate logic. */
     if msg.is_content_type(ContentType::Alert) {

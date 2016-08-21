@@ -28,7 +28,7 @@ impl MessagePayload {
   pub fn decode_given_type(&self, typ: &ContentType) -> Option<MessagePayload> {
     if let MessagePayload::Opaque(ref payload) = *self {
       let mut r = Reader::init(&payload.0);
-      match *typ {
+      let parsed = match *typ {
         ContentType::Alert =>
           Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r)))),
         ContentType::Handshake =>
@@ -37,6 +37,12 @@ impl MessagePayload {
           Some(MessagePayload::ChangeCipherSpec(try_ret!(ChangeCipherSpecPayload::read(&mut r)))),
         _ =>
           None
+      };
+
+      if r.any_left() {
+        None
+      } else {
+        parsed
       }
     } else {
       None
@@ -114,9 +120,17 @@ impl Message {
     self.typ == typ
   }
 
-  pub fn decode_payload(&mut self) {
+  pub fn decode_payload(&mut self) -> bool {
+    /* Do we need a decode? */
+    if self.typ == ContentType::ApplicationData {
+      return true;
+    }
+
     if let Some(x) = self.payload.decode_given_type(&self.typ) {
       self.payload = x;
+      true
+    } else {
+      false
     }
   }
 
