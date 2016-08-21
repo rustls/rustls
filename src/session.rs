@@ -540,9 +540,9 @@ impl SessionCommon {
       }
 
       error!("TLS alert received: {:#?}", msg);
-      return Err(TLSError::AlertReceived(alert.description.clone()));
+      Err(TLSError::AlertReceived(alert.description.clone()))
     } else {
-      unreachable!();
+      Err(TLSError::CorruptMessagePayload(ContentType::Alert))
     }
   }
 
