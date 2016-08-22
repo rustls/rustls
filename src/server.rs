@@ -300,9 +300,14 @@ impl ServerSessionImpl {
     Ok(())
   }
 
+  fn queue_unexpected_alert(&mut self) {
+    self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+  }
+
   pub fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     let handler = self.get_handler();
-    try!(handler.expect.check_message(msg));
+    try!(handler.expect.check_message(msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err }));
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
 
