@@ -182,7 +182,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
 }
 
 fn emit_certificate_req(sess: &mut ServerSessionImpl) {
-  if sess.config.client_auth_roots.len() == 0 {
+  if !sess.config.client_auth_offer {
     return;
   }
 

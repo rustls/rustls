@@ -68,9 +68,10 @@ pub struct ServerConfig {
   pub alpn_protocols: Vec<String>,
 
   /// List of client authentication root certificates.
-  /// If this list is empty, no client authentication is
-  /// performed.
   pub client_auth_roots: verify::RootCertStore,
+
+  /// Whether to attempt client auth.
+  pub client_auth_offer: bool,
 
   /// Whether to complete handshakes with clients which
   /// don't do client auth.
@@ -139,6 +140,7 @@ impl ServerConfig {
       alpn_protocols: Vec::new(),
       cert_resolver: Box::new(FailResolveChain {}),
       client_auth_roots: verify::RootCertStore::empty(),
+      client_auth_offer: false,
       client_auth_mandatory: false
     }
   }
@@ -172,6 +174,7 @@ impl ServerConfig {
       self.client_auth_roots.add(&cert)
         .unwrap()
     }
+    self.client_auth_offer = true;
     self.client_auth_mandatory = mandatory;
   }
 }
@@ -240,7 +243,7 @@ impl ServerSessionImpl {
       state: ConnState::ExpectClientHello
     };
 
-    if sess.config.client_auth_roots.len() > 0 {
+    if sess.config.client_auth_offer {
       sess.handshake_data.transcript.set_client_auth_enabled();
     }
 
