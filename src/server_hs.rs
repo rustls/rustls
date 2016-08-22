@@ -381,6 +381,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
   sess.secrets_current.init(&sess.handshake_data.secrets,
                             sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
                             &kxd.premaster_secret);
+  sess.start_encryption();
 
   if sess.handshake_data.doing_client_auth {
     Ok(ConnState::ExpectCertificateVerify)
@@ -428,7 +429,17 @@ pub static EXPECT_CERTIFICATE_VERIFY: Handler = Handler {
 
 /* --- Process client's ChangeCipherSpec --- */
 fn handle_ccs(sess: &mut ServerSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
-  sess.start_encryption();
+  /* CCS should not be received interleaved with fragmented handshake-level
+   * message. */
+  if !sess.common.handshake_joiner.empty() {
+    warn!("CCS received interleaved with fragmented handshake");
+    return Err(TLSError::InappropriateMessage {
+      expect_types: vec![ ContentType::Handshake ],
+      got_type: ContentType::ChangeCipherSpec
+    });
+  }
+
+  sess.common.peer_now_encrypting();
   Ok(ConnState::ExpectFinished)
 }
 
@@ -449,6 +460,7 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
   };
 
   sess.common.send_msg(&m, false);
+  sess.common.we_now_encrypting();
 }
 
 fn emit_finished(sess: &mut ServerSessionImpl) {

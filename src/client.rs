@@ -287,17 +287,6 @@ pub enum ConnState {
   Traffic
 }
 
-impl ConnState {
-  fn is_encrypted(&self) -> bool {
-    match *self {
-      ConnState::ExpectFinished
-        | ConnState::ExpectFinishedResume
-        | ConnState::Traffic => true,
-      _ => false
-    }
-  }
-}
-
 pub struct ClientSessionImpl {
   pub config: Arc<ClientConfig>,
   pub handshake_data: ClientHandshakeData,
@@ -419,11 +408,6 @@ impl ClientSessionImpl {
     try!(handler.expect.check_message(msg));
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
-
-    /* Start decrypting incoming messages at the right time. */
-    if self.state.is_encrypted() && !self.common.peer_encrypting {
-      self.common.peer_now_encrypting();
-    }
 
     /* Once we're connected, start flushing sendable_plaintext. */
     if self.state == ConnState::Traffic && !self.common.traffic {

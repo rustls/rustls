@@ -307,6 +307,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
   };
 
   sess.common.send_msg(&ccs, false);
+  sess.common.we_now_encrypting();
 }
 
 fn emit_finished(sess: &mut ClientSessionImpl) {
@@ -462,8 +463,19 @@ pub static EXPECT_SERVER_HELLO_DONE: Handler = Handler {
 };
 
 /* -- Waiting for their CCS -- */
-fn handle_ccs(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+fn handle_ccs(sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+  /* CCS should not be received interleaved with fragmented handshake-level
+   * message. */
+  if !sess.common.handshake_joiner.empty() {
+    warn!("CCS received interleaved with fragmented handshake");
+    return Err(TLSError::InappropriateMessage {
+      expect_types: vec![ ContentType::Handshake ],
+      got_type: ContentType::ChangeCipherSpec
+    });
+  }
+
   /* nb. msgs layer validates trivial contents of CCS */
+  sess.common.peer_now_encrypting();
   Ok(ConnState::ExpectFinished)
 }
 
@@ -475,9 +487,9 @@ pub static EXPECT_CCS: Handler = Handler {
   handle: handle_ccs
 };
 
-fn handle_ccs_resume(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
-  /* nb. msgs layer validates trivial contents of CCS */
-  Ok(ConnState::ExpectFinishedResume)
+fn handle_ccs_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  handle_ccs(sess, m)
+    .and(Ok(ConnState::ExpectFinishedResume))
 }
 
 pub static EXPECT_CCS_RESUME: Handler = Handler {

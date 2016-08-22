@@ -479,6 +479,7 @@ pub struct SessionCommon {
   read_seq: u64,
   peer_eof: bool,
   pub peer_encrypting: bool,
+  pub we_encrypting: bool,
   pub traffic: bool,
   pub message_deframer: MessageDeframer,
   pub handshake_joiner: HandshakeJoiner,
@@ -496,6 +497,7 @@ impl SessionCommon {
       read_seq: 0,
       peer_eof: false,
       peer_encrypting: false,
+      we_encrypting: false,
       traffic: false,
       message_deframer: MessageDeframer::new(),
       handshake_joiner: HandshakeJoiner::new(),
@@ -595,7 +597,7 @@ impl SessionCommon {
       return;
     }
 
-    assert!(self.peer_encrypting);
+    assert!(self.we_encrypting);
 
     if data.len() == 0 {
       /* Don't send empty fragments. */
@@ -662,15 +664,21 @@ impl SessionCommon {
     self.peer_encrypting = true;
   }
 
+  pub fn we_now_encrypting(&mut self) {
+    self.we_encrypting = true;
+  }
+
   pub fn send_warning_alert(&mut self, desc: AlertDescription) {
+    warn!("Sending warning alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Warning, desc);
-    let enc = self.peer_encrypting;
+    let enc = self.we_encrypting;
     self.send_msg(&m, enc);
   }
 
   pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
+    warn!("Sending fatal alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Fatal, desc);
-    let enc = self.peer_encrypting;
+    let enc = self.we_encrypting;
     self.send_msg(&m, enc);
   }
 }
