@@ -220,7 +220,11 @@ fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<SignatureAlgorithms, TL
     (&RSA, &SHA256)   => Ok(&RSA_SHA256),
     (&RSA, &SHA384)   => Ok(&RSA_SHA384),
     (&RSA, &SHA512)   => Ok(&RSA_SHA512),
-    _ => Err(TLSError::General("cannot convert to webpki sigalg".to_string()))
+    _ => {
+      let error_msg = format!("received unadvertised sigalg {:?} {:?}",
+                              sh.sign, sh.hash);
+      Err(TLSError::PeerMisbehavedError(error_msg))
+    }
   }
 }
 

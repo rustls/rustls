@@ -50,14 +50,21 @@ pub struct Handler {
   pub handle: HandleFunction
 }
 
-fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -> Vec<ServerExtension> {
+fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload)
+  -> Result<Vec<ServerExtension>, TLSError> {
   let mut ret = Vec::new();
 
   /* ALPN */
   let our_protocols = &sess.config.alpn_protocols;
   let maybe_their_protocols = hello.get_alpn_extension();
   if let Some(their_protocols) = maybe_their_protocols {
-    sess.alpn_protocol = util::first_in_both(&our_protocols, &their_protocols.to_strings());
+    let their_proto_strings = their_protocols.to_strings();
+
+    if their_proto_strings.contains(&"".to_string()) {
+      return Err(TLSError::PeerMisbehavedError("client offered empty ALPN protocol".to_string()));
+    }
+
+    sess.alpn_protocol = util::first_in_both(&our_protocols, &their_proto_strings);
     match sess.alpn_protocol {
       Some(ref selected_protocol) => {
         info!("Chosen ALPN protocol {:?}", selected_protocol);
@@ -77,13 +84,13 @@ fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) 
     ret.push(ServerExtension::make_empty_renegotiation_info());
   }
 
-  ret
+  Ok(ret)
 }
 
-fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) {
+fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -> Result<(), TLSError> {
   sess.handshake_data.generate_server_random();
   let sessid = sess.config.session_storage.generate();
-  let extensions = process_extensions(sess, hello);
+  let extensions = try!(process_extensions(sess, hello));
 
   let sh = Message {
     typ: ContentType::Handshake,
@@ -108,6 +115,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) {
   debug!("sending server hello {:?}", sh);
   sess.handshake_data.transcript.add_message(&sh);
   sess.common.send_msg(&sh, false);
+  Ok(())
 }
 
 fn emit_certificate(sess: &mut ServerSessionImpl) {
@@ -135,7 +143,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
   let kx = try!({
     let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
     scs.start_server_kx(curve)
-      .ok_or_else(|| TLSError::General("key exchange failed".to_string()))
+      .ok_or_else(|| TLSError::KeyExchangeError)
   });
   let secdh = ServerECDHParams::new(curve, &kx.pubkey);
 
@@ -219,9 +227,9 @@ fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
   sess.common.send_msg(&m, false);
 }
 
-fn hsfail(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
+fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
   sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-  TLSError::General(why.to_string())
+  TLSError::PeerIncompatibleError(why.to_string())
 }
 
 fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
@@ -229,12 +237,17 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
 
   if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
     sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-    return Err(TLSError::General("client does not support TLSv1_2".to_string()));
+    return Err(TLSError::PeerIncompatibleError("client does not support TLSv1_2".to_string()));
   }
 
   if !client_hello.compression_methods.contains(&Compression::Null) {
     sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-    return Err(TLSError::General("client did not offer Null compression".to_string()));
+    return Err(TLSError::PeerIncompatibleError("client did not offer Null compression".to_string()));
+  }
+
+  if client_hello.has_duplicate_extension() {
+    sess.common.send_fatal_alert(AlertDescription::DecodeError);
+    return Err(TLSError::PeerMisbehavedError("client sent duplicate extensions".to_string()));
   }
 
   /* Save their Random. */
@@ -246,9 +259,9 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   let sigalgs_ext = client_hello.get_sigalgs_extension()
     .unwrap_or(&default_sigalgs_ext);
   let eccurves_ext = try!(client_hello.get_eccurves_extension()
-                          .ok_or_else(|| hsfail(sess, "client didn't describe ec curves")));
+                          .ok_or_else(|| incompatible(sess, "client didn't describe ec curves")));
   let ecpoints_ext = try!(client_hello.get_ecpoints_extension()
-                          .ok_or_else(|| hsfail(sess, "client didn't describe ec points")));
+                          .ok_or_else(|| incompatible(sess, "client didn't describe ec points")));
 
   debug!("we got a clienthello {:?}", client_hello);
   debug!("sni {:?}", sni_ext);
@@ -258,7 +271,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
 
   if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
     sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-    return Err(TLSError::General("client didn't support uncompressed ec points".to_string()));
+    return Err(TLSError::PeerIncompatibleError("client didn't support uncompressed ec points".to_string()));
   }
 
   /* Choose a certificate. */
@@ -283,8 +296,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   };
 
   if maybe_ciphersuite.is_none() {
-    sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("no ciphersuites in common".to_string()));
+    return Err(incompatible(sess, "no ciphersuites in common"));
   }
 
   sess.handshake_data.ciphersuite = maybe_ciphersuite;
@@ -298,22 +310,22 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   let sigalg = try!(
     sess.handshake_data.ciphersuite.as_ref().unwrap()
       .resolve_sig_alg(sigalgs_ext)
-      .ok_or_else(|| hsfail(sess, "no supported sigalg"))
+      .ok_or_else(|| incompatible(sess, "no supported sigalg"))
   );
   let eccurve = try!(
     util::first_in_both(EllipticCurveList::supported().as_slice(),
                         eccurves_ext.as_slice())
-      .ok_or_else(|| hsfail(sess, "no supported curve"))
+      .ok_or_else(|| incompatible(sess, "no supported curve"))
   );
   let ecpoint = try!(
     util::first_in_both(ECPointFormatList::supported().as_slice(),
                         ecpoints_ext.as_slice())
-      .ok_or_else(|| hsfail(sess, "no supported point format"))
+      .ok_or_else(|| incompatible(sess, "no supported point format"))
   );
 
   assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-  emit_server_hello(sess, client_hello);
+  try!(emit_server_hello(sess, client_hello));
   emit_certificate(sess);
   try!(emit_server_kx(sess, &sigalg, &eccurve, private_key));
   emit_certificate_req(sess);
@@ -375,7 +387,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
   let kx = mem::replace(&mut sess.handshake_data.kx_data, None).unwrap();
   let kxd = try!(
     kx.server_complete(&client_kx.0)
-    .ok_or_else(|| hsfail(sess, "kx failed"))
+    .ok_or_else(|| TLSError::KeyExchangeError)
   );
 
   sess.secrets_current.init(&sess.handshake_data.secrets,
@@ -409,7 +421,7 @@ fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: &Message) -> Resul
   };
 
   if rc.is_err() {
-    hsfail(sess, "invalid client certverify");
+    sess.common.send_fatal_alert(AlertDescription::AccessDenied);
     return Err(rc.unwrap_err());
   } else {
     debug!("client CertificateVerify OK");

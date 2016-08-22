@@ -8,6 +8,7 @@ use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
 use std::io::Write;
+use std::collections;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -515,6 +516,23 @@ impl Codec for ClientHelloPayload {
 }
 
 impl ClientHelloPayload {
+  /// Returns true if there is more than one extension of a given
+  /// type.
+  pub fn has_duplicate_extension(&self) -> bool {
+    let mut seen = collections::HashSet::new();
+
+    for ext in &self.extensions {
+      let typ = ext.get_type().get_u16();
+
+      if seen.contains(&typ) {
+        return true;
+      }
+      seen.insert(typ);
+    }
+
+    false
+  }
+
   pub fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
     self.extensions.iter().find(|x| x.get_type() == ext)
   }
@@ -602,6 +620,23 @@ impl Codec for ServerHelloPayload {
 }
 
 impl ServerHelloPayload {
+  /// Returns true if there is more than one extension of a given
+  /// type.
+  pub fn has_duplicate_extension(&self) -> bool {
+    let mut seen = collections::HashSet::new();
+
+    for ext in &self.extensions {
+      let typ = ext.get_type().get_u16();
+
+      if seen.contains(&typ) {
+        return true;
+      }
+      seen.insert(typ);
+    }
+
+    false
+  }
+
   pub fn find_extension(&self, ext: ExtensionType) -> Option<&ServerExtension> {
     self.extensions.iter().find(|x| x.get_type() == ext)
   }

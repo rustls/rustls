@@ -116,23 +116,39 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
     sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("server does not support TLSv1_2".to_string()));
+    return Err(TLSError::PeerIncompatibleError("server does not support TLSv1_2".to_string()));
   }
 
   if server_hello.compression_method != Compression::Null {
     sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("server chose non-Null compression".to_string()));
+    return Err(TLSError::PeerMisbehavedError("server chose non-Null compression".to_string()));
+  }
+
+  if server_hello.has_duplicate_extension() {
+    sess.common.send_fatal_alert(AlertDescription::DecodeError);
+    return Err(TLSError::PeerMisbehavedError("server sent duplicate extensions".to_string()));
   }
 
   /* Extract ALPN protocol */
   sess.alpn_protocol = server_hello.get_alpn_protocol();
+  if sess.alpn_protocol.is_some() {
+    if sess.config.alpn_protocols.len() == 0 {
+      sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+      return Err(TLSError::PeerMisbehavedError("server sent ALPN extension unexpectedly".to_string()));
+    }
+
+    if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
+      sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+      return Err(TLSError::PeerMisbehavedError("server sent non-offered ALPN protocol".to_string()));
+    }
+  }
   info!("ALPN protocol is {:?}", sess.alpn_protocol);
 
   let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
 
   if scs.is_none() {
     sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("server chose non-offered ciphersuite".to_string()));
+    return Err(TLSError::PeerMisbehavedError("server chose non-offered ciphersuite".to_string()));
   }
 
   info!("Using ciphersuite {:?}", server_hello.cipher_suite);
@@ -156,7 +172,8 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
       /* Is the server telling lies about the ciphersuite? */
       if resuming.cipher_suite != scs.unwrap().suite {
-        return Err(TLSError::General("abbreviated handshake offered, but with varied cs".to_string()));
+        let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
+        return Err(TLSError::PeerMisbehavedError(error_msg));
       }
 
       sess.secrets_current.init_resume(&sess.handshake_data.secrets,
@@ -202,7 +219,7 @@ fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnSta
   sess.handshake_data.transcript.add_message(m);
 
   if maybe_decoded_kx.is_none() {
-    return Err(TLSError::General("cannot decode server's kx".to_string()));
+    return Err(TLSError::PeerIncompatibleError("cannot decode server's kx".to_string()));
   }
 
   let decoded_kx = maybe_decoded_kx.unwrap();
@@ -428,7 +445,7 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 4a. */
   let kxd = try!(sess.handshake_data.ciphersuite.as_ref().unwrap()
     .do_client_kx(&sess.handshake_data.server_kx_params)
-    .ok_or_else(|| TLSError::General("key exchange failed".to_string()))
+    .ok_or_else(|| TLSError::KeyExchangeError)
   );
 
   /* 4b. */
