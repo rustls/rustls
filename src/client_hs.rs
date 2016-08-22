@@ -428,14 +428,25 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 2. */
   /* Build up the contents of the signed message.
    * It's ClientHello.random || ServerHello.random || ServerKeyExchange.params */
-  let mut message = Vec::new();
-  message.extend_from_slice(&sess.handshake_data.secrets.client_random);
-  message.extend_from_slice(&sess.handshake_data.secrets.server_random);
-  message.extend_from_slice(&sess.handshake_data.server_kx_params);
+  {
+    let mut message = Vec::new();
+    message.extend_from_slice(&sess.handshake_data.secrets.client_random);
+    message.extend_from_slice(&sess.handshake_data.secrets.server_random);
+    message.extend_from_slice(&sess.handshake_data.server_kx_params);
 
-  try!(verify::verify_signed_struct(&message,
-                                    &sess.handshake_data.server_cert_chain[0],
-                                    sess.handshake_data.server_kx_sig.as_ref().unwrap()));
+    /* Check the signature is compatible with the ciphersuite. */
+    let sig = sess.handshake_data.server_kx_sig.as_ref().unwrap();
+    let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+    if scs.sign != sig.alg.sign {
+      let error_message = format!("peer signed kx with wrong algorithm (got {:?} expect {:?})",
+                                  sig.alg.sign, scs.sign);
+      return Err(TLSError::PeerMisbehavedError(error_message));
+    }
+
+    try!(verify::verify_signed_struct(&message,
+                                      &sess.handshake_data.server_cert_chain[0],
+                                      sig));
+  }
 
   /* 3. */
   if sess.handshake_data.doing_client_auth {
