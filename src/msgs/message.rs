@@ -6,6 +6,7 @@ use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::enums::{AlertLevel, AlertDescription};
+use msgs::enums::HandshakeType;
 
 #[derive(Debug)]
 pub enum MessagePayload {
@@ -118,6 +119,19 @@ impl Message {
 
   pub fn is_content_type(&self, typ: ContentType) -> bool {
     self.typ == typ
+  }
+
+  pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
+    /* Bit of a layering violation, but OK. */
+    if !self.is_content_type(ContentType::Handshake) {
+      return false;
+    }
+
+    if let MessagePayload::Handshake(ref hsp) = self.payload {
+      hsp.typ == hstyp
+    } else {
+      false
+    }
   }
 
   pub fn decode_payload(&mut self) -> bool {

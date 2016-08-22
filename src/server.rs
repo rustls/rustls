@@ -1,7 +1,7 @@
 use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
-use msgs::enums::AlertDescription;
+use msgs::enums::{AlertDescription, HandshakeType};
 use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
@@ -305,6 +305,11 @@ impl ServerSessionImpl {
   }
 
   pub fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
+    if self.state == ConnState::Traffic && msg.is_handshake_type(HandshakeType::ClientHello) {
+      self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+      return Ok(());
+    }
+
     let handler = self.get_handler();
     try!(handler.expect.check_message(msg)
          .map_err(|err| { self.queue_unexpected_alert(); err }));

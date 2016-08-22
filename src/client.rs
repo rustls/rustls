@@ -1,5 +1,5 @@
 use msgs::enums::CipherSuite;
-use msgs::enums::AlertDescription;
+use msgs::enums::{AlertDescription, HandshakeType};
 use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
@@ -405,9 +405,32 @@ impl ClientSessionImpl {
     self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
   }
 
+  /// Detect and drop/reject HelloRequests.  This is needed irrespective
+  /// of the current protocol state, which should illustrate how badly
+  /// TLS renegotiation is designed.
+  ///
+  /// Returns true if `msg` is a HelloRequest and has been processed.
+  fn process_hello_req(&mut self, msg: &mut Message) -> bool {
+    if msg.is_handshake_type(HandshakeType::HelloRequest) {
+      /* If we're post handshake, send a refusal alert.
+       * Otherwise, drop it silently. */
+      if self.state == ConnState::Traffic {
+        self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+      }
+
+      true
+    } else {
+      false
+    }
+  }
+
   /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
   /// that Handler expects.  Finally, we ask the handler to handle the message.
   fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
+    if self.process_hello_req(msg) {
+      return Ok(());
+    }
+
     let handler = self.get_handler();
     try!(handler.expect.check_message(msg)
          .map_err(|err| { self.queue_unexpected_alert(); err }));
