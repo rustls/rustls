@@ -189,7 +189,8 @@ fn emit_certificate_req(sess: &mut ServerSessionImpl) {
   let names = sess.config.client_auth_roots.get_subjects();
 
   let cr = CertificateRequestPayload {
-    certtypes: vec![ ClientCertificateType::RSASign ],
+    certtypes: vec![ ClientCertificateType::RSASign,
+                     ClientCertificateType::ECDSASign ],
     sigalgs: SupportedSignatureAlgorithms::supported_verify(),
     canames: names
   };
