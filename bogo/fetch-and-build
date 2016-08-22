@@ -2,12 +2,14 @@
 
 set -e
 
+rm -f runner.tar.gz
 wget https://boringssl.googlesource.com/boringssl/+archive/master/ssl/test/runner.tar.gz
 mkdir -p bogo
-tar -C bogo/ -xzf runner.tar.gz
-( cd bogo/ && go test -c )
+cd bogo/
+tar -xzf ../runner.tar.gz
+patch -p1 < ../patches/testerrormap.diff
+go test -c
 
 # generate new key and cert, because the one provided is expired :(
-( cd bogo/ &&
-  openssl req -newkey rsa:2048 -x509 -batch -nodes -keyout key.pem -out cert.pem -days 3650 &&
-  openssl rsa -in key.pem -out key.rsa )
+openssl req -newkey rsa:2048 -x509 -batch -nodes -keyout key.pem -out cert.pem -days 3650
+openssl rsa -in key.pem -out key.rsa
