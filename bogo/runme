@@ -4,7 +4,8 @@
 # TLS test tool ('BoGo') against rustls.
 
 set -xe
-cargo build
+
+sed -i -e 's/\(DANGEROUS_DISABLE_VERIFY: bool = \)false/\1true/g' ../src/verify.rs
 cargo test --no-run
 
 if [ ! -e bogo/ ] ; then

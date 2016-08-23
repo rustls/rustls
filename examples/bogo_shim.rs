@@ -30,13 +30,15 @@ macro_rules! println_err(
 struct Options {
   port: u16,
   server: bool,
-  resume: bool,
+  resumes: usize,
   require_any_client_cert: bool,
+  offer_no_client_cas: bool,
   queue_data: bool,
   host_name: String,
   key_file: String,
   cert_file: String,
-  protocols: String
+  protocols: Vec<String>,
+  expect_curve: u16
 }
 
 impl Options {
@@ -44,13 +46,15 @@ impl Options {
     Options {
       port: 0,
       server: false,
-      resume: false,
+      resumes: 0,
       host_name: "example.com".to_string(),
       queue_data: false,
       require_any_client_cert: false,
+      offer_no_client_cas: false,
       key_file: "".to_string(),
       cert_file: "".to_string(),
-      protocols: "".to_string()
+      protocols: vec![],
+      expect_curve: 0
     }
   }
 }
@@ -98,13 +102,15 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
   let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
   cfg.set_single_cert(cert.clone(), key);
 
-  if opts.require_any_client_cert {
+  if opts.offer_no_client_cas {
+    cfg.client_auth_offer = true;
+  } else if opts.require_any_client_cert {
     cfg.client_auth_offer = true;
     cfg.client_auth_mandatory = true;
   }
   
   if opts.protocols.len() > 0 {
-    cfg.set_protocols(&split_protocols(&opts.protocols));
+    cfg.set_protocols(&opts.protocols);
   }
 
   Arc::new(cfg)
@@ -123,7 +129,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
   }
 
   if opts.protocols.len() > 0 {
-    cfg.set_protocols(&split_protocols(&opts.protocols));
+    cfg.set_protocols(&opts.protocols);
   }
 
   Arc::new(cfg)
@@ -137,6 +143,8 @@ fn quit(why: &str) -> ! {
 fn handle_err(err: rustls::TLSError) -> ! {
   use rustls::TLSError;
   use rustls::internal::msgs::enums::{AlertDescription, ContentType};
+
+  println!("TLS error: {:?}", err);
   
   match err {
     TLSError::InappropriateHandshakeMessage{..} |
@@ -240,9 +248,19 @@ fn main() {
       "-cert-file" => {
         opts.cert_file = args.remove(0);
       },
-      "-resume" => {
-        opts.resume = true;
+      "-resume-count" => {
+        opts.resumes = args.remove(0).parse::<usize>().unwrap();
       },
+      "-expect-curve-id" | "-expect-peer-signature-algorithm" |
+        "-expect-advertised-alpn" | "-expect-alpn" |
+        "-expect-server-name" | "-expect-certificate-types" => {
+        println!("not checking {} {}; NYI", arg, args.remove(0));
+      },
+      "-expect-no-session" | "-expect-session-miss" => {},
+
+      "-select-alpn" => {
+        opts.protocols.push(args.remove(0));
+      }
       "-require-any-client-certificate" => {
         opts.require_any_client_cert = true;
       },
@@ -252,13 +270,43 @@ fn main() {
       "-host-name" => {
         opts.host_name = args.remove(0);
       },
-      "-enable-all-curves" => {}, /* the default */
       "-advertise-alpn" => {
-        opts.protocols = args.remove(0);
+        opts.protocols = split_protocols(&args.remove(0));
+      },
+      "-use-null-client-ca-list" => {
+        opts.offer_no_client_cas = true;
       },
 
-      _ => {
+      /* defaults: */
+      "-enable-all-curves" | "-renegotiate-ignore" |
+        "-decline-alpn" => {},
+
+      /* Not implemented things */
+      "-dtls" | "-enable-ocsp-stapling" | "-cipher" |
+        "-no-tls13" | "-no-ssl3" | "-max-version" | "-min-version" |
+        "-psk" | "-renegotiate-freely" | "-false-start" |
+        "-fallback-scsv" | "-implicit-handshake" |
+        "-fail-early-callback" | "-install-ddos-callback" |
+        "-enable-signed-cert-timestamps" | "-ocsp-response" |
+        "-async" | "-advertise-npn" | "-use-early-callback" |
+        "-use-old-client-cert-callback" | "-verify-fail" |
+        "-verify-peer" | "-expect-channel-id" |
+        "-shim-shuts-down" | "-check-close-notify" |
+        "-send-channel-id" | "-select-next-proto" |
+        "-p384-only" | "-expect-verify-result" | "-send-alert" |
+        "-signing-prefs" | "-digest-prefs" |
+        "-export-keying-material" | "-tls-unique" |
+        "-enable-server-custom-extension" |
+        "-enable-client-custom-extension" |
+        "-expect-dhe-group-size" | "-use-ticket-callback" |
+        "-signed-cert-timestamps" => {
+        println!("NYI option {:?}", arg);
         process::exit(BOGO_NACK);
+      }
+
+      _ => {
+        println!("unhandled option {:?}", arg);
+        process::exit(BOGO_NACK + 10);
       }
     }
   }
@@ -278,15 +326,13 @@ fn main() {
     }
   };
 
-  if opts.server && opts.resume {
+  if opts.server && opts.resumes > 0 {
+    println!("server resumption NYI");
     process::exit(BOGO_NACK);
   }
 
-  let mut sess1 = make_session();
-  exec(&opts, &mut sess1);
-
-  if opts.resume {
-    let mut sess2 = make_session();
-    exec(&opts, &mut sess2);
+  for _ in 0..opts.resumes+1 {
+    let mut sess = make_session();
+    exec(&opts, &mut sess);
   }
 }
