@@ -267,8 +267,7 @@ impl ServerSessionImpl {
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.common.peer_encrypting {
-      let dm = try!(self.common.decrypt_incoming(msg)
-                    .ok_or(TLSError::DecryptError));
+      let dm = try!(self.common.decrypt_incoming(msg));
       *msg = dm;
     }
 
