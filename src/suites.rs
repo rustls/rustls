@@ -43,7 +43,7 @@ impl KeyExchange {
 
   pub fn client_ecdhe(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
     let mut rd = Reader::init(&kx_params);
-    let ecdh_params = ServerECDHParams::read(&mut rd).unwrap();
+    let ecdh_params = try_ret!(ServerECDHParams::read(&mut rd));
 
     try_ret!(KeyExchange::start_ecdhe(&ecdh_params.curve_params.named_curve))
       .complete(&ecdh_params.public.0)
@@ -132,7 +132,7 @@ impl SupportedCipherSuite {
   pub fn do_client_kx(&self, kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
     match &self.kx {
       &KeyExchangeAlgorithm::ECDHE => KeyExchange::client_ecdhe(kx_params),
-      _ => unreachable!()
+      _ => None
     }
   }
 

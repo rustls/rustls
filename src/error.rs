@@ -28,9 +28,6 @@ pub enum TLSError {
   /// We couldn't decrypt a message.  This is invariably fatal.
   DecryptError,
 
-  /// We failed key exchange with the peer.  This is fatal.
-  KeyExchangeError,
-
   /// The peer doesn't support a protocol version/feature we require.
   /// The parameter gives a hint as to what version/feature it is.
   PeerIncompatibleError(String),

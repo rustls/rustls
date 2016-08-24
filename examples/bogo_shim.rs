@@ -155,7 +155,6 @@ fn handle_err(err: rustls::TLSError) -> ! {
     TLSError::CorruptMessagePayload(ContentType::ChangeCipherSpec) => quit(":BAD_CHANGE_CIPHER_SPEC:"),
     TLSError::CorruptMessage => quit(":GARBAGE:"),
     TLSError::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
-    TLSError::KeyExchangeError => quit(":KX_FAILURE:"),
     TLSError::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
     TLSError::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
     TLSError::NoCertificatesPresented => quit(":NO_CERTS:"),

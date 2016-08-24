@@ -456,7 +456,7 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 4a. */
   let kxd = try!(sess.handshake_data.ciphersuite.as_ref().unwrap()
     .do_client_kx(&sess.handshake_data.server_kx_params)
-    .ok_or_else(|| TLSError::KeyExchangeError)
+    .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
   );
 
   /* 4b. */

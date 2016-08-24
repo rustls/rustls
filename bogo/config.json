@@ -83,10 +83,10 @@
   "TestErrorMap": {
     "SendInvalidRecordType": ":GARBAGE:",
     "NoSharedCipher": ":HANDSHAKE_FAILURE:",
-    "InvalidECDHPoint-Client": ":KX_FAILURE:",
-    "InvalidECDHPoint-Server": ":KX_FAILURE:",
+    "InvalidECDHPoint-Client": ":PEER_MISBEHAVIOUR:",
+    "InvalidECDHPoint-Server": ":PEER_MISBEHAVIOUR:",
     "NoSupportedCurves": ":INCOMPATIBLE:",
-    "BadECDHECurve": ":KX_FAILURE:",
+    "BadECDHECurve": ":PEER_MISBEHAVIOUR:",
     "VersionTooLow": ":INCOMPATIBLE:",
     "CertMismatchRSA": ":PEER_MISBEHAVIOUR:",
     "CertMismatchECDSA": ":PEER_MISBEHAVIOUR:",

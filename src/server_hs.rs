@@ -143,7 +143,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
   let kx = try!({
     let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
     scs.start_server_kx(curve)
-      .ok_or_else(|| TLSError::KeyExchangeError)
+      .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
   });
   let secdh = ServerECDHParams::new(curve, &kx.pubkey);
 
@@ -388,7 +388,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
   let kx = mem::replace(&mut sess.handshake_data.kx_data, None).unwrap();
   let kxd = try!(
     kx.server_complete(&client_kx.0)
-    .ok_or_else(|| TLSError::KeyExchangeError)
+    .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange completion failed".to_string()))
   );
 
   sess.secrets_current.init(&sess.handshake_data.secrets,
