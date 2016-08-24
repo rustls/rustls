@@ -15,4 +15,4 @@ fi
 cd bogo && ./bogo.test -shim-path ../../target/debug/examples/bogo_shim \
      -shim-config ../config.json \
      -test.parallel 1 -num-workers 1 \
-     -pipe
+     -pipe -allow-unimplemented

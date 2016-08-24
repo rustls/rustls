@@ -98,6 +98,8 @@
     "Verify-ServerAuth-SignatureType": ":PEER_MISBEHAVIOUR:",
     "ClientAuth-Enforced": ":PEER_MISBEHAVIOUR:",
     "ServerAuth-Enforced": ":PEER_MISBEHAVIOUR:",
-    "UnofferedExtension-Client": ":PEER_MISBEHAVIOUR:"
+    "UnofferedExtension-Client": ":PEER_MISBEHAVIOUR:",
+    "UnknownExtension-Client": ":PEER_MISBEHAVIOUR:",
+    "LargePlaintext": ":PEER_MISBEHAVIOUR:"
   }
 }
