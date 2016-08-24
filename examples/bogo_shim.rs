@@ -307,7 +307,7 @@ fn main() {
 
       _ => {
         println!("unhandled option {:?}", arg);
-        process::exit(BOGO_NACK + 10);
+        process::exit(1);
       }
     }
   }
