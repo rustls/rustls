@@ -1,10 +1,10 @@
-use msgs::enums::{ContentType, HandshakeType};
+use msgs::enums::{ContentType, HandshakeType, ExtensionType};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random};
-use msgs::handshake::ClientExtension;
+use msgs::handshake::{ClientExtension, ServerExtension};
 use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
@@ -84,6 +84,11 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));
   }
 
+  /* Note what extensions we sent. */
+  sess.handshake_data.sent_extensions = exts.iter()
+    .map(|ext| ext.get_type())
+    .collect();
+
   let ch = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
@@ -110,6 +115,21 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   sess.common.send_msg(&ch, false);
 }
 
+fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtension>) -> bool {
+  let allowed_unsolicited = vec![ ExtensionType::RenegotiationInfo ];
+
+  let sent = &sess.handshake_data.sent_extensions;
+  for ext in exts {
+    let ext_type = ext.get_type();
+    if !sent.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type) {
+      debug!("Unsolicited extension {:?}", ext_type);
+      return true;
+    }
+  }
+
+  false
+}
+
 fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
   debug!("We got ServerHello {:#?}", server_hello);
@@ -129,14 +149,14 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
     return Err(TLSError::PeerMisbehavedError("server sent duplicate extensions".to_string()));
   }
 
+  if sent_unsolicited_extensions(sess, &server_hello.extensions) {
+    sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+    return Err(TLSError::PeerMisbehavedError("server sent unsolicited extension".to_string()));
+  }
+
   /* Extract ALPN protocol */
   sess.alpn_protocol = server_hello.get_alpn_protocol();
   if sess.alpn_protocol.is_some() {
-    if sess.config.alpn_protocols.len() == 0 {
-      sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-      return Err(TLSError::PeerMisbehavedError("server sent ALPN extension unexpectedly".to_string()));
-    }
-
     if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
       sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
       return Err(TLSError::PeerMisbehavedError("server sent non-offered ALPN protocol".to_string()));

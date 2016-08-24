@@ -1,5 +1,5 @@
 use msgs::enums::CipherSuite;
-use msgs::enums::{AlertDescription, HandshakeType};
+use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
@@ -238,6 +238,7 @@ pub struct ClientHandshakeData {
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub dns_name: String,
   pub session_id: SessionID,
+  pub sent_extensions: Vec<ExtensionType>,
   pub server_kx_params: Vec<u8>,
   pub server_kx_sig: Option<DigitallySignedStruct>,
   pub transcript: hash_hs::HandshakeHash,
@@ -256,6 +257,7 @@ impl ClientHandshakeData {
       ciphersuite: None,
       dns_name: host_name.to_string(),
       session_id: SessionID::empty(),
+      sent_extensions: Vec::new(),
       server_kx_params: Vec::new(),
       server_kx_sig: None,
       transcript: hash_hs::HandshakeHash::new(),
