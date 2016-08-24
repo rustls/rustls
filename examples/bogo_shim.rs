@@ -280,15 +280,17 @@ fn main() {
       "-enable-all-curves" | "-renegotiate-ignore" |
         "-decline-alpn" => {},
 
+      /* internal openssl details: */
+      "-async" | "-implicit-handshake" |
+        "-use-old-client-cert-callback" | "-use-early-callback" => {},
+
       /* Not implemented things */
       "-dtls" | "-enable-ocsp-stapling" | "-cipher" |
         "-no-tls13" | "-no-ssl3" | "-max-version" | "-min-version" |
         "-psk" | "-renegotiate-freely" | "-false-start" |
-        "-fallback-scsv" | "-implicit-handshake" |
-        "-fail-early-callback" | "-install-ddos-callback" |
+        "-fallback-scsv" | "-fail-early-callback" | "-install-ddos-callback" |
         "-enable-signed-cert-timestamps" | "-ocsp-response" |
-        "-async" | "-advertise-npn" | "-use-early-callback" |
-        "-use-old-client-cert-callback" | "-verify-fail" |
+        "-advertise-npn" | "-verify-fail" |
         "-verify-peer" | "-expect-channel-id" |
         "-shim-shuts-down" | "-check-close-notify" |
         "-send-channel-id" | "-select-next-proto" |

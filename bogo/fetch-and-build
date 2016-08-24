@@ -14,6 +14,5 @@ patch -p1 < ../patches/testerrormap.diff
 patch -p1 < ../patches/supportedsuite.diff
 go test -c
 
-# generate new key and cert, because the one provided is expired :(
-openssl req -newkey rsa:2048 -x509 -batch -nodes -keyout key.pem -out cert.pem -days 3650
+# convert key to format we can read
 openssl rsa -in key.pem -out key.rsa
