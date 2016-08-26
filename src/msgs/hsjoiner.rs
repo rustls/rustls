@@ -34,6 +34,11 @@ impl HandshakeJoiner {
     msg.is_content_type(ContentType::Handshake)
   }
 
+  /// Do we have any buffered data?
+  pub fn empty(&self) -> bool {
+    self.buf.len() == 0
+  }
+
   /// Take the message, and join/split it as needed.
   /// Return the number of new messages added to the
   /// output deque as a result of this message.
@@ -106,6 +111,7 @@ mod tests {
   #[test]
   fn want() {
     let hj = HandshakeJoiner::new();
+    assert_eq!(hj.empty(), true);
 
     let wanted = Message {
       typ: ContentType::Handshake,
@@ -148,6 +154,7 @@ mod tests {
 
     assert_eq!(hj.want_message(&msg), true);
     assert_eq!(hj.take_message(&msg), Some(2));
+    assert_eq!(hj.empty(), true);
 
     let expect = Message {
       typ: ContentType::Handshake,
@@ -182,6 +189,7 @@ mod tests {
   fn join() {
     /* Check we join one handshake message split over two PDUs. */
     let mut hj = HandshakeJoiner::new();
+    assert_eq!(hj.empty(), true);
 
     /* Introduce Finished of 16 bytes, providing 4. */
     let mut msg = Message {
@@ -192,6 +200,7 @@ mod tests {
 
     assert_eq!(hj.want_message(&msg), true);
     assert_eq!(hj.take_message(&msg), Some(0));
+    assert_eq!(hj.empty(), false);
 
     /* 11 more bytes. */
     msg = Message {
@@ -202,6 +211,7 @@ mod tests {
 
     assert_eq!(hj.want_message(&msg), true);
     assert_eq!(hj.take_message(&msg), Some(0));
+    assert_eq!(hj.empty(), false);
 
     /* Final 1 byte. */
     msg = Message {
@@ -212,6 +222,7 @@ mod tests {
 
     assert_eq!(hj.want_message(&msg), true);
     assert_eq!(hj.take_message(&msg), Some(1));
+    assert_eq!(hj.empty(), true);
 
     let expect = Message {
       typ: ContentType::Handshake,

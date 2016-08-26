@@ -13,6 +13,9 @@ use x509;
 
 use std::io;
 
+/// Disable all verifications, for testing purposes.
+const DANGEROUS_DISABLE_VERIFY: bool = false;
+
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
@@ -161,6 +164,11 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
     .map(|x| x.to_trust_anchor())
     .collect();
 
+  if DANGEROUS_DISABLE_VERIFY {
+    warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping certificate verification");
+    return Ok(cert);
+  }
+
   cert.verify_is_valid_tls_server_cert(&SUPPORTED_SIG_ALGS,
                                        &trustroots,
                                        &chain,
@@ -176,6 +184,11 @@ pub fn verify_server_cert(roots: &RootCertStore,
                           presented_certs: &Vec<ASN1Cert>,
                           dns_name: &str) -> Result<(), TLSError> {
   let cert = try!(verify_common_cert(roots, presented_certs));
+
+  if DANGEROUS_DISABLE_VERIFY {
+    warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping server name verification");
+    return Ok(());
+  }
 
   cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
     .map_err(|err| TLSError::WebPKIError(err))
@@ -220,7 +233,11 @@ fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<SignatureAlgorithms, TL
     (&RSA, &SHA256)   => Ok(&RSA_SHA256),
     (&RSA, &SHA384)   => Ok(&RSA_SHA384),
     (&RSA, &SHA512)   => Ok(&RSA_SHA512),
-    _ => Err(TLSError::General("cannot convert to webpki sigalg".to_string()))
+    _ => {
+      let error_msg = format!("received unadvertised sigalg {:?} {:?}",
+                              sh.sign, sh.hash);
+      Err(TLSError::PeerMisbehavedError(error_msg))
+    }
   }
 }
 

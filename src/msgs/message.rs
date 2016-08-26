@@ -6,6 +6,7 @@ use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::enums::{AlertLevel, AlertDescription};
+use msgs::enums::HandshakeType;
 
 #[derive(Debug)]
 pub enum MessagePayload {
@@ -28,7 +29,7 @@ impl MessagePayload {
   pub fn decode_given_type(&self, typ: &ContentType) -> Option<MessagePayload> {
     if let MessagePayload::Opaque(ref payload) = *self {
       let mut r = Reader::init(&payload.0);
-      match *typ {
+      let parsed = match *typ {
         ContentType::Alert =>
           Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r)))),
         ContentType::Handshake =>
@@ -37,6 +38,12 @@ impl MessagePayload {
           Some(MessagePayload::ChangeCipherSpec(try_ret!(ChangeCipherSpecPayload::read(&mut r)))),
         _ =>
           None
+      };
+
+      if r.any_left() {
+        None
+      } else {
+        parsed
       }
     } else {
       None
@@ -77,6 +84,32 @@ impl Message {
     Some(Message { typ: typ, version: version, payload: MessagePayload::Opaque(payload) })
   }
 
+  /// Do some *very* lax checks on the header, and return
+  /// None if it looks really broken.  Otherwise, return
+  /// the length field.
+  pub fn check_header(bytes: &[u8]) -> Option<usize> {
+    let mut rd = Reader::init(bytes);
+
+    let typ = try_ret!(ContentType::read(&mut rd));
+    let version = try_ret!(ProtocolVersion::read(&mut rd));
+    let len = try_ret!(read_u16(&mut rd));
+
+    /* Don't accept any new content-types. */
+    if let ContentType::Unknown(_) = typ {
+      return None;
+    }
+
+    /* Accept only versions 0x03XX for any XX. */
+    match version {
+      ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
+        return None;
+      },
+      _ => ()
+    };
+
+    Some(len as usize)
+  }
+
   pub fn encode(&self, bytes: &mut Vec<u8>) {
     self.typ.encode(bytes);
     self.version.encode(bytes);
@@ -88,9 +121,30 @@ impl Message {
     self.typ == typ
   }
 
-  pub fn decode_payload(&mut self) {
+  pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
+    /* Bit of a layering violation, but OK. */
+    if !self.is_content_type(ContentType::Handshake) {
+      return false;
+    }
+
+    if let MessagePayload::Handshake(ref hsp) = self.payload {
+      hsp.typ == hstyp
+    } else {
+      false
+    }
+  }
+
+  pub fn decode_payload(&mut self) -> bool {
+    /* Do we need a decode? */
+    if self.typ == ContentType::ApplicationData {
+      return true;
+    }
+
     if let Some(x) = self.payload.decode_given_type(&self.typ) {
       self.payload = x;
+      true
+    } else {
+      false
     }
   }
 

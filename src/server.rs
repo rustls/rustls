@@ -1,7 +1,7 @@
 use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
-use msgs::enums::AlertDescription;
+use msgs::enums::{AlertDescription, HandshakeType};
 use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
@@ -68,9 +68,10 @@ pub struct ServerConfig {
   pub alpn_protocols: Vec<String>,
 
   /// List of client authentication root certificates.
-  /// If this list is empty, no client authentication is
-  /// performed.
   pub client_auth_roots: verify::RootCertStore,
+
+  /// Whether to attempt client auth.
+  pub client_auth_offer: bool,
 
   /// Whether to complete handshakes with clients which
   /// don't do client auth.
@@ -139,6 +140,7 @@ impl ServerConfig {
       alpn_protocols: Vec::new(),
       cert_resolver: Box::new(FailResolveChain {}),
       client_auth_roots: verify::RootCertStore::empty(),
+      client_auth_offer: false,
       client_auth_mandatory: false
     }
   }
@@ -172,6 +174,7 @@ impl ServerConfig {
       self.client_auth_roots.add(&cert)
         .unwrap()
     }
+    self.client_auth_offer = true;
     self.client_auth_mandatory = mandatory;
   }
 }
@@ -220,16 +223,6 @@ pub enum ConnState {
   Traffic
 }
 
-impl ConnState {
-  fn is_encrypted(&self) -> bool {
-    match *self {
-      ConnState::ExpectFinished
-        | ConnState::Traffic => true,
-      _ => false
-    }
-  }
-}
-
 pub struct ServerSessionImpl {
   pub config: Arc<ServerConfig>,
   pub handshake_data: ServerHandshakeData,
@@ -250,7 +243,7 @@ impl ServerSessionImpl {
       state: ConnState::ExpectClientHello
     };
 
-    if sess.config.client_auth_roots.len() > 0 {
+    if sess.config.client_auth_offer {
       sess.handshake_data.transcript.set_client_auth_enabled();
     }
 
@@ -274,8 +267,7 @@ impl ServerSessionImpl {
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.common.peer_encrypting {
-      let dm = try!(self.common.decrypt_incoming(msg)
-                    .ok_or(TLSError::DecryptError));
+      let dm = try!(self.common.decrypt_incoming(msg));
       *msg = dm;
     }
 
@@ -284,7 +276,7 @@ impl ServerSessionImpl {
     if self.common.handshake_joiner.want_message(msg) {
       try!(
         self.common.handshake_joiner.take_message(msg)
-        .ok_or_else(|| TLSError::CorruptMessage)
+        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
       );
       return self.process_new_handshake_messages();
     }
@@ -310,15 +302,21 @@ impl ServerSessionImpl {
     Ok(())
   }
 
+  fn queue_unexpected_alert(&mut self) {
+    self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+  }
+
   pub fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
+    if self.state == ConnState::Traffic && msg.is_handshake_type(HandshakeType::ClientHello) {
+      self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+      return Ok(());
+    }
+
     let handler = self.get_handler();
-    try!(handler.expect.check_message(msg));
+    try!(handler.expect.check_message(msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err }));
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
-
-    if self.state.is_encrypted() && !self.common.peer_encrypting {
-      self.common.peer_now_encrypting();
-    }
 
     if self.state == ConnState::Traffic && !self.common.traffic {
       self.common.start_traffic();
@@ -340,6 +338,10 @@ impl ServerSessionImpl {
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    if self.common.message_deframer.desynced {
+      return Err(TLSError::CorruptMessage);
+    }
+
     loop {
       match self.common.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),

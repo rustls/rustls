@@ -1,10 +1,10 @@
-use msgs::enums::{ContentType, HandshakeType};
+use msgs::enums::{ContentType, HandshakeType, ExtensionType};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random};
-use msgs::handshake::ClientExtension;
+use msgs::handshake::{ClientExtension, ServerExtension};
 use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
@@ -84,6 +84,11 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));
   }
 
+  /* Note what extensions we sent. */
+  sess.handshake_data.sent_extensions = exts.iter()
+    .map(|ext| ext.get_type())
+    .collect();
+
   let ch = Message {
     typ: ContentType::Handshake,
     version: ProtocolVersion::TLSv1_2,
@@ -110,29 +115,60 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   sess.common.send_msg(&ch, false);
 }
 
+fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtension>) -> bool {
+  let allowed_unsolicited = vec![ ExtensionType::RenegotiationInfo ];
+
+  let sent = &sess.handshake_data.sent_extensions;
+  for ext in exts {
+    let ext_type = ext.get_type();
+    if !sent.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type) {
+      debug!("Unsolicited extension {:?}", ext_type);
+      return true;
+    }
+  }
+
+  false
+}
+
 fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
   debug!("We got ServerHello {:#?}", server_hello);
 
   if server_hello.server_version != ProtocolVersion::TLSv1_2 {
     sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("server does not support TLSv1_2".to_string()));
+    return Err(TLSError::PeerIncompatibleError("server does not support TLSv1_2".to_string()));
   }
 
   if server_hello.compression_method != Compression::Null {
     sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("server chose non-Null compression".to_string()));
+    return Err(TLSError::PeerMisbehavedError("server chose non-Null compression".to_string()));
+  }
+
+  if server_hello.has_duplicate_extension() {
+    sess.common.send_fatal_alert(AlertDescription::DecodeError);
+    return Err(TLSError::PeerMisbehavedError("server sent duplicate extensions".to_string()));
+  }
+
+  if sent_unsolicited_extensions(sess, &server_hello.extensions) {
+    sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+    return Err(TLSError::PeerMisbehavedError("server sent unsolicited extension".to_string()));
   }
 
   /* Extract ALPN protocol */
   sess.alpn_protocol = server_hello.get_alpn_protocol();
+  if sess.alpn_protocol.is_some() {
+    if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
+      sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+      return Err(TLSError::PeerMisbehavedError("server sent non-offered ALPN protocol".to_string()));
+    }
+  }
   info!("ALPN protocol is {:?}", sess.alpn_protocol);
 
   let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
 
   if scs.is_none() {
     sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    return Err(TLSError::General("server chose non-offered ciphersuite".to_string()));
+    return Err(TLSError::PeerMisbehavedError("server chose non-offered ciphersuite".to_string()));
   }
 
   info!("Using ciphersuite {:?}", server_hello.cipher_suite);
@@ -156,7 +192,8 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
       /* Is the server telling lies about the ciphersuite? */
       if resuming.cipher_suite != scs.unwrap().suite {
-        return Err(TLSError::General("abbreviated handshake offered, but with varied cs".to_string()));
+        let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
+        return Err(TLSError::PeerMisbehavedError(error_msg));
       }
 
       sess.secrets_current.init_resume(&sess.handshake_data.secrets,
@@ -202,7 +239,7 @@ fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnSta
   sess.handshake_data.transcript.add_message(m);
 
   if maybe_decoded_kx.is_none() {
-    return Err(TLSError::General("cannot decode server's kx".to_string()));
+    return Err(TLSError::PeerIncompatibleError("cannot decode server's kx".to_string()));
   }
 
   let decoded_kx = maybe_decoded_kx.unwrap();
@@ -307,6 +344,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
   };
 
   sess.common.send_msg(&ccs, false);
+  sess.common.we_now_encrypting();
 }
 
 fn emit_finished(sess: &mut ClientSessionImpl) {
@@ -410,14 +448,25 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 2. */
   /* Build up the contents of the signed message.
    * It's ClientHello.random || ServerHello.random || ServerKeyExchange.params */
-  let mut message = Vec::new();
-  message.extend_from_slice(&sess.handshake_data.secrets.client_random);
-  message.extend_from_slice(&sess.handshake_data.secrets.server_random);
-  message.extend_from_slice(&sess.handshake_data.server_kx_params);
+  {
+    let mut message = Vec::new();
+    message.extend_from_slice(&sess.handshake_data.secrets.client_random);
+    message.extend_from_slice(&sess.handshake_data.secrets.server_random);
+    message.extend_from_slice(&sess.handshake_data.server_kx_params);
 
-  try!(verify::verify_signed_struct(&message,
-                                    &sess.handshake_data.server_cert_chain[0],
-                                    sess.handshake_data.server_kx_sig.as_ref().unwrap()));
+    /* Check the signature is compatible with the ciphersuite. */
+    let sig = sess.handshake_data.server_kx_sig.as_ref().unwrap();
+    let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+    if scs.sign != sig.alg.sign {
+      let error_message = format!("peer signed kx with wrong algorithm (got {:?} expect {:?})",
+                                  sig.alg.sign, scs.sign);
+      return Err(TLSError::PeerMisbehavedError(error_message));
+    }
+
+    try!(verify::verify_signed_struct(&message,
+                                      &sess.handshake_data.server_cert_chain[0],
+                                      sig));
+  }
 
   /* 3. */
   if sess.handshake_data.doing_client_auth {
@@ -427,7 +476,7 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 4a. */
   let kxd = try!(sess.handshake_data.ciphersuite.as_ref().unwrap()
     .do_client_kx(&sess.handshake_data.server_kx_params)
-    .ok_or_else(|| TLSError::General("key exchange failed".to_string()))
+    .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
   );
 
   /* 4b. */
@@ -462,8 +511,19 @@ pub static EXPECT_SERVER_HELLO_DONE: Handler = Handler {
 };
 
 /* -- Waiting for their CCS -- */
-fn handle_ccs(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+fn handle_ccs(sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+  /* CCS should not be received interleaved with fragmented handshake-level
+   * message. */
+  if !sess.common.handshake_joiner.empty() {
+    warn!("CCS received interleaved with fragmented handshake");
+    return Err(TLSError::InappropriateMessage {
+      expect_types: vec![ ContentType::Handshake ],
+      got_type: ContentType::ChangeCipherSpec
+    });
+  }
+
   /* nb. msgs layer validates trivial contents of CCS */
+  sess.common.peer_now_encrypting();
   Ok(ConnState::ExpectFinished)
 }
 
@@ -475,9 +535,9 @@ pub static EXPECT_CCS: Handler = Handler {
   handle: handle_ccs
 };
 
-fn handle_ccs_resume(_sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
-  /* nb. msgs layer validates trivial contents of CCS */
-  Ok(ConnState::ExpectFinishedResume)
+fn handle_ccs_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  handle_ccs(sess, m)
+    .and(Ok(ConnState::ExpectFinishedResume))
 }
 
 pub static EXPECT_CCS_RESUME: Handler = Handler {

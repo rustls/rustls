@@ -183,6 +183,7 @@ extern crate base64;
 extern crate log;
 
 mod util;
+#[macro_use]
 mod msgs;
 mod error;
 mod rand;
@@ -217,7 +218,7 @@ pub mod internal {
 /* The public interface is: */
 pub use error::TLSError;
 pub use session::Session;
-pub use client::{StoresClientSessions, ClientConfig, ClientSession};
+pub use client::{StoresClientSessions, ClientSessionMemoryCache, ClientConfig, ClientSession};
 pub use verify::{RootCertStore};
 pub use server::{ServerConfig, ServerSession};
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};

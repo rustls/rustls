@@ -19,11 +19,22 @@ pub enum TLSError {
   /// The peer sent us a syntactically incorrect TLS message.
   CorruptMessage,
 
+  /// The peer sent us a TLS message with invalid contents.
+  CorruptMessagePayload(ContentType),
+
   /// The peer didn't give us any certificates.
   NoCertificatesPresented,
 
   /// We couldn't decrypt a message.  This is invariably fatal.
   DecryptError,
+
+  /// The peer doesn't support a protocol version/feature we require.
+  /// The parameter gives a hint as to what version/feature it is.
+  PeerIncompatibleError(String),
+
+  /// The peer deviated from the standard TLS protocol.
+  /// The parameter gives a hint where.
+  PeerMisbehavedError(String),
 
   /// We received a fatal alert.  This means the peer is unhappy.
   AlertReceived(AlertDescription),

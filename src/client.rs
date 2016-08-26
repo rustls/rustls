@@ -1,5 +1,5 @@
 use msgs::enums::CipherSuite;
-use msgs::enums::AlertDescription;
+use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
@@ -15,6 +15,7 @@ use sign;
 use error::TLSError;
 use rand;
 
+use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
 
@@ -34,6 +35,7 @@ pub trait StoresClientSessions {
   fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>>;
 }
 
+/// An implementor of StoresClientSessions which does nothing.
 struct NoSessionStorage {}
 
 impl StoresClientSessions for NoSessionStorage {
@@ -43,6 +45,43 @@ impl StoresClientSessions for NoSessionStorage {
 
   fn get(&mut self, _key: &Vec<u8>) -> Option<Vec<u8>> {
     None
+  }
+}
+
+/// An implementor of StoresClientSessions that stores everything
+/// in memory.  It enforces a limit on the number of sessions
+/// to bound memory usage.
+pub struct ClientSessionMemoryCache {
+  cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+  max_entries: usize
+}
+
+impl ClientSessionMemoryCache {
+  pub fn new(size: usize) -> Box<ClientSessionMemoryCache> {
+    assert!(size > 0);
+    Box::new(ClientSessionMemoryCache {
+      cache: collections::HashMap::new(),
+      max_entries: size
+    })
+  }
+
+  fn limit_size(&mut self) {
+    while self.cache.len() > self.max_entries {
+      let k = self.cache.keys().next().unwrap().clone();
+      self.cache.remove(&k);
+    }
+  }
+}
+
+impl StoresClientSessions for ClientSessionMemoryCache {
+  fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
+    self.cache.insert(key, value);
+    self.limit_size();
+    true
+  }
+
+  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>> {
+    self.cache.get(key).map(|x| x.clone())
   }
 }
 
@@ -199,6 +238,7 @@ pub struct ClientHandshakeData {
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub dns_name: String,
   pub session_id: SessionID,
+  pub sent_extensions: Vec<ExtensionType>,
   pub server_kx_params: Vec<u8>,
   pub server_kx_sig: Option<DigitallySignedStruct>,
   pub transcript: hash_hs::HandshakeHash,
@@ -217,6 +257,7 @@ impl ClientHandshakeData {
       ciphersuite: None,
       dns_name: host_name.to_string(),
       session_id: SessionID::empty(),
+      sent_extensions: Vec::new(),
       server_kx_params: Vec::new(),
       server_kx_sig: None,
       transcript: hash_hs::HandshakeHash::new(),
@@ -246,17 +287,6 @@ pub enum ConnState {
   ExpectCCSResume,
   ExpectFinishedResume,
   Traffic
-}
-
-impl ConnState {
-  fn is_encrypted(&self) -> bool {
-    match *self {
-      ConnState::ExpectFinished
-        | ConnState::ExpectFinishedResume
-        | ConnState::Traffic => true,
-      _ => false
-    }
-  }
 }
 
 pub struct ClientSessionImpl {
@@ -334,8 +364,7 @@ impl ClientSessionImpl {
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.common.peer_encrypting {
-      let dm = try!(self.common.decrypt_incoming(msg)
-                    .ok_or(TLSError::DecryptError));
+      let dm = try!(self.common.decrypt_incoming(msg));
       *msg = dm;
     }
 
@@ -344,13 +373,15 @@ impl ClientSessionImpl {
     if self.common.handshake_joiner.want_message(msg) {
       try!(
         self.common.handshake_joiner.take_message(msg)
-        .ok_or_else(|| TLSError::CorruptMessage)
+        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
       );
       return self.process_new_handshake_messages();
     }
 
     /* Now we can fully parse the message payload. */
-    msg.decode_payload();
+    if !msg.decode_payload() {
+      return Err(TLSError::CorruptMessagePayload(msg.typ.clone()));
+    }
 
     /* For alerts, we have separate logic. */
     if msg.is_content_type(ContentType::Alert) {
@@ -371,18 +402,41 @@ impl ClientSessionImpl {
     Ok(())
   }
 
+  fn queue_unexpected_alert(&mut self) {
+    self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+  }
+
+  /// Detect and drop/reject HelloRequests.  This is needed irrespective
+  /// of the current protocol state, which should illustrate how badly
+  /// TLS renegotiation is designed.
+  ///
+  /// Returns true if `msg` is a HelloRequest and has been processed.
+  fn process_hello_req(&mut self, msg: &mut Message) -> bool {
+    if msg.is_handshake_type(HandshakeType::HelloRequest) {
+      /* If we're post handshake, send a refusal alert.
+       * Otherwise, drop it silently. */
+      if self.state == ConnState::Traffic {
+        self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+      }
+
+      true
+    } else {
+      false
+    }
+  }
+
   /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
   /// that Handler expects.  Finally, we ask the handler to handle the message.
   fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
+    if self.process_hello_req(msg) {
+      return Ok(());
+    }
+
     let handler = self.get_handler();
-    try!(handler.expect.check_message(msg));
+    try!(handler.expect.check_message(msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err }));
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
-
-    /* Start decrypting incoming messages at the right time. */
-    if self.state.is_encrypted() && !self.common.peer_encrypting {
-      self.common.peer_now_encrypting();
-    }
 
     /* Once we're connected, start flushing sendable_plaintext. */
     if self.state == ConnState::Traffic && !self.common.traffic {
@@ -408,6 +462,10 @@ impl ClientSessionImpl {
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    if self.common.message_deframer.desynced {
+      return Err(TLSError::CorruptMessage);
+    }
+
     loop {
       match self.common.message_deframer.frames.pop_front() {
         Some(mut msg) => try!(self.process_msg(&mut msg)),

@@ -170,8 +170,8 @@ impl SessionSecrets {
 
 
 pub trait MessageCipher {
-  fn decrypt(&self, m: &Message, seq: u64) -> Result<Message, ()>;
-  fn encrypt(&self, m: &Message, seq: u64) -> Result<Message, ()>;
+  fn decrypt(&self, m: &Message, seq: u64) -> Result<Message, TLSError>;
+  fn encrypt(&self, m: &Message, seq: u64) -> Result<Message, TLSError>;
 }
 
 impl MessageCipher {
@@ -235,12 +235,12 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageCipher for GCMMessageCipher {
-  fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
-    let payload = try!(msg.get_opaque_payload().ok_or(()));
+  fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, TLSError> {
+    let payload = try!(msg.get_opaque_payload().ok_or(TLSError::DecryptError));
     let mut buf = payload.0.clone();
 
     if buf.len() < GCM_OVERHEAD {
-      return Err(());
+      return Err(TLSError::DecryptError);
     }
 
     let mut nonce = [0u8; 12];
@@ -259,8 +259,13 @@ impl MessageCipher for GCMMessageCipher {
                                 GCM_EXPLICIT_NONCE_LEN,
                                 &mut buf,
                                 &aad)
-        .map_err(|_| ())
+        .map_err(|_| TLSError::DecryptError)
     );
+
+    if plain_len > MAX_FRAGMENT_LEN {
+      let msg = "peer sent oversized fragment".to_string();
+      return Err(TLSError::PeerMisbehavedError(msg));
+    }
 
     buf.truncate(plain_len);
 
@@ -273,7 +278,7 @@ impl MessageCipher for GCMMessageCipher {
     )
   }
 
-  fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
+  fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, TLSError> {
     /* The GCM nonce is constructed from a 32-bit 'salt' derived
      * from the master-secret, and a 64-bit explicit part,
      * with no specified construction.  Thanks for that.
@@ -309,7 +314,7 @@ impl MessageCipher for GCMMessageCipher {
                                 &mut buf[GCM_EXPLICIT_NONCE_LEN..],
                                 tag_len,
                                 &aad)
-        .map_err(|_| ())
+        .map_err(|_| TLSError::General("encrypt failed".to_string()))
     );
 
     buf[0..8].as_mut().write(&nonce[4..]).unwrap();
@@ -383,12 +388,12 @@ fn xor(accum: &mut [u8], offset: &[u8]) {
 const CP_OVERHEAD: usize = 16;
 
 impl MessageCipher for ChaCha20Poly1305MessageCipher {
-  fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
-    let payload = try!(msg.get_opaque_payload().ok_or(()));
+  fn decrypt(&self, msg: &Message, seq: u64) -> Result<Message, TLSError> {
+    let payload = try!(msg.get_opaque_payload().ok_or(TLSError::DecryptError));
     let mut buf = payload.0.clone();
 
     if buf.len() < CP_OVERHEAD {
-      return Err(());
+      return Err(TLSError::DecryptError);
     }
 
     /* Nonce is offset_96 ^ (0_32 || seq_64) */
@@ -408,8 +413,13 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
                                 0,
                                 &mut buf,
                                 &aad)
-        .map_err(|_| ())
+        .map_err(|_| TLSError::DecryptError)
     );
+
+    if plain_len > MAX_FRAGMENT_LEN {
+      let msg = "peer sent oversized fragment".to_string();
+      return Err(TLSError::PeerMisbehavedError(msg));
+    }
 
     buf.truncate(plain_len);
 
@@ -422,7 +432,7 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     )
   }
 
-  fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, ()> {
+  fn encrypt(&self, msg: &Message, seq: u64) -> Result<Message, TLSError> {
     let mut nonce = [0u8; 12];
     codec::put_u64(seq, &mut nonce[4..]);
     xor(&mut nonce, &self.enc_offset);
@@ -448,7 +458,7 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
                                 &mut buf,
                                 tag_len,
                                 &aad)
-        .map_err(|_| ())
+        .map_err(|_| TLSError::General("encrypt failed".to_string()))
     );
 
     Ok(Message {
@@ -463,12 +473,13 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
 pub struct InvalidMessageCipher {}
 
 impl MessageCipher for InvalidMessageCipher {
-  fn decrypt(&self, _m: &Message, _seq: u64) -> Result<Message, ()> {
-    Err(())
+  /* Neither of these errors should ever occur */
+  fn decrypt(&self, _m: &Message, _seq: u64) -> Result<Message, TLSError> {
+    Err(TLSError::DecryptError)
   }
 
-  fn encrypt(&self, _m: &Message, _seq: u64) -> Result<Message, ()> {
-    Err(())
+  fn encrypt(&self, _m: &Message, _seq: u64) -> Result<Message, TLSError> {
+    Err(TLSError::General("encrypt not yet available".to_string()))
   }
 }
 
@@ -479,6 +490,7 @@ pub struct SessionCommon {
   read_seq: u64,
   peer_eof: bool,
   pub peer_encrypting: bool,
+  pub we_encrypting: bool,
   pub traffic: bool,
   pub message_deframer: MessageDeframer,
   pub handshake_joiner: HandshakeJoiner,
@@ -496,6 +508,7 @@ impl SessionCommon {
       read_seq: 0,
       peer_eof: false,
       peer_encrypting: false,
+      we_encrypting: false,
       traffic: false,
       message_deframer: MessageDeframer::new(),
       handshake_joiner: HandshakeJoiner::new(),
@@ -517,11 +530,11 @@ impl SessionCommon {
     self.message_cipher.encrypt(plain, seq).unwrap()
   }
 
-  pub fn decrypt_incoming(&mut self, plain: &Message) -> Option<Message> {
+  pub fn decrypt_incoming(&mut self, plain: &Message) -> Result<Message, TLSError> {
     let seq = self.read_seq;
     self.read_seq += 1;
     assert!(self.read_seq != 0);
-    self.message_cipher.decrypt(plain, seq).ok()
+    self.message_cipher.decrypt(plain, seq)
   }
 
   pub fn process_alert(&mut self, msg: &mut Message) -> Result<(), TLSError> {
@@ -540,9 +553,9 @@ impl SessionCommon {
       }
 
       error!("TLS alert received: {:#?}", msg);
-      return Err(TLSError::AlertReceived(alert.description.clone()));
+      Err(TLSError::AlertReceived(alert.description.clone()))
     } else {
-      unreachable!();
+      Err(TLSError::CorruptMessagePayload(ContentType::Alert))
     }
   }
 
@@ -595,7 +608,7 @@ impl SessionCommon {
       return;
     }
 
-    assert!(self.peer_encrypting);
+    assert!(self.we_encrypting);
 
     if data.len() == 0 {
       /* Don't send empty fragments. */
@@ -662,15 +675,21 @@ impl SessionCommon {
     self.peer_encrypting = true;
   }
 
+  pub fn we_now_encrypting(&mut self) {
+    self.we_encrypting = true;
+  }
+
   pub fn send_warning_alert(&mut self, desc: AlertDescription) {
+    warn!("Sending warning alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Warning, desc);
-    let enc = self.peer_encrypting;
+    let enc = self.we_encrypting;
     self.send_msg(&m, enc);
   }
 
   pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
+    warn!("Sending fatal alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Fatal, desc);
-    let enc = self.peer_encrypting;
+    let enc = self.we_encrypting;
     self.send_msg(&m, enc);
   }
 }
