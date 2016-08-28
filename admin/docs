@@ -1,6 +1,0 @@
-#!/bin/sh
-
-set -e
-cargo doc --no-deps --package rustls
-git checkout gh-pages
-cp -rv target/doc/* .
