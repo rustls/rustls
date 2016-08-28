@@ -6,6 +6,7 @@ rust:
   - beta
   - nightly
 script:
-  - cargo build --verbose
-  - cargo test --verbose
+  - cargo build
+  - cargo test --release
+  - ./target/release/examples/bench
   - cd bogo && ./runme
