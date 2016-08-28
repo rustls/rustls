@@ -105,6 +105,14 @@ impl RootCertStore {
     Ok(())
   }
 
+  /// Adds all the given TrustAnchors `anchors`.  This does not
+  /// fail.
+  pub fn add_trust_anchors(&mut self, anchors: &[webpki::TrustAnchor]) {
+    for ta in anchors {
+      self.roots.push(OwnedTrustAnchor::from_trust_anchor(ta));
+    }
+  }
+
   /// Parse a PEM file and add all certificates found inside.
   /// Errors are non-specific; they may be io errors in `rd` and
   /// PEM format errors, but not certificate validity errors.

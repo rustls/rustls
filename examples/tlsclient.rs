@@ -18,6 +18,7 @@ extern crate docopt;
 use docopt::Docopt;
 
 extern crate rustls;
+extern crate webpki_roots;
 
 use rustls::Session;
 
@@ -279,8 +280,8 @@ is 443.  By default, this reads a request from stdin (to EOF)
 before making the connection.  --http replaces this with a
 basic HTTP GET request for /.
 
-If --cafile is not supplied, CA certificates are read from
-`/etc/ssl/certs/ca-certificates.crt'.
+If --cafile is not supplied, a built-in set of CA certificates
+are used from the webpki-roots crate.
 
 Usage:
   tlsclient [--verbose] [-p PORT] [--http] [--auth-key KEY --auth-certs CERTS] [--mtu MTU] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
@@ -399,17 +400,17 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.ciphersuites = lookup_suites(&args.flag_suite);
   }
 
-  let cafile = match args.flag_cafile {
-    Some(ref cafile) => cafile.clone(),
-    None => "/etc/ssl/certs/ca-certificates.crt".to_string()
-  };
-  let certfile = match std::fs::File::open(&cafile) {
-    Ok(file) => file,
-    Err(e) => panic!("cannot open CA file '{}': {:?}\nConsider using the --cafile option to provide a valid CA file.", cafile, e)
-  };
-  let mut reader = BufReader::new(certfile);
-  config.root_store.add_pem_file(&mut reader)
-    .unwrap();
+  if args.flag_cafile.is_some() {
+    let cafile = args.flag_cafile.as_ref().unwrap();
+
+    let certfile = fs::File::open(&cafile)
+      .expect("Cannot open CA file");
+    let mut reader = BufReader::new(certfile);
+    config.root_store.add_pem_file(&mut reader)
+      .unwrap();
+  } else {
+    config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+  }
 
   let persist = Box::new(PersistCache::new(&args.flag_cache));
 

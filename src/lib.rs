@@ -91,18 +91,13 @@
 //! ```
 //!
 //! Next we load some root certificates.  These are used to authenticate the server.
-//! This step is system-specific, but this sample will run on Debian-derived Linux.
+//! The recommended way is to depend on the `webpki_roots` crate which contains
+//! the Mozilla set of root certificates.
 //!
 //! ```no_run
 //! # let mut config = rustls::ClientConfig::new();
-//! use std::fs::File;
-//! use std::io::BufReader;
-//!
-//! let certfile = File::open("/etc/ssl/certs/ca-certificates.crt")
-//!   .unwrap();
-//! let mut reader = BufReader::new(certfile);
-//! config.root_store.add_pem_file(&mut reader)
-//!   .unwrap();
+//! # extern crate webpki_roots;
+//! config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
 //! ```
 //!
 //! Now we can make a session.  You need to provide the server's hostname so we

@@ -1,6 +1,6 @@
 [package]
 name = "rustls"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
 readme = "README.md"
@@ -21,3 +21,4 @@ env_logger = "0.3.3"
 mio = "0.5.1"
 docopt = "0.6"
 rustc-serialize = "0.3"
+webpki-roots = "0.1.0"
