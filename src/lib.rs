@@ -94,9 +94,7 @@
 //! The recommended way is to depend on the `webpki_roots` crate which contains
 //! the Mozilla set of root certificates.
 //!
-//! ```no_run
-//! # let mut config = rustls::ClientConfig::new();
-//! # extern crate webpki_roots;
+//! ```rust,ignore
 //! config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
 //! ```
 //!
