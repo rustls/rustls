@@ -78,29 +78,11 @@ impl Random {
   }
 }
 
-#[derive(Debug, Clone)]
-pub struct SessionID {
-  pub bytes: Vec<u8>
-}
-
-impl Codec for SessionID {
-  fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_u8(self.bytes.len() as u8, bytes);
-    bytes.extend_from_slice(&self.bytes[..]);
-  }
-
-  fn read(r: &mut Reader) -> Option<SessionID> {
-    let mut ret = SessionID { bytes: Vec::new() };
-    let len = try_ret!(codec::read_u8(r)) as usize;
-    let sub = try_ret!(r.sub(len));
-    ret.bytes.extend_from_slice(sub.rest());
-    Some(ret)
-  }
-}
+pub type SessionID = PayloadU8;
 
 impl SessionID {
   pub fn empty() -> SessionID {
-    SessionID { bytes: Vec::new() }
+    PayloadU8::new(Vec::new())
   }
 }
 

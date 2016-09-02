@@ -44,8 +44,26 @@ impl<'a> Reader<'a> {
 
 /// Things we can encode and read from a Reader.
 pub trait Codec : Debug + Sized {
+  /// Encode yourself by appending onto `bytes`.
   fn encode(&self, bytes: &mut Vec<u8>);
+
+  /// Decode yourself by fiddling with the `Reader`.
+  /// Return Some if it worked, None if not.
   fn read(&mut Reader) -> Option<Self>;
+
+  /// Convenience function to get the results of `encode()`.
+  fn get_encoding(&self) -> Vec<u8> {
+    let mut ret = Vec::new();
+    self.encode(&mut ret);
+    ret
+  }
+
+  /// Read one of these from the front of `bytes` and
+  /// return it.
+  fn read_bytes(bytes: &[u8]) -> Option<Self> {
+    let mut rd = Reader::init(bytes);
+    Self::read(&mut rd)
+  }
 }
 
 /* Encoding functions. */

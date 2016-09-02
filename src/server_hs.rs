@@ -6,7 +6,7 @@ use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
 use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
-use msgs::handshake::{ClientHelloPayload, ServerExtension};
+use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use msgs::handshake::ConvertProtocolNameList;
 use msgs::handshake::SignatureAndHashAlgorithm;
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
@@ -17,6 +17,7 @@ use msgs::handshake::CertificateRequestPayload;
 use msgs::handshake::SupportedMandatedSignatureAlgorithms;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
+use msgs::persist;
 use server::{ServerSessionImpl, ConnState};
 use suites;
 use sign;
@@ -89,8 +90,13 @@ fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload)
 
 fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -> Result<(), TLSError> {
   sess.handshake_data.generate_server_random();
-  let sessid = sess.config.session_storage.generate();
   let extensions = try!(process_extensions(sess, hello));
+
+  if sess.handshake_data.session_id.len() == 0 {
+    let sessid = sess.config.session_storage.lock().unwrap()
+      .generate();
+    sess.handshake_data.session_id = sessid;
+  }
 
   let sh = Message {
     typ: ContentType::Handshake,
@@ -102,7 +108,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -
           ServerHelloPayload {
             server_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&sess.handshake_data.secrets.server_random),
-            session_id: sessid,
+            session_id: sess.handshake_data.session_id.clone(),
             cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite,
             compression_method: Compression::Null,
             extensions: extensions
@@ -233,6 +239,33 @@ fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
   TLSError::PeerIncompatibleError(why.to_string())
 }
 
+fn start_resumption(sess: &mut ServerSessionImpl,
+                    client_hello: &ClientHelloPayload,
+                    id: &SessionID,
+                    resumedata: persist::ServerSessionValue) -> Result<ConnState, TLSError> {
+  info!("Resuming session");
+
+  /* The RFC underspecifies this case.  Reject it, because someone's going to be
+   * disappointed. */
+  if sess.handshake_data.ciphersuite.as_ref().unwrap().suite != resumedata.cipher_suite {
+    return Err(TLSError::PeerMisbehavedError("client varied ciphersuite over resumption".to_string()));
+  }
+
+  sess.handshake_data.session_id = id.clone();
+  try!(emit_server_hello(sess, client_hello));
+
+  sess.secrets_current.init_resume(&sess.handshake_data.secrets,
+                                   sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
+                                   &resumedata.master_secret.0);
+  sess.start_encryption();
+  sess.handshake_data.valid_client_cert_chain = resumedata.client_cert_chain;
+  sess.handshake_data.doing_resume = true;
+
+  emit_ccs(sess);
+  emit_finished(sess);
+  return Ok(ConnState::ExpectCCS);
+}
+
 fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
@@ -306,6 +339,20 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   /* Start handshake hash. */
   sess.handshake_data.start_handshake_hash();
   sess.handshake_data.transcript.add_message(m);
+
+  /* Perhaps resume? */
+  if client_hello.session_id.len() > 0 {
+    let maybe_resume = {
+      let persist = sess.config.session_storage.lock().unwrap();
+      persist.get(&client_hello.session_id)
+    }.and_then(|x| persist::ServerSessionValue::read_bytes(&x));
+    if maybe_resume.is_some() {
+      return start_resumption(sess,
+                              client_hello,
+                              &client_hello.session_id,
+                              maybe_resume.unwrap());
+    }
+  }
 
   /* Now we have chosen a ciphersuite, we can make kx decisions. */
   let sigalg = try!(
@@ -492,6 +539,7 @@ fn emit_finished(sess: &mut ServerSessionImpl) {
     )
   };
 
+  sess.handshake_data.transcript.add_message(&f);
   sess.common.send_msg(&f, true);
 }
 
@@ -507,9 +555,29 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
       .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
   );
 
+  /* Save session, perhaps */
+  if !sess.handshake_data.doing_resume && sess.handshake_data.session_id.len() > 0 {
+    let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+    let client_certs = &sess.handshake_data.valid_client_cert_chain;
+
+    let value = persist::ServerSessionValue::new(&scs.suite,
+                                                 sess.secrets_current.get_master_secret(),
+                                                 client_certs);
+
+    let mut persist = sess.config.session_storage.lock().unwrap();
+    if persist.put(&sess.handshake_data.session_id, value.get_encoding()) {
+      info!("Session saved");
+    } else {
+      info!("Session not saved");
+    }
+  }
+
+  /* Send our CCS and Finished. */
   sess.handshake_data.transcript.add_message(m);
-  emit_ccs(sess);
-  emit_finished(sess);
+  if !sess.handshake_data.doing_resume {
+    emit_ccs(sess);
+    emit_finished(sess);
+  }
   Ok(ConnState::Traffic)
 }
 

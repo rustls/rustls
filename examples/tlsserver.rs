@@ -362,9 +362,9 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] echo
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] http
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--resumption] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] echo
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--resumption] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] http
+  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--resumption] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
   tlsserver --version
   tlsserver --help
 
@@ -380,6 +380,7 @@ Options:
                         signed by those roots provided in CERTFILE.
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
+    --resumption        Support session resumption.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
@@ -401,6 +402,7 @@ struct Args {
   flag_key: Option<String>,
   flag_auth: Option<String>,
   flag_require_auth: bool,
+  flag_resumption: bool,
   arg_fport: Option<u16>
 }
 
@@ -462,6 +464,10 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
 
   if args.flag_suite.len() != 0 {
     config.ciphersuites = lookup_suites(&args.flag_suite);
+  }
+
+  if args.flag_resumption {
+    config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
   }
 
   config.set_protocols(&args.flag_proto);

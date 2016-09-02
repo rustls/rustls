@@ -2,7 +2,7 @@ use msgs::codec;
 use msgs::codec::{Codec, Reader};
 
 /// An externally length'd payload
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Payload(pub Vec<u8>);
 
 impl Codec for Payload {
@@ -24,13 +24,15 @@ impl Payload {
 }
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PayloadU24(pub Vec<u8>);
 
 impl PayloadU24 {
   pub fn new(bytes: Vec<u8>) -> PayloadU24 {
     PayloadU24(bytes)
   }
+
+  pub fn len(&self) -> usize { self.0.len() }
 }
 
 impl Codec for PayloadU24 {
@@ -48,13 +50,15 @@ impl Codec for PayloadU24 {
 }
 
 /// An arbitrary, unknown-content, u16-length-prefixed payload
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PayloadU16(pub Vec<u8>);
 
 impl PayloadU16 {
   pub fn new(bytes: Vec<u8>) -> PayloadU16 {
     PayloadU16(bytes)
   }
+
+  pub fn len(&self) -> usize { self.0.len() }
 }
 
 impl Codec for PayloadU16 {
@@ -72,13 +76,15 @@ impl Codec for PayloadU16 {
 }
 
 /// An arbitrary, unknown-content, u8-length-prefixed payload
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PayloadU8(pub Vec<u8>);
 
 impl PayloadU8 {
   pub fn new(bytes: Vec<u8>) -> PayloadU8 {
     PayloadU8(bytes)
   }
+
+  pub fn len(&self) -> usize { self.0.len() }
 }
 
 impl Codec for PayloadU8 {

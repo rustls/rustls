@@ -64,8 +64,7 @@ impl HandshakeHash {
   pub fn add_message(&mut self, m: &Message) -> &mut HandshakeHash {
     match m.payload {
       MessagePayload::Handshake(ref hs) => {
-        let mut buf = Vec::new();
-        hs.encode(&mut buf);
+        let buf = hs.get_encoding();
         self.update_raw(&buf);
       },
       _ => unreachable!()

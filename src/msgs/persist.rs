@@ -1,9 +1,12 @@
 use msgs::handshake::SessionID;
 use msgs::enums::CipherSuite;
 use msgs::codec::{Reader, Codec};
+use msgs::handshake::CertificatePayload;
 use msgs::base::PayloadU8;
 
 /* These are the keys and values we store in session storage. */
+
+/* --- Client types --- */
 #[derive(Debug)]
 pub struct ClientSessionKey {
   dns_name: PayloadU8
@@ -70,15 +73,50 @@ impl ClientSessionValue {
       master_secret: PayloadU8::new(ms)
     }
   }
+}
 
-  pub fn read_bytes(bytes: &[u8]) -> Option<ClientSessionValue> {
-    let mut rd = Reader::init(bytes);
-    ClientSessionValue::read(&mut rd)
+/* --- Server types --- */
+pub type ServerSessionKey = SessionID;
+
+#[derive(Debug)]
+pub struct ServerSessionValue {
+  pub cipher_suite: CipherSuite,
+  pub master_secret: PayloadU8,
+  pub client_cert_chain: Option<CertificatePayload>
+}
+
+impl Codec for ServerSessionValue {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.cipher_suite.encode(bytes);
+    self.master_secret.encode(bytes);
+    if self.client_cert_chain.is_some() {
+      self.client_cert_chain.as_ref().unwrap().encode(bytes);
+    }
   }
 
-  pub fn get_encoding(&self) -> Vec<u8> {
-    let mut buf = Vec::new();
-    self.encode(&mut buf);
-    buf
+  fn read(r: &mut Reader) -> Option<ServerSessionValue> {
+    let cs = try_ret!(CipherSuite::read(r));
+    let ms = try_ret!(PayloadU8::read(r));
+    let ccert = if r.any_left() {
+      CertificatePayload::read(r)
+    } else {
+      None
+    };
+
+    Some(ServerSessionValue {
+      cipher_suite: cs,
+      master_secret: ms,
+      client_cert_chain: ccert
+    })
+  }
+}
+
+impl ServerSessionValue {
+  pub fn new(cs: &CipherSuite, ms: Vec<u8>, cert_chain: &Option<CertificatePayload>) -> ServerSessionValue {
+    ServerSessionValue {
+      cipher_suite: cs.clone(),
+      master_secret: PayloadU8::new(ms),
+      client_cert_chain: cert_chain.clone()
+    }
   }
 }

@@ -6,6 +6,7 @@ use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
 use msgs::message::Message;
+use msgs::codec::Codec;
 use hash_hs;
 use server_hs;
 use error::TLSError;
@@ -13,21 +14,26 @@ use rand;
 use sign;
 use verify;
 
-use std::sync::Arc;
+use std::collections;
+use std::sync::{Arc, Mutex};
 use std::io;
 
-pub trait StoresSessions {
+pub trait StoresServerSessions {
   /// Generate a session ID.
   fn generate(&self) -> SessionID;
 
-  /// Store session secrets.
-  fn store(&self, id: &SessionID, sec: &SessionSecrets) -> bool;
+  /// Store session secrets encoded in `value` against key `id`,
+  /// overwrites any existing value against `id`.  Returns `true`
+  /// if the value was stored.
+  fn put(&mut self, id: &SessionID, value: Vec<u8>) -> bool;
 
-  /// Find a session with the given id.
-  fn find(&self, id: &SessionID) -> Option<SessionSecrets>;
+  /// Find a session with the given `id`.  Return it, or None
+  /// if it doesn't exist.
+  fn get(&self, id: &SessionID) -> Option<Vec<u8>>;
 
-  /// Erase a session with the given id.
-  fn erase(&self, id: &SessionID) -> bool;
+  /// Erase a session with the given `id`.  Return true if
+  /// `id` existed and was removed.
+  fn del(&mut self, id: &SessionID) -> bool;
 }
 
 pub trait ResolvesCert {
@@ -58,7 +64,7 @@ pub struct ServerConfig {
   pub ignore_client_order: bool,
 
   /// How to store client sessions.
-  pub session_storage: Box<StoresSessions>,
+  pub session_storage: Mutex<Box<StoresServerSessions>>,
 
   /// How to choose a server cert and key.
   pub cert_resolver: Box<ResolvesCert>,
@@ -78,13 +84,62 @@ pub struct ServerConfig {
   pub client_auth_mandatory: bool
 }
 
+/// Something which never stores sessions.
 struct NoSessionStorage {}
 
-impl StoresSessions for NoSessionStorage {
-  fn generate(&self) -> SessionID { SessionID { bytes: Vec::new() } }
-  fn store(&self, _id: &SessionID, _sec: &SessionSecrets) -> bool { false }
-  fn find(&self, _id: &SessionID) -> Option<SessionSecrets> { None }
-  fn erase(&self, _id: &SessionID) -> bool { false }
+impl StoresServerSessions for NoSessionStorage {
+  fn generate(&self) -> SessionID { SessionID::empty() }
+  fn put(&mut self, _id: &SessionID, _sec: Vec<u8>) -> bool { false }
+  fn get(&self, _id: &SessionID) -> Option<Vec<u8>> { None }
+  fn del(&mut self, _id: &SessionID) -> bool { false }
+}
+
+/// An implementor of StoresServerSessions that stores everything
+/// in memory.  If enforces a limit on the number of stored sessions
+/// to bound memory usage.
+pub struct ServerSessionMemoryCache {
+  cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+  max_entries: usize
+}
+
+impl ServerSessionMemoryCache {
+  pub fn new(size: usize) -> Box<ServerSessionMemoryCache> {
+    assert!(size > 0);
+    Box::new(ServerSessionMemoryCache {
+      cache: collections::HashMap::new(),
+      max_entries: size
+    })
+  }
+
+  fn limit_size(&mut self) {
+    while self.cache.len() > self.max_entries {
+      let k = self.cache.keys().next().unwrap().clone();
+      self.cache.remove(&k);
+    }
+  }
+}
+
+impl StoresServerSessions for ServerSessionMemoryCache {
+  fn generate(&self) -> SessionID {
+    let mut v = Vec::new();
+    v.resize(16, 0u8);
+    rand::fill_random(&mut v);
+    SessionID::new(v)
+  }
+
+  fn put(&mut self, id: &SessionID, sec: Vec<u8>) -> bool {
+    self.cache.insert(id.get_encoding(), sec);
+    self.limit_size();
+    true
+  }
+
+  fn get(&self, id: &SessionID) -> Option<Vec<u8>> {
+    self.cache.get(&id.get_encoding()).map(|x| x.clone())
+  }
+
+  fn del(&mut self, id: &SessionID) -> bool {
+    self.cache.remove(&id.get_encoding()).is_some()
+  }
 }
 
 /// Something which never resolves a certificate.
@@ -136,13 +191,18 @@ impl ServerConfig {
     ServerConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       ignore_client_order: false,
-      session_storage: Box::new(NoSessionStorage {}),
+      session_storage: Mutex::new(Box::new(NoSessionStorage {})),
       alpn_protocols: Vec::new(),
       cert_resolver: Box::new(FailResolveChain {}),
       client_auth_roots: verify::RootCertStore::empty(),
       client_auth_offer: false,
       client_auth_mandatory: false
     }
+  }
+
+  /// Sets the session persistence layer to `persist`.
+  pub fn set_persistence(&mut self, persist: Box<StoresServerSessions + Send + Sync>) {
+    self.session_storage = Mutex::new(persist);
   }
 
   /// Sets a single certificate chain and matching private key.  This
@@ -182,9 +242,11 @@ impl ServerConfig {
 pub struct ServerHandshakeData {
   pub server_cert_chain: Option<CertificatePayload>,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
+  pub session_id: SessionID,
   pub secrets: SessionSecrets,
   pub transcript: hash_hs::HandshakeHash,
   pub kx_data: Option<KeyExchange>,
+  pub doing_resume: bool,
   pub doing_client_auth: bool,
   pub valid_client_cert_chain: Option<Vec<ASN1Cert>>
 }
@@ -194,9 +256,11 @@ impl ServerHandshakeData {
     ServerHandshakeData {
       server_cert_chain: None,
       ciphersuite: None,
+      session_id: SessionID::empty(),
       secrets: SessionSecrets::for_server(),
       transcript: hash_hs::HandshakeHash::new(),
       kx_data: None,
+      doing_resume: false,
       doing_client_auth: false,
       valid_client_cert_chain: None
     }

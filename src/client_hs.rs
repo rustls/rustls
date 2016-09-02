@@ -49,7 +49,7 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
   let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
   let key_buf = key.get_encoding();
 
-  let mut persist = sess.config.session_persistence.lock().expect("");
+  let mut persist = sess.config.session_persistence.lock().unwrap();
   let maybe_value = persist.get(&key_buf);
 
   if maybe_value.is_none() {
@@ -186,7 +186,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
   /* See if we're successfully resuming. */
   let mut abbreviated_handshake = false;
   if let Some(ref resuming) = sess.handshake_data.resuming_session {
-    if resuming.session_id.bytes == sess.handshake_data.session_id.bytes {
+    if resuming.session_id == sess.handshake_data.session_id {
       info!("Server agreed to resume");
       abbreviated_handshake = true;
 
@@ -550,7 +550,7 @@ pub static EXPECT_CCS_RESUME: Handler = Handler {
 
 /* -- Waiting for their finished -- */
 fn save_session(sess: &mut ClientSessionImpl) {
-  if sess.handshake_data.session_id.bytes.len() == 0 {
+  if sess.handshake_data.session_id.len() == 0 {
     info!("Session not saved: server didn't allocate id");
     return;
   }
@@ -564,7 +564,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
                                                sess.secrets_current.get_master_secret());
   let value_buf = value.get_encoding();
 
-  let mut persist = sess.config.session_persistence.lock().expect("");
+  let mut persist = sess.config.session_persistence.lock().unwrap();
   let worked = persist.put(key_buf, value_buf);
 
   if worked {
