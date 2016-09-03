@@ -104,7 +104,7 @@ fn netflix() {
 #[test]
 fn stackoverflow() {
   connect("stackoverflow.com")
-    .expect("HTTP/1.1 200 OK")
+    .expect("HTTP/1.1 ")
     .go()
     .unwrap();
 }
