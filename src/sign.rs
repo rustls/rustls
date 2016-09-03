@@ -1,6 +1,8 @@
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm};
 use untrusted;
 use ring;
+use ring::signature;
+use std::sync::Arc;
 
 /// A thing that can sign a message.
 pub trait Signer {
@@ -13,14 +15,14 @@ pub trait Signer {
 
 /// A Signer for RSA-PKCS1
 pub struct RSASigner {
-  key: ring::signature::RSAKeyPair
+  key: Arc<signature::RSAKeyPair>
 }
 
 impl RSASigner {
   pub fn new(der: &[u8]) -> Result<RSASigner, ()> {
-    let key = ring::signature::RSAKeyPair::from_der(untrusted::Input::from(der));
+    let key = signature::RSAKeyPair::from_der(untrusted::Input::from(der));
     key
-      .map(|k| RSASigner { key: k })
+      .map(|s| RSASigner { key: Arc::new(s) })
       .map_err(|_| ())
   }
 }
@@ -29,13 +31,19 @@ impl Signer for RSASigner {
   fn sign(&self, hash_alg: &HashAlgorithm, message: &[u8]) -> Result<Vec<u8>, ()> {
     let mut sig = vec![0; self.key.public_modulus_len()];
     let pad = match hash_alg {
-      &HashAlgorithm::SHA256 => &ring::signature::RSA_PKCS1_SHA256,
-      &HashAlgorithm::SHA384 => &ring::signature::RSA_PKCS1_SHA384,
-      &HashAlgorithm::SHA512 => &ring::signature::RSA_PKCS1_SHA512,
+      &HashAlgorithm::SHA256 => &signature::RSA_PKCS1_SHA256,
+      &HashAlgorithm::SHA384 => &signature::RSA_PKCS1_SHA384,
+      &HashAlgorithm::SHA512 => &signature::RSA_PKCS1_SHA512,
       _ => unreachable!()
     };
+
     let rng = ring::rand::SystemRandom::new();
-    self.key.sign(pad, &rng, message, &mut sig)
+    let mut signer = try!(
+      signature::RSASigningState::new(self.key.clone())
+      .map_err(|_| ())
+    );
+
+    signer.sign(pad, &rng, message, &mut sig)
       .map(|_| sig)
       .map_err(|_| ())
   }
