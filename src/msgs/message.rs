@@ -161,8 +161,8 @@ impl Message {
     self.payload.encode(&mut buf);
 
     Message {
-      typ: self.typ.clone(),
-      version: self.version.clone(),
+      typ: self.typ,
+      version: self.version,
       payload: MessagePayload::opaque(buf)
     }
   }

@@ -1,7 +1,7 @@
 
 use msgs::codec::{encode_u8, read_u8, encode_u16, read_u16, Reader, Codec};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ProtocolVersion {
   SSLv2,
   SSLv3,
@@ -47,7 +47,7 @@ impl ProtocolVersion {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HashAlgorithm {
   NONE,
   MD5,
@@ -99,7 +99,7 @@ impl HashAlgorithm {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SignatureAlgorithm {
   Anonymous,
   RSA,
@@ -142,7 +142,7 @@ impl SignatureAlgorithm {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ClientCertificateType {
   RSASign,
   DSSSign,
@@ -203,7 +203,7 @@ impl ClientCertificateType {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Compression {
   Null,
   Deflate,
@@ -243,7 +243,7 @@ impl Compression {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ContentType {
   ChangeCipherSpec,
   Alert,
@@ -289,7 +289,7 @@ impl ContentType {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HandshakeType {
   HelloRequest,
   ClientHello,
@@ -356,7 +356,7 @@ impl HandshakeType {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AlertLevel {
   Warning,
   Fatal,
@@ -393,7 +393,7 @@ impl AlertLevel {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AlertDescription {
   CloseNotify,
   UnexpectedMessage,
@@ -502,7 +502,7 @@ impl AlertDescription {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HeartbeatMessageType {
   Request,
   Response,
@@ -539,7 +539,7 @@ impl HeartbeatMessageType {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ExtensionType {
   ServerName,
   MaxFragmentLength,
@@ -636,7 +636,7 @@ impl ExtensionType {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ServerNameType {
   HostName,
   Unknown(u8)
@@ -670,7 +670,7 @@ impl ServerNameType {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum NamedCurve {
   sect163k1,
   sect163r1,
@@ -797,7 +797,7 @@ impl NamedCurve {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CipherSuite {
   TLS_NULL_WITH_NULL_NULL,
   TLS_RSA_WITH_NULL_MD5,
@@ -1929,7 +1929,7 @@ impl CipherSuite {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ECPointFormat {
   Uncompressed,
   ANSIX962CompressedPrime,
@@ -1969,7 +1969,7 @@ impl ECPointFormat {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum HeartbeatMode {
   PeerAllowedToSend,
   PeerNotAllowedToSend,
@@ -2006,7 +2006,7 @@ impl HeartbeatMode {
   }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ECCurveType {
   ExplicitPrime,
   ExplicitChar2,

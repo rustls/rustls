@@ -271,8 +271,8 @@ impl MessageCipher for GCMMessageCipher {
 
     Ok(
       Message {
-        typ: msg.typ.clone(),
-        version: msg.version.clone(),
+        typ: msg.typ,
+        version: msg.version,
         payload: MessagePayload::opaque(buf)
       }
     )
@@ -320,8 +320,8 @@ impl MessageCipher for GCMMessageCipher {
     buf[0..8].as_mut().write(&nonce[4..]).unwrap();
 
     Ok(Message {
-      typ: msg.typ.clone(),
-      version: msg.version.clone(),
+      typ: msg.typ,
+      version: msg.version,
       payload: MessagePayload::opaque(buf)
     })
   }
@@ -425,8 +425,8 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
 
     Ok(
       Message {
-        typ: msg.typ.clone(),
-        version: msg.version.clone(),
+        typ: msg.typ,
+        version: msg.version,
         payload: MessagePayload::opaque(buf)
       }
     )
@@ -462,8 +462,8 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     );
 
     Ok(Message {
-      typ: msg.typ.clone(),
-      version: msg.version.clone(),
+      typ: msg.typ,
+      version: msg.version,
       payload: MessagePayload::opaque(buf)
     })
   }
@@ -553,7 +553,7 @@ impl SessionCommon {
       }
 
       error!("TLS alert received: {:#?}", msg);
-      Err(TLSError::AlertReceived(alert.description.clone()))
+      Err(TLSError::AlertReceived(alert.description))
     } else {
       Err(TLSError::CorruptMessagePayload(ContentType::Alert))
     }

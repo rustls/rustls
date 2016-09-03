@@ -322,7 +322,7 @@ impl ClientSessionImpl {
     let mut ret = Vec::new();
 
     for cs in self.config.ciphersuites.iter() {
-      ret.push(cs.suite.clone());
+      ret.push(cs.suite);
     }
 
     /* We don't do renegotation at all, in fact. */
@@ -337,9 +337,8 @@ impl ClientSessionImpl {
   }
 
   pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
-    let got = suite.clone();
     for ref scs in &self.config.ciphersuites {
-      if scs.suite == got {
+      if &scs.suite == suite {
         return Some(scs);
       }
     }
@@ -380,7 +379,7 @@ impl ClientSessionImpl {
 
     /* Now we can fully parse the message payload. */
     if !msg.decode_payload() {
-      return Err(TLSError::CorruptMessagePayload(msg.typ.clone()));
+      return Err(TLSError::CorruptMessagePayload(msg.typ));
     }
 
     /* For alerts, we have separate logic. */

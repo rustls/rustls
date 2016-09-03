@@ -145,7 +145,7 @@ impl SupportedCurves for EllipticCurveList {
   }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SignatureAndHashAlgorithm {
   pub hash: HashAlgorithm,
   pub sign: SignatureAlgorithm
@@ -324,7 +324,7 @@ impl ClientExtension {
       ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket,
       ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
       ClientExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
-      ClientExtension::Unknown(ref r) => r.typ.clone()
+      ClientExtension::Unknown(ref r) => r.typ
     }
   }
 }
@@ -414,7 +414,7 @@ impl ServerExtension {
       ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket,
       ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
       ServerExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
-      ServerExtension::Unknown(ref r) => r.typ.clone()
+      ServerExtension::Unknown(ref r) => r.typ
     }
   }
 }
@@ -708,7 +708,7 @@ pub struct DigitallySignedStruct {
 
 impl DigitallySignedStruct {
   pub fn new(alg: &SignatureAndHashAlgorithm, sig: Vec<u8>) -> DigitallySignedStruct {
-    DigitallySignedStruct { alg: alg.clone(), sig: PayloadU16::new(sig) }
+    DigitallySignedStruct { alg: *alg, sig: PayloadU16::new(sig) }
   }
 }
 
@@ -753,7 +753,7 @@ impl ServerECDHParams {
     ServerECDHParams {
       curve_params: ECParameters {
         curve_type: ECCurveType::NamedCurve,
-        named_curve: named_curve.clone()
+        named_curve: *named_curve
       },
       public: PayloadU8::new(pubkey.clone())
     }

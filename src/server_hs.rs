@@ -103,7 +103,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -
             server_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&sess.handshake_data.secrets.server_random),
             session_id: sessid,
-            cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite.clone(),
+            cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite,
             compression_method: Compression::Null,
             extensions: extensions
           }

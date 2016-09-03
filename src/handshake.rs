@@ -15,7 +15,7 @@ impl Expectation {
             m.typ, self.content_types);
       return Err(TLSError::InappropriateMessage {
         expect_types: self.content_types.to_vec(),
-        got_type: m.typ.clone()
+        got_type: m.typ
       });
     }
 
@@ -26,7 +26,7 @@ impl Expectation {
               hsp.typ, self.handshake_types);
         return Err(TLSError::InappropriateHandshakeMessage {
           expect_types: self.handshake_types.to_vec(),
-          got_type: hsp.typ.clone()
+          got_type: hsp.typ
         });
       }
     }

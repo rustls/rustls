@@ -150,13 +150,13 @@ impl SupportedCipherSuite {
     let our_preference = vec![
       // Prefer the designated hash algorithm of this suite, for
       // security level consistency.
-      SignatureAndHashAlgorithm { hash: self.hash.clone(), sign: self.sign.clone() },
+      SignatureAndHashAlgorithm { hash: self.hash, sign: self.sign },
 
       // Then prefer the right sign algorithm, with the best hashes
       // first.
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: self.sign.clone() },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: self.sign.clone() },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: self.sign.clone() }
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: self.sign },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: self.sign },
+      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: self.sign }
     ];
 
     util::first_in_both(our_preference.as_slice(),

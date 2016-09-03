@@ -65,7 +65,7 @@ impl Codec for ClientSessionValue {
 impl ClientSessionValue {
   pub fn new(cs: &CipherSuite, sessid: &SessionID, ms: Vec<u8>) -> ClientSessionValue {
     ClientSessionValue {
-      cipher_suite: cs.clone(),
+      cipher_suite: *cs,
       session_id: sessid.clone(),
       master_secret: PayloadU8::new(ms)
     }

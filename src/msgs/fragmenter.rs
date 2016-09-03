@@ -36,8 +36,8 @@ impl MessageFragmenter {
 
     for chunk in payload.chunks(self.max_frag) {
       let cm = Message {
-        typ: msg.typ.clone(),
-        version: msg.version.clone(),
+        typ: msg.typ,
+        version: msg.version,
         payload: MessagePayload::opaque(chunk.to_vec())
       };
       out.push_back(cm);
