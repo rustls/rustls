@@ -209,7 +209,7 @@ fn client_resumes() {
 
 #[test]
 fn server_resumes() {
-  let mut server = TlsServer::new(9200);
+  let mut server = TlsServer::new(9600);
   server.resumes()
         .http_mode()
         .run();
