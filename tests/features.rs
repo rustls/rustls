@@ -171,12 +171,12 @@ fn client_auth_by_server_required() {
     .arg("-cert").arg("test-ca/rsa/client.fullchain")
     .expect("Acceptable client certificate CA names")
     .go();
-  
+
   server.kill();
 }
 
 #[test]
-fn resumption() {
+fn client_resumes() {
   let mut server = OpenSSLServer::new_rsa(8200);
   server.run();
 
@@ -205,6 +205,44 @@ fn resumption() {
     .expect_log("Server agreed to resume")
     .expect("1 session cache hits")
     .go();
+}
+
+#[test]
+fn server_resumes() {
+  let mut server = TlsServer::new(9200);
+  server.resumes()
+        .http_mode()
+        .run();
+
+  let sess1 = "target/debug/session1.ssl";
+  let sess2 = "target/debug/session2.ssl";
+
+  server.client()
+    .arg("-sess_out").arg(sess1)
+    .expect("New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+    .go();
+
+  server.client()
+    .arg("-sess_in").arg(sess1)
+    .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+    .go();
+
+  server.client()
+    .arg("-sess_out").arg(sess2)
+    .expect("New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+    .go();
+
+  for _ in 0..2 {
+    server.client()
+      .arg("-sess_in").arg(sess1)
+      .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+      .go();
+
+    server.client()
+      .arg("-sess_in").arg(sess2)
+      .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+      .go();
+  }
 }
 
 #[test]
