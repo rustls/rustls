@@ -168,7 +168,7 @@ impl Connection {
     }
 
     if self.closing && !self.tls_session.wants_write() {
-      self.socket.shutdown(Shutdown::Both).unwrap();
+      let _ = self.socket.shutdown(Shutdown::Both);
       self.close_back();
     } else {
       self.reregister(event_loop);
