@@ -583,6 +583,7 @@ impl OpenSSLClient {
 
     let mut subp = process::Command::new(openssl_find());
     subp.arg("s_client")
+        .arg("-tls1_2")
         .arg("-host").arg("localhost")
         .arg("-port").arg(self.port.to_string())
         .arg("-CAfile").arg(&self.cafile)
