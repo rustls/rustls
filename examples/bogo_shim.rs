@@ -97,6 +97,8 @@ fn split_protocols(protos: &str) -> Vec<String> {
 
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
   let mut cfg = rustls::ServerConfig::new();
+  let persist = rustls::ServerSessionMemoryCache::new(32);
+  cfg.set_persistence(persist);
 
   let cert = load_cert(&opts.cert_file);
   let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
@@ -326,11 +328,6 @@ fn main() {
       s as Box<rustls::Session>
     }
   };
-
-  if opts.server && opts.resumes > 0 {
-    println!("server resumption NYI");
-    process::exit(BOGO_NACK);
-  }
 
   for _ in 0..opts.resumes+1 {
     let mut sess = make_session();
