@@ -1,6 +1,16 @@
-sudo: required
-dist: trusty
 language: rust
+os:
+  - linux
+  - osx
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+    - os: osx
+      osx_image: xcode8i
+  allow_failures:
+    - os: osx
 rust:
   - stable
   - beta
