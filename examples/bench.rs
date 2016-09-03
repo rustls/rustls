@@ -11,6 +11,8 @@ use std::io::{self, Write};
 extern crate rustls;
 use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
+use rustls::ServerSessionMemoryCache;
+use rustls::ClientSessionMemoryCache;
 use rustls::Session;
 use rustls::internal::pemfile;
 use rustls::internal::msgs::enums::SignatureAlgorithm;
@@ -92,20 +94,37 @@ fn get_key() -> Vec<u8> {
   ).unwrap()[0].clone()
 }
 
-fn make_server_config(with_client_auth: bool) -> ServerConfig {
+#[derive(PartialEq, Clone)]
+enum ClientAuth {
+  No,
+  Yes
+}
+
+#[derive(PartialEq, Clone)]
+enum Resumption {
+  No,
+  Yes
+}
+
+fn make_server_config(clientauth: &ClientAuth, resume: &Resumption) -> ServerConfig {
   let mut cfg = ServerConfig::new();
   
   cfg.set_single_cert(get_chain(), get_key());
 
-  if with_client_auth {
+  if clientauth == &ClientAuth::Yes {
     cfg.set_client_auth_roots(get_chain(), true);
+  }
+
+  if resume == &Resumption::Yes {
+    cfg.set_persistence(ServerSessionMemoryCache::new(128));
   }
 
   cfg
 }
 
 fn make_client_config(suite: &'static rustls::SupportedCipherSuite,
-                      with_client_auth: bool) -> ClientConfig {
+                      clientauth: &ClientAuth,
+                      resume: &Resumption) -> ClientConfig {
   let mut cfg = ClientConfig::new();
   let mut rootbuf = io::BufReader::new(
     fs::File::open("test-ca/rsa/ca.cert").unwrap()
@@ -114,16 +133,20 @@ fn make_client_config(suite: &'static rustls::SupportedCipherSuite,
   cfg.ciphersuites.clear();
   cfg.ciphersuites.push(suite);
 
-  if with_client_auth {
+  if clientauth == &ClientAuth::Yes {
     cfg.set_single_client_cert(get_chain(), get_key());
+  }
+
+  if resume == &Resumption::Yes {
+    cfg.set_persistence(ClientSessionMemoryCache::new(128));
   }
 
   cfg
 }
 
-fn bench_handshake(suite: &'static rustls::SupportedCipherSuite, with_client_auth: bool) {
-  let client_config = Arc::new(make_client_config(suite, with_client_auth));
-  let server_config = Arc::new(make_server_config(with_client_auth));
+fn bench_handshake(suite: &'static rustls::SupportedCipherSuite, clientauth: ClientAuth, resume: Resumption) {
+  let client_config = Arc::new(make_client_config(suite, &clientauth, &resume));
+  let server_config = Arc::new(make_server_config(&clientauth, &resume));
 
   let rounds = 64;
   let mut client_time = 0f64;
@@ -151,13 +174,15 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite, with_client_aut
     });
   }
 
-  println!("handshakes\t{:?}\tclient\t{}\t{:.2}\thandshake/s",
+  println!("handshakes\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
            suite.suite,
-           if with_client_auth { "mutual" } else { "server-auth" },
+           if clientauth == ClientAuth::Yes { "mutual" } else { "server-auth" },
+           if resume == Resumption::Yes { "resume" } else { "no-resume" },
            rounds as f64 / client_time);
-  println!("handshakes\t{:?}\tserver\t{}\t{:.2}\thandshake/s",
+  println!("handshakes\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
            suite.suite,
-           if with_client_auth { "mutual" } else { "server-auth" },
+           if clientauth == ClientAuth::Yes { "mutual" } else { "server-auth" },
+           if resume == Resumption::Yes { "resume" } else { "no-resume" },
            rounds as f64 / server_time);
 }
 
@@ -174,8 +199,8 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
 }
 
 fn bench_bulk(suite: &'static rustls::SupportedCipherSuite) {
-  let client_config = Arc::new(make_client_config(suite, false));
-  let server_config = Arc::new(make_server_config(false));
+  let client_config = Arc::new(make_client_config(suite, &ClientAuth::No, &Resumption::No));
+  let server_config = Arc::new(make_server_config(&ClientAuth::No, &Resumption::No));
 
   let mut client = ClientSession::new(&client_config, "localhost");
   let mut server = ServerSession::new(&server_config);
@@ -210,7 +235,9 @@ fn main() {
     }
 
     bench_bulk(suite);
-    bench_handshake(suite, false);
-    bench_handshake(suite, true);
+    bench_handshake(suite, ClientAuth::No, Resumption::No);
+    bench_handshake(suite, ClientAuth::Yes, Resumption::No);
+    bench_handshake(suite, ClientAuth::No, Resumption::Yes);
+    bench_handshake(suite, ClientAuth::Yes, Resumption::Yes);
   }
 }
