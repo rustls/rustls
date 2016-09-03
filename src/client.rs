@@ -360,6 +360,10 @@ impl ClientSessionImpl {
     !self.common.sendable_tls.is_empty()
   }
 
+  pub fn is_handshaking(&self) -> bool {
+    self.state != ConnState::Traffic
+  }
+
   pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.common.peer_encrypting {
@@ -529,6 +533,10 @@ impl Session for ClientSession {
 
   fn wants_write(&self) -> bool {
     self.imp.wants_write()
+  }
+
+  fn is_handshaking(&self) -> bool {
+    self.imp.is_handshaking()
   }
 
   fn send_close_notify(&mut self) {

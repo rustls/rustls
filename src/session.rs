@@ -48,6 +48,11 @@ pub trait Session : Read + Write {
   /// as possible.
   fn wants_write(&self) -> bool;
 
+  /// Returns true if the session is currently perform the TLS
+  /// handshake.  During this time plaintext written to the
+  /// session is buffered in memory.
+  fn is_handshaking(&self) -> bool;
+
   /// Queues a close_notify fatal alert to be sent in the next
   /// `write_tls` call.  This informs the peer that the
   /// connection is being closed.

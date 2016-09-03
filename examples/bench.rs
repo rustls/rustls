@@ -187,15 +187,24 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite, clientauth: Cli
 }
 
 fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
+  assert_eq!(server.is_handshaking(), true);
+  assert_eq!(client.is_handshaking(), true);
   transfer(client, server);
   server.process_new_packets().unwrap();
+  assert_eq!(server.is_handshaking(), true);
+  assert_eq!(client.is_handshaking(), true);
   transfer(server, client);
   client.process_new_packets().unwrap();
+  assert_eq!(server.is_handshaking(), true);
+  assert_eq!(client.is_handshaking(), true);
   transfer(client, server);
   server.process_new_packets().unwrap();
+  assert_eq!(server.is_handshaking(), false);
+  assert_eq!(client.is_handshaking(), true);
   transfer(server, client);
   client.process_new_packets().unwrap();
-  transfer(client, server);
+  assert_eq!(server.is_handshaking(), false);
+  assert_eq!(client.is_handshaking(), false);
 }
 
 fn bench_bulk(suite: &'static rustls::SupportedCipherSuite) {
