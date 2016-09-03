@@ -99,7 +99,6 @@ impl mio::Handler for TlsServer {
         self.connections[token].ready(event_loop, events);
 
         if self.connections[token].is_closed() {
-          self.connections[token].deregister(event_loop);
           self.connections.remove(token);
         }
       }
@@ -314,16 +313,6 @@ impl Connection {
                             self.token,
                             mio::EventSet::readable(),
                             mio::PollOpt::level() | mio::PollOpt::oneshot())
-        .unwrap();
-    }
-  }
-
-  fn deregister(&self, event_loop: &mut mio::EventLoop<TlsServer>) {
-    event_loop.deregister(&self.socket)
-      .unwrap();
-
-    if self.back.is_some() {
-      event_loop.deregister(self.back.as_ref().unwrap())
         .unwrap();
     }
   }
