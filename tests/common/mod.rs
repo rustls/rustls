@@ -43,9 +43,19 @@ pub fn skipped(why: &str) {
     .unwrap();
 }
 
+pub fn openssl_find() -> &'static str {
+  /* We need a homebrew openssl, because OSX comes with
+   * 0.9.8y or something equally ancient! */
+  if cfg!(target_os = "macos") {
+    return "/usr/local/opt/openssl/bin/openssl";
+  }
+
+  return "openssl";
+}
+
 /* Does openssl s_client support -alpn? */
 pub fn openssl_client_supports_alpn() -> bool {
-  let output = process::Command::new("openssl")
+  let output = process::Command::new(openssl_find())
     .arg("s_client")
     .arg("-help")
     .output()
@@ -58,7 +68,7 @@ pub fn openssl_client_supports_alpn() -> bool {
 
 /* Does openssl s_client support -alpn? */
 pub fn openssl_server_supports_alpn() -> bool {
-  let output = process::Command::new("openssl")
+  let output = process::Command::new(openssl_find())
     .arg("s_server")
     .arg("-help")
     .output()
@@ -304,7 +314,7 @@ impl OpenSSLServer {
       extra_args.push("-www");
     }
 
-    let mut subp = process::Command::new("openssl");
+    let mut subp = process::Command::new(openssl_find());
     subp.arg("s_server")
         .arg("-accept").arg(self.port.to_string())
         .arg("-key").arg(&self.key)
@@ -571,7 +581,7 @@ impl OpenSSLClient {
     let mut extra_args = Vec::<&'static str>::new();
     extra_args.extend(&self.extra_args);
 
-    let mut subp = process::Command::new("openssl");
+    let mut subp = process::Command::new(openssl_find());
     subp.arg("s_client")
         .arg("-host").arg("localhost")
         .arg("-port").arg(self.port.to_string())
