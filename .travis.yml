@@ -17,7 +17,7 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
 script:
   - cargo build
-  - cargo test
+  - RUST_BACKTRACE=1 cargo test
   - cargo test --release --no-run
   - ./target/release/examples/bench
   - cd bogo && ./runme
