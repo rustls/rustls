@@ -92,7 +92,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -
   sess.handshake_data.generate_server_random();
   let extensions = try!(process_extensions(sess, hello));
 
-  if sess.handshake_data.session_id.len() == 0 {
+  if sess.handshake_data.session_id.is_empty() {
     let sessid = sess.config.session_storage.lock().unwrap()
       .generate();
     sess.handshake_data.session_id = sessid;
@@ -341,7 +341,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   sess.handshake_data.transcript.add_message(m);
 
   /* Perhaps resume? */
-  if client_hello.session_id.len() > 0 {
+  if !client_hello.session_id.is_empty() {
     let maybe_resume = {
       let persist = sess.config.session_storage.lock().unwrap();
       persist.get(&client_hello.session_id)
@@ -556,7 +556,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
   );
 
   /* Save session, perhaps */
-  if !sess.handshake_data.doing_resume && sess.handshake_data.session_id.len() > 0 {
+  if !sess.handshake_data.doing_resume && !sess.handshake_data.session_id.is_empty() {
     let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
     let client_certs = &sess.handshake_data.valid_client_cert_chain;
 

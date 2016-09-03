@@ -550,7 +550,7 @@ pub static EXPECT_CCS_RESUME: Handler = Handler {
 
 /* -- Waiting for their finished -- */
 fn save_session(sess: &mut ClientSessionImpl) {
-  if sess.handshake_data.session_id.len() == 0 {
+  if sess.handshake_data.session_id.is_empty() {
     info!("Session not saved: server didn't allocate id");
     return;
   }

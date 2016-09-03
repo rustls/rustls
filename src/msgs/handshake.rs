@@ -78,11 +78,45 @@ impl Random {
   }
 }
 
-pub type SessionID = PayloadU8;
+#[derive(Debug, PartialEq, Clone)]
+pub struct SessionID {
+  bytes: Vec<u8>
+}
+
+impl Codec for SessionID {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    assert!(self.bytes.len() <= 0xff);
+    bytes.push(self.bytes.len() as u8);
+    bytes.extend_from_slice(&self.bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<SessionID> {
+    let len = try_ret!(codec::read_u8(r));
+    let bytes = try_ret!(r.take(len as usize));
+
+    if len <= 32 {
+      Some(SessionID { bytes: bytes.to_vec() })
+    } else {
+      None
+    }
+  }
+}
 
 impl SessionID {
+  pub fn new(bytes: Vec<u8>) -> SessionID {
+    SessionID { bytes: bytes }
+  }
+
   pub fn empty() -> SessionID {
-    PayloadU8::new(Vec::new())
+    SessionID::new(Vec::new())
+  }
+
+  pub fn len(&self) -> usize {
+    return self.bytes.len()
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
   }
 }
 
