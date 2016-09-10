@@ -152,7 +152,7 @@ impl RootCertStore {
 fn verify_common_cert<'a>(roots: &RootCertStore,
                           presented_certs: &'a [ASN1Cert])
     -> Result<webpki::EndEntityCert<'a>, TLSError> {
-  if presented_certs.len() == 0 {
+  if presented_certs.is_empty() {
     return Err(TLSError::NoCertificatesPresented);
   }
 
@@ -233,14 +233,14 @@ fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<SignatureAlgorithms, TL
   use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
   match (&sh.sign, &sh.hash) {
-    (&ECDSA, &SHA1)   => Ok(&ECDSA_SHA1),
-    (&ECDSA, &SHA256) => Ok(&ECDSA_SHA256),
-    (&ECDSA, &SHA384) => Ok(&ECDSA_SHA384),
-    (&ECDSA, &SHA512) => Ok(&ECDSA_SHA512),
-    (&RSA, &SHA1)     => Ok(&RSA_SHA1),
-    (&RSA, &SHA256)   => Ok(&RSA_SHA256),
-    (&RSA, &SHA384)   => Ok(&RSA_SHA384),
-    (&RSA, &SHA512)   => Ok(&RSA_SHA512),
+    (&ECDSA, &SHA1)   => Ok(ECDSA_SHA1),
+    (&ECDSA, &SHA256) => Ok(ECDSA_SHA256),
+    (&ECDSA, &SHA384) => Ok(ECDSA_SHA384),
+    (&ECDSA, &SHA512) => Ok(ECDSA_SHA512),
+    (&RSA, &SHA1)     => Ok(RSA_SHA1),
+    (&RSA, &SHA256)   => Ok(RSA_SHA256),
+    (&RSA, &SHA384)   => Ok(RSA_SHA384),
+    (&RSA, &SHA512)   => Ok(RSA_SHA512),
     _ => {
       let error_msg = format!("received unadvertised sigalg {:?} {:?}",
                               sh.sign, sh.hash);

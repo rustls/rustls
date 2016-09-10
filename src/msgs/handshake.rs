@@ -612,7 +612,7 @@ impl Codec for ServerHelloPayload {
     self.cipher_suite.encode(bytes);
     self.compression_method.encode(bytes);
 
-    if self.extensions.len() > 0 {
+    if !self.extensions.is_empty() {
       codec::encode_vec_u16(bytes, &self.extensions);
     }
   }

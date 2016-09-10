@@ -395,11 +395,8 @@ impl ClientSessionImpl {
   }
 
   fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
-    loop {
-      match self.common.handshake_joiner.frames.pop_front() {
-        Some(mut msg) => try!(self.process_main_protocol(&mut msg)),
-        None => break
-      }
+    while let Some(mut msg) = self.common.handshake_joiner.frames.pop_front() {
+      try!(self.process_main_protocol(&mut msg));
     }
 
     Ok(())
@@ -469,11 +466,8 @@ impl ClientSessionImpl {
       return Err(TLSError::CorruptMessage);
     }
 
-    loop {
-      match self.common.message_deframer.frames.pop_front() {
-        Some(mut msg) => try!(self.process_msg(&mut msg)),
-        None => break
-      }
+    while let Some(mut msg) = self.common.message_deframer.frames.pop_front() {
+      try!(self.process_msg(&mut msg));
     }
 
     Ok(())
@@ -484,7 +478,7 @@ impl ClientSessionImpl {
   }
 
   pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
-    if self.handshake_data.server_cert_chain.len() == 0 {
+    if self.handshake_data.server_cert_chain.is_empty() {
       return None;
     }
 

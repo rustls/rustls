@@ -399,7 +399,7 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnS
   sess.handshake_data.transcript.add_message(m);
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
 
-  if cert_chain.len() == 0 && !sess.config.client_auth_mandatory {
+  if cert_chain.is_empty() && !sess.config.client_auth_mandatory {
     info!("client auth requested but no certificate supplied");
     sess.handshake_data.doing_client_auth = false;
     sess.handshake_data.transcript.abandon_client_auth();

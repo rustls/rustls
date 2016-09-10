@@ -79,7 +79,7 @@ impl MessageDeframer {
   /// to process, either whole messages in our output
   /// queue or partial messages in our buffer.
   pub fn has_pending(&self) -> bool {
-    self.frames.len() > 0 || self.buf.len() > 0
+    !self.frames.is_empty() || !self.buf.is_empty()
   }
 
   /// Does our `buf` contain a full message?  It does if it is big enough to
