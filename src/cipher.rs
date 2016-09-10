@@ -1,4 +1,4 @@
-extern crate ring;
+use ring;
 use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;

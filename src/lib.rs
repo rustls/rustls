@@ -165,6 +165,9 @@ extern crate webpki;
 /* *ring* for cryptography. */
 extern crate ring;
 
+/* time for feeding webpki the time. */
+extern crate time;
+
 /* untrusted for feeding ring and webpki. */
 extern crate untrusted;
 

@@ -3,7 +3,7 @@
 /// for our own use.  These functions never fail,
 /// they panic on error.
 
-extern crate ring;
+use ring;
 
 /// Fill the whole slice with random material.
 pub fn fill_random(bytes: &mut [u8]) {

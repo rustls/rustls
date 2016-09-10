@@ -1,6 +1,4 @@
-extern crate ring;
-use self::ring::digest;
-
+use ring::digest;
 use std::mem;
 use msgs::codec::Codec;
 use msgs::message::{Message, MessagePayload};
@@ -105,14 +103,14 @@ impl HandshakeHash {
 #[cfg(test)]
 mod test {
   use super::HandshakeHash;
-  use super::ring;
+  use ring::digest;
 
   #[test]
   fn hashes_correctly() {
     let mut hh = HandshakeHash::new();
     hh.update_raw(b"hello");
     assert_eq!(hh.buffer.len(), 5);
-    hh.start_hash(&ring::digest::SHA256);
+    hh.start_hash(&digest::SHA256);
     assert_eq!(hh.buffer.len(), 0);
     hh.update_raw(b"world");
     let h = hh.get_current_hash();
@@ -128,7 +126,7 @@ mod test {
     hh.set_client_auth_enabled();
     hh.update_raw(b"hello");
     assert_eq!(hh.buffer.len(), 5);
-    hh.start_hash(&ring::digest::SHA256);
+    hh.start_hash(&digest::SHA256);
     assert_eq!(hh.buffer.len(), 5);
     hh.update_raw(b"world");
     assert_eq!(hh.buffer.len(), 10);
@@ -147,7 +145,7 @@ mod test {
     hh.set_client_auth_enabled();
     hh.update_raw(b"hello");
     assert_eq!(hh.buffer.len(), 5);
-    hh.start_hash(&ring::digest::SHA256);
+    hh.start_hash(&digest::SHA256);
     assert_eq!(hh.buffer.len(), 5);
     hh.abandon_client_auth();
     assert_eq!(hh.buffer.len(), 0);

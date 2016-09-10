@@ -1,5 +1,4 @@
-extern crate ring;
-use prf;
+use ring;
 use std::io::{Read, Write};
 use msgs::message::{Message, MessagePayload};
 use msgs::deframer::MessageDeframer;
@@ -10,6 +9,7 @@ use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::MessageCipher;
+use prf;
 
 use std::io;
 use std::mem;

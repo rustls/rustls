@@ -1,7 +1,6 @@
-extern crate webpki;
-extern crate ring;
-extern crate time;
-extern crate untrusted;
+use webpki;
+use time;
+use untrusted;
 
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;

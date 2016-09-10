@@ -1,6 +1,5 @@
-extern crate ring;
-use self::ring::digest;
-use self::ring::hmac;
+use ring::digest;
+use ring::hmac;
 
 use std::io::Write;
 
@@ -50,7 +49,7 @@ pub fn prf(out: &mut [u8],
 
 #[cfg(test)]
 mod tests {
-  use super::ring::digest::{SHA256, SHA512};
+  use ring::digest::{SHA256, SHA512};
 
   #[test]
   fn check_sha256() {

@@ -1,7 +1,7 @@
 use std::{fmt, error};
 use std::error::Error;
 use msgs::enums::{ContentType, HandshakeType, AlertDescription};
-extern crate webpki;
+use webpki;
 
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
@@ -109,7 +109,7 @@ mod tests {
     use super::TLSError;
     use std::error::Error;
     use msgs::enums::{ContentType, HandshakeType, AlertDescription};
-    extern crate webpki;
+    use webpki;
 
     let all = vec![
       TLSError::InappropriateMessage {
