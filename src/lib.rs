@@ -182,6 +182,7 @@ mod error;
 mod rand;
 mod hash_hs;
 mod prf;
+mod cipher;
 mod session;
 mod pemfile;
 mod x509;
