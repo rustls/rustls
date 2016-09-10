@@ -525,7 +525,7 @@ impl SessionCommon {
   }
 
   pub fn has_readable_plaintext(&self) -> bool {
-    self.received_plaintext.len() != 0
+    !self.received_plaintext.is_empty()
   }
 
   pub fn encrypt_outgoing(&mut self, plain: &Message) -> Message {
@@ -669,7 +669,7 @@ impl SessionCommon {
     let len = try!(self.received_plaintext.as_slice().read(buf));
     self.received_plaintext = self.received_plaintext.split_off(len);
 
-    if len == 0 && self.connection_at_eof() && self.received_plaintext.len() == 0 {
+    if len == 0 && self.connection_at_eof() && self.received_plaintext.is_empty() {
       return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));
     }
 

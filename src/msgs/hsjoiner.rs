@@ -36,7 +36,7 @@ impl HandshakeJoiner {
 
   /// Do we have any buffered data?
   pub fn empty(&self) -> bool {
-    self.buf.len() == 0
+    self.buf.is_empty()
   }
 
   /// Take the message, and join/split it as needed.

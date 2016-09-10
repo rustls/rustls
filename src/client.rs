@@ -484,7 +484,7 @@ impl ClientSessionImpl {
   }
 
   pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
-    if self.handshake_data.server_cert_chain.len() == 0 {
+    if self.handshake_data.server_cert_chain.is_empty() {
       return None;
     }
 

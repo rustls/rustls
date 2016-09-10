@@ -80,7 +80,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   exts.push(ClientExtension::EllipticCurves(EllipticCurveList::supported()));
   exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported_verify()));
 
-  if sess.config.alpn_protocols.len() > 0 {
+  if !sess.config.alpn_protocols.is_empty() {
     exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));
   }
 

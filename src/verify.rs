@@ -152,7 +152,7 @@ impl RootCertStore {
 fn verify_common_cert<'a>(roots: &RootCertStore,
                           presented_certs: &'a [ASN1Cert])
     -> Result<webpki::EndEntityCert<'a>, TLSError> {
-  if presented_certs.len() == 0 {
+  if presented_certs.is_empty() {
     return Err(TLSError::NoCertificatesPresented);
   }
 
