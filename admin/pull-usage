@@ -1,0 +1,17 @@
+#!/bin/sh
+# Extract the example usage into README.md
+
+set -e
+
+awk 'BEGIN { take=1 }/```tlsclient/{take=0;print}take' < README.md > README.md.new
+./target/debug/examples/tlsclient --help >> README.md.new
+awk '/^```tlsclient$/ {start=1;} start' < README.md > README.md.tmp
+awk '/^```$/ {start=1;} start' < README.md.tmp >> README.md.new
+mv README.md.new README.md
+
+awk 'BEGIN { take=1 }/```tlsserver/{take=0;print}take' < README.md > README.md.new
+./target/debug/examples/tlsserver --help >> README.md.new
+awk '/^```tlsserver$/ {start=1;} start' < README.md > README.md.tmp
+awk '/^```$/ {start=1;} start' < README.md.tmp >> README.md.new
+mv README.md.new README.md
+rm README.md.tmp

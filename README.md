@@ -69,7 +69,7 @@ There are two example programs which use mio to do asynchronous IO.
 ## Client example program
 The client example program is named `tlsclient`.  The interface looks like:
 
-```
+```tlsclient
 Connects to the TLS server at hostname:PORT.  The default PORT
 is 443.  By default, this reads a request from stdin (to EOF)
 before making the connection.  --http replaces this with a
@@ -79,14 +79,12 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http]
-    [--auth-key KEY --auth-certs CERTS] [--mtu MTU] [--cache CACHE]
-    [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
-  tlsclient --version
-  tlsclient --help
+  tlsclient [options] <hostname>
+  tlsclient (--version | -v)
+  tlsclient (--help | -h)
 
 Options:
-    -p, --port PORT     Connect to PORT. Default is 443.
+    -p, --port PORT     Connect to PORT [default: 443].
     --http              Send a basic HTTP GET request for /.
     --cafile CAFILE     Read root certificates from CAFILE.
     --auth-key KEY      Read client authentication key from KEY.
@@ -96,10 +94,11 @@ Options:
                         SUITE instead.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
     --cache CACHE       Save session cache to file CACHE.
+    --no-tickets        Disable session ticket support.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
-    --version           Show tool version.
-    --help              Show this screen.
+    --version, -v       Show tool version.
+    --help, -h          Show this screen.
 ```
 
 Some sample runs:
@@ -125,7 +124,7 @@ Connection closed
 ## Server example program
 The server example program is named `tlsserver`.  The interface looks like:
 
-```
+```tlsserver
 Runs a TLS server on :PORT.  The default PORT is 443.
 
 `echo' mode means the server echoes received data on each connection.
@@ -139,36 +138,31 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT]
-    [--auth CERTFILE] [--require-auth] [--suite SUITE...]
-    [--proto PROTOCOL...] echo
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT]
-    [--auth CERTFILE] [--require-auth] [--suite SUITE...]
-    [--proto PROTOCOL...] http
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT]
-    [--auth CERTFILE] [--require-auth] [--suite SUITE...]
-    [--proto PROTOCOL...] forward <fport>
-  tlsserver --version
-  tlsserver --help
+  tlsserver --certs CERTFILE --key KEYFILE [options] echo
+  tlsserver --certs CERTFILE --key KEYFILE [options] http
+  tlsserver --certs CERTFILE --key KEYFILE [options] forward <fport>
+  tlsserver (--version | -v)
+  tlsserver (--help | -h)
 
 Options:
-    -p, --port PORT     Listen on PORT. Default is 443.
+    -p, --port PORT     Listen on PORT [default: 443].
     --certs CERTFILE    Read server certificates from CERTFILE.
                         This should contain PEM-format certificates
                         in the right order (the first certificate should
                         certify KEYFILE, the last should be a root CA).
-    --key KEYFILE       Read private key from KEYFILE.  This should be a RSA private key,
-                        in PEM format.
+    --key KEYFILE       Read private key from KEYFILE.  This should be a RSA
+                        private key, in PEM format.
     --auth CERTFILE     Enable client authentication, and accept certificates
                         signed by those roots provided in CERTFILE.
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
+    --resumption        Support session resumption.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
     --verbose           Emit log output.
-    --version           Show tool version.
-    --help              Show this screen.
+    --version, -v       Show tool version.
+    --help, -h          Show this screen.
 ```
 
 Here's a sample run; we start a TLS echo server, then connect to it with
