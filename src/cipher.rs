@@ -42,13 +42,13 @@ impl MessageCipher {
     let server_write_iv = &key_block[offs..offs+scs.fixed_iv_len]; offs += scs.fixed_iv_len;
     let explicit_nonce_offs = &key_block[offs..offs+scs.explicit_nonce_len];
 
-    let (write_mac_key, write_key, write_iv) = if secrets.we_are_client {
+    let (write_mac_key, write_key, write_iv) = if secrets.randoms.we_are_client {
       (client_write_mac_key, client_write_key, client_write_iv)
     } else {
       (server_write_mac_key, server_write_key, server_write_iv)
     };
 
-    let (read_mac_key, read_key, read_iv) = if secrets.we_are_client {
+    let (read_mac_key, read_key, read_iv) = if secrets.randoms.we_are_client {
       (server_write_mac_key, server_write_key, server_write_iv)
     } else {
       (client_write_mac_key, client_write_key, client_write_iv)

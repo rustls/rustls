@@ -10,6 +10,7 @@ use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::MessageCipher;
 use prf;
+use rand;
 
 use std::io;
 use std::mem;
@@ -68,12 +69,35 @@ pub trait Session : Read + Write {
   fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>>;
 }
 
-pub struct SessionSecrets {
+#[derive(Clone)]
+pub struct SessionRandoms {
   pub we_are_client: bool,
-  pub client_random: [u8; 32],
-  pub server_random: [u8; 32],
-  hash: Option<&'static ring::digest::Algorithm>,
-  master_secret: [u8; 48]
+  pub client: [u8; 32],
+  pub server: [u8; 32]
+}
+
+impl SessionRandoms {
+  pub fn for_server() -> SessionRandoms {
+    let mut ret = SessionRandoms {
+      we_are_client: false,
+      client: [0u8; 32],
+      server: [0u8; 32]
+    };
+
+    rand::fill_random(&mut ret.server);
+    ret
+  }
+
+  pub fn for_client() -> SessionRandoms {
+    let mut ret = SessionRandoms {
+      we_are_client: true,
+      client: [0u8; 32],
+      server: [0u8; 32]
+    };
+
+    rand::fill_random(&mut ret.client);
+    ret
+  }
 }
 
 fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
@@ -83,56 +107,41 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
   randoms
 }
 
+pub struct SessionSecrets {
+  pub randoms: SessionRandoms,
+  hash: &'static ring::digest::Algorithm,
+  master_secret: [u8; 48]
+}
 
 impl SessionSecrets {
-  pub fn for_server() -> SessionSecrets {
-    SessionSecrets {
-      we_are_client: false,
-      hash: None,
-      client_random: [0u8; 32],
-      server_random: [0u8; 32],
+  pub fn new(randoms: &SessionRandoms,
+             hashalg: &'static ring::digest::Algorithm,
+             pms: &[u8]) -> SessionSecrets {
+    let mut ret = SessionSecrets {
+      randoms: randoms.clone(),
+      hash: hashalg,
       master_secret: [0u8; 48]
-    }
-  }
+    };
 
-  pub fn for_client() -> SessionSecrets {
-    let mut ret = SessionSecrets::for_server();
-    ret.we_are_client = true;
-    ret
-  }
-
-  pub fn get_master_secret(&self) -> Vec<u8> {
-    let mut ret = Vec::new();
-    ret.extend_from_slice(&self.master_secret);
-    ret
-  }
-
-  pub fn init(&mut self,
-              hs_rands: &SessionSecrets,
-              hashalg: &'static ring::digest::Algorithm,
-              pms: &[u8]) {
-    /* Copy in randoms. */
-    self.client_random.as_mut().write(&hs_rands.client_random).unwrap();
-    self.server_random.as_mut().write(&hs_rands.server_random).unwrap();
-
-    self.hash = Some(hashalg);
-
-    let randoms = join_randoms(&self.client_random, &self.server_random);
-    prf::prf(&mut self.master_secret,
-             hashalg,
+    let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
+    prf::prf(&mut ret.master_secret,
+             ret.hash,
              pms,
              b"master secret",
              &randoms);
+    ret
   }
 
-  pub fn init_resume(&mut self,
-                     hs_rands: &SessionSecrets,
-                     hashalg: &'static ring::digest::Algorithm,
-                     master_secret: &[u8]) {
-    self.client_random.as_mut().write(&hs_rands.client_random).unwrap();
-    self.server_random.as_mut().write(&hs_rands.server_random).unwrap();
-    self.hash = Some(hashalg);
-    self.master_secret.as_mut().write(master_secret).unwrap();
+  pub fn new_resume(randoms: &SessionRandoms,
+                    hashalg: &'static ring::digest::Algorithm,
+                    master_secret: &[u8]) -> SessionSecrets {
+    let mut ret = SessionSecrets {
+      randoms: randoms.clone(),
+      hash: hashalg,
+      master_secret: [0u8; 48]
+    };
+    ret.master_secret.as_mut().write(master_secret).unwrap();
+    ret
   }
 
   pub fn make_key_block(&self, len: usize) -> Vec<u8> {
@@ -141,9 +150,9 @@ impl SessionSecrets {
 
     /* NOTE: opposite order to above for no good reason.
      * Don't design security protocols on drugs, kids. */
-    let randoms = join_randoms(&self.server_random, &self.client_random);
+    let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
     prf::prf(&mut out,
-             self.hash.unwrap(),
+             self.hash,
              &self.master_secret,
              b"key expansion",
              &randoms);
@@ -151,12 +160,18 @@ impl SessionSecrets {
     out
   }
 
+  pub fn get_master_secret(&self) -> Vec<u8> {
+    let mut ret = Vec::new();
+    ret.extend_from_slice(&self.master_secret);
+    ret
+  }
+
   pub fn make_verify_data(&self, handshake_hash: &Vec<u8>, label: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     out.resize(12, 0u8);
 
     prf::prf(&mut out,
-             self.hash.unwrap(),
+             self.hash,
              &self.master_secret,
              label,
              &handshake_hash);

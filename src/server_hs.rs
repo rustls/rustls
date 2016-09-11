@@ -18,6 +18,7 @@ use msgs::handshake::SupportedMandatedSignatureAlgorithms;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
+use session::SessionSecrets;
 use server::{ServerSessionImpl, ConnState};
 use suites;
 use sign;
@@ -89,7 +90,6 @@ fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload)
 }
 
 fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -> Result<(), TLSError> {
-  sess.handshake_data.generate_server_random();
   let extensions = try!(process_extensions(sess, hello));
 
   if sess.handshake_data.session_id.is_empty() {
@@ -107,7 +107,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -
         payload: HandshakePayload::ServerHello(
           ServerHelloPayload {
             server_version: ProtocolVersion::TLSv1_2,
-            random: Random::from_slice(&sess.handshake_data.secrets.server_random),
+            random: Random::from_slice(&sess.handshake_data.randoms.server),
             session_id: sess.handshake_data.session_id.clone(),
             cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite,
             compression_method: Compression::Null,
@@ -154,8 +154,8 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
   let secdh = ServerECDHParams::new(curve, &kx.pubkey);
 
   let mut msg = Vec::new();
-  msg.extend(&sess.handshake_data.secrets.client_random);
-  msg.extend(&sess.handshake_data.secrets.server_random);
+  msg.extend(&sess.handshake_data.randoms.client);
+  msg.extend(&sess.handshake_data.randoms.server);
   secdh.encode(&mut msg);
 
   let sig = try!(
@@ -254,9 +254,10 @@ fn start_resumption(sess: &mut ServerSessionImpl,
   sess.handshake_data.session_id = id.clone();
   try!(emit_server_hello(sess, client_hello));
 
-  sess.secrets_current.init_resume(&sess.handshake_data.secrets,
-                                   sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
-                                   &resumedata.master_secret.0);
+  let hashalg = sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash();
+  sess.secrets = Some(SessionSecrets::new_resume(&sess.handshake_data.randoms,
+                                                 hashalg,
+                                                 &resumedata.master_secret.0));
   sess.start_encryption();
   sess.handshake_data.valid_client_cert_chain = resumedata.client_cert_chain;
   sess.handshake_data.doing_resume = true;
@@ -285,7 +286,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   }
 
   /* Save their Random. */
-  client_hello.random.write_slice(&mut sess.handshake_data.secrets.client_random);
+  client_hello.random.write_slice(&mut sess.handshake_data.randoms.client);
 
   let default_sigalgs_ext = SupportedSignatureAlgorithms::default();
 
@@ -438,9 +439,10 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnSta
     .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange completion failed".to_string()))
   );
 
-  sess.secrets_current.init(&sess.handshake_data.secrets,
-                            sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash(),
-                            &kxd.premaster_secret);
+  let hashalg = sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash();
+  sess.secrets = Some(SessionSecrets::new(&sess.handshake_data.randoms,
+                                          hashalg,
+                                          &kxd.premaster_secret));
   sess.start_encryption();
 
   if sess.handshake_data.doing_client_auth {
@@ -525,7 +527,7 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
 
 fn emit_finished(sess: &mut ServerSessionImpl) {
   let vh = sess.handshake_data.transcript.get_current_hash();
-  let verify_data = sess.secrets_current.server_verify_data(&vh);
+  let verify_data = sess.secrets.as_ref().unwrap().server_verify_data(&vh);
   let verify_data_payload = Payload::new(verify_data);
 
   let f = Message {
@@ -547,7 +549,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
   let vh = sess.handshake_data.transcript.get_current_hash();
-  let expect_verify_data = sess.secrets_current.client_verify_data(&vh);
+  let expect_verify_data = sess.secrets.as_ref().unwrap().client_verify_data(&vh);
 
   use ring;
   try!(
@@ -561,7 +563,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
     let client_certs = &sess.handshake_data.valid_client_cert_chain;
 
     let value = persist::ServerSessionValue::new(&scs.suite,
-                                                 sess.secrets_current.get_master_secret(),
+                                                 sess.secrets.as_ref().unwrap().get_master_secret(),
                                                  client_certs);
 
     let mut persist = sess.config.session_storage.lock().unwrap();

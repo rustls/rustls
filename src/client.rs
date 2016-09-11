@@ -1,6 +1,6 @@
 use msgs::enums::CipherSuite;
 use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
-use session::{Session, SessionSecrets, SessionCommon};
+use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
 use msgs::handshake::{DistinguishedNames, SupportedSignatureAlgorithms, ASN1Cert};
@@ -13,7 +13,6 @@ use hash_hs;
 use verify;
 use sign;
 use error::TLSError;
-use rand;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -251,7 +250,7 @@ pub struct ClientHandshakeData {
   pub server_kx_sig: Option<DigitallySignedStruct>,
   pub transcript: hash_hs::HandshakeHash,
   pub resuming_session: Option<persist::ClientSessionValue>,
-  pub secrets: SessionSecrets,
+  pub randoms: SessionRandoms,
   pub may_issue_new_ticket: bool,
   pub new_ticket: Vec<u8>,
   pub new_ticket_lifetime: u32,
@@ -273,7 +272,7 @@ impl ClientHandshakeData {
       server_kx_sig: None,
       transcript: hash_hs::HandshakeHash::new(),
       resuming_session: None,
-      secrets: SessionSecrets::for_client(),
+      randoms: SessionRandoms::for_client(),
       may_issue_new_ticket: false,
       new_ticket: Vec::new(),
       new_ticket_lifetime: 0,
@@ -282,10 +281,6 @@ impl ClientHandshakeData {
       client_auth_cert: None,
       client_auth_key: None
     }
-  }
-
-  pub fn generate_client_random(&mut self) {
-    rand::fill_random(&mut self.secrets.client_random);
   }
 }
 
@@ -308,7 +303,7 @@ pub enum ConnState {
 pub struct ClientSessionImpl {
   pub config: Arc<ClientConfig>,
   pub handshake_data: ClientHandshakeData,
-  pub secrets_current: SessionSecrets,
+  pub secrets: Option<SessionSecrets>,
   pub alpn_protocol: Option<String>,
   pub common: SessionCommon,
   pub state: ConnState
@@ -320,7 +315,7 @@ impl ClientSessionImpl {
     let mut cs = ClientSessionImpl {
       config: config.clone(),
       handshake_data: ClientHandshakeData::new(hostname),
-      secrets_current: SessionSecrets::for_client(),
+      secrets: None,
       alpn_protocol: None,
       common: SessionCommon::new(config.mtu),
       state: ConnState::ExpectServerHello
@@ -349,7 +344,7 @@ impl ClientSessionImpl {
 
   pub fn start_encryption(&mut self) {
     let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-    self.common.start_encryption(scs, &self.secrets_current);
+    self.common.start_encryption(scs, self.secrets.as_ref().unwrap());
   }
 
   pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {

@@ -1,4 +1,4 @@
-use session::{Session, SessionSecrets, SessionCommon};
+use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
 use msgs::enums::{AlertDescription, HandshakeType};
@@ -243,7 +243,7 @@ pub struct ServerHandshakeData {
   pub server_cert_chain: Option<CertificatePayload>,
   pub ciphersuite: Option<&'static SupportedCipherSuite>,
   pub session_id: SessionID,
-  pub secrets: SessionSecrets,
+  pub randoms: SessionRandoms,
   pub transcript: hash_hs::HandshakeHash,
   pub kx_data: Option<KeyExchange>,
   pub doing_resume: bool,
@@ -257,17 +257,13 @@ impl ServerHandshakeData {
       server_cert_chain: None,
       ciphersuite: None,
       session_id: SessionID::empty(),
-      secrets: SessionSecrets::for_server(),
+      randoms: SessionRandoms::for_server(),
       transcript: hash_hs::HandshakeHash::new(),
       kx_data: None,
       doing_resume: false,
       doing_client_auth: false,
       valid_client_cert_chain: None
     }
-  }
-
-  pub fn generate_server_random(&mut self) {
-    rand::fill_random(&mut self.secrets.server_random);
   }
 
   pub fn start_handshake_hash(&mut self) {
@@ -290,7 +286,7 @@ pub enum ConnState {
 pub struct ServerSessionImpl {
   pub config: Arc<ServerConfig>,
   pub handshake_data: ServerHandshakeData,
-  pub secrets_current: SessionSecrets,
+  pub secrets: Option<SessionSecrets>,
   pub common: SessionCommon,
   pub alpn_protocol: Option<String>,
   pub state: ConnState,
@@ -301,7 +297,7 @@ impl ServerSessionImpl {
     let mut sess = ServerSessionImpl {
       config: server_config.clone(),
       handshake_data: ServerHandshakeData::new(),
-      secrets_current: SessionSecrets::for_server(),
+      secrets: None,
       common: SessionCommon::new(None),
       alpn_protocol: None,
       state: ConnState::ExpectClientHello
@@ -416,7 +412,7 @@ impl ServerSessionImpl {
 
   pub fn start_encryption(&mut self) {
     let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-    self.common.start_encryption(scs, &self.secrets_current);
+    self.common.start_encryption(scs, self.secrets.as_ref().unwrap());
   }
 
   pub fn send_close_notify(&mut self) {
