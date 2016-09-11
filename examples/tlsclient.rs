@@ -284,7 +284,7 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient [options] <hostname>
+  tlsclient [options] [--suite SUITE ...] [--proto PROTO ...] <hostname>
   tlsclient (--version | -v)
   tlsclient (--help | -h)
 
@@ -296,8 +296,9 @@ Options:
     --auth-certs CERTS  Read client authentication certificates from CERTS.
                         CERTS must match up with KEY.
     --suite SUITE       Disable default cipher suite list, and use
-                        SUITE instead.
+                        SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
+                        May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
     --verbose           Emit log output.

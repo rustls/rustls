@@ -351,9 +351,9 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [options] echo
-  tlsserver --certs CERTFILE --key KEYFILE [options] http
-  tlsserver --certs CERTFILE --key KEYFILE [options] forward <fport>
+  tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] echo
+  tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] http
+  tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] forward <fport>
   tlsserver (--version | -v)
   tlsserver (--help | -h)
 
@@ -371,8 +371,9 @@ Options:
                         authentication.
     --resumption        Support session resumption.
     --suite SUITE       Disable default cipher suite list, and use
-                        SUITE instead.
+                        SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
+                        May be used multiple times.
     --verbose           Emit log output.
     --version, -v       Show tool version.
     --help, -h          Show this screen.
