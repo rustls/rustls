@@ -351,20 +351,20 @@ localhost:fport.
 key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--resumption] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] echo
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--resumption] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] http
-  tlsserver --certs CERTFILE --key KEYFILE [--verbose] [-p PORT] [--resumption] [--auth CERTFILE] [--require-auth] [--suite SUITE...] [--proto PROTOCOL...] forward <fport>
-  tlsserver --version
-  tlsserver --help
+  tlsserver --certs CERTFILE --key KEYFILE [options] echo
+  tlsserver --certs CERTFILE --key KEYFILE [options] http
+  tlsserver --certs CERTFILE --key KEYFILE [options] forward <fport>
+  tlsserver (--version | -v)
+  tlsserver (--help | -h)
 
 Options:
-    -p, --port PORT     Listen on PORT. Default is 443.
+    -p, --port PORT     Listen on PORT [default: 443].
     --certs CERTFILE    Read server certificates from CERTFILE.
                         This should contain PEM-format certificates
                         in the right order (the first certificate should
                         certify KEYFILE, the last should be a root CA).
-    --key KEYFILE       Read private key from KEYFILE.  This should be a RSA private key,
-                        in PEM format.
+    --key KEYFILE       Read private key from KEYFILE.  This should be a RSA
+                        private key, in PEM format.
     --auth CERTFILE     Enable client authentication, and accept certificates
                         signed by those roots provided in CERTFILE.
     --require-auth      Send a fatal alert if the client does not complete client
@@ -374,8 +374,8 @@ Options:
                         SUITE instead.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
     --verbose           Emit log output.
-    --version           Show tool version.
-    --help              Show this screen.
+    --version, -v       Show tool version.
+    --help, -h          Show this screen.
 ";
 
 #[derive(Debug, RustcDecodable)]

@@ -284,12 +284,12 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http] [--auth-key KEY --auth-certs CERTS] [--mtu MTU] [--no-tickets] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
-  tlsclient --version
-  tlsclient --help
+  tlsclient [options] <hostname>
+  tlsclient (--version | -v)
+  tlsclient (--help | -h)
 
 Options:
-    -p, --port PORT     Connect to PORT. Default is 443.
+    -p, --port PORT     Connect to PORT [default: 443].
     --http              Send a basic HTTP GET request for /.
     --cafile CAFILE     Read root certificates from CAFILE.
     --auth-key KEY      Read client authentication key from KEY.
@@ -302,8 +302,8 @@ Options:
     --no-tickets        Disable session ticket support.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
-    --version           Show tool version.
-    --help              Show this screen.
+    --version, -v       Show tool version.
+    --help, -h          Show this screen.
 ";
 
 #[derive(Debug, RustcDecodable)]
