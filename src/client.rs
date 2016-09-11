@@ -171,7 +171,14 @@ pub struct ClientConfig {
   pub mtu: Option<usize>,
 
   /// How to decide what client auth certificate/keys to use.
-  pub client_auth_cert_resolver: Box<ResolvesClientCert>
+  pub client_auth_cert_resolver: Box<ResolvesClientCert>,
+
+  /// Whether to support RFC5077 tickets.  You must provide a working
+  /// `session_persistence` member for this to have any meaningful
+  /// effect.
+  ///
+  /// The default is true.
+  pub enable_tickets: bool
 }
 
 impl ClientConfig {
@@ -185,7 +192,8 @@ impl ClientConfig {
       alpn_protocols: Vec::new(),
       session_persistence: Mutex::new(Box::new(NoSessionStorage {})),
       mtu: None,
-      client_auth_cert_resolver: Box::new(FailResolveClientCert {})
+      client_auth_cert_resolver: Box::new(FailResolveClientCert {}),
+      enable_tickets: true
     }
   }
 
@@ -244,6 +252,9 @@ pub struct ClientHandshakeData {
   pub transcript: hash_hs::HandshakeHash,
   pub resuming_session: Option<persist::ClientSessionValue>,
   pub secrets: SessionSecrets,
+  pub may_issue_new_ticket: bool,
+  pub new_ticket: Vec<u8>,
+  pub new_ticket_lifetime: u32,
   pub doing_client_auth: bool,
   pub client_auth_sigalg: Option<SignatureAndHashAlgorithm>,
   pub client_auth_cert: Option<CertificatePayload>,
@@ -263,6 +274,9 @@ impl ClientHandshakeData {
       transcript: hash_hs::HandshakeHash::new(),
       resuming_session: None,
       secrets: SessionSecrets::for_client(),
+      may_issue_new_ticket: false,
+      new_ticket: Vec::new(),
+      new_ticket_lifetime: 0,
       doing_client_auth: false,
       client_auth_sigalg: None,
       client_auth_cert: None,
@@ -282,8 +296,10 @@ pub enum ConnState {
   ExpectServerKX,
   ExpectServerHelloDoneOrCertRequest,
   ExpectServerHelloDone,
+  ExpectCCSOrNewTicket,
   ExpectCCS,
   ExpectFinished,
+  ExpectCCSOrNewTicketResume,
   ExpectCCSResume,
   ExpectFinishedResume,
   Traffic
@@ -453,8 +469,10 @@ impl ClientSessionImpl {
       ConnState::ExpectServerKX => &client_hs::EXPECT_SERVER_KX,
       ConnState::ExpectServerHelloDoneOrCertRequest => &client_hs::EXPECT_DONE_OR_CERTREQ,
       ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
+      ConnState::ExpectCCSOrNewTicket => &client_hs::EXPECT_CCS_OR_NEW_TICKET,
       ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
       ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,
+      ConnState::ExpectCCSOrNewTicketResume => &client_hs::EXPECT_CCS_OR_NEW_TICKET_RESUME,
       ConnState::ExpectCCSResume => &client_hs::EXPECT_CCS_RESUME,
       ConnState::ExpectFinishedResume => &client_hs::EXPECT_FINISHED_RESUME,
       ConnState::Traffic => &client_hs::TRAFFIC

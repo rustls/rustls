@@ -89,6 +89,7 @@ pub struct TlsClient {
   pub cache: Option<String>,
   pub suites: Vec<String>,
   pub protos: Vec<String>,
+  pub no_tickets: bool,
   pub verbose: bool,
   pub mtu: Option<usize>,
   pub expect_fails: bool,
@@ -106,6 +107,7 @@ impl TlsClient {
       client_auth_key: None,
       client_auth_certs: None,
       cache: None,
+      no_tickets: false,
       verbose: false,
       mtu: None,
       suites: Vec::new(),
@@ -129,6 +131,11 @@ impl TlsClient {
 
   pub fn cache(&mut self, cache: &str) -> &mut TlsClient {
     self.cache = Some(cache.to_string());
+    self
+  }
+
+  pub fn no_tickets(&mut self) -> &mut TlsClient {
+    self.no_tickets = true;
     self
   }
 
@@ -189,6 +196,10 @@ impl TlsClient {
     if self.cache.is_some() {
       args.push("--cache");
       args.push(self.cache.as_ref().unwrap());
+    }
+
+    if self.no_tickets {
+      args.push("--no-tickets");
     }
 
     if self.cafile.is_some() {

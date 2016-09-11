@@ -895,6 +895,30 @@ impl Codec for CertificateRequestPayload {
   }
 }
 
+/* -- NewSessionTicket -- */
+#[derive(Debug)]
+pub struct NewSessionTicketPayload {
+  pub lifetime_hint: u32,
+  pub ticket: PayloadU16
+}
+
+impl Codec for NewSessionTicketPayload {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    codec::encode_u32(self.lifetime_hint, bytes);
+    self.ticket.encode(bytes);
+  }
+
+  fn read(r: &mut Reader) -> Option<NewSessionTicketPayload> {
+    let lifetime = try_ret!(codec::read_u32(r));
+    let ticket = try_ret!(PayloadU16::read(r));
+
+    Some(NewSessionTicketPayload {
+      lifetime_hint: lifetime,
+      ticket: ticket
+    })
+  }
+}
+
 #[derive(Debug)]
 pub enum HandshakePayload {
   HelloRequest,
@@ -906,6 +930,7 @@ pub enum HandshakePayload {
   CertificateVerify(DigitallySignedStruct),
   ServerHelloDone,
   ClientKeyExchange(Payload),
+  NewSessionTicket(NewSessionTicketPayload),
   Finished(Payload),
   Unknown(Payload)
 }
@@ -922,6 +947,7 @@ impl HandshakePayload {
       HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
       HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
       HandshakePayload::CertificateVerify(ref x) => x.encode(bytes),
+      HandshakePayload::NewSessionTicket(ref x) => x.encode(bytes),
       HandshakePayload::Finished(ref x) => x.encode(bytes),
       HandshakePayload::Unknown(ref x) => x.encode(bytes)
     }
@@ -970,6 +996,8 @@ impl Codec for HandshakeMessagePayload {
         HandshakePayload::CertificateRequest(try_ret!(CertificateRequestPayload::read(&mut sub))),
       HandshakeType::CertificateVerify =>
         HandshakePayload::CertificateVerify(try_ret!(DigitallySignedStruct::read(&mut sub))),
+      HandshakeType::NewSessionTicket =>
+        HandshakePayload::NewSessionTicket(try_ret!(NewSessionTicketPayload::read(&mut sub))),
       HandshakeType::Finished =>
         HandshakePayload::Finished(try_ret!(Payload::read(&mut sub))),
       _ =>

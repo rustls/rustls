@@ -183,6 +183,7 @@ fn client_resumes() {
   // no resumption without client support
   for _ in 0..2 {
     server.client()
+      .no_tickets()
       .expect_log("No cached session for")
       .expect_log("Not resuming any session")
       .go();
@@ -193,6 +194,7 @@ fn client_resumes() {
 
   server.client()
     .cache(cache_filename)
+    .no_tickets()
     .expect_log("No cached session for")
     .expect_log("Not resuming any session")
     .expect("0 session cache hits")
@@ -201,6 +203,7 @@ fn client_resumes() {
 
   server.client()
     .cache(cache_filename)
+    .no_tickets()
     .expect_log("Resuming session")
     .expect_log("Server agreed to resume")
     .expect("1 session cache hits")

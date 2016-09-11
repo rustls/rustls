@@ -18,6 +18,7 @@ use msgs::ccs::ChangeCipherSpecPayload;
 use client::{ClientSessionImpl, ConnState};
 use suites;
 use verify;
+use rand;
 use error::TLSError;
 use handshake::Expectation;
 
@@ -61,17 +62,29 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
   persist::ClientSessionValue::read_bytes(&value)
 }
 
+/// If we have a ticket, we use the sessionid as a signal that we're
+/// doing an abbreviated handshake.  See section 3.4 in RFC5077.
+fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
+  if csv.ticket.len() > 0 {
+    let mut random_id = [0u8; 16];
+    rand::fill_random(&mut random_id);
+    csv.session_id = SessionID::new(random_id.to_vec());
+  }
+}
+
 pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   sess.handshake_data.generate_client_random();
 
-  /* Do we have a SessionID cached for this host? */
+  /* Do we have a SessionID or ticket cached for this host? */
   sess.handshake_data.resuming_session = find_session(sess);
-  let session_id = if let Some(resuming) = sess.handshake_data.resuming_session.as_ref() {
+  let (session_id, ticket) = if sess.handshake_data.resuming_session.is_some() {
+    let mut resuming = sess.handshake_data.resuming_session.as_mut().unwrap();
+    randomise_sessionid_for_ticket(resuming);
     info!("Resuming session");
-    resuming.session_id.clone()
+    (resuming.session_id.clone(), resuming.ticket.0.clone())
   } else {
     info!("Not resuming any session");
-    SessionID::empty()
+    (SessionID::empty(), Vec::new())
   };
 
   let mut exts = Vec::new();
@@ -79,6 +92,15 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
   exts.push(ClientExtension::EllipticCurves(EllipticCurveList::supported()));
   exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureAlgorithms::supported_verify()));
+
+  if sess.config.enable_tickets {
+    /* If we have a ticket, include it.  Otherwise, request one. */
+    if ticket.is_empty() {
+      exts.push(ClientExtension::SessionTicketRequest);
+    } else {
+      exts.push(ClientExtension::SessionTicketOffer(Payload::new(ticket)));
+    }
+  }
 
   if !sess.config.alpn_protocols.is_empty() {
     exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config.alpn_protocols)));
@@ -183,6 +205,12 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
   server_hello.random.write_slice(&mut sess.handshake_data.secrets.server_random);
   sess.handshake_data.session_id = server_hello.session_id.clone();
 
+  /* Might the server send a ticket? */
+  if server_hello.find_extension(ExtensionType::SessionTicket).is_some() {
+    info!("Server supports tickets");
+    sess.handshake_data.may_issue_new_ticket = true;
+  }
+
   /* See if we're successfully resuming. */
   let mut abbreviated_handshake = false;
   if let Some(ref resuming) = sess.handshake_data.resuming_session {
@@ -204,7 +232,12 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
   if abbreviated_handshake {
     sess.start_encryption();
-    Ok(ConnState::ExpectCCSResume)
+
+    if sess.handshake_data.may_issue_new_ticket {
+      Ok(ConnState::ExpectCCSOrNewTicketResume)
+    } else {
+      Ok(ConnState::ExpectCCSResume)
+    }
   } else {
     Ok(ConnState::ExpectCertificate)
   }
@@ -499,7 +532,11 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 5. */
   emit_finished(sess);
 
-  Ok(ConnState::ExpectCCS)
+  if sess.handshake_data.may_issue_new_ticket {
+    Ok(ConnState::ExpectCCSOrNewTicket)
+  } else {
+    Ok(ConnState::ExpectCCS)
+  }
 }
 
 pub static EXPECT_SERVER_HELLO_DONE: Handler = Handler {
@@ -535,6 +572,30 @@ pub static EXPECT_CCS: Handler = Handler {
   handle: handle_ccs
 };
 
+fn handle_new_ticket(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  let ticket = extract_handshake!(m, HandshakePayload::NewSessionTicket).unwrap();
+  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.new_ticket = ticket.ticket.0.clone();
+  sess.handshake_data.new_ticket_lifetime = ticket.lifetime_hint;
+  Ok(ConnState::ExpectCCS)
+}
+
+fn handle_ccs_or_new_ticket(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  if m.is_content_type(ContentType::ChangeCipherSpec) {
+    handle_ccs(sess, m)
+  } else {
+    handle_new_ticket(sess, m)
+  }
+}
+
+pub static EXPECT_CCS_OR_NEW_TICKET: Handler = Handler {
+  expect: Expectation {
+    content_types: &[ContentType::ChangeCipherSpec, ContentType::Handshake],
+    handshake_types: &[HandshakeType::NewSessionTicket]
+  },
+  handle: handle_ccs_or_new_ticket
+};
+
 fn handle_ccs_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   handle_ccs(sess, m)
     .and(Ok(ConnState::ExpectFinishedResume))
@@ -548,10 +609,34 @@ pub static EXPECT_CCS_RESUME: Handler = Handler {
   handle: handle_ccs_resume
 };
 
+fn handle_ccs_or_new_ticket_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  if m.is_content_type(ContentType::ChangeCipherSpec) {
+    handle_ccs_resume(sess, m)
+  } else {
+    handle_new_ticket(sess, m)
+      .and(Ok(ConnState::ExpectCCSResume))
+  }
+}
+
+pub static EXPECT_CCS_OR_NEW_TICKET_RESUME: Handler = Handler {
+  expect: Expectation {
+    content_types: &[ContentType::ChangeCipherSpec, ContentType::Handshake],
+    handshake_types: &[HandshakeType::NewSessionTicket]
+  },
+  handle: handle_ccs_or_new_ticket_resume
+};
+
 /* -- Waiting for their finished -- */
 fn save_session(sess: &mut ClientSessionImpl) {
-  if sess.handshake_data.session_id.is_empty() {
-    info!("Session not saved: server didn't allocate id");
+  /* Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
+   * original ticket again. */
+  let mut ticket = mem::replace(&mut sess.handshake_data.new_ticket, Vec::new());
+  if ticket.is_empty() && sess.handshake_data.resuming_session.is_some() {
+    ticket = sess.handshake_data.resuming_session.as_mut().unwrap().take_ticket();
+  }
+
+  if sess.handshake_data.session_id.is_empty() && ticket.is_empty() {
+    info!("Session not saved: server didn't allocate id or ticket");
     return;
   }
 
@@ -561,6 +646,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
   let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
   let value = persist::ClientSessionValue::new(&scs.suite,
                                                &sess.handshake_data.session_id,
+                                               ticket,
                                                sess.secrets_current.get_master_secret());
   let value_buf = value.get_encoding();
 

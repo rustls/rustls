@@ -284,7 +284,7 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient [--verbose] [-p PORT] [--http] [--auth-key KEY --auth-certs CERTS] [--mtu MTU] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
+  tlsclient [--verbose] [-p PORT] [--http] [--auth-key KEY --auth-certs CERTS] [--mtu MTU] [--no-tickets] [--cache CACHE] [--cafile CAFILE] [--suite SUITE...] [--proto PROTOCOL...] <hostname>
   tlsclient --version
   tlsclient --help
 
@@ -299,6 +299,7 @@ Options:
                         SUITE instead.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
     --cache CACHE       Save session cache to file CACHE.
+    --no-tickets        Disable session ticket support.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
     --version           Show tool version.
@@ -315,6 +316,7 @@ struct Args {
   flag_mtu: Option<usize>,
   flag_cafile: Option<String>,
   flag_cache: Option<String>,
+  flag_no_tickets: bool,
   flag_auth_key: Option<String>,
   flag_auth_certs: Option<String>,
   arg_hostname: String
@@ -410,6 +412,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
       .unwrap();
   } else {
     config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+  }
+
+  if args.flag_no_tickets {
+    config.enable_tickets = false;
   }
 
   let persist = Box::new(PersistCache::new(&args.flag_cache));
