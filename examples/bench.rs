@@ -14,6 +14,7 @@ use rustls::{ServerConfig, ServerSession};
 use rustls::ServerSessionMemoryCache;
 use rustls::ClientSessionMemoryCache;
 use rustls::Session;
+use rustls::Ticketer;
 use rustls::internal::pemfile;
 use rustls::internal::msgs::enums::SignatureAlgorithm;
 
@@ -103,7 +104,18 @@ enum ClientAuth {
 #[derive(PartialEq, Clone)]
 enum Resumption {
   No,
-  Yes
+  SessionID,
+  Tickets
+}
+
+impl Resumption {
+  fn label(&self) -> &'static str {
+    match *self {
+      Resumption::No => "no-resume",
+      Resumption::SessionID => "sessionid",
+      Resumption::Tickets => "tickets"
+    }
+  }
 }
 
 fn make_server_config(clientauth: &ClientAuth, resume: &Resumption) -> ServerConfig {
@@ -115,8 +127,10 @@ fn make_server_config(clientauth: &ClientAuth, resume: &Resumption) -> ServerCon
     cfg.set_client_auth_roots(get_chain(), true);
   }
 
-  if resume == &Resumption::Yes {
+  if resume == &Resumption::SessionID {
     cfg.set_persistence(ServerSessionMemoryCache::new(128));
+  } else if resume == &Resumption::Tickets {
+    cfg.ticketer = Ticketer::new();
   }
 
   cfg
@@ -137,7 +151,7 @@ fn make_client_config(suite: &'static rustls::SupportedCipherSuite,
     cfg.set_single_client_cert(get_chain(), get_key());
   }
 
-  if resume == &Resumption::Yes {
+  if resume != &Resumption::No {
     cfg.set_persistence(ClientSessionMemoryCache::new(128));
   }
 
@@ -177,12 +191,12 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite, clientauth: Cli
   println!("handshakes\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
            suite.suite,
            if clientauth == ClientAuth::Yes { "mutual" } else { "server-auth" },
-           if resume == Resumption::Yes { "resume" } else { "no-resume" },
+           resume.label(),
            rounds as f64 / client_time);
   println!("handshakes\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
            suite.suite,
            if clientauth == ClientAuth::Yes { "mutual" } else { "server-auth" },
-           if resume == Resumption::Yes { "resume" } else { "no-resume" },
+           resume.label(),
            rounds as f64 / server_time);
 }
 
@@ -246,7 +260,9 @@ fn main() {
     bench_bulk(suite);
     bench_handshake(suite, ClientAuth::No, Resumption::No);
     bench_handshake(suite, ClientAuth::Yes, Resumption::No);
-    bench_handshake(suite, ClientAuth::No, Resumption::Yes);
-    bench_handshake(suite, ClientAuth::Yes, Resumption::Yes);
+    bench_handshake(suite, ClientAuth::No, Resumption::SessionID);
+    bench_handshake(suite, ClientAuth::Yes, Resumption::SessionID);
+    bench_handshake(suite, ClientAuth::No, Resumption::Tickets);
+    bench_handshake(suite, ClientAuth::Yes, Resumption::Tickets);
   }
 }

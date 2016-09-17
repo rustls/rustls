@@ -249,6 +249,32 @@ fn server_resumes() {
 }
 
 #[test]
+fn server_resumes_with_tickets() {
+  let mut server = TlsServer::new(9700);
+  server.tickets()
+        .http_mode()
+        .run();
+
+  let sess = "target/debug/ticket.ssl";
+
+  server.client()
+    .arg("-sess_out").arg(sess)
+    .expect("New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+    .expect("TLS session ticket:")
+    .expect("TLS session ticket lifetime hint: 43200 (seconds)")
+    .go();
+
+  for _ in 0..8 {
+    server.client()
+      .arg("-sess_in").arg(sess)
+      .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+      .expect("TLS session ticket:")
+      .expect("TLS session ticket lifetime hint: 43200 (seconds)")
+      .go();
+  }
+}
+
+#[test]
 fn recv_low_mtu() {
   let mut server = OpenSSLServer::new_rsa(8300);
   server.arg("-mtu").arg("32");

@@ -385,6 +385,7 @@ pub struct TlsServer {
   used_suites: Vec<String>,
   used_protos: Vec<String>,
   pub resumes: bool,
+  pub tickets: bool,
   pub client_auth_roots: String,
   pub client_auth_required: bool,
   pub verbose: bool,
@@ -407,6 +408,7 @@ impl TlsServer {
       used_suites: Vec::new(),
       used_protos: Vec::new(),
       resumes: false,
+      tickets: false,
       client_auth_roots: String::new(),
       client_auth_required: false,
       child: None
@@ -450,6 +452,11 @@ impl TlsServer {
     self
   }
 
+  pub fn tickets(&mut self) -> &mut Self {
+    self.tickets = true;
+    self
+  }
+
   pub fn client_auth_roots(&mut self, cafile: &str) -> &mut Self {
     self.client_auth_roots = cafile.to_string();
     self
@@ -484,6 +491,10 @@ impl TlsServer {
 
     if self.resumes {
       args.push("--resumption");
+    }
+
+    if self.tickets {
+      args.push("--tickets");
     }
 
     if self.client_auth_roots.len() > 0 {
