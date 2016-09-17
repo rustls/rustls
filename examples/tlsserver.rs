@@ -370,6 +370,7 @@ Options:
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
     --resumption        Support session resumption.
+    --tickets           Support tickets.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
@@ -393,6 +394,7 @@ struct Args {
   flag_auth: Option<String>,
   flag_require_auth: bool,
   flag_resumption: bool,
+  flag_tickets: bool,
   arg_fport: Option<u16>
 }
 
@@ -458,6 +460,10 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
 
   if args.flag_resumption {
     config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
+  }
+
+  if args.flag_tickets {
+    config.ticketer = rustls::Ticketer::new();
   }
 
   config.set_protocols(&args.flag_proto);

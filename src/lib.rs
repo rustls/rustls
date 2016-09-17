@@ -195,6 +195,7 @@ mod handshake;
 mod server_hs;
 mod client_hs;
 mod suites;
+mod ticketer;
 mod server;
 mod client;
 
@@ -218,4 +219,6 @@ pub use session::Session;
 pub use verify::{RootCertStore};
 pub use client::{StoresClientSessions, ClientSessionMemoryCache, ClientConfig, ClientSession};
 pub use server::{StoresServerSessions, ServerSessionMemoryCache, ServerConfig, ServerSession};
+pub use server::ProducesTickets;
+pub use ticketer::Ticketer;
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};

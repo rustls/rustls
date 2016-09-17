@@ -36,6 +36,37 @@ pub trait StoresServerSessions {
   fn del(&mut self, id: &SessionID) -> bool;
 }
 
+pub trait ProducesTickets {
+  /// Returns true if this implementation will encrypt/decrypt
+  /// tickets.  Should return false if this is a dummy
+  /// implementation: the server will not send the SessionTicket
+  /// extension and will not call the other functions.
+  fn enabled(&self) -> bool;
+
+  /// Returns the lifetime in seconds of tickets produced now.
+  /// The lifetime is provided as a hint to clients that the
+  /// ticket will not be useful after the given time.
+  ///
+  /// This lifetime must be implemented by key rolling and
+  /// erasure, not by storing a lifetime in the ticket.
+  ///
+  /// The objective is to limit damage to forward secrecy caused
+  /// by tickets, not just limiting their lifetime.
+  fn get_lifetime(&self) -> u32;
+
+  /// Encrypt and authenticate `plain`, returning the resulting
+  /// ticket.  Return None if `plain` cannot be encrypted for
+  /// some reason: the connection will fail with an error.
+  fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>>;
+
+  /// Decrypt `cipher`, validating its authenticity protection
+  /// and recovering the plaintext.  `cipher` is fully attacker
+  /// controlled, so this decryption must be side-channel free,
+  /// panic-proof, and otherwise bullet-proof.  If the decryption
+  /// fails, return None.
+  fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
+}
+
 pub trait ResolvesCert {
   /// Choose a certificate chain and matching key given any SNI,
   /// sigalgs, EC curves and EC point format extensions
@@ -65,6 +96,9 @@ pub struct ServerConfig {
 
   /// How to store client sessions.
   pub session_storage: Mutex<Box<StoresServerSessions>>,
+
+  /// How to produce tickets.
+  pub ticketer: Box<ProducesTickets>,
 
   /// How to choose a server cert and key.
   pub cert_resolver: Box<ResolvesCert>,
@@ -142,6 +176,16 @@ impl StoresServerSessions for ServerSessionMemoryCache {
   }
 }
 
+/// Something which never produces tickets.
+struct NeverProducesTickets {}
+
+impl ProducesTickets for NeverProducesTickets {
+  fn enabled(&self) -> bool { false }
+  fn get_lifetime(&self) -> u32 { 0 }
+  fn encrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> { None }
+  fn decrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> { None }
+}
+
 /// Something which never resolves a certificate.
 struct FailResolveChain {}
 
@@ -192,6 +236,7 @@ impl ServerConfig {
       ciphersuites: ALL_CIPHERSUITES.to_vec(),
       ignore_client_order: false,
       session_storage: Mutex::new(Box::new(NoSessionStorage {})),
+      ticketer: Box::new(NeverProducesTickets {}),
       alpn_protocols: Vec::new(),
       cert_resolver: Box::new(FailResolveChain {}),
       client_auth_roots: verify::RootCertStore::empty(),
@@ -247,6 +292,7 @@ pub struct ServerHandshakeData {
   pub transcript: hash_hs::HandshakeHash,
   pub kx_data: Option<KeyExchange>,
   pub doing_resume: bool,
+  pub send_ticket: bool,
   pub doing_client_auth: bool,
   pub valid_client_cert_chain: Option<Vec<ASN1Cert>>
 }
@@ -260,6 +306,7 @@ impl ServerHandshakeData {
       randoms: SessionRandoms::for_server(),
       transcript: hash_hs::HandshakeHash::new(),
       kx_data: None,
+      send_ticket: false,
       doing_resume: false,
       doing_client_auth: false,
       valid_client_cert_chain: None

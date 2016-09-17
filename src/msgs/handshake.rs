@@ -592,6 +592,10 @@ impl ClientHelloPayload {
       _ => None
     }
   }
+
+  pub fn get_ticket_extension(&self) -> Option<&ClientExtension> {
+    self.find_extension(ExtensionType::SessionTicket)
+  }
 }
 
 #[derive(Debug)]
@@ -900,6 +904,15 @@ impl Codec for CertificateRequestPayload {
 pub struct NewSessionTicketPayload {
   pub lifetime_hint: u32,
   pub ticket: PayloadU16
+}
+
+impl NewSessionTicketPayload {
+  pub fn new(lifetime_hint: u32, ticket: Vec<u8>) -> NewSessionTicketPayload {
+    NewSessionTicketPayload {
+      lifetime_hint: lifetime_hint,
+      ticket: PayloadU16::new(ticket)
+    }
+  }
 }
 
 impl Codec for NewSessionTicketPayload {

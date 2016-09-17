@@ -69,7 +69,7 @@ pub trait Session : Read + Write {
   fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SessionRandoms {
   pub we_are_client: bool,
   pub client: [u8; 32],
@@ -97,6 +97,14 @@ impl SessionRandoms {
 
     rand::fill_random(&mut ret.client);
     ret
+  }
+
+  pub fn zeroes() -> SessionRandoms {
+    SessionRandoms {
+      we_are_client: false,
+      client: [0u8; 32],
+      server: [0u8; 32]
+    }
   }
 }
 

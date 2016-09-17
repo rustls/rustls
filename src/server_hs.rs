@@ -9,11 +9,11 @@ use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use msgs::handshake::ConvertProtocolNameList;
 use msgs::handshake::SignatureAndHashAlgorithm;
-use msgs::handshake::{EllipticCurveList, SupportedCurves};
+use msgs::handshake::{EllipticCurveList, SupportedCurves, ClientExtension};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
-use msgs::handshake::CertificateRequestPayload;
+use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload};
 use msgs::handshake::SupportedMandatedSignatureAlgorithms;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
@@ -84,6 +84,15 @@ fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload)
 
   if secure_reneg_offered {
     ret.push(ServerExtension::make_empty_renegotiation_info());
+  }
+
+  /* Tickets:
+   * If we get any SessionTicket extension and have tickets enabled,
+   * we send an ack. */
+  if hello.find_extension(ExtensionType::SessionTicket).is_some() &&
+    sess.config.ticketer.enabled() {
+    sess.handshake_data.send_ticket = true;
+    ret.push(ServerExtension::SessionTicketAcknowledgement);
   }
 
   Ok(ret)
@@ -262,6 +271,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
   sess.handshake_data.valid_client_cert_chain = resumedata.client_cert_chain;
   sess.handshake_data.doing_resume = true;
 
+  emit_ticket(sess);
   emit_ccs(sess);
   emit_finished(sess);
   return Ok(ConnState::ExpectCCS);
@@ -341,12 +351,52 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: &Message) -> Result<Conn
   sess.handshake_data.start_handshake_hash();
   sess.handshake_data.transcript.add_message(m);
 
-  /* Perhaps resume? */
-  if !client_hello.session_id.is_empty() {
+  /* -- Check for resumption --
+   * We can do this either by (in order of preference):
+   * 1. receiving a ticket that decrypts
+   * 2. receiving a sessionid that is in our cache
+   *
+   * If we receive a ticket, the sessionid won't be in our
+   * cache, so don't check.
+   *
+   * If either works, we end up with a ServerSessionValue
+   * which is passed to start_resumption and concludes
+   * our handling of the ClientHello.
+   */
+  let mut ticket_received = false;
+
+  if let Some(ticket_ext) = client_hello.get_ticket_extension() {
+    match ticket_ext {
+      &ClientExtension::SessionTicketOffer(ref ticket) => {
+        ticket_received = true;
+        info!("Ticket received");
+
+        let maybe_resume = sess.config.ticketer.decrypt(&ticket.0)
+          .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
+
+        if maybe_resume.is_some() {
+          return start_resumption(sess,
+                                  client_hello,
+                                  &client_hello.session_id,
+                                  maybe_resume.unwrap());
+        } else {
+          info!("Ticket didn't decrypt");
+        }
+      }
+
+      // eg ClientExtension::SessionTicketRequest
+      _ => (),
+    }
+  }
+
+  /* Perhaps resume?  If we received a ticket, the sessionid
+   * does not correspond to a real session. */
+  if !client_hello.session_id.is_empty() && !ticket_received {
     let maybe_resume = {
       let persist = sess.config.session_storage.lock().unwrap();
       persist.get(&client_hello.session_id)
     }.and_then(|x| persist::ServerSessionValue::read_bytes(&x));
+
     if maybe_resume.is_some() {
       return start_resumption(sess,
                               client_hello,
@@ -514,6 +564,33 @@ pub static EXPECT_CCS: Handler = Handler {
 };
 
 /* --- Process client's Finished --- */
+fn emit_ticket(sess: &mut ServerSessionImpl) {
+  if !sess.handshake_data.send_ticket {
+    return;
+  }
+
+  /* If we can't produce a ticket for some reason, we can't
+   * report an error. Send an empty one. */
+  let plain = get_server_session_value(sess).get_encoding();
+  let ticket = sess.config.ticketer.encrypt(&plain)
+    .unwrap_or_else(|| Vec::new());
+  let ticket_lifetime = sess.config.ticketer.get_lifetime();
+
+  let m = Message {
+    typ: ContentType::Handshake,
+    version: ProtocolVersion::TLSv1_2,
+    payload: MessagePayload::Handshake(
+      HandshakeMessagePayload {
+        typ: HandshakeType::NewSessionTicket,
+        payload: HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(ticket_lifetime, ticket))
+      }
+    )
+  };
+
+  sess.handshake_data.transcript.add_message(&m);
+  sess.common.send_msg(&m, false);
+}
+
 fn emit_ccs(sess: &mut ServerSessionImpl) {
   let m = Message {
     typ: ContentType::ChangeCipherSpec,
@@ -545,6 +622,15 @@ fn emit_finished(sess: &mut ServerSessionImpl) {
   sess.common.send_msg(&f, true);
 }
 
+fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionValue {
+  let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+  let client_certs = &sess.handshake_data.valid_client_cert_chain;
+
+  persist::ServerSessionValue::new(&scs.suite,
+                                   sess.secrets.as_ref().unwrap().get_master_secret(),
+                                   client_certs)
+}
+
 fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
@@ -559,12 +645,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
 
   /* Save session, perhaps */
   if !sess.handshake_data.doing_resume && !sess.handshake_data.session_id.is_empty() {
-    let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
-    let client_certs = &sess.handshake_data.valid_client_cert_chain;
-
-    let value = persist::ServerSessionValue::new(&scs.suite,
-                                                 sess.secrets.as_ref().unwrap().get_master_secret(),
-                                                 client_certs);
+    let value = get_server_session_value(sess);
 
     let mut persist = sess.config.session_storage.lock().unwrap();
     if persist.put(&sess.handshake_data.session_id, value.get_encoding()) {
@@ -577,6 +658,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: &Message) -> Result<ConnStat
   /* Send our CCS and Finished. */
   sess.handshake_data.transcript.add_message(m);
   if !sess.handshake_data.doing_resume {
+    emit_ticket(sess);
     emit_ccs(sess);
     emit_finished(sess);
   }

@@ -143,6 +143,23 @@ pub fn put_u64(v: u64, bytes: &mut [u8]) {
   bytes[7] = v as u8;
 }
 
+pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
+  Some(
+       ((bytes[0] as u64) << 56) |
+       ((bytes[1] as u64) << 48) |
+       ((bytes[2] as u64) << 40) |
+       ((bytes[3] as u64) << 32) |
+       ((bytes[4] as u64) << 24) |
+       ((bytes[5] as u64) << 16) |
+       ((bytes[6] as u64) << 8) |
+       bytes[7] as u64
+      )
+}
+
+pub fn read_u64(r: &mut Reader) -> Option<u64> {
+  r.take(8).and_then(decode_u64)
+}
+
 pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
   let mut sub: Vec<u8> = Vec::new();
   for i in items {
