@@ -5,7 +5,7 @@ and [libwebpki](https://github.com/briansmith/webpki) for certificate
 verification.
 
 # Status
-Rustls is currently in development and hence unstable.
+Rustls is currently in development and hence unstable.  [Here's what I'm working on now](https://github.com/ctz/rustls/projects/1).
 
 [![Build Status](https://travis-ci.org/ctz/rustls.svg?branch=master)](https://travis-ci.org/ctz/rustls)
 
