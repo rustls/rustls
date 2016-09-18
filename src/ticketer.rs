@@ -1,144 +1,91 @@
 
-use {rand, suites};
-use suites::SupportedCipherSuite;
-use cipher::MessageCipher;
-use session::{SessionRandoms, SessionSecrets};
-use msgs::enums::{ProtocolVersion, ContentType};
-use msgs::message::{Message, MessagePayload};
 use server::ProducesTickets;
+use rand;
 
-use std::io::Write;
 use time;
 use std::mem;
 use std::sync::Mutex;
+use ring::aead;
 
-/// A thing that can produce and unwrap tickets reusing the
-/// standard record layer.
-///
-/// ## Design
-/// RFC5077 recommends a ticket format based on an adhoc
-/// generic composition of AES128-CBC and HMAC-SHA256.
-///
-/// That seems like a shame, because every TLS stack already has
-/// code to do encryption and decryption of arbitrary messages:
-/// the record layer.  The following is the glue needed to bring
-/// the two systems together:
-///
-/// * To build one, you need a secret key of any length.
-///   This is treated as the premaster secret, with zeroes as
-///   server and client randoms.  This gives us a master secret
-///   which has the same entropy as the original key, and the
-///   right length.  It is standardly and deterministically
-///   generated from the pre-master secret.
-///
-/// * To create a ticket, we start with a plaintext (which is an
-///   encoding of a `ServerSessionValue` but opaque at this level).
-///   We choose a 32-byte random which takes the place of the
-///   server_random, and then derive the key block using it,
-///   with zeroes as the client random, and the aforementioned
-///   master secret.
-///   Next we encapsulate the plaintext in a TLSv1.2 ApplicationData
-///   message, with sequence number zero.  This is encrypted.
-///   The ticket is the fragment of this message with the server
-///   random prefixed to it.
-///
-/// * To decrypt a ticket, take the first 32 bytes and construct
-///   a record layer as before.  Put the rest of the ticket into
-///   an ApplicationData message, and decrypt with the sequence
-///   number zero.
-///
-/// Note that it would be simpler and faster to generate tickets
-/// in a single record layer instantiation, with a sequence number
-/// prefixed.  However, publishing a sequence number would be a
-/// privacy leak.
-///
-pub struct StandardCiphersuiteTicketer {
-  secrets: SessionSecrets,
-  suite: &'static SupportedCipherSuite,
+pub struct AEADTicketer {
+  alg: &'static aead::Algorithm,
+  enc: aead::SealingKey,
+  dec: aead::OpeningKey,
   lifetime: u32
 }
 
-impl StandardCiphersuiteTicketer {
-  /// Make a ticketer using the given ciphersuite `suite`,
-  /// `key` (which should be high-entropy and of any length),
-  /// and `lifetime_seconds` which is a ticket's lifetime in seconds.
-  pub fn new_custom(suite: &'static SupportedCipherSuite, key: &[u8],
-                    lifetime_seconds: u32) -> StandardCiphersuiteTicketer {
-    StandardCiphersuiteTicketer {
-      secrets: SessionSecrets::new(&SessionRandoms::zeroes(),
-                                   suite.get_hash(),
-                                   key),
-      suite: suite,
+impl AEADTicketer {
+  pub fn new_custom(alg: &'static aead::Algorithm,
+                    key: &[u8],
+                    lifetime_seconds: u32) -> AEADTicketer {
+    AEADTicketer {
+      alg: alg,
+      enc: aead::SealingKey::new(alg, key).unwrap(),
+      dec: aead::OpeningKey::new(alg, key).unwrap(),
       lifetime: lifetime_seconds
     }
   }
 
   /// Make a ticketer with recommended configuration and a random key.
-  pub fn new() -> StandardCiphersuiteTicketer {
+  pub fn new() -> AEADTicketer {
     let mut key = [0u8; 32];
     rand::fill_random(&mut key);
-    StandardCiphersuiteTicketer::new_custom(
-      &suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-      &key,
-      60 * 60 * 12)
+    AEADTicketer::new_custom(&aead::CHACHA20_POLY1305, &key, 60 * 60 * 12)
   }
 }
 
-impl ProducesTickets for StandardCiphersuiteTicketer {
+impl ProducesTickets for AEADTicketer {
   fn enabled(&self) -> bool { true }
   fn get_lifetime(&self) -> u32 { self.lifetime }
 
   /// Encrypt `message` and return the ciphertext.
   fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-    let sec = SessionSecrets::new_resume(&SessionRandoms::for_server(),
-                                         self.suite.get_hash(),
-                                         &self.secrets.get_master_secret());
-    let cipher = MessageCipher::new(self.suite, &sec);
-
-    let message = Message {
-      typ: ContentType::ApplicationData,
-      version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(message.to_vec())
-    };
-    
-    let result = match cipher.encrypt(&message, 0) {
-      Ok(m) => m,
-      Err(_) => return None
-    };
+    // Random nonce, because a counter is a privacy leak.
+    let mut nonce = [0u8; 12];
+    rand::fill_random(&mut nonce);
 
     let mut out = Vec::new();
-    out.extend_from_slice(&sec.randoms.server);
-    out.extend_from_slice(&result.get_opaque_payload().unwrap().0);
-    Some(out)
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&message);
+    out.resize(nonce.len() + message.len() + self.alg.max_overhead_len(), 0u8);
+
+    let rc = aead::seal_in_place(&self.enc,
+                                 &nonce,
+                                 &mut out[nonce.len()..],
+                                 self.alg.max_overhead_len(),
+                                 &[0u8; 0]);
+    if rc.is_err() {
+      None
+    } else {
+      Some(out)
+    }
   }
 
   /// Decrypt `ciphertext` and recover the original message.
   fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-    if ciphertext.len() < 32 {
+    let nonce_len = self.alg.nonce_len();
+    let tag_len = self.alg.max_overhead_len();
+
+    if ciphertext.len() < nonce_len + tag_len {
       return None;
     }
 
-    let mut randoms = SessionRandoms::zeroes();
-    randoms.we_are_client = true;
-    randoms.server.as_mut().write(&ciphertext[..32]).unwrap();
+    let nonce = &ciphertext[0..nonce_len];
+    let mut out = Vec::new();
+    out.extend_from_slice(&ciphertext[nonce_len..]);
 
-    let sec = SessionSecrets::new_resume(&randoms,
-                                         self.suite.get_hash(),
-                                         &self.secrets.get_master_secret());
-    let cipher = MessageCipher::new(self.suite, &sec);
+    let len = aead::open_in_place(&self.dec,
+                                  nonce,
+                                  0,
+                                  &mut out,
+                                  &[0u8; 0]);
 
-    let message = Message {
-      typ: ContentType::ApplicationData,
-      version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(ciphertext[32..].to_vec())
-    };
+    if len.is_err() {
+      return None;
+    }
 
-    let result = match cipher.decrypt(&message, 0) {
-      Ok(m) => m,
-      Err(_) => return None
-    };
-
-    Some(result.get_opaque_payload().unwrap().0)
+    out.truncate(len.unwrap());
+    Some(out)
   }
 }
 
@@ -216,7 +163,7 @@ impl ProducesTickets for TicketSwitcher {
 pub struct Ticketer {}
 
 fn generate_inner() -> Box<ProducesTickets> {
-  Box::new(StandardCiphersuiteTicketer::new())
+  Box::new(AEADTicketer::new())
 }
 
 impl Ticketer {

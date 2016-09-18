@@ -98,14 +98,6 @@ impl SessionRandoms {
     rand::fill_random(&mut ret.client);
     ret
   }
-
-  pub fn zeroes() -> SessionRandoms {
-    SessionRandoms {
-      we_are_client: false,
-      client: [0u8; 32],
-      server: [0u8; 32]
-    }
-  }
 }
 
 fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
