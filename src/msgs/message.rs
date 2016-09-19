@@ -8,6 +8,8 @@ use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::enums::{AlertLevel, AlertDescription};
 use msgs::enums::HandshakeType;
 
+use std::mem;
+
 #[derive(Debug)]
 pub enum MessagePayload {
   Alert(AlertMessagePayload),
@@ -148,9 +150,9 @@ impl Message {
     }
   }
 
-  pub fn get_opaque_payload(&self) -> Option<Payload> {
-    if let MessagePayload::Opaque(ref op) = self.payload {
-      Some(op.clone())
+  pub fn take_opaque_payload(&mut self) -> Option<Payload> {
+    if let MessagePayload::Opaque(ref mut op) = self.payload {
+      Some(mem::replace(op, Payload::empty()))
     } else {
       None
     }

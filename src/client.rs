@@ -375,16 +375,16 @@ impl ClientSessionImpl {
     self.state != ConnState::Traffic
   }
 
-  pub fn process_msg(&mut self, msg: &mut Message) -> Result<(), TLSError> {
+  pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
     /* Decrypt if demanded by current state. */
     if self.common.peer_encrypting {
       let dm = try!(self.common.decrypt_incoming(msg));
-      *msg = dm;
+      msg = dm;
     }
 
     /* For handshake messages, we need to join them before parsing
      * and processing. */
-    if self.common.handshake_joiner.want_message(msg) {
+    if self.common.handshake_joiner.want_message(&msg) {
       try!(
         self.common.handshake_joiner.take_message(msg)
         .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
@@ -406,8 +406,8 @@ impl ClientSessionImpl {
   }
 
   fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
-    while let Some(mut msg) = self.common.handshake_joiner.frames.pop_front() {
-      try!(self.process_main_protocol(&mut msg));
+    while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
+      try!(self.process_main_protocol(msg));
     }
 
     Ok(())
@@ -417,34 +417,31 @@ impl ClientSessionImpl {
     self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
   }
 
+  fn is_hello_req(&self, msg: &Message) -> bool {
+    msg.is_handshake_type(HandshakeType::HelloRequest)
+  }
+
   /// Detect and drop/reject HelloRequests.  This is needed irrespective
   /// of the current protocol state, which should illustrate how badly
   /// TLS renegotiation is designed.
-  ///
-  /// Returns true if `msg` is a HelloRequest and has been processed.
-  fn process_hello_req(&mut self, msg: &mut Message) -> bool {
-    if msg.is_handshake_type(HandshakeType::HelloRequest) {
-      /* If we're post handshake, send a refusal alert.
-       * Otherwise, drop it silently. */
-      if self.state == ConnState::Traffic {
-        self.common.send_warning_alert(AlertDescription::NoRenegotiation);
-      }
-
-      true
-    } else {
-      false
+  fn process_hello_req(&mut self) {
+    /* If we're post handshake, send a refusal alert.
+     * Otherwise, drop it silently. */
+    if self.state == ConnState::Traffic {
+      self.common.send_warning_alert(AlertDescription::NoRenegotiation);
     }
   }
 
   /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
   /// that Handler expects.  Finally, we ask the handler to handle the message.
-  fn process_main_protocol(&mut self, msg: &mut Message) -> Result<(), TLSError> {
-    if self.process_hello_req(msg) {
+  fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
+    if self.is_hello_req(&msg) {
+      self.process_hello_req();
       return Ok(());
     }
 
     let handler = self.get_handler();
-    try!(handler.expect.check_message(msg)
+    try!(handler.expect.check_message(&msg)
          .map_err(|err| { self.queue_unexpected_alert(); err }));
     let new_state = try!((handler.handle)(self, msg));
     self.state = new_state;
@@ -479,8 +476,8 @@ impl ClientSessionImpl {
       return Err(TLSError::CorruptMessage);
     }
 
-    while let Some(mut msg) = self.common.message_deframer.frames.pop_front() {
-      try!(self.process_msg(&mut msg));
+    while let Some(msg) = self.common.message_deframer.frames.pop_front() {
+      try!(self.process_msg(msg));
     }
 
     Ok(())

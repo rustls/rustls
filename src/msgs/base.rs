@@ -20,6 +20,10 @@ impl Payload {
     Payload(bytes)
   }
 
+  pub fn empty() -> Payload {
+    Payload::new(Vec::new())
+  }
+
   pub fn len(&self) -> usize { self.0.len() }
 }
 

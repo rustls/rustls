@@ -53,14 +53,15 @@ mod tests {
   use std::collections::VecDeque;
 
   fn msg_eq(mm: Option<Message>, total_len: usize, typ: &ContentType, version: &ProtocolVersion, bytes: &[u8]) {
-    let m = mm.unwrap();
-
-    assert_eq!(&m.typ, typ);
-    assert_eq!(&m.version, version);
-    assert_eq!(m.get_opaque_payload().unwrap().0, bytes.to_vec());
+    let mut m = mm.unwrap();
 
     let mut buf = Vec::new();
     m.encode(&mut buf);
+
+    assert_eq!(&m.typ, typ);
+    assert_eq!(&m.version, version);
+    assert_eq!(m.take_opaque_payload().unwrap().0, bytes.to_vec());
+
     assert_eq!(total_len, buf.len());
   }
 

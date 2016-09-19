@@ -37,7 +37,7 @@ macro_rules! extract_handshake(
   )
 );
 
-pub type HandleFunction = fn(&mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError>;
+pub type HandleFunction = fn(&mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError>;
 
 /* These are effectively operations on the ClientSessionImpl, variant on the
  * connection state. They must not have state of their own -- so they're
@@ -151,7 +151,7 @@ fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtens
   false
 }
 
-fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
   debug!("We got ServerHello {:#?}", server_hello);
 
@@ -196,7 +196,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
 
   /* Start our handshake hash, and input this reply. */
   sess.handshake_data.transcript.start_hash(scs.as_ref().unwrap().get_hash());
-  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.transcript.add_message(&m);
 
   sess.handshake_data.ciphersuite = scs;
 
@@ -250,9 +250,9 @@ pub static EXPECT_SERVER_HELLO: Handler = Handler {
   handle: handle_server_hello
 };
 
-fn handle_certificate(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_certificate(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
-  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.handshake_data.server_cert_chain = cert_chain.clone();
   Ok(ConnState::ExpectServerKX)
 }
@@ -265,10 +265,10 @@ pub static EXPECT_CERTIFICATE: Handler = Handler {
   handle: handle_certificate
 };
 
-fn handle_server_kx(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_server_kx(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
   let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.handshake_data.ciphersuite.unwrap().kx);
-  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.transcript.add_message(&m);
 
   if maybe_decoded_kx.is_none() {
     return Err(TLSError::PeerIncompatibleError("cannot decode server's kx".to_string()));
@@ -402,9 +402,9 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
 /* --- Either a CertificateRequest, or a ServerHelloDone. ---
  * Existence of the CertificateRequest tells us the server is asking for
  * client auth.  Otherwise we go straight to ServerHelloDone. */
-fn handle_certificate_req(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
-  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.handshake_data.doing_client_auth = true;
   info!("Got CertificateRequest {:?}", certreq);
 
@@ -438,7 +438,7 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: &Message) -> Result<C
   Ok(ConnState::ExpectServerHelloDone)
 }
 
-fn handle_done_or_certreq(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_done_or_certreq(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   if extract_handshake!(m, HandshakePayload::CertificateRequest).is_some() {
     handle_certificate_req(sess, m)
   } else {
@@ -455,8 +455,8 @@ pub static EXPECT_DONE_OR_CERTREQ: Handler = Handler {
   handle: handle_done_or_certreq
 };
 
-fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  sess.handshake_data.transcript.add_message(m);
+fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+  sess.handshake_data.transcript.add_message(&m);
 
   info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
   info!("Server DNS name is {:?}", sess.handshake_data.dns_name);
@@ -548,7 +548,7 @@ pub static EXPECT_SERVER_HELLO_DONE: Handler = Handler {
 };
 
 /* -- Waiting for their CCS -- */
-fn handle_ccs(sess: &mut ClientSessionImpl, _m: &Message) -> Result<ConnState, TLSError> {
+fn handle_ccs(sess: &mut ClientSessionImpl, _m: Message) -> Result<ConnState, TLSError> {
   /* CCS should not be received interleaved with fragmented handshake-level
    * message. */
   if !sess.common.handshake_joiner.empty() {
@@ -572,9 +572,9 @@ pub static EXPECT_CCS: Handler = Handler {
   handle: handle_ccs
 };
 
-fn handle_new_ticket(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_new_ticket(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let ticket = extract_handshake!(m, HandshakePayload::NewSessionTicket).unwrap();
-  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.transcript.add_message(&m);
   sess.handshake_data.new_ticket = ticket.ticket.0.clone();
   sess.handshake_data.new_ticket_lifetime = ticket.lifetime_hint;
   Ok(ConnState::ExpectCCS)
@@ -588,7 +588,7 @@ pub static EXPECT_NEW_TICKET: Handler = Handler {
   handle: handle_new_ticket
 };
 
-fn handle_ccs_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_ccs_resume(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   handle_ccs(sess, m)
     .and(Ok(ConnState::ExpectFinishedResume))
 }
@@ -601,7 +601,7 @@ pub static EXPECT_CCS_RESUME: Handler = Handler {
   handle: handle_ccs_resume
 };
 
-fn handle_new_ticket_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_new_ticket_resume(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   handle_new_ticket(sess, m)
     .and(Ok(ConnState::ExpectCCSResume))
 }
@@ -649,7 +649,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
   }
 }
 
-fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_finished(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
   /* Work out what verify_data we expect. */
@@ -665,14 +665,14 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnStat
   );
 
   /* Hash this message too. */
-  sess.handshake_data.transcript.add_message(m);
+  sess.handshake_data.transcript.add_message(&m);
 
   save_session(sess);
 
   Ok(ConnState::Traffic)
 }
 
-fn handle_finished_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+fn handle_finished_resume(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let next_state = try!(handle_finished(sess, m));
 
   emit_ccs(sess);
@@ -697,8 +697,8 @@ pub static EXPECT_FINISHED_RESUME: Handler = Handler {
 };
 
 /* -- Traffic transit state -- */
-fn handle_traffic(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  sess.common.take_received_plaintext(m.get_opaque_payload().unwrap());
+fn handle_traffic(sess: &mut ClientSessionImpl, mut m: Message) -> Result<ConnState, TLSError> {
+  sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
 

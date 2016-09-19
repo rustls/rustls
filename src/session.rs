@@ -227,21 +227,21 @@ impl SessionCommon {
     !self.received_plaintext.is_empty()
   }
 
-  pub fn encrypt_outgoing(&mut self, plain: &Message) -> Message {
+  pub fn encrypt_outgoing(&mut self, plain: Message) -> Message {
     let seq = self.write_seq;
     self.write_seq += 1;
     assert!(self.write_seq != 0);
     self.message_cipher.encrypt(plain, seq).unwrap()
   }
 
-  pub fn decrypt_incoming(&mut self, plain: &Message) -> Result<Message, TLSError> {
+  pub fn decrypt_incoming(&mut self, plain: Message) -> Result<Message, TLSError> {
     let seq = self.read_seq;
     self.read_seq += 1;
     assert!(self.read_seq != 0);
     self.message_cipher.decrypt(plain, seq)
   }
 
-  pub fn process_alert(&mut self, msg: &mut Message) -> Result<(), TLSError> {
+  pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {
     if let MessagePayload::Alert(ref alert) = msg.payload {
       /* If we get a CloseNotify, make a note to declare EOF to our
        * caller. */
@@ -270,9 +270,7 @@ impl SessionCommon {
     self.message_fragmenter.fragment(m, &mut plain_messages);
 
     for m in plain_messages {
-      let mut buf = Vec::new();
-      m.encode(&mut buf);
-      let em = self.encrypt_outgoing(&m);
+      let em = self.encrypt_outgoing(m);
       self.queue_tls_message(em);
     }
   }

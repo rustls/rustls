@@ -46,10 +46,10 @@ impl HandshakeJoiner {
   /// Returns None if msg or a preceding message was corrupt.
   /// You cannot recover from this situation.  Otherwise returns
   /// a count of how many messages we queued.
-  pub fn take_message(&mut self, msg: &Message) -> Option<usize> {
+  pub fn take_message(&mut self, mut msg: Message) -> Option<usize> {
     // Input must be opaque, otherwise we might have already
     // lost information!
-    let payload = msg.get_opaque_payload().unwrap();
+    let payload = msg.take_opaque_payload().unwrap();
 
     self.buf.extend_from_slice(&payload.0[..]);
 
@@ -153,7 +153,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), Some(2));
+    assert_eq!(hj.take_message(msg), Some(2));
     assert_eq!(hj.empty(), true);
 
     let expect = Message {
@@ -182,7 +182,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), None);
+    assert_eq!(hj.take_message(msg), None);
   }
 
   #[test]
@@ -199,7 +199,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), Some(0));
+    assert_eq!(hj.take_message(msg), Some(0));
     assert_eq!(hj.empty(), false);
 
     /* 11 more bytes. */
@@ -210,7 +210,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), Some(0));
+    assert_eq!(hj.take_message(msg), Some(0));
     assert_eq!(hj.empty(), false);
 
     /* Final 1 byte. */
@@ -221,7 +221,7 @@ mod tests {
     };
 
     assert_eq!(hj.want_message(&msg), true);
-    assert_eq!(hj.take_message(&msg), Some(1));
+    assert_eq!(hj.take_message(msg), Some(1));
     assert_eq!(hj.empty(), true);
 
     let expect = Message {
