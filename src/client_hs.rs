@@ -207,7 +207,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
   /* Might the server send a ticket? */
   if server_hello.find_extension(ExtensionType::SessionTicket).is_some() {
     info!("Server supports tickets");
-    sess.handshake_data.may_issue_new_ticket = true;
+    sess.handshake_data.must_issue_new_ticket = true;
   }
 
   /* See if we're successfully resuming. */
@@ -232,8 +232,8 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: &Message) -> Result<Conn
   if abbreviated_handshake {
     sess.start_encryption();
 
-    if sess.handshake_data.may_issue_new_ticket {
-      Ok(ConnState::ExpectCCSOrNewTicketResume)
+    if sess.handshake_data.must_issue_new_ticket {
+      Ok(ConnState::ExpectNewTicketResume)
     } else {
       Ok(ConnState::ExpectCCSResume)
     }
@@ -532,8 +532,8 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl, m: &Message) -> Result
   /* 5. */
   emit_finished(sess);
 
-  if sess.handshake_data.may_issue_new_ticket {
-    Ok(ConnState::ExpectCCSOrNewTicket)
+  if sess.handshake_data.must_issue_new_ticket {
+    Ok(ConnState::ExpectNewTicket)
   } else {
     Ok(ConnState::ExpectCCS)
   }
@@ -580,20 +580,12 @@ fn handle_new_ticket(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnSt
   Ok(ConnState::ExpectCCS)
 }
 
-fn handle_ccs_or_new_ticket(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  if m.is_content_type(ContentType::ChangeCipherSpec) {
-    handle_ccs(sess, m)
-  } else {
-    handle_new_ticket(sess, m)
-  }
-}
-
-pub static EXPECT_CCS_OR_NEW_TICKET: Handler = Handler {
+pub static EXPECT_NEW_TICKET: Handler = Handler {
   expect: Expectation {
-    content_types: &[ContentType::ChangeCipherSpec, ContentType::Handshake],
+    content_types: &[ContentType::Handshake],
     handshake_types: &[HandshakeType::NewSessionTicket]
   },
-  handle: handle_ccs_or_new_ticket
+  handle: handle_new_ticket
 };
 
 fn handle_ccs_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
@@ -609,21 +601,17 @@ pub static EXPECT_CCS_RESUME: Handler = Handler {
   handle: handle_ccs_resume
 };
 
-fn handle_ccs_or_new_ticket_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
-  if m.is_content_type(ContentType::ChangeCipherSpec) {
-    handle_ccs_resume(sess, m)
-  } else {
-    handle_new_ticket(sess, m)
-      .and(Ok(ConnState::ExpectCCSResume))
-  }
+fn handle_new_ticket_resume(sess: &mut ClientSessionImpl, m: &Message) -> Result<ConnState, TLSError> {
+  handle_new_ticket(sess, m)
+    .and(Ok(ConnState::ExpectCCSResume))
 }
 
-pub static EXPECT_CCS_OR_NEW_TICKET_RESUME: Handler = Handler {
+pub static EXPECT_NEW_TICKET_RESUME: Handler = Handler {
   expect: Expectation {
-    content_types: &[ContentType::ChangeCipherSpec, ContentType::Handshake],
+    content_types: &[ContentType::Handshake],
     handshake_types: &[HandshakeType::NewSessionTicket]
   },
-  handle: handle_ccs_or_new_ticket_resume
+  handle: handle_new_ticket_resume
 };
 
 /* -- Waiting for their finished -- */
