@@ -33,6 +33,7 @@ struct Options {
   resumes: usize,
   require_any_client_cert: bool,
   offer_no_client_cas: bool,
+  tickets: bool,
   queue_data: bool,
   host_name: String,
   key_file: String,
@@ -47,6 +48,7 @@ impl Options {
       port: 0,
       server: false,
       resumes: 0,
+      tickets: true,
       host_name: "example.com".to_string(),
       queue_data: false,
       require_any_client_cert: false,
@@ -110,7 +112,11 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     cfg.client_auth_offer = true;
     cfg.client_auth_mandatory = true;
   }
-  
+
+  if opts.tickets {
+    cfg.ticketer = rustls::Ticketer::new();
+  }
+
   if opts.protocols.len() > 0 {
     cfg.set_protocols(&opts.protocols);
   }
@@ -147,7 +153,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
   use rustls::internal::msgs::enums::{AlertDescription, ContentType};
 
   println!("TLS error: {:?}", err);
-  
+
   match err {
     TLSError::InappropriateHandshakeMessage{..} |
       TLSError::InappropriateMessage{..} => quit(":UNEXPECTED_MESSAGE:"),
@@ -155,6 +161,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
     TLSError::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
     TLSError::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
     TLSError::CorruptMessagePayload(ContentType::ChangeCipherSpec) => quit(":BAD_CHANGE_CIPHER_SPEC:"),
+    TLSError::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
     TLSError::CorruptMessage => quit(":GARBAGE:"),
     TLSError::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
     TLSError::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
@@ -188,7 +195,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
 
   loop {
     flush(sess, &mut conn);
-    
+
     if sess.wants_read() {
       let len = sess.read_tls(&mut conn)
         .expect("read failed");
@@ -257,7 +264,8 @@ fn main() {
         "-expect-server-name" | "-expect-certificate-types" => {
         println!("not checking {} {}; NYI", arg, args.remove(0));
       },
-      "-expect-no-session" | "-expect-session-miss" => {},
+      "-expect-no-session" | "-expect-session-miss" |
+        "-expect-ticket-renewal" => {},
 
       "-select-alpn" => {
         opts.protocols.push(args.remove(0));

@@ -62,20 +62,7 @@
     "ExtendedMasterSecret-*": "",
     "Renegotiate-Client-*": "no reneg",
     "Renegotiate-Server-*": "",
-    "SendHalfHelloRequest-*": "",
-    "SupportTicketsWithSessionID": "tickets not yet implemented",
-    "CorruptTicket-TLS12": "",
-    "Basic-Client-*": "",
-    "Basic-Server-Sync": "",
-    "Basic-Server-Sync-SplitHandshakeRecords": "",
-    "Basic-Server-Sync-PackHandshakeFlight": "",
-    "Basic-Server-Async": "",
-    "Basic-Server-Async-SplitHandshakeRecords": "",
-    "Basic-Server-Async-PackHandshakeFlight": "",
-    "SkipNewSessionTicket": "",
-    "OversizedSessionId-TLS12": "",
-    "WrongMessageType-NewSessionTicket": "",
-    "SendEmptySessionTicket": ""
+    "SendHalfHelloRequest-*": ""
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
@@ -108,6 +95,7 @@
     "ServerAuth-Enforced": ":PEER_MISBEHAVIOUR:",
     "UnofferedExtension-Client": ":PEER_MISBEHAVIOUR:",
     "UnknownExtension-Client": ":PEER_MISBEHAVIOUR:",
+    "OversizedSessionId-TLS12": ":BAD_HANDSHAKE_MSG:",
     "LargePlaintext": ":PEER_MISBEHAVIOUR:"
   }
 }
