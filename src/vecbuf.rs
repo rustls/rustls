@@ -49,20 +49,19 @@ impl ChunkVecBuffer {
   }
 
   pub fn write_to(&mut self, wr: &mut io::Write) -> io::Result<usize> {
-    let mut total = 0;
-
-    while !self.is_empty() {
-      let used = try!(wr.write(&self.chunks[0]));
-      total += used;
-
-      if used == self.chunks[0].len() {
-        self.chunks.remove(0);
-      } else {
-        self.chunks[0] = self.chunks[0].split_off(used);
-        return Ok(total);
-      }
+    // would desperately like writev support here!
+    if self.is_empty() {
+      return Ok(0);
     }
 
-    return Ok(total);
+    let used = try!(wr.write(&self.chunks[0]));
+
+    if used == self.chunks[0].len() {
+      self.chunks.remove(0);
+    } else {
+      self.chunks[0] = self.chunks[0].split_off(used);
+    }
+
+    return Ok(used);
   }
 }
