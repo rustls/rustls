@@ -28,8 +28,8 @@ obsolete cryptography.
 * ALPN support.
 * SNI support.
 * Tunable MTU to make TLS messages match size of underlying transport.
-* Resumption by clients.
-* Resumption by servers.
+* Resumption.
+* Resumption via tickets (RFC5077).
 * Client authentication by clients.
 * Client authentication by servers.
 
@@ -38,7 +38,6 @@ obsolete cryptography.
 * ECDSA server authentication by servers.
 * PSK support.
 * TLS1.3.
-* Resumption via tickets.
 * OCSP stapling.
 * Certificate pinning.
 
@@ -158,6 +157,7 @@ Options:
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
     --resumption        Support session resumption.
+    --tickets           Support tickets.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.

@@ -14,8 +14,8 @@
 //! * ALPN support.
 //! * SNI support.
 //! * Tunable MTU to make TLS messages match size of underlying transport.
-//! * Resumption by clients.
-//! * Resumption by servers.
+//! * Resumption.
+//! * Resumption via tickets (RFC5077).
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //!
@@ -24,7 +24,6 @@
 //! * ECDSA server authentication by servers.
 //! * PSK support.
 //! * TLS1.3.
-//! * Resumption via tickets.
 //! * OCSP stapling.
 //! * Certificate pinning.
 //!
