@@ -7,7 +7,7 @@ use common::OpenSSLServer;
 
 #[test]
 fn ecdhe_rsa_aes_128_gcm_sha256() {
-  let mut server = OpenSSLServer::new_rsa(8100);
+  let mut server = OpenSSLServer::new_rsa(5000);
   server.run();
   server.client()
     .verbose()
@@ -19,7 +19,7 @@ fn ecdhe_rsa_aes_128_gcm_sha256() {
 
 #[test]
 fn ecdhe_rsa_aes_256_gcm_sha384() {
-  let mut server = OpenSSLServer::new_rsa(8200);
+  let mut server = OpenSSLServer::new_rsa(5010);
   server.run();
   server.client()
     .verbose()
@@ -31,7 +31,7 @@ fn ecdhe_rsa_aes_256_gcm_sha384() {
 
 #[test]
 fn ecdhe_ecdsa_aes_128_gcm_sha256() {
-  let mut server = OpenSSLServer::new_ecdsa(8300);
+  let mut server = OpenSSLServer::new_ecdsa(5020);
   server.run();
   server.client()
     .verbose()
@@ -43,7 +43,7 @@ fn ecdhe_ecdsa_aes_128_gcm_sha256() {
 
 #[test]
 fn ecdhe_ecdsa_aes_256_gcm_sha384() {
-  let mut server = OpenSSLServer::new_ecdsa(8400);
+  let mut server = OpenSSLServer::new_ecdsa(5030);
   server.run();
   server.client()
     .verbose()

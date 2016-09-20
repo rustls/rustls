@@ -7,7 +7,7 @@ use common::OpenSSLServer;
  * but B is not. */
 #[test]
 fn partial_chain() {
-  let mut server = OpenSSLServer::new_rsa(8100);
+  let mut server = OpenSSLServer::new_rsa(3000);
   server.partial_chain();
   server.run();
   server.client()

@@ -12,7 +12,7 @@ fn alpn_offer() {
     return;
   }
 
-  let mut server = OpenSSLServer::new_rsa(8100);
+  let mut server = OpenSSLServer::new_rsa(9000);
   server.arg("-alpn")
         .arg("ponytown,breakfast,edgware")
         .run();
@@ -53,7 +53,7 @@ fn alpn_agree() {
     return;
   }
 
-  let mut server = TlsServer::new(9100);
+  let mut server = TlsServer::new(9010);
   server.proto("connaught")
         .proto("bonjour")
         .proto("egg")
@@ -82,7 +82,7 @@ fn alpn_agree() {
 
 #[test]
 fn client_auth_by_client() {
-  let mut server = OpenSSLServer::new_rsa(8500);
+  let mut server = OpenSSLServer::new_rsa(9020);
   server.arg("-verify").arg("0");
   server.run();
 
@@ -99,7 +99,7 @@ fn client_auth_by_client() {
 
 #[test]
 fn client_auth_requested_but_unsupported() {
-  let mut server = OpenSSLServer::new_rsa(8600);
+  let mut server = OpenSSLServer::new_rsa(9030);
   server.arg("-verify").arg("0");
   server.run();
 
@@ -115,7 +115,7 @@ fn client_auth_requested_but_unsupported() {
 
 #[test]
 fn client_auth_required_but_unsupported() {
-  let mut server = OpenSSLServer::new_rsa(8700);
+  let mut server = OpenSSLServer::new_rsa(9040);
   server.arg("-Verify").arg("0");
   server.run();
 
@@ -131,7 +131,7 @@ fn client_auth_required_but_unsupported() {
 
 #[test]
 fn client_auth_by_server_accepted() {
-  let mut server = TlsServer::new(9200);
+  let mut server = TlsServer::new(9050);
   server.client_auth_roots("test-ca/rsa/client.chain")
         .http_mode()
         .run();
@@ -153,7 +153,7 @@ fn client_auth_by_server_accepted() {
 
 #[test]
 fn client_auth_by_server_required() {
-  let mut server = TlsServer::new(9300);
+  let mut server = TlsServer::new(9060);
   server.client_auth_roots("test-ca/rsa/client.chain")
         .client_auth_required()
         .http_mode()
@@ -177,7 +177,7 @@ fn client_auth_by_server_required() {
 
 #[test]
 fn client_resumes() {
-  let mut server = OpenSSLServer::new_rsa(8200);
+  let mut server = OpenSSLServer::new_rsa(9070);
   server.run();
 
   // no resumption without client support
@@ -212,7 +212,7 @@ fn client_resumes() {
 
 #[test]
 fn server_resumes() {
-  let mut server = TlsServer::new(9600);
+  let mut server = TlsServer::new(9080);
   server.resumes()
         .http_mode()
         .run();
@@ -250,7 +250,7 @@ fn server_resumes() {
 
 #[test]
 fn server_resumes_with_tickets() {
-  let mut server = TlsServer::new(9700);
+  let mut server = TlsServer::new(9090);
   server.tickets()
         .http_mode()
         .run();
@@ -276,7 +276,7 @@ fn server_resumes_with_tickets() {
 
 #[test]
 fn recv_low_mtu() {
-  let mut server = OpenSSLServer::new_rsa(8300);
+  let mut server = OpenSSLServer::new_rsa(9100);
   server.arg("-mtu").arg("32");
   server.run();
 
@@ -287,7 +287,7 @@ fn recv_low_mtu() {
 
 #[test]
 fn send_low_mtu() {
-  let mut server = OpenSSLServer::new_rsa(8400);
+  let mut server = OpenSSLServer::new_rsa(9110);
   server.run();
 
   server.client()

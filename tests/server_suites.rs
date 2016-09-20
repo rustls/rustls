@@ -7,7 +7,7 @@ use common::TlsServer;
 
 #[test]
 fn ecdhe_rsa_aes_128_gcm_sha256() {
-  let mut server = TlsServer::new(7100);
+  let mut server = TlsServer::new(7000);
 
   server.echo_mode()
     .suite("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -22,7 +22,7 @@ fn ecdhe_rsa_aes_128_gcm_sha256() {
 
 #[test]
 fn ecdhe_rsa_aes_256_gcm_sha384() {
-  let mut server = TlsServer::new(7200);
+  let mut server = TlsServer::new(7010);
 
   server.echo_mode()
     .suite("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")

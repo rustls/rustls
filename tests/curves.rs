@@ -6,7 +6,7 @@ use common::OpenSSLServer;
 
 #[test]
 fn curve_nistp256() {
-  let mut server = OpenSSLServer::new_rsa(8300);
+  let mut server = OpenSSLServer::new_rsa(4000);
   server.arg("-named_curve").arg("prime256v1");
   server.run();
   server.client()
@@ -18,7 +18,7 @@ fn curve_nistp256() {
 
 #[test]
 fn curve_nistp384() {
-  let mut server = OpenSSLServer::new_rsa(8400);
+  let mut server = OpenSSLServer::new_rsa(4010);
   server.arg("-named_curve").arg("secp384r1");
   server.run();
   server.client()

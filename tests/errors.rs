@@ -20,7 +20,7 @@ fn no_tls12() {
 
 #[test]
 fn no_ecdhe() {
-  let mut server = OpenSSLServer::new_rsa(8100);
+  let mut server = OpenSSLServer::new_rsa(8010);
   server.arg("-no_ecdhe");
   server.run();
 
@@ -34,7 +34,7 @@ fn no_ecdhe() {
 
 #[test]
 fn tls11_only() {
-  let mut server = OpenSSLServer::new_rsa(8200);
+  let mut server = OpenSSLServer::new_rsa(8020);
   server.arg("-tls1_1");
   server.run();
 
