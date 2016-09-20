@@ -162,7 +162,7 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite, clientauth: Cli
   let client_config = Arc::new(make_client_config(suite, &clientauth, &resume));
   let server_config = Arc::new(make_server_config(&clientauth, &resume));
 
-  let rounds = 64;
+  let rounds = 512;
   let mut client_time = 0f64;
   let mut server_time = 0f64;
 
@@ -233,7 +233,7 @@ fn bench_bulk(suite: &'static rustls::SupportedCipherSuite) {
   let mut buf = Vec::new();
   buf.resize(1024 * 1024, 0u8);
 
-  let total_mb = 64;
+  let total_mb = 512;
   let mut time_send = 0f64;
   let mut time_recv = 0f64;
 
