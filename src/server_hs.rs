@@ -129,7 +129,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload) -
 
   debug!("sending server hello {:?}", sh);
   sess.handshake_data.transcript.add_message(&sh);
-  sess.common.send_msg(&sh, false);
+  sess.common.send_msg(sh, false);
   Ok(())
 }
 
@@ -148,7 +148,7 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&c);
-  sess.common.send_msg(&c, false);
+  sess.common.send_msg(c, false);
 }
 
 fn emit_server_kx(sess: &mut ServerSessionImpl,
@@ -192,7 +192,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
 
   sess.handshake_data.kx_data = Some(kx);
   sess.handshake_data.transcript.add_message(&m);
-  sess.common.send_msg(&m, false);
+  sess.common.send_msg(m, false);
   Ok(())
 }
 
@@ -223,7 +223,7 @@ fn emit_certificate_req(sess: &mut ServerSessionImpl) {
 
   debug!("Sending CertificateRequest {:?}", m);
   sess.handshake_data.transcript.add_message(&m);
-  sess.common.send_msg(&m, false);
+  sess.common.send_msg(m, false);
   sess.handshake_data.doing_client_auth = true;
 }
 
@@ -240,7 +240,7 @@ fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&m);
-  sess.common.send_msg(&m, false);
+  sess.common.send_msg(m, false);
 }
 
 fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
@@ -588,7 +588,7 @@ fn emit_ticket(sess: &mut ServerSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&m);
-  sess.common.send_msg(&m, false);
+  sess.common.send_msg(m, false);
 }
 
 fn emit_ccs(sess: &mut ServerSessionImpl) {
@@ -598,7 +598,7 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
     payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
   };
 
-  sess.common.send_msg(&m, false);
+  sess.common.send_msg(m, false);
   sess.common.we_now_encrypting();
 }
 
@@ -619,7 +619,7 @@ fn emit_finished(sess: &mut ServerSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&f);
-  sess.common.send_msg(&f, true);
+  sess.common.send_msg(f, true);
 }
 
 fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionValue {

@@ -24,10 +24,10 @@ impl MessageFragmenter {
   /// Take the Message `msg` and re-fragment it into new
   /// messages whose fragment is no more than max_frag.
   /// The new messages are appended to the `out` deque.
-  pub fn fragment(&self, msg: &Message, out: &mut VecDeque<Message>) {
+  pub fn fragment(&self, msg: Message, out: &mut VecDeque<Message>) {
     // Non-fragment path
     if msg.payload.len() <= self.max_frag {
-      out.push_back(msg.to_opaque());
+      out.push_back(msg.into_opaque());
       return;
     }
 
@@ -50,6 +50,7 @@ mod tests {
   use super::{MessageFragmenter, PACKET_OVERHEAD};
   use msgs::message::{MessagePayload, Message};
   use msgs::enums::{ContentType, ProtocolVersion};
+  use msgs::codec::Codec;
   use std::collections::VecDeque;
 
   fn msg_eq(mm: Option<Message>, total_len: usize, typ: &ContentType, version: &ProtocolVersion, bytes: &[u8]) {
@@ -67,18 +68,20 @@ mod tests {
 
   #[test]
   fn smoke() {
+    let typ = ContentType::Handshake;
+    let version = ProtocolVersion::TLSv1_2;
     let m = Message {
-      typ: ContentType::Handshake,
-      version: ProtocolVersion::TLSv1_2,
+      typ: typ,
+      version: version,
       payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec())
     };
 
     let frag = MessageFragmenter::new(3);
     let mut q = VecDeque::new();
-    frag.fragment(&m, &mut q);
-    msg_eq(q.pop_front(), PACKET_OVERHEAD + 3, &m.typ, &m.version, b"\x01\x02\x03");
-    msg_eq(q.pop_front(), PACKET_OVERHEAD + 3, &m.typ, &m.version, b"\x04\x05\x06");
-    msg_eq(q.pop_front(), PACKET_OVERHEAD + 2, &m.typ, &m.version, b"\x07\x08");
+    frag.fragment(m, &mut q);
+    msg_eq(q.pop_front(), PACKET_OVERHEAD + 3, &typ, &version, b"\x01\x02\x03");
+    msg_eq(q.pop_front(), PACKET_OVERHEAD + 3, &typ, &version, b"\x04\x05\x06");
+    msg_eq(q.pop_front(), PACKET_OVERHEAD + 2, &typ, &version, b"\x07\x08");
     assert_eq!(q.len(), 0);
   }
 
@@ -92,9 +95,11 @@ mod tests {
 
     let frag = MessageFragmenter::new(8);
     let mut q = VecDeque::new();
-    frag.fragment(&m, &mut q);
+    frag.fragment(m, &mut q);
     msg_eq(q.pop_front(), PACKET_OVERHEAD + 8,
-           &m.typ, &m.version, b"\x01\x02\x03\x04\x05\x06\x07\x08");
+           &ContentType::Handshake,
+           &ProtocolVersion::TLSv1_2,
+           b"\x01\x02\x03\x04\x05\x06\x07\x08");
     assert_eq!(q.len(), 0);
   }
 }

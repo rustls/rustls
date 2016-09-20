@@ -133,7 +133,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
   debug!("Sending ClientHello {:#?}", ch);
 
   sess.handshake_data.transcript.add_message(&ch);
-  sess.common.send_msg(&ch, false);
+  sess.common.send_msg(ch, false);
 }
 
 fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtension>) -> bool {
@@ -313,7 +313,7 @@ fn emit_certificate(sess: &mut ClientSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&cert);
-  sess.common.send_msg(&cert, false);
+  sess.common.send_msg(cert, false);
 }
 
 fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) {
@@ -334,7 +334,7 @@ fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) 
   };
 
   sess.handshake_data.transcript.add_message(&ckx);
-  sess.common.send_msg(&ckx, false);
+  sess.common.send_msg(ckx, false);
 }
 
 fn emit_certverify(sess: &mut ClientSessionImpl) {
@@ -365,7 +365,7 @@ fn emit_certverify(sess: &mut ClientSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&m);
-  sess.common.send_msg(&m, false);
+  sess.common.send_msg(m, false);
 }
 
 fn emit_ccs(sess: &mut ClientSessionImpl) {
@@ -375,7 +375,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
     payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
   };
 
-  sess.common.send_msg(&ccs, false);
+  sess.common.send_msg(ccs, false);
   sess.common.we_now_encrypting();
 }
 
@@ -396,7 +396,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
   };
 
   sess.handshake_data.transcript.add_message(&f);
-  sess.common.send_msg(&f, true);
+  sess.common.send_msg(f, true);
 }
 
 /* --- Either a CertificateRequest, or a ServerHelloDone. ---

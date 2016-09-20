@@ -97,7 +97,7 @@ struct TicketSwitcherState {
 
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
-/// often, demoting the current ticketer 
+/// often, demoting the current ticketer.
 pub struct TicketSwitcher {
   generator: fn() -> Box<ProducesTickets>,
   lifetime: u32,

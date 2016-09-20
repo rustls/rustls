@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::io;
 
 use msgs::codec;
+use msgs::codec::Codec;
 use msgs::message::Message;
 
 const HEADER_SIZE: usize = 1 + 2 + 2;

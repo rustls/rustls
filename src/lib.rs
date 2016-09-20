@@ -184,6 +184,7 @@ mod msgs;
 mod error;
 mod rand;
 mod hash_hs;
+mod vecbuf;
 mod prf;
 mod cipher;
 mod session;

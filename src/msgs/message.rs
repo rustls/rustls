@@ -74,8 +74,8 @@ pub struct Message {
   pub payload: MessagePayload
 }
 
-impl Message {
-  pub fn read(r: &mut Reader) -> Option<Message> {
+impl Codec for Message {
+  fn read(r: &mut Reader) -> Option<Message> {
     let typ = try_ret!(ContentType::read(r));
     let version = try_ret!(ProtocolVersion::read(r));
     let len = try_ret!(read_u16(r));
@@ -86,6 +86,15 @@ impl Message {
     Some(Message { typ: typ, version: version, payload: MessagePayload::Opaque(payload) })
   }
 
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    self.typ.encode(bytes);
+    self.version.encode(bytes);
+    encode_u16(self.payload.len() as u16, bytes);
+    self.payload.encode(bytes);
+  }
+}
+
+impl Message {
   /// Do some *very* lax checks on the header, and return
   /// None if it looks really broken.  Otherwise, return
   /// the length field.
@@ -110,13 +119,6 @@ impl Message {
     };
 
     Some(len as usize)
-  }
-
-  pub fn encode(&self, bytes: &mut Vec<u8>) {
-    self.typ.encode(bytes);
-    self.version.encode(bytes);
-    encode_u16(self.payload.len() as u16, bytes);
-    self.payload.encode(bytes);
   }
 
   pub fn is_content_type(&self, typ: ContentType) -> bool {
@@ -158,7 +160,11 @@ impl Message {
     }
   }
 
-  pub fn to_opaque(&self) -> Message {
+  pub fn into_opaque(self) -> Message {
+    if let MessagePayload::Opaque(_) = self.payload {
+      return self;
+    }
+
     let mut buf = Vec::new();
     self.payload.encode(&mut buf);
 

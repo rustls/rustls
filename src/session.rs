@@ -5,15 +5,16 @@ use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::base::Payload;
+use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::MessageCipher;
+use vecbuf::ChunkVecBuffer;
 use prf;
 use rand;
 
 use std::io;
-use std::mem;
 use std::collections::VecDeque;
 
 /// Generalises ClientSession and ServerSession
@@ -199,9 +200,9 @@ pub struct SessionCommon {
   pub message_deframer: MessageDeframer,
   pub handshake_joiner: HandshakeJoiner,
   pub message_fragmenter: MessageFragmenter,
-  received_plaintext: Vec<u8>,
-  sendable_plaintext: Vec<u8>,
-  pub sendable_tls: Vec<u8>
+  received_plaintext: ChunkVecBuffer,
+  sendable_plaintext: ChunkVecBuffer,
+  pub sendable_tls: ChunkVecBuffer
 }
 
 impl SessionCommon {
@@ -217,9 +218,9 @@ impl SessionCommon {
       message_deframer: MessageDeframer::new(),
       handshake_joiner: HandshakeJoiner::new(),
       message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
-      received_plaintext: Vec::new(),
-      sendable_plaintext: Vec::new(),
-      sendable_tls: Vec::new(),
+      received_plaintext: ChunkVecBuffer::new(),
+      sendable_plaintext: ChunkVecBuffer::new(),
+      sendable_tls: ChunkVecBuffer::new(),
     }
   }
 
@@ -265,7 +266,7 @@ impl SessionCommon {
 
   /// Fragment `m`, encrypt the fragments, and then queue
   /// the encrypted fragments for sending.
-  pub fn send_msg_encrypt(&mut self, m: &Message) {
+  pub fn send_msg_encrypt(&mut self, m: Message) {
     let mut plain_messages = VecDeque::new();
     self.message_fragmenter.fragment(m, &mut plain_messages);
 
@@ -290,18 +291,16 @@ impl SessionCommon {
   }
 
   pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
-    let written = try!(wr.write(&self.sendable_tls));
-    self.sendable_tls = self.sendable_tls.split_off(written);
-    Ok(written)
+    self.sendable_tls.write_to(wr)
   }
 
   /// Send plaintext application data, fragmenting and
   /// encrypting it as it goes out.
-  pub fn send_plain(&mut self, data: &[u8]) {
+  pub fn send_plain(&mut self, data: Vec<u8>) {
     if !self.traffic {
       /* If we haven't completed handshaking, buffer
        * plaintext to send once we do. */
-      self.sendable_plaintext.extend_from_slice(data);
+      self.sendable_plaintext.append(data);
       return;
     }
 
@@ -317,10 +316,10 @@ impl SessionCommon {
     let m = Message {
       typ: ContentType::ApplicationData,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(data.to_vec())
+      payload: MessagePayload::opaque(data)
     };
 
-    self.send_msg_encrypt(&m);
+    self.send_msg_encrypt(m);
   }
 
   pub fn start_traffic(&mut self) {
@@ -335,22 +334,24 @@ impl SessionCommon {
       return;
     }
 
-    let buf = mem::replace(&mut self.sendable_plaintext, Vec::new());
-    self.send_plain(&buf);
+    while !self.sendable_plaintext.is_empty() {
+      let buf = self.sendable_plaintext.take_one();
+      self.send_plain(buf);
+    }
   }
 
   // Put m into sendable_tls for writing.
   fn queue_tls_message(&mut self, m: Message) {
-    m.encode(&mut self.sendable_tls);
+    self.sendable_tls.append(m.get_encoding());
   }
 
   /// Send a raw TLS message, fragmenting it if needed.
-  pub fn send_msg(&mut self, m: &Message, must_encrypt: bool) {
+  pub fn send_msg(&mut self, m: Message, must_encrypt: bool) {
     if !must_encrypt {
       let mut to_send = VecDeque::new();
       self.message_fragmenter.fragment(m, &mut to_send);
-      for m in to_send {
-        self.queue_tls_message(m);
+      for mm in to_send {
+        self.queue_tls_message(mm);
       }
     } else {
       self.send_msg_encrypt(m);
@@ -358,13 +359,11 @@ impl SessionCommon {
   }
 
   pub fn take_received_plaintext(&mut self, bytes: Payload) {
-    self.received_plaintext.extend_from_slice(&bytes.0);
+    self.received_plaintext.append(bytes.0);
   }
 
   pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    use std::io::Read;
-    let len = try!(self.received_plaintext.as_slice().read(buf));
-    self.received_plaintext = self.received_plaintext.split_off(len);
+    let len = try!(self.received_plaintext.read(buf));
 
     if len == 0 && self.connection_at_eof() && self.received_plaintext.is_empty() {
       return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "CloseNotify alert received"));
@@ -389,13 +388,13 @@ impl SessionCommon {
     warn!("Sending warning alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Warning, desc);
     let enc = self.we_encrypting;
-    self.send_msg(&m, enc);
+    self.send_msg(m, enc);
   }
 
   pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
     warn!("Sending fatal alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Fatal, desc);
     let enc = self.we_encrypting;
-    self.send_msg(&m, enc);
+    self.send_msg(m, enc);
   }
 }
