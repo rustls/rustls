@@ -479,6 +479,10 @@ impl ServerSessionImpl {
 
     Some(r)
   }
+
+  pub fn get_alpn_protocol(&self) -> Option<String> {
+    self.alpn_protocol.clone()
+  }
 }
 
 /// This represents a single TLS server session.
@@ -530,6 +534,10 @@ impl Session for ServerSession {
 
   fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
     self.imp.get_peer_certificates()
+  }
+
+  fn get_alpn_protocol(&self) -> Option<String> {
+    self.imp.get_alpn_protocol()
   }
 }
 

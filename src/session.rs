@@ -68,6 +68,13 @@ pub trait Session : Read + Write {
   ///
   /// The return value is None until this value is available.
   fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>>;
+
+  /// Retrieves the protocol agreed with the peer via ALPN.
+  ///
+  /// A return value of None after handshake completion
+  /// means no protocol was agreed (because no protocols
+  /// were offered or accepted by the peer).
+  fn get_alpn_protocol(&self) -> Option<String>;
 }
 
 #[derive(Clone, Debug)]
