@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export COVERAGE_OUT=$(realpath target)/coverage
+export COVERAGE_OUT=$PWD/target/coverage
 export KCOV_OPTIONS="kcov --exclude-pattern=/.cargo/,intrin.h --verify"
 export COVERAGE="$KCOV_OPTIONS $COVERAGE_OUT"
 export RUST_TEST_THREADS=1

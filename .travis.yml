@@ -14,5 +14,5 @@ script:
   - RUST_BACKTRACE=1 cargo test
   - cargo test --release --no-run
   - ./target/release/examples/bench
-  - cd bogo && ./runme
+  - ( cd bogo && ./runme )
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./admin/coverage   ; fi

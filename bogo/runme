@@ -5,6 +5,7 @@
 
 set -xe
 
+cp ../src/verify.rs ../src/verify-secure.rs
 sed -i -e 's/\(DANGEROUS_DISABLE_VERIFY: bool = \)false/\1true/g' ../src/verify.rs
 cargo test --no-run
 
@@ -12,7 +13,8 @@ if [ ! -e bogo/ ] ; then
   ./fetch-and-build
 fi
 
-cd bogo && ./bogo.test -shim-path ../../admin/covbin/bogo_shim \
+( cd bogo && ./bogo.test -shim-path ../../admin/covbin/bogo_shim \
      -shim-config ../config.json \
      -test.parallel 1 -num-workers 1 \
-     -pipe -allow-unimplemented
+     -pipe -allow-unimplemented )
+mv ../src/verify-secure.rs ../src/verify.rs
