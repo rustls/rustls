@@ -3,6 +3,7 @@ use std::process;
 use std::thread;
 use std::time;
 use std::net;
+use std::env;
 
 /* For tests which connect to internet servers, don't go crazy. */
 pub fn polite() {
@@ -41,6 +42,22 @@ pub fn skipped(why: &str) {
   let mut stdout = io::stdout();
   write!(&mut stdout, "[  SKIPPED  ]        because: {}\n -- UNTESTED: ", why)
     .unwrap();
+}
+
+pub fn tlsserver_find() -> &'static str {
+  if env::var("WITH_COVBIN_WRAPPERS").is_ok() {
+    "admin/covbin/tlsserver"
+  } else {
+    "target/debug/examples/tlsserver"
+  }
+}
+
+pub fn tlsclient_find() -> &'static str {
+  if env::var("WITH_COVBIN_WRAPPERS").is_ok() {
+    "admin/covbin/tlsclient"
+  } else {
+    "target/debug/examples/tlsclient"
+  }
 }
 
 pub fn openssl_find() -> &'static str {
@@ -237,7 +254,7 @@ impl TlsClient {
       args.push(&mtustring);
     }
 
-    let output = process::Command::new("target/debug/examples/tlsclient")
+    let output = process::Command::new(tlsclient_find())
       .args(&args)
       .output()
       .unwrap_or_else(|e| { panic!("failed to execute: {}", e) });
@@ -520,7 +537,7 @@ impl TlsServer {
 
     println!("args {:?}", args);
 
-    let child = process::Command::new("target/debug/examples/tlsserver")
+    let child = process::Command::new(tlsserver_find())
       .args(&args)
       .spawn()
       .expect("cannot run tlsserver");

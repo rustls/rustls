@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# See https://users.rust-lang.org/t/tutorial-how-to-collect-test-coverages-for-rust-project/650
+
+set -e
+
+sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev
+
+mkdir -p kcov
+cd kcov
+wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz
+tar xzf master.tar.gz
+cd kcov-master
+mkdir build
+cd build
+cmake ..
+make
+sudo make install

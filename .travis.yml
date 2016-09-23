@@ -8,9 +8,11 @@ matrix:
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./admin/build-kcov ; fi
 script:
   - cargo build
   - RUST_BACKTRACE=1 cargo test
   - cargo test --release --no-run
   - ./target/release/examples/bench
   - cd bogo && ./runme
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./admin/coverage   ; fi

@@ -1,0 +1,18 @@
+#!/bin/sh
+
+export COVERAGE_OUT=$(realpath target)/coverage
+export KCOV_OPTIONS="kcov --exclude-pattern=/.cargo/,intrin.h --verify"
+export COVERAGE="$KCOV_OPTIONS $COVERAGE_OUT"
+export RUST_TEST_THREADS=1
+
+# unit and integration tests. run these twice, first to capture coverage of
+# child processes and then to capture coverage of the test themselves
+for test in $(cargo test notexist 2>&1 | grep Running | awk '{ print $2 }') ; do
+  WITH_COVBIN_WRAPPERS=1 ./$test
+  $COVERAGE ./$test
+done
+
+# bogo tests
+( cd bogo && ./runme )
+
+$KCOV_OPTIONS --coveralls-id $COVERALLS_TOKEN --report-only target/coverage/ ./target/debug/examples/tlsclient

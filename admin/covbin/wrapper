@@ -1,0 +1,6 @@
+#!/bin/sh
+
+ME=$(realpath -s $0)
+WHICH=$(basename "$ME")
+HERE=$(dirname "$ME")
+exec $COVERAGE $HERE/../../target/${RELEASE:-debug}/examples/$WHICH "$@"
