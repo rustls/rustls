@@ -41,7 +41,7 @@ impl KeyExchange {
     }
   }
 
-  pub fn client_ecdhe(kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
+  pub fn client_ecdhe(kx_params: &[u8]) -> Option<KeyExchangeResult> {
     let mut rd = Reader::init(&kx_params);
     let ecdh_params = try_ret!(ServerECDHParams::read(&mut rd));
 
@@ -129,7 +129,7 @@ impl SupportedCipherSuite {
   /// We have parameters and a verified public key in `kx_params`.
   /// Generate an ephemeral key, generate the shared secret, and
   /// return it and the public half in a `KeyExchangeResult`.
-  pub fn do_client_kx(&self, kx_params: &Vec<u8>) -> Option<KeyExchangeResult> {
+  pub fn do_client_kx(&self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
     match &self.kx {
       &KeyExchangeAlgorithm::ECDHE => KeyExchange::client_ecdhe(kx_params),
       _ => None
@@ -266,8 +266,8 @@ pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 6] = [
 
 /* These both O(N^2)! */
 pub fn choose_ciphersuite_preferring_client(
-    client_suites: &Vec<CipherSuite>,
-    server_suites: &Vec<&'static SupportedCipherSuite>) -> Option<&'static SupportedCipherSuite> {
+    client_suites: &[CipherSuite],
+    server_suites: &[&'static SupportedCipherSuite]) -> Option<&'static SupportedCipherSuite> {
   for client_suite in client_suites {
     if let Some(selected) = server_suites.iter().find(|x| *client_suite == x.suite) {
       return Some(*selected);
@@ -278,8 +278,8 @@ pub fn choose_ciphersuite_preferring_client(
 }
 
 pub fn choose_ciphersuite_preferring_server(
-    client_suites: &Vec<CipherSuite>,
-    server_suites: &Vec<&'static SupportedCipherSuite>) -> Option<&'static SupportedCipherSuite> {
+    client_suites: &[CipherSuite],
+    server_suites: &[&'static SupportedCipherSuite]) -> Option<&'static SupportedCipherSuite> {
   if let Some(selected) = server_suites.iter().find(|x| client_suites.contains(&x.suite)) {
     return Some(*selected);
   }
@@ -289,7 +289,7 @@ pub fn choose_ciphersuite_preferring_server(
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with SignatureAlgorithm `sigalg` removed.
-pub fn reduce_given_sigalg(all: &Vec<&'static SupportedCipherSuite>, sigalg: &SignatureAlgorithm)
+pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite], sigalg: &SignatureAlgorithm)
   -> Vec<&'static SupportedCipherSuite> {
   all.iter()
      .filter(|&&suite| &suite.sign == sigalg)
