@@ -269,7 +269,7 @@ impl rustls::StoresClientSessions for PersistCache {
   }
 
   /// get: from in-memory cache
-  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>> {
+  fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
     self.cache.get(key).map(|x| x.clone())
   }
 }
