@@ -160,7 +160,7 @@ pub fn read_u64(r: &mut Reader) -> Option<u64> {
   r.take(8).and_then(decode_u64)
 }
 
-pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
+pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
   let mut sub: Vec<u8> = Vec::new();
   for i in items {
     i.encode(&mut sub);
@@ -171,7 +171,7 @@ pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
   bytes.append(&mut sub);
 }
 
-pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
+pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
   let mut sub: Vec<u8> = Vec::new();
   for i in items {
     i.encode(&mut sub);
@@ -182,7 +182,7 @@ pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
   bytes.append(&mut sub);
 }
 
-pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &Vec<T>) {
+pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
   let mut sub: Vec<u8> = Vec::new();
   for i in items {
     i.encode(&mut sub);

@@ -31,7 +31,7 @@ pub trait StoresClientSessions {
 
   /// Returns the latest value for `key`.  Returns `None`
   /// if there's no such value.
-  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>>;
+  fn get(&mut self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
 /// An implementor of StoresClientSessions which does nothing.
@@ -42,7 +42,7 @@ impl StoresClientSessions for NoSessionStorage {
     false
   }
 
-  fn get(&mut self, _key: &Vec<u8>) -> Option<Vec<u8>> {
+  fn get(&mut self, _key: &[u8]) -> Option<Vec<u8>> {
     None
   }
 }
@@ -79,7 +79,7 @@ impl StoresClientSessions for ClientSessionMemoryCache {
     true
   }
 
-  fn get(&mut self, key: &Vec<u8>) -> Option<Vec<u8>> {
+  fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
     self.cache.get(key).map(|x| x.clone())
   }
 }
