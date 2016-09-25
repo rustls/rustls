@@ -12,11 +12,16 @@ repository = "https://github.com/ctz/rustls"
 untrusted = "0.3.1"
 time = "0.1.35"
 base64 = "~0.2.0"
-log = "0.3.6"
+log = { version = "0.3.6", optional = true }
 ring = { version = "0.4", features = ["rsa_signing"] }
 webpki = "0.3.0"
 
+[features]
+default = ["logging"]
+logging = ["log"]
+
 [dev-dependencies]
+log = "0.3.6"
 env_logger = "0.3.3"
 mio = "0.5.1"
 docopt = "0.6"

@@ -173,9 +173,19 @@ extern crate untrusted;
 /* rust-base64 for pemfile module. */
 extern crate base64;
 
-/* log for logging. */
+/* log for logging (optional). */
+#[cfg(feature = "logging")]
 #[macro_use]
 extern crate log;
+
+#[cfg(not(feature = "logging"))]
+#[macro_use]
+mod compile_out_log {
+  macro_rules! debug    ( ($($tt:tt)*) => {{}} );
+  macro_rules! info     ( ($($tt:tt)*) => {{}} );
+  macro_rules! warn     ( ($($tt:tt)*) => {{}} );
+  macro_rules! error    ( ($($tt:tt)*) => {{}} );
+}
 
 mod util;
 #[macro_use]
