@@ -16,6 +16,9 @@ pub mod fragmenter;
 pub mod hsjoiner;
 
 #[cfg(test)]
+mod enums_test;
+
+#[cfg(test)]
 mod test {
   #[test]
   fn smoketest() {
