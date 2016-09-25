@@ -15,4 +15,4 @@ done
 # bogo tests
 ( cd bogo && ./runme )
 
-$KCOV_OPTIONS --coveralls-id $COVERALLS_TOKEN --report-only target/coverage/ ./target/debug/examples/tlsclient
+$KCOV_OPTIONS --coveralls-id=$TRAVIS_JOB_ID --report-only target/coverage/ ./target/debug/examples/tlsclient
