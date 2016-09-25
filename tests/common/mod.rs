@@ -306,7 +306,7 @@ impl OpenSSLServer {
     OpenSSLServer {
       port: unused_port(start_port),
       http: true,
-      quiet: false,
+      quiet: true,
       key: format!("test-ca/{}/end.key", keytype),
       cert: format!("test-ca/{}/end.cert", keytype),
       chain: format!("test-ca/{}/end.chain", keytype),
