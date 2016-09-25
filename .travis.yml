@@ -15,4 +15,6 @@ script:
   - cargo test --release --no-run
   - ./target/release/examples/bench
   - ( cd bogo && ./runme )
+  - cargo build --no-default-features
+  - cargo test --no-default-features --no-run
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./admin/coverage   ; fi
