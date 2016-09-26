@@ -196,6 +196,9 @@ impl SessionSecrets {
 }
 
 /* --- Common (to client and server) session functions --- */
+static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
+static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
+
 pub struct SessionCommon {
   message_cipher: Box<MessageCipher + Send + Sync>,
   write_seq: u64,
@@ -238,14 +241,20 @@ impl SessionCommon {
   pub fn encrypt_outgoing(&mut self, plain: Message) -> Message {
     let seq = self.write_seq;
     self.write_seq += 1;
-    assert!(self.write_seq != 0);
     self.message_cipher.encrypt(plain, seq).unwrap()
   }
 
   pub fn decrypt_incoming(&mut self, plain: Message) -> Result<Message, TLSError> {
+    // Perhaps if we send an alert well before their counter wraps, a
+    // buggy peer won't make a terrible mistake here?
+    // Note that there's no reason to refuse to decrypt: the security
+    // failure has already happened.
+    if self.read_seq == SEQ_SOFT_LIMIT {
+      self.send_close_notify();
+    }
+
     let seq = self.read_seq;
     self.read_seq += 1;
-    assert!(self.read_seq != 0);
     self.message_cipher.decrypt(plain, seq)
   }
 
@@ -278,6 +287,18 @@ impl SessionCommon {
     self.message_fragmenter.fragment(m, &mut plain_messages);
 
     for m in plain_messages {
+      // Close connection once we start to run out of
+      // sequence space.
+      if self.write_seq == SEQ_SOFT_LIMIT {
+        self.send_close_notify();
+      }
+
+      // Refuse to wrap counter at all costs.  This
+      // is basically untestable unfortunately.
+      if self.write_seq >= SEQ_HARD_LIMIT {
+        return;
+      }
+
       let em = self.encrypt_outgoing(m);
       self.queue_tls_message(em);
     }
@@ -403,5 +424,9 @@ impl SessionCommon {
     let m = Message::build_alert(AlertLevel::Fatal, desc);
     let enc = self.we_encrypting;
     self.send_msg(m, enc);
+  }
+
+  pub fn send_close_notify(&mut self) {
+    self.send_warning_alert(AlertDescription::CloseNotify)
   }
 }

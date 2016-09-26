@@ -462,10 +462,6 @@ impl ServerSessionImpl {
     self.common.start_encryption(scs, self.secrets.as_ref().unwrap());
   }
 
-  pub fn send_close_notify(&mut self) {
-    self.common.send_warning_alert(AlertDescription::CloseNotify)
-  }
-
   pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
     if self.handshake_data.valid_client_cert_chain.is_none() {
       return None;
@@ -529,7 +525,7 @@ impl Session for ServerSession {
   }
 
   fn send_close_notify(&mut self) {
-    self.imp.send_close_notify()
+    self.imp.common.send_close_notify()
   }
 
   fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
