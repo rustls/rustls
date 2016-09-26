@@ -66,15 +66,13 @@ impl Codec for Random {
 
 impl Random {
   pub fn from_slice(bytes: &[u8]) -> Random {
-    assert_eq!(bytes.len(), 32);
     let mut rd = Reader::init(&bytes);
     Random::read(&mut rd).unwrap()
   }
 
   pub fn write_slice(&self, mut bytes: &mut [u8]) {
-    let mut buf = Vec::new();
-    self.encode(&mut buf);
-    assert_eq!(bytes.write(&buf).unwrap(), 32);
+    let buf = self.get_encoding();
+    bytes.write(&buf).unwrap();
   }
 }
 
@@ -85,7 +83,7 @@ pub struct SessionID {
 
 impl Codec for SessionID {
   fn encode(&self, bytes: &mut Vec<u8>) {
-    assert!(self.bytes.len() <= 0xff);
+    debug_assert!(self.bytes.len() <= 32);
     bytes.push(self.bytes.len() as u8);
     bytes.extend_from_slice(&self.bytes);
   }
@@ -103,7 +101,8 @@ impl Codec for SessionID {
 }
 
 impl SessionID {
-  pub fn new(bytes: Vec<u8>) -> SessionID {
+  pub fn new(mut bytes: Vec<u8>) -> SessionID {
+    bytes.truncate(32);
     SessionID { bytes: bytes }
   }
 
