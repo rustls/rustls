@@ -422,7 +422,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
       .ok_or_else(|| incompatible(sess, "no supported point format"))
   );
 
-  assert_eq!(ecpoint, ECPointFormat::Uncompressed);
+  debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
   try!(emit_server_hello(sess, client_hello));
   emit_certificate(sess);

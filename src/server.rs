@@ -138,7 +138,7 @@ pub struct ServerSessionMemoryCache {
 
 impl ServerSessionMemoryCache {
   pub fn new(size: usize) -> Box<ServerSessionMemoryCache> {
-    assert!(size > 0);
+    debug_assert!(size > 0);
     Box::new(ServerSessionMemoryCache {
       cache: collections::HashMap::new(),
       max_entries: size

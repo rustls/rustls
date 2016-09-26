@@ -166,7 +166,7 @@ pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     i.encode(&mut sub);
   }
 
-  assert!(sub.len() <= 0xff);
+  debug_assert!(sub.len() <= 0xff);
   encode_u8(sub.len() as u8, bytes);
   bytes.append(&mut sub);
 }
@@ -177,7 +177,7 @@ pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     i.encode(&mut sub);
   }
 
-  assert!(sub.len() <= 0xffff);
+  debug_assert!(sub.len() <= 0xffff);
   encode_u16(sub.len() as u16, bytes);
   bytes.append(&mut sub);
 }
@@ -188,7 +188,7 @@ pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     i.encode(&mut sub);
   }
 
-  assert!(sub.len() <= 0xffffff);
+  debug_assert!(sub.len() <= 0xffffff);
   encode_u24(sub.len() as u32, bytes);
   bytes.append(&mut sub);
 }

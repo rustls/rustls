@@ -57,7 +57,7 @@ pub struct ClientSessionMemoryCache {
 
 impl ClientSessionMemoryCache {
   pub fn new(size: usize) -> Box<ClientSessionMemoryCache> {
-    assert!(size > 0);
+    debug_assert!(size > 0);
     Box::new(ClientSessionMemoryCache {
       cache: collections::HashMap::new(),
       max_entries: size
@@ -220,7 +220,7 @@ impl ClientConfig {
      * is PACKET_OVERHEAD. */
     if let Some(x) = *mtu {
       use msgs::fragmenter;
-      assert!(x > fragmenter::PACKET_OVERHEAD);
+      debug_assert!(x > fragmenter::PACKET_OVERHEAD);
       self.mtu = Some(x - fragmenter::PACKET_OVERHEAD);
     } else {
       self.mtu = None;

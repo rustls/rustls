@@ -189,9 +189,9 @@ impl GCMMessageCipher {
       nonce_offset: [0u8; 8]
     };
 
-    assert_eq!(enc_iv.len(), 4);
-    assert_eq!(dec_iv.len(), 4);
-    assert_eq!(nonce_offset.len(), 8);
+    debug_assert_eq!(enc_iv.len(), 4);
+    debug_assert_eq!(dec_iv.len(), 4);
+    debug_assert_eq!(nonce_offset.len(), 8);
 
     ret.enc_salt.as_mut().write(enc_iv).unwrap();
     ret.dec_salt.as_mut().write(dec_iv).unwrap();

@@ -15,7 +15,7 @@ impl MessageFragmenter {
   /// include overhead (so a `max_fragment_len` of 5 will produce
   /// 10 byte packets).
   pub fn new(max_fragment_len: usize) -> MessageFragmenter {
-    assert!(max_fragment_len <= MAX_FRAGMENT_LEN);
+    debug_assert!(max_fragment_len <= MAX_FRAGMENT_LEN);
     MessageFragmenter {
       max_frag: max_fragment_len
     }

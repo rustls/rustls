@@ -33,7 +33,7 @@ impl HandshakeHash {
   /// We might be doing client auth, so need to keep a full
   /// log of the handshake.
   pub fn set_client_auth_enabled(&mut self) {
-    assert!(self.ctx.is_none()); // or we might have already discarded messages
+    debug_assert!(self.ctx.is_none()); // or we might have already discarded messages
     self.client_auth_enabled = true;
   }
 
@@ -46,7 +46,7 @@ impl HandshakeHash {
 
   /// We now know what hash function the verify_data will use.
   pub fn start_hash(&mut self, alg: &'static digest::Algorithm) {
-    assert!(self.ctx.is_none());
+    debug_assert!(self.ctx.is_none());
 
     let mut ctx = digest::Context::new(alg);
     ctx.update(&self.buffer);
@@ -95,7 +95,7 @@ impl HandshakeHash {
   /// so far.  This method only works once; it resets the buffer
   /// to empty.
   pub fn take_handshake_buf(&mut self) -> Vec<u8> {
-    assert!(self.client_auth_enabled);
+    debug_assert!(self.client_auth_enabled);
     mem::replace(&mut self.buffer, Vec::new())
   }
 }

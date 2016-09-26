@@ -332,7 +332,7 @@ impl SessionCommon {
       return;
     }
 
-    assert!(self.we_encrypting);
+    debug_assert!(self.we_encrypting);
 
     if data.len() == 0 {
       /* Don't send empty fragments. */
