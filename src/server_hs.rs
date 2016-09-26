@@ -28,7 +28,6 @@ use error::TLSError;
 use handshake::Expectation;
 
 use std::sync::Arc;
-use std::mem;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
