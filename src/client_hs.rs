@@ -297,7 +297,7 @@ pub static EXPECT_SERVER_KX: Handler = Handler {
 };
 
 fn emit_certificate(sess: &mut ClientSessionImpl) {
-  let chosen_cert = mem::replace(&mut sess.handshake_data.client_auth_cert, None);
+  let chosen_cert = sess.handshake_data.client_auth_cert.take();
 
   let cert = Message {
     typ: ContentType::Handshake,
@@ -345,7 +345,7 @@ fn emit_certverify(sess: &mut ClientSessionImpl) {
   }
 
   let message = sess.handshake_data.transcript.take_handshake_buf();
-  let key = mem::replace(&mut sess.handshake_data.client_auth_key, None).unwrap();
+  let key = sess.handshake_data.client_auth_key.take().unwrap();
   let sigalg = sess.handshake_data.client_auth_sigalg
     .clone()
     .unwrap();

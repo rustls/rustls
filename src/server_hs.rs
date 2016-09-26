@@ -483,7 +483,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnStat
 
   /* Complete key agreement, and set up encryption with the
    * resulting premaster secret. */
-  let kx = mem::replace(&mut sess.handshake_data.kx_data, None).unwrap();
+  let kx = sess.handshake_data.kx_data.take().unwrap();
   let kxd = try!(
     kx.server_complete(&client_kx.0)
     .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange completion failed".to_string()))
