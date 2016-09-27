@@ -222,3 +222,68 @@ fn server_can_get_client_cert() {
   let certs = server.get_peer_certificates();
   assert_eq!(certs, Some(get_chain()));
 }
+
+fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
+  let mut buf = Vec::new();
+  buf.resize(expect.len(), 0u8);
+  assert_eq!(expect.len(), reader.read(&mut buf).unwrap());
+  assert_eq!(expect.to_vec(), buf);
+
+  let err = reader.read(&mut buf);
+  assert!(err.is_err());
+  assert_eq!(err.err().unwrap().kind(), io::ErrorKind::ConnectionAborted);
+}
+
+#[test]
+fn server_close_notify() {
+  let mut client_config = make_client_config();
+  let mut server_config = make_server_config();
+
+  server_config.set_client_auth_roots(get_chain(), true);
+  client_config.set_single_client_cert(get_chain(), get_key());
+
+  let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+  let mut server = ServerSession::new(&Arc::new(server_config));
+
+  do_handshake(&mut client, &mut server);
+
+  // check that alerts don't overtake appdata
+  assert_eq!(12, server.write(b"from-server!").unwrap());
+  assert_eq!(12, client.write(b"from-client!").unwrap());
+  server.send_close_notify();
+
+  transfer(&mut server, &mut client);
+  client.process_new_packets().unwrap();
+  check_read_and_close(&mut client, b"from-server!");
+
+  transfer(&mut client, &mut server);
+  server.process_new_packets().unwrap();
+  check_read(&mut server, b"from-client!");
+}
+
+#[test]
+fn client_close_notify() {
+  let mut client_config = make_client_config();
+  let mut server_config = make_server_config();
+
+  server_config.set_client_auth_roots(get_chain(), true);
+  client_config.set_single_client_cert(get_chain(), get_key());
+
+  let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+  let mut server = ServerSession::new(&Arc::new(server_config));
+
+  do_handshake(&mut client, &mut server);
+
+  // check that alerts don't overtake appdata
+  assert_eq!(12, server.write(b"from-server!").unwrap());
+  assert_eq!(12, client.write(b"from-client!").unwrap());
+  client.send_close_notify();
+
+  transfer(&mut client, &mut server);
+  server.process_new_packets().unwrap();
+  check_read_and_close(&mut server, b"from-client!");
+
+  transfer(&mut server, &mut client);
+  client.process_new_packets().unwrap();
+  check_read(&mut client, b"from-server!");
+}
