@@ -140,10 +140,10 @@ impl MessageCipher for GCMMessageCipher {
     codec::put_u64(seq, &mut nonce[4..]);
     xor(&mut nonce[4..], &self.nonce_offset);
 
-    let mut buf = Vec::new();
-    buf.resize(GCM_EXPLICIT_NONCE_LEN, 0u8);
-    msg.payload.encode(&mut buf);
-    let payload_len = buf.len() - GCM_EXPLICIT_NONCE_LEN;
+    let typ = msg.typ;
+    let version = msg.version;
+    let mut buf = msg.take_payload();
+    let payload_len = buf.len();
 
     /* make room for tag */
     let tag_len = self.alg.max_overhead_len();
@@ -152,25 +152,27 @@ impl MessageCipher for GCMMessageCipher {
 
     let mut aad = Vec::new();
     codec::encode_u64(seq, &mut aad);
-    msg.typ.encode(&mut aad);
-    msg.version.encode(&mut aad);
+    typ.encode(&mut aad);
+    version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
     try!(
       ring::aead::seal_in_place(&self.enc_key,
                                 &nonce,
-                                &mut buf[GCM_EXPLICIT_NONCE_LEN..],
+                                &mut buf,
                                 tag_len,
                                 &aad)
         .map_err(|_| TLSError::General("encrypt failed".to_string()))
     );
 
-    buf[0..8].as_mut().write(&nonce[4..]).unwrap();
+    let mut result = Vec::new();
+    result.extend_from_slice(&nonce[4..]);
+    result.extend_from_slice(&buf);
 
     Ok(Message {
-      typ: msg.typ,
-      version: msg.version,
-      payload: MessagePayload::opaque(buf)
+      typ: typ,
+      version: version,
+      payload: MessagePayload::opaque(result)
     })
   }
 }
@@ -279,8 +281,10 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     codec::put_u64(seq, &mut nonce[4..]);
     xor(&mut nonce, &self.enc_offset);
 
-    let mut buf = Vec::new();
-    msg.payload.encode(&mut buf);
+    let typ = msg.typ;
+    let version = msg.version;
+
+    let mut buf = msg.take_payload();
     let payload_len = buf.len();
 
     /* make room for tag */
@@ -290,8 +294,8 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
 
     let mut aad = Vec::new();
     codec::encode_u64(seq, &mut aad);
-    msg.typ.encode(&mut aad);
-    msg.version.encode(&mut aad);
+    typ.encode(&mut aad);
+    version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
     try!(
@@ -304,8 +308,8 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     );
 
     Ok(Message {
-      typ: msg.typ,
-      version: msg.version,
+      typ: typ,
+      version: version,
       payload: MessagePayload::opaque(buf)
     })
   }

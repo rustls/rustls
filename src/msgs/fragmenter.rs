@@ -31,13 +31,14 @@ impl MessageFragmenter {
       return;
     }
 
-    let mut payload = Vec::new();
-    msg.payload.encode(&mut payload);
+    let typ = msg.typ;
+    let version = msg.version;
+    let payload = msg.take_payload();
 
     for chunk in payload.chunks(self.max_frag) {
       let cm = Message {
-        typ: msg.typ,
-        version: msg.version,
+        typ: typ,
+        version: version,
         payload: MessagePayload::opaque(chunk.to_vec())
       };
       out.push_back(cm);
