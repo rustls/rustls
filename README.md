@@ -11,6 +11,16 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 [![Coverage Status](https://coveralls.io/repos/github/ctz/rustls/badge.svg?branch=master)](https://coveralls.io/github/ctz/rustls?branch=master)
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 
+## Release history:
+
+* 0.5.0:
+  - Tickets.
+  - Coverage testing.
+  - Benchmarking.
+  - Massive performance improvements (from ~1Gbps to ~6Gbps per core).
+  - OSX support.
+  - Minor API corrections and additional testing.
+
 # Documentation
 Lives here: https://docs.rs/rustls/
 
