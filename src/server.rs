@@ -18,6 +18,12 @@ use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
 
+/// A trait for the ability to generate Session IDs, and store
+/// server session data. The keys and values are opaque.
+///
+/// Both the keys and values should be treated as
+/// **highly sensitive data**, containing enough key material
+/// to break all security of the corresponding session.
 pub trait StoresServerSessions {
   /// Generate a session ID.
   fn generate(&self) -> SessionID;
@@ -36,6 +42,7 @@ pub trait StoresServerSessions {
   fn del(&mut self, id: &SessionID) -> bool;
 }
 
+/// A trait for the ability to encrypt and decrypt tickets.
 pub trait ProducesTickets {
   /// Returns true if this implementation will encrypt/decrypt
   /// tickets.  Should return false if this is a dummy
@@ -48,7 +55,7 @@ pub trait ProducesTickets {
   /// ticket will not be useful after the given time.
   ///
   /// This lifetime must be implemented by key rolling and
-  /// erasure, not by storing a lifetime in the ticket.
+  /// erasure, *not* by storing a lifetime in the ticket.
   ///
   /// The objective is to limit damage to forward secrecy caused
   /// by tickets, not just limiting their lifetime.
@@ -56,7 +63,8 @@ pub trait ProducesTickets {
 
   /// Encrypt and authenticate `plain`, returning the resulting
   /// ticket.  Return None if `plain` cannot be encrypted for
-  /// some reason: the connection will fail with an error.
+  /// some reason: an empty ticket will be sent and the connection
+  /// will continue.
   fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>>;
 
   /// Decrypt `cipher`, validating its authenticity protection

@@ -7,6 +7,10 @@ use std::mem;
 use std::sync::Mutex;
 use ring::aead;
 
+/// This is a ProducesTickets implementation which uses
+/// any *ring* aead::Algorithm to encrypt and authentication
+/// the ticket payload.  It does not enforce any lifetime
+/// constraint.
 pub struct AEADTicketer {
   alg: &'static aead::Algorithm,
   enc: aead::SealingKey,
@@ -15,6 +19,10 @@ pub struct AEADTicketer {
 }
 
 impl AEADTicketer {
+  /// Make a new AEADTicketer using the given `alg`, `key` material
+  /// and advertised `lifetime_seconds`.  Note that `lifetime_seconds`
+  /// does not affect the lifetime of the key.  `key` must be the
+  /// right length for `alg` or this will panic.
   pub fn new_custom(alg: &'static aead::Algorithm,
                     key: &[u8],
                     lifetime_seconds: u32) -> AEADTicketer {
@@ -123,7 +131,13 @@ impl TicketSwitcher {
     }
   }
 
-  fn maybe_roll(&self) {
+  /// If it's time, demote the `current` ticketer to `previous` (so it
+  /// does no new encryptions but can do decryptions) and make a fresh
+  /// `current` ticketer.
+  ///
+  /// Calling this regularly will ensure timely key erasure.  Otherwise,
+  /// key erasure will be delayed until the next encrypt/decrypt call.
+  pub fn maybe_roll(&self) {
     let mut state = self.state.lock().unwrap();
     let now = time::get_time().sec;
 
