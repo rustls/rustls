@@ -572,7 +572,7 @@ fn emit_ticket(sess: &mut ServerSessionImpl) {
    * report an error. Send an empty one. */
   let plain = get_server_session_value(sess).get_encoding();
   let ticket = sess.config.ticketer.encrypt(&plain)
-    .unwrap_or_else(|| Vec::new());
+    .unwrap_or_else(Vec::new);
   let ticket_lifetime = sess.config.ticketer.get_lifetime();
 
   let m = Message {
