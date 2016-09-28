@@ -348,7 +348,7 @@ impl ClientSessionImpl {
   }
 
   pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
-    for ref scs in &self.config.ciphersuites {
+    for scs in &self.config.ciphersuites {
       if &scs.suite == suite {
         return Some(scs);
       }
