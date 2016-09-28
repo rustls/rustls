@@ -306,7 +306,7 @@ fn emit_certificate(sess: &mut ClientSessionImpl) {
       HandshakeMessagePayload {
         typ: HandshakeType::Certificate,
         payload: HandshakePayload::Certificate(
-          chosen_cert.unwrap_or_else(|| Vec::new())
+          chosen_cert.unwrap_or_else(Vec::new)
         )
       }
     )

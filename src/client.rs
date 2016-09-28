@@ -80,7 +80,7 @@ impl StoresClientSessions for ClientSessionMemoryCache {
   }
 
   fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
-    self.cache.get(key).map(|x| x.clone())
+    self.cache.get(key).cloned()
   }
 }
 
@@ -332,7 +332,7 @@ impl ClientSessionImpl {
   pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
     let mut ret = Vec::new();
 
-    for cs in self.config.ciphersuites.iter() {
+    for cs in &self.config.ciphersuites {
       ret.push(cs.suite);
     }
 
@@ -348,7 +348,7 @@ impl ClientSessionImpl {
   }
 
   pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
-    for ref scs in &self.config.ciphersuites {
+    for scs in &self.config.ciphersuites {
       if &scs.suite == suite {
         return Some(scs);
       }
