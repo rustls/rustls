@@ -176,7 +176,7 @@ impl StoresServerSessions for ServerSessionMemoryCache {
   }
 
   fn get(&self, id: &SessionID) -> Option<Vec<u8>> {
-    self.cache.get(&id.get_encoding()).map(|x| x.clone())
+    self.cache.get(&id.get_encoding()).cloned()
   }
 
   fn del(&mut self, id: &SessionID) -> bool {

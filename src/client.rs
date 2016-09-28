@@ -80,7 +80,7 @@ impl StoresClientSessions for ClientSessionMemoryCache {
   }
 
   fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
-    self.cache.get(key).map(|x| x.clone())
+    self.cache.get(key).cloned()
   }
 }
 
