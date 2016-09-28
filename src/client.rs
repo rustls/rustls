@@ -332,7 +332,7 @@ impl ClientSessionImpl {
   pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
     let mut ret = Vec::new();
 
-    for cs in self.config.ciphersuites.iter() {
+    for cs in &self.config.ciphersuites {
       ret.push(cs.suite);
     }
 
