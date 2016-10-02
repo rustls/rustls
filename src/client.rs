@@ -97,7 +97,7 @@ pub trait ResolvesClientCert {
   fn resolve(&self,
              acceptable_issuers: &DistinguishedNames,
              sigalgs: &SupportedSignatureAlgorithms)
-    -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>;
+    -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>;
 
   /// Return true if any certificates at all are available.
   fn has_certs(&self) -> bool;
@@ -109,7 +109,7 @@ impl ResolvesClientCert for FailResolveClientCert {
   fn resolve(&self,
              _acceptable_issuers: &DistinguishedNames,
              _sigalgs: &SupportedSignatureAlgorithms)
-    -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>
+    -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>
   {
     None
   }
@@ -119,7 +119,7 @@ impl ResolvesClientCert for FailResolveClientCert {
 
 struct AlwaysResolvesClientCert {
   chain: CertificatePayload,
-  key: Arc<Box<sign::Signer>>
+  key: Arc<Box<sign::Signer + Send + Sync>>
 }
 
 impl AlwaysResolvesClientCert {
@@ -139,7 +139,7 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
   fn resolve(&self,
              _acceptable_issuers: &DistinguishedNames,
              _sigalgs: &SupportedSignatureAlgorithms)
-    -> Option<(CertificatePayload, Arc<Box<sign::Signer>>)>
+    -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>
   {
     Some((self.chain.clone(), self.key.clone()))
   }
@@ -170,7 +170,7 @@ pub struct ClientConfig {
   pub mtu: Option<usize>,
 
   /// How to decide what client auth certificate/keys to use.
-  pub client_auth_cert_resolver: Box<ResolvesClientCert>,
+  pub client_auth_cert_resolver: Box<ResolvesClientCert + Send + Sync>,
 
   /// Whether to support RFC5077 tickets.  You must provide a working
   /// `session_persistence` member for this to have any meaningful
@@ -257,7 +257,7 @@ pub struct ClientHandshakeData {
   pub doing_client_auth: bool,
   pub client_auth_sigalg: Option<SignatureAndHashAlgorithm>,
   pub client_auth_cert: Option<CertificatePayload>,
-  pub client_auth_key: Option<Arc<Box<sign::Signer>>>
+  pub client_auth_key: Option<Arc<Box<sign::Signer + Send + Sync>>>
 }
 
 impl ClientHandshakeData {
