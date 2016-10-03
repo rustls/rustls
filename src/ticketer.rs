@@ -98,8 +98,8 @@ impl ProducesTickets for AEADTicketer {
 }
 
 struct TicketSwitcherState {
-  current: Box<ProducesTickets>,
-  previous: Option<Box<ProducesTickets>>,
+  current: Box<ProducesTickets + Send + Sync>,
+  previous: Option<Box<ProducesTickets + Send + Sync>>,
   next_switch_time: i64
 }
 
@@ -107,7 +107,7 @@ struct TicketSwitcherState {
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
 pub struct TicketSwitcher {
-  generator: fn() -> Box<ProducesTickets>,
+  generator: fn() -> Box<ProducesTickets + Send + Sync>,
   lifetime: u32,
   state: Mutex<TicketSwitcherState>
 }
@@ -117,7 +117,7 @@ impl TicketSwitcher {
   /// is used to generate new tickets.  Tickets are accepted for no
   /// longer than twice this duration.  `generator` produces a new
   /// `ProducesTickets` implementation.
-  pub fn new(lifetime: u32, generator: fn() -> Box<ProducesTickets>) -> TicketSwitcher {
+  pub fn new(lifetime: u32, generator: fn() -> Box<ProducesTickets + Send + Sync>) -> TicketSwitcher {
     TicketSwitcher {
       generator: generator,
       lifetime: lifetime,
@@ -176,14 +176,14 @@ impl ProducesTickets for TicketSwitcher {
 
 pub struct Ticketer {}
 
-fn generate_inner() -> Box<ProducesTickets> {
+fn generate_inner() -> Box<ProducesTickets + Send + Sync> {
   Box::new(AEADTicketer::new())
 }
 
 impl Ticketer {
   /// Make the recommended Ticketer.  This produces tickets
   /// with a 12 hour life and randomly generated keys.
-  pub fn new() -> Box<ProducesTickets> {
+  pub fn new() -> Box<ProducesTickets + Send + Sync> {
     Box::new(
       TicketSwitcher::new(6 * 60 * 60, generate_inner)
     )

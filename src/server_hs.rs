@@ -153,7 +153,7 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
 fn emit_server_kx(sess: &mut ServerSessionImpl,
                   sigalg: &SignatureAndHashAlgorithm,
                   curve: &NamedCurve,
-                  signer: Arc<Box<sign::Signer>>) -> Result<(), TLSError> {
+                  signer: Arc<Box<sign::Signer + Send + Sync>>) -> Result<(), TLSError> {
   let kx = try!({
     let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
     scs.start_server_kx(curve)

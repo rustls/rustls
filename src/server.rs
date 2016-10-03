@@ -86,7 +86,7 @@ pub trait ResolvesCert {
              server_name: Option<&ServerNameRequest>,
              sigalgs: &SupportedSignatureAlgorithms,
              ec_curves: &EllipticCurveList,
-             ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer>>), ()>;
+             ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -103,13 +103,13 @@ pub struct ServerConfig {
   pub ignore_client_order: bool,
 
   /// How to store client sessions.
-  pub session_storage: Mutex<Box<StoresServerSessions>>,
+  pub session_storage: Mutex<Box<StoresServerSessions + Send>>,
 
   /// How to produce tickets.
-  pub ticketer: Box<ProducesTickets>,
+  pub ticketer: Box<ProducesTickets + Send + Sync>,
 
   /// How to choose a server cert and key.
-  pub cert_resolver: Box<ResolvesCert>,
+  pub cert_resolver: Box<ResolvesCert + Send + Sync>,
 
   /// Protocol names we support, most preferred first.
   /// If empty we don't do ALPN at all.
@@ -202,7 +202,7 @@ impl ResolvesCert for FailResolveChain {
              _server_name: Option<&ServerNameRequest>,
              _sigalgs: &SupportedSignatureAlgorithms,
              _ec_curves: &EllipticCurveList,
-             _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer>>), ()> {
+             _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
     Err(())
   }
 }
@@ -210,7 +210,7 @@ impl ResolvesCert for FailResolveChain {
 /// Something which always resolves to the same cert chain.
 struct AlwaysResolvesChain {
   chain: CertificatePayload,
-  key: Arc<Box<sign::Signer>>
+  key: Arc<Box<sign::Signer + Send + Sync>>
 }
 
 impl AlwaysResolvesChain {
@@ -230,7 +230,7 @@ impl ResolvesCert for AlwaysResolvesChain {
              _server_name: Option<&ServerNameRequest>,
              _sigalgs: &SupportedSignatureAlgorithms,
              _ec_curves: &EllipticCurveList,
-             _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer>>), ()> {
+             _ec_pointfmts: &ECPointFormatList) -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
     Ok((self.chain.clone(), self.key.clone()))
   }
 }
