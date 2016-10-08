@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# This script fetches, builds, and runs the TryTLS
+# TLS test tool against rustls.  The rustls-TryTLS test stub is
+# by Joachim Viide -- https://github.com/HowNetWorks/trytls-rustls-stub
+
+set -xe
+
+if [ ! -e trytls/ ] ; then
+  pip install --system --prefix trytls/ trytls
+fi
+
+export PYTHONPATH=trytls/lib/python2.7/site-packages/
+./trytls/bin/trytls https ../admin/covbin/trytls_shim || true
+
+# nb, currently expected to fail:
+# - tlsfun.de has a now-untrusted CA due to misissuance (StartCom)
+# - {cve,cve2}.freakattack.com no longer resolves
