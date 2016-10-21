@@ -7,7 +7,7 @@
 set -xe
 
 if [ ! -e trytls/ ] ; then
-  pip install --system --prefix trytls/ trytls
+  pip install --prefix trytls/ trytls
 fi
 
 export PYTHONPATH=trytls/lib/python2.7/site-packages/
