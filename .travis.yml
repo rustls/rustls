@@ -9,6 +9,7 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./admin/build-kcov ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then pip install --upgrade pip ; fi
 script:
   - cargo build
   - RUST_BACKTRACE=1 cargo test
