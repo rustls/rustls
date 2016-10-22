@@ -117,12 +117,4 @@ fn apple() {
     .unwrap();
 }
 
-#[test]
-fn wordpress() {
-  connect("wordpress.com")
-    .expect("HTTP/1.1 200 OK")
-    .go()
-    .unwrap();
-}
-
 }
