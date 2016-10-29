@@ -8,6 +8,7 @@ pub enum ProtocolVersion {
     TLSv1_0,
     TLSv1_1,
     TLSv1_2,
+    TLSv1_3,
     Unknown(u16),
 }
 
@@ -29,6 +30,7 @@ impl Codec for ProtocolVersion {
             0x0301 => ProtocolVersion::TLSv1_0,
             0x0302 => ProtocolVersion::TLSv1_1,
             0x0303 => ProtocolVersion::TLSv1_2,
+            0x0304 => ProtocolVersion::TLSv1_3,
             x => ProtocolVersion::Unknown(x),
         })
     }
@@ -42,6 +44,7 @@ impl ProtocolVersion {
             ProtocolVersion::TLSv1_0 => 0x0301,
             ProtocolVersion::TLSv1_1 => 0x0302,
             ProtocolVersion::TLSv1_2 => 0x0303,
+            ProtocolVersion::TLSv1_3 => 0x0304,
             ProtocolVersion::Unknown(v) => v,
         }
     }
@@ -295,6 +298,8 @@ pub enum HandshakeType {
     ClientHello,
     ServerHello,
     NewSessionTicket,
+    HelloRetryRequest,
+    EncryptedExtensions,
     Certificate,
     ServerKeyExchange,
     CertificateRequest,
@@ -304,6 +309,7 @@ pub enum HandshakeType {
     Finished,
     CertificateURL,
     CertificateStatus,
+    KeyUpdate,
     Unknown(u8),
 }
 
@@ -324,6 +330,8 @@ impl Codec for HandshakeType {
             0x01 => HandshakeType::ClientHello,
             0x02 => HandshakeType::ServerHello,
             0x04 => HandshakeType::NewSessionTicket,
+            0x06 => HandshakeType::HelloRetryRequest,
+            0x08 => HandshakeType::EncryptedExtensions,
             0x0b => HandshakeType::Certificate,
             0x0c => HandshakeType::ServerKeyExchange,
             0x0d => HandshakeType::CertificateRequest,
@@ -333,6 +341,7 @@ impl Codec for HandshakeType {
             0x14 => HandshakeType::Finished,
             0x15 => HandshakeType::CertificateURL,
             0x16 => HandshakeType::CertificateStatus,
+            0x18 => HandshakeType::KeyUpdate,
             x => HandshakeType::Unknown(x),
         })
     }
@@ -345,6 +354,8 @@ impl HandshakeType {
             HandshakeType::ClientHello => 0x01,
             HandshakeType::ServerHello => 0x02,
             HandshakeType::NewSessionTicket => 0x04,
+            HandshakeType::HelloRetryRequest => 0x06,
+            HandshakeType::EncryptedExtensions => 0x08,
             HandshakeType::Certificate => 0x0b,
             HandshakeType::ServerKeyExchange => 0x0c,
             HandshakeType::CertificateRequest => 0x0d,
@@ -354,6 +365,7 @@ impl HandshakeType {
             HandshakeType::Finished => 0x14,
             HandshakeType::CertificateURL => 0x15,
             HandshakeType::CertificateStatus => 0x16,
+            HandshakeType::KeyUpdate => 0x18,
             HandshakeType::Unknown(v) => v,
         }
     }
@@ -420,10 +432,17 @@ pub enum AlertDescription {
     ProtocolVersion,
     InsufficientSecurity,
     InternalError,
+    InappropriateFallback,
     UserCanceled,
     NoRenegotiation,
+    MissingExtension,
     UnsupportedExtension,
+    CertificateUnobtainable,
     UnrecognisedName,
+    BadCertificateStatusResponse,
+    BadCertificateHashValue,
+    UnknownPSKIdentity,
+    CertificateRequired,
     Unknown(u8),
 }
 
@@ -462,10 +481,17 @@ impl Codec for AlertDescription {
             0x46 => AlertDescription::ProtocolVersion,
             0x47 => AlertDescription::InsufficientSecurity,
             0x50 => AlertDescription::InternalError,
+            0x56 => AlertDescription::InappropriateFallback,
             0x5a => AlertDescription::UserCanceled,
             0x64 => AlertDescription::NoRenegotiation,
+            0x6d => AlertDescription::MissingExtension,
             0x6e => AlertDescription::UnsupportedExtension,
+            0x6f => AlertDescription::CertificateUnobtainable,
             0x70 => AlertDescription::UnrecognisedName,
+            0x71 => AlertDescription::BadCertificateStatusResponse,
+            0x72 => AlertDescription::BadCertificateHashValue,
+            0x73 => AlertDescription::UnknownPSKIdentity,
+            0x74 => AlertDescription::CertificateRequired,
             x => AlertDescription::Unknown(x),
         })
     }
@@ -496,10 +522,17 @@ impl AlertDescription {
             AlertDescription::ProtocolVersion => 0x46,
             AlertDescription::InsufficientSecurity => 0x47,
             AlertDescription::InternalError => 0x50,
+            AlertDescription::InappropriateFallback => 0x56,
             AlertDescription::UserCanceled => 0x5a,
             AlertDescription::NoRenegotiation => 0x64,
+            AlertDescription::MissingExtension => 0x6d,
             AlertDescription::UnsupportedExtension => 0x6e,
+            AlertDescription::CertificateUnobtainable => 0x6f,
             AlertDescription::UnrecognisedName => 0x70,
+            AlertDescription::BadCertificateStatusResponse => 0x71,
+            AlertDescription::BadCertificateHashValue => 0x72,
+            AlertDescription::UnknownPSKIdentity => 0x73,
+            AlertDescription::CertificateRequired => 0x74,
             AlertDescription::Unknown(v) => v,
         }
     }
@@ -564,6 +597,13 @@ pub enum ExtensionType {
     Padding,
     ExtendedMasterSecret,
     SessionTicket,
+    KeyShare,
+    PreSharedKey,
+    EarlyData,
+    SupportedVersions,
+    Cookie,
+    PSKKeyExchangeModes,
+    TicketEarlyDataInfo,
     NextProtocolNegotiation,
     ChannelId,
     RenegotiationInfo,
@@ -603,6 +643,13 @@ impl Codec for ExtensionType {
             0x0015 => ExtensionType::Padding,
             0x0017 => ExtensionType::ExtendedMasterSecret,
             0x0023 => ExtensionType::SessionTicket,
+            0x0028 => ExtensionType::KeyShare,
+            0x0029 => ExtensionType::PreSharedKey,
+            0x002a => ExtensionType::EarlyData,
+            0x002b => ExtensionType::SupportedVersions,
+            0x002c => ExtensionType::Cookie,
+            0x002d => ExtensionType::PSKKeyExchangeModes,
+            0x002e => ExtensionType::TicketEarlyDataInfo,
             0x3374 => ExtensionType::NextProtocolNegotiation,
             0x754f => ExtensionType::ChannelId,
             0xff01 => ExtensionType::RenegotiationInfo,
@@ -634,6 +681,13 @@ impl ExtensionType {
             ExtensionType::Padding => 0x0015,
             ExtensionType::ExtendedMasterSecret => 0x0017,
             ExtensionType::SessionTicket => 0x0023,
+            ExtensionType::KeyShare => 0x0028,
+            ExtensionType::PreSharedKey => 0x0029,
+            ExtensionType::EarlyData => 0x002a,
+            ExtensionType::SupportedVersions => 0x002b,
+            ExtensionType::Cookie => 0x002c,
+            ExtensionType::PSKKeyExchangeModes => 0x002d,
+            ExtensionType::TicketEarlyDataInfo => 0x002e,
             ExtensionType::NextProtocolNegotiation => 0x3374,
             ExtensionType::ChannelId => 0x754f,
             ExtensionType::RenegotiationInfo => 0xff01,
@@ -799,6 +853,67 @@ impl NamedCurve {
             NamedCurve::arbitrary_explicit_prime_curves => 0xff01,
             NamedCurve::arbitrary_explicit_char2_curves => 0xff02,
             NamedCurve::Unknown(v) => v,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum NamedGroup {
+    secp256r1,
+    secp384r1,
+    secp521r1,
+    X25519,
+    X448,
+    FFDHE2048,
+    FFDHE3072,
+    FFDHE4096,
+    FFDHE6144,
+    FFDHE8192,
+    Unknown(u16),
+}
+
+impl Codec for NamedGroup {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u16(self.get_u16(), bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<NamedGroup> {
+        let u = read_u16(r);
+
+        if u.is_none() {
+            return None;
+        }
+
+        Some(match u.unwrap() {
+            0x0017 => NamedGroup::secp256r1,
+            0x0018 => NamedGroup::secp384r1,
+            0x0019 => NamedGroup::secp521r1,
+            0x001d => NamedGroup::X25519,
+            0x001e => NamedGroup::X448,
+            0x0100 => NamedGroup::FFDHE2048,
+            0x0101 => NamedGroup::FFDHE3072,
+            0x0102 => NamedGroup::FFDHE4096,
+            0x0103 => NamedGroup::FFDHE6144,
+            0x0104 => NamedGroup::FFDHE8192,
+            x => NamedGroup::Unknown(x),
+        })
+    }
+}
+
+impl NamedGroup {
+    pub fn get_u16(&self) -> u16 {
+        match *self {
+            NamedGroup::secp256r1 => 0x0017,
+            NamedGroup::secp384r1 => 0x0018,
+            NamedGroup::secp521r1 => 0x0019,
+            NamedGroup::X25519 => 0x001d,
+            NamedGroup::X448 => 0x001e,
+            NamedGroup::FFDHE2048 => 0x0100,
+            NamedGroup::FFDHE3072 => 0x0101,
+            NamedGroup::FFDHE4096 => 0x0102,
+            NamedGroup::FFDHE6144 => 0x0103,
+            NamedGroup::FFDHE8192 => 0x0104,
+            NamedGroup::Unknown(v) => v,
         }
     }
 }
@@ -992,6 +1107,11 @@ pub enum CipherSuite {
     TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256,
     TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256,
     TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+    TLS13_AES_128_GCM_SHA256,
+    TLS13_AES_256_GCM_SHA384,
+    TLS13_CHACHA20_POLY1305_SHA256,
+    TLS13_AES_128_CCM_SHA256,
+    TLS13_AES_128_CCM_8_SHA256,
     TLS_ECDH_ECDSA_WITH_NULL_SHA,
     TLS_ECDH_ECDSA_WITH_RC4_128_SHA,
     TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
@@ -1375,6 +1495,11 @@ impl Codec for CipherSuite {
             0x00c4 => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256,
             0x00c5 => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256,
             0x00ff => CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+            0x1301 => CipherSuite::TLS13_AES_128_GCM_SHA256,
+            0x1302 => CipherSuite::TLS13_AES_256_GCM_SHA384,
+            0x1303 => CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+            0x1304 => CipherSuite::TLS13_AES_128_CCM_SHA256,
+            0x1305 => CipherSuite::TLS13_AES_128_CCM_8_SHA256,
             0xc001 => CipherSuite::TLS_ECDH_ECDSA_WITH_NULL_SHA,
             0xc002 => CipherSuite::TLS_ECDH_ECDSA_WITH_RC4_128_SHA,
             0xc003 => CipherSuite::TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
@@ -1750,6 +1875,11 @@ impl CipherSuite {
             CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c4,
             CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c5,
             CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
+            CipherSuite::TLS13_AES_128_GCM_SHA256 => 0x1301,
+            CipherSuite::TLS13_AES_256_GCM_SHA384 => 0x1302,
+            CipherSuite::TLS13_CHACHA20_POLY1305_SHA256 => 0x1303,
+            CipherSuite::TLS13_AES_128_CCM_SHA256 => 0x1304,
+            CipherSuite::TLS13_AES_128_CCM_8_SHA256 => 0x1305,
             CipherSuite::TLS_ECDH_ECDSA_WITH_NULL_SHA => 0xc001,
             CipherSuite::TLS_ECDH_ECDSA_WITH_RC4_128_SHA => 0xc002,
             CipherSuite::TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc003,
@@ -2048,6 +2178,147 @@ impl ECCurveType {
             ECCurveType::ExplicitChar2 => 0x02,
             ECCurveType::NamedCurve => 0x03,
             ECCurveType::Unknown(v) => v,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum SignatureScheme {
+    RSA_PKCS1_SHA1,
+    RSA_PKCS1_SHA256,
+    ECDSA_NISTP256_SHA256,
+    RSA_PKCS1_SHA384,
+    ECDSA_NISTP384_SHA384,
+    RSA_PKCS1_SHA512,
+    ECDSA_NISTP521_SHA512,
+    RSA_PSS_SHA256,
+    RSA_PSS_SHA384,
+    RSA_PSS_SHA512,
+    ED25519,
+    ED448,
+    Unknown(u16),
+}
+
+impl Codec for SignatureScheme {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u16(self.get_u16(), bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<SignatureScheme> {
+        let u = read_u16(r);
+
+        if u.is_none() {
+            return None;
+        }
+
+        Some(match u.unwrap() {
+            0x0201 => SignatureScheme::RSA_PKCS1_SHA1,
+            0x0401 => SignatureScheme::RSA_PKCS1_SHA256,
+            0x0403 => SignatureScheme::ECDSA_NISTP256_SHA256,
+            0x0501 => SignatureScheme::RSA_PKCS1_SHA384,
+            0x0503 => SignatureScheme::ECDSA_NISTP384_SHA384,
+            0x0601 => SignatureScheme::RSA_PKCS1_SHA512,
+            0x0603 => SignatureScheme::ECDSA_NISTP521_SHA512,
+            0x0804 => SignatureScheme::RSA_PSS_SHA256,
+            0x0805 => SignatureScheme::RSA_PSS_SHA384,
+            0x0806 => SignatureScheme::RSA_PSS_SHA512,
+            0x0807 => SignatureScheme::ED25519,
+            0x0808 => SignatureScheme::ED448,
+            x => SignatureScheme::Unknown(x),
+        })
+    }
+}
+
+impl SignatureScheme {
+    pub fn get_u16(&self) -> u16 {
+        match *self {
+            SignatureScheme::RSA_PKCS1_SHA1 => 0x0201,
+            SignatureScheme::RSA_PKCS1_SHA256 => 0x0401,
+            SignatureScheme::ECDSA_NISTP256_SHA256 => 0x0403,
+            SignatureScheme::RSA_PKCS1_SHA384 => 0x0501,
+            SignatureScheme::ECDSA_NISTP384_SHA384 => 0x0503,
+            SignatureScheme::RSA_PKCS1_SHA512 => 0x0601,
+            SignatureScheme::ECDSA_NISTP521_SHA512 => 0x0603,
+            SignatureScheme::RSA_PSS_SHA256 => 0x0804,
+            SignatureScheme::RSA_PSS_SHA384 => 0x0805,
+            SignatureScheme::RSA_PSS_SHA512 => 0x0806,
+            SignatureScheme::ED25519 => 0x0807,
+            SignatureScheme::ED448 => 0x0808,
+            SignatureScheme::Unknown(v) => v,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum PSKKeyExchangeMode {
+    PSK_KE,
+    PSK_DHE_KE,
+    Unknown(u8),
+}
+
+impl Codec for PSKKeyExchangeMode {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u8(self.get_u8(), bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<PSKKeyExchangeMode> {
+        let u = read_u8(r);
+
+        if u.is_none() {
+            return None;
+        }
+
+        Some(match u.unwrap() {
+            0x00 => PSKKeyExchangeMode::PSK_KE,
+            0x01 => PSKKeyExchangeMode::PSK_DHE_KE,
+            x => PSKKeyExchangeMode::Unknown(x),
+        })
+    }
+}
+
+impl PSKKeyExchangeMode {
+    pub fn get_u8(&self) -> u8 {
+        match *self {
+            PSKKeyExchangeMode::PSK_KE => 0x00,
+            PSKKeyExchangeMode::PSK_DHE_KE => 0x01,
+            PSKKeyExchangeMode::Unknown(v) => v,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum KeyUpdateRequest {
+    UpdateNotRequested,
+    UpdateRequested,
+    Unknown(u8),
+}
+
+impl Codec for KeyUpdateRequest {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u8(self.get_u8(), bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<KeyUpdateRequest> {
+        let u = read_u8(r);
+
+        if u.is_none() {
+            return None;
+        }
+
+        Some(match u.unwrap() {
+            0x00 => KeyUpdateRequest::UpdateNotRequested,
+            0x01 => KeyUpdateRequest::UpdateRequested,
+            x => KeyUpdateRequest::Unknown(x),
+        })
+    }
+}
+
+impl KeyUpdateRequest {
+    pub fn get_u8(&self) -> u8 {
+        match *self {
+            KeyUpdateRequest::UpdateNotRequested => 0x00,
+            KeyUpdateRequest::UpdateRequested => 0x01,
+            KeyUpdateRequest::Unknown(v) => v,
         }
     }
 }
