@@ -5,7 +5,8 @@ use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random};
 use msgs::handshake::{ClientExtension, ServerExtension};
-use msgs::handshake::{SupportedSignatureAlgorithms, SupportedMandatedSignatureAlgorithms};
+use msgs::handshake::{SupportedSignatureSchemes, SupportedMandatedSignatureSchemes};
+use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{EllipticCurveList, SupportedCurves};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
@@ -90,8 +91,7 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     exts.push(ClientExtension::make_sni(&sess.handshake_data.dns_name));
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::EllipticCurves(EllipticCurveList::supported()));
-    let verify_algs = SupportedSignatureAlgorithms::supported_verify();
-    exts.push(ClientExtension::SignatureAlgorithms(verify_algs));
+    exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
 
     if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
@@ -342,13 +342,13 @@ fn emit_certverify(sess: &mut ClientSessionImpl) {
 
     let message = sess.handshake_data.transcript.take_handshake_buf();
     let key = sess.handshake_data.client_auth_key.take().unwrap();
-    let sigalg = sess.handshake_data
-        .client_auth_sigalg
+    let sigscheme = sess.handshake_data
+        .client_auth_sigscheme
         .clone()
         .unwrap();
-    let sig = key.sign(&sigalg.hash, &message)
+    let sig = key.sign(sigscheme, &message)
         .expect("client auth signing failed unexpectedly");
-    let body = DigitallySignedStruct::new(&sigalg, sig);
+    let body = DigitallySignedStruct::new(sigscheme, sig);
 
     let m = Message {
         typ: ContentType::Handshake,
@@ -412,19 +412,19 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> Result<Co
     }
 
     let maybe_certkey =
-        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &certreq.sigalgs);
+        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &certreq.sigschemes);
 
     let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
-    let maybe_sigalg = scs.resolve_sig_alg(&certreq.sigalgs);
+    let maybe_sigscheme = scs.resolve_sig_scheme(&certreq.sigschemes);
 
-    if maybe_certkey.is_some() && maybe_sigalg.is_some() {
+    if maybe_certkey.is_some() && maybe_sigscheme.is_some() {
         let (cert, key) = maybe_certkey.unwrap();
-        info!("Attempting client auth, will use {:?}", maybe_sigalg.as_ref().unwrap());
+        info!("Attempting client auth, will use {:?}", maybe_sigscheme.as_ref().unwrap());
         sess.handshake_data.client_auth_cert = Some(cert);
         sess.handshake_data.client_auth_key = Some(key);
-        sess.handshake_data.client_auth_sigalg = maybe_sigalg;
+        sess.handshake_data.client_auth_sigscheme = maybe_sigscheme;
     } else {
-        info!("Client auth requested but no cert/sigalg available");
+        info!("Client auth requested but no cert/sigscheme available");
     }
 
     Ok(ConnState::ExpectServerHelloDone)
@@ -483,10 +483,10 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
         // Check the signature is compatible with the ciphersuite.
         let sig = sess.handshake_data.server_kx_sig.as_ref().unwrap();
         let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
-        if scs.sign != sig.alg.sign {
+        if scs.sign != sig.scheme.sign() {
             let error_message =
                 format!("peer signed kx with wrong algorithm (got {:?} expect {:?})",
-                                  sig.alg.sign, scs.sign);
+                                  sig.scheme.sign(), scs.sign);
             return Err(TLSError::PeerMisbehavedError(error_message));
         }
 

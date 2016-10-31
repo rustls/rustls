@@ -1,6 +1,7 @@
-use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, NamedCurve};
-use msgs::handshake::{SignatureAndHashAlgorithm, KeyExchangeAlgorithm};
-use msgs::handshake::SupportedSignatureAlgorithms;
+use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme, NamedCurve};
+use msgs::handshake::KeyExchangeAlgorithm;
+use msgs::handshake::SupportedSignatureSchemes;
+use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
 use util;
@@ -152,35 +153,25 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Resolve a single supported `SignatureAndHashAlgorithm` from the
-    /// offered `SupportedSignatureAlgorithms`.  If we return None,
+    /// Resolve a single supported `SignatureScheme` from the
+    /// offered `SupportedSignatureSchemes`.  If we return None,
     /// the handshake terminates.
-    pub fn resolve_sig_alg(&self,
-                           sigalgs: &SupportedSignatureAlgorithms)
-                           -> Option<SignatureAndHashAlgorithm> {
-        let our_preference = vec![// Prefer the designated hash algorithm of this suite, for
-                                  // security level consistency.
-                                  SignatureAndHashAlgorithm {
-                                      hash: self.hash,
-                                      sign: self.sign,
-                                  },
+    pub fn resolve_sig_scheme(&self,
+                              offered: &SupportedSignatureSchemes)
+                              -> Option<SignatureScheme> {
+        let our_preference = vec![
+      // Prefer the designated hash algorithm of this suite, for
+      // security level consistency.
+      SignatureScheme::make(self.sign, self.hash),
 
-                                  // Then prefer the right sign algorithm, with the best hashes
-                                  // first.
-                                  SignatureAndHashAlgorithm {
-                                      hash: HashAlgorithm::SHA512,
-                                      sign: self.sign,
-                                  },
-                                  SignatureAndHashAlgorithm {
-                                      hash: HashAlgorithm::SHA384,
-                                      sign: self.sign,
-                                  },
-                                  SignatureAndHashAlgorithm {
-                                      hash: HashAlgorithm::SHA256,
-                                      sign: self.sign,
-                                  }];
+      // Then prefer the right sign algorithm, with the best hashes
+      // first.
+      SignatureScheme::make(self.sign, HashAlgorithm::SHA512),
+      SignatureScheme::make(self.sign, HashAlgorithm::SHA384),
+      SignatureScheme::make(self.sign, HashAlgorithm::SHA256),
+    ];
 
-        util::first_in_both(our_preference.as_slice(), sigalgs.as_slice())
+        util::first_in_both(our_preference.as_slice(), offered.as_slice())
     }
 
     pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
@@ -319,25 +310,31 @@ mod test {
 
     #[test]
     fn test_client_pref() {
-        let client = vec![CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                          CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384];
-        let server = vec![&super::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-                          &super::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+        let client = vec![
+      CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+      CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    ];
+        let server = vec![
+      &super::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+      &super::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    ];
         let chosen = super::choose_ciphersuite_preferring_client(&client, &server);
         assert!(chosen.is_some());
-        assert_eq!(chosen.unwrap(),
-                   &super::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+        assert_eq!(chosen.unwrap(), &super::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
     }
 
     #[test]
     fn test_server_pref() {
-        let client = vec![CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                          CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384];
-        let server = vec![&super::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-                          &super::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+        let client = vec![
+      CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+      CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    ];
+        let server = vec![
+      &super::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+      &super::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    ];
         let chosen = super::choose_ciphersuite_preferring_server(&client, &server);
         assert!(chosen.is_some());
-        assert_eq!(chosen.unwrap(),
-                   &super::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384);
+        assert_eq!(chosen.unwrap(), &super::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384);
     }
 }

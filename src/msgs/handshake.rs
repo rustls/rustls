@@ -1,6 +1,7 @@
 use msgs::enums::{ProtocolVersion, HandshakeType};
 use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedCurve};
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
+use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use msgs::enums::ClientCertificateType;
 use msgs::enums::ECCurveType;
 use msgs::base::{Payload, PayloadU8, PayloadU16};
@@ -221,59 +222,98 @@ impl SupportedCurves for EllipticCurveList {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SignatureAndHashAlgorithm {
-    pub hash: HashAlgorithm,
-    pub sign: SignatureAlgorithm,
+declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
+
+pub trait DecomposedSignatureScheme {
+    fn sign(&self) -> SignatureAlgorithm;
+    fn hash(&self) -> HashAlgorithm;
+    fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme;
 }
 
-impl Codec for SignatureAndHashAlgorithm {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.hash.encode(bytes);
-        self.sign.encode(bytes);
+impl DecomposedSignatureScheme for SignatureScheme {
+    fn sign(&self) -> SignatureAlgorithm {
+        match *self {
+            SignatureScheme::RSA_PKCS1_SHA1 => SignatureAlgorithm::RSA,
+            SignatureScheme::RSA_PKCS1_SHA256 => SignatureAlgorithm::RSA,
+            SignatureScheme::RSA_PKCS1_SHA384 => SignatureAlgorithm::RSA,
+            SignatureScheme::RSA_PKCS1_SHA512 => SignatureAlgorithm::RSA,
+            SignatureScheme::RSA_PSS_SHA256 => SignatureAlgorithm::RSA,
+            SignatureScheme::RSA_PSS_SHA384 => SignatureAlgorithm::RSA,
+            SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            SignatureScheme::ECDSA_NISTP256_SHA256 => SignatureAlgorithm::ECDSA,
+            SignatureScheme::ECDSA_NISTP384_SHA384 => SignatureAlgorithm::ECDSA,
+            SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
+            _ => SignatureAlgorithm::Unknown(0),
+        }
     }
 
-    fn read(r: &mut Reader) -> Option<SignatureAndHashAlgorithm> {
-        let hash = try_ret!(HashAlgorithm::read(r));
-        let sign = try_ret!(SignatureAlgorithm::read(r));
+    fn hash(&self) -> HashAlgorithm {
+        match *self {
+            SignatureScheme::RSA_PKCS1_SHA1 => HashAlgorithm::SHA1,
+            SignatureScheme::RSA_PKCS1_SHA256 => HashAlgorithm::SHA256,
+            SignatureScheme::RSA_PKCS1_SHA384 => HashAlgorithm::SHA384,
+            SignatureScheme::RSA_PKCS1_SHA512 => HashAlgorithm::SHA512,
+            SignatureScheme::RSA_PSS_SHA256 => HashAlgorithm::SHA256,
+            SignatureScheme::RSA_PSS_SHA384 => HashAlgorithm::SHA384,
+            SignatureScheme::RSA_PSS_SHA512 => HashAlgorithm::SHA512,
+            SignatureScheme::ECDSA_NISTP256_SHA256 => HashAlgorithm::SHA256,
+            SignatureScheme::ECDSA_NISTP384_SHA384 => HashAlgorithm::SHA384,
+            SignatureScheme::ECDSA_NISTP521_SHA512 => HashAlgorithm::SHA512,
+            _ => HashAlgorithm::NONE,
+        }
+    }
 
-        Some(SignatureAndHashAlgorithm {
-            hash: hash,
-            sign: sign,
-        })
+    fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme {
+        use msgs::enums::SignatureAlgorithm::{RSA, ECDSA};
+        use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
+
+        match (alg, hash) {
+            (RSA, SHA1) => SignatureScheme::RSA_PKCS1_SHA1,
+            (RSA, SHA256) => SignatureScheme::RSA_PKCS1_SHA256,
+            (RSA, SHA384) => SignatureScheme::RSA_PKCS1_SHA384,
+            (RSA, SHA512) => SignatureScheme::RSA_PKCS1_SHA512,
+            (ECDSA, SHA256) => SignatureScheme::ECDSA_NISTP256_SHA256,
+            (ECDSA, SHA384) => SignatureScheme::ECDSA_NISTP384_SHA384,
+            (ECDSA, SHA512) => SignatureScheme::ECDSA_NISTP521_SHA512,
+            (_, _) => unreachable!(),
+        }
     }
 }
 
-declare_u16_vec!(SupportedSignatureAlgorithms, SignatureAndHashAlgorithm);
-
-pub trait SupportedMandatedSignatureAlgorithms {
-    fn mandated() -> SupportedSignatureAlgorithms;
-    fn supported_verify() -> SupportedSignatureAlgorithms;
+pub trait SupportedMandatedSignatureSchemes {
+    fn mandated() -> SupportedSignatureSchemes;
+    fn supported_verify() -> SupportedSignatureSchemes;
 }
 
-impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
-    /// What SupportedSignatureAlgorithms are hardcoded in the RFC.
+impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
+    /// What SupportedSignatureSchemes are hardcoded in the TLS1.2 RFC.
     /// Yes, you cannot avoid SHA1 in standard TLS.
-    fn mandated() -> SupportedSignatureAlgorithms {
+    fn mandated() -> SupportedSignatureSchemes {
         vec![
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::DSA },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA }
+      SignatureScheme::RSA_PKCS1_SHA1,
     ]
     }
 
     /// Supported signature verification algorithms in decreasing order of expected security.
-    fn supported_verify() -> SupportedSignatureAlgorithms {
+    fn supported_verify() -> SupportedSignatureSchemes {
         vec![
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::ECDSA },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: SignatureAlgorithm::ECDSA },
+      /* FIXME: ed448 */
+      SignatureScheme::ED25519,
 
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: SignatureAlgorithm::RSA },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::RSA },
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: SignatureAlgorithm::RSA },
+      /* FIXME: ECDSA-P521-SHA512 */
+      SignatureScheme::ECDSA_NISTP384_SHA384,
+      SignatureScheme::ECDSA_NISTP256_SHA256,
 
-      /* Leave the truly crap ones for last */
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
+      /* FIXME: PSS
+      SignatureScheme::RSA_PSS_SHA512,
+      SignatureScheme::RSA_PSS_SHA384,
+      SignatureScheme::RSA_PSS_SHA256,
+      */
+
+      SignatureScheme::RSA_PKCS1_SHA512,
+      SignatureScheme::RSA_PKCS1_SHA384,
+      SignatureScheme::RSA_PKCS1_SHA256,
+      SignatureScheme::RSA_PKCS1_SHA1,
     ]
     }
 }
@@ -382,7 +422,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
 pub enum ClientExtension {
     ECPointFormats(ECPointFormatList),
     EllipticCurves(EllipticCurveList),
-    SignatureAlgorithms(SupportedSignatureAlgorithms),
+    SignatureAlgorithms(SupportedSignatureSchemes),
     Heartbeat(HeartbeatMode),
     ServerName(ServerNameRequest),
     SessionTicketRequest,
@@ -433,17 +473,15 @@ impl Codec for ClientExtension {
         let len = try_ret!(codec::read_u16(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
-        let result = match typ {
+        Some(match typ {
             ExtensionType::ECPointFormats => {
                 ClientExtension::ECPointFormats(try_ret!(ECPointFormatList::read(&mut sub)))
             }
             ExtensionType::EllipticCurves => {
                 ClientExtension::EllipticCurves(try_ret!(EllipticCurveList::read(&mut sub)))
             }
-            ExtensionType::SignatureAlgorithms => {
-                let sig_algs = try_ret!(SupportedSignatureAlgorithms::read(&mut sub));
-                ClientExtension::SignatureAlgorithms(sig_algs)
-            }
+            ExtensionType::SignatureAlgorithms =>
+        ClientExtension::SignatureAlgorithms(try_ret!(SupportedSignatureSchemes::read(&mut sub))),
             ExtensionType::Heartbeat => {
                 ClientExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub)))
             }
@@ -461,9 +499,7 @@ impl Codec for ClientExtension {
                 ClientExtension::Protocols(try_ret!(ProtocolNameList::read(&mut sub)))
             }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
-        };
-
-        Some(result)
+        })
     }
 }
 
@@ -631,7 +667,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureAlgorithms> {
+    pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureSchemes> {
         let ext = try_ret!(self.find_extension(ExtensionType::SignatureAlgorithms));
         match *ext {
             ClientExtension::SignatureAlgorithms(ref req) => Some(req),
@@ -665,6 +701,74 @@ impl ClientHelloPayload {
 
     pub fn get_ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
+    }
+}
+
+#[derive(Debug)]
+pub enum HelloRetryExtension {
+    KeyShare(NamedGroup),
+    Cookie(PayloadU16),
+    Unknown(UnknownExtension),
+}
+
+impl HelloRetryExtension {
+    pub fn get_type(&self) -> ExtensionType {
+        match *self {
+            HelloRetryExtension::KeyShare(_) => ExtensionType::KeyShare,
+            HelloRetryExtension::Cookie(_) => ExtensionType::Cookie,
+            HelloRetryExtension::Unknown(ref r) => r.typ,
+        }
+    }
+}
+
+impl Codec for HelloRetryExtension {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.get_type().encode(bytes);
+
+        let mut sub: Vec<u8> = Vec::new();
+        match *self {
+            HelloRetryExtension::KeyShare(ref r) => r.encode(&mut sub),
+            HelloRetryExtension::Cookie(ref r) => r.encode(&mut sub),
+            HelloRetryExtension::Unknown(ref r) => r.encode(&mut sub),
+        }
+
+        codec::encode_u16(sub.len() as u16, bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<HelloRetryExtension> {
+        let typ = try_ret!(ExtensionType::read(r));
+        let len = try_ret!(codec::read_u16(r)) as usize;
+        let mut sub = try_ret!(r.sub(len));
+
+        Some(match typ {
+            ExtensionType::KeyShare => {
+                HelloRetryExtension::KeyShare(try_ret!(NamedGroup::read(&mut sub)))
+            }
+            ExtensionType::Heartbeat => {
+                HelloRetryExtension::Cookie(try_ret!(PayloadU16::read(&mut sub)))
+            }
+            _ => HelloRetryExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct HelloRetryRequest {
+    pub server_version: ProtocolVersion,
+    pub extensions: Vec<HelloRetryExtension>,
+}
+
+impl Codec for HelloRetryRequest {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.server_version.encode(bytes);
+        codec::encode_vec_u16(bytes, &self.extensions);
+    }
+
+    fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
+        Some(HelloRetryRequest {
+            server_version: try_ret!(ProtocolVersion::read(r)),
+            extensions: try_ret!(codec::read_vec_u16::<HelloRetryExtension>(r)),
+        })
     }
 }
 
@@ -795,14 +899,14 @@ impl Codec for ECParameters {
 
 #[derive(Debug, Clone)]
 pub struct DigitallySignedStruct {
-    pub alg: SignatureAndHashAlgorithm,
+    pub scheme: SignatureScheme,
     pub sig: PayloadU16,
 }
 
 impl DigitallySignedStruct {
-    pub fn new(alg: &SignatureAndHashAlgorithm, sig: Vec<u8>) -> DigitallySignedStruct {
+    pub fn new(scheme: SignatureScheme, sig: Vec<u8>) -> DigitallySignedStruct {
         DigitallySignedStruct {
-            alg: *alg,
+            scheme: scheme,
             sig: PayloadU16::new(sig),
         }
     }
@@ -810,16 +914,16 @@ impl DigitallySignedStruct {
 
 impl Codec for DigitallySignedStruct {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.alg.encode(bytes);
+        self.scheme.encode(bytes);
         self.sig.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<DigitallySignedStruct> {
-        let alg = try_ret!(SignatureAndHashAlgorithm::read(r));
+        let scheme = try_ret!(SignatureScheme::read(r));
         let sig = try_ret!(PayloadU16::read(r));
 
         Some(DigitallySignedStruct {
-            alg: alg,
+            scheme: scheme,
             sig: sig,
         })
     }
@@ -954,6 +1058,9 @@ impl ServerKeyExchangePayload {
     }
 }
 
+// -- EncryptedExtensions (TLS1.3 only) --
+declare_u16_vec!(EncryptedExtensions, ServerExtension);
+
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
 pub type DistinguishedName = PayloadU16;
@@ -962,25 +1069,25 @@ declare_u16_vec!(DistinguishedNames, DistinguishedName);
 #[derive(Debug)]
 pub struct CertificateRequestPayload {
     pub certtypes: ClientCertificateTypes,
-    pub sigalgs: SupportedSignatureAlgorithms,
+    pub sigschemes: SupportedSignatureSchemes,
     pub canames: DistinguishedNames,
 }
 
 impl Codec for CertificateRequestPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.certtypes.encode(bytes);
-        self.sigalgs.encode(bytes);
+        self.sigschemes.encode(bytes);
         self.canames.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<CertificateRequestPayload> {
         let certtypes = try_ret!(ClientCertificateTypes::read(r));
-        let sigalgs = try_ret!(SupportedSignatureAlgorithms::read(r));
+        let sigschemes = try_ret!(SupportedSignatureSchemes::read(r));
         let canames = try_ret!(DistinguishedNames::read(r));
 
         Some(CertificateRequestPayload {
             certtypes: certtypes,
-            sigalgs: sigalgs,
+            sigschemes: sigschemes,
             canames: canames,
         })
     }
@@ -1024,6 +1131,7 @@ pub enum HandshakePayload {
     HelloRequest,
     ClientHello(ClientHelloPayload),
     ServerHello(ServerHelloPayload),
+    HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificatePayload),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
@@ -1031,6 +1139,8 @@ pub enum HandshakePayload {
     ServerHelloDone,
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
+    EncryptedExtensions(EncryptedExtensions),
+    KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
     Unknown(Payload),
 }
@@ -1041,6 +1151,7 @@ impl HandshakePayload {
             HandshakePayload::HelloRequest => {}
             HandshakePayload::ClientHello(ref x) => x.encode(bytes),
             HandshakePayload::ServerHello(ref x) => x.encode(bytes),
+            HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
             HandshakePayload::Certificate(ref x) => x.encode(bytes),
             HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
             HandshakePayload::ServerHelloDone => {}
@@ -1048,6 +1159,8 @@ impl HandshakePayload {
             HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
             HandshakePayload::CertificateVerify(ref x) => x.encode(bytes),
             HandshakePayload::NewSessionTicket(ref x) => x.encode(bytes),
+            HandshakePayload::EncryptedExtensions(ref x) => x.encode(bytes),
+            HandshakePayload::KeyUpdate(ref x) => x.encode(bytes),
             HandshakePayload::Finished(ref x) => x.encode(bytes),
             HandshakePayload::Unknown(ref x) => x.encode(bytes),
         }
@@ -1085,6 +1198,9 @@ impl Codec for HandshakeMessagePayload {
             HandshakeType::ServerHello => {
                 HandshakePayload::ServerHello(try_ret!(ServerHelloPayload::read(&mut sub)))
             }
+            HandshakeType::HelloRetryRequest => {
+                HandshakePayload::HelloRetryRequest(try_ret!(HelloRetryRequest::read(&mut sub)))
+            }
             HandshakeType::Certificate => {
                 HandshakePayload::Certificate(try_ret!(CertificatePayload::read(&mut sub)))
             }
@@ -1101,6 +1217,12 @@ impl Codec for HandshakeMessagePayload {
             }
             HandshakeType::NewSessionTicket =>
         HandshakePayload::NewSessionTicket(try_ret!(NewSessionTicketPayload::read(&mut sub))),
+            HandshakeType::EncryptedExtensions => {
+                HandshakePayload::EncryptedExtensions(try_ret!(EncryptedExtensions::read(&mut sub)))
+            }
+            HandshakeType::KeyUpdate => {
+                HandshakePayload::KeyUpdate(try_ret!(KeyUpdateRequest::read(&mut sub)))
+            }
             HandshakeType::Finished => {
                 HandshakePayload::Finished(try_ret!(Payload::read(&mut sub)))
             }

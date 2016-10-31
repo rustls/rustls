@@ -1,4 +1,5 @@
-use msgs::enums::{HashAlgorithm, SignatureAlgorithm};
+use msgs::enums::{HashAlgorithm, SignatureAlgorithm, SignatureScheme};
+use msgs::handshake::DecomposedSignatureScheme;
 use untrusted;
 use ring;
 use ring::signature;
@@ -8,7 +9,7 @@ use key;
 /// A thing that can sign a message.
 pub trait Signer {
     /// Signs `message`, hashing it with `hash_alg` first.
-    fn sign(&self, hash_alg: &HashAlgorithm, message: &[u8]) -> Result<Vec<u8>, ()>;
+    fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
@@ -28,12 +29,12 @@ impl RSASigner {
 }
 
 impl Signer for RSASigner {
-    fn sign(&self, hash_alg: &HashAlgorithm, message: &[u8]) -> Result<Vec<u8>, ()> {
+    fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()> {
         let mut sig = vec![0; self.key.public_modulus_len()];
-        let pad = match hash_alg {
-            &HashAlgorithm::SHA256 => &signature::RSA_PKCS1_SHA256,
-            &HashAlgorithm::SHA384 => &signature::RSA_PKCS1_SHA384,
-            &HashAlgorithm::SHA512 => &signature::RSA_PKCS1_SHA512,
+        let pad = match scheme.hash() {
+            HashAlgorithm::SHA256 => &signature::RSA_PKCS1_SHA256,
+            HashAlgorithm::SHA384 => &signature::RSA_PKCS1_SHA384,
+            HashAlgorithm::SHA512 => &signature::RSA_PKCS1_SHA512,
             _ => unreachable!(),
         };
 

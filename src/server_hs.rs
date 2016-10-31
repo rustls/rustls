@@ -1,20 +1,19 @@
 use msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use msgs::enums::{Compression, NamedCurve, ECPointFormat, CipherSuite};
 use msgs::enums::{ExtensionType, AlertDescription};
-use msgs::enums::ClientCertificateType;
+use msgs::enums::{ClientCertificateType, SignatureScheme};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::Payload;
-use msgs::handshake::{HandshakePayload, SupportedSignatureAlgorithms};
+use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use msgs::handshake::ConvertProtocolNameList;
-use msgs::handshake::SignatureAndHashAlgorithm;
 use msgs::handshake::{EllipticCurveList, SupportedCurves, ClientExtension};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
 use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload};
-use msgs::handshake::SupportedMandatedSignatureAlgorithms;
+use msgs::handshake::SupportedMandatedSignatureSchemes;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
@@ -152,7 +151,7 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
 }
 
 fn emit_server_kx(sess: &mut ServerSessionImpl,
-                  sigalg: &SignatureAndHashAlgorithm,
+                  sigscheme: SignatureScheme,
                   curve: &NamedCurve,
                   signer: Arc<Box<sign::Signer + Send + Sync>>)
                   -> Result<(), TLSError> {
@@ -169,13 +168,13 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
     secdh.encode(&mut msg);
 
     let sig = try!(
-    signer.sign(&sigalg.hash, &msg)
+    signer.sign(sigscheme, &msg)
     .map_err(|_| TLSError::General("signing failed".to_string()))
   );
 
     let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
         params: secdh,
-        dss: DigitallySignedStruct::new(sigalg, sig),
+        dss: DigitallySignedStruct::new(sigscheme, sig),
     });
 
     let m = Message {
@@ -203,7 +202,7 @@ fn emit_certificate_req(sess: &mut ServerSessionImpl) {
     let cr = CertificateRequestPayload {
         certtypes: vec![ ClientCertificateType::RSASign,
                      ClientCertificateType::ECDSASign ],
-        sigalgs: SupportedSignatureAlgorithms::supported_verify(),
+        sigschemes: SupportedSignatureSchemes::supported_verify(),
         canames: names,
     };
 
@@ -294,11 +293,11 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     // Save their Random.
     client_hello.random.write_slice(&mut sess.handshake_data.randoms.client);
 
-    let default_sigalgs_ext = SupportedSignatureAlgorithms::default();
+    let default_sigschemes_ext = SupportedSignatureSchemes::default();
 
     let sni_ext = client_hello.get_sni_extension();
-    let sigalgs_ext = client_hello.get_sigalgs_extension()
-        .unwrap_or(&default_sigalgs_ext);
+    let sigschemes_ext = client_hello.get_sigalgs_extension()
+        .unwrap_or(&default_sigschemes_ext);
     let eccurves_ext = try!(client_hello.get_eccurves_extension()
                           .ok_or_else(|| incompatible(sess, "client didn't describe ec curves")));
     let ecpoints_ext = try!(client_hello.get_ecpoints_extension()
@@ -306,7 +305,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
 
     debug!("we got a clienthello {:?}", client_hello);
     debug!("sni {:?}", sni_ext);
-    debug!("sigalgs {:?}", sigalgs_ext);
+    debug!("sig schemes {:?}", sigschemes_ext);
     debug!("eccurves {:?}", eccurves_ext);
     debug!("ecpoints {:?}", ecpoints_ext);
 
@@ -318,7 +317,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
 
     // Choose a certificate.
     let maybe_cert_key =
-        sess.config.cert_resolver.resolve(sni_ext, sigalgs_ext, eccurves_ext, ecpoints_ext);
+        sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext, eccurves_ext, ecpoints_ext);
     if maybe_cert_key.is_err() {
         sess.common.send_fatal_alert(AlertDescription::AccessDenied);
         return Err(TLSError::General("no server certificate chain resolved".to_string()));
@@ -407,10 +406,10 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     }
 
     // Now we have chosen a ciphersuite, we can make kx decisions.
-    let sigalg = try!(
+    let sigscheme = try!(
     sess.handshake_data.ciphersuite.as_ref().unwrap()
-      .resolve_sig_alg(sigalgs_ext)
-      .ok_or_else(|| incompatible(sess, "no supported sigalg"))
+      .resolve_sig_scheme(sigschemes_ext)
+      .ok_or_else(|| incompatible(sess, "no supported sig scheme"))
   );
     let eccurve = try!(
     util::first_in_both(EllipticCurveList::supported().as_slice(),
@@ -427,7 +426,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
 
     try!(emit_server_hello(sess, client_hello));
     emit_certificate(sess);
-    try!(emit_server_kx(sess, &sigalg, &eccurve, private_key));
+    try!(emit_server_kx(sess, sigscheme, &eccurve, private_key));
     emit_certificate_req(sess);
     emit_server_hello_done(sess);
 

@@ -108,7 +108,7 @@ fn client_auth_requested_but_unsupported() {
 
     server.client()
         .expect_log("Got CertificateRequest")
-        .expect_log("Client auth requested but no cert/sigalg available")
+        .expect_log("Client auth requested but no cert/sigscheme available")
         .expect("no client certificate available\n")
         .expect("Ciphers common between both SSL end points:\n")
         .go();
@@ -124,7 +124,7 @@ fn client_auth_required_but_unsupported() {
 
     server.client()
         .expect_log("Got CertificateRequest")
-        .expect_log("Client auth requested but no cert/sigalg available")
+        .expect_log("Client auth requested but no cert/sigscheme available")
         .expect("TLS error: AlertReceived(HandshakeFailure)")
         .fails()
         .go();
