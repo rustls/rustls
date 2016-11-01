@@ -2185,6 +2185,7 @@ impl ECCurveType {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum SignatureScheme {
     RSA_PKCS1_SHA1,
+    ECDSA_SHA1_Legacy,
     RSA_PKCS1_SHA256,
     ECDSA_NISTP256_SHA256,
     RSA_PKCS1_SHA384,
@@ -2213,6 +2214,7 @@ impl Codec for SignatureScheme {
 
         Some(match u.unwrap() {
             0x0201 => SignatureScheme::RSA_PKCS1_SHA1,
+            0x0203 => SignatureScheme::ECDSA_SHA1_Legacy,
             0x0401 => SignatureScheme::RSA_PKCS1_SHA256,
             0x0403 => SignatureScheme::ECDSA_NISTP256_SHA256,
             0x0501 => SignatureScheme::RSA_PKCS1_SHA384,
@@ -2233,6 +2235,7 @@ impl SignatureScheme {
     pub fn get_u16(&self) -> u16 {
         match *self {
             SignatureScheme::RSA_PKCS1_SHA1 => 0x0201,
+            SignatureScheme::ECDSA_SHA1_Legacy => 0x0203,
             SignatureScheme::RSA_PKCS1_SHA256 => 0x0401,
             SignatureScheme::ECDSA_NISTP256_SHA256 => 0x0403,
             SignatureScheme::RSA_PKCS1_SHA384 => 0x0501,

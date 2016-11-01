@@ -240,6 +240,7 @@ impl DecomposedSignatureScheme for SignatureScheme {
             SignatureScheme::RSA_PSS_SHA256 => SignatureAlgorithm::RSA,
             SignatureScheme::RSA_PSS_SHA384 => SignatureAlgorithm::RSA,
             SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            SignatureScheme::ECDSA_SHA1_Legacy => SignatureAlgorithm::ECDSA,
             SignatureScheme::ECDSA_NISTP256_SHA256 => SignatureAlgorithm::ECDSA,
             SignatureScheme::ECDSA_NISTP384_SHA384 => SignatureAlgorithm::ECDSA,
             SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
@@ -256,6 +257,7 @@ impl DecomposedSignatureScheme for SignatureScheme {
             SignatureScheme::RSA_PSS_SHA256 => HashAlgorithm::SHA256,
             SignatureScheme::RSA_PSS_SHA384 => HashAlgorithm::SHA384,
             SignatureScheme::RSA_PSS_SHA512 => HashAlgorithm::SHA512,
+            SignatureScheme::ECDSA_SHA1_Legacy => HashAlgorithm::SHA1,
             SignatureScheme::ECDSA_NISTP256_SHA256 => HashAlgorithm::SHA256,
             SignatureScheme::ECDSA_NISTP384_SHA384 => HashAlgorithm::SHA384,
             SignatureScheme::ECDSA_NISTP521_SHA512 => HashAlgorithm::SHA512,
@@ -313,6 +315,8 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
       SignatureScheme::RSA_PKCS1_SHA512,
       SignatureScheme::RSA_PKCS1_SHA384,
       SignatureScheme::RSA_PKCS1_SHA256,
+
+      SignatureScheme::ECDSA_SHA1_Legacy,
       SignatureScheme::RSA_PKCS1_SHA1,
     ]
     }
