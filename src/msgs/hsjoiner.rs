@@ -55,7 +55,7 @@ impl HandshakeJoiner {
 
         let mut count = 0;
         while self.buf_contains_message() {
-            if !self.deframe_one() {
+            if !self.deframe_one(msg.version) {
                 return None;
             }
 
@@ -77,10 +77,10 @@ impl HandshakeJoiner {
     /// the back of our `frames` deque inside a normal `Message`.
     ///
     /// Returns false if the stream is desynchronised beyond repair.
-    fn deframe_one(&mut self) -> bool {
+    fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
         let used = {
             let mut rd = codec::Reader::init(&self.buf);
-            let payload = HandshakeMessagePayload::read(&mut rd);
+            let payload = HandshakeMessagePayload::read_version(&mut rd, version);
 
             if payload.is_none() {
                 return false;
@@ -88,7 +88,7 @@ impl HandshakeJoiner {
 
             let m = Message {
                 typ: ContentType::Handshake,
-                version: ProtocolVersion::TLSv1_2,
+                version: version,
                 payload: MessagePayload::Handshake(payload.unwrap()),
             };
 
@@ -146,11 +146,10 @@ mod tests {
         // Check we split two handshake messages within one PDU.
         let mut hj = HandshakeJoiner::new();
 
-        // two HelloRequests
         let msg = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::opaque(b"\x00\x00\x00\x00\x00\x00\x00\x00"),
+            payload: MessagePayload::opaque(b"\x00\x00\x00\x00\x00\x00\x00\x00"), /* two HelloRequests. */
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -175,11 +174,10 @@ mod tests {
         // Check obvious crap payloads are reported as errors, not panics.
         let mut hj = HandshakeJoiner::new();
 
-        // short ClientHello
         let msg = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::opaque(b"\x01\x00\x00\x02\xff\xff"),
+            payload: MessagePayload::opaque(b"\x01\x00\x00\x02\xff\xff"), // short ClientHello.
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -225,15 +223,18 @@ mod tests {
         assert_eq!(hj.take_message(msg), Some(1));
         assert_eq!(hj.empty(), true);
 
-        let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Finished,
-                payload: HandshakePayload::Finished(Payload::new(payload)),
-            }),
-        };
+      typ: ContentType::Handshake,
+      version: ProtocolVersion::TLSv1_2,
+      payload: MessagePayload::Handshake(
+        HandshakeMessagePayload {
+          typ: HandshakeType::Finished,
+          payload: HandshakePayload::Finished(
+            Payload::new(b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec())
+          )
+        }
+      )
+    };
 
         pop_eq(&expect, &mut hj);
     }

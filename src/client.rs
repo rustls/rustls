@@ -1,4 +1,4 @@
-use msgs::enums::CipherSuite;
+use msgs::enums::{CipherSuite, ProtocolVersion};
 use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
@@ -8,10 +8,12 @@ use msgs::enums::SignatureScheme;
 use msgs::enums::ContentType;
 use msgs::message::Message;
 use msgs::persist;
+use key_schedule::KeySchedule;
 use client_hs;
 use hash_hs;
 use verify;
 use sign;
+use suites;
 use error::TLSError;
 use key;
 
@@ -265,6 +267,7 @@ pub struct ClientHandshakeData {
     pub client_auth_sigscheme: Option<SignatureScheme>,
     pub client_auth_cert: Option<CertificatePayload>,
     pub client_auth_key: Option<Arc<Box<sign::Signer + Send + Sync>>>,
+    pub offered_key_shares: Vec<suites::KeyExchange>,
 }
 
 impl ClientHandshakeData {
@@ -287,6 +290,7 @@ impl ClientHandshakeData {
             client_auth_sigscheme: None,
             client_auth_cert: None,
             client_auth_key: None,
+            offered_key_shares: Vec::new(),
         }
     }
 }
@@ -294,8 +298,10 @@ impl ClientHandshakeData {
 #[derive(PartialEq)]
 pub enum ConnState {
     ExpectServerHello,
+    ExpectEncryptedExtensions,
     ExpectCertificate,
     ExpectServerKX,
+    ExpectCertificateVerify,
     ExpectServerHelloDoneOrCertRequest,
     ExpectServerHelloDone,
     ExpectNewTicket,
@@ -313,6 +319,7 @@ pub struct ClientSessionImpl {
     pub secrets: Option<SessionSecrets>,
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
+    pub key_schedule: Option<KeySchedule>,
     pub state: ConnState,
 }
 
@@ -324,6 +331,7 @@ impl ClientSessionImpl {
             secrets: None,
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu),
+            key_schedule: None,
             state: ConnState::ExpectServerHello,
         };
 
@@ -348,9 +356,9 @@ impl ClientSessionImpl {
         ret
     }
 
-    pub fn start_encryption(&mut self) {
+    pub fn start_encryption_tls12(&mut self) {
         let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-        self.common.start_encryption(scs, self.secrets.as_ref().unwrap());
+        self.common.start_encryption_tls12(scs, self.secrets.as_ref().unwrap());
     }
 
     pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
@@ -388,13 +396,15 @@ impl ClientSessionImpl {
             msg = dm;
         }
 
+        println!("incoming {:?}", msg);
+
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.common.handshake_joiner.want_message(&msg) {
-            try!(
-        self.common.handshake_joiner.take_message(msg)
-        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
-      );
+            try!(self.common
+                .handshake_joiner
+                .take_message(msg)
+                .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake)));
             return self.process_new_handshake_messages();
         }
 
@@ -447,8 +457,12 @@ impl ClientSessionImpl {
         }
 
         let handler = self.get_handler();
-        try!(handler.expect.check_message(&msg)
-         .map_err(|err| { self.queue_unexpected_alert(); err }));
+        try!(handler.expect
+            .check_message(&msg)
+            .map_err(|err| {
+                self.queue_unexpected_alert();
+                err
+            }));
         let new_state = try!((handler.handle)(self, msg));
         self.state = new_state;
 
@@ -463,8 +477,10 @@ impl ClientSessionImpl {
     fn get_handler(&self) -> &'static client_hs::Handler {
         match self.state {
             ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
+            ConnState::ExpectEncryptedExtensions => &client_hs::EXPECT_ENCRYPTED_EXTENSIONS,
             ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
             ConnState::ExpectServerKX => &client_hs::EXPECT_SERVER_KX,
+            ConnState::ExpectCertificateVerify => &client_hs::EXPECT_CERTIFICATE_VERIFY,
             ConnState::ExpectServerHelloDoneOrCertRequest => &client_hs::EXPECT_DONE_OR_CERTREQ,
             ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
             ConnState::ExpectNewTicket => &client_hs::EXPECT_NEW_TICKET,

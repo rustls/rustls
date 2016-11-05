@@ -28,16 +28,18 @@ impl MessagePayload {
         }
     }
 
-    pub fn decode_given_type(&self, typ: &ContentType) -> Option<MessagePayload> {
+    pub fn decode_given_type(&self,
+                             typ: ContentType,
+                             vers: ProtocolVersion)
+                             -> Option<MessagePayload> {
         if let MessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
-            let parsed = match *typ {
+            let parsed = match typ {
                 ContentType::Alert => {
                     Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r))))
                 }
-                ContentType::Handshake => {
-                    Some(MessagePayload::Handshake(try_ret!(HandshakeMessagePayload::read(&mut r))))
-                }
+                ContentType::Handshake =>
+          Some(MessagePayload::Handshake(try_ret!(HandshakeMessagePayload::read_version(&mut r, vers)))),
                 ContentType::ChangeCipherSpec =>
           Some(MessagePayload::ChangeCipherSpec(try_ret!(ChangeCipherSpecPayload::read(&mut r)))),
                 _ => None,
@@ -145,7 +147,7 @@ impl Message {
             return true;
         }
 
-        if let Some(x) = self.payload.decode_given_type(&self.typ) {
+        if let Some(x) = self.payload.decode_given_type(self.typ, self.version) {
             self.payload = x;
             true
         } else {

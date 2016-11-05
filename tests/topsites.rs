@@ -31,7 +31,7 @@ mod online {
     .verbose()
     .expect("HTTP/1.1 ") // currently 302 redirects
     .expect_log("Using ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")
-    .expect_log("ECDHE curve is ECParameters { curve_type: NamedCurve, named_curve: X25519 }")
+    .expect_log("ECDHE curve is ECParameters { curve_type: NamedCurve, named_group: X25519 }")
     .go()
     .unwrap();
     }

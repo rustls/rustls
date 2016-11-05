@@ -1,5 +1,5 @@
 use msgs::enums::{ProtocolVersion, HandshakeType};
-use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedCurve};
+use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat};
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
 use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use msgs::enums::ClientCertificateType;
@@ -210,15 +210,15 @@ impl SupportedPointFormats for ECPointFormatList {
     }
 }
 
-declare_u16_vec!(EllipticCurveList, NamedCurve);
+declare_u16_vec!(NamedGroups, NamedGroup);
 
-pub trait SupportedCurves {
-    fn supported() -> EllipticCurveList;
+pub trait SupportedGroups {
+    fn supported() -> NamedGroups;
 }
 
-impl SupportedCurves for EllipticCurveList {
-    fn supported() -> EllipticCurveList {
-        vec![ NamedCurve::X25519, NamedCurve::secp384r1, NamedCurve::secp256r1 ]
+impl SupportedGroups for NamedGroups {
+    fn supported() -> NamedGroups {
+        vec![ NamedGroup::X25519, NamedGroup::secp384r1, NamedGroup::secp256r1 ]
     }
 }
 
@@ -306,11 +306,10 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
       SignatureScheme::ECDSA_NISTP384_SHA384,
       SignatureScheme::ECDSA_NISTP256_SHA256,
 
-      /* FIXME: PSS
+      /* FIXME: PSS is a lie! */
       SignatureScheme::RSA_PSS_SHA512,
       SignatureScheme::RSA_PSS_SHA384,
       SignatureScheme::RSA_PSS_SHA256,
-      */
 
       SignatureScheme::RSA_PKCS1_SHA512,
       SignatureScheme::RSA_PKCS1_SHA384,
@@ -422,16 +421,55 @@ impl ConvertProtocolNameList for ProtocolNameList {
     }
 }
 
+// --- TLS 1.3 Key shares ---
+#[derive(Debug)]
+pub struct KeyShareEntry {
+    pub group: NamedGroup,
+    pub payload: PayloadU16,
+}
+
+impl KeyShareEntry {
+    pub fn new(group: NamedGroup, payload: &[u8]) -> KeyShareEntry {
+        KeyShareEntry {
+            group: group,
+            payload: PayloadU16::new(payload.to_vec()),
+        }
+    }
+}
+
+impl Codec for KeyShareEntry {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.group.encode(bytes);
+        self.payload.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<KeyShareEntry> {
+        let group = try_ret!(NamedGroup::read(r));
+        let payload = try_ret!(PayloadU16::read(r));
+
+        Some(KeyShareEntry {
+            group: group,
+            payload: payload,
+        })
+    }
+}
+
+declare_u16_vec!(KeyShareEntries, KeyShareEntry);
+
+declare_u8_vec!(ProtocolVersions, ProtocolVersion);
+
 #[derive(Debug)]
 pub enum ClientExtension {
     ECPointFormats(ECPointFormatList),
-    EllipticCurves(EllipticCurveList),
+    NamedGroups(NamedGroups),
     SignatureAlgorithms(SupportedSignatureSchemes),
     Heartbeat(HeartbeatMode),
     ServerName(ServerNameRequest),
     SessionTicketRequest,
     SessionTicketOffer(Payload),
     Protocols(ProtocolNameList),
+    SupportedVersions(ProtocolVersions),
+    KeyShare(KeyShareEntries),
     Unknown(UnknownExtension),
 }
 
@@ -439,13 +477,15 @@ impl ClientExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
-            ClientExtension::EllipticCurves(_) => ExtensionType::EllipticCurves,
+            ClientExtension::NamedGroups(_) => ExtensionType::EllipticCurves,
             ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             ClientExtension::Heartbeat(_) => ExtensionType::Heartbeat,
             ClientExtension::ServerName(_) => ExtensionType::ServerName,
             ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket,
             ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
             ClientExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
+            ClientExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
+            ClientExtension::KeyShare(_) => ExtensionType::KeyShare,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -458,13 +498,15 @@ impl Codec for ClientExtension {
         let mut sub: Vec<u8> = Vec::new();
         match *self {
             ClientExtension::ECPointFormats(ref r) => r.encode(&mut sub),
-            ClientExtension::EllipticCurves(ref r) => r.encode(&mut sub),
+            ClientExtension::NamedGroups(ref r) => r.encode(&mut sub),
             ClientExtension::SignatureAlgorithms(ref r) => r.encode(&mut sub),
             ClientExtension::Heartbeat(ref r) => r.encode(&mut sub),
             ClientExtension::ServerName(ref r) => r.encode(&mut sub),
             ClientExtension::SessionTicketRequest => (),
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
+            ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
+            ClientExtension::KeyShare(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -482,7 +524,7 @@ impl Codec for ClientExtension {
                 ClientExtension::ECPointFormats(try_ret!(ECPointFormatList::read(&mut sub)))
             }
             ExtensionType::EllipticCurves => {
-                ClientExtension::EllipticCurves(try_ret!(EllipticCurveList::read(&mut sub)))
+                ClientExtension::NamedGroups(try_ret!(NamedGroups::read(&mut sub)))
             }
             ExtensionType::SignatureAlgorithms =>
         ClientExtension::SignatureAlgorithms(try_ret!(SupportedSignatureSchemes::read(&mut sub))),
@@ -501,6 +543,12 @@ impl Codec for ClientExtension {
             }
             ExtensionType::ALProtocolNegotiation => {
                 ClientExtension::Protocols(try_ret!(ProtocolNameList::read(&mut sub)))
+            }
+            ExtensionType::SupportedVersions => {
+                ClientExtension::SupportedVersions(try_ret!(ProtocolVersions::read(&mut sub)))
+            }
+            ExtensionType::KeyShare => {
+                ClientExtension::KeyShare(try_ret!(KeyShareEntries::read(&mut sub)))
             }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -527,6 +575,7 @@ pub enum ServerExtension {
     SessionTicketAcknowledgement,
     RenegotiationInfo(PayloadU8),
     Protocols(ProtocolNameList),
+    KeyShare(KeyShareEntry),
     Unknown(UnknownExtension),
 }
 
@@ -539,6 +588,7 @@ impl ServerExtension {
             ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket,
             ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             ServerExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
+            ServerExtension::KeyShare(_) => ExtensionType::KeyShare,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -556,6 +606,7 @@ impl Codec for ServerExtension {
             ServerExtension::SessionTicketAcknowledgement => (),
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
+            ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -582,6 +633,9 @@ impl Codec for ServerExtension {
             }
             ExtensionType::ALProtocolNegotiation => {
                 ServerExtension::Protocols(try_ret!(ProtocolNameList::read(&mut sub)))
+            }
+            ExtensionType::KeyShare => {
+                ServerExtension::KeyShare(try_ret!(KeyShareEntry::read(&mut sub)))
             }
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -679,10 +733,10 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_eccurves_extension(&self) -> Option<&EllipticCurveList> {
+    pub fn get_namedgroups_extension(&self) -> Option<&NamedGroups> {
         let ext = try_ret!(self.find_extension(ExtensionType::EllipticCurves));
         match *ext {
-            ClientExtension::EllipticCurves(ref req) => Some(req),
+            ClientExtension::NamedGroups(ref req) => Some(req),
             _ => None,
         }
     }
@@ -786,13 +840,22 @@ pub struct ServerHelloPayload {
     pub extensions: Vec<ServerExtension>,
 }
 
+fn is_tls13(vers: ProtocolVersion) -> bool {
+    vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::Unknown(0x7f12)
+}
+
 impl Codec for ServerHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.server_version.encode(bytes);
         self.random.encode(bytes);
-        self.session_id.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        self.compression_method.encode(bytes);
+
+        if is_tls13(self.server_version) {
+            self.cipher_suite.encode(bytes);
+        } else {
+            self.session_id.encode(bytes);
+            self.cipher_suite.encode(bytes);
+            self.compression_method.encode(bytes);
+        }
 
         if !self.extensions.is_empty() {
             codec::encode_vec_u16(bytes, &self.extensions);
@@ -800,12 +863,23 @@ impl Codec for ServerHelloPayload {
     }
 
     fn read(r: &mut Reader) -> Option<ServerHelloPayload> {
+        let version = try_ret!(ProtocolVersion::read(r));
+        let random = try_ret!(Random::read(r));
+
+        let (session_id, suite, compression) = if is_tls13(version) {
+            (SessionID::empty(), try_ret!(CipherSuite::read(r)), Compression::Null)
+        } else {
+            (try_ret!(SessionID::read(r)),
+             try_ret!(CipherSuite::read(r)),
+             try_ret!(Compression::read(r)))
+        };
+
         let mut ret = ServerHelloPayload {
-            server_version: try_ret!(ProtocolVersion::read(r)),
-            random: try_ret!(Random::read(r)),
-            session_id: try_ret!(SessionID::read(r)),
-            cipher_suite: try_ret!(CipherSuite::read(r)),
-            compression_method: try_ret!(Compression::read(r)),
+            server_version: version,
+            random: random,
+            session_id: session_id,
+            cipher_suite: suite,
+            compression_method: compression,
             extensions: Vec::new(),
         };
 
@@ -846,6 +920,14 @@ impl ServerHelloPayload {
             _ => None,
         }
     }
+
+    pub fn get_key_share(&self) -> Option<&KeyShareEntry> {
+        let ext = try_ret!(self.find_extension(ExtensionType::KeyShare));
+        match *ext {
+            ServerExtension::KeyShare(ref share) => Some(share),
+            _ => None,
+        }
+    }
 }
 
 pub type ASN1Cert = key::Certificate; // PayloadU24;
@@ -861,8 +943,103 @@ impl Codec for CertificatePayload {
     }
 }
 
+// TLS1.3 changes the Certificate payload encoding.
+// That's annoying. It means the parsing is not
+// context-free any more.
+
+#[derive(Debug)]
+pub enum CertificateExtension {
+    Unknown(UnknownExtension),
+}
+
+impl CertificateExtension {
+    pub fn get_type(&self) -> ExtensionType {
+        match *self {
+            CertificateExtension::Unknown(ref r) => r.typ,
+        }
+    }
+}
+
+impl Codec for CertificateExtension {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.get_type().encode(bytes);
+
+        let mut sub: Vec<u8> = Vec::new();
+        match *self {
+            CertificateExtension::Unknown(ref r) => r.encode(&mut sub),
+        }
+
+        codec::encode_u16(sub.len() as u16, bytes);
+        bytes.append(&mut sub);
+    }
+
+    fn read(r: &mut Reader) -> Option<CertificateExtension> {
+        let typ = try_ret!(ExtensionType::read(r));
+        let len = try_ret!(codec::read_u16(r)) as usize;
+        let mut sub = try_ret!(r.sub(len));
+
+        Some(match typ {
+            _ => CertificateExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
+        })
+    }
+}
+
+declare_u16_vec!(CertificateExtensions, CertificateExtension);
+
+#[derive(Debug)]
+pub struct CertificateEntry {
+    pub cert: ASN1Cert,
+    pub exts: CertificateExtensions,
+}
+
+impl Codec for CertificateEntry {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cert.encode(bytes);
+        self.exts.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<CertificateEntry> {
+        Some(CertificateEntry {
+            cert: try_ret!(ASN1Cert::read(r)),
+            exts: try_ret!(CertificateExtensions::read(r)),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct CertificatePayloadTLS13 {
+    pub request_context: PayloadU8,
+    pub list: Vec<CertificateEntry>,
+}
+
+impl Codec for CertificatePayloadTLS13 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.request_context.encode(bytes);
+        codec::encode_vec_u24(bytes, &self.list);
+    }
+
+    fn read(r: &mut Reader) -> Option<CertificatePayloadTLS13> {
+        println!("CertificatePayloadTLS13: read");
+        Some(CertificatePayloadTLS13 {
+            request_context: try_ret!(PayloadU8::read(r)),
+            list: try_ret!(codec::read_vec_u24::<CertificateEntry>(r)),
+        })
+    }
+}
+
+impl CertificatePayloadTLS13 {
+    pub fn convert(&self) -> CertificatePayload {
+        let mut ret = Vec::new();
+        for entry in &self.list {
+            ret.push(entry.cert.clone());
+        }
+        ret
+    }
+}
+
 #[derive(Debug)]
 pub enum KeyExchangeAlgorithm {
+    BulkOnly,
     DH,
     DHE,
     RSA,
@@ -876,13 +1053,13 @@ pub enum KeyExchangeAlgorithm {
 #[derive(Debug)]
 pub struct ECParameters {
     pub curve_type: ECCurveType,
-    pub named_curve: NamedCurve,
+    pub named_group: NamedGroup,
 }
 
 impl Codec for ECParameters {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.curve_type.encode(bytes);
-        self.named_curve.encode(bytes);
+        self.named_group.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ECParameters> {
@@ -892,11 +1069,11 @@ impl Codec for ECParameters {
             return None;
         }
 
-        let nc = try_ret!(NamedCurve::read(r));
+        let grp = try_ret!(NamedGroup::read(r));
 
         Some(ECParameters {
             curve_type: ct,
-            named_curve: nc,
+            named_group: grp,
         })
     }
 }
@@ -956,11 +1133,11 @@ pub struct ServerECDHParams {
 }
 
 impl ServerECDHParams {
-    pub fn new(named_curve: &NamedCurve, pubkey: &Vec<u8>) -> ServerECDHParams {
+    pub fn new(named_group: &NamedGroup, pubkey: &Vec<u8>) -> ServerECDHParams {
         ServerECDHParams {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,
-                named_curve: *named_curve,
+                named_group: *named_group,
             },
             public: PayloadU8::new(pubkey.clone()),
         }
@@ -1137,6 +1314,7 @@ pub enum HandshakePayload {
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificatePayload),
+    CertificateTLS13(CertificatePayloadTLS13),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateVerify(DigitallySignedStruct),
@@ -1157,6 +1335,7 @@ impl HandshakePayload {
             HandshakePayload::ServerHello(ref x) => x.encode(bytes),
             HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
             HandshakePayload::Certificate(ref x) => x.encode(bytes),
+            HandshakePayload::CertificateTLS13(ref x) => x.encode(bytes),
             HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
             HandshakePayload::ServerHelloDone => {}
             HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
@@ -1190,9 +1369,24 @@ impl Codec for HandshakeMessagePayload {
     }
 
     fn read(r: &mut Reader) -> Option<HandshakeMessagePayload> {
+        println!("read() for tls1.2");
+        HandshakeMessagePayload::read_version(r, ProtocolVersion::TLSv1_2)
+    }
+}
+
+impl HandshakeMessagePayload {
+    pub fn len(&self) -> usize {
+        let mut buf = Vec::new();
+        self.encode(&mut buf);
+        buf.len()
+    }
+
+    pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<HandshakeMessagePayload> {
         let typ = try_ret!(HandshakeType::read(r));
         let len = try_ret!(codec::read_u24(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
+
+        println!("read_version for {:?} typ {:?} len {:?}", vers, typ, len);
 
         let payload = match typ {
             HandshakeType::HelloRequest if sub.left() == 0 => HandshakePayload::HelloRequest,
@@ -1205,6 +1399,8 @@ impl Codec for HandshakeMessagePayload {
             HandshakeType::HelloRetryRequest => {
                 HandshakePayload::HelloRetryRequest(try_ret!(HelloRetryRequest::read(&mut sub)))
             }
+            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 =>
+        HandshakePayload::CertificateTLS13(try_ret!(CertificatePayloadTLS13::read(&mut sub))),
             HandshakeType::Certificate => {
                 HandshakePayload::Certificate(try_ret!(CertificatePayload::read(&mut sub)))
             }
@@ -1237,13 +1433,5 @@ impl Codec for HandshakeMessagePayload {
             typ: typ,
             payload: payload,
         })
-    }
-}
-
-impl HandshakeMessagePayload {
-    pub fn len(&self) -> usize {
-        let mut buf = Vec::new();
-        self.encode(&mut buf);
-        buf.len()
     }
 }

@@ -196,6 +196,7 @@ mod hash_hs;
 mod vecbuf;
 mod prf;
 mod cipher;
+mod key_schedule;
 mod session;
 mod pemfile;
 mod x509;

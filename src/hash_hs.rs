@@ -21,6 +21,15 @@ pub struct HandshakeHash {
     buffer: Vec<u8>,
 }
 
+fn dumphex(why: &str, bytes: &[u8]) {
+    print!("{} ({}): ", why, bytes.len());
+
+    for b in bytes {
+        print!("{:02x}", b);
+    }
+    println!("");
+}
+
 impl HandshakeHash {
     pub fn new() -> HandshakeHash {
         HandshakeHash {
@@ -72,6 +81,7 @@ impl HandshakeHash {
 
     /// Hash or buffer a byte slice.
     fn update_raw(&mut self, buf: &[u8]) -> &mut Self {
+        dumphex("rustls key_schedule_update_hash", buf);
         if self.ctx.is_some() {
             self.ctx.as_mut().unwrap().update(buf);
         }
