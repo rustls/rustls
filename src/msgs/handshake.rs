@@ -1307,6 +1307,79 @@ impl Codec for NewSessionTicketPayload {
     }
 }
 
+// -- NewSessionTicket electric boogaloo --
+#[derive(Debug)]
+pub enum NewSessionTicketExtension {
+    Unknown(UnknownExtension),
+}
+
+impl NewSessionTicketExtension {
+    pub fn get_type(&self) -> ExtensionType {
+        match *self {
+            NewSessionTicketExtension::Unknown(ref r) => r.typ,
+        }
+    }
+}
+
+impl Codec for NewSessionTicketExtension {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.get_type().encode(bytes);
+
+        let mut sub: Vec<u8> = Vec::new();
+        match *self {
+            NewSessionTicketExtension::Unknown(ref r) => r.encode(&mut sub),
+        }
+
+        codec::encode_u16(sub.len() as u16, bytes);
+        bytes.append(&mut sub);
+    }
+
+    fn read(r: &mut Reader) -> Option<NewSessionTicketExtension> {
+        let typ = try_ret!(ExtensionType::read(r));
+        let len = try_ret!(codec::read_u16(r)) as usize;
+        let mut sub = try_ret!(r.sub(len));
+
+        Some(match typ {
+            _ => {
+                NewSessionTicketExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub)))
+            }
+        })
+    }
+}
+
+declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
+
+#[derive(Debug)]
+pub struct NewSessionTicketPayloadTLS13 {
+    pub lifetime: u32,
+    pub age_add: u32,
+    pub ticket: PayloadU16,
+    pub exts: NewSessionTicketExtensions,
+}
+
+impl Codec for NewSessionTicketPayloadTLS13 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        codec::encode_u32(self.lifetime, bytes);
+        codec::encode_u32(self.age_add, bytes);
+        self.ticket.encode(bytes);
+        self.exts.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<NewSessionTicketPayloadTLS13> {
+        let lifetime = try_ret!(codec::read_u32(r));
+        let age_add = try_ret!(codec::read_u32(r));
+        let ticket = try_ret!(PayloadU16::read(r));
+        let exts = try_ret!(NewSessionTicketExtensions::read(r));
+
+        Some(NewSessionTicketPayloadTLS13 {
+            lifetime: lifetime,
+            age_add: age_add,
+            ticket: ticket,
+            exts: exts,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub enum HandshakePayload {
     HelloRequest,
@@ -1321,6 +1394,7 @@ pub enum HandshakePayload {
     ServerHelloDone,
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
+    NewSessionTicketTLS13(NewSessionTicketPayloadTLS13),
     EncryptedExtensions(EncryptedExtensions),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
@@ -1342,6 +1416,7 @@ impl HandshakePayload {
             HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
             HandshakePayload::CertificateVerify(ref x) => x.encode(bytes),
             HandshakePayload::NewSessionTicket(ref x) => x.encode(bytes),
+            HandshakePayload::NewSessionTicketTLS13(ref x) => x.encode(bytes),
             HandshakePayload::EncryptedExtensions(ref x) => x.encode(bytes),
             HandshakePayload::KeyUpdate(ref x) => x.encode(bytes),
             HandshakePayload::Finished(ref x) => x.encode(bytes),
@@ -1415,6 +1490,8 @@ impl HandshakeMessagePayload {
             HandshakeType::CertificateVerify => {
                 HandshakePayload::CertificateVerify(try_ret!(DigitallySignedStruct::read(&mut sub)))
             }
+            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3  =>
+        HandshakePayload::NewSessionTicketTLS13(try_ret!(NewSessionTicketPayloadTLS13::read(&mut sub))),
             HandshakeType::NewSessionTicket =>
         HandshakePayload::NewSessionTicket(try_ret!(NewSessionTicketPayload::read(&mut sub))),
             HandshakeType::EncryptedExtensions => {

@@ -2,7 +2,6 @@
 use std::collections::VecDeque;
 
 use msgs::codec;
-use msgs::codec::Codec;
 use msgs::message::{Message, MessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::handshake::HandshakeMessagePayload;

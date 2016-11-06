@@ -344,7 +344,8 @@ pub static EXPECT_SERVER_HELLO: Handler = Handler {
 fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
                                m: Message)
                                -> Result<ConnState, TLSError> {
-    let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
+    let _exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
+    info!("TLS1.3 encrypted extensions: {:?}", _exts);
     sess.handshake_data.transcript.add_message(&m);
     Ok(ConnState::ExpectCertificate)
 }
@@ -836,7 +837,7 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
     key_schedule.current_client_traffic_secret = write_key;
     key_schedule.current_server_traffic_secret = read_key;
 
-    Ok(ConnState::Traffic)
+    Ok(ConnState::TrafficTLS13)
 }
 
 fn handle_finished_tls12(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
@@ -859,7 +860,7 @@ fn handle_finished_tls12(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
 
     save_session(sess);
 
-    Ok(ConnState::Traffic)
+    Ok(ConnState::TrafficTLS12)
 }
 
 fn handle_finished_resume(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
@@ -889,13 +890,34 @@ pub static EXPECT_FINISHED_RESUME: Handler = Handler {
 // -- Traffic transit state --
 fn handle_traffic(sess: &mut ClientSessionImpl, mut m: Message) -> Result<ConnState, TLSError> {
     sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
-    Ok(ConnState::Traffic)
+    Ok(ConnState::TrafficTLS12)
 }
 
-pub static TRAFFIC: Handler = Handler {
+pub static TRAFFIC_TLS12: Handler = Handler {
     expect: Expectation {
         content_types: &[ContentType::ApplicationData],
         handshake_types: &[],
     },
     handle: handle_traffic,
+};
+
+// -- Traffic transit state (TLS1.3) --
+// In this state we can be sent tickets, keyupdates,
+// and application data.
+fn handle_traffic_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+    if m.is_content_type(ContentType::ApplicationData) {
+        try!(handle_traffic(sess, m));
+    } else if m.is_handshake_type(HandshakeType::NewSessionTicket) {
+        info!("Ignoring TLS1.3 NewSessionTicket message {:?}", m);
+    }
+
+    Ok(ConnState::TrafficTLS13)
+}
+
+pub static TRAFFIC_TLS13: Handler = Handler {
+    expect: Expectation {
+        content_types: &[ContentType::ApplicationData, ContentType::Handshake],
+        handshake_types: &[HandshakeType::NewSessionTicket],
+    },
+    handle: handle_traffic_tls13,
 };

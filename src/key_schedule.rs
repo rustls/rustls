@@ -42,7 +42,7 @@ pub struct KeySchedule {
     pub current_server_traffic_secret: Vec<u8>,
 }
 
-fn dumphex(why: &str, bytes: &[u8]) {
+fn _dumphex(why: &str, bytes: &[u8]) {
     print!("{}: ", why);
     for b in bytes {
         print!("{:02x}", b);
@@ -53,7 +53,6 @@ fn dumphex(why: &str, bytes: &[u8]) {
 impl KeySchedule {
     pub fn new(hash: &'static digest::Algorithm) -> KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
-        println!("start-zeroes");
         KeySchedule {
             current: hmac::SigningKey::new(hash, &zeroes[..hash.output_len]),
             hash: hash,
@@ -69,9 +68,6 @@ impl KeySchedule {
     }
 
     pub fn input_secret(&mut self, secret: &[u8]) {
-        dumphex("extract-secret", secret);
-        let res = hmac::sign(&self.current, secret);
-        dumphex("extract-result", res.as_ref());
         let new = hkdf::extract(&self.current, secret);
         self.current = new
     }
@@ -79,7 +75,6 @@ impl KeySchedule {
     pub fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         debug_assert!(hs_hash.len() == self.hash.output_len);
 
-        println!("derive({:?})", kind);
         _hkdf_expand_label(&self.current,
                            kind.to_bytes(),
                            hs_hash,
@@ -95,14 +90,11 @@ impl KeySchedule {
             _ => unreachable!(),
         };
 
-        dumphex("verify_data base", &base_key);
-        dumphex("verify_data hash", &hs_hash);
         let hmac_key = hkdf_expand_label(self.hash,
                                          &base_key,
                                          b"finished",
                                          &[],
                                          self.hash.output_len as u16);
-        dumphex("verify_data signkey", &hmac_key);
 
         hmac::sign(&hmac::SigningKey::new(self.hash, &hmac_key), hs_hash)
             .as_ref()
@@ -127,10 +119,8 @@ fn _hkdf_expand_label(secret: &hmac::SigningKey,
     hkdflabel.extend_from_slice(label);
     codec::encode_u8(context.len() as u8, &mut hkdflabel);
     hkdflabel.extend_from_slice(&context);
-    dumphex("  label", &hkdflabel);
 
     hkdf::expand(secret, &hkdflabel, &mut out);
-    dumphex("  output", &out);
     out
 }
 

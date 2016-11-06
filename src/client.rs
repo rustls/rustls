@@ -1,4 +1,4 @@
-use msgs::enums::{CipherSuite, ProtocolVersion};
+use msgs::enums::CipherSuite;
 use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
@@ -310,7 +310,8 @@ pub enum ConnState {
     ExpectNewTicketResume,
     ExpectCCSResume,
     ExpectFinishedResume,
-    Traffic,
+    TrafficTLS12,
+    TrafficTLS13,
 }
 
 pub struct ClientSessionImpl {
@@ -386,7 +387,11 @@ impl ClientSessionImpl {
     }
 
     pub fn is_handshaking(&self) -> bool {
-        self.state != ConnState::Traffic
+        match self.state {
+            ConnState::TrafficTLS12 |
+            ConnState::TrafficTLS13 => true,
+            _ => false,
+        }
     }
 
     pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
@@ -396,15 +401,13 @@ impl ClientSessionImpl {
             msg = dm;
         }
 
-        println!("incoming {:?}", msg);
-
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.common.handshake_joiner.want_message(&msg) {
-            try!(self.common
-                .handshake_joiner
-                .take_message(msg)
-                .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake)));
+            try!(
+        self.common.handshake_joiner.take_message(msg)
+        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
+      );
             return self.process_new_handshake_messages();
         }
 
@@ -443,7 +446,7 @@ impl ClientSessionImpl {
     fn process_hello_req(&mut self) {
         // If we're post handshake, send a refusal alert.
         // Otherwise, drop it silently.
-        if self.state == ConnState::Traffic {
+        if !self.is_handshaking() {
             self.common.send_warning_alert(AlertDescription::NoRenegotiation);
         }
     }
@@ -457,17 +460,13 @@ impl ClientSessionImpl {
         }
 
         let handler = self.get_handler();
-        try!(handler.expect
-            .check_message(&msg)
-            .map_err(|err| {
-                self.queue_unexpected_alert();
-                err
-            }));
+        try!(handler.expect.check_message(&msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err }));
         let new_state = try!((handler.handle)(self, msg));
         self.state = new_state;
 
         // Once we're connected, start flushing sendable_plaintext.
-        if self.state == ConnState::Traffic && !self.common.traffic {
+        if !self.is_handshaking() && !self.common.traffic {
             self.common.start_traffic();
         }
 
@@ -489,7 +488,8 @@ impl ClientSessionImpl {
             ConnState::ExpectNewTicketResume => &client_hs::EXPECT_NEW_TICKET_RESUME,
             ConnState::ExpectCCSResume => &client_hs::EXPECT_CCS_RESUME,
             ConnState::ExpectFinishedResume => &client_hs::EXPECT_FINISHED_RESUME,
-            ConnState::Traffic => &client_hs::TRAFFIC,
+            ConnState::TrafficTLS12 => &client_hs::TRAFFIC_TLS12,
+            ConnState::TrafficTLS13 => &client_hs::TRAFFIC_TLS13,
         }
     }
 
