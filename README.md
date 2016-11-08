@@ -75,7 +75,8 @@ There are plenty of other libraries that provide these features should you
 need them.
 
 # Example code
-There are two example programs which use mio to do asynchronous IO.
+There are two example programs which use 
+[mio](https://github.com/carllerche/mio) to do asynchronous IO.
 
 ## Client example program
 The client example program is named `tlsclient`.  The interface looks like:
