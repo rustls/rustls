@@ -3,7 +3,7 @@
 set -e
 
 # a known-good commit
-COMMIT=5c4e8571ccc63e559a7c2067ddea31280914f1c8
+COMMIT=9b885c5d0fe1a89b2063654dbdd0faf2a6c076fd
 
 rm -f runner.tar.gz
 wget https://boringssl.googlesource.com/boringssl/+archive/$COMMIT/ssl/test/runner.tar.gz
@@ -11,7 +11,6 @@ mkdir -p bogo
 cd bogo/
 tar -xzf ../runner.tar.gz
 patch -p1 < ../patches/testerrormap.diff
-patch -p1 < ../patches/supportedsuite.diff
 go test -c
 
 # convert key to format we can read
