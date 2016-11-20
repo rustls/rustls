@@ -1499,9 +1499,13 @@ impl HandshakeMessagePayload {
             _ => HandshakePayload::Unknown(try_ret!(Payload::read(&mut sub))),
         };
 
-        Some(HandshakeMessagePayload {
-            typ: typ,
-            payload: payload,
-        })
+        if sub.any_left() {
+            None
+        } else {
+            Some(HandshakeMessagePayload {
+                typ: typ,
+                payload: payload,
+            })
+        }
     }
 }

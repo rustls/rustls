@@ -14,8 +14,10 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn rest(&self) -> &[u8] {
-        &self.buf[self.offs..]
+    pub fn rest(&mut self) -> &[u8] {
+        let ret = &self.buf[self.offs..];
+        self.offs = self.buf.len();
+        ret
     }
 
     pub fn take(&mut self, len: usize) -> Option<&[u8]> {
