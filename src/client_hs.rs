@@ -417,11 +417,22 @@ pub static EXPECT_SERVER_KX: Handler = Handler {
 fn handle_certificate_verify(sess: &mut ClientSessionImpl,
                              m: Message)
                              -> Result<ConnState, TLSError> {
+    let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
+
+    // 1. Verify the certificate chain.
+    // 2. Verify their signature on the handshake.
+    try!(verify::verify_server_cert(&sess.config.root_store,
+                                  &sess.handshake_data.server_cert_chain,
+                                  &sess.handshake_data.dns_name));
+
+    let handshake_hash = sess.handshake_data.transcript.get_current_hash();
+    try!(verify::verify_tls13(&sess.handshake_data.server_cert_chain[0],
+                            &cert_verify,
+                            &handshake_hash,
+                            b"TLS 1.3, server CertificateVerify\x00"));
+
     sess.handshake_data.transcript.add_message(&m);
 
-    let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
-    warn!("FIXME! no certificate verification performed! FIXME!");
-    info!("CertificateVerify {:?}", cert_verify);
     Ok(ConnState::ExpectFinished)
 }
 
