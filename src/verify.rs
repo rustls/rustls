@@ -212,18 +212,25 @@ static RSA_SHA1: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA1];
 static RSA_SHA256: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA256];
 static RSA_SHA384: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA384];
 static RSA_SHA512: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA512];
+static RSA_PSS_SHA256: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY];
+static RSA_PSS_SHA384: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
+static RSA_PSS_SHA512: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
 
 fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSError> {
-    use msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
-    use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
+    match scheme {
+        // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
+        SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
+        SignatureScheme::ECDSA_NISTP384_SHA384 => Ok(ECDSA_SHA384),
 
-    match (scheme.sign(), scheme.hash()) {
-        (ECDSA, SHA256) => Ok(ECDSA_SHA256),
-        (ECDSA, SHA384) => Ok(ECDSA_SHA384),
-        (RSA, SHA1) => Ok(RSA_SHA1),
-        (RSA, SHA256) => Ok(RSA_SHA256),
-        (RSA, SHA384) => Ok(RSA_SHA384),
-        (RSA, SHA512) => Ok(RSA_SHA512),
+        SignatureScheme::RSA_PKCS1_SHA1 => Ok(RSA_SHA1),
+        SignatureScheme::RSA_PKCS1_SHA256 => Ok(RSA_SHA256),
+        SignatureScheme::RSA_PKCS1_SHA384 => Ok(RSA_SHA384),
+        SignatureScheme::RSA_PKCS1_SHA512 => Ok(RSA_SHA512),
+
+        SignatureScheme::RSA_PSS_SHA256 => Ok(RSA_PSS_SHA256),
+        SignatureScheme::RSA_PSS_SHA384 => Ok(RSA_PSS_SHA384),
+        SignatureScheme::RSA_PSS_SHA512 => Ok(RSA_PSS_SHA512),
+
         _ => {
             let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
             Err(TLSError::PeerMisbehavedError(error_msg))
