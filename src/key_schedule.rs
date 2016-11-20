@@ -81,15 +81,20 @@ impl KeySchedule {
                            self.hash.output_len as u16)
     }
 
+    fn current_traffic_secret(&self, kind: SecretKind) -> &[u8] {
+        match kind {
+            SecretKind::ServerHandshakeTrafficSecret |
+            SecretKind::ServerApplicationTrafficSecret => &self.current_server_traffic_secret,
+            SecretKind::ClientHandshakeTrafficSecret |
+            SecretKind::ClientApplicationTrafficSecret => &self.current_client_traffic_secret,
+            _ => unreachable!(),
+        }
+    }
+
     pub fn sign_verify_data(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         debug_assert!(hs_hash.len() == self.hash.output_len);
 
-        let base_key = match kind {
-            SecretKind::ServerHandshakeTrafficSecret => &self.current_server_traffic_secret,
-            SecretKind::ClientHandshakeTrafficSecret => &self.current_client_traffic_secret,
-            _ => unreachable!(),
-        };
-
+        let base_key = self.current_traffic_secret(kind);
         let hmac_key = hkdf_expand_label(self.hash,
                                          &base_key,
                                          b"finished",
@@ -99,6 +104,15 @@ impl KeySchedule {
         hmac::sign(&hmac::SigningKey::new(self.hash, &hmac_key), hs_hash)
             .as_ref()
             .to_vec()
+    }
+
+    pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
+        let base_key = self.current_traffic_secret(kind);
+        hkdf_expand_label(self.hash,
+                          &base_key,
+                          b"application traffic secret",
+                          &[],
+                          self.hash.output_len as u16)
     }
 }
 

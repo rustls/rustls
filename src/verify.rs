@@ -5,7 +5,6 @@ use untrusted;
 use msgs::handshake::ASN1Cert;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::enums::SignatureScheme;
-use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{DistinguishedName, DistinguishedNames};
 use error::TLSError;
 use pemfile;

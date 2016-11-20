@@ -192,4 +192,12 @@ impl Message {
             }),
         }
     }
+
+    pub fn build_key_update_notify() -> Message {
+        Message {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
+        }
+    }
 }

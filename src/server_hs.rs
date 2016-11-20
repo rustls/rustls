@@ -121,7 +121,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl,
                 server_version: ProtocolVersion::TLSv1_2,
                 random: Random::from_slice(&sess.handshake_data.randoms.server),
                 session_id: sess.handshake_data.session_id.clone(),
-                cipher_suite: sess.handshake_data.ciphersuite.unwrap().suite,
+                cipher_suite: sess.common.get_suite().suite,
                 compression_method: Compression::Null,
                 extensions: extensions,
             }),
@@ -156,7 +156,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
                   signer: Arc<Box<sign::Signer + Send + Sync>>)
                   -> Result<(), TLSError> {
     let kx = try!({
-    let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+    let scs = sess.common.get_suite();
     scs.start_server_kx(*group)
       .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
   });
@@ -249,7 +249,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
 
     // The RFC underspecifies this case.  Reject it, because someone's going to be
     // disappointed.
-    if sess.handshake_data.ciphersuite.as_ref().unwrap().suite != resumedata.cipher_suite {
+    if sess.common.get_suite().suite != resumedata.cipher_suite {
         return Err(TLSError::PeerMisbehavedError("client varied ciphersuite over resumption"
             .to_string()));
     }
@@ -257,7 +257,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
     sess.handshake_data.session_id = id.clone();
     try!(emit_server_hello(sess, client_hello));
 
-    let hashalg = sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash();
+    let hashalg = sess.common.get_suite().get_hash();
     sess.secrets = Some(SessionSecrets::new_resume(&sess.handshake_data.randoms,
                                                    hashalg,
                                                    &resumedata.master_secret.0));
@@ -340,11 +340,11 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
         return Err(incompatible(sess, "no ciphersuites in common"));
     }
 
-    sess.handshake_data.ciphersuite = maybe_ciphersuite;
     info!("decided upon suite {:?}", maybe_ciphersuite.as_ref().unwrap());
+    sess.common.set_suite(maybe_ciphersuite.unwrap());
 
     // Start handshake hash.
-    sess.handshake_data.start_handshake_hash();
+    sess.handshake_data.transcript.start_hash(sess.common.get_suite().get_hash());
     sess.handshake_data.transcript.add_message(&m);
 
     // -- Check for resumption --
@@ -406,7 +406,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
 
     // Now we have chosen a ciphersuite, we can make kx decisions.
     let sigscheme = try!(
-    sess.handshake_data.ciphersuite.as_ref().unwrap()
+    sess.common.get_suite()
       .resolve_sig_scheme(sigschemes_ext)
       .ok_or_else(|| incompatible(sess, "no supported sig scheme"))
   );
@@ -488,7 +488,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnStat
     .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange completion failed".to_string()))
   );
 
-    let hashalg = sess.handshake_data.ciphersuite.as_ref().unwrap().get_hash();
+    let hashalg = sess.common.get_suite().get_hash();
     sess.secrets =
         Some(SessionSecrets::new(&sess.handshake_data.randoms, hashalg, &kxd.premaster_secret));
     sess.start_encryption_tls12();
@@ -543,7 +543,7 @@ pub static EXPECT_CERTIFICATE_VERIFY: Handler = Handler {
 fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> Result<ConnState, TLSError> {
     // CCS should not be received interleaved with fragmented handshake-level
     // message.
-    if !sess.common.handshake_joiner.empty() {
+    if !sess.common.handshake_joiner.is_empty() {
         warn!("CCS received interleaved with fragmented handshake");
         return Err(TLSError::InappropriateMessage {
             expect_types: vec![ ContentType::Handshake ],
@@ -623,7 +623,7 @@ fn emit_finished(sess: &mut ServerSessionImpl) {
 }
 
 fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionValue {
-    let scs = sess.handshake_data.ciphersuite.as_ref().unwrap();
+    let scs = sess.common.get_suite();
     let client_certs = &sess.handshake_data.valid_client_cert_chain;
 
     persist::ServerSessionValue::new(&scs.suite,

@@ -1508,4 +1508,11 @@ impl HandshakeMessagePayload {
             })
         }
     }
+
+    pub fn build_key_update_notify() -> HandshakeMessagePayload {
+        HandshakeMessagePayload {
+            typ: HandshakeType::KeyUpdate,
+            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
+        }
+    }
 }

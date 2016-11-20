@@ -8,7 +8,6 @@ use msgs::enums::SignatureScheme;
 use msgs::enums::ContentType;
 use msgs::message::Message;
 use msgs::persist;
-use key_schedule::KeySchedule;
 use client_hs;
 use hash_hs;
 use verify;
@@ -251,7 +250,6 @@ impl ClientConfig {
 
 pub struct ClientHandshakeData {
     pub server_cert_chain: CertificatePayload,
-    pub ciphersuite: Option<&'static SupportedCipherSuite>,
     pub dns_name: String,
     pub session_id: SessionID,
     pub sent_extensions: Vec<ExtensionType>,
@@ -274,7 +272,6 @@ impl ClientHandshakeData {
     fn new(host_name: &str) -> ClientHandshakeData {
         ClientHandshakeData {
             server_cert_chain: Vec::new(),
-            ciphersuite: None,
             dns_name: host_name.to_string(),
             session_id: SessionID::empty(),
             sent_extensions: Vec::new(),
@@ -320,7 +317,6 @@ pub struct ClientSessionImpl {
     pub secrets: Option<SessionSecrets>,
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
-    pub key_schedule: Option<KeySchedule>,
     pub state: ConnState,
 }
 
@@ -331,8 +327,7 @@ impl ClientSessionImpl {
             handshake_data: ClientHandshakeData::new(hostname),
             secrets: None,
             alpn_protocol: None,
-            common: SessionCommon::new(config.mtu),
-            key_schedule: None,
+            common: SessionCommon::new(config.mtu, true),
             state: ConnState::ExpectServerHello,
         };
 
@@ -358,8 +353,7 @@ impl ClientSessionImpl {
     }
 
     pub fn start_encryption_tls12(&mut self) {
-        let scs = self.handshake_data.ciphersuite.as_ref().unwrap();
-        self.common.start_encryption_tls12(scs, self.secrets.as_ref().unwrap());
+        self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
     }
 
     pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
@@ -404,10 +398,10 @@ impl ClientSessionImpl {
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.common.handshake_joiner.want_message(&msg) {
-            try!(self.common
-                .handshake_joiner
-                .take_message(msg)
-                .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake)));
+            try!(
+        self.common.handshake_joiner.take_message(msg)
+        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
+      );
             return self.process_new_handshake_messages();
         }
 
@@ -460,12 +454,8 @@ impl ClientSessionImpl {
         }
 
         let handler = self.get_handler();
-        try!(handler.expect
-            .check_message(&msg)
-            .map_err(|err| {
-                self.queue_unexpected_alert();
-                err
-            }));
+        try!(handler.expect.check_message(&msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err }));
         let new_state = try!((handler.handle)(self, msg));
         self.state = new_state;
 

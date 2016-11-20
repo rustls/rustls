@@ -12,6 +12,7 @@ use suites::SupportedCipherSuite;
 use cipher::MessageCipher;
 use vecbuf::ChunkVecBuffer;
 use key;
+use key_schedule::{SecretKind, KeySchedule};
 use prf;
 use rand;
 
@@ -202,15 +203,25 @@ impl SessionSecrets {
 static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 
+pub enum MessageCipherChange {
+    BothNew,
+    WriteNew,
+    ReadNew,
+}
+
 pub struct SessionCommon {
     pub is_tls13: bool,
+    pub is_client: bool,
     message_cipher: Box<MessageCipher + Send + Sync>,
+    key_schedule: Option<KeySchedule>,
+    suite: Option<&'static SupportedCipherSuite>,
     write_seq: u64,
     read_seq: u64,
     peer_eof: bool,
     pub peer_encrypting: bool,
     pub we_encrypting: bool,
     pub traffic: bool,
+    pub want_write_key_update: bool,
     pub message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
@@ -220,16 +231,20 @@ pub struct SessionCommon {
 }
 
 impl SessionCommon {
-    pub fn new(mtu: Option<usize>) -> SessionCommon {
+    pub fn new(mtu: Option<usize>, client: bool) -> SessionCommon {
         SessionCommon {
             is_tls13: false,
+            is_client: client,
+            suite: None,
             message_cipher: MessageCipher::invalid(),
+            key_schedule: None,
             write_seq: 0,
             read_seq: 0,
             peer_eof: false,
             peer_encrypting: false,
             we_encrypting: false,
             traffic: false,
+            want_write_key_update: false,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
             message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
@@ -239,12 +254,47 @@ impl SessionCommon {
         }
     }
 
-    pub fn set_message_cipher(&mut self, cipher: Box<MessageCipher + Send + Sync>) {
+    pub fn get_suite(&self) -> &'static SupportedCipherSuite {
+        self.suite.as_ref().unwrap()
+    }
+
+    pub fn set_suite(&mut self, suite: &'static SupportedCipherSuite) {
+        self.suite = Some(suite);
+    }
+
+    pub fn get_mut_key_schedule(&mut self) -> &mut KeySchedule {
+        self.key_schedule.as_mut().unwrap()
+    }
+
+    pub fn get_key_schedule(&self) -> &KeySchedule {
+        self.key_schedule.as_ref().unwrap()
+    }
+
+    pub fn set_key_schedule(&mut self, ks: KeySchedule) {
+        self.key_schedule = Some(ks);
+    }
+
+    pub fn set_message_cipher(&mut self,
+                              cipher: Box<MessageCipher + Send + Sync>,
+                              why: MessageCipherChange) {
         self.message_cipher = cipher;
-        self.write_seq = 0;
-        self.read_seq = 0;
-        self.peer_encrypting = true;
-        self.we_encrypting = true;
+
+        match why {
+            MessageCipherChange::BothNew => {
+                self.write_seq = 0;
+                self.read_seq = 0;
+                self.peer_encrypting = true;
+                self.we_encrypting = true;
+            }
+
+            MessageCipherChange::ReadNew => {
+                self.read_seq = 0;
+            }
+
+            MessageCipherChange::WriteNew => {
+                self.write_seq = 0;
+            }
+        }
     }
 
     pub fn has_readable_plaintext(&self) -> bool {
@@ -266,6 +316,7 @@ impl SessionCommon {
             self.send_close_notify();
         }
 
+        debug!("decrypt seq {:?}", self.read_seq);
         let seq = self.read_seq;
         self.read_seq += 1;
         self.message_cipher.decrypt(plain, seq)
@@ -293,9 +344,47 @@ impl SessionCommon {
         }
     }
 
+    fn do_write_key_update(&mut self) {
+        // TLS1.3 putting key update triggering here breaks layering
+        // between the handshake and record layer.
+
+        let kind = if self.is_client {
+            SecretKind::ClientApplicationTrafficSecret
+        } else {
+            SecretKind::ServerApplicationTrafficSecret
+        };
+
+        let write_key = self.get_key_schedule().derive_next(kind);
+
+        let cipher = {
+            let read_key = if self.is_client {
+                &self.get_key_schedule().current_server_traffic_secret
+            } else {
+                &self.get_key_schedule().current_client_traffic_secret
+            };
+
+            MessageCipher::new_tls13(self.get_suite(), &write_key, &read_key)
+        };
+
+        self.set_message_cipher(cipher, MessageCipherChange::WriteNew);
+
+        if self.is_client {
+            self.get_mut_key_schedule().current_client_traffic_secret = write_key;
+        } else {
+            self.get_mut_key_schedule().current_server_traffic_secret = write_key;
+        }
+
+        self.want_write_key_update = false;
+        self.send_msg_encrypt(Message::build_key_update_notify());
+    }
+
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     pub fn send_msg_encrypt(&mut self, m: Message) {
+        if self.want_write_key_update {
+            self.do_write_key_update();
+        }
+
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter.fragment(m, &mut plain_messages);
 
@@ -414,10 +503,8 @@ impl SessionCommon {
         Ok(len)
     }
 
-    pub fn start_encryption_tls12(&mut self,
-                                  suite: &'static SupportedCipherSuite,
-                                  secrets: &SessionSecrets) {
-        self.message_cipher = MessageCipher::new_tls12(suite, secrets);
+    pub fn start_encryption_tls12(&mut self, secrets: &SessionSecrets) {
+        self.message_cipher = MessageCipher::new_tls12(self.get_suite(), secrets);
     }
 
     pub fn peer_now_encrypting(&mut self) {
