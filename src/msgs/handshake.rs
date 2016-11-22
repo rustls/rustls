@@ -757,6 +757,22 @@ impl ClientHelloPayload {
     pub fn get_ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
     }
+
+    pub fn get_versions_extension(&self) -> Option<&ProtocolVersions> {
+        let ext = try_ret!(self.find_extension(ExtensionType::SupportedVersions));
+        match *ext {
+            ClientExtension::SupportedVersions(ref vers) => Some(vers),
+            _ => None,
+        }
+    }
+
+    pub fn get_keyshare_extension(&self) -> Option<&KeyShareEntries> {
+        let ext = try_ret!(self.find_extension(ExtensionType::KeyShare));
+        match *ext {
+            ClientExtension::KeyShare(ref shares) => Some(shares),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -888,36 +904,13 @@ impl Codec for ServerHelloPayload {
     }
 }
 
+impl HasServerExtensions for ServerHelloPayload {
+    fn get_extensions(&self) -> &[ServerExtension] {
+        &self.extensions
+    }
+}
+
 impl ServerHelloPayload {
-    /// Returns true if there is more than one extension of a given
-    /// type.
-    pub fn has_duplicate_extension(&self) -> bool {
-        let mut seen = collections::HashSet::new();
-
-        for ext in &self.extensions {
-            let typ = ext.get_type().get_u16();
-
-            if seen.contains(&typ) {
-                return true;
-            }
-            seen.insert(typ);
-        }
-
-        false
-    }
-
-    pub fn find_extension(&self, ext: ExtensionType) -> Option<&ServerExtension> {
-        self.extensions.iter().find(|x| x.get_type() == ext)
-    }
-
-    pub fn get_alpn_protocol(&self) -> Option<String> {
-        let ext = try_ret!(self.find_extension(ExtensionType::ALProtocolNegotiation));
-        match *ext {
-            ServerExtension::Protocols(ref protos) => protos.to_single_string(),
-            _ => None,
-        }
-    }
-
     pub fn get_key_share(&self) -> Option<&KeyShareEntry> {
         let ext = try_ret!(self.find_extension(ExtensionType::KeyShare));
         match *ext {
@@ -1024,6 +1017,13 @@ impl Codec for CertificatePayloadTLS13 {
 }
 
 impl CertificatePayloadTLS13 {
+    pub fn new() -> CertificatePayloadTLS13 {
+        CertificatePayloadTLS13 {
+            request_context: PayloadU8::empty(),
+            list: Vec::new(),
+        }
+    }
+
     pub fn convert(&self) -> CertificatePayload {
         let mut ret = Vec::new();
         for entry in &self.list {
@@ -1237,6 +1237,45 @@ impl ServerKeyExchangePayload {
 
 // -- EncryptedExtensions (TLS1.3 only) --
 declare_u16_vec!(EncryptedExtensions, ServerExtension);
+
+pub trait HasServerExtensions {
+    fn get_extensions(&self) -> &[ServerExtension];
+
+    /// Returns true if there is more than one extension of a given
+    /// type.
+    fn has_duplicate_extension(&self) -> bool {
+        let mut seen = collections::HashSet::new();
+
+        for ext in self.get_extensions() {
+            let typ = ext.get_type().get_u16();
+
+            if seen.contains(&typ) {
+                return true;
+            }
+            seen.insert(typ);
+        }
+
+        false
+    }
+
+    fn find_extension(&self, ext: ExtensionType) -> Option<&ServerExtension> {
+        self.get_extensions().iter().find(|x| x.get_type() == ext)
+    }
+
+    fn get_alpn_protocol(&self) -> Option<String> {
+        let ext = try_ret!(self.find_extension(ExtensionType::ALProtocolNegotiation));
+        match *ext {
+            ServerExtension::Protocols(ref protos) => protos.to_single_string(),
+            _ => None,
+        }
+    }
+}
+
+impl HasServerExtensions for EncryptedExtensions {
+    fn get_extensions(&self) -> &[ServerExtension] {
+        &self
+    }
+}
 
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);

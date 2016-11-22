@@ -284,7 +284,7 @@ fn convert_alg_tls13(scheme: SignatureScheme)
         ECDSA_NISTP384_SHA384 => Ok(&webpki::ECDSA_P384_SHA384),
         RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
         RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
-        RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
+        RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => {
             let error_msg = format!("received unsupported sig scheme {:?}", scheme);
             Err(TLSError::PeerMisbehavedError(error_msg))

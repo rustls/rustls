@@ -316,7 +316,6 @@ impl SessionCommon {
             self.send_close_notify();
         }
 
-        debug!("decrypt seq {:?}", self.read_seq);
         let seq = self.read_seq;
         self.read_seq += 1;
         self.message_cipher.decrypt(plain, seq)

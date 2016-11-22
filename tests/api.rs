@@ -57,24 +57,12 @@ fn make_client_config() -> ClientConfig {
 }
 
 fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
-    assert_eq!(server.is_handshaking(), true);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(client, server);
-    server.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), true);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(server, client);
-    client.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), true);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(client, server);
-    server.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), false);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(server, client);
-    client.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), false);
-    assert_eq!(client.is_handshaking(), false);
+    while server.is_handshaking() || client.is_handshaking() {
+        transfer(client, server);
+        server.process_new_packets().unwrap();
+        transfer(server, client);
+        client.process_new_packets().unwrap();
+    }
 }
 
 fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<String>) {

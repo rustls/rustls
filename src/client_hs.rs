@@ -4,7 +4,7 @@ use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random, ServerHelloPayload};
-use msgs::handshake::{ClientExtension, ServerExtension};
+use msgs::handshake::{ClientExtension, ServerExtension, HasServerExtensions};
 use msgs::handshake::{SupportedSignatureSchemes, SupportedMandatedSignatureSchemes};
 use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry};
@@ -222,6 +222,21 @@ fn start_handshake_traffic(sess: &mut ClientSessionImpl,
     Ok(())
 }
 
+fn process_alpn_protocol(sess: &mut ClientSessionImpl,
+                         proto: Option<String>)
+                         -> Result<(), TLSError> {
+    sess.alpn_protocol = proto;
+    if sess.alpn_protocol.is_some() {
+        if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
+            sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+            return Err(TLSError::PeerMisbehavedError("server sent non-offered ALPN protocol"
+                .to_string()));
+        }
+    }
+    info!("ALPN protocol is {:?}", sess.alpn_protocol);
+    Ok(())
+}
+
 fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
     let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
     debug!("We got ServerHello {:#?}", server_hello);
@@ -257,15 +272,9 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
     }
 
     // Extract ALPN protocol
-    sess.alpn_protocol = server_hello.get_alpn_protocol();
-    if sess.alpn_protocol.is_some() {
-        if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
-            sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TLSError::PeerMisbehavedError("server sent non-offered ALPN protocol"
-                .to_string()));
-        }
+    if !sess.common.is_tls13 {
+        try!(process_alpn_protocol(sess, server_hello.get_alpn_protocol()));
     }
-    info!("ALPN protocol is {:?}", sess.alpn_protocol);
 
     let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
 
@@ -344,9 +353,12 @@ pub static EXPECT_SERVER_HELLO: Handler = Handler {
 fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
                                m: Message)
                                -> Result<ConnState, TLSError> {
-    let _exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
-    info!("TLS1.3 encrypted extensions: {:?}", _exts);
+    let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
+    info!("TLS1.3 encrypted extensions: {:?}", exts);
     sess.handshake_data.transcript.add_message(&m);
+
+    try!(process_alpn_protocol(sess, exts.get_alpn_protocol()));
+
     Ok(ConnState::ExpectCertificate)
 }
 

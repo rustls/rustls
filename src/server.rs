@@ -344,6 +344,7 @@ pub enum ConnState {
     ExpectCertificateVerify,
     ExpectCCS,
     ExpectFinished,
+    ExpectFinishedTLS13,
     Traffic,
 }
 
@@ -458,6 +459,7 @@ impl ServerSessionImpl {
             ConnState::ExpectCertificateVerify => &server_hs::EXPECT_CERTIFICATE_VERIFY,
             ConnState::ExpectCCS => &server_hs::EXPECT_CCS,
             ConnState::ExpectFinished => &server_hs::EXPECT_FINISHED,
+            ConnState::ExpectFinishedTLS13 => &server_hs::EXPECT_FINISHED_TLS13,
             ConnState::Traffic => &server_hs::TRAFFIC,
         }
     }

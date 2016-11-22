@@ -113,6 +113,10 @@ impl PayloadU8 {
         PayloadU8(bytes)
     }
 
+    pub fn empty() -> PayloadU8 {
+        PayloadU8(Vec::new())
+    }
+
     pub fn len(&self) -> usize {
         self.0.len()
     }

@@ -1,5 +1,6 @@
-use msgs::enums::{HashAlgorithm, SignatureAlgorithm, SignatureScheme};
-use msgs::handshake::DecomposedSignatureScheme;
+use msgs::enums::{SignatureAlgorithm, SignatureScheme};
+use msgs::handshake::SupportedSignatureSchemes;
+use util;
 use untrusted;
 use ring;
 use ring::signature;
@@ -8,40 +9,80 @@ use key;
 
 /// A thing that can sign a message.
 pub trait Signer {
-    /// Signs `message`, hashing it with `hash_alg` first.
+    /// Choose a SignatureScheme from those offered.
+    fn choose_scheme(&self, offered: &SupportedSignatureSchemes) -> Option<SignatureScheme>;
+
+    /// Signs `message` using `scheme`.
     fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
 }
 
-/// A Signer for RSA-PKCS1
+/// A Signer for RSA-PKCS1 or RSA-PSS
 pub struct RSASigner {
     key: Arc<signature::RSAKeyPair>,
+    schemes: SupportedSignatureSchemes,
+}
+
+fn all_schemes() -> SupportedSignatureSchemes {
+    vec![
+    SignatureScheme::RSA_PSS_SHA512,
+    SignatureScheme::RSA_PSS_SHA384,
+    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PKCS1_SHA512,
+    SignatureScheme::RSA_PKCS1_SHA384,
+    SignatureScheme::RSA_PKCS1_SHA256,
+  ]
 }
 
 impl RSASigner {
     pub fn new(der: &key::PrivateKey) -> Result<RSASigner, ()> {
         let key = signature::RSAKeyPair::from_der(untrusted::Input::from(&der.0));
-        key.map(|s| RSASigner { key: Arc::new(s) })
+        key.map(|s| {
+                RSASigner {
+                    key: Arc::new(s),
+                    schemes: all_schemes(),
+                }
+            })
             .map_err(|_| ())
     }
 }
 
+fn _dumphex(label: &str, bytes: &[u8]) {
+    print!("{}: ", label);
+
+    for b in bytes {
+        print!("{:02x}", b);
+    }
+    print!("\n");
+}
+
 impl Signer for RSASigner {
+    fn choose_scheme(&self, offered: &SupportedSignatureSchemes) -> Option<SignatureScheme> {
+        util::first_in_both(&self.schemes, offered)
+    }
+
     fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()> {
         let mut sig = vec![0; self.key.public_modulus_len()];
-        let pad = match scheme.hash() {
-            HashAlgorithm::SHA256 => &signature::RSA_PKCS1_SHA256,
-            HashAlgorithm::SHA384 => &signature::RSA_PKCS1_SHA384,
-            HashAlgorithm::SHA512 => &signature::RSA_PKCS1_SHA512,
-            _ => unreachable!(),
+
+        let encoding: &signature::RSAEncoding = match scheme {
+            SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PSS_SHA256 => &signature::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_SHA384 => &signature::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA512 => &signature::RSA_PSS_SHA512,
+            _ => return Err(()),
         };
 
         let rng = ring::rand::SystemRandom::new();
-        let mut signer = try!(signature::RSASigningState::new(self.key.clone()).map_err(|_| ()));
+        let mut signer = try!(
+      signature::RSASigningState::new(self.key.clone())
+      .map_err(|_| ())
+    );
 
-        signer.sign(pad, &rng, message, &mut sig)
+        signer.sign(encoding, &rng, message, &mut sig)
             .map(|_| sig)
             .map_err(|_| ())
     }

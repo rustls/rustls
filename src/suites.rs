@@ -331,7 +331,7 @@ pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite],
                            sigalg: &SignatureAlgorithm)
                            -> Vec<&'static SupportedCipherSuite> {
     all.iter()
-        .filter(|&&suite| &suite.sign == sigalg)
+        .filter(|&&suite| suite.sign == SignatureAlgorithm::Anonymous || &suite.sign == sigalg)
         .cloned()
         .collect()
 }
