@@ -344,7 +344,7 @@ impl SessionCommon {
     let m = Message {
       typ: ContentType::ApplicationData,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(data)
+      payload: MessagePayload::opaque(data.as_slice())
     };
 
     self.send_msg_encrypt(m);

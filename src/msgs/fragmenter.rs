@@ -39,7 +39,7 @@ impl MessageFragmenter {
       let cm = Message {
         typ: typ,
         version: version,
-        payload: MessagePayload::opaque(chunk.to_vec())
+        payload: MessagePayload::opaque(chunk)
       };
       out.push_back(cm);
     }
@@ -74,7 +74,7 @@ mod tests {
     let m = Message {
       typ: typ,
       version: version,
-      payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec())
+      payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08")
     };
 
     let frag = MessageFragmenter::new(3);
@@ -91,7 +91,7 @@ mod tests {
     let m = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec())
+      payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08")
     };
 
     let frag = MessageFragmenter::new(8);

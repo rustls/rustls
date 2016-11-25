@@ -3,7 +3,7 @@ use msgs::codec::{Codec, Reader};
 
 /// An externally length'd payload
 #[derive(Debug, Clone, PartialEq)]
-pub struct Payload(pub Vec<u8>);
+pub struct Payload( pub Vec<u8>);
 
 impl Codec for Payload {
   fn encode(&self, bytes: &mut Vec<u8>) {
@@ -21,9 +21,14 @@ impl Payload {
   }
 
   pub fn empty() -> Payload {
-    Payload::new(Vec::new())
+    Payload::new(Vec::with_capacity(2048))
   }
-
+  
+  pub fn from_slice(data: &[u8]) -> Payload {
+    let mut v = Vec::with_capacity(data.len()+5);
+    v.extend_from_slice(data);
+    Payload(v)
+  }
   pub fn len(&self) -> usize { self.0.len() }
 }
 

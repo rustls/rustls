@@ -116,13 +116,13 @@ mod tests {
     let wanted = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"hello world".to_vec())
+      payload: MessagePayload::opaque(b"hello world")
     };
 
     let unwanted = Message {
       typ: ContentType::Alert,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"ponytown".to_vec())
+      payload: MessagePayload::opaque(b"ponytown")
     };
 
     assert_eq!(hj.want_message(&wanted), true);
@@ -149,7 +149,7 @@ mod tests {
     let msg = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec()) /* two HelloRequests. */
+      payload: MessagePayload::opaque(b"\x00\x00\x00\x00\x00\x00\x00\x00") /* two HelloRequests. */
     };
 
     assert_eq!(hj.want_message(&msg), true);
@@ -178,7 +178,7 @@ mod tests {
     let msg = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"\x01\x00\x00\x02\xff\xff".to_vec()) /* short ClientHello. */
+      payload: MessagePayload::opaque(b"\x01\x00\x00\x02\xff\xff") /* short ClientHello. */
     };
 
     assert_eq!(hj.want_message(&msg), true);
@@ -195,7 +195,7 @@ mod tests {
     let mut msg = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec())
+      payload: MessagePayload::opaque(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04")
     };
 
     assert_eq!(hj.want_message(&msg), true);
@@ -206,7 +206,7 @@ mod tests {
     msg = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec())
+      payload: MessagePayload::opaque(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e")
     };
 
     assert_eq!(hj.want_message(&msg), true);
@@ -217,7 +217,7 @@ mod tests {
     msg = Message {
       typ: ContentType::Handshake,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(b"\x0f".to_vec())
+      payload: MessagePayload::opaque(b"\x0f")
     };
 
     assert_eq!(hj.want_message(&msg), true);

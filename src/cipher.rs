@@ -121,7 +121,7 @@ impl MessageCipher for GCMMessageCipher {
       Message {
         typ: msg.typ,
         version: msg.version,
-        payload: MessagePayload::opaque(buf)
+        payload: MessagePayload::opaque(buf.as_slice())
       }
     )
   }
@@ -172,7 +172,7 @@ impl MessageCipher for GCMMessageCipher {
     Ok(Message {
       typ: typ,
       version: version,
-      payload: MessagePayload::opaque(result)
+      payload: MessagePayload::opaque(result.as_slice())
     })
   }
 }
@@ -271,7 +271,7 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
       Message {
         typ: msg.typ,
         version: msg.version,
-        payload: MessagePayload::opaque(buf)
+        payload: MessagePayload::opaque(buf.as_slice())
       }
     )
   }
@@ -310,7 +310,7 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
     Ok(Message {
       typ: typ,
       version: version,
-      payload: MessagePayload::opaque(buf)
+      payload: MessagePayload::opaque(buf.as_slice())
     })
   }
 }
