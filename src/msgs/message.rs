@@ -61,8 +61,8 @@ impl MessagePayload {
     }
   }
 
-  pub fn opaque(data: Vec<u8>) -> MessagePayload {
-    MessagePayload::Opaque(Payload::new(data))
+  pub fn opaque(data: &[u8]) -> MessagePayload {
+    MessagePayload::Opaque(Payload::from_slice(data))
   }
 }
 
@@ -175,7 +175,7 @@ impl Message {
     Message {
       typ: self.typ,
       version: self.version,
-      payload: MessagePayload::opaque(buf)
+      payload: MessagePayload::opaque(buf.as_slice())
     }
   }
 

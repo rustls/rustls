@@ -6,7 +6,7 @@ use msgs::enums::ECCurveType;
 use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
-
+use std::fmt;
 use std::io::Write;
 use std::collections;
 
@@ -43,6 +43,7 @@ macro_rules! declare_u16_vec(
 );
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct Random {
   pub gmt_unix_time: u32,
   pub opaque: [u8; 28]
@@ -75,43 +76,82 @@ impl Random {
     bytes.write(&buf).unwrap();
   }
 }
-
-#[derive(Debug, PartialEq, Clone)]
+#[repr(C)]
 pub struct SessionID {
-  bytes: Vec<u8>
+    data: [u8;33]
 }
-
+impl fmt::Debug for SessionID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SessionID len: {} data:[{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}]", self.data[0],self.data[1],self.data[2],self.data[3],self.data[4],self.data[5],self.data[6],self.data[7],self.data[8],self.data[9],self.data[10],self.data[11],self.data[12],self.data[13],self.data[14],self.data[15],self.data[16],self.data[17],self.data[18],self.data[19],self.data[20],self.data[21],self.data[22],self.data[23],self.data[24],self.data[25],self.data[26],self.data[27],self.data[28],self.data[29],self.data[30],self.data[31],self.data[32])
+    }
+}
+impl Clone for SessionID {
+    fn clone(&self) -> Self {
+        let mut d = [0u8;33];
+        for i in 0..33 {
+            d[i] = self.data[i]
+        }
+        SessionID{ data: d }
+    }
+}
+impl PartialEq for SessionID {
+    fn eq(&self, other: &Self) -> bool {
+        if self.data[0] != other.data[0] {
+            return false;
+        }
+        let l = self.data[0] as usize;
+        let mut flag = true;
+        for i in 1..l {
+            flag &= self.data[i] == other.data[i]
+        }
+        flag
+    }
+}
 impl Codec for SessionID {
   fn encode(&self, bytes: &mut Vec<u8>) {
-    debug_assert!(self.bytes.len() <= 32);
-    bytes.push(self.bytes.len() as u8);
-    bytes.extend_from_slice(&self.bytes);
+    debug_assert!(self.len() <= 32);
+    let l = self.len();
+    bytes.push( l as u8);
+    for x in 0..l {
+        bytes.push(self.data[x+1]);
+    }
   }
 
   fn read(r: &mut Reader) -> Option<SessionID> {
     let len = try_ret!(codec::read_u8(r));
-    let bytes = try_ret!(r.take(len as usize));
-
-    if len <= 32 {
-      Some(SessionID { bytes: bytes.to_vec() })
-    } else {
-      None
+    if len > 32 {
+      return None;
+    }
+    match r.take(len as usize) {
+      Option::None => None,
+      Option::Some(x) => {
+        let mut d = [0u8;33];
+        d[0] = len;
+        for (i,b) in x.iter().enumerate() {
+          d[i+1] = *b;
+        }
+        Some(SessionID{ data: d })
+      }
     }
   }
 }
 
 impl SessionID {
-  pub fn new(mut bytes: Vec<u8>) -> SessionID {
-    bytes.truncate(32);
-    SessionID { bytes: bytes }
+  pub fn new(bytes: Vec<u8>) -> SessionID {
+    let mut d = [0u8;33];
+    d[0] = bytes.len() as u8;
+    for (i,b) in bytes.iter().skip(1).take(32).enumerate() {
+        d[i+1] = *b;
+    }
+    SessionID { data: d }
   }
 
   pub fn empty() -> SessionID {
-    SessionID::new(Vec::new())
+    SessionID { data: [0u8;33] }
   }
 
   pub fn len(&self) -> usize {
-    return self.bytes.len()
+    self.data[0] as usize
   }
 
   pub fn is_empty(&self) -> bool {
