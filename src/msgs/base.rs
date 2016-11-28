@@ -3,7 +3,7 @@ use msgs::codec::{Codec, Reader};
 
 /// An externally length'd payload
 #[derive(Debug, Clone, PartialEq)]
-pub struct Payload( pub Vec<u8>);
+pub struct Payload(pub Vec<u8>);
 
 impl Codec for Payload {
   fn encode(&self, bytes: &mut Vec<u8>) {
