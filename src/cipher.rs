@@ -131,12 +131,14 @@ impl MessageCipher for GCMMessageCipher {
         msg.version.encode(&mut aad);
         codec::encode_u16((buf.len() - GCM_OVERHEAD) as u16, &mut aad);
 
-        let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
-                                                       &nonce,
-                                                       GCM_EXPLICIT_NONCE_LEN,
-                                                       &mut buf,
-                                                       &aad)
-            .map_err(|_| TLSError::DecryptError));
+        let plain_len = try!(
+      ring::aead::open_in_place(&self.dec_key,
+                                &nonce,
+                                GCM_EXPLICIT_NONCE_LEN,
+                                &mut buf,
+                                &aad)
+        .map_err(|_| TLSError::DecryptError)
+    );
 
         if plain_len > MAX_FRAGMENT_LEN {
             let msg = "peer sent oversized fragment".to_string();
@@ -182,8 +184,14 @@ impl MessageCipher for GCMMessageCipher {
         version.encode(&mut aad);
         codec::encode_u16(payload_len as u16, &mut aad);
 
-        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf, tag_len, &aad)
-            .map_err(|_| TLSError::General("encrypt failed".to_string())));
+        try!(
+      ring::aead::seal_in_place(&self.enc_key,
+                                &nonce,
+                                &mut buf,
+                                tag_len,
+                                &aad)
+        .map_err(|_| TLSError::General("encrypt failed".to_string()))
+    );
 
         let mut result = Vec::new();
         result.extend_from_slice(&nonce[4..]);
@@ -260,13 +268,19 @@ impl MessageCipher for TLS13MessageCipher {
         let want_len = buf.len() + tag_len;
         buf.resize(want_len, 0u8);
 
-        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf, tag_len, &[])
-            .map_err(|_| TLSError::General("encrypt failed".to_string())));
+        try!(
+      ring::aead::seal_in_place(&self.enc_key,
+                                &nonce,
+                                &mut buf,
+                                tag_len,
+                                &[])
+        .map_err(|_| TLSError::General("encrypt failed".to_string()))
+    );
 
         Ok(Message {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_0,
-            payload: MessagePayload::opaque(buf),
+            payload: MessagePayload::opaque(buf.as_slice()),
         })
     }
 
@@ -282,8 +296,14 @@ impl MessageCipher for TLS13MessageCipher {
             return Err(TLSError::DecryptError);
         }
 
-        let plain_len = try!(ring::aead::open_in_place(&self.dec_key, &nonce, 0, &mut buf, &[])
-            .map_err(|_| TLSError::DecryptError));
+        let plain_len = try!(
+      ring::aead::open_in_place(&self.dec_key,
+                                &nonce,
+                                0,
+                                &mut buf,
+                                &[])
+        .map_err(|_| TLSError::DecryptError)
+    );
 
         buf.truncate(plain_len);
 
@@ -301,7 +321,7 @@ impl MessageCipher for TLS13MessageCipher {
         Ok(Message {
             typ: content_type,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::opaque(buf),
+            payload: MessagePayload::opaque(buf.as_slice()),
         })
     }
 }
@@ -381,8 +401,14 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
         msg.version.encode(&mut aad);
         codec::encode_u16((buf.len() - CHACHAPOLY1305_OVERHEAD) as u16, &mut aad);
 
-        let plain_len = try!(ring::aead::open_in_place(&self.dec_key, &nonce, 0, &mut buf, &aad)
-            .map_err(|_| TLSError::DecryptError));
+        let plain_len = try!(
+      ring::aead::open_in_place(&self.dec_key,
+                                &nonce,
+                                0,
+                                &mut buf,
+                                &aad)
+        .map_err(|_| TLSError::DecryptError)
+    );
 
         if plain_len > MAX_FRAGMENT_LEN {
             let err_msg = "peer sent oversized fragment".to_string();
@@ -420,8 +446,14 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
         version.encode(&mut aad);
         codec::encode_u16(payload_len as u16, &mut aad);
 
-        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf, tag_len, &aad)
-            .map_err(|_| TLSError::General("encrypt failed".to_string())));
+        try!(
+      ring::aead::seal_in_place(&self.enc_key,
+                                &nonce,
+                                &mut buf,
+                                tag_len,
+                                &aad)
+        .map_err(|_| TLSError::General("encrypt failed".to_string()))
+    );
 
         Ok(Message {
             typ: typ,

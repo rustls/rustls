@@ -29,6 +29,7 @@ impl Payload {
         v.extend_from_slice(data);
         Payload(v)
     }
+
     pub fn len(&self) -> usize {
         self.0.len()
     }
