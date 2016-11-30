@@ -556,7 +556,8 @@ impl io::Read for ServerSession {
 impl io::Write for ServerSession {
   /// Send the plaintext `buf` to the peer, encrypting
   /// and authenticating it.  Once this function succeeds
-  /// you should call `write_tls` which will output
+  /// you should call `write_tls` which will output the
+  /// corresponding TLS records.
   ///
   /// This function buffers plaintext sent before the
   /// TLS handshake completes, and sends it as soon
