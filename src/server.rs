@@ -403,10 +403,10 @@ impl ServerSessionImpl {
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.common.handshake_joiner.want_message(&msg) {
-            try!(
-        self.common.handshake_joiner.take_message(msg)
-        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
-      );
+            try!(self.common
+                .handshake_joiner
+                .take_message(msg)
+                .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake)));
             return self.process_new_handshake_messages();
         }
 
@@ -439,8 +439,12 @@ impl ServerSessionImpl {
         }
 
         let handler = self.get_handler();
-        try!(handler.expect.check_message(&msg)
-         .map_err(|err| { self.queue_unexpected_alert(); err }));
+        try!(handler.expect
+            .check_message(&msg)
+            .map_err(|err| {
+                self.queue_unexpected_alert();
+                err
+            }));
         let new_state = try!((handler.handle)(self, msg));
         self.state = new_state;
 

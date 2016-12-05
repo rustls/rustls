@@ -10,6 +10,7 @@ use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
+use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::enums::ClientCertificateType;
@@ -359,7 +360,7 @@ fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
 
     try!(process_alpn_protocol(sess, exts.get_alpn_protocol()));
 
-    Ok(ConnState::ExpectCertificate)
+    Ok(ConnState::ExpectCertificateOrCertReq)
 }
 
 pub static EXPECT_ENCRYPTED_EXTENSIONS: Handler = Handler {
@@ -390,6 +391,26 @@ pub static EXPECT_CERTIFICATE: Handler = Handler {
         handshake_types: &[HandshakeType::Certificate],
     },
     handle: handle_certificate,
+};
+
+fn handle_certificate_or_cert_req(sess: &mut ClientSessionImpl,
+                                  m: Message)
+                                  -> Result<ConnState, TLSError> {
+    assert!(sess.common.is_tls13);
+
+    if m.is_handshake_type(HandshakeType::Certificate) {
+        handle_certificate(sess, m)
+    } else {
+        handle_certificate_req_tls13(sess, m)
+    }
+}
+
+pub static EXPECT_CERTIFICATE_OR_CERTREQ: Handler = Handler {
+    expect: Expectation {
+        content_types: &[ContentType::Handshake],
+        handshake_types: &[HandshakeType::Certificate, HandshakeType::CertificateRequest],
+    },
+    handle: handle_certificate_or_cert_req,
 };
 
 fn handle_server_kx(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
@@ -586,6 +607,37 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> Result<Co
     }
 
     Ok(ConnState::ExpectServerHelloDone)
+}
+
+// TLS1.3 version of the above.  We then move to expecting the server Certificate.
+// Unfortunately the CertificateRequest type changed in an annoying way in TLS1.3.
+fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
+                                m: Message)
+                                -> Result<ConnState, TLSError> {
+    let ref mut certreq = extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
+    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.doing_client_auth = true;
+    info!("Got CertificateRequest {:?}", certreq);
+
+    // Fortunately the problems here in TLS1.2 and prior are corrected in
+    // TLS1.3.
+
+    let maybe_certkey =
+        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &certreq.sigschemes);
+
+    if maybe_certkey.is_some() {
+        let (cert, key) = maybe_certkey.unwrap();
+        let maybe_sigscheme = key.choose_scheme(&certreq.sigschemes);
+        info!("Attempting client auth, will use sigscheme {:?}", maybe_sigscheme);
+        sess.handshake_data.client_auth_cert = Some(cert);
+        sess.handshake_data.client_auth_key = Some(key);
+        sess.handshake_data.client_auth_sigscheme = maybe_sigscheme;
+        sess.handshake_data.client_auth_context = Some(certreq.context.0.clone());
+    } else {
+        info!("Client auth requested but no cert selected");
+    }
+
+    Ok(ConnState::ExpectCertificate)
 }
 
 fn handle_done_or_certreq(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState, TLSError> {
@@ -809,6 +861,65 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState
     }
 }
 
+fn emit_certificate_tls13(sess: &mut ClientSessionImpl) {
+    let mut cert_payload = CertificatePayloadTLS13 {
+        context: PayloadU8::new(sess.handshake_data.client_auth_context.take().unwrap()),
+        list: Vec::new(),
+    };
+
+    if let Some(cert_chain) = sess.handshake_data.client_auth_cert.take() {
+        for cert in cert_chain {
+            cert_payload.list.push(CertificateEntry::new(cert));
+        }
+    }
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTLS13(cert_payload),
+        }),
+    };
+
+    sess.handshake_data.transcript.add_message(&m);
+    sess.common.send_msg(m, true);
+}
+
+fn emit_certverify_tls13(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
+    if sess.handshake_data.client_auth_sigscheme.is_none() ||
+       sess.handshake_data.client_auth_key.is_none() {
+        info!("Skipping certverify message (no client scheme/key)");
+        return Ok(());
+    }
+
+    let mut message = Vec::new();
+    message.resize(64, 0x20u8);
+    message.extend_from_slice(b"TLS 1.3, client CertificateVerify\x00");
+    message.extend_from_slice(&sess.handshake_data.transcript.get_current_hash());
+
+    let scheme = sess.handshake_data.client_auth_sigscheme.take().unwrap();
+    let key = sess.handshake_data.client_auth_key.take().unwrap();
+    let sig = try!(
+    key.sign(scheme, &message)
+      .map_err(|_| TLSError::General("cannot sign".to_string()))
+  );
+    let verf = DigitallySignedStruct::new(scheme, sig);
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateVerify,
+            payload: HandshakePayload::CertificateVerify(verf),
+        }),
+    };
+
+    sess.handshake_data.transcript.add_message(&m);
+    sess.common.send_msg(m, true);
+    Ok(())
+}
+
 fn emit_finished_tls13(sess: &mut ClientSessionImpl) {
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     let verify_data = sess.common
@@ -845,6 +956,11 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
 
     sess.handshake_data.transcript.add_message(&m);
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
+
+    if sess.handshake_data.doing_client_auth {
+        emit_certificate_tls13(sess);
+        try!(emit_certverify_tls13(sess));
+    }
 
     emit_finished_tls13(sess);
 
