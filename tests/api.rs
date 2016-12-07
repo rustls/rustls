@@ -7,6 +7,7 @@ extern crate rustls;
 use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
 use rustls::Session;
+use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
 
 fn transfer(left: &mut Session, right: &mut Session) {
@@ -28,7 +29,7 @@ fn transfer(left: &mut Session, right: &mut Session) {
   }
 }
 
-fn get_chain() -> Vec<Vec<u8>> {
+fn get_chain() -> Vec<Certificate> {
   pemfile::certs(
     &mut io::BufReader::new(
       fs::File::open("test-ca/rsa/end.fullchain").unwrap()
@@ -36,7 +37,7 @@ fn get_chain() -> Vec<Vec<u8>> {
   ).unwrap()
 }
 
-fn get_key() -> Vec<u8> {
+fn get_key() -> PrivateKey {
   pemfile::rsa_private_keys(
     &mut io::BufReader::new(
       fs::File::open("test-ca/rsa/end.rsa").unwrap()

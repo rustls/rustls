@@ -9,7 +9,7 @@ use msgs::handshake::{DistinguishedName, DistinguishedNames};
 use error::TLSError;
 use pemfile;
 use x509;
-
+use key;
 use std::io;
 
 /// Disable all verifications, for testing purposes.
@@ -94,9 +94,9 @@ impl RootCertStore {
   }
 
   /// Add a single DER-encoded certificate to the store.
-  pub fn add(&mut self, der: &[u8]) -> Result<(), webpki::Error> {
+  pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
     let ta = try!(
-      webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::from(der))
+      webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::from(&der.0))
     );
 
     let ota = OwnedTrustAnchor::from_trust_anchor(&ta);

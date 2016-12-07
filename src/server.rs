@@ -2,7 +2,7 @@ use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
 use msgs::enums::{AlertDescription, HandshakeType};
-use msgs::handshake::{SessionID, CertificatePayload, ASN1Cert};
+use msgs::handshake::{SessionID, CertificatePayload};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureAlgorithms};
 use msgs::handshake::{EllipticCurveList, ECPointFormatList};
 use msgs::message::Message;
@@ -13,6 +13,7 @@ use error::TLSError;
 use rand;
 use sign;
 use verify;
+use key;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -214,12 +215,12 @@ struct AlwaysResolvesChain {
 }
 
 impl AlwaysResolvesChain {
-  fn new_rsa(chain: Vec<Vec<u8>>, priv_key: &[u8]) -> AlwaysResolvesChain {
+  fn new_rsa(chain: Vec<key::Certificate>, priv_key: &key::PrivateKey) -> AlwaysResolvesChain {
     let key = sign::RSASigner::new(priv_key)
       .expect("Invalid RSA private key");
     let mut payload = Vec::new();
     for cert in chain {
-      payload.push(ASN1Cert::new(cert));
+      payload.push(cert);
     }
     AlwaysResolvesChain { chain: payload, key: Arc::new(Box::new(key)) }
   }
@@ -264,7 +265,7 @@ impl ServerConfig {
   ///
   /// `cert_chain` is a vector of DER-encoded certificates.
   /// `key_der` is a DER-encoded RSA private key.
-  pub fn set_single_cert(&mut self, cert_chain: Vec<Vec<u8>>, key_der: Vec<u8>) {
+  pub fn set_single_cert(&mut self, cert_chain: Vec<key::Certificate>, key_der: key::PrivateKey) {
     self.cert_resolver = Box::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
   }
 
@@ -282,7 +283,7 @@ impl ServerConfig {
   /// and validate certificates to the given list of root
   /// `certs`.  If `mandatory` is true, the server will fail
   /// to handshake with a client if it does not do client auth.
-  pub fn set_client_auth_roots(&mut self, certs: Vec<Vec<u8>>, mandatory: bool) {
+  pub fn set_client_auth_roots(&mut self, certs: Vec<key::Certificate>, mandatory: bool) {
     for cert in certs {
       self.client_auth_roots.add(&cert)
         .unwrap()
@@ -302,7 +303,7 @@ pub struct ServerHandshakeData {
   pub doing_resume: bool,
   pub send_ticket: bool,
   pub doing_client_auth: bool,
-  pub valid_client_cert_chain: Option<Vec<ASN1Cert>>
+  pub valid_client_cert_chain: Option<Vec<key::Certificate>>
 }
 
 impl ServerHandshakeData {
@@ -470,7 +471,7 @@ impl ServerSessionImpl {
     self.common.start_encryption(scs, self.secrets.as_ref().unwrap());
   }
 
-  pub fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
+  pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
     if self.handshake_data.valid_client_cert_chain.is_none() {
       return None;
     }
@@ -478,7 +479,7 @@ impl ServerSessionImpl {
     let mut r = Vec::new();
 
     for cert in self.handshake_data.valid_client_cert_chain.as_ref().unwrap() {
-      r.push(cert.0.clone());
+      r.push(cert.clone());
     }
 
     Some(r)
@@ -536,7 +537,7 @@ impl Session for ServerSession {
     self.imp.common.send_close_notify()
   }
 
-  fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>> {
+  fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
     self.imp.get_peer_certificates()
   }
 

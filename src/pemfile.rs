@@ -1,15 +1,17 @@
 use std::io;
 use base64;
-
-fn extract(rd: &mut io::BufRead,
-           start_mark: &str,
-           end_mark: &str) -> Result<Vec<Vec<u8>>, ()> {
+use key;
+fn extract<A>(rd: &mut io::BufRead,
+              start_mark: &str,
+              end_mark: &str,
+              f: &Fn(Vec<u8>) -> A) -> Result<Vec<A>, ()> {
   let mut ders = Vec::new();
   let mut b64buf = String::new();
   let mut take_base64 = false;
 
+  let mut raw_line = Vec::<u8>::new();
   loop {
-    let mut raw_line = Vec::<u8>::new();
+    raw_line.clear();
     let len = try!(rd.read_until(b'\n', &mut raw_line)
                    .map_err(|_| ()));
 
@@ -27,7 +29,7 @@ fn extract(rd: &mut io::BufRead,
       take_base64 = false;
       let der = try!(base64::decode_ws(&b64buf)
                      .map_err(|_| ()));
-      ders.push(der);
+      ders.push(f(der));
       b64buf = String::new();
       continue;
     }
@@ -38,18 +40,21 @@ fn extract(rd: &mut io::BufRead,
   }
 }
 
+
 /// Extract all the certificates from rd, and return a vec of bytevecs
 /// containing the der-format contents.
-pub fn certs(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
+pub fn certs(rd: &mut io::BufRead) -> Result<Vec<key::Certificate>, ()> {
   extract(rd,
           "-----BEGIN CERTIFICATE-----",
-          "-----END CERTIFICATE-----")
+          "-----END CERTIFICATE-----",
+          &|v| key::Certificate(v))
 }
 
 /// Extract all RSA private keys from rd, and return a vec of bytevecs
 /// containing the der-format contents.
-pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<Vec<u8>>, ()> {
+pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
   extract(rd,
           "-----BEGIN RSA PRIVATE KEY-----",
-          "-----END RSA PRIVATE KEY-----")
+          "-----END RSA PRIVATE KEY-----",
+          &|v| key::PrivateKey(v))
 }

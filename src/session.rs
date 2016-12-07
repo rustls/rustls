@@ -11,6 +11,7 @@ use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::MessageCipher;
 use vecbuf::ChunkVecBuffer;
+use key;
 use prf;
 use rand;
 
@@ -67,7 +68,7 @@ pub trait Session : Read + Write + Send {
   /// if client authentication was completed.
   ///
   /// The return value is None until this value is available.
-  fn get_peer_certificates(&self) -> Option<Vec<Vec<u8>>>;
+  fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>>;
 
   /// Retrieves the protocol agreed with the peer via ALPN.
   ///

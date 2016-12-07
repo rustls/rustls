@@ -3,12 +3,13 @@ use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat, NamedC
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
 use msgs::enums::ClientCertificateType;
 use msgs::enums::ECCurveType;
-use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use msgs::base::{Payload, PayloadU8, PayloadU16};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 use std::fmt;
 use std::io::Write;
 use std::collections;
+use key;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -709,16 +710,16 @@ impl ServerHelloPayload {
   }
 }
 
-pub type ASN1Cert = PayloadU24;
-pub type CertificatePayload = Vec<ASN1Cert>;
+pub type ASN1Cert = key::Certificate; // PayloadU24;
+pub type CertificatePayload = Vec<key::Certificate>;
 
 impl Codec for CertificatePayload {
   fn encode(&self, bytes: &mut Vec<u8>) {
-    codec::encode_vec_u24(bytes, self);
+    codec::encode_vec_u24(bytes, &self);
   }
 
   fn read(r: &mut Reader) -> Option<CertificatePayload> {
-    codec::read_vec_u24::<ASN1Cert>(r)
+    codec::read_vec_u24(r)
   }
 }
 

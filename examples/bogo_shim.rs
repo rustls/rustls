@@ -61,14 +61,14 @@ impl Options {
   }
 }
 
-fn load_cert(filename: &str) -> Vec<Vec<u8>> {
+fn load_cert(filename: &str) -> Vec<rustls::Certificate> {
   let certfile = fs::File::open(filename)
     .expect("cannot open certificate file");
   let mut reader = BufReader::new(certfile);
   rustls::internal::pemfile::certs(&mut reader).unwrap()
 }
 
-fn load_key(filename: &str) -> Vec<u8> {
+fn load_key(filename: &str) -> rustls::PrivateKey {
   if filename.contains("ecdsa") {
     println_err!("No ECDSA key support");
     process::exit(BOGO_NACK);

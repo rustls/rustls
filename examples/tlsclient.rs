@@ -367,7 +367,7 @@ fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSu
   out
 }
 
-fn load_certs(filename: &str) -> Vec<Vec<u8>> {
+fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
   let certfile = fs::File::open(filename)
     .expect("cannot open certificate file");
   let mut reader = BufReader::new(certfile);
@@ -375,7 +375,7 @@ fn load_certs(filename: &str) -> Vec<Vec<u8>> {
     .unwrap()
 }
 
-fn load_private_key(filename: &str) -> Vec<u8> {
+fn load_private_key(filename: &str) -> rustls::PrivateKey {
   let keyfile = fs::File::open(filename)
     .expect("cannot open private key file");
   let mut reader = BufReader::new(keyfile);

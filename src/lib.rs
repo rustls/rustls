@@ -208,7 +208,7 @@ mod suites;
 mod ticketer;
 mod server;
 mod client;
-
+mod key;
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
@@ -232,3 +232,4 @@ pub use server::{StoresServerSessions, ServerSessionMemoryCache, ServerConfig, S
 pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
+pub use key::{Certificate, PrivateKey};
