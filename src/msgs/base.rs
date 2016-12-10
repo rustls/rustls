@@ -71,7 +71,7 @@ impl Codec for key::Certificate {
 
     fn read(r: &mut Reader) -> Option<key::Certificate> {
         let len = try_ret!(codec::read_u24(r)) as usize;
-        let sub = try_ret!(r.sub(len));
+        let mut sub = try_ret!(r.sub(len));
         let body = sub.rest().to_vec();
         Some(key::Certificate(body))
     }
