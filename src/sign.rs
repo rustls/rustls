@@ -3,6 +3,7 @@ use untrusted;
 use ring;
 use ring::signature;
 use std::sync::Arc;
+use key;
 
 /// A thing that can sign a message.
 pub trait Signer {
@@ -19,8 +20,8 @@ pub struct RSASigner {
 }
 
 impl RSASigner {
-  pub fn new(der: &[u8]) -> Result<RSASigner, ()> {
-    let key = signature::RSAKeyPair::from_der(untrusted::Input::from(der));
+  pub fn new(der: &key::PrivateKey) -> Result<RSASigner, ()> {
+    let key = signature::RSAKeyPair::from_der(untrusted::Input::from(&der.0));
     key
       .map(|s| RSASigner { key: Arc::new(s) })
       .map_err(|_| ())

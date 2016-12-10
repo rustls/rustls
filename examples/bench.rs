@@ -79,7 +79,7 @@ fn drain(d: &mut Session, expect_len: usize) {
   }
 }
 
-fn get_chain() -> Vec<Vec<u8>> {
+fn get_chain() -> Vec<rustls::Certificate> {
   pemfile::certs(
     &mut io::BufReader::new(
       fs::File::open("test-ca/rsa/end.fullchain").unwrap()
@@ -87,7 +87,7 @@ fn get_chain() -> Vec<Vec<u8>> {
   ).unwrap()
 }
 
-fn get_key() -> Vec<u8> {
+fn get_key() -> rustls::PrivateKey {
   pemfile::rsa_private_keys(
     &mut io::BufReader::new(
       fs::File::open("test-ca/rsa/end.rsa").unwrap()

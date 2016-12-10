@@ -1,6 +1,6 @@
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
-
+use key;
 /// An externally length'd payload
 #[derive(Debug, Clone, PartialEq)]
 pub struct Payload(pub Vec<u8>);
@@ -55,6 +55,20 @@ impl Codec for PayloadU24 {
     let sub = try_ret!(r.sub(len));
     let body = sub.rest().to_vec();
     Some(PayloadU24(body))
+  }
+}
+
+impl Codec for key::Certificate {
+  fn encode(&self, bytes: &mut Vec<u8>) {
+    codec::encode_u24(self.0.len() as u32, bytes);
+    bytes.extend_from_slice(&self.0);
+  }
+
+  fn read(r: &mut Reader) -> Option<key::Certificate> {
+    let len = try_ret!(codec::read_u24(r)) as usize;
+    let sub = try_ret!(r.sub(len));
+    let body = sub.rest().to_vec();
+    Some(key::Certificate(body))
   }
 }
 
