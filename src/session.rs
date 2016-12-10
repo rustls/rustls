@@ -307,7 +307,7 @@ impl SessionCommon {
         self.message_cipher.encrypt(plain, seq).unwrap()
     }
 
-    pub fn decrypt_incoming(&mut self, plain: Message) -> Result<Message, TLSError> {
+    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TLSError> {
         // Perhaps if we send an alert well before their counter wraps, a
         // buggy peer won't make a terrible mistake here?
         // Note that there's no reason to refuse to decrypt: the security
@@ -318,7 +318,7 @@ impl SessionCommon {
 
         let seq = self.read_seq;
         self.read_seq += 1;
-        self.message_cipher.decrypt(plain, seq)
+        self.message_cipher.decrypt(encr, seq)
     }
 
     pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {

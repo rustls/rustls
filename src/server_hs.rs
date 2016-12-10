@@ -3,7 +3,7 @@ use msgs::enums::{Compression, NamedGroup, ECPointFormat, CipherSuite};
 use msgs::enums::{ExtensionType, AlertDescription};
 use msgs::enums::{ClientCertificateType, SignatureScheme};
 use msgs::message::{Message, MessagePayload};
-use msgs::base::Payload;
+use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
@@ -13,6 +13,7 @@ use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
 use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload};
+use msgs::handshake::CertificateRequestPayloadTLS13;
 use msgs::handshake::{HelloRetryRequest, HelloRetryExtension, KeyShareEntry};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::SupportedMandatedSignatureSchemes;
@@ -374,6 +375,35 @@ fn emit_encrypted_extensions(sess: &mut ServerSessionImpl,
     Ok(())
 }
 
+fn emit_certificate_req_tls13(sess: &mut ServerSessionImpl) {
+    if !sess.config.client_auth_offer {
+        return;
+    }
+
+    let names = sess.config.client_auth_roots.get_subjects();
+
+    let cr = CertificateRequestPayloadTLS13 {
+        context: PayloadU8::empty(),
+        sigschemes: SupportedSignatureSchemes::supported_verify(),
+        canames: names,
+        extensions: Vec::new(),
+    };
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateRequest,
+            payload: HandshakePayload::CertificateRequestTLS13(cr),
+        }),
+    };
+
+    debug!("Sending CertificateRequest {:?}", m);
+    sess.handshake_data.transcript.add_message(&m);
+    sess.common.send_msg(m, true);
+    sess.handshake_data.doing_client_auth = true;
+}
+
 fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
     let mut cert_body = CertificatePayloadTLS13::new();
 
@@ -492,11 +522,16 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
 
     try!(emit_server_hello_tls13(sess, chosen_share));
     try!(emit_encrypted_extensions(sess, client_hello));
+    emit_certificate_req_tls13(sess);
     emit_certificate_tls13(sess);
     try!(emit_certificate_verify_tls13(sess, &sigschemes_ext, signer));
     emit_finished_tls13(sess);
 
-    return Ok(ConnState::ExpectFinishedTLS13);
+    if sess.handshake_data.doing_client_auth {
+        Ok(ConnState::ExpectCertificateTLS13)
+    } else {
+        Ok(ConnState::ExpectFinishedTLS13)
+    }
 }
 
 fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
@@ -718,6 +753,37 @@ pub static EXPECT_CERTIFICATE: Handler = Handler {
     handle: handle_certificate,
 };
 
+fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
+                            m: Message)
+                            -> Result<ConnState, TLSError> {
+    sess.handshake_data.transcript.add_message(&m);
+    let certp = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
+    let cert_chain = certp.convert();
+
+    if cert_chain.is_empty() && !sess.config.client_auth_mandatory {
+        info!("client auth requested but no certificate supplied");
+        sess.handshake_data.doing_client_auth = false;
+        sess.handshake_data.transcript.abandon_client_auth();
+        return Ok(ConnState::ExpectFinishedTLS13);
+    }
+
+    try!(
+     verify::verify_client_cert(&sess.config.client_auth_roots,
+                                &cert_chain)
+  );
+
+    sess.handshake_data.valid_client_cert_chain = Some(cert_chain);
+    Ok(ConnState::ExpectCertificateVerifyTLS13)
+}
+
+pub static EXPECT_CERTIFICATE_TLS13: Handler = Handler {
+    expect: Expectation {
+        content_types: &[ContentType::Handshake],
+        handshake_types: &[HandshakeType::Certificate],
+    },
+    handle: handle_certificate_tls13,
+};
+
 // --- Process client's KeyExchange ---
 fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
     let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
@@ -780,6 +846,40 @@ pub static EXPECT_CERTIFICATE_VERIFY: Handler = Handler {
         handshake_types: &[HandshakeType::CertificateVerify],
     },
     handle: handle_certificate_verify,
+};
+
+fn handle_certificate_verify_tls13(sess: &mut ServerSessionImpl,
+                                   m: Message)
+                                   -> Result<ConnState, TLSError> {
+    let rc = {
+        let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
+        let certs = sess.handshake_data.valid_client_cert_chain.as_ref().unwrap();
+        let handshake_hash = sess.handshake_data.transcript.get_current_hash();
+        sess.handshake_data.transcript.abandon_client_auth();
+
+        verify::verify_tls13(&certs[0],
+                             &sig,
+                             &handshake_hash,
+                             b"TLS 1.3, client CertificateVerify\x00")
+    };
+
+    if rc.is_err() {
+        sess.common.send_fatal_alert(AlertDescription::AccessDenied);
+        return Err(rc.unwrap_err());
+    } else {
+        debug!("client CertificateVerify OK");
+    }
+
+    sess.handshake_data.transcript.add_message(&m);
+    Ok(ConnState::ExpectFinishedTLS13)
+}
+
+pub static EXPECT_CERTIFICATE_VERIFY_TLS13: Handler = Handler {
+    expect: Expectation {
+        content_types: &[ContentType::Handshake],
+        handshake_types: &[HandshakeType::CertificateVerify],
+    },
+    handle: handle_certificate_verify_tls13,
 };
 
 // --- Process client's ChangeCipherSpec ---

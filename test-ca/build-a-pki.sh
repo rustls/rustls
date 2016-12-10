@@ -43,6 +43,10 @@ openssl req -nodes \
           -batch \
           -subj "/CN=ponytown client"
 
+openssl rsa \
+          -in rsa/client.key \
+          -out rsa/client.rsa
+
 # ecdsa
 openssl ecparam -name prime256v1 -out ecdsa/nistp256.pem
 openssl ecparam -name secp384r1 -out ecdsa/nistp384.pem
@@ -104,7 +108,7 @@ for kt in rsa ecdsa ; do
             -days 2000 \
             -set_serial 456 \
             -extensions v3_end -extfile openssl.cnf
-  
+
   openssl x509 -req \
             -in $kt/client.req \
             -out $kt/client.cert \
@@ -117,7 +121,7 @@ for kt in rsa ecdsa ; do
 
   cat $kt/inter.cert $kt/ca.cert > $kt/end.chain
   cat $kt/end.cert $kt/inter.cert $kt/ca.cert > $kt/end.fullchain
-  
+
   cat $kt/inter.cert $kt/ca.cert > $kt/client.chain
   cat $kt/client.cert $kt/inter.cert $kt/ca.cert > $kt/client.fullchain
 

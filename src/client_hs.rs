@@ -862,8 +862,13 @@ fn handle_finished(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnState
 }
 
 fn emit_certificate_tls13(sess: &mut ClientSessionImpl) {
+    let context = sess.handshake_data
+        .client_auth_context
+        .take()
+        .unwrap_or_else(|| Vec::new());
+
     let mut cert_payload = CertificatePayloadTLS13 {
-        context: PayloadU8::new(sess.handshake_data.client_auth_context.take().unwrap()),
+        context: PayloadU8::new(context),
         list: Vec::new(),
     };
 
@@ -955,13 +960,13 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
   );
 
     sess.handshake_data.transcript.add_message(&m);
-    let handshake_hash = sess.handshake_data.transcript.get_current_hash();
 
     if sess.handshake_data.doing_client_auth {
         emit_certificate_tls13(sess);
         try!(emit_certverify_tls13(sess));
     }
 
+    let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     emit_finished_tls13(sess);
 
     sess.common.get_mut_key_schedule().input_empty();
