@@ -7,6 +7,7 @@ use msgs::hsjoiner::HandshakeJoiner;
 use msgs::base::Payload;
 use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
+use msgs::enums::KeyUpdateRequest;
 use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::MessageCipher;
@@ -535,5 +536,49 @@ impl SessionCommon {
 
     pub fn send_close_notify(&mut self) {
         self.send_warning_alert(AlertDescription::CloseNotify)
+    }
+
+    pub fn process_key_update(&mut self,
+                              kur: &KeyUpdateRequest,
+                              read_kind: SecretKind)
+                              -> Result<(), TLSError> {
+        // Mustn't be interleaved with other handshake messages.
+        if !self.handshake_joiner.is_empty() {
+            let msg = "KeyUpdate received at wrong time".to_string();
+            warn!("{}", msg);
+            return Err(TLSError::PeerMisbehavedError(msg));
+        }
+
+        match *kur {
+            KeyUpdateRequest::UpdateNotRequested => {}
+            KeyUpdateRequest::UpdateRequested => {
+                self.want_write_key_update = true;
+            }
+            _ => {
+                self.send_fatal_alert(AlertDescription::IllegalParameter);
+                return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+            }
+        }
+
+        // Update our read-side keys.
+        let new_read_key = self.get_key_schedule()
+            .derive_next(read_kind);
+
+        let suite = self.get_suite();
+        let write_key = if read_kind == SecretKind::ServerApplicationTrafficSecret {
+            self.get_key_schedule().current_client_traffic_secret.clone()
+        } else {
+            self.get_key_schedule().current_server_traffic_secret.clone()
+        };
+        self.set_message_cipher(MessageCipher::new_tls13(suite, &write_key, &new_read_key),
+                                MessageCipherChange::ReadNew);
+
+        if read_kind == SecretKind::ServerApplicationTrafficSecret {
+            self.get_mut_key_schedule().current_server_traffic_secret = new_read_key;
+        } else {
+            self.get_mut_key_schedule().current_client_traffic_secret = new_read_key;
+        }
+
+        Ok(())
     }
 }

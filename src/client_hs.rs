@@ -1,4 +1,4 @@
-use msgs::enums::{ContentType, HandshakeType, ExtensionType, KeyUpdateRequest};
+use msgs::enums::{ContentType, HandshakeType, ExtensionType};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
@@ -1082,38 +1082,8 @@ fn handle_traffic_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Conn
 }
 
 fn handle_key_update(sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
-    // Mustn't be interleaved with other handshake messages.
-    if !sess.common.handshake_joiner.is_empty() {
-        let msg = "KeyUpdate received at wrong time".to_string();
-        warn!("{}", msg);
-        return Err(TLSError::PeerMisbehavedError(msg));
-    }
-
     let kur = extract_handshake!(m, HandshakePayload::KeyUpdate).unwrap();
-    match *kur {
-        KeyUpdateRequest::UpdateNotRequested => {}
-        KeyUpdateRequest::UpdateRequested => {
-            sess.common.want_write_key_update = true;
-        }
-        _ => {
-            sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
-        }
-    }
-
-    // Update our read-side keys.
-    let new_read_key = sess.common
-        .get_key_schedule()
-        .derive_next(SecretKind::ServerApplicationTrafficSecret);
-
-    let suite = sess.common.get_suite();
-    let write_key = sess.common.get_key_schedule().current_client_traffic_secret.clone();
-    sess.common.set_message_cipher(MessageCipher::new_tls13(suite, &write_key, &new_read_key),
-                                   MessageCipherChange::ReadNew);
-
-    sess.common.get_mut_key_schedule().current_server_traffic_secret = new_read_key;
-
-    Ok(())
+    sess.common.process_key_update(kur, SecretKind::ServerApplicationTrafficSecret)
 }
 
 pub static TRAFFIC_TLS13: Handler = Handler {

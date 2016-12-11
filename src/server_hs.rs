@@ -1020,7 +1020,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState
         emit_ccs(sess);
         emit_finished(sess);
     }
-    Ok(ConnState::Traffic)
+    Ok(ConnState::TrafficTLS12)
 }
 
 pub static EXPECT_FINISHED: Handler = Handler {
@@ -1067,7 +1067,7 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
         key_schedule.current_client_traffic_secret = read_key;
     }
 
-    Ok(ConnState::Traffic) // TODO: accept keyupdates
+    Ok(ConnState::TrafficTLS13)
 }
 
 pub static EXPECT_FINISHED_TLS13: Handler = Handler {
@@ -1081,13 +1081,36 @@ pub static EXPECT_FINISHED_TLS13: Handler = Handler {
 // --- Process traffic ---
 fn handle_traffic(sess: &mut ServerSessionImpl, mut m: Message) -> Result<ConnState, TLSError> {
     sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
-    Ok(ConnState::Traffic)
+    Ok(ConnState::TrafficTLS12)
 }
 
-pub static TRAFFIC: Handler = Handler {
+pub static TRAFFIC_TLS12: Handler = Handler {
     expect: Expectation {
         content_types: &[ContentType::ApplicationData],
         handshake_types: &[],
     },
     handle: handle_traffic,
+};
+
+fn handle_key_update(sess: &mut ServerSessionImpl, m: Message) -> Result<(), TLSError> {
+    let kur = extract_handshake!(m, HandshakePayload::KeyUpdate).unwrap();
+    sess.common.process_key_update(kur, SecretKind::ClientApplicationTrafficSecret)
+}
+
+fn handle_traffic_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+    if m.is_content_type(ContentType::ApplicationData) {
+        try!(handle_traffic(sess, m));
+    } else if m.is_handshake_type(HandshakeType::KeyUpdate) {
+        try!(handle_key_update(sess, m));
+    }
+
+    Ok(ConnState::TrafficTLS13)
+}
+
+pub static TRAFFIC_TLS13: Handler = Handler {
+    expect: Expectation {
+        content_types: &[ContentType::ApplicationData, ContentType::Handshake],
+        handshake_types: &[HandshakeType::KeyUpdate],
+    },
+    handle: handle_traffic_tls13,
 };

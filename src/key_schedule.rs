@@ -3,7 +3,7 @@
 use ring::{hmac, digest, hkdf};
 use msgs::codec;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SecretKind {
     ExternalPSKBinderKey,
     ResumptionPSKBinderKey,
