@@ -21,15 +21,6 @@ pub struct HandshakeHash {
     buffer: Vec<u8>,
 }
 
-fn _dumphex(why: &str, bytes: &[u8]) {
-    print!("{} ({}): ", why, bytes.len());
-
-    for b in bytes {
-        print!("{:02x}", b);
-    }
-    println!("");
-}
-
 impl HandshakeHash {
     pub fn new() -> HandshakeHash {
         HandshakeHash {

@@ -553,6 +553,19 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
         return Err(TLSError::PeerMisbehavedError("client sent duplicate extensions".to_string()));
     }
 
+    // Are we doing TLS1.3?
+    let maybe_versions_ext = client_hello.get_versions_extension();
+    if let Some(versions) = maybe_versions_ext {
+        let tls13_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
+        let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
+
+        if versions.contains(&ProtocolVersion::Unknown(0x7f12)) && tls13_enabled {
+            sess.common.is_tls13 = true;
+        } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
+            return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
+        }
+    }
+
     // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
     debug!("we got a clienthello {:?}", client_hello);
 
@@ -572,19 +585,26 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
         return Err(TLSError::General("no server certificate chain resolved".to_string()));
     }
     let (cert_chain, private_key) = maybe_cert_key.unwrap();
+    sess.handshake_data.server_cert_chain = Some(cert_chain);
 
     // Reduce our supported ciphersuites by the certificate.
     // (no-op for TLS1.3)
-    let ciphersuites_suitable_for_cert = suites::reduce_given_sigalg(&sess.config.ciphersuites,
-                                                                     &private_key.algorithm());
-    sess.handshake_data.server_cert_chain = Some(cert_chain);
+    let suitable_suites = suites::reduce_given_sigalg(&sess.config.ciphersuites,
+                                                      &private_key.algorithm());
+
+    // And version
+    let protocol_version = if sess.common.is_tls13 {
+        ProtocolVersion::TLSv1_3
+    } else {
+        ProtocolVersion::TLSv1_2
+    };
+
+    let suitable_suites = suites::reduce_given_version(&suitable_suites, protocol_version);
 
     let maybe_ciphersuite = if sess.config.ignore_client_order {
-        suites::choose_ciphersuite_preferring_server(&client_hello.cipher_suites,
-                                                     &ciphersuites_suitable_for_cert)
+        suites::choose_ciphersuite_preferring_server(&client_hello.cipher_suites, &suitable_suites)
     } else {
-        suites::choose_ciphersuite_preferring_client(&client_hello.cipher_suites,
-                                                     &ciphersuites_suitable_for_cert)
+        suites::choose_ciphersuite_preferring_client(&client_hello.cipher_suites, &suitable_suites)
     };
 
     if maybe_ciphersuite.is_none() {
@@ -598,13 +618,8 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     sess.handshake_data.transcript.start_hash(sess.common.get_suite().get_hash());
     sess.handshake_data.transcript.add_message(&m);
 
-    // Are we doing TLS1.3?
-    let maybe_versions_ext = client_hello.get_versions_extension();
-    if let Some(versions) = maybe_versions_ext {
-        if versions.contains(&ProtocolVersion::Unknown(0x7f12)) {
-            sess.common.is_tls13 = true;
-            return handle_client_hello_tls13(sess, &client_hello, &private_key);
-        }
+    if sess.common.is_tls13 {
+        return handle_client_hello_tls13(sess, &client_hello, &private_key);
     }
 
     // -- TLS1.2 only from hereon in --

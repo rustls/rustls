@@ -1,7 +1,7 @@
 use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::ContentType;
-use msgs::enums::{AlertDescription, HandshakeType};
+use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use msgs::handshake::{SessionID, CertificatePayload};
 use msgs::handshake::{ServerNameRequest, SupportedSignatureSchemes};
 use msgs::message::Message;
@@ -122,6 +122,10 @@ pub struct ServerConfig {
     /// Whether to complete handshakes with clients which
     /// don't do client auth.
     pub client_auth_mandatory: bool,
+
+    /// Supported protocol versions, in no particular order.
+    /// The default is all supported versions.
+    pub versions: Vec<ProtocolVersion>,
 }
 
 /// Something which never stores sessions.
@@ -263,6 +267,7 @@ impl ServerConfig {
             client_auth_roots: verify::RootCertStore::empty(),
             client_auth_offer: false,
             client_auth_mandatory: false,
+            versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
         }
     }
 
@@ -405,10 +410,10 @@ impl ServerSessionImpl {
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.common.handshake_joiner.want_message(&msg) {
-            try!(
-        self.common.handshake_joiner.take_message(msg)
-        .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
-      );
+            try!(self.common
+                .handshake_joiner
+                .take_message(msg)
+                .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake)));
             return self.process_new_handshake_messages();
         }
 
@@ -441,8 +446,12 @@ impl ServerSessionImpl {
         }
 
         let handler = self.get_handler();
-        try!(handler.expect.check_message(&msg)
-         .map_err(|err| { self.queue_unexpected_alert(); err }));
+        try!(handler.expect
+            .check_message(&msg)
+            .map_err(|err| {
+                self.queue_unexpected_alert();
+                err
+            }));
         let new_state = try!((handler.handle)(self, msg));
         self.state = new_state;
 
@@ -501,6 +510,19 @@ impl ServerSessionImpl {
     pub fn get_alpn_protocol(&self) -> Option<String> {
         self.alpn_protocol.clone()
     }
+
+    pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
+        match self.state {
+            ConnState::ExpectClientHello => None,
+            _ => {
+                if self.common.is_tls13 {
+                    Some(ProtocolVersion::TLSv1_3)
+                } else {
+                    Some(ProtocolVersion::TLSv1_2)
+                }
+            }
+        }
+    }
 }
 
 /// This represents a single TLS server session.
@@ -556,6 +578,10 @@ impl Session for ServerSession {
 
     fn get_alpn_protocol(&self) -> Option<String> {
         self.imp.get_alpn_protocol()
+    }
+
+    fn get_protocol_version(&self) -> Option<ProtocolVersion> {
+        self.imp.get_protocol_version()
     }
 }
 

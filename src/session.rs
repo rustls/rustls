@@ -77,6 +77,11 @@ pub trait Session: Read + Write + Send {
     /// means no protocol was agreed (because no protocols
     /// were offered or accepted by the peer).
     fn get_alpn_protocol(&self) -> Option<String>;
+
+    /// Retrieves the protocol version agreed with the peer.
+    ///
+    /// This returns None until the version is agreed.
+    fn get_protocol_version(&self) -> Option<ProtocolVersion>;
 }
 
 #[derive(Clone, Debug)]

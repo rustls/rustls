@@ -224,6 +224,7 @@ pub mod internal {
 }
 
 // The public interface is:
+pub use msgs::enums::ProtocolVersion;
 pub use error::TLSError;
 pub use session::Session;
 pub use verify::RootCertStore;

@@ -42,14 +42,6 @@ pub struct KeySchedule {
     pub current_server_traffic_secret: Vec<u8>,
 }
 
-fn _dumphex(why: &str, bytes: &[u8]) {
-    print!("{}: ", why);
-    for b in bytes {
-        print!("{:02x}", b);
-    }
-    println!("");
-}
-
 impl KeySchedule {
     pub fn new(hash: &'static digest::Algorithm) -> KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];

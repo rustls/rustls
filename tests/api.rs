@@ -7,6 +7,8 @@ extern crate rustls;
 use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
 use rustls::Session;
+use rustls::ProtocolVersion;
+use rustls::TLSError;
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
 
@@ -65,6 +67,19 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
     }
 }
 
+fn do_handshake_until_error(client: &mut ClientSession,
+                            server: &mut ServerSession)
+                            -> Result<(), TLSError> {
+    while server.is_handshaking() || client.is_handshaking() {
+        transfer(client, server);
+        try!(server.process_new_packets());
+        transfer(server, client);
+        try!(client.process_new_packets());
+    }
+
+    Ok(())
+}
+
 fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<String>) {
     let mut client_config = make_client_config();
     let mut server_config = make_server_config();
@@ -105,6 +120,76 @@ fn alpn() {
 
     // case sensitive
     alpn_test(vec!["PROTO".to_string()], vec!["proto".to_string()], None);
+}
+
+fn version_test(client_versions: Vec<ProtocolVersion>,
+                server_versions: Vec<ProtocolVersion>,
+                result: Option<ProtocolVersion>) {
+    let mut client_config = make_client_config();
+    let mut server_config = make_server_config();
+
+    println!("version {:?} {:?} -> {:?}",
+             client_versions,
+             server_versions,
+             result);
+
+    if !client_versions.is_empty() {
+        client_config.versions = client_versions;
+    }
+
+    if !server_versions.is_empty() {
+        server_config.versions = server_versions;
+    }
+
+    let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    assert_eq!(client.get_protocol_version(), None);
+    assert_eq!(server.get_protocol_version(), None);
+    if result.is_none() {
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert_eq!(err.is_err(), true);
+    } else {
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.get_protocol_version(), result);
+        assert_eq!(server.get_protocol_version(), result);
+    }
+}
+
+#[test]
+fn versions() {
+    // default -> 1.3
+    version_test(vec![], vec![], Some(ProtocolVersion::TLSv1_3));
+
+    // client default, server 1.2 -> 1.2
+    version_test(vec![],
+                 vec![ProtocolVersion::TLSv1_2],
+                 Some(ProtocolVersion::TLSv1_2));
+
+    // client 1.2, server default -> 1.2
+    version_test(vec![ProtocolVersion::TLSv1_2],
+                 vec![],
+                 Some(ProtocolVersion::TLSv1_2));
+
+    // client 1.2, server 1.3 -> fail
+    version_test(vec![ProtocolVersion::TLSv1_2],
+                 vec![ProtocolVersion::TLSv1_3],
+                 None);
+
+    // client 1.3, server 1.2 -> fail
+    version_test(vec![ProtocolVersion::TLSv1_3],
+                 vec![ProtocolVersion::TLSv1_2],
+                 None);
+
+    // client 1.3, server 1.2+1.3 -> 1.3
+    version_test(vec![ProtocolVersion::TLSv1_3],
+                 vec![ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3],
+                 Some(ProtocolVersion::TLSv1_3));
+
+    // client 1.2+1.3, server 1.2 -> 1.2
+    version_test(vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
+                 vec![ProtocolVersion::TLSv1_2],
+                 Some(ProtocolVersion::TLSv1_2));
 }
 
 fn check_read(reader: &mut io::Read, bytes: &[u8]) {

@@ -93,18 +93,28 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
         (SessionID::empty(), Vec::new())
     };
 
-    let supported_versions = vec![
-    ProtocolVersion::Unknown(TLS13_DRAFT),
-    ProtocolVersion::TLSv1_2
-  ];
+    let support_tls12 = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
+    let support_tls13 = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
+
+    let mut supported_versions = Vec::new();
+    if support_tls13 {
+        supported_versions.push(ProtocolVersion::Unknown(TLS13_DRAFT));
+    }
+
+    if support_tls12 {
+        supported_versions.push(ProtocolVersion::TLSv1_2);
+    }
 
     let mut key_shares = vec![];
-    let groups = NamedGroups::supported();
 
-    for group in groups {
-        if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
-            key_shares.push(KeyShareEntry::new(group, &key_share.pubkey));
-            sess.handshake_data.offered_key_shares.push(key_share);
+    if support_tls13 {
+        let groups = NamedGroups::supported();
+
+        for group in groups {
+            if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
+                key_shares.push(KeyShareEntry::new(group, &key_share.pubkey));
+                sess.handshake_data.offered_key_shares.push(key_share);
+            }
         }
     }
 
@@ -114,7 +124,10 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
     exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
-    exts.push(ClientExtension::KeyShare(key_shares));
+
+    if support_tls13 {
+        exts.push(ClientExtension::KeyShare(key_shares));
+    }
 
     if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
@@ -243,11 +256,13 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
     debug!("We got ServerHello {:#?}", server_hello);
 
     match server_hello.server_version {
-        ProtocolVersion::TLSv1_2 => {
+        ProtocolVersion::TLSv1_2 if sess.config.versions.contains(&ProtocolVersion::TLSv1_2) => {
             sess.common.is_tls13 = false;
         }
         ProtocolVersion::TLSv1_3 |
-        ProtocolVersion::Unknown(TLS13_DRAFT) => {
+        ProtocolVersion::Unknown(TLS13_DRAFT) if sess.config
+            .versions
+            .contains(&ProtocolVersion::TLSv1_3) => {
             sess.common.is_tls13 = true;
         }
         _ => {

@@ -133,7 +133,8 @@ impl RootCertStore {
         }
 
         info!("add_pem_file processed {} valid and {} invalid certs",
-          valid_count, invalid_count);
+              valid_count,
+              invalid_count);
 
         Ok((valid_count, invalid_count))
     }
@@ -151,10 +152,8 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
 
     // EE cert must appear first.
     let cert_der = untrusted::Input::from(&presented_certs[0].0);
-    let cert = try!(
-    webpki::EndEntityCert::from(cert_der)
-      .map_err(|err| TLSError::WebPKIError(err))
-  );
+    let cert = try!(webpki::EndEntityCert::from(cert_der)
+        .map_err(|err| TLSError::WebPKIError(err)));
 
     let chain: Vec<untrusted::Input> = presented_certs.iter()
         .skip(1)
@@ -268,8 +267,7 @@ pub fn verify_signed_struct(message: &[u8],
 
     let possible_algs = try!(convert_scheme(dss.scheme));
     let cert_in = untrusted::Input::from(&cert.0);
-    let cert = try!(webpki::EndEntityCert::from(cert_in)
-                  .map_err(|err| TLSError::WebPKIError(err)));
+    let cert = try!(webpki::EndEntityCert::from(cert_in).map_err(|err| TLSError::WebPKIError(err)));
 
     verify_sig_using_any_alg(&cert, &possible_algs, message, &dss.sig.0)
         .map_err(|err| TLSError::WebPKIError(err))
@@ -305,11 +303,10 @@ pub fn verify_tls13(cert: &ASN1Cert,
     msg.extend_from_slice(handshake_hash);
 
     let cert_in = untrusted::Input::from(&cert.0);
-    let cert = try!(webpki::EndEntityCert::from(cert_in)
-                  .map_err(|err| TLSError::WebPKIError(err)));
+    let cert = try!(webpki::EndEntityCert::from(cert_in).map_err(|err| TLSError::WebPKIError(err)));
     try!(cert.verify_signature(alg,
-                             untrusted::Input::from(&msg),
-                             untrusted::Input::from(&dss.sig.0))
-       .map_err(|err| TLSError::WebPKIError(err)));
+                          untrusted::Input::from(&msg),
+                          untrusted::Input::from(&dss.sig.0))
+        .map_err(|err| TLSError::WebPKIError(err)));
     Ok(())
 }

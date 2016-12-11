@@ -49,15 +49,6 @@ impl RSASigner {
     }
 }
 
-fn _dumphex(label: &str, bytes: &[u8]) {
-    print!("{}: ", label);
-
-    for b in bytes {
-        print!("{:02x}", b);
-    }
-    print!("\n");
-}
-
 impl Signer for RSASigner {
     fn choose_scheme(&self, offered: &SupportedSignatureSchemes) -> Option<SignatureScheme> {
         util::first_in_both(&self.schemes, offered)
