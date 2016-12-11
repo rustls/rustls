@@ -115,7 +115,10 @@ impl Resumption {
     }
 }
 
-fn make_server_config(clientauth: &ClientAuth, resume: &Resumption) -> ServerConfig {
+fn make_server_config(version: rustls::ProtocolVersion,
+                      clientauth: &ClientAuth,
+                      resume: &Resumption)
+                      -> ServerConfig {
     let mut cfg = ServerConfig::new();
 
     cfg.set_single_cert(get_chain(), get_key());
@@ -130,10 +133,14 @@ fn make_server_config(clientauth: &ClientAuth, resume: &Resumption) -> ServerCon
         cfg.ticketer = Ticketer::new();
     }
 
+    cfg.versions.clear();
+    cfg.versions.push(version);
+
     cfg
 }
 
-fn make_client_config(suite: &'static rustls::SupportedCipherSuite,
+fn make_client_config(version: rustls::ProtocolVersion,
+                      suite: &'static rustls::SupportedCipherSuite,
                       clientauth: &ClientAuth,
                       resume: &Resumption)
                       -> ClientConfig {
@@ -142,6 +149,8 @@ fn make_client_config(suite: &'static rustls::SupportedCipherSuite,
     cfg.root_store.add_pem_file(&mut rootbuf).unwrap();
     cfg.ciphersuites.clear();
     cfg.ciphersuites.push(suite);
+    cfg.versions.clear();
+    cfg.versions.push(version);
 
     if clientauth == &ClientAuth::Yes {
         cfg.set_single_client_cert(get_chain(), get_key());
@@ -154,11 +163,16 @@ fn make_client_config(suite: &'static rustls::SupportedCipherSuite,
     cfg
 }
 
-fn bench_handshake(suite: &'static rustls::SupportedCipherSuite,
+fn bench_handshake(version: rustls::ProtocolVersion,
+                   suite: &'static rustls::SupportedCipherSuite,
                    clientauth: ClientAuth,
                    resume: Resumption) {
-    let client_config = Arc::new(make_client_config(suite, &clientauth, &resume));
-    let server_config = Arc::new(make_server_config(&clientauth, &resume));
+    let client_config = Arc::new(make_client_config(version, suite, &clientauth, &resume));
+    let server_config = Arc::new(make_server_config(version, &clientauth, &resume));
+
+    if !suite.usable_for_version(version) {
+        return;
+    }
 
     let rounds = 512;
     let mut client_time = 0f64;
@@ -186,7 +200,8 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite,
         });
     }
 
-    println!("handshakes\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
+    println!("handshakes\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
+             version,
              suite.suite,
              if clientauth == ClientAuth::Yes {
                  "mutual"
@@ -195,7 +210,8 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite,
              },
              resume.label(),
              rounds as f64 / client_time);
-    println!("handshakes\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
+    println!("handshakes\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
+             version,
              suite.suite,
              if clientauth == ClientAuth::Yes {
                  "mutual"
@@ -207,29 +223,22 @@ fn bench_handshake(suite: &'static rustls::SupportedCipherSuite,
 }
 
 fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
-    assert_eq!(server.is_handshaking(), true);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(client, server);
-    server.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), true);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(server, client);
-    client.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), true);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(client, server);
-    server.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), false);
-    assert_eq!(client.is_handshaking(), true);
-    transfer(server, client);
-    client.process_new_packets().unwrap();
-    assert_eq!(server.is_handshaking(), false);
-    assert_eq!(client.is_handshaking(), false);
+    while server.is_handshaking() || client.is_handshaking() {
+        transfer(client, server);
+        server.process_new_packets().unwrap();
+        transfer(server, client);
+        client.process_new_packets().unwrap();
+    }
 }
 
-fn bench_bulk(suite: &'static rustls::SupportedCipherSuite) {
-    let client_config = Arc::new(make_client_config(suite, &ClientAuth::No, &Resumption::No));
-    let server_config = Arc::new(make_server_config(&ClientAuth::No, &Resumption::No));
+fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::SupportedCipherSuite) {
+    let client_config =
+        Arc::new(make_client_config(version, suite, &ClientAuth::No, &Resumption::No));
+    let server_config = Arc::new(make_server_config(version, &ClientAuth::No, &Resumption::No));
+
+    if !suite.usable_for_version(version) {
+        return;
+    }
 
     let mut client = ClientSession::new(&client_config, "localhost");
     let mut server = ServerSession::new(&server_config);
@@ -255,27 +264,31 @@ fn bench_bulk(suite: &'static rustls::SupportedCipherSuite) {
         drain(&mut client, buf.len());
     }
 
-    println!("bulk\t{:?}\tsend\t{:.2}\tMB/s",
+    println!("bulk\t{:?}\t{:?}\tsend\t{:.2}\tMB/s",
+             version,
              suite.suite,
              total_mb as f64 / time_send);
-    println!("bulk\t{:?}\trecv\t{:.2}\tMB/s",
+    println!("bulk\t{:?}\t{:?}\trecv\t{:.2}\tMB/s",
+             version,
              suite.suite,
              total_mb as f64 / time_recv);
 }
 
 fn main() {
-    for suite in rustls::ALL_CIPHERSUITES.iter() {
-        if suite.sign != SignatureAlgorithm::RSA {
-            // TODO: Need ECDSA server support for this.
-            continue;
-        }
+    for version in &[rustls::ProtocolVersion::TLSv1_3, rustls::ProtocolVersion::TLSv1_2] {
+        for suite in rustls::ALL_CIPHERSUITES.iter() {
+            if suite.sign == SignatureAlgorithm::ECDSA {
+                // TODO: Need ECDSA server support for this.
+                continue;
+            }
 
-        bench_bulk(suite);
-        bench_handshake(suite, ClientAuth::No, Resumption::No);
-        bench_handshake(suite, ClientAuth::Yes, Resumption::No);
-        bench_handshake(suite, ClientAuth::No, Resumption::SessionID);
-        bench_handshake(suite, ClientAuth::Yes, Resumption::SessionID);
-        bench_handshake(suite, ClientAuth::No, Resumption::Tickets);
-        bench_handshake(suite, ClientAuth::Yes, Resumption::Tickets);
+            bench_bulk(*version, suite);
+            bench_handshake(*version, suite, ClientAuth::No, Resumption::No);
+            bench_handshake(*version, suite, ClientAuth::Yes, Resumption::No);
+            bench_handshake(*version, suite, ClientAuth::No, Resumption::SessionID);
+            bench_handshake(*version, suite, ClientAuth::Yes, Resumption::SessionID);
+            bench_handshake(*version, suite, ClientAuth::No, Resumption::Tickets);
+            bench_handshake(*version, suite, ClientAuth::Yes, Resumption::Tickets);
+        }
     }
 }

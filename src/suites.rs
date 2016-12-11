@@ -188,12 +188,12 @@ impl SupportedCipherSuite {
         (self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
     }
 
-    fn usable_for_tls13(&self) -> bool {
-        self.sign == SignatureAlgorithm::Anonymous
-    }
-
-    fn usable_for_tls12(&self) -> bool {
-        self.sign != SignatureAlgorithm::Anonymous
+    pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
+        match version {
+            ProtocolVersion::TLSv1_3 => self.sign == SignatureAlgorithm::Anonymous,
+            ProtocolVersion::TLSv1_2 => self.sign != SignatureAlgorithm::Anonymous,
+            _ => false,
+        }
     }
 }
 
@@ -353,13 +353,7 @@ pub fn reduce_given_version(all: &[&'static SupportedCipherSuite],
                             version: ProtocolVersion)
                             -> Vec<&'static SupportedCipherSuite> {
     all.iter()
-        .filter(|&&suite| {
-            match version {
-                ProtocolVersion::TLSv1_2 => suite.usable_for_tls12(),
-                ProtocolVersion::TLSv1_3 => suite.usable_for_tls13(),
-                _ => false,
-            }
-        })
+        .filter(|&&suite| suite.usable_for_version(version))
         .cloned()
         .collect()
 }
