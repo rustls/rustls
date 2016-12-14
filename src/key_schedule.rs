@@ -21,7 +21,7 @@ impl SecretKind {
     fn to_bytes(&self) -> &'static [u8] {
         match *self {
             SecretKind::ExternalPSKBinderKey => b"external psk binder key",
-            SecretKind::ResumptionPSKBinderKey => b"reusmption psk binder key",
+            SecretKind::ResumptionPSKBinderKey => b"resumption psk binder key",
             SecretKind::ClientEarlyTrafficSecret => b"client early traffic secret",
             SecretKind::EarlyExporterMasterSecret => b"early exporter master secret",
             SecretKind::ClientHandshakeTrafficSecret => b"client handshake traffic secret",
@@ -83,10 +83,14 @@ impl KeySchedule {
         }
     }
 
-    pub fn sign_verify_data(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
+    pub fn sign_finish(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
+        let base_key = self.current_traffic_secret(kind);
+        self.sign_verify_data(&base_key, hs_hash)
+    }
+
+    pub fn sign_verify_data(&self, base_key: &[u8], hs_hash: &[u8]) -> Vec<u8> {
         debug_assert!(hs_hash.len() == self.hash.output_len);
 
-        let base_key = self.current_traffic_secret(kind);
         let hmac_key = hkdf_expand_label(self.hash,
                                          &base_key,
                                          b"finished",

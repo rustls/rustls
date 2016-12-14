@@ -4,6 +4,7 @@ use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameTy
 use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use msgs::enums::ClientCertificateType;
 use msgs::enums::ECCurveType;
+use msgs::enums::PskKeyExchangeMode;
 use msgs::base::{Payload, PayloadU8, PayloadU16};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
@@ -378,8 +379,8 @@ impl Codec for ServerName {
 
 declare_u16_vec!(ServerNameRequest, ServerName);
 
-pub type ProtocolName = PayloadU8;
-declare_u16_vec!(ProtocolNameList, ProtocolName);
+pub type ProtocolNameList = VecU16OfPayloadU8;
+declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 
 pub trait ConvertProtocolNameList {
     fn from_strings(names: &[String]) -> Self;
@@ -451,8 +452,74 @@ impl Codec for KeyShareEntry {
     }
 }
 
-declare_u16_vec!(KeyShareEntries, KeyShareEntry);
+// --- TLS 1.3 PresharedKey offers ---
+#[derive(Debug)]
+pub struct PresharedKeyIdentity {
+    pub identity: PayloadU16,
+    pub obfuscated_ticket_age: u32,
+}
 
+impl PresharedKeyIdentity {
+    pub fn new(id: Vec<u8>, age: u32) -> PresharedKeyIdentity {
+        PresharedKeyIdentity {
+            identity: PayloadU16::new(id),
+            obfuscated_ticket_age: age,
+        }
+    }
+}
+
+impl Codec for PresharedKeyIdentity {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.identity.encode(bytes);
+        codec::encode_u32(self.obfuscated_ticket_age, bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<PresharedKeyIdentity> {
+        Some(PresharedKeyIdentity {
+            identity: try_ret!(PayloadU16::read(r)),
+            obfuscated_ticket_age: try_ret!(codec::read_u32(r)),
+        })
+    }
+}
+
+declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
+pub type PresharedKeyBinder = PayloadU8;
+pub type PresharedKeyBinders = VecU16OfPayloadU8;
+
+#[derive(Debug)]
+pub struct PresharedKeyOffer {
+    pub identities: PresharedKeyIdentities,
+    pub binders: PresharedKeyBinders,
+}
+
+impl PresharedKeyOffer {
+    /// Make a new one with one entry.
+    pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> PresharedKeyOffer {
+        PresharedKeyOffer {
+            identities: vec![ id ],
+            binders: vec![ PresharedKeyBinder::new(binder) ],
+        }
+    }
+}
+
+impl Codec for PresharedKeyOffer {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.identities.encode(bytes);
+        self.binders.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<PresharedKeyOffer> {
+        Some(PresharedKeyOffer {
+            identities: try_ret!(PresharedKeyIdentities::read(r)),
+            binders: try_ret!(PresharedKeyBinders::read(r)),
+        })
+    }
+}
+
+// ---
+
+declare_u8_vec!(PskKeyExchangeModes, PskKeyExchangeMode);
+declare_u16_vec!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
 #[derive(Debug)]
@@ -467,6 +534,8 @@ pub enum ClientExtension {
     Protocols(ProtocolNameList),
     SupportedVersions(ProtocolVersions),
     KeyShare(KeyShareEntries),
+    PresharedKeyModes(PskKeyExchangeModes),
+    PresharedKey(PresharedKeyOffer),
     Unknown(UnknownExtension),
 }
 
@@ -483,6 +552,8 @@ impl ClientExtension {
             ClientExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             ClientExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ClientExtension::KeyShare(_) => ExtensionType::KeyShare,
+            ClientExtension::PresharedKeyModes(_) => ExtensionType::PSKKeyExchangeModes,
+            ClientExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -504,6 +575,8 @@ impl Codec for ClientExtension {
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
             ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
             ClientExtension::KeyShare(ref r) => r.encode(&mut sub),
+            ClientExtension::PresharedKeyModes(ref r) => r.encode(&mut sub),
+            ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -547,6 +620,12 @@ impl Codec for ClientExtension {
             ExtensionType::KeyShare => {
                 ClientExtension::KeyShare(try_ret!(KeyShareEntries::read(&mut sub)))
             }
+            ExtensionType::PSKKeyExchangeModes => {
+                ClientExtension::PresharedKeyModes(try_ret!(PskKeyExchangeModes::read(&mut sub)))
+            }
+            ExtensionType::PreSharedKey => {
+                ClientExtension::PresharedKey(try_ret!(PresharedKeyOffer::read(&mut sub)))
+            }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -573,6 +652,7 @@ pub enum ServerExtension {
     RenegotiationInfo(PayloadU8),
     Protocols(ProtocolNameList),
     KeyShare(KeyShareEntry),
+    PresharedKey(u16),
     Unknown(UnknownExtension),
 }
 
@@ -586,6 +666,7 @@ impl ServerExtension {
             ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             ServerExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             ServerExtension::KeyShare(_) => ExtensionType::KeyShare,
+            ServerExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -604,6 +685,7 @@ impl Codec for ServerExtension {
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
+            ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -633,6 +715,9 @@ impl Codec for ServerExtension {
             }
             ExtensionType::KeyShare => {
                 ServerExtension::KeyShare(try_ret!(KeyShareEntry::read(&mut sub)))
+            }
+            ExtensionType::PreSharedKey => {
+                ServerExtension::PresharedKey(try_ret!(codec::read_u16(&mut sub)))
             }
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -772,6 +857,16 @@ impl ClientHelloPayload {
             ClientExtension::KeyShare(ref shares) => Some(shares),
             _ => None,
         }
+    }
+
+    pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
+        let last_extension = self.extensions.last_mut().unwrap();
+        match *last_extension {
+            ClientExtension::PresharedKey(ref mut offer) => {
+                offer.binders[0] = PresharedKeyBinder::new(binder);
+            }
+            _ => {}
+        };
     }
 }
 
@@ -915,6 +1010,14 @@ impl ServerHelloPayload {
         let ext = try_ret!(self.find_extension(ExtensionType::KeyShare));
         match *ext {
             ServerExtension::KeyShare(ref share) => Some(share),
+            _ => None,
+        }
+    }
+
+    pub fn get_psk_index(&self) -> Option<u16> {
+        let ext = try_ret!(self.find_extension(ExtensionType::PreSharedKey));
+        match *ext {
+            ServerExtension::PresharedKey(ref index) => Some(*index),
             _ => None,
         }
     }

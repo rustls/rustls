@@ -83,11 +83,25 @@ impl HandshakeHash {
         self
     }
 
+    /// Get the hash value if we were to hash `extra` too,
+    /// using hash function `hash`.
+    pub fn get_hash_given(&self, hash: &'static digest::Algorithm, extra: &[u8]) -> Vec<u8> {
+        debug_assert!(self.ctx.is_none());
+
+        let mut ctx = digest::Context::new(hash);
+        ctx.update(&self.buffer);
+        ctx.update(extra);
+        let hash = ctx.finish();
+        let mut ret = Vec::new();
+        ret.extend_from_slice(hash.as_ref());
+        ret
+    }
+
     /// Get the current hash value.
     pub fn get_current_hash(&self) -> Vec<u8> {
-        let h = self.ctx.as_ref().unwrap().clone().finish();
+        let hash = self.ctx.as_ref().unwrap().clone().finish();
         let mut ret = Vec::new();
-        ret.extend_from_slice(h.as_ref());
+        ret.extend_from_slice(hash.as_ref());
         ret
     }
 

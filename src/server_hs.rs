@@ -466,7 +466,7 @@ fn emit_finished_tls13(sess: &mut ServerSessionImpl) {
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     let verify_data = sess.common
         .get_key_schedule()
-        .sign_verify_data(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
+        .sign_finish(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
     let verify_data_payload = Payload::new(verify_data);
 
     let m = Message {
@@ -984,7 +984,15 @@ fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionV
     let scs = sess.common.get_suite();
     let client_certs = &sess.handshake_data.valid_client_cert_chain;
 
-    persist::ServerSessionValue::new(&scs.suite,
+    // nb cannot use get_protocol_version here; FIXME
+    let version = if sess.common.is_tls13 {
+        ProtocolVersion::TLSv1_3
+    } else {
+        ProtocolVersion::TLSv1_2
+    };
+
+    persist::ServerSessionValue::new(version,
+                                     scs.suite,
                                      sess.secrets.as_ref().unwrap().get_master_secret(),
                                      client_certs)
 }
@@ -1037,7 +1045,7 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     let expect_verify_data = sess.common
         .get_key_schedule()
-        .sign_verify_data(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
+        .sign_finish(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
 
     use ring;
     try!(

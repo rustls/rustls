@@ -1,5 +1,5 @@
 use msgs::handshake::SessionID;
-use msgs::enums::CipherSuite;
+use msgs::enums::{CipherSuite, ProtocolVersion};
 use msgs::codec::{Reader, Codec};
 use msgs::handshake::CertificatePayload;
 use msgs::base::{PayloadU8, PayloadU16};
@@ -36,6 +36,7 @@ impl ClientSessionKey {
 
 #[derive(Debug)]
 pub struct ClientSessionValue {
+    pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub session_id: SessionID,
     pub ticket: PayloadU16,
@@ -44,6 +45,7 @@ pub struct ClientSessionValue {
 
 impl Codec for ClientSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.session_id.encode(bytes);
         self.ticket.encode(bytes);
@@ -51,12 +53,14 @@ impl Codec for ClientSessionValue {
     }
 
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
+        let v = try_ret!(ProtocolVersion::read(r));
         let cs = try_ret!(CipherSuite::read(r));
         let sid = try_ret!(SessionID::read(r));
         let ticket = try_ret!(PayloadU16::read(r));
         let ms = try_ret!(PayloadU8::read(r));
 
         Some(ClientSessionValue {
+            version: v,
             cipher_suite: cs,
             session_id: sid,
             ticket: ticket,
@@ -66,13 +70,15 @@ impl Codec for ClientSessionValue {
 }
 
 impl ClientSessionValue {
-    pub fn new(cs: &CipherSuite,
+    pub fn new(v: ProtocolVersion,
+               cs: CipherSuite,
                sessid: &SessionID,
                ticket: Vec<u8>,
                ms: Vec<u8>)
                -> ClientSessionValue {
         ClientSessionValue {
-            cipher_suite: *cs,
+            version: v,
+            cipher_suite: cs,
             session_id: sessid.clone(),
             ticket: PayloadU16::new(ticket),
             master_secret: PayloadU8::new(ms),
@@ -84,6 +90,10 @@ impl ClientSessionValue {
         let old_ticket = mem::replace(&mut self.ticket, new_ticket);
         old_ticket.0
     }
+
+    pub fn get_obfuscated_ticket_age(&self) -> u32 {
+        0
+    }
 }
 
 // --- Server types ---
@@ -91,6 +101,7 @@ pub type ServerSessionKey = SessionID;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
+    pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
     pub client_cert_chain: Option<CertificatePayload>,
@@ -98,6 +109,7 @@ pub struct ServerSessionValue {
 
 impl Codec for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
         if self.client_cert_chain.is_some() {
@@ -106,6 +118,7 @@ impl Codec for ServerSessionValue {
     }
 
     fn read(r: &mut Reader) -> Option<ServerSessionValue> {
+        let v = try_ret!(ProtocolVersion::read(r));
         let cs = try_ret!(CipherSuite::read(r));
         let ms = try_ret!(PayloadU8::read(r));
         let ccert = if r.any_left() {
@@ -115,6 +128,7 @@ impl Codec for ServerSessionValue {
         };
 
         Some(ServerSessionValue {
+            version: v,
             cipher_suite: cs,
             master_secret: ms,
             client_cert_chain: ccert,
@@ -123,12 +137,14 @@ impl Codec for ServerSessionValue {
 }
 
 impl ServerSessionValue {
-    pub fn new(cs: &CipherSuite,
+    pub fn new(v: ProtocolVersion,
+               cs: CipherSuite,
                ms: Vec<u8>,
                cert_chain: &Option<CertificatePayload>)
                -> ServerSessionValue {
         ServerSessionValue {
-            cipher_suite: cs.clone(),
+            version: v,
+            cipher_suite: cs,
             master_secret: PayloadU8::new(ms),
             client_cert_chain: cert_chain.clone(),
         }

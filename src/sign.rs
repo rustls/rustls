@@ -26,14 +26,12 @@ pub struct RSASigner {
 }
 
 fn all_schemes() -> SupportedSignatureSchemes {
-    vec![
-    SignatureScheme::RSA_PSS_SHA512,
-    SignatureScheme::RSA_PSS_SHA384,
-    SignatureScheme::RSA_PSS_SHA256,
-    SignatureScheme::RSA_PKCS1_SHA512,
-    SignatureScheme::RSA_PKCS1_SHA384,
-    SignatureScheme::RSA_PKCS1_SHA256,
-  ]
+    vec![SignatureScheme::RSA_PSS_SHA512,
+         SignatureScheme::RSA_PSS_SHA384,
+         SignatureScheme::RSA_PSS_SHA256,
+         SignatureScheme::RSA_PKCS1_SHA512,
+         SignatureScheme::RSA_PKCS1_SHA384,
+         SignatureScheme::RSA_PKCS1_SHA256]
 }
 
 impl RSASigner {
@@ -68,10 +66,7 @@ impl Signer for RSASigner {
         };
 
         let rng = ring::rand::SystemRandom::new();
-        let mut signer = try!(
-      signature::RSASigningState::new(self.key.clone())
-      .map_err(|_| ())
-    );
+        let mut signer = try!(signature::RSASigningState::new(self.key.clone()).map_err(|_| ()));
 
         signer.sign(encoding, &rng, message, &mut sig)
             .map(|_| sig)
