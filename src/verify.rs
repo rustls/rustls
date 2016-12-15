@@ -20,14 +20,10 @@ type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 /// Which signature verification mechanisms we support.  No particular
 /// order.
 static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
-  &webpki::ECDSA_P256_SHA1,
   &webpki::ECDSA_P256_SHA256,
   &webpki::ECDSA_P256_SHA384,
-  &webpki::ECDSA_P256_SHA512,
-  &webpki::ECDSA_P384_SHA1,
   &webpki::ECDSA_P384_SHA256,
   &webpki::ECDSA_P384_SHA384,
-  &webpki::ECDSA_P384_SHA512,
   &webpki::RSA_PKCS1_2048_8192_SHA1,
   &webpki::RSA_PKCS1_2048_8192_SHA256,
   &webpki::RSA_PKCS1_2048_8192_SHA384,
@@ -209,17 +205,11 @@ pub fn verify_client_cert(roots: &RootCertStore,
     .map(|_| ())
 }
 
-static ECDSA_SHA1: SignatureAlgorithms = &[
-  &webpki::ECDSA_P256_SHA1, &webpki::ECDSA_P384_SHA1
-];
 static ECDSA_SHA256: SignatureAlgorithms = &[
   &webpki::ECDSA_P256_SHA256, &webpki::ECDSA_P384_SHA256
 ];
 static ECDSA_SHA384: SignatureAlgorithms = &[
   &webpki::ECDSA_P256_SHA384, &webpki::ECDSA_P384_SHA384
-];
-static ECDSA_SHA512: SignatureAlgorithms = &[
-  &webpki::ECDSA_P256_SHA512, &webpki::ECDSA_P384_SHA512
 ];
 
 static RSA_SHA1: SignatureAlgorithms = &[ &webpki::RSA_PKCS1_2048_8192_SHA1 ];
@@ -232,10 +222,8 @@ fn convert_alg(sh: &SignatureAndHashAlgorithm) -> Result<SignatureAlgorithms, TL
   use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
   match (&sh.sign, &sh.hash) {
-    (&ECDSA, &SHA1)   => Ok(ECDSA_SHA1),
     (&ECDSA, &SHA256) => Ok(ECDSA_SHA256),
     (&ECDSA, &SHA384) => Ok(ECDSA_SHA384),
-    (&ECDSA, &SHA512) => Ok(ECDSA_SHA512),
     (&RSA, &SHA1)     => Ok(RSA_SHA1),
     (&RSA, &SHA256)   => Ok(RSA_SHA256),
     (&RSA, &SHA384)   => Ok(RSA_SHA384),
