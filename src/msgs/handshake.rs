@@ -242,7 +242,6 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
   /// Supported signature verification algorithms in decreasing order of expected security.
   fn supported_verify() -> SupportedSignatureAlgorithms {
     vec![
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA512, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA384, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: SignatureAlgorithm::ECDSA },
 
@@ -251,7 +250,6 @@ impl SupportedMandatedSignatureAlgorithms for SupportedSignatureAlgorithms {
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA256, sign: SignatureAlgorithm::RSA },
 
       /* Leave the truly crap ones for last */
-      SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::ECDSA },
       SignatureAndHashAlgorithm { hash: HashAlgorithm::SHA1, sign: SignatureAlgorithm::RSA },
     ]
   }

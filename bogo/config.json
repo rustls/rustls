@@ -41,6 +41,7 @@
     "ServerAuth-SHA1-Fallback": "",
     "*-AES128-SHA*": "",
     "*-AES256-SHA*": "",
+    "*-ECDSA-SHA1-*": "no ecdsa-sha1",
     "*-Sign-RSA-PKCS1-SHA1-*": "no sha1",
     "*-RSA-PSS-*": "no pss yet",
     "*-P521-*": "no p521",
