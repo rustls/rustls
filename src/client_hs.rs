@@ -91,11 +91,9 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl, hmp: &mut HandshakeMessa
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
-    let encoding = hmp.get_encoding();
-    let binder_len = suite_hash.output_len;
-    let binder_plaintext = &encoding[0..encoding.len() - binder_len - 2 - 1];
+    let binder_plaintext = hmp.get_encoding_for_binder_signing();
     let handshake_hash =
-        sess.handshake_data.transcript.get_hash_given(suite_hash, binder_plaintext);
+        sess.handshake_data.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
     let mut empty_hash_ctx = hash_hs::HandshakeHash::new();
     empty_hash_ctx.start_hash(suite_hash);

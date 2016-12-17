@@ -859,6 +859,14 @@ impl ClientHelloPayload {
         }
     }
 
+    pub fn get_psk(&self) -> Option<&PresharedKeyOffer> {
+        let ext = try_ret!(self.find_extension(ExtensionType::PreSharedKey));
+        match *ext {
+            ClientExtension::PresharedKey(ref psk) => Some(psk),
+            _ => None,
+        }
+    }
+
     pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
         let last_extension = self.extensions.last_mut().unwrap();
         match *last_extension {
@@ -1700,5 +1708,24 @@ impl HandshakeMessagePayload {
             typ: HandshakeType::KeyUpdate,
             payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
         }
+    }
+
+    pub fn get_encoding_for_binder_signing(&self) -> Vec<u8> {
+        let mut ret = self.get_encoding();
+
+        let binder_len = match self.payload {
+            HandshakePayload::ClientHello(ref ch) => {
+                let offer = ch.get_psk().unwrap();
+
+                let mut binders_encoding = Vec::new();
+                offer.binders.encode(&mut binders_encoding);
+                binders_encoding.len()
+            }
+            _ => 0,
+        };
+
+        let ret_len = ret.len() - binder_len;
+        ret.truncate(ret_len);
+        ret
     }
 }
