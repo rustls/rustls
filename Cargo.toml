@@ -14,7 +14,7 @@ time = "0.1.35"
 base64 = "~0.2.0"
 log = { version = "0.3.6", optional = true }
 ring = { version = "0.6.0-alpha1", features = ["rsa_signing"] }
-webpki = { git = "https://github.com/ctz/webpki", branch = "jbp-pss" }
+webpki = "0.8.0"
 
 [features]
 default = ["logging"]
@@ -26,4 +26,4 @@ env_logger = "0.3.3"
 mio = "0.5.1"
 docopt = "0.6"
 rustc-serialize = "0.3"
-webpki-roots = { git = "https://github.com/ctz/webpki-roots", branch = "jbp-pss" }
+webpki-roots = "0.6.0"
