@@ -305,7 +305,6 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
       SignatureScheme::ECDSA_NISTP384_SHA384,
       SignatureScheme::ECDSA_NISTP256_SHA256,
 
-      /* FIXME: PSS is a lie! */
       SignatureScheme::RSA_PSS_SHA512,
       SignatureScheme::RSA_PSS_SHA384,
       SignatureScheme::RSA_PSS_SHA256,
@@ -865,6 +864,12 @@ impl ClientHelloPayload {
             ClientExtension::PresharedKey(ref psk) => Some(psk),
             _ => None,
         }
+    }
+
+    pub fn check_psk_ext_is_last(&self) -> bool {
+        self.extensions.last()
+          .map_or(false,
+                  |ext| ext.get_type() == ExtensionType::PreSharedKey)
     }
 
     pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
@@ -1541,6 +1546,17 @@ pub struct NewSessionTicketPayloadTLS13 {
     pub age_add: u32,
     pub ticket: PayloadU16,
     pub exts: NewSessionTicketExtensions,
+}
+
+impl NewSessionTicketPayloadTLS13 {
+    pub fn new(lifetime: u32, ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
+        NewSessionTicketPayloadTLS13 {
+            lifetime: lifetime,
+            age_add: 0, // FIXME
+            ticket: PayloadU16::new(ticket),
+            exts: vec![]
+        }
+    }
 }
 
 impl Codec for NewSessionTicketPayloadTLS13 {
