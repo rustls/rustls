@@ -25,7 +25,6 @@ use sign;
 use verify;
 use util;
 use error::TLSError;
-use handshake::Expectation;
 
 use std::sync::Arc;
 
@@ -41,15 +40,11 @@ macro_rules! extract_handshake(
   )
 );
 
-pub type HandleFunction = fn(&mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError>;
+
 
 /* These are effectively operations on the ServerSessionImpl, variant on the
  * connection state. They must not have state of their own -- so they're
  * functions rather than a trait. */
-pub struct Handler {
-  pub expect: Expectation,
-  pub handle: HandleFunction
-}
 
 fn process_extensions(sess: &mut ServerSessionImpl, hello: &ClientHelloPayload)
   -> Result<Vec<ServerExtension>, TLSError> {
@@ -276,7 +271,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
   return Ok(ConnState::ExpectCCS);
 }
 
-fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
 
   if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
@@ -436,16 +431,8 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
   }
 }
 
-pub static EXPECT_CLIENT_HELLO: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ClientHello]
-  },
-  handle: handle_client_hello
-};
-
 /* --- Process client's Certificate for client auth --- */
-fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   sess.handshake_data.transcript.add_message(&m);
   let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
 
@@ -467,16 +454,8 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnSt
   Ok(ConnState::ExpectClientKX)
 }
 
-pub static EXPECT_CERTIFICATE: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Certificate]
-  },
-  handle: handle_certificate
-};
-
 /* --- Process client's KeyExchange --- */
-fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
   sess.handshake_data.transcript.add_message(&m);
 
@@ -501,16 +480,8 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnStat
   }
 }
 
-pub static EXPECT_CLIENT_KX: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ClientKeyExchange]
-  },
-  handle: handle_client_kx
-};
-
 /* --- Process client's certificate proof --- */
-fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let rc = {
     let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
     let certs = sess.handshake_data.valid_client_cert_chain.as_ref().unwrap();
@@ -530,16 +501,8 @@ fn handle_certificate_verify(sess: &mut ServerSessionImpl, m: Message) -> Result
   Ok(ConnState::ExpectCCS)
 }
 
-pub static EXPECT_CERTIFICATE_VERIFY: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::CertificateVerify]
-  },
-  handle: handle_certificate_verify
-};
-
 /* --- Process client's ChangeCipherSpec --- */
-fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> Result<ConnState, TLSError> {
   /* CCS should not be received interleaved with fragmented handshake-level
    * message. */
   if !sess.common.handshake_joiner.empty() {
@@ -553,14 +516,6 @@ fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> Result<ConnState, TL
   sess.common.peer_now_encrypting();
   Ok(ConnState::ExpectFinished)
 }
-
-pub static EXPECT_CCS: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::ChangeCipherSpec],
-    handshake_types: &[]
-  },
-  handle: handle_ccs
-};
 
 /* --- Process client's Finished --- */
 fn emit_ticket(sess: &mut ServerSessionImpl) {
@@ -630,7 +585,7 @@ fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionV
                                    client_certs)
 }
 
-fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
   let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
   let vh = sess.handshake_data.transcript.get_current_hash();
@@ -664,24 +619,8 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState
   Ok(ConnState::Traffic)
 }
 
-pub static EXPECT_FINISHED: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Finished]
-  },
-  handle: handle_finished
-};
-
 /* --- Process traffic --- */
-fn handle_traffic(sess: &mut ServerSessionImpl, mut m: Message) -> Result<ConnState, TLSError> {
+pub fn handle_traffic(sess: &mut ServerSessionImpl, mut m: Message) -> Result<ConnState, TLSError> {
   sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
   Ok(ConnState::Traffic)
 }
-
-pub static TRAFFIC: Handler = Handler {
-  expect: Expectation {
-    content_types: &[ContentType::ApplicationData],
-    handshake_types: &[]
-  },
-  handle: handle_traffic
-};

@@ -64,14 +64,48 @@ impl MessagePayload {
   pub fn opaque(data: &[u8]) -> MessagePayload {
     MessagePayload::Opaque(Payload::from_slice(data))
   }
+  pub fn get_vec(self) -> Vec<u8> {
+    match self {
+      MessagePayload::Opaque(x) => x.0,
+      _ => panic!("Rustls: get_vec should only be called on opaque")
+    }
+  }
 }
-
+impl From<Vec<u8>> for MessagePayload{
+  #[inline(always)]
+  fn from(x: Vec<u8>) -> MessagePayload{
+    MessagePayload::Opaque(Payload(x))
+  }
+}
 /// A TLS frame, named TLSPlaintext in the standard
 #[derive(Debug)]
 pub struct Message {
   pub typ: ContentType,
   pub version: ProtocolVersion,
   pub payload: MessagePayload
+}
+
+///A TLS Frame being passed to decode
+pub struct BrokenMessage {
+  pub typ: ContentType,
+  pub version: ProtocolVersion
+}
+impl BrokenMessage {
+  pub fn from_msg(m: Message) -> (BrokenMessage, Vec<u8>) {
+    (BrokenMessage {
+      typ: m.typ,
+      version: m.version
+    },
+    m.into_opaque().payload.get_vec())
+  }
+  #[inline(always)]
+  pub fn to_msg(self, data: Vec<u8> ) -> Message {
+    Message {
+      typ: self.typ,
+      version: self.version,
+      payload: MessagePayload::from(data)
+    }
+  }
 }
 
 impl Codec for Message {
@@ -169,13 +203,13 @@ impl Message {
       return self;
     }
 
-    let mut buf = Vec::new();
+    let mut buf = Vec::with_capacity(4096);
     self.payload.encode(&mut buf);
 
     Message {
       typ: self.typ,
       version: self.version,
-      payload: MessagePayload::opaque(buf.as_slice())
+      payload: MessagePayload::from(buf)
     }
   }
 

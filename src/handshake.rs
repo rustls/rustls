@@ -35,3 +35,87 @@ impl Expectation {
   }
 }
 
+/*
+ * Server Expectations
+ */
+pub static SERVER_EXPECT_CLIENT_HELLO: Expectation = Expectation {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::ClientHello]
+};
+pub static SERVER_EXPECT_CERTIFICATE: Expectation = Expectation {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::Certificate]
+};
+pub static SERVER_EXPECT_CLIENT_KX: Expectation = Expectation {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::ClientKeyExchange]
+};
+pub static SERVER_EXPECT_CERTIFICATE_VERIFY: Expectation = Expectation {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::CertificateVerify]
+};
+pub static SERVER_EXPECT_CCS: Expectation = Expectation {
+  content_types: &[ContentType::ChangeCipherSpec],
+  handshake_types: &[]
+};
+pub static SERVER_EXPECT_FINISHED: Expectation = Expectation {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::Finished]
+};
+pub static SERVER_TRAFFIC: Expectation = Expectation {
+  content_types: &[ContentType::ApplicationData],
+  handshake_types: &[]
+};
+
+/*
+ * Client Expectations
+ */
+pub static CLIENT_EXPECT_SERVER_HELLO: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::ServerHello]
+};
+pub static CLIENT_EXPECT_CERTIFICATE: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::Certificate]
+};
+pub static CLIENT_EXPECT_SERVER_KX: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::ServerKeyExchange]
+};
+pub static CLIENT_EXPECT_DONE_OR_CERTREQ: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::CertificateRequest, HandshakeType::ServerHelloDone]
+};
+pub static CLIENT_EXPECT_SERVER_HELLO_DONE: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::ServerHelloDone]
+};
+pub static CLIENT_EXPECT_CCS: Expectation = Expectation  {
+  content_types: &[ContentType::ChangeCipherSpec],
+  handshake_types: &[]
+};
+pub static CLIENT_EXPECT_NEW_TICKET: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::NewSessionTicket]
+};
+pub static CLIENT_EXPECT_CCS_RESUME: Expectation = Expectation  {
+  content_types: &[ContentType::ChangeCipherSpec],
+  handshake_types: &[]
+};
+pub static CLIENT_EXPECT_NEW_TICKET_RESUME: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::NewSessionTicket]
+};
+pub static CLIENT_EXPECT_FINISHED: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[HandshakeType::Finished]
+};
+
+pub static CLIENT_EXPECT_FINISHED_RESUME: Expectation = Expectation  {
+  content_types: &[ContentType::Handshake],
+  handshake_types: &[]
+};
+pub static CLIENT_TRAFFIC: Expectation = Expectation  {
+  content_types: &[ContentType::ApplicationData],
+  handshake_types: &[]
+};

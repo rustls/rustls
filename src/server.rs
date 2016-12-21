@@ -14,6 +14,8 @@ use rand;
 use sign;
 use verify;
 use key;
+use handshake;
+use handshake::Expectation;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -328,7 +330,7 @@ impl ServerHandshakeData {
   }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Copy,Clone)]
 pub enum ConnState {
   ExpectClientHello,
   ExpectCertificate,
@@ -337,6 +339,30 @@ pub enum ConnState {
   ExpectCCS,
   ExpectFinished,
   Traffic
+}
+impl ConnState {
+  pub fn expectation(&self) -> &'static Expectation {
+    match *self {
+      ConnState::ExpectClientHello => &handshake::SERVER_EXPECT_CLIENT_HELLO,
+      ConnState::ExpectCertificate => &handshake::SERVER_EXPECT_CERTIFICATE,
+      ConnState::ExpectClientKX => &handshake::SERVER_EXPECT_CLIENT_KX,
+      ConnState::ExpectCertificateVerify => &handshake::SERVER_EXPECT_CERTIFICATE_VERIFY,
+      ConnState::ExpectCCS => &handshake::SERVER_EXPECT_CCS,
+      ConnState::ExpectFinished => &handshake::SERVER_EXPECT_FINISHED,
+      ConnState::Traffic => &handshake::SERVER_TRAFFIC
+    }
+  }
+  pub fn handler(&self, server: &mut ServerSessionImpl, msg: Message ) -> Result<ConnState, TLSError> {
+    match *self {
+      ConnState::ExpectClientHello => server_hs::handle_client_hello(server, msg),
+      ConnState::ExpectCertificate => server_hs::handle_certificate(server, msg),
+      ConnState::ExpectClientKX => server_hs::handle_client_kx(server, msg),
+      ConnState::ExpectCertificateVerify => server_hs::handle_certificate_verify(server, msg),
+      ConnState::ExpectCCS => server_hs::handle_ccs(server, msg),
+      ConnState::ExpectFinished => server_hs::handle_finished(server, msg),
+      ConnState::Traffic => server_hs::handle_traffic(server, msg)
+    }
+  }
 }
 
 pub struct ServerSessionImpl {
@@ -419,50 +445,35 @@ impl ServerSessionImpl {
     Ok(())
   }
 
-  fn queue_unexpected_alert(&mut self) {
-    self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+  fn queue_unexpected_alert(&mut self) -> Result<(),TLSError> {
+    self.common.send_fatal_alert(AlertDescription::UnexpectedMessage)
   }
 
   pub fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
     if self.state == ConnState::Traffic && msg.is_handshake_type(HandshakeType::ClientHello) {
-      self.common.send_warning_alert(AlertDescription::NoRenegotiation);
-      return Ok(());
+      return self.common.send_warning_alert(AlertDescription::NoRenegotiation);
     }
-
-    let handler = self.get_handler();
-    try!(handler.expect.check_message(&msg)
-         .map_err(|err| { self.queue_unexpected_alert(); err }));
-    let new_state = try!((handler.handle)(self, msg));
+    let state = self.state.clone();
+    let expect = state.expectation();
+    expect.check_message(&msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err })?;
+    let new_state = state.handler(self, msg)?;
     self.state = new_state;
 
     if self.state == ConnState::Traffic && !self.common.traffic {
-      self.common.start_traffic();
+      return self.common.start_traffic();
     }
 
     Ok(())
-  }
-
-  fn get_handler(&self) -> &'static server_hs::Handler {
-    match self.state {
-      ConnState::ExpectClientHello => &server_hs::EXPECT_CLIENT_HELLO,
-      ConnState::ExpectCertificate => &server_hs::EXPECT_CERTIFICATE,
-      ConnState::ExpectClientKX => &server_hs::EXPECT_CLIENT_KX,
-      ConnState::ExpectCertificateVerify => &server_hs::EXPECT_CERTIFICATE_VERIFY,
-      ConnState::ExpectCCS => &server_hs::EXPECT_CCS,
-      ConnState::ExpectFinished => &server_hs::EXPECT_FINISHED,
-      ConnState::Traffic => &server_hs::TRAFFIC
-    }
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
     if self.common.message_deframer.desynced {
       return Err(TLSError::CorruptMessage);
     }
-
     while let Some(msg) = self.common.message_deframer.frames.pop_front() {
-      try!(self.process_msg(msg));
+      let _ = self.process_msg(msg)?;
     }
-
     Ok(())
   }
 
@@ -533,7 +544,7 @@ impl Session for ServerSession {
     self.imp.is_handshaking()
   }
 
-  fn send_close_notify(&mut self) {
+  fn send_close_notify(&mut self) -> Result<(),TLSError> {
     self.imp.common.send_close_notify()
   }
 

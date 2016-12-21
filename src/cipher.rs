@@ -2,7 +2,7 @@ use ring;
 use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
-use msgs::message::{Message, MessagePayload};
+use msgs::message::BrokenMessage;
 use msgs::fragmenter::MAX_FRAGMENT_LEN;
 use error::TLSError;
 use session::SessionSecrets;
@@ -17,8 +17,8 @@ fn xor(accum: &mut [u8], offset: &[u8]) {
 
 /// Objects with this trait can encrypt and decrypt TLS messages.
 pub trait MessageCipher {
-  fn decrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
-  fn encrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
+  fn decrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError>;
+  fn encrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError>;
 }
 
 impl MessageCipher {
@@ -83,9 +83,8 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageCipher for GCMMessageCipher {
-  fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
-    let payload = try!(msg.take_opaque_payload().ok_or(TLSError::DecryptError));
-    let mut buf = payload.0;
+  fn decrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError> {
+    let mut buf = data;
 
     if buf.len() < GCM_OVERHEAD {
       return Err(TLSError::DecryptError);
@@ -95,7 +94,7 @@ impl MessageCipher for GCMMessageCipher {
     nonce.as_mut().write(&self.dec_salt).unwrap();
     nonce[4..].as_mut().write(&buf).unwrap();
 
-    let mut aad = Vec::new();
+    let mut aad = Vec::with_capacity(64);
     codec::encode_u64(seq, &mut aad);
     msg.typ.encode(&mut aad);
     msg.version.encode(&mut aad);
@@ -117,16 +116,10 @@ impl MessageCipher for GCMMessageCipher {
 
     buf.truncate(plain_len);
 
-    Ok(
-      Message {
-        typ: msg.typ,
-        version: msg.version,
-        payload: MessagePayload::opaque(buf.as_slice())
-      }
-    )
+    Ok(buf)
   }
 
-  fn encrypt(&self, msg: Message, seq: u64) -> Result<Message, TLSError> {
+  fn encrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError> {
     /* The GCM nonce is constructed from a 32-bit 'salt' derived
      * from the master-secret, and a 64-bit explicit part,
      * with no specified construction.  Thanks for that.
@@ -140,9 +133,7 @@ impl MessageCipher for GCMMessageCipher {
     codec::put_u64(seq, &mut nonce[4..]);
     xor(&mut nonce[4..], &self.nonce_offset);
 
-    let typ = msg.typ;
-    let version = msg.version;
-    let mut buf = msg.take_payload();
+    let mut buf = data;
     let payload_len = buf.len();
 
     /* make room for tag */
@@ -152,8 +143,8 @@ impl MessageCipher for GCMMessageCipher {
 
     let mut aad = Vec::new();
     codec::encode_u64(seq, &mut aad);
-    typ.encode(&mut aad);
-    version.encode(&mut aad);
+    msg.typ.encode(&mut aad);
+    msg.version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
     try!(
@@ -165,15 +156,11 @@ impl MessageCipher for GCMMessageCipher {
         .map_err(|_| TLSError::General("encrypt failed".to_string()))
     );
 
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(12+buf.len());
     result.extend_from_slice(&nonce[4..]);
     result.extend_from_slice(&buf);
 
-    Ok(Message {
-      typ: typ,
-      version: version,
-      payload: MessagePayload::opaque(result.as_slice())
-    })
+    Ok(result)
   }
 }
 
@@ -232,9 +219,8 @@ impl ChaCha20Poly1305MessageCipher {
 const CP_OVERHEAD: usize = 16;
 
 impl MessageCipher for ChaCha20Poly1305MessageCipher {
-  fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
-    let payload = try!(msg.take_opaque_payload().ok_or(TLSError::DecryptError));
-    let mut buf = payload.0;
+  fn decrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError> {
+    let mut buf = data;
 
     if buf.len() < CP_OVERHEAD {
       return Err(TLSError::DecryptError);
@@ -267,24 +253,15 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
 
     buf.truncate(plain_len);
 
-    Ok(
-      Message {
-        typ: msg.typ,
-        version: msg.version,
-        payload: MessagePayload::opaque(buf.as_slice())
-      }
-    )
+    Ok(buf)
   }
 
-  fn encrypt(&self, msg: Message, seq: u64) -> Result<Message, TLSError> {
+  fn encrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError> {
     let mut nonce = [0u8; 12];
     codec::put_u64(seq, &mut nonce[4..]);
     xor(&mut nonce, &self.enc_offset);
 
-    let typ = msg.typ;
-    let version = msg.version;
-
-    let mut buf = msg.take_payload();
+    let mut buf = data;
     let payload_len = buf.len();
 
     /* make room for tag */
@@ -294,8 +271,8 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
 
     let mut aad = Vec::new();
     codec::encode_u64(seq, &mut aad);
-    typ.encode(&mut aad);
-    version.encode(&mut aad);
+    msg.typ.encode(&mut aad);
+    msg.version.encode(&mut aad);
     codec::encode_u16(payload_len as u16, &mut aad);
 
     try!(
@@ -307,11 +284,7 @@ impl MessageCipher for ChaCha20Poly1305MessageCipher {
         .map_err(|_| TLSError::General("encrypt failed".to_string()))
     );
 
-    Ok(Message {
-      typ: typ,
-      version: version,
-      payload: MessagePayload::opaque(buf.as_slice())
-    })
+    Ok(buf)
   }
 }
 
@@ -320,12 +293,12 @@ pub struct InvalidMessageCipher {}
 
 impl MessageCipher for InvalidMessageCipher {
   /* Neither of these errors should ever occur */
-  fn decrypt(&self, _m: Message, _seq: u64) -> Result<Message, TLSError> {
+  #[allow(unused_variables)]
+  fn decrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError> {
     Err(TLSError::DecryptError)
   }
-
-  fn encrypt(&self, _m: Message, _seq: u64) -> Result<Message, TLSError> {
+  #[allow(unused_variables)]
+  fn encrypt(&self, msg: &BrokenMessage, seq: u64, data: Vec<u8>) -> Result<Vec<u8>, TLSError> {
     Err(TLSError::General("encrypt not yet available".to_string()))
   }
 }
-
