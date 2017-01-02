@@ -78,7 +78,8 @@ fn no_dh() {
 fn mozilla_old() {
   polite();
   connect("mozilla-old.badssl.com")
-    .expect("<title>mozilla-old.badssl.com</title>")
+    .fails()
+    .expect("TLS error: WebPKIError(CertExpired)")
     .go()
     .unwrap();
 }
@@ -143,7 +144,8 @@ fn rsa8192() {
 fn sha1_2016() {
   polite();
   connect("sha1-2016.badssl.com")
-    .expect("<title>sha1-2016.badssl.com</title>")
+    .fails()
+    .expect("TLS error: WebPKIError(CertExpired)")
     .go()
     .unwrap();
 }
