@@ -67,9 +67,9 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
 /// doing an abbreviated handshake.  See section 3.4 in RFC5077.
 fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
   if csv.ticket.len() > 0 {
-    let mut random_id = [0u8; 16];
+    let mut random_id = [0u8; 32];
     rand::fill_random(&mut random_id);
-    csv.session_id = SessionID::new(random_id.to_vec());
+    csv.session_id = SessionID::new(&random_id);
   }
 }
 
