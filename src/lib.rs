@@ -156,24 +156,24 @@
 //! `tlsserver` and `tlsclient` are full worked examples.  These both use mio.
 //!
 
-/* Our dependencies: */
+// Our dependencies:
 
-/* webpki for certificate verification. */
+// webpki for certificate verification.
 extern crate webpki;
 
-/* *ring* for cryptography. */
+// *ring* for cryptography.
 extern crate ring;
 
-/* time for feeding webpki the time. */
+// time for feeding webpki the time.
 extern crate time;
 
-/* untrusted for feeding ring and webpki. */
+// untrusted for feeding ring and webpki.
 extern crate untrusted;
 
-/* rust-base64 for pemfile module. */
+// rust-base64 for pemfile module.
 extern crate base64;
 
-/* log for logging (optional). */
+// log for logging (optional).
 #[cfg(feature = "logging")]
 #[macro_use]
 extern crate log;
@@ -181,10 +181,10 @@ extern crate log;
 #[cfg(not(feature = "logging"))]
 #[macro_use]
 mod compile_out_log {
-  macro_rules! debug    ( ($($tt:tt)*) => {{}} );
-  macro_rules! info     ( ($($tt:tt)*) => {{}} );
-  macro_rules! warn     ( ($($tt:tt)*) => {{}} );
-  macro_rules! error    ( ($($tt:tt)*) => {{}} );
+    macro_rules! debug    ( ($($tt:tt)*) => {{}} );
+    macro_rules! info     ( ($($tt:tt)*) => {{}} );
+    macro_rules! warn     ( ($($tt:tt)*) => {{}} );
+    macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
 mod util;
@@ -212,21 +212,21 @@ mod key;
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
-  /// Functions for parsing PEM files containing certificates/keys.
-  pub mod pemfile {
-    pub use pemfile::{certs, rsa_private_keys};
-  }
+    /// Functions for parsing PEM files containing certificates/keys.
+    pub mod pemfile {
+        pub use pemfile::{certs, rsa_private_keys};
+    }
 
-  /// Low-level TLS message parsing and encoding functions.
-  pub mod msgs {
-    pub use msgs::*;
-  }
+    /// Low-level TLS message parsing and encoding functions.
+    pub mod msgs {
+        pub use msgs::*;
+    }
 }
 
-/* The public interface is: */
+// The public interface is:
 pub use error::TLSError;
 pub use session::Session;
-pub use verify::{RootCertStore};
+pub use verify::RootCertStore;
 pub use client::{StoresClientSessions, ClientSessionMemoryCache, ClientConfig, ClientSession};
 pub use server::{StoresServerSessions, ServerSessionMemoryCache, ServerConfig, ServerSession};
 pub use server::ProducesTickets;

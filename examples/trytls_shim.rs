@@ -1,9 +1,8 @@
-/*
- * A Rustls stub for TryTLS
- *
- * Author: Joachim Viide
- * See: https://github.com/HowNetWorks/trytls-rustls-stub
- */
+// A Rustls stub for TryTLS
+//
+// Author: Joachim Viide
+// See: https://github.com/HowNetWorks/trytls-rustls-stub
+//
 
 extern crate rustls;
 extern crate webpki_roots;

@@ -20,22 +20,22 @@ mod enums_test;
 
 #[cfg(test)]
 mod test {
-  #[test]
-  fn smoketest() {
-    use super::codec::Reader;
-    use super::message::Message;
-    use super::codec::Codec;
-    let bytes = include_bytes!("handshake-test.1.bin");
-    let mut r = Reader::init(bytes);
+    #[test]
+    fn smoketest() {
+        use super::codec::Reader;
+        use super::message::Message;
+        use super::codec::Codec;
+        let bytes = include_bytes!("handshake-test.1.bin");
+        let mut r = Reader::init(bytes);
 
-    while r.any_left() {
-      let mut m = Message::read(&mut r).unwrap();
+        while r.any_left() {
+            let mut m = Message::read(&mut r).unwrap();
 
-      let mut out: Vec<u8> = vec![];
-      m.encode(&mut out);
-      assert!(out.len() > 0);
+            let mut out: Vec<u8> = vec![];
+            m.encode(&mut out);
+            assert!(out.len() > 0);
 
-      m.decode_payload();
+            m.decode_payload();
+        }
     }
-  }
 }

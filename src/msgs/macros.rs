@@ -4,4 +4,3 @@
 macro_rules! try_ret(
     ($e:expr) => (match $e { Some(e) => e, None => return None })
 );
-

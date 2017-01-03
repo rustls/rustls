@@ -7,8 +7,7 @@ use ring;
 
 /// Fill the whole slice with random material.
 pub fn fill_random(bytes: &mut [u8]) {
-  ring::rand::SystemRandom::new()
-    .fill(bytes)
-    .unwrap();
+    ring::rand::SystemRandom::new()
+        .fill(bytes)
+        .unwrap();
 }
-
