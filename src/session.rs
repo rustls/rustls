@@ -1,6 +1,6 @@
 use ring;
 use std::io::{Read, Write};
-use msgs::message::{Message, MessagePayload};
+use msgs::message::{Message, BrokenMessage, MessagePayload};
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
@@ -58,7 +58,7 @@ pub trait Session : Read + Write + Send {
   /// Queues a close_notify fatal alert to be sent in the next
   /// `write_tls` call.  This informs the peer that the
   /// connection is being closed.
-  fn send_close_notify(&mut self);
+  fn send_close_notify(&mut self) -> Result<(),TLSError>;
 
   /// Retrieves the certificate chain used by the peer to authenticate.
   ///
@@ -239,10 +239,12 @@ impl SessionCommon {
     !self.received_plaintext.is_empty()
   }
 
-  pub fn encrypt_outgoing(&mut self, plain: Message) -> Message {
+  pub fn encrypt_outgoing(&mut self, plain: Message) -> Result<Message, TLSError> {
     let seq = self.write_seq;
     self.write_seq += 1;
-    self.message_cipher.encrypt(plain, seq).unwrap()
+    let (broke,data) = BrokenMessage::from_msg(plain);
+    let data = self.message_cipher.encrypt(&broke, seq, data)?;
+    Ok(broke.to_msg(data))
   }
 
   pub fn decrypt_incoming(&mut self, plain: Message) -> Result<Message, TLSError> {
@@ -256,7 +258,9 @@ impl SessionCommon {
 
     let seq = self.read_seq;
     self.read_seq += 1;
-    self.message_cipher.decrypt(plain, seq)
+    let (broke,data) = BrokenMessage::from_msg(plain);
+    let data = self.message_cipher.decrypt(&broke, seq, data)?;
+    Ok(broke.to_msg(data))
   }
 
   pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {
@@ -271,7 +275,7 @@ impl SessionCommon {
       /* Warnings are nonfatal. */
       if alert.level == AlertLevel::Warning {
         warn!("TLS alert warning received: {:#?}", msg);
-        return Ok(())
+        return Ok(());
       }
 
       error!("TLS alert received: {:#?}", msg);
@@ -283,7 +287,7 @@ impl SessionCommon {
 
   /// Fragment `m`, encrypt the fragments, and then queue
   /// the encrypted fragments for sending.
-  pub fn send_msg_encrypt(&mut self, m: Message) {
+  pub fn send_msg_encrypt(&mut self, m: Message) -> Result<(),TLSError> {
     let mut plain_messages = VecDeque::new();
     self.message_fragmenter.fragment(m, &mut plain_messages);
 
@@ -297,12 +301,13 @@ impl SessionCommon {
       // Refuse to wrap counter at all costs.  This
       // is basically untestable unfortunately.
       if self.write_seq >= SEQ_HARD_LIMIT {
-        return;
+        return Err(TLSError::General("Seqeunce hard limit".to_string()));
       }
 
-      let em = self.encrypt_outgoing(m);
+      let em = self.encrypt_outgoing(m)?;
       self.queue_tls_message(em);
     }
+    Ok(())
   }
 
   /// Are we done? ie, have we processed all received messages,
@@ -325,19 +330,19 @@ impl SessionCommon {
 
   /// Send plaintext application data, fragmenting and
   /// encrypting it as it goes out.
-  pub fn send_plain(&mut self, data: Vec<u8>) {
+  pub fn send_plain(&mut self, data: Vec<u8>) -> Result<(),TLSError> {
     if !self.traffic {
       /* If we haven't completed handshaking, buffer
        * plaintext to send once we do. */
       self.sendable_plaintext.append(data);
-      return;
+      return Ok(());
     }
 
     debug_assert!(self.we_encrypting);
 
     if data.len() == 0 {
       /* Don't send empty fragments. */
-      return;
+      return Err(TLSError::General("Cannot send a zero length message".to_string()));
     }
 
     /* Make one giant message, then have the fragmenter chop
@@ -345,28 +350,29 @@ impl SessionCommon {
     let m = Message {
       typ: ContentType::ApplicationData,
       version: ProtocolVersion::TLSv1_2,
-      payload: MessagePayload::opaque(data.as_slice())
+      payload: MessagePayload::from(data)
     };
 
-    self.send_msg_encrypt(m);
+    self.send_msg_encrypt(m)
   }
 
-  pub fn start_traffic(&mut self) {
+  pub fn start_traffic(&mut self) -> Result<(),TLSError> {
     self.traffic = true;
-    self.flush_plaintext();
+    self.flush_plaintext()
   }
 
   /// Send any buffered plaintext.  Plaintext is buffered if
   /// written during handshake.
-  pub fn flush_plaintext(&mut self) {
+  pub fn flush_plaintext(&mut self) -> Result<(),TLSError> {
     if !self.traffic {
-      return;
+      return Ok(());
     }
 
     while !self.sendable_plaintext.is_empty() {
       let buf = self.sendable_plaintext.take_one();
-      self.send_plain(buf);
+      self.send_plain(buf)?;
     }
+    Ok(())
   }
 
   // Put m into sendable_tls for writing.
@@ -375,15 +381,16 @@ impl SessionCommon {
   }
 
   /// Send a raw TLS message, fragmenting it if needed.
-  pub fn send_msg(&mut self, m: Message, must_encrypt: bool) {
+  pub fn send_msg(&mut self, m: Message, must_encrypt: bool) -> Result<(),TLSError> {
     if !must_encrypt {
       let mut to_send = VecDeque::new();
       self.message_fragmenter.fragment(m, &mut to_send);
       for mm in to_send {
         self.queue_tls_message(mm);
       }
+      Ok(())
     } else {
-      self.send_msg_encrypt(m);
+      self.send_msg_encrypt(m)
     }
   }
 
@@ -413,21 +420,21 @@ impl SessionCommon {
     self.we_encrypting = true;
   }
 
-  pub fn send_warning_alert(&mut self, desc: AlertDescription) {
+  pub fn send_warning_alert(&mut self, desc: AlertDescription) -> Result<(),TLSError> {
     warn!("Sending warning alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Warning, desc);
     let enc = self.we_encrypting;
-    self.send_msg(m, enc);
+    self.send_msg(m, enc)
   }
 
-  pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
+  pub fn send_fatal_alert(&mut self, desc: AlertDescription) -> Result<(),TLSError> {
     warn!("Sending fatal alert {:?}", desc);
     let m = Message::build_alert(AlertLevel::Fatal, desc);
     let enc = self.we_encrypting;
-    self.send_msg(m, enc);
+    self.send_msg(m, enc)
   }
 
-  pub fn send_close_notify(&mut self) {
+  pub fn send_close_notify(&mut self) -> Result<(),TLSError> {
     self.send_warning_alert(AlertDescription::CloseNotify)
   }
 }

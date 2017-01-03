@@ -14,6 +14,8 @@ use verify;
 use sign;
 use error::TLSError;
 use key;
+use handshake::Expectation;
+use handshake;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -285,7 +287,7 @@ impl ClientHandshakeData {
   }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Clone,Copy)]
 pub enum ConnState {
   ExpectServerHello,
   ExpectCertificate,
@@ -300,7 +302,40 @@ pub enum ConnState {
   ExpectFinishedResume,
   Traffic
 }
-
+impl ConnState {
+  pub fn expectation(&self) -> &'static Expectation {
+    match *self {
+      ConnState::ExpectServerHello => &handshake::CLIENT_EXPECT_SERVER_HELLO,
+      ConnState::ExpectCertificate => &handshake::CLIENT_EXPECT_CERTIFICATE,
+      ConnState::ExpectServerKX => &handshake::CLIENT_EXPECT_SERVER_KX,
+      ConnState::ExpectServerHelloDoneOrCertRequest => &handshake::CLIENT_EXPECT_DONE_OR_CERTREQ,
+      ConnState::ExpectServerHelloDone => &handshake::CLIENT_EXPECT_SERVER_HELLO_DONE,
+      ConnState::ExpectNewTicket => &handshake::CLIENT_EXPECT_NEW_TICKET,
+      ConnState::ExpectCCS => &handshake::CLIENT_EXPECT_CCS,
+      ConnState::ExpectFinished => &handshake::CLIENT_EXPECT_FINISHED,
+      ConnState::ExpectNewTicketResume => &handshake::CLIENT_EXPECT_NEW_TICKET_RESUME,
+      ConnState::ExpectCCSResume => &handshake::CLIENT_EXPECT_CCS_RESUME,
+      ConnState::ExpectFinishedResume => &handshake::CLIENT_EXPECT_FINISHED_RESUME,
+      ConnState::Traffic => &handshake::CLIENT_TRAFFIC,
+    }
+  }
+  pub fn handler(&self, client: &mut ClientSessionImpl, msg: Message ) -> Result<ConnState, TLSError> {
+    match *self {
+      ConnState::ExpectServerHello => client_hs::handle_server_hello(client,msg),
+      ConnState::ExpectCertificate => client_hs::handle_certificate(client,msg),
+      ConnState::ExpectServerKX => client_hs::handle_server_kx(client,msg),
+      ConnState::ExpectServerHelloDoneOrCertRequest => client_hs::handle_done_or_certreq(client,msg),
+      ConnState::ExpectServerHelloDone => client_hs::handle_server_hello_done(client,msg),
+      ConnState::ExpectNewTicket => client_hs::handle_new_ticket(client,msg),
+      ConnState::ExpectCCS => client_hs::handle_ccs(client,msg),
+      ConnState::ExpectFinished => client_hs::handle_finished(client,msg),
+      ConnState::ExpectNewTicketResume => client_hs::handle_new_ticket_resume(client,msg),
+      ConnState::ExpectCCSResume => client_hs::handle_ccs_resume(client,msg),
+      ConnState::ExpectFinishedResume => client_hs::handle_finished_resume(client,msg),
+      ConnState::Traffic => client_hs::handle_traffic(client,msg),
+    }
+  }
+}
 pub struct ClientSessionImpl {
   pub config: Arc<ClientConfig>,
   pub handshake_data: ClientHandshakeData,
@@ -440,11 +475,11 @@ impl ClientSessionImpl {
       self.process_hello_req();
       return Ok(());
     }
-
-    let handler = self.get_handler();
-    try!(handler.expect.check_message(&msg)
-         .map_err(|err| { self.queue_unexpected_alert(); err }));
-    let new_state = try!((handler.handle)(self, msg));
+    let state = self.state.clone();
+    let expect = state.expectation();
+    expect.check_message(&msg)
+         .map_err(|err| { self.queue_unexpected_alert(); err })?;
+    let new_state = state.handler(self, msg)?;
     self.state = new_state;
 
     /* Once we're connected, start flushing sendable_plaintext. */
@@ -453,23 +488,6 @@ impl ClientSessionImpl {
     }
 
     Ok(())
-  }
-
-  fn get_handler(&self) -> &'static client_hs::Handler {
-    match self.state {
-      ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
-      ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
-      ConnState::ExpectServerKX => &client_hs::EXPECT_SERVER_KX,
-      ConnState::ExpectServerHelloDoneOrCertRequest => &client_hs::EXPECT_DONE_OR_CERTREQ,
-      ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
-      ConnState::ExpectNewTicket => &client_hs::EXPECT_NEW_TICKET,
-      ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
-      ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,
-      ConnState::ExpectNewTicketResume => &client_hs::EXPECT_NEW_TICKET_RESUME,
-      ConnState::ExpectCCSResume => &client_hs::EXPECT_CCS_RESUME,
-      ConnState::ExpectFinishedResume => &client_hs::EXPECT_FINISHED_RESUME,
-      ConnState::Traffic => &client_hs::TRAFFIC
-    }
   }
 
   pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
@@ -544,7 +562,7 @@ impl Session for ClientSession {
     self.imp.is_handshaking()
   }
 
-  fn send_close_notify(&mut self) {
+  fn send_close_notify(&mut self) -> Result<(),TLSError> {
     self.imp.common.send_close_notify()
   }
 
