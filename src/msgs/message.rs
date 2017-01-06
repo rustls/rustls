@@ -38,10 +38,14 @@ impl MessagePayload {
                 ContentType::Alert => {
                     Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r))))
                 }
-                ContentType::Handshake =>
-          Some(MessagePayload::Handshake(try_ret!(HandshakeMessagePayload::read_version(&mut r, vers)))),
-                ContentType::ChangeCipherSpec =>
-          Some(MessagePayload::ChangeCipherSpec(try_ret!(ChangeCipherSpecPayload::read(&mut r)))),
+                ContentType::Handshake => {
+                    let p = try_ret!(HandshakeMessagePayload::read_version(&mut r, vers));
+                    Some(MessagePayload::Handshake(p))
+                }
+                ContentType::ChangeCipherSpec => {
+                    let p = try_ret!(ChangeCipherSpecPayload::read(&mut r));
+                    Some(MessagePayload::ChangeCipherSpec(p))
+                }
                 _ => None,
             };
 

@@ -502,7 +502,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
                 -> bool {
     let binder_plaintext = match client_hello.payload {
         MessagePayload::Handshake(ref hmp) => hmp.get_encoding_for_binder_signing(),
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     let suite_hash = sess.common.get_suite().get_hash();
@@ -518,8 +518,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
     let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
-    ring::constant_time::verify_slices_are_equal(&real_binder, &binder)
-        .is_ok()
+    ring::constant_time::verify_slices_are_equal(&real_binder, &binder).is_ok()
 }
 
 fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
@@ -580,12 +579,8 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
 
             let resume = maybe_resume.unwrap();
 
-            if !check_binder(sess,
-                             chm,
-                             &resume.master_secret.0,
-                             &psk_offer.binders[i].0) {
-                return Err(TLSError::PeerMisbehavedError("client sent wrong binder"
-                                                         .to_string()));
+            if !check_binder(sess, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
+                return Err(TLSError::PeerMisbehavedError("client sent wrong binder".to_string()));
             }
 
             if resume.cipher_suite != sess.common.get_suite().suite {
@@ -1071,24 +1066,18 @@ fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionV
 
     // nb cannot use get_protocol_version here; FIXME
     let (version, secret) = if sess.common.is_tls13 {
-        let handshake_hash = sess
-            .handshake_data
-            .transcript.get_current_hash();
-        let resume_secret = sess
-            .common
+        let handshake_hash = sess.handshake_data
+            .transcript
+            .get_current_hash();
+        let resume_secret = sess.common
             .get_key_schedule()
             .derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
-        (ProtocolVersion::TLSv1_3,
-         resume_secret)
+        (ProtocolVersion::TLSv1_3, resume_secret)
     } else {
-        (ProtocolVersion::TLSv1_2,
-         sess.secrets.as_ref().unwrap().get_master_secret())
+        (ProtocolVersion::TLSv1_2, sess.secrets.as_ref().unwrap().get_master_secret())
     };
 
-    persist::ServerSessionValue::new(version,
-                                     scs.suite,
-                                     secret,
-                                     client_certs)
+    persist::ServerSessionValue::new(version, scs.suite, secret, client_certs)
 }
 
 fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
@@ -1151,8 +1140,8 @@ fn emit_ticket_tls13(sess: &mut ServerSessionImpl) {
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicketTLS13(payload)
-        })
+            payload: HandshakePayload::NewSessionTicketTLS13(payload),
+        }),
     };
 
     debug!("sending new ticket {:?}", m);

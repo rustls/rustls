@@ -867,9 +867,9 @@ impl ClientHelloPayload {
     }
 
     pub fn check_psk_ext_is_last(&self) -> bool {
-        self.extensions.last()
-          .map_or(false,
-                  |ext| ext.get_type() == ExtensionType::PreSharedKey)
+        self.extensions
+            .last()
+            .map_or(false, |ext| ext.get_type() == ExtensionType::PreSharedKey)
     }
 
     pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
@@ -1554,7 +1554,7 @@ impl NewSessionTicketPayloadTLS13 {
             lifetime: lifetime,
             age_add: 0, // FIXME
             ticket: PayloadU16::new(ticket),
-            exts: vec![]
+            exts: vec![],
         }
     }
 }
@@ -1675,28 +1675,40 @@ impl HandshakeMessagePayload {
             HandshakeType::HelloRetryRequest => {
                 HandshakePayload::HelloRetryRequest(try_ret!(HelloRetryRequest::read(&mut sub)))
             }
-            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 =>
-        HandshakePayload::CertificateTLS13(try_ret!(CertificatePayloadTLS13::read(&mut sub))),
+            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
+                let p = try_ret!(CertificatePayloadTLS13::read(&mut sub));
+                HandshakePayload::CertificateTLS13(p)
+            }
             HandshakeType::Certificate => {
                 HandshakePayload::Certificate(try_ret!(CertificatePayload::read(&mut sub)))
             }
-            HandshakeType::ServerKeyExchange =>
-        HandshakePayload::ServerKeyExchange(try_ret!(ServerKeyExchangePayload::read(&mut sub))),
+            HandshakeType::ServerKeyExchange => {
+                let p = try_ret!(ServerKeyExchangePayload::read(&mut sub));
+                HandshakePayload::ServerKeyExchange(p)
+            }
             HandshakeType::ServerHelloDone if sub.left() == 0 => HandshakePayload::ServerHelloDone,
             HandshakeType::ClientKeyExchange => {
                 HandshakePayload::ClientKeyExchange(try_ret!(Payload::read(&mut sub)))
             }
-            HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3  =>
-        HandshakePayload::CertificateRequestTLS13(try_ret!(CertificateRequestPayloadTLS13::read(&mut sub))),
-            HandshakeType::CertificateRequest =>
-        HandshakePayload::CertificateRequest(try_ret!(CertificateRequestPayload::read(&mut sub))),
+            HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
+                let p = try_ret!(CertificateRequestPayloadTLS13::read(&mut sub));
+                HandshakePayload::CertificateRequestTLS13(p)
+            }
+            HandshakeType::CertificateRequest => {
+                let p = try_ret!(CertificateRequestPayload::read(&mut sub));
+                HandshakePayload::CertificateRequest(p)
+            }
             HandshakeType::CertificateVerify => {
                 HandshakePayload::CertificateVerify(try_ret!(DigitallySignedStruct::read(&mut sub)))
             }
-            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3  =>
-        HandshakePayload::NewSessionTicketTLS13(try_ret!(NewSessionTicketPayloadTLS13::read(&mut sub))),
-            HandshakeType::NewSessionTicket =>
-        HandshakePayload::NewSessionTicket(try_ret!(NewSessionTicketPayload::read(&mut sub))),
+            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
+                let p = try_ret!(NewSessionTicketPayloadTLS13::read(&mut sub));
+                HandshakePayload::NewSessionTicketTLS13(p)
+            }
+            HandshakeType::NewSessionTicket => {
+                let p = try_ret!(NewSessionTicketPayload::read(&mut sub));
+                HandshakePayload::NewSessionTicket(p)
+            }
             HandshakeType::EncryptedExtensions => {
                 HandshakePayload::EncryptedExtensions(try_ret!(EncryptedExtensions::read(&mut sub)))
             }
