@@ -181,10 +181,10 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
     msg.extend(&sess.handshake_data.randoms.server);
     secdh.encode(&mut msg);
 
-    let sig = try!(
-    signer.sign(sigscheme, &msg)
-    .map_err(|_| TLSError::General("signing failed".to_string()))
-  );
+    let sig = try! {
+        signer.sign(sigscheme, &msg)
+            .map_err(|_| TLSError::General("signing failed".to_string()))
+    };
 
     let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
         params: secdh,
@@ -293,11 +293,11 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
     let mut extensions = Vec::new();
 
     // Do key exchange
-    let kxr = try!(
-    suites::KeyExchange::start_ecdhe(share.group)
-      .and_then(|kx| kx.complete(&share.payload.0))
-      .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
-  );
+    let kxr = try! {
+        suites::KeyExchange::start_ecdhe(share.group)
+            .and_then(|kx| kx.complete(&share.payload.0))
+            .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
+    };
 
     let kse = KeyShareEntry::new(share.group, &kxr.pubkey);
     extensions.push(ServerExtension::KeyShare(kse));
@@ -778,21 +778,23 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     }
 
     // Now we have chosen a ciphersuite, we can make kx decisions.
-    let sigscheme = try!(
-    sess.common.get_suite()
-      .resolve_sig_scheme(sigschemes_ext)
-      .ok_or_else(|| incompatible(sess, "no supported sig scheme"))
-  );
-    let group = try!(
-    util::first_in_both(NamedGroups::supported().as_slice(),
-                        groups_ext.as_slice())
-      .ok_or_else(|| incompatible(sess, "no supported group"))
-  );
-    let ecpoint = try!(
-    util::first_in_both(ECPointFormatList::supported().as_slice(),
-                        ecpoints_ext.as_slice())
-      .ok_or_else(|| incompatible(sess, "no supported point format"))
-  );
+    let sigscheme = try! {
+        sess.common.get_suite()
+            .resolve_sig_scheme(sigschemes_ext)
+            .ok_or_else(|| incompatible(sess, "no supported sig scheme"))
+    };
+
+    let group = try! {
+        util::first_in_both(NamedGroups::supported().as_slice(),
+                            groups_ext.as_slice())
+            .ok_or_else(|| incompatible(sess, "no supported group"))
+    };
+
+    let ecpoint = try! {
+        util::first_in_both(ECPointFormatList::supported().as_slice(),
+                            ecpoints_ext.as_slice())
+            .ok_or_else(|| incompatible(sess, "no supported point format"))
+    };
 
     debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
@@ -831,10 +833,10 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnSt
 
     debug!("certs {:?}", cert_chain);
 
-    try!(
-    verify::verify_client_cert(&sess.config.client_auth_roots,
-                               &cert_chain)
-  );
+    try! {
+        verify::verify_client_cert(&sess.config.client_auth_roots,
+                                   &cert_chain)
+    };
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain.clone());
     Ok(ConnState::ExpectClientKX)
@@ -862,10 +864,10 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
         return Ok(ConnState::ExpectFinishedTLS13);
     }
 
-    try!(
-     verify::verify_client_cert(&sess.config.client_auth_roots,
-                                &cert_chain)
-  );
+    try! {
+        verify::verify_client_cert(&sess.config.client_auth_roots,
+                                   &cert_chain)
+    };
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain);
     Ok(ConnState::ExpectCertificateVerifyTLS13)
@@ -887,10 +889,11 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnStat
     // Complete key agreement, and set up encryption with the
     // resulting premaster secret.
     let kx = sess.handshake_data.kx_data.take().unwrap();
-    let kxd = try!(
-    kx.server_complete(&client_kx.0)
-    .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange completion failed".to_string()))
-  );
+    let kxd = try! {
+        kx.server_complete(&client_kx.0)
+            .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange completion failed"
+                                                         .to_string()))
+    };
 
     let hashalg = sess.common.get_suite().get_hash();
     sess.secrets =
@@ -1087,10 +1090,10 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState
     let expect_verify_data = sess.secrets.as_ref().unwrap().client_verify_data(&vh);
 
     use ring;
-    try!(
-    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-      .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
-  );
+    try! {
+        ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+            .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
+    };
 
     // Save session, perhaps
     if !sess.handshake_data.doing_resume && !sess.handshake_data.session_id.is_empty() {
@@ -1158,10 +1161,10 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
         .sign_finish(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
 
     use ring;
-    try!(
-    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-      .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
-  );
+    try! {
+        ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+            .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
+    };
 
     // nb. future derivations include Client Finished, but not the
     // main application data keying.

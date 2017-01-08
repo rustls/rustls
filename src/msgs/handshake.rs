@@ -619,9 +619,7 @@ impl Codec for ClientExtension {
             ExtensionType::PreSharedKey => {
                 ClientExtension::PresharedKey(try_ret!(PresharedKeyOffer::read(&mut sub)))
             }
-            ExtensionType::Cookie => {
-                ClientExtension::Cookie(try_ret!(PayloadU16::read(&mut sub)))
-            }
+            ExtensionType::Cookie => ClientExtension::Cookie(try_ret!(PayloadU16::read(&mut sub))),
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }

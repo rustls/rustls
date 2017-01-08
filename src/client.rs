@@ -479,7 +479,9 @@ impl ClientSessionImpl {
     fn get_handler(&self) -> &'static client_hs::Handler {
         match self.state {
             ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
-            ConnState::ExpectServerHelloOrHelloRetryRequest => &client_hs::EXPECT_SERVER_HELLO_OR_RETRY,
+            ConnState::ExpectServerHelloOrHelloRetryRequest => {
+                &client_hs::EXPECT_SERVER_HELLO_OR_RETRY
+            }
             ConnState::ExpectEncryptedExtensions => &client_hs::EXPECT_ENCRYPTED_EXTENSIONS,
             ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
             ConnState::ExpectCertificateOrCertReq => &client_hs::EXPECT_CERTIFICATE_OR_CERTREQ,

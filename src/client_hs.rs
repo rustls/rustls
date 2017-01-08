@@ -164,14 +164,13 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     let mut key_shares = vec![];
 
     if support_tls13 {
-        /* Choose our groups:
-         * - if we've been asked via HelloRetryRequest for a specific
-         *   one, do that.
-         * - if not, we might have a hint of what the server supports
-         * - if not, send all supported.  This is slow, but avoids an extra trip.
-         */
-        let groups = retryreq
-            .and_then(|req| req.get_requested_key_share_group())
+        // Choose our groups:
+        // - if we've been asked via HelloRetryRequest for a specific
+        //   one, do that.
+        // - if not, we might have a hint of what the server supports
+        // - if not, send all supported.  This is slow, but avoids an extra trip.
+        //
+        let groups = retryreq.and_then(|req| req.get_requested_key_share_group())
             .or_else(|| find_kx_hint(sess))
             .map(|grp| vec![ grp ])
             .unwrap_or_else(|| NamedGroups::supported());
@@ -537,12 +536,9 @@ fn handle_server_hello_or_retry(sess: &mut ClientSessionImpl,
 pub static EXPECT_SERVER_HELLO_OR_RETRY: Handler = Handler {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
-        handshake_types: &[
-            HandshakeType::ServerHello,
-            HandshakeType::HelloRetryRequest,
-        ]
+        handshake_types: &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
     },
-    handle: handle_server_hello_or_retry
+    handle: handle_server_hello_or_retry,
 };
 
 fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
@@ -1042,8 +1038,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
                                                  master_secret);
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
-    let worked = persist.put(key.get_encoding(),
-                             value.get_encoding());
+    let worked = persist.put(key.get_encoding(), value.get_encoding());
 
     if worked {
         info!("Session saved");
@@ -1095,10 +1090,10 @@ fn emit_certverify_tls13(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
 
     let scheme = sess.handshake_data.client_auth_sigscheme.take().unwrap();
     let key = sess.handshake_data.client_auth_key.take().unwrap();
-    let sig = try!(
-    key.sign(scheme, &message)
-      .map_err(|_| TLSError::General("cannot sign".to_string()))
-  );
+    let sig = try! {
+        key.sign(scheme, &message)
+            .map_err(|_| TLSError::General("cannot sign".to_string()))
+    };
     let verf = DigitallySignedStruct::new(scheme, sig);
 
     let m = Message {
@@ -1144,10 +1139,10 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
         .sign_finish(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
 
     use ring;
-    try!(
-    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-      .map_err(|_| TLSError::DecryptError)
-  );
+    try! {
+        ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+            .map_err(|_| TLSError::DecryptError)
+    };
 
     sess.handshake_data.transcript.add_message(&m);
 
@@ -1190,10 +1185,10 @@ fn handle_finished_tls12(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
     // Constant-time verification of this is relatively unimportant: they only
     // get one chance.  But it can't hurt.
     use ring;
-    try!(
-    ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-      .map_err(|_| TLSError::DecryptError)
-  );
+    try! {
+        ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+            .map_err(|_| TLSError::DecryptError)
+    };
 
     // Hash this message too.
     sess.handshake_data.transcript.add_message(&m);
@@ -1278,8 +1273,7 @@ fn handle_new_ticket_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<(
     let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
-    let worked = persist.put(key.get_encoding(),
-                             value.get_encoding());
+    let worked = persist.put(key.get_encoding(), value.get_encoding());
 
     if worked {
         info!("Ticket saved");

@@ -89,9 +89,10 @@ impl RootCertStore {
 
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
-        let ta = try!(
-      webpki::trust_anchor_util::cert_der_as_trust_anchor(untrusted::Input::from(&der.0))
-    );
+        let ta = {
+            let inp = untrusted::Input::from(&der.0);
+            try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(inp))
+        };
 
         let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
         self.roots.push(ota);

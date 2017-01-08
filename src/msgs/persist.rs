@@ -33,14 +33,14 @@ impl ClientSessionKey {
     pub fn session_for_dns_name(dns_name: &str) -> ClientSessionKey {
         ClientSessionKey {
             kind: b"session",
-            dns_name: PayloadU8::new(dns_name.as_bytes().to_vec())
+            dns_name: PayloadU8::new(dns_name.as_bytes().to_vec()),
         }
     }
 
     pub fn hint_for_dns_name(dns_name: &str) -> ClientSessionKey {
         ClientSessionKey {
             kind: b"kx-hint",
-            dns_name: PayloadU8::new(dns_name.as_bytes().to_vec())
+            dns_name: PayloadU8::new(dns_name.as_bytes().to_vec()),
         }
     }
 }
