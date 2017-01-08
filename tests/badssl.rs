@@ -77,8 +77,7 @@ mod online {
     fn mozilla_old() {
         polite();
         connect("mozilla-old.badssl.com")
-            .fails()
-            .expect("TLS error: WebPKIError(CertExpired)")
+            .expect("<title>mozilla-old.badssl.com</title>")
             .go()
             .unwrap();
     }

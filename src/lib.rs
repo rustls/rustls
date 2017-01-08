@@ -16,6 +16,7 @@
 //! * Tunable MTU to make TLS messages match size of underlying transport.
 //! * TLS1.2 session resumption.
 //! * TLS1.2 resumption via tickets (RFC5077).
+//! * TLS1.3 resumption via tickets.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //!
