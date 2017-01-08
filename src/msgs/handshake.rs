@@ -46,28 +46,19 @@ macro_rules! declare_u16_vec(
 );
 
 #[derive(Debug)]
-#[repr(C)]
-pub struct Random {
-    pub gmt_unix_time: u32,
-    pub opaque: [u8; 28],
-}
+pub struct Random([u8; 32]);
 
 impl Codec for Random {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u32(self.gmt_unix_time, bytes);
-        bytes.extend_from_slice(&self.opaque);
+        bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader) -> Option<Random> {
-        let time = try_ret!(codec::read_u32(r));
-        let bytes = try_ret!(r.take(28));
-        let mut opaque = [0; 28];
+        let bytes = try_ret!(r.take(32));
+        let mut opaque = [0; 32];
         opaque.clone_from_slice(bytes);
 
-        Some(Random {
-            gmt_unix_time: time,
-            opaque: opaque,
-        })
+        Some(Random(opaque))
     }
 }
 
@@ -535,6 +526,7 @@ pub enum ClientExtension {
     KeyShare(KeyShareEntries),
     PresharedKeyModes(PskKeyExchangeModes),
     PresharedKey(PresharedKeyOffer),
+    Cookie(PayloadU16),
     Unknown(UnknownExtension),
 }
 
@@ -553,6 +545,7 @@ impl ClientExtension {
             ClientExtension::KeyShare(_) => ExtensionType::KeyShare,
             ClientExtension::PresharedKeyModes(_) => ExtensionType::PSKKeyExchangeModes,
             ClientExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
+            ClientExtension::Cookie(_) => ExtensionType::Cookie,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -576,6 +569,7 @@ impl Codec for ClientExtension {
             ClientExtension::KeyShare(ref r) => r.encode(&mut sub),
             ClientExtension::PresharedKeyModes(ref r) => r.encode(&mut sub),
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
+            ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -624,6 +618,9 @@ impl Codec for ClientExtension {
             }
             ExtensionType::PreSharedKey => {
                 ClientExtension::PresharedKey(try_ret!(PresharedKeyOffer::read(&mut sub)))
+            }
+            ExtensionType::Cookie => {
+                ClientExtension::Cookie(try_ret!(PayloadU16::read(&mut sub)))
             }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -912,6 +909,7 @@ impl Codec for HelloRetryExtension {
         }
 
         codec::encode_u16(sub.len() as u16, bytes);
+        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryExtension> {
@@ -948,6 +946,28 @@ impl Codec for HelloRetryRequest {
             server_version: try_ret!(ProtocolVersion::read(r)),
             extensions: try_ret!(codec::read_vec_u16::<HelloRetryExtension>(r)),
         })
+    }
+}
+
+impl HelloRetryRequest {
+    fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
+        self.extensions.iter().find(|x| x.get_type() == ext)
+    }
+
+    pub fn get_requested_key_share_group(&self) -> Option<NamedGroup> {
+        let ext = try_ret!(self.find_extension(ExtensionType::KeyShare));
+        match *ext {
+            HelloRetryExtension::KeyShare(grp) => Some(grp),
+            _ => None,
+        }
+    }
+
+    pub fn get_cookie(&self) -> Option<&PayloadU16> {
+        let ext = try_ret!(self.find_extension(ExtensionType::Cookie));
+        match *ext {
+            HelloRetryExtension::Cookie(ref ck) => Some(ck),
+            _ => None,
+        }
     }
 }
 

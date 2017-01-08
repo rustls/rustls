@@ -302,6 +302,7 @@ impl ClientHandshakeData {
 #[derive(PartialEq)]
 pub enum ConnState {
     ExpectServerHello,
+    ExpectServerHelloOrHelloRetryRequest,
     ExpectEncryptedExtensions,
     ExpectCertificate,
     ExpectCertificateOrCertReq,
@@ -343,7 +344,7 @@ impl ClientSessionImpl {
             cs.handshake_data.transcript.set_client_auth_enabled();
         }
 
-        client_hs::emit_client_hello(&mut cs);
+        cs.state = client_hs::emit_client_hello(&mut cs);
         cs
     }
 
@@ -478,6 +479,7 @@ impl ClientSessionImpl {
     fn get_handler(&self) -> &'static client_hs::Handler {
         match self.state {
             ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
+            ConnState::ExpectServerHelloOrHelloRetryRequest => &client_hs::EXPECT_SERVER_HELLO_OR_RETRY,
             ConnState::ExpectEncryptedExtensions => &client_hs::EXPECT_ENCRYPTED_EXTENSIONS,
             ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
             ConnState::ExpectCertificateOrCertReq => &client_hs::EXPECT_CERTIFICATE_OR_CERTREQ,

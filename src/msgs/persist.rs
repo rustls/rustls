@@ -13,12 +13,13 @@ use std::mem;
 /// Matching value is a `ClientSessionValue`.
 #[derive(Debug)]
 pub struct ClientSessionKey {
+    kind: &'static [u8],
     dns_name: PayloadU8,
 }
 
 impl Codec for ClientSessionKey {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(b"session");
+        bytes.extend_from_slice(self.kind);
         self.dns_name.encode(bytes);
     }
 
@@ -29,8 +30,18 @@ impl Codec for ClientSessionKey {
 }
 
 impl ClientSessionKey {
-    pub fn for_dns_name(dns_name: &str) -> ClientSessionKey {
-        ClientSessionKey { dns_name: PayloadU8::new(dns_name.as_bytes().to_vec()) }
+    pub fn session_for_dns_name(dns_name: &str) -> ClientSessionKey {
+        ClientSessionKey {
+            kind: b"session",
+            dns_name: PayloadU8::new(dns_name.as_bytes().to_vec())
+        }
+    }
+
+    pub fn hint_for_dns_name(dns_name: &str) -> ClientSessionKey {
+        ClientSessionKey {
+            kind: b"kx-hint",
+            dns_name: PayloadU8::new(dns_name.as_bytes().to_vec())
+        }
     }
 }
 

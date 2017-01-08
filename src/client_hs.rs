@@ -13,7 +13,7 @@ use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::handshake::DigitallySignedStruct;
-use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
+use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
 use msgs::enums::{ClientCertificateType, PskKeyExchangeMode};
 use msgs::codec::Codec;
 use msgs::persist;
@@ -57,7 +57,7 @@ pub struct Handler {
 }
 
 fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionValue> {
-    let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
+    let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
     let key_buf = key.get_encoding();
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
@@ -70,6 +70,22 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
 
     let value = maybe_value.unwrap();
     persist::ClientSessionValue::read_bytes(&value)
+}
+
+fn find_kx_hint(sess: &mut ClientSessionImpl) -> Option<NamedGroup> {
+    let key = persist::ClientSessionKey::hint_for_dns_name(&sess.handshake_data.dns_name);
+    let key_buf = key.get_encoding();
+
+    let mut persist = sess.config.session_persistence.lock().unwrap();
+    let maybe_value = persist.get(&key_buf);
+    maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
+}
+
+fn save_kx_hint(sess: &mut ClientSessionImpl, group: NamedGroup) {
+    let key = persist::ClientSessionKey::hint_for_dns_name(&sess.handshake_data.dns_name);
+
+    let mut persist = sess.config.session_persistence.lock().unwrap();
+    persist.put(key.get_encoding(), group.get_encoding());
 }
 
 /// If we have a ticket, we use the sessionid as a signal that we're
@@ -114,7 +130,13 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl, hmp: &mut HandshakeMessa
     };
 }
 
-pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
+pub fn emit_client_hello(sess: &mut ClientSessionImpl) -> ConnState {
+    emit_client_hello_for_retry(sess, None)
+}
+
+fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
+                               retryreq: Option<&HelloRetryRequest>)
+                               -> ConnState {
     // Do we have a SessionID or ticket cached for this host?
     sess.handshake_data.resuming_session = find_session(sess);
     let (session_id, ticket, resume_version) = if sess.handshake_data.resuming_session.is_some() {
@@ -142,7 +164,17 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
     let mut key_shares = vec![];
 
     if support_tls13 {
-        let groups = NamedGroups::supported();
+        /* Choose our groups:
+         * - if we've been asked via HelloRetryRequest for a specific
+         *   one, do that.
+         * - if not, we might have a hint of what the server supports
+         * - if not, send all supported.  This is slow, but avoids an extra trip.
+         */
+        let groups = retryreq
+            .and_then(|req| req.get_requested_key_share_group())
+            .or_else(|| find_kx_hint(sess))
+            .map(|grp| vec![ grp ])
+            .unwrap_or_else(|| NamedGroups::supported());
 
         for group in groups {
             if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
@@ -163,8 +195,12 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
         exts.push(ClientExtension::KeyShare(key_shares));
     }
 
+    if let Some(cookie) = retryreq.and_then(|req| req.get_cookie()) {
+        exts.push(ClientExtension::Cookie(cookie.clone()));
+    }
+
     if support_tls13 && sess.config.enable_tickets {
-        let psk_modes = vec![ PskKeyExchangeMode::KE, PskKeyExchangeMode::DHE_KE ];
+        let psk_modes = vec![ PskKeyExchangeMode::DHE_KE, PskKeyExchangeMode::KE ];
         exts.push(ClientExtension::PresharedKeyModes(psk_modes));
     }
 
@@ -240,6 +276,12 @@ pub fn emit_client_hello(sess: &mut ClientSessionImpl) {
 
     sess.handshake_data.transcript.add_message(&ch);
     sess.common.send_msg(ch, false);
+
+    if support_tls13 && retryreq.is_none() {
+        ConnState::ExpectServerHelloOrHelloRetryRequest
+    } else {
+        ConnState::ExpectServerHello
+    }
 }
 
 fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtension>) -> bool {
@@ -312,20 +354,22 @@ fn start_handshake_traffic(sess: &mut ClientSessionImpl,
         info!("Server didn't contribute DH share");
         key_schedule.input_empty();
     } else {
-        let their_key_share = try!(
-      server_hello.get_key_share()
-        .ok_or_else(|| {
-          sess.common.send_fatal_alert(AlertDescription::MissingExtension);
-          TLSError::PeerMisbehavedError("missing key share".to_string())
-        })
-    );
+        let their_key_share = try! {
+            server_hello.get_key_share()
+                .ok_or_else(|| {
+                    sess.common.send_fatal_alert(AlertDescription::MissingExtension);
+                    TLSError::PeerMisbehavedError("missing key share".to_string())
+                    })
+        };
 
         let our_key_share = try!(find_key_share(sess, their_key_share.group));
-        let shared = try!(
-      our_key_share.complete(&their_key_share.payload.0)
-        .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
-    );
+        let shared = try! {
+            our_key_share.complete(&their_key_share.payload.0)
+                .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed"
+                                                             .to_string()))
+        };
 
+        save_kx_hint(sess, their_key_share.group);
         key_schedule.input_secret(&shared.premaster_secret);
     }
 
@@ -408,7 +452,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
     info!("Using ciphersuite {:?}", server_hello.cipher_suite);
     sess.common.set_suite(scs.unwrap());
 
-    // Start our handshake hash, and input the client-hello.
+    // Start our handshake hash, and input the server-hello.
     sess.handshake_data.transcript.start_hash(sess.common.get_suite().get_hash());
     sess.handshake_data.transcript.add_message(&m);
 
@@ -469,6 +513,36 @@ pub static EXPECT_SERVER_HELLO: Handler = Handler {
         handshake_types: &[HandshakeType::ServerHello],
     },
     handle: handle_server_hello,
+};
+
+fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
+                              m: Message)
+                              -> Result<ConnState, TLSError> {
+    let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest);
+    sess.handshake_data.transcript.add_message(&m);
+    debug!("Got HRR {:?}", hrr);
+    Ok(emit_client_hello_for_retry(sess, hrr))
+}
+
+fn handle_server_hello_or_retry(sess: &mut ClientSessionImpl,
+                                m: Message)
+                                -> Result<ConnState, TLSError> {
+    if m.is_handshake_type(HandshakeType::ServerHello) {
+        handle_server_hello(sess, m)
+    } else {
+        handle_hello_retry_request(sess, m)
+    }
+}
+
+pub static EXPECT_SERVER_HELLO_OR_RETRY: Handler = Handler {
+    expect: Expectation {
+        content_types: &[ContentType::Handshake],
+        handshake_types: &[
+            HandshakeType::ServerHello,
+            HandshakeType::HelloRetryRequest,
+        ]
+    },
+    handle: handle_server_hello_or_retry
 };
 
 fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
@@ -956,8 +1030,7 @@ fn save_session(sess: &mut ClientSessionImpl) {
         return;
     }
 
-    let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
-    let key_buf = key.get_encoding();
+    let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
 
     let scs = sess.common.get_suite();
     let master_secret = sess.secrets.as_ref().unwrap().get_master_secret();
@@ -967,10 +1040,10 @@ fn save_session(sess: &mut ClientSessionImpl) {
                                                  &sess.handshake_data.session_id,
                                                  ticket,
                                                  master_secret);
-    let value_buf = value.get_encoding();
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
-    let worked = persist.put(key_buf, value_buf);
+    let worked = persist.put(key.get_encoding(),
+                             value.get_encoding());
 
     if worked {
         info!("Session saved");
@@ -1201,13 +1274,12 @@ fn handle_new_ticket_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<(
                                                  &SessionID::empty(),
                                                  nst.ticket.0.clone(),
                                                  secret);
-    let value_buf = value.get_encoding();
 
-    let key = persist::ClientSessionKey::for_dns_name(&sess.handshake_data.dns_name);
-    let key_buf = key.get_encoding();
+    let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
-    let worked = persist.put(key_buf, value_buf);
+    let worked = persist.put(key.get_encoding(),
+                             value.get_encoding());
 
     if worked {
         info!("Ticket saved");
