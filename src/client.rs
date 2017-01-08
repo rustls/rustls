@@ -532,6 +532,7 @@ impl ClientSessionImpl {
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         match self.state {
             ConnState::ExpectServerHello => None,
+            ConnState::ExpectServerHelloOrHelloRetryRequest => None,
             _ => {
                 if self.common.is_tls13 {
                     Some(ProtocolVersion::TLSv1_3)
