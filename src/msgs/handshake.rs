@@ -1567,10 +1567,10 @@ pub struct NewSessionTicketPayloadTLS13 {
 }
 
 impl NewSessionTicketPayloadTLS13 {
-    pub fn new(lifetime: u32, ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
+    pub fn new(lifetime: u32, age_add: u32, ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
         NewSessionTicketPayloadTLS13 {
             lifetime: lifetime,
-            age_add: 0, // FIXME
+            age_add: age_add,
             ticket: PayloadU16::new(ticket),
             exts: vec![],
         }

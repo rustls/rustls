@@ -26,6 +26,7 @@ use suites;
 use hash_hs;
 use verify;
 use rand;
+use time;
 use error::TLSError;
 use handshake::Expectation;
 
@@ -56,6 +57,10 @@ pub struct Handler {
     pub handle: HandleFunction,
 }
 
+fn ticket_timebase() -> u64 {
+    time::get_time().sec as u64
+}
+
 fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionValue> {
     let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
     let key_buf = key.get_encoding();
@@ -69,7 +74,15 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
     }
 
     let value = maybe_value.unwrap();
-    persist::ClientSessionValue::read_bytes(&value)
+    if let Some(result) = persist::ClientSessionValue::read_bytes(&value) {
+        if result.has_expired(ticket_timebase()) {
+            None
+        } else {
+            Some(result)
+        }
+    } else {
+        None
+    }
 }
 
 fn find_kx_hint(sess: &mut ClientSessionImpl) -> Option<NamedGroup> {
@@ -230,7 +243,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                 .resuming_session
                 .as_ref()
                 .unwrap();
-            (resuming.get_obfuscated_ticket_age(), resuming.cipher_suite)
+            (resuming.get_obfuscated_ticket_age(ticket_timebase()),
+             resuming.cipher_suite)
         };
 
         let binder_len = sess.find_cipher_suite(&suite).unwrap().get_hash().output_len;
@@ -1031,11 +1045,14 @@ fn save_session(sess: &mut ClientSessionImpl) {
     let scs = sess.common.get_suite();
     let master_secret = sess.secrets.as_ref().unwrap().get_master_secret();
     let version = sess.get_protocol_version().unwrap();
-    let value = persist::ClientSessionValue::new(version,
-                                                 scs.suite,
-                                                 &sess.handshake_data.session_id,
-                                                 ticket,
-                                                 master_secret);
+    let mut value = persist::ClientSessionValue::new(version,
+                                                     scs.suite,
+                                                     &sess.handshake_data.session_id,
+                                                     ticket,
+                                                     master_secret);
+    value.set_times(ticket_timebase(),
+                    sess.handshake_data.new_ticket_lifetime,
+                    0);
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
     let worked = persist.put(key.get_encoding(), value.get_encoding());
@@ -1264,11 +1281,14 @@ fn handle_new_ticket_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<(
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     let secret =
         sess.common.get_key_schedule().derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
-    let value = persist::ClientSessionValue::new(ProtocolVersion::TLSv1_3,
-                                                 sess.common.get_suite().suite,
-                                                 &SessionID::empty(),
-                                                 nst.ticket.0.clone(),
-                                                 secret);
+    let mut value = persist::ClientSessionValue::new(ProtocolVersion::TLSv1_3,
+                                                     sess.common.get_suite().suite,
+                                                     &SessionID::empty(),
+                                                     nst.ticket.0.clone(),
+                                                     secret);
+    value.set_times(ticket_timebase(),
+                    nst.lifetime,
+                    nst.age_add);
 
     let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
 

@@ -30,6 +30,7 @@ use sign;
 use ring;
 use verify;
 use util;
+use rand;
 use error::TLSError;
 use handshake::Expectation;
 
@@ -1137,7 +1138,8 @@ fn emit_ticket_tls13(sess: &mut ServerSessionImpl) {
     }
 
     let ticket = maybe_ticket.unwrap();
-    let payload = NewSessionTicketPayloadTLS13::new(ticket_lifetime, ticket);
+    let age_add = rand::random_u32(); // nb, we don't do 0-RTT data, so whatever
+    let payload = NewSessionTicketPayloadTLS13::new(ticket_lifetime, age_add, ticket);
     let m = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
