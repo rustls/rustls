@@ -221,18 +221,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             .alpn_protocols)));
     }
 
-    let fill_in_binder = if sess.config.enable_tickets &&
-                            resume_version == ProtocolVersion::TLSv1_2 {
-        // If we have a ticket, include it.  Otherwise, request one.
-        if ticket.is_empty() {
-            exts.push(ClientExtension::SessionTicketRequest);
-        } else {
-            exts.push(ClientExtension::SessionTicketOffer(Payload::new(ticket)));
-        }
-        false
-    } else if support_tls13 && sess.config.enable_tickets &&
-                                   resume_version == ProtocolVersion::TLSv1_3 &&
-                                   !ticket.is_empty() {
+    let fill_in_binder = if support_tls13 && sess.config.enable_tickets &&
+                            resume_version == ProtocolVersion::TLSv1_3 &&
+                            !ticket.is_empty() {
         // Finally, and only for TLS1.3 with a ticket resumption, include a binder
         // for our ticket.  This must go last.
         //
@@ -243,8 +234,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                 .resuming_session
                 .as_ref()
                 .unwrap();
-            (resuming.get_obfuscated_ticket_age(ticket_timebase()),
-             resuming.cipher_suite)
+            (resuming.get_obfuscated_ticket_age(ticket_timebase()), resuming.cipher_suite)
         };
 
         let binder_len = sess.find_cipher_suite(&suite).unwrap().get_hash().output_len;
@@ -254,6 +244,14 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
         exts.push(ClientExtension::PresharedKey(psk_ext));
         true
+    } else if sess.config.enable_tickets {
+        // If we have a ticket, include it.  Otherwise, request one.
+        if ticket.is_empty() {
+            exts.push(ClientExtension::SessionTicketRequest);
+        } else {
+            exts.push(ClientExtension::SessionTicketOffer(Payload::new(ticket)));
+        }
+        false
     } else {
         false
     };
