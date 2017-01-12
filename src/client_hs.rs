@@ -463,6 +463,17 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
     info!("Using ciphersuite {:?}", server_hello.cipher_suite);
     sess.common.set_suite(scs.unwrap());
 
+    let version = if sess.common.is_tls13 {
+        ProtocolVersion::TLSv1_3
+    } else {
+        ProtocolVersion::TLSv1_2
+    };
+    if !sess.common.get_suite().usable_for_version(version) {
+        sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+        return Err(TLSError::PeerMisbehavedError("server chose unusable ciphersuite for version"
+            .to_string()));
+    }
+
     // Start our handshake hash, and input the server-hello.
     sess.handshake_data.transcript.start_hash(sess.common.get_suite().get_hash());
     sess.handshake_data.transcript.add_message(&m);
