@@ -279,7 +279,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     let ch = Message {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
+        version: ProtocolVersion::TLSv1_0,
         payload: MessagePayload::Handshake(chp),
     };
 
