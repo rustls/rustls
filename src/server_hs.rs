@@ -255,6 +255,11 @@ fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
     TLSError::PeerIncompatibleError(why.to_string())
 }
 
+fn illegal_param(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
+    sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+    TLSError::PeerMisbehavedError(why.to_string())
+}
+
 fn start_resumption(sess: &mut ServerSessionImpl,
                     client_hello: &ClientHelloPayload,
                     id: &SessionID,
@@ -527,6 +532,11 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
                              signer: &Arc<Box<sign::Signer + Send + Sync>>)
                              -> Result<ConnState, TLSError> {
     let client_hello = extract_handshake!(chm, HandshakePayload::ClientHello).unwrap();
+
+    if client_hello.compression_methods.len() != 1 {
+        return Err(illegal_param(sess, "client offered wrong compressions"));
+    }
+
     let groups_ext = try!(client_hello.get_namedgroups_extension()
     .ok_or_else(|| incompatible(sess, "client didn't describe groups")));
 

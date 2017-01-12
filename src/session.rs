@@ -336,10 +336,14 @@ impl SessionCommon {
                 return Ok(());
             }
 
-            // Warnings are nonfatal.
+            // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3.
             if alert.level == AlertLevel::Warning {
-                warn!("TLS alert warning received: {:#?}", msg);
-                return Ok(());
+                if self.is_tls13 {
+                    self.send_fatal_alert(AlertDescription::DecodeError);
+                } else {
+                    warn!("TLS alert warning received: {:#?}", msg);
+                    return Ok(());
+                }
             }
 
             error!("TLS alert received: {:#?}", msg);
