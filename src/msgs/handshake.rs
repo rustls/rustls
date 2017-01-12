@@ -1063,7 +1063,8 @@ impl Codec for CertificatePayload {
     }
 
     fn read(r: &mut Reader) -> Option<CertificatePayload> {
-        codec::read_vec_u24(r)
+        // 64KB of certificates is plenty, 16MB is obviously silly
+        codec::read_vec_u24_limited(r, 0x10000)
     }
 }
 
@@ -1154,7 +1155,7 @@ impl Codec for CertificatePayloadTLS13 {
     fn read(r: &mut Reader) -> Option<CertificatePayloadTLS13> {
         Some(CertificatePayloadTLS13 {
             context: try_ret!(PayloadU8::read(r)),
-            list: try_ret!(codec::read_vec_u24::<CertificateEntry>(r)),
+            list: try_ret!(codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)),
         })
     }
 }

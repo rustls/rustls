@@ -212,9 +212,13 @@ pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
     Some(ret)
 }
 
-pub fn read_vec_u24<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
+pub fn read_vec_u24_limited<T: Codec>(r: &mut Reader, max_bytes: usize) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
     let len = try_ret!(read_u24(r)) as usize;
+    if len > max_bytes {
+        return None;
+    }
+
     let mut sub = try_ret!(r.sub(len));
 
     while sub.any_left() {

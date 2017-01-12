@@ -124,7 +124,7 @@ mod online {
         polite();
         connect("10000-sans.badssl.com")
             .fails()
-            .expect("TLS error: WebPKIError(BadDER)")
+            .expect("TLS error: CorruptMessagePayload(Handshake)")
             .go()
             .unwrap();
     }
