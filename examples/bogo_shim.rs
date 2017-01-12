@@ -16,6 +16,7 @@ use std::io;
 use std::io::BufReader;
 use std::io::{Write, Read};
 use std::sync::Arc;
+use rustls::internal::msgs::enums::ProtocolVersion;
 
 static BOGO_NACK: i32 = 89;
 
@@ -38,6 +39,8 @@ struct Options {
     key_file: String,
     cert_file: String,
     protocols: Vec<String>,
+    support_tls13: bool,
+    support_tls12: bool,
     expect_curve: u16,
 }
 
@@ -55,6 +58,8 @@ impl Options {
             key_file: "".to_string(),
             cert_file: "".to_string(),
             protocols: vec![],
+            support_tls13: true,
+            support_tls12: true,
             expect_curve: 0,
         }
     }
@@ -136,6 +141,16 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         cfg.set_protocols(&opts.protocols);
     }
 
+    cfg.versions.clear();
+
+    if opts.support_tls12 {
+        cfg.versions.push(ProtocolVersion::TLSv1_2);
+    }
+
+    if opts.support_tls13 {
+        cfg.versions.push(ProtocolVersion::TLSv1_3);
+    }
+
     Arc::new(cfg)
 }
 
@@ -162,11 +177,17 @@ fn handle_err(err: rustls::TLSError) -> ! {
             quit(":BAD_CHANGE_CIPHER_SPEC:")
         }
         TLSError::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
+        TLSError::CorruptMessagePayload(ContentType::Unknown(42)) => {
+            quit(":GARBAGE:")
+        }
         TLSError::CorruptMessage => quit(":GARBAGE:"),
         TLSError::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         TLSError::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
         TLSError::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
         TLSError::NoCertificatesPresented => quit(":NO_CERTS:"),
+        TLSError::AlertReceived(AlertDescription::UnexpectedMessage) => {
+            quit(":BAD_ALERT:")
+        }
         TLSError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey) => {
             quit(":BAD_SIGNATURE:")
         }
@@ -262,6 +283,13 @@ fn main() {
             "-resume-count" => {
                 opts.resumes = args.remove(0).parse::<usize>().unwrap();
             }
+            "-no-tls13" => {
+                opts.support_tls13 = false;
+            }
+            "-no-tls12" => {
+                opts.support_tls12 = false;
+            }
+            "-max-cert-list" |
             "-expect-curve-id" |
             "-expect-peer-signature-algorithm" |
             "-expect-advertised-alpn" |
@@ -296,6 +324,9 @@ fn main() {
             // defaults:
             "-enable-all-curves" |
             "-renegotiate-ignore" |
+            "-no-tls11" |
+            "-no-tls1" |
+            "-no-ssl3" |
             "-decline-alpn" => {}
 
             // internal openssl details:
@@ -308,15 +339,12 @@ fn main() {
             "-dtls" |
             "-enable-ocsp-stapling" |
             "-cipher" |
-            "-no-tls13" |
-            "-no-ssl3" |
-            "-max-version" |
-            "-min-version" |
             "-psk" |
             "-renegotiate-freely" |
             "-false-start" |
             "-fallback-scsv" |
             "-fail-early-callback" |
+            "-fail-cert-callback" |
             "-install-ddos-callback" |
             "-enable-signed-cert-timestamps" |
             "-ocsp-response" |
@@ -339,6 +367,7 @@ fn main() {
             "-enable-client-custom-extension" |
             "-expect-dhe-group-size" |
             "-use-ticket-callback" |
+            "-enable-grease" |
             "-signed-cert-timestamps" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
