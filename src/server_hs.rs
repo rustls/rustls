@@ -20,8 +20,8 @@ use msgs::handshake::SupportedMandatedSignatureSchemes;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
-use session::{SessionSecrets, MessageCipherChange};
-use cipher::MessageCipher;
+use session::SessionSecrets;
+use cipher;
 use server::{ServerSessionImpl, ConnState};
 use key_schedule::{KeySchedule, SecretKind};
 use suites;
@@ -345,8 +345,8 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     let write_key = key_schedule.derive(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
     let read_key = key_schedule.derive(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
-    sess.common.set_message_cipher(MessageCipher::new_tls13(suite, &write_key, &read_key),
-                                   MessageCipherChange::BothNew);
+    sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+    sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
     key_schedule.current_client_traffic_secret = read_key;
     key_schedule.current_server_traffic_secret = write_key;
     sess.common.set_key_schedule(key_schedule);
@@ -1191,8 +1191,8 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
     };
 
     let suite = sess.common.get_suite();
-    sess.common.set_message_cipher(MessageCipher::new_tls13(suite, &write_key, &read_key),
-                                   MessageCipherChange::BothNew);
+    sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+    sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
 
     {
         let key_schedule = sess.common.get_mut_key_schedule();
