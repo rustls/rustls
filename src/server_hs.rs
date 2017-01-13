@@ -498,7 +498,20 @@ fn emit_finished_tls13(sess: &mut ServerSessionImpl) {
 
     debug!("sending finished {:?}", m);
     sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.hash_at_server_fin = sess.handshake_data.transcript.get_current_hash();
     sess.common.send_msg(m, true);
+
+    /* Now move to application data keys. */
+    sess.common.get_mut_key_schedule().input_empty();
+    let write_key = sess.common
+        .get_key_schedule()
+        .derive(SecretKind::ServerApplicationTrafficSecret,
+                &sess.handshake_data.hash_at_server_fin);
+    let suite = sess.common.get_suite();
+    sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+    sess.common
+        .get_mut_key_schedule()
+        .current_server_traffic_secret = write_key;
 }
 
 fn check_binder(sess: &mut ServerSessionImpl,
@@ -1182,23 +1195,18 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
     // main application data keying.
     sess.handshake_data.transcript.add_message(&m);
 
-    sess.common.get_mut_key_schedule().input_empty();
-    let (write_key, read_key) = {
-        let key_schedule = sess.common.get_key_schedule();
-
-        (key_schedule.derive(SecretKind::ServerApplicationTrafficSecret, &handshake_hash),
-         key_schedule.derive(SecretKind::ClientApplicationTrafficSecret, &handshake_hash))
-    };
+    /* Now move to using application data keys for client traffic.
+     * Server traffic is already done. */
+    let read_key = sess.common
+        .get_key_schedule()
+        .derive(SecretKind::ClientApplicationTrafficSecret,
+                &sess.handshake_data.hash_at_server_fin);
 
     let suite = sess.common.get_suite();
-    sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
     sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-
-    {
-        let key_schedule = sess.common.get_mut_key_schedule();
-        key_schedule.current_server_traffic_secret = write_key;
-        key_schedule.current_client_traffic_secret = read_key;
-    }
+    sess.common
+        .get_mut_key_schedule()
+        .current_client_traffic_secret = read_key;
 
     if sess.config.ticketer.enabled() {
         emit_ticket_tls13(sess);

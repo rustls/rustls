@@ -1172,31 +1172,37 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
 
     sess.handshake_data.transcript.add_message(&m);
 
+    /* Transition to application data */
+    sess.common.get_mut_key_schedule().input_empty();
+
+    /* Traffic from server is now encrypted with application data keys. */
+    let handshake_hash = sess.handshake_data.transcript.get_current_hash();
+    let read_key = sess.common
+        .get_key_schedule()
+        .derive(SecretKind::ServerApplicationTrafficSecret, &handshake_hash);
+    let suite = sess.common.get_suite();
+    sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+    sess.common
+        .get_mut_key_schedule()
+        .current_server_traffic_secret = read_key;
+
+    /* Send our authentication/finished messages.  These are still encrypted
+     * with our handshake keys. */
     if sess.handshake_data.doing_client_auth {
         emit_certificate_tls13(sess);
         try!(emit_certverify_tls13(sess));
     }
 
-    let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     emit_finished_tls13(sess);
 
-    sess.common.get_mut_key_schedule().input_empty();
-    let (write_key, read_key) = {
-        let key_schedule = sess.common.get_key_schedule();
-
-        (key_schedule.derive(SecretKind::ClientApplicationTrafficSecret, &handshake_hash),
-         key_schedule.derive(SecretKind::ServerApplicationTrafficSecret, &handshake_hash))
-    };
-
-    let suite = sess.common.get_suite();
+    /* Now move to our application traffic keys. */
+    let write_key = sess.common
+        .get_key_schedule()
+        .derive(SecretKind::ClientApplicationTrafficSecret, &handshake_hash);
     sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-    sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-
-    {
-        let key_schedule = sess.common.get_mut_key_schedule();
-        key_schedule.current_client_traffic_secret = write_key;
-        key_schedule.current_server_traffic_secret = read_key;
-    }
+    sess.common
+        .get_mut_key_schedule()
+        .current_client_traffic_secret = write_key;
 
     Ok(ConnState::TrafficTLS13)
 }
