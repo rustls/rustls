@@ -860,6 +860,10 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnSt
     try! {
         verify::verify_client_cert(&sess.config.client_auth_roots,
                                    &cert_chain)
+            .or_else(|err| {
+                     incompatible(sess, "certificate invalid");
+                     Err(err)
+                     })
     };
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain.clone());
@@ -881,11 +885,16 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
     let certp = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
     let cert_chain = certp.convert();
 
-    if cert_chain.is_empty() && !sess.config.client_auth_mandatory {
-        info!("client auth requested but no certificate supplied");
-        sess.handshake_data.doing_client_auth = false;
-        sess.handshake_data.transcript.abandon_client_auth();
-        return Ok(ConnState::ExpectFinishedTLS13);
+    if cert_chain.is_empty() {
+        if !sess.config.client_auth_mandatory {
+            info!("client auth requested but no certificate supplied");
+            sess.handshake_data.doing_client_auth = false;
+            sess.handshake_data.transcript.abandon_client_auth();
+            return Ok(ConnState::ExpectFinishedTLS13);
+        }
+
+        sess.common.send_fatal_alert(AlertDescription::CertificateRequired);
+        return Err(TLSError::NoCertificatesPresented);
     }
 
     try! {
