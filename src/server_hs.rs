@@ -314,7 +314,7 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
 
     let sh = Message {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
+        version: ProtocolVersion::TLSv1_0,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::ServerHello,
             payload: HandshakePayload::ServerHello(ServerHelloPayload {
@@ -364,13 +364,15 @@ fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
 
     let m = Message {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
+        version: ProtocolVersion::TLSv1_0,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::HelloRetryRequest,
             payload: HandshakePayload::HelloRetryRequest(req),
         }),
     };
 
+    debug!("Requesting retry {:?}", m);
+    sess.handshake_data.transcript.add_message(&m);
     sess.common.send_msg(m, false);
 }
 
@@ -568,6 +570,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
         // We don't have a suitable key share.  Choose a suitable group and
         // send a HelloRetryRequest.
         let retry_group_maybe = util::first_in_both(&NamedGroups::supported(), groups_ext);
+        sess.handshake_data.transcript.add_message(chm);
 
         if let Some(group) = retry_group_maybe {
             emit_hello_retry_request(sess, group);
