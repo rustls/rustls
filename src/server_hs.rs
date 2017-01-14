@@ -719,7 +719,11 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     sess.common.set_suite(maybe_ciphersuite.unwrap());
 
     // Start handshake hash.
-    sess.handshake_data.transcript.start_hash(sess.common.get_suite().get_hash());
+    if !sess.handshake_data.transcript.start_hash(sess.common.get_suite().get_hash()) {
+        sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+        return Err(TLSError::PeerIncompatibleError("hash differed on retry"
+            .to_string()));
+    }
 
     if sess.common.is_tls13 {
         return handle_client_hello_tls13(sess, &m, &private_key);

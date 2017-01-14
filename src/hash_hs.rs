@@ -12,6 +12,9 @@ use msgs::message::{Message, MessagePayload};
 /// This is disable in cases where client auth is not possible.
 pub struct HandshakeHash {
     /// None before we know what hash function we're using
+    alg: Option<&'static digest::Algorithm>,
+
+    /// None before we know what hash function we're using
     ctx: Option<digest::Context>,
 
     /// true if we need to keep all messages
@@ -21,9 +24,19 @@ pub struct HandshakeHash {
     buffer: Vec<u8>,
 }
 
+// This hack is needed because rust doesn't provide reference
+// equality: in other words given a and b of type &T, are
+// the references for the same object?
+fn hash_eq(ha: &'static digest::Algorithm, hb: &'static digest::Algorithm) -> bool {
+    let a = digest::digest(ha, &[]);
+    let b = digest::digest(hb, &[]);
+    a.as_ref() == b.as_ref()
+}
+
 impl HandshakeHash {
     pub fn new() -> HandshakeHash {
         HandshakeHash {
+            alg: None,
             ctx: None,
             client_auth_enabled: false,
             buffer: Vec::new(),
@@ -45,7 +58,20 @@ impl HandshakeHash {
     }
 
     /// We now know what hash function the verify_data will use.
-    pub fn start_hash(&mut self, alg: &'static digest::Algorithm) {
+    pub fn start_hash(&mut self, alg: &'static digest::Algorithm) -> bool {
+        match self.alg {
+            None => {},
+            Some(started) => {
+                if !hash_eq(started, alg) {
+                    // hash type is changing
+                    warn!("altered hash to HandshakeHash::start_hash");
+                    return false;
+                }
+
+                return true;
+            }
+        }
+        self.alg = Some(alg);
         debug_assert!(self.ctx.is_none());
 
         let mut ctx = digest::Context::new(alg);
@@ -56,6 +82,7 @@ impl HandshakeHash {
         if !self.client_auth_enabled {
             self.buffer.drain(..);
         }
+        true
     }
 
     /// Hash/buffer a handshake message.
