@@ -577,8 +577,13 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
         sess.handshake_data.transcript.add_message(chm);
 
         if let Some(group) = retry_group_maybe {
-            emit_hello_retry_request(sess, group);
-            return Ok(ConnState::ExpectClientHello);
+            if sess.handshake_data.done_retry {
+                return Err(illegal_param(sess, "did not follow retry request"));
+            } else {
+                emit_hello_retry_request(sess, group);
+                sess.handshake_data.done_retry = true;
+                return Ok(ConnState::ExpectClientHello);
+            }
         } else {
             return Err(incompatible(sess, "no kx group overlap with client"));
         }

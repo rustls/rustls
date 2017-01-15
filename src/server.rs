@@ -323,6 +323,7 @@ pub struct ServerHandshakeData {
     pub doing_resume: bool,
     pub send_ticket: bool,
     pub doing_client_auth: bool,
+    pub done_retry: bool,
     pub valid_client_cert_chain: Option<Vec<key::Certificate>>,
 }
 
@@ -338,6 +339,7 @@ impl ServerHandshakeData {
             send_ticket: false,
             doing_resume: false,
             doing_client_auth: false,
+            done_retry: false,
             valid_client_cert_chain: None,
         }
     }
