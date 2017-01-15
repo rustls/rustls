@@ -20,6 +20,7 @@ webpki = "0.10"
 [features]
 default = ["logging"]
 logging = ["log"]
+dtls = []
 
 [dev-dependencies]
 log = "0.3.6"

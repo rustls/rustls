@@ -353,6 +353,8 @@ pub enum HandshakeType {
     HelloRequest,
     ClientHello,
     ServerHello,
+    #[cfg(feature="dtls")]
+    HelloVerifyRequest, // DTLS only
     NewSessionTicket,
     HelloRetryRequest,
     EncryptedExtensions,
@@ -385,6 +387,8 @@ impl Codec for HandshakeType {
             0x00 => HandshakeType::HelloRequest,
             0x01 => HandshakeType::ClientHello,
             0x02 => HandshakeType::ServerHello,
+            #[cfg(feature="dtls")]
+            0x03 => HandshakeType::HelloVerifyRequest,
             0x04 => HandshakeType::NewSessionTicket,
             0x06 => HandshakeType::HelloRetryRequest,
             0x08 => HandshakeType::EncryptedExtensions,
@@ -409,6 +413,8 @@ impl HandshakeType {
             HandshakeType::HelloRequest => 0x00,
             HandshakeType::ClientHello => 0x01,
             HandshakeType::ServerHello => 0x02,
+            #[cfg(feature="dtls")]
+            HandshakeType::HelloVerifyRequest => 0x03,
             HandshakeType::NewSessionTicket => 0x04,
             HandshakeType::HelloRetryRequest => 0x06,
             HandshakeType::EncryptedExtensions => 0x08,
