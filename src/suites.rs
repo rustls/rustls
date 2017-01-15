@@ -161,15 +161,24 @@ impl SupportedCipherSuite {
     pub fn resolve_sig_scheme(&self,
                               offered: &SupportedSignatureSchemes)
                               -> Option<SignatureScheme> {
-        let our_preference = vec![// Prefer the designated hash algorithm of this suite, for
-                                  // security level consistency.
-                                  SignatureScheme::make(self.sign, self.hash),
+        let mut our_preference = vec![
+            // Prefer the designated hash algorithm of this suite, for
+            // security level consistency.
+            SignatureScheme::make(self.sign, self.hash),
 
-                                  // Then prefer the right sign algorithm, with the best hashes
-                                  // first.
-                                  SignatureScheme::make(self.sign, HashAlgorithm::SHA512),
-                                  SignatureScheme::make(self.sign, HashAlgorithm::SHA384),
-                                  SignatureScheme::make(self.sign, HashAlgorithm::SHA256)];
+            // Then prefer the right sign algorithm, with the best hashes
+            // first.
+            SignatureScheme::make(self.sign, HashAlgorithm::SHA512),
+            SignatureScheme::make(self.sign, HashAlgorithm::SHA384),
+            SignatureScheme::make(self.sign, HashAlgorithm::SHA256)
+        ];
+
+        // For RSA, support PSS too
+        if self.sign == SignatureAlgorithm::RSA {
+            our_preference.push(SignatureScheme::RSA_PSS_SHA512);
+            our_preference.push(SignatureScheme::RSA_PSS_SHA384);
+            our_preference.push(SignatureScheme::RSA_PSS_SHA256);
+        }
 
         util::first_in_both(our_preference.as_slice(), offered.as_slice())
     }
