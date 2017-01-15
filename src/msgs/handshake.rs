@@ -275,6 +275,7 @@ impl DecomposedSignatureScheme for SignatureScheme {
 pub trait SupportedMandatedSignatureSchemes {
     fn mandated() -> SupportedSignatureSchemes;
     fn supported_verify() -> SupportedSignatureSchemes;
+    fn supported_sign_tls13() -> SupportedSignatureSchemes;
 }
 
 impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
@@ -282,30 +283,38 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
     /// Yes, you cannot avoid SHA1 in standard TLS.
     fn mandated() -> SupportedSignatureSchemes {
         vec![
-      SignatureScheme::RSA_PKCS1_SHA1,
-    ]
+            SignatureScheme::RSA_PKCS1_SHA1,
+        ]
     }
 
     /// Supported signature verification algorithms in decreasing order of expected security.
     fn supported_verify() -> SupportedSignatureSchemes {
         vec![
-      /* FIXME: ed448 */
-      SignatureScheme::ED25519,
+            /* FIXME: ECDSA-P521-SHA512 */
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
 
-      /* FIXME: ECDSA-P521-SHA512 */
-      SignatureScheme::ECDSA_NISTP384_SHA384,
-      SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
 
-      SignatureScheme::RSA_PSS_SHA512,
-      SignatureScheme::RSA_PSS_SHA384,
-      SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA256,
 
-      SignatureScheme::RSA_PKCS1_SHA512,
-      SignatureScheme::RSA_PKCS1_SHA384,
-      SignatureScheme::RSA_PKCS1_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA1,
+        ]
+    }
 
-      SignatureScheme::RSA_PKCS1_SHA1,
-    ]
+    fn supported_sign_tls13() -> SupportedSignatureSchemes {
+        vec![
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
+        ]
     }
 }
 

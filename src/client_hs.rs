@@ -1,4 +1,4 @@
-use msgs::enums::{ContentType, HandshakeType, ExtensionType};
+use msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
@@ -846,12 +846,23 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
     // Fortunately the problems here in TLS1.2 and prior are corrected in
     // TLS1.3.
 
+    let tls13_sign_schemes = SupportedSignatureSchemes::supported_sign_tls13();
+    let compat_sigschemes = certreq.sigschemes
+        .iter()
+        .cloned()
+        .filter(|scheme| tls13_sign_schemes.contains(scheme))
+        .collect::<Vec<SignatureScheme>>();
+
+    if compat_sigschemes.is_empty() {
+        return Err(TLSError::PeerIncompatibleError("server sent bad certreq schemes".to_string()));
+    }
+
     let maybe_certkey =
-        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &certreq.sigschemes);
+        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &compat_sigschemes);
 
     if maybe_certkey.is_some() {
         let (cert, key) = maybe_certkey.unwrap();
-        let maybe_sigscheme = key.choose_scheme(&certreq.sigschemes);
+        let maybe_sigscheme = key.choose_scheme(&compat_sigschemes);
         info!("Attempting client auth, will use sigscheme {:?}", maybe_sigscheme);
         sess.handshake_data.client_auth_cert = Some(cert);
         sess.handshake_data.client_auth_key = Some(key);

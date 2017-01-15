@@ -460,7 +460,7 @@ fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
     message.extend_from_slice(&sess.handshake_data.transcript.get_current_hash());
 
     let scheme = try!(signer.choose_scheme(schemes)
-    .ok_or_else(|| TLSError::General("no overlapping sigschemes".to_string())));
+    .ok_or_else(|| TLSError::PeerIncompatibleError("no overlapping sigschemes".to_string())));
 
     let sig = try!(signer.sign(scheme, &message)
     .map_err(|_| TLSError::General("cannot sign".to_string())));
@@ -555,8 +555,12 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     let groups_ext = try!(client_hello.get_namedgroups_extension()
     .ok_or_else(|| incompatible(sess, "client didn't describe groups")));
 
-    let sigschemes_ext = try!(client_hello.get_sigalgs_extension()
-    .ok_or_else(|| incompatible(sess, "client didn't describe sigschemes")));
+    let mut sigschemes_ext = try!(client_hello.get_sigalgs_extension()
+    .ok_or_else(|| incompatible(sess, "client didn't describe sigschemes")))
+        .clone();
+
+    let tls13_schemes = SupportedSignatureSchemes::supported_sign_tls13();
+    sigschemes_ext.retain(|scheme| tls13_schemes.contains(scheme));
 
     let shares_ext = try!(client_hello.get_keyshare_extension()
     .ok_or_else(|| incompatible(sess, "client didn't send keyshares")));
