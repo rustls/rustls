@@ -572,6 +572,12 @@ fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
     info!("TLS1.3 encrypted extensions: {:?}", exts);
     sess.handshake_data.transcript.add_message(&m);
 
+    if exts.has_duplicate_extension() {
+        sess.common.send_fatal_alert(AlertDescription::DecodeError);
+        return Err(TLSError::PeerMisbehavedError("server sent duplicate encrypted extensions"
+                                                 .to_string()));
+    }
+
     try!(process_alpn_protocol(sess, exts.get_alpn_protocol()));
 
     if sess.handshake_data.resuming_session.is_some() {
