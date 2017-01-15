@@ -260,19 +260,20 @@ fn illegal_param(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
     TLSError::PeerMisbehavedError(why.to_string())
 }
 
+fn can_resume(sess: &ServerSessionImpl,
+              resumedata: &Option<persist::ServerSessionValue>) -> bool {
+    // The RFCs underspecify what happens if we try to resume to
+    // an unoffered/varying suite.  We just don't resume if offered this.
+    resumedata.is_some() &&
+        resumedata.as_ref().unwrap().cipher_suite == sess.common.get_suite().suite
+}
+
 fn start_resumption(sess: &mut ServerSessionImpl,
                     client_hello: &ClientHelloPayload,
                     id: &SessionID,
                     resumedata: persist::ServerSessionValue)
                     -> Result<ConnState, TLSError> {
     info!("Resuming session");
-
-    // The RFC underspecifies this case.  Reject it, because someone's going to be
-    // disappointed.
-    if sess.common.get_suite().suite != resumedata.cipher_suite {
-        return Err(TLSError::PeerMisbehavedError("client varied ciphersuite over resumption"
-            .to_string()));
-    }
 
     sess.handshake_data.session_id = id.clone();
     try!(emit_server_hello(sess, client_hello));
@@ -611,7 +612,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
                 .decrypt(&psk_id.identity.0)
                 .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
 
-            if maybe_resume.is_none() {
+            if !can_resume(sess, &maybe_resume) { 
                 continue;
             }
 
@@ -620,10 +621,6 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
             if !check_binder(sess, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
                 sess.common.send_fatal_alert(AlertDescription::DecryptError);
                 return Err(TLSError::PeerMisbehavedError("client sent wrong binder".to_string()));
-            }
-
-            if resume.cipher_suite != sess.common.get_suite().suite {
-                return Err(illegal_param(sess, "client varied ciphersuite over resumption"));
             }
 
             chosen_psk_index = Some(i);
@@ -786,7 +783,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
                     .decrypt(&ticket.0)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
 
-                if maybe_resume.is_some() {
+                if can_resume(sess, &maybe_resume) {
                     return start_resumption(sess,
                                             client_hello,
                                             &client_hello.session_id,
@@ -810,7 +807,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
             }
             .and_then(|x| persist::ServerSessionValue::read_bytes(&x));
 
-        if maybe_resume.is_some() {
+        if can_resume(sess, &maybe_resume) {
             return start_resumption(sess,
                                     client_hello,
                                     &client_hello.session_id,
