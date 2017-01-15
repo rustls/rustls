@@ -576,8 +576,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
             emit_hello_retry_request(sess, group);
             return Ok(ConnState::ExpectClientHello);
         } else {
-            return Err(TLSError::PeerIncompatibleError("no kx group overlap with client"
-                .to_string()));
+            return Err(incompatible(sess, "no kx group overlap with client"));
         }
     }
 
@@ -590,8 +589,11 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     let mut resuming_psk = None;
     if let Some(psk_offer) = client_hello.get_psk() {
         if !client_hello.check_psk_ext_is_last() {
-            return Err(TLSError::PeerIncompatibleError("psk extension in wrong position"
-                .to_string()));
+            return Err(illegal_param(sess, "psk extension in wrong position"));
+        }
+
+        if psk_offer.binders.len() != psk_offer.identities.len() {
+            return Err(illegal_param(sess, "psk extension mismatched ids/binders"));
         }
 
         for (i, psk_id) in psk_offer.identities.iter().enumerate() {
@@ -607,13 +609,12 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
             let resume = maybe_resume.unwrap();
 
             if !check_binder(sess, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
+                sess.common.send_fatal_alert(AlertDescription::DecryptError);
                 return Err(TLSError::PeerMisbehavedError("client sent wrong binder".to_string()));
             }
 
             if resume.cipher_suite != sess.common.get_suite().suite {
-                return Err(TLSError::PeerMisbehavedError("client varied ciphersuite over \
-                                                          resumption"
-                    .to_string()));
+                return Err(illegal_param(sess, "client varied ciphersuite over resumption"));
             }
 
             chosen_psk_index = Some(i);

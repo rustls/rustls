@@ -419,7 +419,10 @@ impl ServerSessionImpl {
         if self.common.handshake_joiner.want_message(&msg) {
             try! {
                 self.common.handshake_joiner.take_message(msg)
-                    .ok_or_else(|| TLSError::CorruptMessagePayload(ContentType::Handshake))
+                    .ok_or_else(|| {
+                                self.common.send_fatal_alert(AlertDescription::DecodeError);
+                                TLSError::CorruptMessagePayload(ContentType::Handshake)
+                                })
             };
             return self.process_new_handshake_messages();
         }
