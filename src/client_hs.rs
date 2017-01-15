@@ -181,12 +181,13 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         // - if we've been asked via HelloRetryRequest for a specific
         //   one, do that.
         // - if not, we might have a hint of what the server supports
-        // - if not, send all supported.  This is slow, but avoids an extra trip.
+        // - if not, send just X25519.
         //
         let groups = retryreq.and_then(|req| req.get_requested_key_share_group())
             .or_else(|| find_kx_hint(sess))
+            .or_else(|| Some(NamedGroup::X25519))
             .map(|grp| vec![ grp ])
-            .unwrap_or_else(|| NamedGroups::supported());
+            .unwrap();
 
         for group in groups {
             if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
