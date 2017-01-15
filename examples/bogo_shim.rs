@@ -41,6 +41,8 @@ struct Options {
     protocols: Vec<String>,
     support_tls13: bool,
     support_tls12: bool,
+    min_version: Option<ProtocolVersion>,
+    max_version: Option<ProtocolVersion>,
     expect_curve: u16,
 }
 
@@ -60,8 +62,23 @@ impl Options {
             protocols: vec![],
             support_tls13: true,
             support_tls12: true,
+            min_version: None,
+            max_version: None,
             expect_curve: 0,
         }
+    }
+
+    fn version_allowed(&self, vers: ProtocolVersion) -> bool {
+        (self.min_version.is_none() || vers.get_u16() >= self.min_version.unwrap().get_u16()) &&
+        (self.max_version.is_none() || vers.get_u16() <= self.max_version.unwrap().get_u16())
+    }
+
+    fn tls13_supported(&self) -> bool {
+        self.support_tls13 && self.version_allowed(ProtocolVersion::TLSv1_3)
+    }
+
+    fn tls12_supported(&self) -> bool {
+        self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 }
 
@@ -143,11 +160,11 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
 
     cfg.versions.clear();
 
-    if opts.support_tls12 {
+    if opts.tls12_supported() {
         cfg.versions.push(ProtocolVersion::TLSv1_2);
     }
 
-    if opts.support_tls13 {
+    if opts.tls13_supported() {
         cfg.versions.push(ProtocolVersion::TLSv1_3);
     }
 
@@ -289,6 +306,14 @@ fn main() {
             "-no-tls12" => {
                 opts.support_tls12 = false;
             }
+            "-min-version" => {
+                let min = args.remove(0).parse::<u16>().unwrap();
+                opts.min_version = Some(ProtocolVersion::Unknown(min));
+            }
+            "-max-version" => {
+                let max = args.remove(0).parse::<u16>().unwrap();
+                opts.max_version = Some(ProtocolVersion::Unknown(max));
+            }
             "-max-cert-list" |
             "-expect-curve-id" |
             "-expect-peer-signature-algorithm" |
@@ -362,12 +387,23 @@ fn main() {
             "-signing-prefs" |
             "-digest-prefs" |
             "-export-keying-material" |
+            "-use-exporter-between-reads" |
+            "-ticket-key" |
             "-tls-unique" |
             "-enable-server-custom-extension" |
             "-enable-client-custom-extension" |
             "-expect-dhe-group-size" |
             "-use-ticket-callback" |
             "-enable-grease" |
+            "-enable-channel-id" |
+            "-expect-extended-master-secret" |
+            "-expect-resume-curve-id" |
+            "-resumption-delay" |
+            "-expect-early-data-info" |
+            "-enable-early-data" |
+            "-expect-cipher-aes" |
+            "-retain-only-sha256-client-cert-initial" |
+            "-expect-peer-cert-file" |
             "-signed-cert-timestamps" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
