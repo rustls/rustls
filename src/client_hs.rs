@@ -159,7 +159,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     sess.handshake_data.resuming_session = find_session(sess);
     let (session_id, ticket, resume_version) = if sess.handshake_data.resuming_session.is_some() {
         let mut resuming = sess.handshake_data.resuming_session.as_mut().unwrap();
-        randomise_sessionid_for_ticket(resuming);
+        if resuming.version == ProtocolVersion::TLSv1_2 {
+            randomise_sessionid_for_ticket(resuming);
+        }
         info!("Resuming session");
         (resuming.session_id.clone(), resuming.ticket.0.clone(), resuming.version)
     } else {
