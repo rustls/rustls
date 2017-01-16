@@ -612,7 +612,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
                 .decrypt(&psk_id.identity.0)
                 .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
 
-            if !can_resume(sess, &maybe_resume) { 
+            if !can_resume(sess, &maybe_resume) {
                 continue;
             }
 
@@ -1139,7 +1139,11 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState
     use ring;
     try! {
         ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-            .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
+            .map_err(|_| {
+                     sess.common.send_fatal_alert(AlertDescription::DecryptError);
+                     warn!("Finished wrong");
+                     TLSError::DecryptError
+                     })
     };
 
     // Save session, perhaps
@@ -1211,7 +1215,11 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
     use ring;
     try! {
         ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-            .map_err(|_| { error!("Finished wrong"); TLSError::DecryptError })
+            .map_err(|_| {
+                     sess.common.send_fatal_alert(AlertDescription::DecryptError);
+                     warn!("Finished wrong");
+                     TLSError::DecryptError
+                     })
     };
 
     // nb. future derivations include Client Finished, but not the

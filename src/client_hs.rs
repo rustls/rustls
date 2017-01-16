@@ -1208,7 +1208,10 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
     use ring;
     try! {
         ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-            .map_err(|_| TLSError::DecryptError)
+            .map_err(|_| {
+                     sess.common.send_fatal_alert(AlertDescription::DecryptError);
+                     TLSError::DecryptError
+                     })
     };
 
     sess.handshake_data.transcript.add_message(&m);
@@ -1260,7 +1263,10 @@ fn handle_finished_tls12(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
     use ring;
     try! {
         ring::constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-            .map_err(|_| TLSError::DecryptError)
+            .map_err(|_| {
+                     sess.common.send_fatal_alert(AlertDescription::DecryptError);
+                     TLSError::DecryptError
+                     })
     };
 
     // Hash this message too.
