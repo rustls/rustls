@@ -928,7 +928,7 @@ impl Codec for HelloRetryExtension {
             ExtensionType::KeyShare => {
                 HelloRetryExtension::KeyShare(try_ret!(NamedGroup::read(&mut sub)))
             }
-            ExtensionType::Heartbeat => {
+            ExtensionType::Cookie => {
                 HelloRetryExtension::Cookie(try_ret!(PayloadU16::read(&mut sub)))
             }
             _ => HelloRetryExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
@@ -957,6 +957,23 @@ impl Codec for HelloRetryRequest {
 }
 
 impl HelloRetryRequest {
+    /// Returns true if there is more than one extension of a given
+    /// type.
+    pub fn has_duplicate_extension(&self) -> bool {
+        let mut seen = collections::HashSet::new();
+
+        for ext in &self.extensions {
+            let typ = ext.get_type().get_u16();
+
+            if seen.contains(&typ) {
+                return true;
+            }
+            seen.insert(typ);
+        }
+
+        false
+    }
+
     fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
         self.extensions.iter().find(|x| x.get_type() == ext)
     }

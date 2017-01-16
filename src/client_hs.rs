@@ -57,6 +57,11 @@ pub struct Handler {
     pub handle: HandleFunction,
 }
 
+fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
+    sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+    TLSError::PeerMisbehavedError(why.to_string())
+}
+
 fn ticket_timebase() -> u64 {
     time::get_time().sec as u64
 }
@@ -190,6 +195,14 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             .unwrap();
 
         for group in groups {
+            // in reply to HelloRetryRequest, we must not alter any existing key
+            // shares
+            if let Some(already_offered_share) = find_key_share(sess, group) {
+                key_shares.push(KeyShareEntry::new(group, &already_offered_share.pubkey));
+                sess.handshake_data.offered_key_shares.push(already_offered_share);
+                continue;
+            }
+
             if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
                 key_shares.push(KeyShareEntry::new(group, &key_share.pubkey));
                 sess.handshake_data.offered_key_shares.push(key_share);
@@ -313,18 +326,24 @@ fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtens
 
 fn find_key_share(sess: &mut ClientSessionImpl,
                   group: NamedGroup)
-                  -> Result<suites::KeyExchange, TLSError> {
-    // While we're doing this, discard all the other key shares.
-    while !sess.handshake_data.offered_key_shares.is_empty() {
-        let share = sess.handshake_data.offered_key_shares.remove(0);
-        if share.group == group {
-            sess.handshake_data.offered_key_shares.clear();
-            return Ok(share);
+                  -> Option<suites::KeyExchange> {
+    let shares = &mut sess.handshake_data.offered_key_shares;
+    for i in 0..shares.len() {
+        if shares[i].group == group {
+            return Some(shares.remove(i));
         }
     }
 
-    sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-    Err(TLSError::PeerMisbehavedError("wrong group for key share".to_string()))
+    None
+}
+
+fn find_key_share_and_discard_others(sess: &mut ClientSessionImpl,
+                                     group: NamedGroup)
+                                     -> Result<suites::KeyExchange, TLSError> {
+    let ret = find_key_share(sess, group)
+        .ok_or_else(|| illegal_param(sess, "wrong group for key share"));
+    sess.handshake_data.offered_key_shares.clear();
+    ret
 }
 
 fn start_handshake_traffic(sess: &mut ClientSessionImpl,
@@ -374,7 +393,8 @@ fn start_handshake_traffic(sess: &mut ClientSessionImpl,
                     })
         };
 
-        let our_key_share = try!(find_key_share(sess, their_key_share.group));
+        let our_key_share = try!(find_key_share_and_discard_others(sess,
+                                                                   their_key_share.group));
         let shared = try! {
             our_key_share.complete(&their_key_share.payload.0)
                 .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed"
@@ -403,9 +423,7 @@ fn process_alpn_protocol(sess: &mut ClientSessionImpl,
     sess.alpn_protocol = proto;
     if sess.alpn_protocol.is_some() {
         if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
-            sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TLSError::PeerMisbehavedError("server sent non-offered ALPN protocol"
-                .to_string()));
+            return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
         }
     }
     info!("ALPN protocol is {:?}", sess.alpn_protocol);
@@ -470,9 +488,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
         ProtocolVersion::TLSv1_2
     };
     if !sess.common.get_suite().usable_for_version(version) {
-        sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
-        return Err(TLSError::PeerMisbehavedError("server chose unusable ciphersuite for version"
-            .to_string()));
+        return Err(illegal_param(sess, "server chose unusable ciphersuite for version"));
     }
 
     // Start our handshake hash, and input the server-hello.
@@ -541,10 +557,15 @@ pub static EXPECT_SERVER_HELLO: Handler = Handler {
 fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
                               m: Message)
                               -> Result<ConnState, TLSError> {
-    let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest);
+    let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
     sess.handshake_data.transcript.add_message(&m);
     debug!("Got HRR {:?}", hrr);
-    Ok(emit_client_hello_for_retry(sess, hrr))
+
+    if hrr.has_duplicate_extension() {
+        return Err(illegal_param(sess, "server send duplicate hrr extensions"));
+    }
+
+    Ok(emit_client_hello_for_retry(sess, Some(hrr)))
 }
 
 fn handle_server_hello_or_retry(sess: &mut ClientSessionImpl,
