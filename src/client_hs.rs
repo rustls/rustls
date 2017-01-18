@@ -311,11 +311,12 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 }
 
-fn sent_unsolicited_extensions(sess: &ClientSessionImpl, exts: &Vec<ServerExtension>) -> bool {
-    let allowed_unsolicited = vec![ ExtensionType::RenegotiationInfo ];
+fn sent_unsolicited_extensions(sess: &ClientSessionImpl,
+                               received_exts: &[ServerExtension],
+                               allowed_unsolicited: &[ExtensionType]) -> bool {
 
     let sent = &sess.handshake_data.sent_extensions;
-    for ext in exts {
+    for ext in received_exts {
         let ext_type = ext.get_type();
         if !sent.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type) {
             debug!("Unsolicited extension {:?}", ext_type);
@@ -463,7 +464,8 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
         return Err(TLSError::PeerMisbehavedError("server sent duplicate extensions".to_string()));
     }
 
-    if sent_unsolicited_extensions(sess, &server_hello.extensions) {
+    let allowed_unsolicited = [ ExtensionType::RenegotiationInfo ];
+    if sent_unsolicited_extensions(sess, &server_hello.extensions, &allowed_unsolicited) {
         sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
         return Err(TLSError::PeerMisbehavedError("server sent unsolicited extension".to_string()));
     }
@@ -599,6 +601,12 @@ fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
         sess.common.send_fatal_alert(AlertDescription::DecodeError);
         return Err(TLSError::PeerMisbehavedError("server sent duplicate encrypted extensions"
                                                  .to_string()));
+    }
+
+    if sent_unsolicited_extensions(sess, &exts, &[]) {
+        sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+        let msg = "server sent unsolicited encrypted extension".to_string();
+        return Err(TLSError::PeerMisbehavedError(msg));
     }
 
     try!(process_alpn_protocol(sess, exts.get_alpn_protocol()));
