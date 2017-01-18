@@ -70,11 +70,23 @@ impl KeyExchange {
         })
     }
 
-    pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
+    pub fn check_client_params(&self, kx_params: &[u8]) -> bool {
+        self.decode_client_params(kx_params).is_some()
+    }
+
+    fn decode_client_params(&self, kx_params: &[u8]) -> Option<ClientECDHParams> {
         let mut rd = Reader::init(kx_params);
         let ecdh_params = ClientECDHParams::read(&mut rd).unwrap();
+        if rd.any_left() {
+            None
+        } else {
+            Some(ecdh_params)
+        }
+    }
 
-        self.complete(&ecdh_params.public.0)
+    pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
+        self.decode_client_params(kx_params)
+            .and_then(|ecdh| self.complete(&ecdh.public.0))
     }
 
     pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {

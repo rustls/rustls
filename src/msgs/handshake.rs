@@ -1376,12 +1376,18 @@ impl ServerKeyExchangePayload {
         if let ServerKeyExchangePayload::Unknown(ref unk) = *self {
             let mut rd = Reader::init(&unk.0);
 
-            return match *kxa {
+            let result = match *kxa {
                 KeyExchangeAlgorithm::ECDHE => {
                     ECDHEServerKeyExchange::read(&mut rd)
                         .and_then(|x| Some(ServerKeyExchangePayload::ECDHE(x)))
                 }
                 _ => None,
+            };
+
+            if rd.any_left() {
+                return None;
+            } else {
+                return result;
             };
         }
 
@@ -1731,7 +1737,12 @@ impl HandshakeMessagePayload {
                 let p = try_ret!(ServerKeyExchangePayload::read(&mut sub));
                 HandshakePayload::ServerKeyExchange(p)
             }
-            HandshakeType::ServerHelloDone if sub.left() == 0 => HandshakePayload::ServerHelloDone,
+            HandshakeType::ServerHelloDone => {
+                if sub.any_left() {
+                    return None;
+                }
+                HandshakePayload::ServerHelloDone
+            }
             HandshakeType::ClientKeyExchange => {
                 HandshakePayload::ClientKeyExchange(try_ret!(Payload::read(&mut sub)))
             }

@@ -674,7 +674,8 @@ fn handle_server_kx(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnStat
     sess.handshake_data.transcript.add_message(&m);
 
     if maybe_decoded_kx.is_none() {
-        return Err(TLSError::PeerIncompatibleError("cannot decode server's kx".to_string()));
+        sess.common.send_fatal_alert(AlertDescription::DecodeError);
+        return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
     }
 
     let decoded_kx = maybe_decoded_kx.unwrap();
@@ -977,10 +978,11 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     }
 
     // 4a.
-    let kxd = try!(sess.common.get_suite()
-    .do_client_kx(&sess.handshake_data.server_kx_params)
-    .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
-  );
+    let kxd = try! {
+        sess.common.get_suite()
+        .do_client_kx(&sess.handshake_data.server_kx_params)
+        .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
+    };
 
     // 4b.
     emit_clientkx(sess, &kxd);
