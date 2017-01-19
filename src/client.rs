@@ -456,7 +456,7 @@ impl ClientSessionImpl {
     /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
     /// that Handler expects.  Finally, we ask the handler to handle the message.
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
-        if msg.is_handshake_type(HandshakeType::HelloRequest) {
+        if msg.is_handshake_type(HandshakeType::HelloRequest) && !self.common.is_tls13 {
             self.process_hello_req();
             return Ok(());
         }

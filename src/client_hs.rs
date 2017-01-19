@@ -14,7 +14,7 @@ use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
-use msgs::enums::{ClientCertificateType, PskKeyExchangeMode};
+use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode};
 use msgs::codec::Codec;
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
@@ -228,7 +228,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 
     if support_tls13 && sess.config.enable_tickets {
-        let psk_modes = vec![ PskKeyExchangeMode::DHE_KE, PskKeyExchangeMode::KE ];
+        let psk_modes = vec![ PSKKeyExchangeMode::PSK_DHE_KE, PSKKeyExchangeMode::PSK_KE ];
         exts.push(ClientExtension::PresharedKeyModes(psk_modes));
     }
 
@@ -347,6 +347,30 @@ fn find_key_share_and_discard_others(sess: &mut ClientSessionImpl,
         .ok_or_else(|| illegal_param(sess, "wrong group for key share"));
     sess.handshake_data.offered_key_shares.clear();
     ret
+}
+
+fn validate_server_hello_tls13(sess: &mut ClientSessionImpl,
+                               server_hello: &ServerHelloPayload)
+                               -> Result<(), TLSError> {
+    // This function applies TLS1.3-specific constraints to the
+    // ServerHello:
+    // - That it only contains ServerExtensions that can appear
+    //   in plaintext.
+
+    let allowed_plaintext_exts = &[
+        ExtensionType::KeyShare,
+        ExtensionType::PreSharedKey
+    ];
+
+    for ext in &server_hello.extensions {
+        if !allowed_plaintext_exts.contains(&ext.get_type()) {
+            sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+            return Err(TLSError::PeerMisbehavedError("server sent unexpected cleartext ext"
+                                                     .to_string()));
+        }
+    }
+
+    Ok(())
 }
 
 fn start_handshake_traffic(sess: &mut ClientSessionImpl,
@@ -502,6 +526,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
     // For TLS1.3, start message encryption using
     // handshake_traffic_secret.
     if sess.common.is_tls13 {
+        try!(validate_server_hello_tls13(sess, &server_hello));
         try!(start_handshake_traffic(sess, &server_hello));
         return Ok(ConnState::ExpectEncryptedExtensions);
     }

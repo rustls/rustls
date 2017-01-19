@@ -1,7 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use msgs::enums::{Compression, NamedGroup, ECPointFormat, CipherSuite};
 use msgs::enums::{ExtensionType, AlertDescription};
-use msgs::enums::{ClientCertificateType, SignatureScheme};
+use msgs::enums::{ClientCertificateType, SignatureScheme, PSKKeyExchangeMode};
 use msgs::message::{Message, MessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
@@ -170,11 +170,11 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
                   group: &NamedGroup,
                   signer: Arc<Box<sign::Signer + Send + Sync>>)
                   -> Result<(), TLSError> {
-    let kx = try!({
-    let scs = sess.common.get_suite();
-    scs.start_server_kx(*group)
-      .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
-  });
+    let kx = try! {
+        sess.common.get_suite()
+            .start_server_kx(*group)
+            .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))
+    };
     let secdh = ServerECDHParams::new(group, &kx.pubkey);
 
     let mut msg = Vec::new();
@@ -627,6 +627,15 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
             resuming_psk = Some(resume.master_secret.0);
             break;
         }
+    }
+
+    if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
+        warn!("Resumption ignored, DHE_KE not offered");
+        sess.handshake_data.send_ticket = false;
+        chosen_psk_index = None;
+        resuming_psk = None;
+    } else {
+        sess.handshake_data.send_ticket = true;
     }
 
     let full_handshake = resuming_psk.is_none();
@@ -1182,6 +1191,10 @@ pub static EXPECT_FINISHED: Handler = Handler {
 };
 
 fn emit_ticket_tls13(sess: &mut ServerSessionImpl) {
+    if !sess.handshake_data.send_ticket {
+        return;
+    }
+
     let plain = get_server_session_value(sess).get_encoding();
     let maybe_ticket = sess.config
         .ticketer

@@ -202,6 +202,7 @@
     "HelloRetryRequest-DuplicateCookie": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequest-DuplicateCurve": ":PEER_MISBEHAVIOUR:",
     "UnknownUnencryptedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
+    "UnexpectedUnencryptedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnofferedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "RenegotiationInfo-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnknownExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",

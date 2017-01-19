@@ -4,7 +4,7 @@ use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameTy
 use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use msgs::enums::ClientCertificateType;
 use msgs::enums::ECCurveType;
-use msgs::enums::PskKeyExchangeMode;
+use msgs::enums::PSKKeyExchangeMode;
 use msgs::base::{Payload, PayloadU8, PayloadU16};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
@@ -517,7 +517,7 @@ impl Codec for PresharedKeyOffer {
 
 // ---
 
-declare_u8_vec!(PskKeyExchangeModes, PskKeyExchangeMode);
+declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 declare_u16_vec!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
@@ -533,7 +533,7 @@ pub enum ClientExtension {
     Protocols(ProtocolNameList),
     SupportedVersions(ProtocolVersions),
     KeyShare(KeyShareEntries),
-    PresharedKeyModes(PskKeyExchangeModes),
+    PresharedKeyModes(PSKKeyExchangeModes),
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16),
     Unknown(UnknownExtension),
@@ -623,7 +623,7 @@ impl Codec for ClientExtension {
                 ClientExtension::KeyShare(try_ret!(KeyShareEntries::read(&mut sub)))
             }
             ExtensionType::PSKKeyExchangeModes => {
-                ClientExtension::PresharedKeyModes(try_ret!(PskKeyExchangeModes::read(&mut sub)))
+                ClientExtension::PresharedKeyModes(try_ret!(PSKKeyExchangeModes::read(&mut sub)))
             }
             ExtensionType::PreSharedKey => {
                 ClientExtension::PresharedKey(try_ret!(PresharedKeyOffer::read(&mut sub)))
@@ -875,6 +875,22 @@ impl ClientHelloPayload {
             .last()
             .map_or(false, |ext| ext.get_type() == ExtensionType::PreSharedKey)
     }
+
+    pub fn get_psk_modes(&self) -> Option<&PSKKeyExchangeModes> {
+        let ext = try_ret!(self.find_extension(ExtensionType::PSKKeyExchangeModes));
+        match *ext {
+            ClientExtension::PresharedKeyModes(ref psk_modes) => Some(psk_modes),
+            _ => None,
+        }
+    }
+
+    pub fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
+        self.get_psk_modes()
+            .and_then(|modes| Some(modes.contains(&mode)))
+            .or(Some(false))
+            .unwrap()
+    }
+
 
     pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
         let last_extension = self.extensions.last_mut().unwrap();
