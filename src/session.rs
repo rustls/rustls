@@ -375,21 +375,43 @@ impl SessionCommon {
         self.message_fragmenter.fragment(m, &mut plain_messages);
 
         for m in plain_messages {
-            // Close connection once we start to run out of
-            // sequence space.
-            if self.write_seq == SEQ_SOFT_LIMIT {
-                self.send_close_notify();
-            }
-
-            // Refuse to wrap counter at all costs.  This
-            // is basically untestable unfortunately.
-            if self.write_seq >= SEQ_HARD_LIMIT {
-                return;
-            }
-
-            let em = self.encrypt_outgoing(m);
-            self.queue_tls_message(em);
+            self.send_single_fragment(m);
         }
+    }
+
+    /// Like send_msg_encrypt, but operate on an appdata directly.
+    fn send_appdata_encrypt(&mut self,
+                            payload: &[u8]) {
+        if self.want_write_key_update {
+            self.do_write_key_update();
+        }
+
+        let mut plain_messages = VecDeque::new();
+        self.message_fragmenter.fragment_raw(ContentType::ApplicationData,
+                                             ProtocolVersion::TLSv1_2,
+                                             payload,
+                                             &mut plain_messages);
+
+        for m in plain_messages {
+            self.send_single_fragment(m);
+        }
+    }
+
+    fn send_single_fragment(&mut self, m: Message) {
+        // Close connection once we start to run out of
+        // sequence space.
+        if self.write_seq == SEQ_SOFT_LIMIT {
+            self.send_close_notify();
+        }
+
+        // Refuse to wrap counter at all costs.  This
+        // is basically untestable unfortunately.
+        if self.write_seq >= SEQ_HARD_LIMIT {
+            return;
+        }
+
+        let em = self.encrypt_outgoing(m);
+        self.queue_tls_message(em);
     }
 
     /// Are we done? ie, have we processed all received messages,
@@ -412,11 +434,11 @@ impl SessionCommon {
 
     /// Send plaintext application data, fragmenting and
     /// encrypting it as it goes out.
-    pub fn send_plain(&mut self, data: Vec<u8>) {
+    pub fn send_plain(&mut self, data: &[u8]) {
         if !self.traffic {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
-            self.sendable_plaintext.append(data);
+            self.sendable_plaintext.append(data.to_vec());
             return;
         }
 
@@ -427,15 +449,7 @@ impl SessionCommon {
             return;
         }
 
-        // Make one giant message, then have the fragmenter chop
-        // it into bits.  Then encrypt and queue those bits.
-        let m = Message {
-            typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::opaque(data.as_slice()),
-        };
-
-        self.send_msg_encrypt(m);
+        self.send_appdata_encrypt(data);
     }
 
     pub fn start_traffic(&mut self) {
@@ -452,7 +466,7 @@ impl SessionCommon {
 
         while !self.sendable_plaintext.is_empty() {
             let buf = self.sendable_plaintext.take_one();
-            self.send_plain(buf);
+            self.send_plain(&buf);
         }
     }
 

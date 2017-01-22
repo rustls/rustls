@@ -64,8 +64,13 @@ impl MessagePayload {
         }
     }
 
-    pub fn opaque(data: &[u8]) -> MessagePayload {
-        MessagePayload::Opaque(Payload::from_slice(data))
+    pub fn opaque_take(data: Vec<u8>) -> MessagePayload {
+        MessagePayload::Opaque(Payload::new(data))
+    }
+
+    // TODO: FIXME: this does a copy at the minute
+    pub fn opaque_borrow(data: &[u8]) -> MessagePayload {
+        MessagePayload::opaque_take(data.to_vec())
     }
 }
 
@@ -182,7 +187,7 @@ impl Message {
         Message {
             typ: self.typ,
             version: self.version,
-            payload: MessagePayload::opaque(buf.as_slice()),
+            payload: MessagePayload::opaque_take(buf),
         }
     }
 

@@ -1,6 +1,7 @@
 
 use std::collections::VecDeque;
 use msgs::message::{Message, MessagePayload};
+use msgs::enums::{ContentType, ProtocolVersion};
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -33,11 +34,21 @@ impl MessageFragmenter {
         let version = msg.version;
         let payload = msg.take_payload();
 
+        self.fragment_raw(typ, version, &payload, out);
+    }
+
+    /// Enqueue fragments of (version, typ, payload) which
+    /// are no longer than max_frag onto the `out` deque.
+    pub fn fragment_raw(&self,
+                        typ: ContentType,
+                        version: ProtocolVersion,
+                        payload: &[u8],
+                        out: &mut VecDeque<Message>) {
         for chunk in payload.chunks(self.max_frag) {
             let cm = Message {
                 typ: typ,
                 version: version,
-                payload: MessagePayload::opaque(chunk),
+                payload: MessagePayload::opaque_borrow(chunk),
             };
             out.push_back(cm);
         }
@@ -76,7 +87,7 @@ mod tests {
         let m = Message {
             typ: typ,
             version: version,
-            payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08"),
+            payload: MessagePayload::opaque_borrow(b"\x01\x02\x03\x04\x05\x06\x07\x08"),
         };
 
         let frag = MessageFragmenter::new(3);
@@ -105,7 +116,7 @@ mod tests {
         let m = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08"),
+            payload: MessagePayload::opaque_borrow(b"\x01\x02\x03\x04\x05\x06\x07\x08"),
         };
 
         let frag = MessageFragmenter::new(8);

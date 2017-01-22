@@ -625,7 +625,7 @@ impl io::Write for ClientSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.imp.common.send_plain(buf.to_vec());
+        self.imp.common.send_plain(buf);
         Ok(buf.len())
     }
 

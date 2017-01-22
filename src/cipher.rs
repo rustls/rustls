@@ -172,7 +172,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
         Ok(Message {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::opaque(buf.as_slice()),
+            payload: MessagePayload::opaque_take(buf),
         })
     }
 }
@@ -218,7 +218,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
         Ok(Message {
             typ: typ,
             version: version,
-            payload: MessagePayload::opaque(result.as_slice()),
+            payload: MessagePayload::opaque_take(result),
         })
     }
 }
@@ -305,7 +305,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         Ok(Message {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_0,
-            payload: MessagePayload::opaque(buf.as_slice()),
+            payload: MessagePayload::opaque_take(buf),
         })
     }
 }
@@ -342,7 +342,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
         Ok(Message {
             typ: content_type,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::opaque(buf.as_slice()),
+            payload: MessagePayload::opaque_take(buf),
         })
     }
 }
@@ -458,7 +458,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         Ok(Message {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::opaque(buf.as_slice()),
+            payload: MessagePayload::opaque_take(buf),
         })
     }
 }
@@ -492,7 +492,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         Ok(Message {
             typ: typ,
             version: version,
-            payload: MessagePayload::opaque(buf.as_slice()),
+            payload: MessagePayload::opaque_take(buf),
         })
     }
 }
