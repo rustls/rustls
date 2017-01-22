@@ -214,6 +214,24 @@ impl SupportedCipherSuite {
             _ => false,
         }
     }
+
+    /// Can a session using suite self resume using suite new_suite?
+    pub fn can_resume_to(&self, new_suite: &SupportedCipherSuite) -> bool {
+        if self.usable_for_version(ProtocolVersion::TLSv1_3) &&
+            new_suite.usable_for_version(ProtocolVersion::TLSv1_3) {
+            // TLS1.3 actually specifies requirements here: suites are compatible
+            // for resumption if they have the same KDF hash
+            self.hash == new_suite.hash
+        } else if self.usable_for_version(ProtocolVersion::TLSv1_2) &&
+            new_suite.usable_for_version(ProtocolVersion::TLSv1_2) {
+            // Previous versions don't specify any constraint, so we don't
+            // resume between suites to avoid bad interactions.
+            self.suite == new_suite.suite
+        } else {
+            // Suites for different versions definitely can't resume!
+            false
+        }
+    }
 }
 
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =

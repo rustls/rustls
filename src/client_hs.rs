@@ -7,14 +7,14 @@ use msgs::handshake::{SessionID, Random, ServerHelloPayload};
 use msgs::handshake::{ClientExtension, ServerExtension, HasServerExtensions};
 use msgs::handshake::{SupportedSignatureSchemes, SupportedMandatedSignatureSchemes};
 use msgs::handshake::DecomposedSignatureScheme;
-use msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry};
+use msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry, EncryptedExtensions};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
-use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode};
+use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode, ECPointFormat};
 use msgs::codec::Codec;
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
@@ -64,6 +64,14 @@ fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
 
 fn ticket_timebase() -> u64 {
     time::get_time().sec as u64
+}
+
+fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
+    if !sess.common.handshake_joiner.is_empty() {
+        Err(illegal_param(sess, "keys changed with pending hs fragment"))
+    } else {
+        Ok(())
+    }
 }
 
 fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionValue> {
@@ -121,7 +129,7 @@ fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
 pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl, hmp: &mut HandshakeMessagePayload) {
     // We need to know the hash function of the suite we're trying to resume into.
     let resuming = sess.handshake_data.resuming_session.as_ref().unwrap();
-    let suite_hash = sess.find_cipher_suite(&resuming.cipher_suite).unwrap().get_hash();
+    let suite_hash = sess.find_cipher_suite(resuming.cipher_suite).unwrap().get_hash();
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -213,7 +221,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 
     let mut exts = Vec::new();
-    exts.push(ClientExtension::SupportedVersions(supported_versions));
+    if !supported_versions.is_empty() {
+        exts.push(ClientExtension::SupportedVersions(supported_versions));
+    }
     exts.push(ClientExtension::make_sni(&sess.handshake_data.dns_name));
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
@@ -228,7 +238,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 
     if support_tls13 && sess.config.enable_tickets {
-        let psk_modes = vec![ PSKKeyExchangeMode::PSK_DHE_KE, PSKKeyExchangeMode::PSK_KE ];
+        // We could support PSK_KE here too. Such connections don't
+        // have forward secrecy, and are similar to TLS1.2 resumption.
+        let psk_modes = vec![ PSKKeyExchangeMode::PSK_DHE_KE ];
         exts.push(ClientExtension::PresharedKeyModes(psk_modes));
     }
 
@@ -253,7 +265,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             (resuming.get_obfuscated_ticket_age(ticket_timebase()), resuming.cipher_suite)
         };
 
-        let binder_len = sess.find_cipher_suite(&suite).unwrap().get_hash().output_len;
+        let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
         let binder = vec![0u8; binder_len];
 
         let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
@@ -327,6 +339,13 @@ fn sent_unsolicited_extensions(sess: &ClientSessionImpl,
     false
 }
 
+fn has_key_share(sess: &mut ClientSessionImpl,
+                 group: NamedGroup) -> bool {
+    sess.handshake_data.offered_key_shares
+        .iter()
+        .any(|share| share.group == group)
+}
+
 fn find_key_share(sess: &mut ClientSessionImpl,
                   group: NamedGroup)
                   -> Option<suites::KeyExchange> {
@@ -349,21 +368,25 @@ fn find_key_share_and_discard_others(sess: &mut ClientSessionImpl,
     ret
 }
 
+// Extensions we expect in plaintext in the ServerHello.
+static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
+    ExtensionType::KeyShare,
+    ExtensionType::PreSharedKey
+];
+
+// Only the intersection of things we offer, and those disallowed
+// in TLS1.3
+static DISALLOWED_TLS13_EXTS: &'static [ExtensionType] = &[
+    ExtensionType::ECPointFormats,
+    ExtensionType::SessionTicket,
+    ExtensionType::RenegotiationInfo
+];
+
 fn validate_server_hello_tls13(sess: &mut ClientSessionImpl,
                                server_hello: &ServerHelloPayload)
                                -> Result<(), TLSError> {
-    // This function applies TLS1.3-specific constraints to the
-    // ServerHello:
-    // - That it only contains ServerExtensions that can appear
-    //   in plaintext.
-
-    let allowed_plaintext_exts = &[
-        ExtensionType::KeyShare,
-        ExtensionType::PreSharedKey
-    ];
-
     for ext in &server_hello.extensions {
-        if !allowed_plaintext_exts.contains(&ext.get_type()) {
+        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
             sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
             return Err(TLSError::PeerMisbehavedError("server sent unexpected cleartext ext"
                                                      .to_string()));
@@ -380,14 +403,11 @@ fn start_handshake_traffic(sess: &mut ClientSessionImpl,
     let hash = suite.get_hash();
     let mut key_schedule = KeySchedule::new(hash);
 
-    // PSK_KE means allowing a missing server key_share
-    // here, but critically only if resuming from something.
-    let mut skip_key_share = false;
-
     if let Some(selected_psk) = server_hello.get_psk_index() {
         if let Some(ref resuming) = sess.handshake_data.resuming_session {
-            if suite.suite != resuming.cipher_suite {
-                return Err(TLSError::PeerMisbehavedError("server resuming wrong suite"
+            let resume_from_suite = sess.find_cipher_suite(resuming.cipher_suite).unwrap();
+            if !resume_from_suite.can_resume_to(suite) {
+                return Err(TLSError::PeerMisbehavedError("server resuming incompatible suite"
                     .to_string()));
             }
 
@@ -398,7 +418,6 @@ fn start_handshake_traffic(sess: &mut ClientSessionImpl,
 
             info!("Resuming using PSK");
             key_schedule.input_secret(&resuming.master_secret.0);
-            skip_key_share = server_hello.get_key_share().is_none();
         } else {
             return Err(TLSError::PeerMisbehavedError("server selected unoffered psk".to_string()));
         }
@@ -408,29 +427,26 @@ fn start_handshake_traffic(sess: &mut ClientSessionImpl,
         sess.handshake_data.resuming_session.take();
     }
 
-    if skip_key_share {
-        info!("Server didn't contribute DH share");
-        key_schedule.input_empty();
-    } else {
-        let their_key_share = try! {
-            server_hello.get_key_share()
-                .ok_or_else(|| {
-                    sess.common.send_fatal_alert(AlertDescription::MissingExtension);
-                    TLSError::PeerMisbehavedError("missing key share".to_string())
-                    })
-        };
+    let their_key_share = try! {
+        server_hello.get_key_share()
+            .ok_or_else(|| {
+                sess.common.send_fatal_alert(AlertDescription::MissingExtension);
+                TLSError::PeerMisbehavedError("missing key share".to_string())
+                })
+    };
 
-        let our_key_share = try!(find_key_share_and_discard_others(sess,
-                                                                   their_key_share.group));
-        let shared = try! {
-            our_key_share.complete(&their_key_share.payload.0)
-                .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed"
-                                                             .to_string()))
-        };
+    let our_key_share = try!(find_key_share_and_discard_others(sess,
+                                                               their_key_share.group));
+    let shared = try! {
+        our_key_share.complete(&their_key_share.payload.0)
+            .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed"
+                                                         .to_string()))
+    };
 
-        save_kx_hint(sess, their_key_share.group);
-        key_schedule.input_secret(&shared.premaster_secret);
-    }
+    save_kx_hint(sess, their_key_share.group);
+    key_schedule.input_secret(&shared.premaster_secret);
+
+    try!(check_aligned_handshake(sess));
 
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     let write_key = key_schedule.derive(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
@@ -472,7 +488,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
             sess.common.is_tls13 = true;
         }
         _ => {
-            sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
+            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(TLSError::PeerIncompatibleError("server does not support TLS v1.2/v1.3"
                 .to_string()));
         }
@@ -499,7 +515,17 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnS
         try!(process_alpn_protocol(sess, server_hello.get_alpn_protocol()));
     }
 
-    let scs = sess.find_cipher_suite(&server_hello.cipher_suite);
+    // If ECPointFormats extension is supplied by the server, it must contain
+    // Uncompressed.  But it's allowed to be omitted.
+    if let Some(point_fmts) = server_hello.get_ecpoints_extension() {
+        if !point_fmts.contains(&ECPointFormat::Uncompressed) {
+            sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
+            return Err(TLSError::PeerMisbehavedError("server does not support uncompressed points"
+                                                     .to_string()));
+        }
+    }
+
+    let scs = sess.find_cipher_suite(server_hello.cipher_suite);
 
     if scs.is_none() {
         sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
@@ -590,8 +616,51 @@ fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
     sess.handshake_data.transcript.add_message(&m);
     debug!("Got HRR {:?}", hrr);
 
+    let has_cookie = hrr.get_cookie().is_some();
+    let req_group = hrr.get_requested_key_share_group();
+
+    // A retry request is illegal if it contains no cookie and asks for
+    // retry of a group we already sent.
+    if !has_cookie && req_group.map(|g| has_key_share(sess, g)).unwrap_or(false) {
+        return Err(illegal_param(sess, "server requested hrr with our group"));
+    }
+
+    // Or asks for us to retry on an unsupported group.
+    if let Some(group) = req_group {
+        if !NamedGroups::supported().contains(&group) {
+            return Err(illegal_param(sess, "server requested hrr with bad group"));
+        }
+    }
+
+    // Or has an empty cookie.
+    if has_cookie && hrr.get_cookie().unwrap().len() == 0 {
+        return Err(illegal_param(sess, "server requested hrr with empty cookie"));
+    }
+
+    // Or has something unrecognised
+    if hrr.has_unknown_extension() {
+        sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+        return Err(TLSError::PeerIncompatibleError("server sent hrr with unhandled extension"
+                                                   .to_string()));
+    }
+
+    // Or has the same extensions more than once
     if hrr.has_duplicate_extension() {
         return Err(illegal_param(sess, "server send duplicate hrr extensions"));
+    }
+
+    // Or asks us to change nothing.
+    if !has_cookie && req_group.is_none() {
+        return Err(illegal_param(sess, "server requested hrr with no changes"));
+    }
+
+    // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
+    match hrr.server_version {
+        ProtocolVersion::TLSv1_3 | ProtocolVersion::Unknown(TLS13_DRAFT) => {
+        }
+        _ => {
+            return Err(illegal_param(sess, "server requested unsupported version in hrr"));
+        }
     }
 
     Ok(emit_client_hello_for_retry(sess, Some(hrr)))
@@ -615,13 +684,8 @@ pub static EXPECT_SERVER_HELLO_OR_RETRY: Handler = Handler {
     handle: handle_server_hello_or_retry,
 };
 
-fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
-                               m: Message)
-                               -> Result<ConnState, TLSError> {
-    let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
-    info!("TLS1.3 encrypted extensions: {:?}", exts);
-    sess.handshake_data.transcript.add_message(&m);
-
+fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
+                                 exts: &EncryptedExtensions) -> Result<(), TLSError> {
     if exts.has_duplicate_extension() {
         sess.common.send_fatal_alert(AlertDescription::DecodeError);
         return Err(TLSError::PeerMisbehavedError("server sent duplicate encrypted extensions"
@@ -634,6 +698,26 @@ fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
         return Err(TLSError::PeerMisbehavedError(msg));
     }
 
+    for ext in exts {
+        if ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) ||
+           DISALLOWED_TLS13_EXTS.contains(&ext.get_type()) {
+            sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+            let msg = "server sent inappropriate encrypted extension".to_string();
+            return Err(TLSError::PeerMisbehavedError(msg));
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
+                               m: Message)
+                               -> Result<ConnState, TLSError> {
+    let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
+    info!("TLS1.3 encrypted extensions: {:?}", exts);
+    sess.handshake_data.transcript.add_message(&m);
+
+    try!(validate_encrypted_extensions(sess, exts));
     try!(process_alpn_protocol(sess, exts.get_alpn_protocol()));
 
     if sess.handshake_data.resuming_session.is_some() {
@@ -656,6 +740,21 @@ fn handle_certificate(sess: &mut ClientSessionImpl, m: Message) -> Result<ConnSt
 
     if sess.common.is_tls13 {
         let cert_chain = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
+
+        // This is only non-empty for client auth.
+        if cert_chain.context.len() > 0 {
+            warn!("certificate with non-empty context during handshake");
+            sess.common.send_fatal_alert(AlertDescription::DecodeError);
+            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+        }
+
+        if cert_chain.any_entry_has_duplicate_extension() ||
+            cert_chain.any_entry_has_unknown_extension() {
+            warn!("certificate chain contains unsolicited/unknown extension");
+            sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+            return Err(TLSError::PeerMisbehavedError("bad cert chain extensions".to_string()));
+        }
+
         sess.handshake_data.server_cert_chain = cert_chain.convert();
         Ok(ConnState::ExpectCertificateVerify)
     } else {
@@ -903,6 +1002,13 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
     // Fortunately the problems here in TLS1.2 and prior are corrected in
     // TLS1.3.
 
+    // Must be empty during handshake.
+    if certreq.context.len() > 0 {
+        warn!("Server sent non-empty certreq context");
+        sess.common.send_fatal_alert(AlertDescription::DecodeError);
+        return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+    }
+
     let tls13_sign_schemes = SupportedSignatureSchemes::supported_sign_tls13();
     let compat_sigschemes = certreq.sigschemes
         .iter()
@@ -911,6 +1017,7 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
         .collect::<Vec<SignatureScheme>>();
 
     if compat_sigschemes.is_empty() {
+        sess.common.send_fatal_alert(AlertDescription::DecodeError);
         return Err(TLSError::PeerIncompatibleError("server sent bad certreq schemes".to_string()));
     }
 
@@ -1275,6 +1382,7 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<Con
     emit_finished_tls13(sess);
 
     /* Now move to our application traffic keys. */
+    try!(check_aligned_handshake(sess));
     let write_key = sess.common
         .get_key_schedule()
         .derive(SecretKind::ClientApplicationTrafficSecret, &handshake_hash);

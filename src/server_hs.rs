@@ -260,10 +260,15 @@ fn illegal_param(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
     TLSError::PeerMisbehavedError(why.to_string())
 }
 
+fn decode_error(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
+    sess.common.send_fatal_alert(AlertDescription::DecodeError);
+    TLSError::PeerMisbehavedError(why.to_string())
+}
+
 fn can_resume(sess: &ServerSessionImpl,
               resumedata: &Option<persist::ServerSessionValue>) -> bool {
     // The RFCs underspecify what happens if we try to resume to
-    // an unoffered/varying suite.  We just don't resume if offered this.
+    // an unoffered/varying suite.  We merely don't resume in weird cases.
     resumedata.is_some() &&
         resumedata.as_ref().unwrap().cipher_suite == sess.common.get_suite().suite
 }
@@ -290,6 +295,18 @@ fn start_resumption(sess: &mut ServerSessionImpl,
     emit_ccs(sess);
     emit_finished(sess);
     return Ok(ConnState::ExpectCCS);
+}
+
+// Changing the keys must not span any fragmented handshake
+// messages.  Otherwise the defragmented messages will have
+// been protected with two different record layer protections,
+// which is illegal.  Not mentioned in RFC.
+fn check_aligned_handshake(sess: &mut ServerSessionImpl) -> Result<(), TLSError> {
+    if !sess.common.handshake_joiner.is_empty() {
+        Err(illegal_param(sess, "keys changed with pending hs fragment"))
+    } else {
+        Ok(())
+    }
 }
 
 fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
@@ -328,6 +345,8 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
             }),
         }),
     };
+
+    try!(check_aligned_handshake(sess));
 
     debug!("sending server hello {:?}", sh);
     sess.handshake_data.transcript.add_message(&sh);
@@ -504,7 +523,7 @@ fn emit_finished_tls13(sess: &mut ServerSessionImpl) {
     sess.handshake_data.hash_at_server_fin = sess.handshake_data.transcript.get_current_hash();
     sess.common.send_msg(m, true);
 
-    /* Now move to application data keys. */
+    // Now move to application data keys.
     sess.common.get_mut_key_schedule().input_empty();
     let write_key = sess.common
         .get_key_schedule()
@@ -566,6 +585,10 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     let shares_ext = try!(client_hello.get_keyshare_extension()
     .ok_or_else(|| incompatible(sess, "client didn't send keyshares")));
 
+    if client_hello.has_keyshare_extension_with_duplicates() {
+        return Err(illegal_param(sess, "client sent duplicate keyshares"));
+    }
+
     let share_groups: Vec<NamedGroup> = shares_ext.iter()
         .map(|share| share.group)
         .collect();
@@ -600,6 +623,10 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     if let Some(psk_offer) = client_hello.get_psk() {
         if !client_hello.check_psk_ext_is_last() {
             return Err(illegal_param(sess, "psk extension in wrong position"));
+        }
+
+        if psk_offer.binders.len() == 0 {
+            return Err(decode_error(sess, "psk extension missing binder"));
         }
 
         if psk_offer.binders.len() != psk_offer.identities.len() {
@@ -648,6 +675,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
         emit_certificate_tls13(sess);
         try!(emit_certificate_verify_tls13(sess, &sigschemes_ext, signer));
     }
+    try!(check_aligned_handshake(sess));
     emit_finished_tls13(sess);
 
     if sess.handshake_data.doing_client_auth && full_handshake {
@@ -659,6 +687,9 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
 
 fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
     let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
+    let tls13_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
+    let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
+    debug!("we got a clienthello {:?}", client_hello);
 
     if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
         sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
@@ -672,26 +703,26 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     }
 
     if client_hello.has_duplicate_extension() {
-        sess.common.send_fatal_alert(AlertDescription::DecodeError);
-        return Err(TLSError::PeerMisbehavedError("client sent duplicate extensions".to_string()));
+        return Err(decode_error(sess, "client sent duplicate extensions"));
     }
 
     // Are we doing TLS1.3?
     let maybe_versions_ext = client_hello.get_versions_extension();
     if let Some(versions) = maybe_versions_ext {
-        let tls13_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
-        let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
-
         if versions.contains(&ProtocolVersion::Unknown(0x7f12)) && tls13_enabled {
             sess.common.is_tls13 = true;
         } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
+            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
+        }
+    } else {
+        if !tls12_enabled && tls13_enabled {
+            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
+            return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
         }
     }
 
     // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
-    debug!("we got a clienthello {:?}", client_hello);
-
     let default_sigschemes_ext = SupportedSignatureSchemes::default();
 
     let sni_ext = client_hello.get_sni_extension();
@@ -1244,14 +1275,15 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
     // main application data keying.
     sess.handshake_data.transcript.add_message(&m);
 
-    /* Now move to using application data keys for client traffic.
-     * Server traffic is already done. */
+    // Now move to using application data keys for client traffic.
+    // Server traffic is already done.
     let read_key = sess.common
         .get_key_schedule()
         .derive(SecretKind::ClientApplicationTrafficSecret,
                 &sess.handshake_data.hash_at_server_fin);
 
     let suite = sess.common.get_suite();
+    try!(check_aligned_handshake(sess));
     sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
     sess.common
         .get_mut_key_schedule()

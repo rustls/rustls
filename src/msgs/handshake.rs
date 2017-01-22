@@ -862,6 +862,27 @@ impl ClientHelloPayload {
         }
     }
 
+    pub fn has_keyshare_extension_with_duplicates(&self) -> bool {
+        let entries = self.get_keyshare_extension();
+        if entries.is_none() {
+            return false;
+        }
+
+        let mut seen = collections::HashSet::new();
+
+        for kse in entries.unwrap() {
+            let grp = kse.group.get_u16();
+
+            if seen.contains(&grp) {
+                return true;
+            }
+
+            seen.insert(grp);
+        }
+
+        false
+    }
+
     pub fn get_psk(&self) -> Option<&PresharedKeyOffer> {
         let ext = try_ret!(self.find_extension(ExtensionType::PreSharedKey));
         match *ext {
@@ -990,6 +1011,15 @@ impl HelloRetryRequest {
         false
     }
 
+    pub fn has_unknown_extension(&self) -> bool {
+        self.extensions
+            .iter()
+            .any(|ext| {
+                 ext.get_type() != ExtensionType::KeyShare &&
+                 ext.get_type() != ExtensionType::Cookie
+                 })
+    }
+
     fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
         self.extensions.iter().find(|x| x.get_type() == ext)
     }
@@ -1094,6 +1124,14 @@ impl ServerHelloPayload {
             _ => None,
         }
     }
+
+    pub fn get_ecpoints_extension(&self) -> Option<&ECPointFormatList> {
+        let ext = try_ret!(self.find_extension(ExtensionType::ECPointFormats));
+        match *ext {
+            ServerExtension::ECPointFormats(ref fmts) => Some(fmts),
+            _ => None,
+        }
+    }
 }
 
 pub type ASN1Cert = key::Certificate; // PayloadU24;
@@ -1180,6 +1218,25 @@ impl CertificateEntry {
             exts: Vec::new(),
         }
     }
+
+    pub fn has_duplicate_extension(&self) -> bool {
+        let mut seen = collections::HashSet::new();
+
+        for ext in &self.exts {
+            let typ = ext.get_type().get_u16();
+
+            if seen.contains(&typ) {
+                return true;
+            }
+            seen.insert(typ);
+        }
+
+        false
+    }
+
+    pub fn has_unknown_extension(&self) -> bool {
+        !self.exts.is_empty()
+    }
 }
 
 #[derive(Debug)]
@@ -1208,6 +1265,26 @@ impl CertificatePayloadTLS13 {
             context: PayloadU8::empty(),
             list: Vec::new(),
         }
+    }
+
+    pub fn any_entry_has_duplicate_extension(&self) -> bool {
+        for ent in &self.list {
+            if ent.has_duplicate_extension() {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn any_entry_has_unknown_extension(&self) -> bool {
+        for ent in &self.list {
+            if ent.has_unknown_extension() {
+                return true;
+            }
+        }
+
+        false
     }
 
     pub fn convert(&self) -> CertificatePayload {

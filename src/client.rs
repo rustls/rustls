@@ -365,9 +365,9 @@ impl ClientSessionImpl {
         self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
     }
 
-    pub fn find_cipher_suite(&self, suite: &CipherSuite) -> Option<&'static SupportedCipherSuite> {
+    pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
         for scs in &self.config.ciphersuites {
-            if &scs.suite == suite {
+            if scs.suite == suite {
                 return Some(scs);
             }
         }

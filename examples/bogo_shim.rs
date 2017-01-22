@@ -74,7 +74,8 @@ impl Options {
     }
 
     fn tls13_supported(&self) -> bool {
-        self.support_tls13 && self.version_allowed(ProtocolVersion::TLSv1_3)
+        self.support_tls13 && (self.version_allowed(ProtocolVersion::TLSv1_3) ||
+                               self.version_allowed(ProtocolVersion::Unknown(0x7f12)))
     }
 
     fn tls12_supported(&self) -> bool {
@@ -137,6 +138,16 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
 
     if opts.protocols.len() > 0 {
         cfg.set_protocols(&opts.protocols);
+    }
+
+    cfg.versions.clear();
+
+    if opts.tls12_supported() {
+        cfg.versions.push(ProtocolVersion::TLSv1_2);
+    }
+
+    if opts.tls13_supported() {
+        cfg.versions.push(ProtocolVersion::TLSv1_3);
     }
 
     Arc::new(cfg)
