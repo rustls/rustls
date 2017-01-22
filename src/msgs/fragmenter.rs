@@ -1,6 +1,6 @@
 
 use std::collections::VecDeque;
-use msgs::message::{Message, MessagePayload};
+use msgs::message::{BorrowMessage, Message, MessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
@@ -23,6 +23,7 @@ impl MessageFragmenter {
     /// Take the Message `msg` and re-fragment it into new
     /// messages whose fragment is no more than max_frag.
     /// The new messages are appended to the `out` deque.
+    /// Payloads are copied.
     pub fn fragment(&self, msg: Message, out: &mut VecDeque<Message>) {
         // Non-fragment path
         if msg.payload.len() <= self.max_frag {
@@ -34,21 +35,28 @@ impl MessageFragmenter {
         let version = msg.version;
         let payload = msg.take_payload();
 
-        self.fragment_raw(typ, version, &payload, out);
-    }
-
-    /// Enqueue fragments of (version, typ, payload) which
-    /// are no longer than max_frag onto the `out` deque.
-    pub fn fragment_raw(&self,
-                        typ: ContentType,
-                        version: ProtocolVersion,
-                        payload: &[u8],
-                        out: &mut VecDeque<Message>) {
         for chunk in payload.chunks(self.max_frag) {
-            let cm = Message {
+            let m = Message {
                 typ: typ,
                 version: version,
-                payload: MessagePayload::opaque_borrow(chunk),
+                payload: MessagePayload::new_opaque(chunk.to_vec())
+            };
+            out.push_back(m);
+        }
+    }
+
+    /// Enqueue borrowed fragments of (version, typ, payload) which
+    /// are no longer than max_frag onto the `out` deque.
+    pub fn fragment_borrow<'a>(&self,
+                               typ: ContentType,
+                               version: ProtocolVersion,
+                               payload: &'a [u8],
+                               out: &mut VecDeque<BorrowMessage<'a>>) {
+        for chunk in payload.chunks(self.max_frag) {
+            let cm = BorrowMessage {
+                typ: typ,
+                version: version,
+                payload: chunk
             };
             out.push_back(cm);
         }
@@ -87,7 +95,7 @@ mod tests {
         let m = Message {
             typ: typ,
             version: version,
-            payload: MessagePayload::opaque_borrow(b"\x01\x02\x03\x04\x05\x06\x07\x08"),
+            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
         let frag = MessageFragmenter::new(3);
@@ -116,7 +124,7 @@ mod tests {
         let m = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::opaque_borrow(b"\x01\x02\x03\x04\x05\x06\x07\x08"),
+            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
         let frag = MessageFragmenter::new(8);

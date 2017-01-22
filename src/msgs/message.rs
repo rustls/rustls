@@ -64,17 +64,13 @@ impl MessagePayload {
         }
     }
 
-    pub fn opaque_take(data: Vec<u8>) -> MessagePayload {
+    pub fn new_opaque(data: Vec<u8>) -> MessagePayload {
         MessagePayload::Opaque(Payload::new(data))
-    }
-
-    // TODO: FIXME: this does a copy at the minute
-    pub fn opaque_borrow(data: &[u8]) -> MessagePayload {
-        MessagePayload::opaque_take(data.to_vec())
     }
 }
 
-/// A TLS frame, named TLSPlaintext in the standard
+/// A TLS frame, named TLSPlaintext in the standard.
+/// This type owns all memory for its interior parts.
 #[derive(Debug)]
 pub struct Message {
     pub typ: ContentType,
@@ -187,7 +183,7 @@ impl Message {
         Message {
             typ: self.typ,
             version: self.version,
-            payload: MessagePayload::opaque_take(buf),
+            payload: MessagePayload::new_opaque(buf),
         }
     }
 
@@ -209,4 +205,34 @@ impl Message {
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
+}
+
+impl<'a> Message {
+    pub fn into_borrowed(&'a self) -> BorrowMessage<'a> {
+        if let MessagePayload::Opaque(ref p) = self.payload {
+            BorrowMessage {
+                typ: self.typ,
+                version: self.version,
+                payload: &p.0
+            }
+        } else {
+            unreachable!("into_borrowed must have opaque message");
+        }
+    }
+}
+
+
+/// A TLS frame, named TLSPlaintext in the standard.
+///
+/// This type differs from `Message` because it borrows
+/// its payload.  You can make a `Message` from an
+/// `BorrowMessage`, but this involves a copy.
+///
+/// This type also cannot decode its internals and
+/// is not a `Codec` type, only `Message` can do that.
+#[derive(Debug)]
+pub struct BorrowMessage<'a> {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: &'a [u8],
 }

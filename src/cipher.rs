@@ -3,7 +3,7 @@ use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::message::{Message, MessagePayload};
+use msgs::message::{BorrowMessage, Message, MessagePayload};
 use msgs::fragmenter::MAX_FRAGMENT_LEN;
 use error::TLSError;
 use session::SessionSecrets;
@@ -24,7 +24,7 @@ pub trait MessageDecrypter {
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter {
-    fn encrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
+    fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TLSError>;
 }
 
 impl MessageEncrypter {
@@ -41,6 +41,18 @@ impl MessageDecrypter {
 
 pub type MessageCipherPair = (Box<MessageDecrypter + Send + Sync>,
                               Box<MessageEncrypter + Send + Sync>);
+
+const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
+fn make_tls12_aad(seq: u64,
+                  typ: ContentType,
+                  vers: ProtocolVersion,
+                  len: usize,
+                  out: &mut [u8]) {
+    codec::put_u64(seq, &mut out[0..]);
+    out[8] = typ.get_u8();
+    codec::put_u16(vers.get_u16(), &mut out[9..]);
+    codec::put_u16(len as u16, &mut out[11..]);
+}
 
 /// Make a MessageCipherPair based on the given supported ciphersuite `scs`,
 /// and the session's `secrets`.
@@ -149,11 +161,8 @@ impl MessageDecrypter for GCMMessageDecrypter {
         nonce.as_mut().write(&self.dec_salt).unwrap();
         nonce[4..].as_mut().write(&buf).unwrap();
 
-        let mut aad = Vec::new();
-        codec::encode_u64(seq, &mut aad);
-        msg.typ.encode(&mut aad);
-        msg.version.encode(&mut aad);
-        codec::encode_u16((buf.len() - GCM_OVERHEAD) as u16, &mut aad);
+        let mut aad = [0u8; TLS12_AAD_SIZE];
+        make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD, &mut aad);
 
         let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
                                                        &nonce,
@@ -172,13 +181,13 @@ impl MessageDecrypter for GCMMessageDecrypter {
         Ok(Message {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::opaque_take(buf),
+            payload: MessagePayload::new_opaque(buf),
         })
     }
 }
 
 impl MessageEncrypter for GCMMessageEncrypter {
-    fn encrypt(&self, msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         // The GCM nonce is constructed from a 32-bit 'salt' derived
         // from the master-secret, and a 64-bit explicit part,
         // with no specified construction.  Thanks for that.
@@ -192,33 +201,24 @@ impl MessageEncrypter for GCMMessageEncrypter {
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce[4..], &self.nonce_offset);
 
-        let typ = msg.typ;
-        let version = msg.version;
-        let mut buf = msg.take_payload();
-        let payload_len = buf.len();
-
-        // make room for tag
+        // make output buffer with room for nonce/tag
         let tag_len = self.alg.max_overhead_len();
-        let want_len = buf.len() + tag_len;
-        buf.resize(want_len, 0u8);
+        let total_len = 8 + msg.payload.len() + tag_len;
+        let mut buf = Vec::with_capacity(total_len);
+        buf.extend_from_slice(&nonce[4..]);
+        buf.extend_from_slice(msg.payload);
+        buf.resize(total_len, 0u8);
 
-        let mut aad = Vec::new();
-        codec::encode_u64(seq, &mut aad);
-        typ.encode(&mut aad);
-        version.encode(&mut aad);
-        codec::encode_u16(payload_len as u16, &mut aad);
+        let mut aad = [0u8; TLS12_AAD_SIZE];
+        make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
 
-        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf, tag_len, &aad)
+        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf[8..], tag_len, &aad)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
-        let mut result = Vec::new();
-        result.extend_from_slice(&nonce[4..]);
-        result.extend_from_slice(&buf);
-
         Ok(Message {
-            typ: typ,
-            version: version,
-            payload: MessagePayload::opaque_take(result),
+            typ: msg.typ,
+            version: msg.version,
+            payload: MessagePayload::new_opaque(buf),
         })
     }
 }
@@ -285,19 +285,18 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
 }
 
 impl MessageEncrypter for TLS13MessageEncrypter {
-    fn encrypt(&self, msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.enc_offset);
 
-        let typ = msg.typ;
-        let mut buf = msg.take_payload();
-        typ.encode(&mut buf);
-
-        // make room for tag
+        // make output buffer with room for content type and tag
         let tag_len = self.alg.max_overhead_len();
-        let want_len = buf.len() + tag_len;
-        buf.resize(want_len, 0u8);
+        let total_len = msg.payload.len() + 1 + tag_len;
+        let mut buf = Vec::with_capacity(total_len);
+        buf.extend_from_slice(msg.payload);
+        msg.typ.encode(&mut buf);
+        buf.resize(total_len, 0u8);
 
         try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf, tag_len, &[])
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
@@ -305,7 +304,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         Ok(Message {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_0,
-            payload: MessagePayload::opaque_take(buf),
+            payload: MessagePayload::new_opaque(buf),
         })
     }
 }
@@ -342,7 +341,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
         Ok(Message {
             typ: content_type,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::opaque_take(buf),
+            payload: MessagePayload::new_opaque(buf),
         })
     }
 }
@@ -439,11 +438,8 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.dec_offset);
 
-        let mut aad = Vec::new();
-        codec::encode_u64(seq, &mut aad);
-        msg.typ.encode(&mut aad);
-        msg.version.encode(&mut aad);
-        codec::encode_u16((buf.len() - CHACHAPOLY1305_OVERHEAD) as u16, &mut aad);
+        let mut aad = [0u8; TLS12_AAD_SIZE];
+        make_tls12_aad(seq, msg.typ, msg.version, buf.len() - CHACHAPOLY1305_OVERHEAD, &mut aad);
 
         let plain_len = try!(ring::aead::open_in_place(&self.dec_key, &nonce, 0, &mut buf, &aad)
             .map_err(|_| TLSError::DecryptError));
@@ -458,41 +454,34 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         Ok(Message {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::opaque_take(buf),
+            payload: MessagePayload::new_opaque(buf),
         })
     }
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&self, msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.enc_offset);
 
-        let typ = msg.typ;
-        let version = msg.version;
+        let mut aad = [0u8; TLS12_AAD_SIZE];
+        make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
 
-        let mut buf = msg.take_payload();
-        let payload_len = buf.len();
-
-        // make room for tag
+        // make result buffer with room for tag, etc.
         let tag_len = self.alg.max_overhead_len();
-        let want_len = buf.len() + tag_len;
-        buf.resize(want_len, 0u8);
-
-        let mut aad = Vec::new();
-        codec::encode_u64(seq, &mut aad);
-        typ.encode(&mut aad);
-        version.encode(&mut aad);
-        codec::encode_u16(payload_len as u16, &mut aad);
+        let total_len = msg.payload.len() + tag_len;
+        let mut buf = Vec::with_capacity(total_len);
+        buf.extend_from_slice(msg.payload);
+        buf.resize(total_len, 0u8);
 
         try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &mut buf, tag_len, &aad)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
         Ok(Message {
-            typ: typ,
-            version: version,
-            payload: MessagePayload::opaque_take(buf),
+            typ: msg.typ,
+            version: msg.version,
+            payload: MessagePayload::new_opaque(buf),
         })
     }
 }
@@ -501,7 +490,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 pub struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&self, _m: Message, _seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, _m: BorrowMessage, _seq: u64) -> Result<Message, TLSError> {
         Err(TLSError::General("encrypt not yet available".to_string()))
     }
 }

@@ -84,9 +84,15 @@ pub fn read_u8(r: &mut Reader) -> Option<u8> {
     r.take(1).and_then(decode_u8)
 }
 
+pub fn put_u16(v: u16, out: &mut [u8]) {
+    out[0] = (v >> 8) as u8;
+    out[1] = v as u8;
+}
+
 pub fn encode_u16(v: u16, bytes: &mut Vec<u8>) {
-    bytes.push((v >> 8) as u8);
-    bytes.push(v as u8);
+    let mut b16 = [0u8; 2];
+    put_u16(v, &mut b16);
+    bytes.extend_from_slice(&b16);
 }
 
 pub fn decode_u16(bytes: &[u8]) -> Option<u16> {

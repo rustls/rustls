@@ -1,6 +1,6 @@
 use ring;
 use std::io::{Read, Write};
-use msgs::message::{Message, MessagePayload};
+use msgs::message::{BorrowMessage, Message, MessagePayload};
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
@@ -294,7 +294,7 @@ impl SessionCommon {
         !self.received_plaintext.is_empty()
     }
 
-    pub fn encrypt_outgoing(&mut self, plain: Message) -> Message {
+    pub fn encrypt_outgoing(&mut self, plain: BorrowMessage) -> Message {
         let seq = self.write_seq;
         self.write_seq += 1;
         self.message_encrypter.encrypt(plain, seq).unwrap()
@@ -375,7 +375,7 @@ impl SessionCommon {
         self.message_fragmenter.fragment(m, &mut plain_messages);
 
         for m in plain_messages {
-            self.send_single_fragment(m);
+            self.send_single_fragment(m.into_borrowed());
         }
     }
 
@@ -387,17 +387,17 @@ impl SessionCommon {
         }
 
         let mut plain_messages = VecDeque::new();
-        self.message_fragmenter.fragment_raw(ContentType::ApplicationData,
-                                             ProtocolVersion::TLSv1_2,
-                                             payload,
-                                             &mut plain_messages);
+        self.message_fragmenter.fragment_borrow(ContentType::ApplicationData,
+                                                ProtocolVersion::TLSv1_2,
+                                                payload,
+                                                &mut plain_messages);
 
         for m in plain_messages {
             self.send_single_fragment(m);
         }
     }
 
-    fn send_single_fragment(&mut self, m: Message) {
+    fn send_single_fragment(&mut self, m: BorrowMessage) {
         // Close connection once we start to run out of
         // sequence space.
         if self.write_seq == SEQ_SOFT_LIMIT {
