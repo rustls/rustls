@@ -79,11 +79,16 @@ impl mio::Handler for TlsServer {
 
                         let tls_session = rustls::ServerSession::new(&self.tls_config);
                         let mode = self.mode.clone();
-                        let token = self.connections
-                            .insert_with(|token| Connection::new(socket, token, mode, tls_session))
-                            .unwrap();
 
-                        self.connections[token].register(event_loop);
+                        match self.connections
+                            .insert_with(|token| Connection::new(socket, token, mode, tls_session)) {
+                            Some(token) => {
+                                self.connections[token].register(event_loop);
+                            }
+                            None => {
+                                error!("Too many connections: rejecting new connection");
+                            }
+                        }
                     }
                     Ok(None) => {}
                     Err(e) => {
@@ -95,10 +100,12 @@ impl mio::Handler for TlsServer {
 
             // A connection socket.
             _ => {
-                self.connections[token].ready(event_loop, events);
+                if self.connections.contains(token) {
+                    self.connections[token].ready(event_loop, events);
 
-                if self.connections[token].is_closed() {
-                    self.connections.remove(token);
+                    if self.connections[token].is_closed() {
+                        self.connections.remove(token);
+                    }
                 }
             }
         }
