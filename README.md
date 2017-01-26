@@ -13,6 +13,10 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.5.4:
+  - First release with TLS1.3-draft-18 support.
+  - More performance improvements (now ~15Gbps per core).
+  - New API to learn version of negotiated connection.
 * 0.5.0:
   - Tickets.
   - Coverage testing.
@@ -49,7 +53,6 @@ obsolete cryptography.
 
 * ECDSA server authentication by servers.
 * PSK support.
-* TLS1.3.
 * OCSP stapling.
 * Certificate pinning.
 
