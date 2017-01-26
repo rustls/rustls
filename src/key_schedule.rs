@@ -5,30 +5,22 @@ use msgs::codec;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SecretKind {
-    ExternalPSKBinderKey,
     ResumptionPSKBinderKey,
-    ClientEarlyTrafficSecret,
-    EarlyExporterMasterSecret,
     ClientHandshakeTrafficSecret,
     ServerHandshakeTrafficSecret,
     ClientApplicationTrafficSecret,
     ServerApplicationTrafficSecret,
-    ExporterMasterSecret,
     ResumptionMasterSecret,
 }
 
 impl SecretKind {
     fn to_bytes(&self) -> &'static [u8] {
         match *self {
-            SecretKind::ExternalPSKBinderKey => b"external psk binder key",
             SecretKind::ResumptionPSKBinderKey => b"resumption psk binder key",
-            SecretKind::ClientEarlyTrafficSecret => b"client early traffic secret",
-            SecretKind::EarlyExporterMasterSecret => b"early exporter master secret",
             SecretKind::ClientHandshakeTrafficSecret => b"client handshake traffic secret",
             SecretKind::ServerHandshakeTrafficSecret => b"server handshake traffic secret",
             SecretKind::ClientApplicationTrafficSecret => b"client application traffic secret",
             SecretKind::ServerApplicationTrafficSecret => b"server application traffic secret",
-            SecretKind::ExporterMasterSecret => b"exporter master secret",
             SecretKind::ResumptionMasterSecret => b"resumption master secret",
         }
     }
