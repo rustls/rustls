@@ -146,10 +146,7 @@ mod test {
 
         let mut ks = KeySchedule::new(&digest::SHA256);
         ks.input_empty(); // no PSK
-        ks.derive(SecretKind::ExternalPSKBinderKey, &fake_handshake_hash);
         ks.derive(SecretKind::ResumptionPSKBinderKey, &fake_handshake_hash);
-        ks.derive(SecretKind::ClientEarlyTrafficSecret, &fake_handshake_hash);
-        ks.derive(SecretKind::EarlyExporterMasterSecret, &fake_handshake_hash);
         ks.input_secret(&[1u8, 2u8, 3u8, 4u8]);
         ks.derive(SecretKind::ClientHandshakeTrafficSecret,
                   &fake_handshake_hash);
@@ -160,7 +157,6 @@ mod test {
                   &fake_handshake_hash);
         ks.derive(SecretKind::ServerApplicationTrafficSecret,
                   &fake_handshake_hash);
-        ks.derive(SecretKind::ExporterMasterSecret, &fake_handshake_hash);
         ks.derive(SecretKind::ResumptionMasterSecret, &fake_handshake_hash);
     }
 }
