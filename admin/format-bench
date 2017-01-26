@@ -17,10 +17,10 @@ for line in sys.stdin:
     pieces = line.split()
 
     if pieces[0] == 'bulk':
-        _, suite, direction, rate, unit = pieces
+        _, version, suite, direction, rate, unit = pieces
         bulks.append((suite, direction, float(rate), unit))
     elif pieces[0] == 'handshakes':
-        _, suite, role, auth, resumed, rate, unit = pieces
+        _, version, suite, role, auth, resumed, rate, unit = pieces
         handshakes.append((suite, role, auth, resumed, float(rate), unit))
 
 for suite, direction, rate, unit in sorted(bulks):
