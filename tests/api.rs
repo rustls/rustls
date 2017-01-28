@@ -1,14 +1,17 @@
 // Assorted public API tests.
 use std::sync::Arc;
+use std::sync::Mutex;
+use std::ops::{Deref, DerefMut};
 use std::fs;
 use std::io::{self, Write};
 
 extern crate rustls;
-use rustls::{ClientConfig, ClientSession};
-use rustls::{ServerConfig, ServerSession};
+use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
+use rustls::{ServerConfig, ServerSession, ResolvesServerCert};
 use rustls::Session;
-use rustls::ProtocolVersion;
+use rustls::{ProtocolVersion, SignatureScheme};
 use rustls::TLSError;
+use rustls::sign;
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
 
@@ -344,4 +347,113 @@ fn client_close_notify() {
     transfer(&mut server, &mut client);
     client.process_new_packets().unwrap();
     check_read(&mut client, b"from-server!");
+}
+
+struct ServerCheckCertResolve {
+    expected: String
+}
+
+impl ServerCheckCertResolve {
+    fn new(expect: &str) -> ServerCheckCertResolve {
+        ServerCheckCertResolve {
+            expected: expect.to_string()
+        }
+    }
+}
+
+impl ResolvesServerCert for ServerCheckCertResolve {
+    fn resolve(&self,
+               server_name: Option<&str>,
+               sigschemes: &[SignatureScheme])
+        -> Result<(Vec<Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+        if let Some(ref got_dns_name) = server_name {
+            if got_dns_name.to_string() != self.expected {
+                panic!("unexpected dns name (wanted '{}' got '{}')", &self.expected, got_dns_name);
+            }
+        } else {
+            panic!("dns name not provided (wanted '{}')", &self.expected);
+        }
+
+        if sigschemes.len() == 0 {
+            panic!("no signature schemes shared by client");
+        }
+
+        Err(())
+    }
+}
+
+#[test]
+fn server_cert_resolve_with_sni() {
+    let client_config = make_client_config();
+    let mut server_config = make_server_config();
+
+    server_config.cert_resolver = Box::new(ServerCheckCertResolve::new("the-value-from-sni"));
+
+    let mut client = ClientSession::new(&Arc::new(client_config), "the-value-from-sni");
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
+}
+
+struct ClientCheckCertResolve {
+    query_count: Mutex<usize>,
+    expect_queries: usize
+}
+
+impl ClientCheckCertResolve {
+    fn new(expect_queries: usize) -> ClientCheckCertResolve {
+        ClientCheckCertResolve {
+            query_count: Mutex::new(0),
+            expect_queries: expect_queries
+        }
+    }
+}
+
+impl Drop for ClientCheckCertResolve {
+    fn drop(&mut self) {
+        let count = self.query_count.lock()
+            .unwrap();
+        assert_eq!(*count.deref(), self.expect_queries);
+    }
+}
+
+impl ResolvesClientCert for ClientCheckCertResolve {
+    fn resolve(&self,
+               acceptable_issuers: &[&[u8]],
+               sigschemes: &[SignatureScheme])
+        -> Option<(Vec<Certificate>, Arc<Box<sign::Signer + Send + Sync>>)> {
+        let mut count = self.query_count.lock()
+            .unwrap();
+        *count.deref_mut() = (*count.deref() as usize) + 1;
+
+        if acceptable_issuers.len() == 0 {
+            panic!("no issuers offered by server");
+        }
+
+        if sigschemes.len() == 0 {
+            panic!("no signature schemes shared by server");
+        }
+
+        None
+    }
+
+    fn has_certs(&self) -> bool {
+        true
+    }
+}
+
+#[test]
+fn client_cert_resolve() {
+    let mut client_config = make_client_config();
+    let mut server_config = make_server_config();
+
+    client_config.client_auth_cert_resolver = Box::new(ClientCheckCertResolve::new(1));
+    server_config.set_client_auth_roots(get_chain(), true);
+
+    let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
 }

@@ -3,7 +3,6 @@ use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
-use msgs::handshake::{DistinguishedNames, SupportedSignatureSchemes};
 use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::message::Message;
@@ -93,13 +92,17 @@ pub trait ResolvesClientCert {
     /// the server's supported signature schemes in `sigschemes`,
     /// return a certificate chain and signing key to authenticate.
     ///
+    /// `acceptable_issuers` is undecoded and unverified by the rustls
+    /// library, but it should be expected to contain a DER encodings
+    /// of X501 NAMEs.
+    ///
     /// Return None to continue the handshake without any client
     /// authentication.  The server may reject the handshake later
     /// if it requires authentication.
     fn resolve(&self,
-               acceptable_issuers: &DistinguishedNames,
-               sigschemes: &SupportedSignatureSchemes)
-               -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)>;
+               acceptable_issuers: &[&[u8]],
+               sigschemes: &[SignatureScheme])
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>)>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -109,9 +112,9 @@ struct FailResolveClientCert {}
 
 impl ResolvesClientCert for FailResolveClientCert {
     fn resolve(&self,
-               _acceptable_issuers: &DistinguishedNames,
-               _sigschemes: &SupportedSignatureSchemes)
-               -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)> {
+               _acceptable_issuers: &[&[u8]],
+               _sigschemes: &[SignatureScheme])
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>)> {
         None
     }
 
@@ -121,7 +124,7 @@ impl ResolvesClientCert for FailResolveClientCert {
 }
 
 struct AlwaysResolvesClientCert {
-    chain: CertificatePayload,
+    chain: Vec<key::Certificate>,
     key: Arc<Box<sign::Signer + Send + Sync>>,
 }
 
@@ -130,13 +133,8 @@ impl AlwaysResolvesClientCert {
                priv_key: &key::PrivateKey)
                -> AlwaysResolvesClientCert {
         let key = sign::RSASigner::new(priv_key).expect("Invalid RSA private key");
-        let mut payload = Vec::new();
-        for cert in chain {
-            payload.push(cert);
-        }
-
         AlwaysResolvesClientCert {
-            chain: payload,
+            chain: chain,
             key: Arc::new(Box::new(key)),
         }
     }
@@ -144,9 +142,9 @@ impl AlwaysResolvesClientCert {
 
 impl ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(&self,
-               _acceptable_issuers: &DistinguishedNames,
-               _sigschemes: &SupportedSignatureSchemes)
-               -> Option<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>)> {
+               _acceptable_issuers: &[&[u8]],
+               _sigschemes: &[SignatureScheme])
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>)> {
         Some((self.chain.clone(), self.key.clone()))
     }
 

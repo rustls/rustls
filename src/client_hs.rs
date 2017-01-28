@@ -970,8 +970,12 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> Result<Co
         return Ok(ConnState::ExpectServerHelloDone);
     }
 
+    let canames = certreq.canames
+        .iter()
+        .map(|p| p.0.as_slice())
+        .collect::<Vec<&[u8]>>();
     let maybe_certkey =
-        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &certreq.sigschemes);
+        sess.config.client_auth_cert_resolver.resolve(&canames, &certreq.sigschemes);
 
     let scs = sess.common.get_suite();
     let maybe_sigscheme = scs.resolve_sig_scheme(&certreq.sigschemes);
@@ -1021,8 +1025,12 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
         return Err(TLSError::PeerIncompatibleError("server sent bad certreq schemes".to_string()));
     }
 
+    let canames = certreq.canames
+        .iter()
+        .map(|p| p.0.as_slice())
+        .collect::<Vec<&[u8]>>();
     let maybe_certkey =
-        sess.config.client_auth_cert_resolver.resolve(&certreq.canames, &compat_sigschemes);
+        sess.config.client_auth_cert_resolver.resolve(&canames, &compat_sigschemes);
 
     if maybe_certkey.is_some() {
         let (cert, key) = maybe_certkey.unwrap();

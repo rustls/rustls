@@ -178,6 +178,7 @@ impl ProducesTickets for TicketSwitcher {
     }
 }
 
+/// A concrete, safe ticket creation mechanism.
 pub struct Ticketer {}
 
 fn generate_inner() -> Box<ProducesTickets + Send + Sync> {
@@ -187,6 +188,8 @@ fn generate_inner() -> Box<ProducesTickets + Send + Sync> {
 impl Ticketer {
     /// Make the recommended Ticketer.  This produces tickets
     /// with a 12 hour life and randomly generated keys.
+    ///
+    /// The encryption mechanism used in Chacha20Poly1305.
     pub fn new() -> Box<ProducesTickets + Send + Sync> {
         Box::new(TicketSwitcher::new(6 * 60 * 60, generate_inner))
     }

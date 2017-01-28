@@ -1,9 +1,8 @@
 use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
-use msgs::enums::ContentType;
+use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use msgs::handshake::{SessionID, CertificatePayload};
-use msgs::handshake::{ServerNameRequest, SupportedSignatureSchemes};
 use msgs::message::Message;
 use msgs::codec::Codec;
 use hash_hs;
@@ -75,16 +74,18 @@ pub trait ProducesTickets {
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 }
 
-pub trait ResolvesCert {
-    /// Choose a certificate chain and matching key given any SNI and
-    /// signature schemes.
+/// How to choose a certificate chain and signing key for use
+/// in server authentication.
+pub trait ResolvesServerCert {
+    /// Choose a certificate chain and matching key given any server DNS
+    /// name provided via SNI, and signature schemes.
     ///
-    /// The certificate chain is returned as a `CertificatePayload`,
+    /// The certificate chain is returned as a vec of `Certificate`s,
     /// the key is inside a `Signer`.
     fn resolve(&self,
-               server_name: Option<&ServerNameRequest>,
-               sigschemes: &SupportedSignatureSchemes)
-               -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()>;
+               server_name: Option<&str>,
+               sigschemes: &[SignatureScheme])
+               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -107,7 +108,7 @@ pub struct ServerConfig {
     pub ticketer: Box<ProducesTickets + Send + Sync>,
 
     /// How to choose a server cert and key.
-    pub cert_resolver: Box<ResolvesCert + Send + Sync>,
+    pub cert_resolver: Box<ResolvesServerCert + Send + Sync>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
@@ -214,40 +215,36 @@ impl ProducesTickets for NeverProducesTickets {
 /// Something which never resolves a certificate.
 struct FailResolveChain {}
 
-impl ResolvesCert for FailResolveChain {
+impl ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
-               _server_name: Option<&ServerNameRequest>,
-               _sigschemes: &SupportedSignatureSchemes)
-               -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+               _server_name: Option<&str>,
+               _sigschemes: &[SignatureScheme])
+               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()> {
         Err(())
     }
 }
 
 /// Something which always resolves to the same cert chain.
 struct AlwaysResolvesChain {
-    chain: CertificatePayload,
+    chain: Vec<key::Certificate>,
     key: Arc<Box<sign::Signer + Send + Sync>>,
 }
 
 impl AlwaysResolvesChain {
     fn new_rsa(chain: Vec<key::Certificate>, priv_key: &key::PrivateKey) -> AlwaysResolvesChain {
         let key = sign::RSASigner::new(priv_key).expect("Invalid RSA private key");
-        let mut payload = Vec::new();
-        for cert in chain {
-            payload.push(cert);
-        }
         AlwaysResolvesChain {
-            chain: payload,
+            chain: chain,
             key: Arc::new(Box::new(key)),
         }
     }
 }
 
-impl ResolvesCert for AlwaysResolvesChain {
+impl ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
-               _server_name: Option<&ServerNameRequest>,
-               _sigschemes: &SupportedSignatureSchemes)
-               -> Result<(CertificatePayload, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+               _server_name: Option<&str>,
+               _sigschemes: &[SignatureScheme])
+               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()> {
         Ok((self.chain.clone(), self.key.clone()))
     }
 }

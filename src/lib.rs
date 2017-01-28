@@ -200,7 +200,6 @@ mod key_schedule;
 mod session;
 mod pemfile;
 mod x509;
-mod sign;
 mod verify;
 mod handshake;
 mod server_hs;
@@ -226,12 +225,18 @@ pub mod internal {
 
 // The public interface is:
 pub use msgs::enums::ProtocolVersion;
+pub use msgs::enums::SignatureScheme;
 pub use error::TLSError;
 pub use session::Session;
 pub use verify::RootCertStore;
-pub use client::{StoresClientSessions, ClientSessionMemoryCache, ClientConfig, ClientSession};
-pub use server::{StoresServerSessions, ServerSessionMemoryCache, ServerConfig, ServerSession};
+pub use client::{StoresClientSessions, ClientSessionMemoryCache};
+pub use client::{ClientConfig, ClientSession};
+pub use client::ResolvesClientCert;
+pub use server::{StoresServerSessions, ServerSessionMemoryCache};
+pub use server::{ServerConfig, ServerSession};
+pub use server::ResolvesServerCert;
 pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
+pub mod sign;

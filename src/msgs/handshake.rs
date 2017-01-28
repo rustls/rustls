@@ -378,6 +378,25 @@ impl Codec for ServerName {
 
 declare_u16_vec!(ServerNameRequest, ServerName);
 
+pub trait ConvertServerNameList {
+    fn get_hostname(&self) -> Option<&str>;
+}
+
+impl ConvertServerNameList for ServerNameRequest {
+    fn get_hostname(&self) -> Option<&str> {
+        for name in self {
+            match name.payload {
+                ServerNamePayload::HostName(ref hostname) => {
+                    return Some(&hostname)
+                }
+                ServerNamePayload::Unknown(_) => {}
+            }
+        }
+
+        None
+    }
+}
+
 pub type ProtocolNameList = VecU16OfPayloadU8;
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 

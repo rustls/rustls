@@ -1,5 +1,4 @@
 use msgs::enums::{SignatureAlgorithm, SignatureScheme};
-use msgs::handshake::SupportedSignatureSchemes;
 use util;
 use untrusted;
 use ring;
@@ -10,7 +9,7 @@ use key;
 /// A thing that can sign a message.
 pub trait Signer {
     /// Choose a SignatureScheme from those offered.
-    fn choose_scheme(&self, offered: &SupportedSignatureSchemes) -> Option<SignatureScheme>;
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<SignatureScheme>;
 
     /// Signs `message` using `scheme`.
     fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()>;
@@ -22,10 +21,10 @@ pub trait Signer {
 /// A Signer for RSA-PKCS1 or RSA-PSS
 pub struct RSASigner {
     key: Arc<signature::RSAKeyPair>,
-    schemes: SupportedSignatureSchemes,
+    schemes: Vec<SignatureScheme>,
 }
 
-fn all_schemes() -> SupportedSignatureSchemes {
+fn all_schemes() -> Vec<SignatureScheme> {
     vec![SignatureScheme::RSA_PSS_SHA512,
          SignatureScheme::RSA_PSS_SHA384,
          SignatureScheme::RSA_PSS_SHA256,
@@ -48,7 +47,7 @@ impl RSASigner {
 }
 
 impl Signer for RSASigner {
-    fn choose_scheme(&self, offered: &SupportedSignatureSchemes) -> Option<SignatureScheme> {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<SignatureScheme> {
         util::first_in_both(&self.schemes, offered)
     }
 

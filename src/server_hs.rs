@@ -7,7 +7,7 @@ use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
-use msgs::handshake::ConvertProtocolNameList;
+use msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use msgs::handshake::{NamedGroups, SupportedGroups, ClientExtension};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
@@ -725,7 +725,8 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
     let default_sigschemes_ext = SupportedSignatureSchemes::default();
 
-    let sni_ext = client_hello.get_sni_extension();
+    let sni_ext = client_hello.get_sni_extension()
+        .and_then(|sni| sni.get_hostname());
     let sigschemes_ext = client_hello.get_sigalgs_extension()
         .unwrap_or(&default_sigschemes_ext);
 
