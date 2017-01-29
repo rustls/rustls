@@ -735,7 +735,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
 
     // Choose a certificate.
     let maybe_cert_key = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
-    if maybe_cert_key.is_err() {
+    if maybe_cert_key.is_none() {
         sess.common.send_fatal_alert(AlertDescription::AccessDenied);
         return Err(TLSError::General("no server certificate chain resolved".to_string()));
     }

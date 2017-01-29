@@ -85,7 +85,7 @@ pub trait ResolvesServerCert : Send + Sync {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer>>), ()>;
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -219,8 +219,8 @@ impl ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer>>), ()> {
-        Err(())
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
+        None
     }
 }
 
@@ -244,8 +244,8 @@ impl ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer>>), ()> {
-        Ok((self.chain.clone(), self.key.clone()))
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
+        Some((self.chain.clone(), self.key.clone()))
     }
 }
 

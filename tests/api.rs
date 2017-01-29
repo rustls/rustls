@@ -365,7 +365,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-        -> Result<(Vec<Certificate>, Arc<Box<sign::Signer>>), ()> {
+        -> Option<(Vec<Certificate>, Arc<Box<sign::Signer>>)> {
         if let Some(ref got_dns_name) = server_name {
             if got_dns_name.to_string() != self.expected {
                 panic!("unexpected dns name (wanted '{}' got '{}')", &self.expected, got_dns_name);
@@ -378,7 +378,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             panic!("no signature schemes shared by client");
         }
 
-        Err(())
+        None
     }
 }
 
