@@ -363,6 +363,7 @@ pub struct ServerSessionImpl {
     pub secrets: Option<SessionSecrets>,
     pub common: SessionCommon,
     pub alpn_protocol: Option<String>,
+    pub error: Option<TLSError>,
     pub state: ConnState,
 }
 
@@ -374,6 +375,7 @@ impl ServerSessionImpl {
             secrets: None,
             common: SessionCommon::new(None, false),
             alpn_protocol: None,
+            error: None,
             state: ConnState::ExpectClientHello,
         };
 
@@ -485,12 +487,23 @@ impl ServerSessionImpl {
     }
 
     pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+        if let Some(ref err) = self.error {
+            return Err(err.clone());
+        }
+
         if self.common.message_deframer.desynced {
             return Err(TLSError::CorruptMessage);
         }
 
         while let Some(msg) = self.common.message_deframer.frames.pop_front() {
-            try!(self.process_msg(msg));
+            match self.process_msg(msg) {
+                Ok(_) => {}
+                Err(err) => {
+                    self.error = Some(err.clone());
+                    return Err(err);
+                }
+            }
+
         }
 
         Ok(())

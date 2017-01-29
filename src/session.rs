@@ -38,7 +38,8 @@ pub trait Session: Read + Write + Send {
 
     /// Processes any new packets read by a previous call to `read_tls`.
     /// Errors from this function relate to TLS protocol errors, and
-    /// are generally fatal to the session.
+    /// are fatal to the session.  Future calls after an error will do
+    /// no new work and will return the same error.
     ///
     /// Success from this function can mean new plaintext is available:
     /// obtain it using `read`.

@@ -118,7 +118,8 @@
 //! therefore call `client.process_new_packets()` which parses and processes the messages.
 //! Any error returned from `process_new_packets` is fatal to the session, and will tell you
 //! why.  For example, if the server's certificate is expired `process_new_packets` will
-//! return `Err(WebPKIError(CertExpired))`.
+//! return `Err(WebPKIError(CertExpired))`.  From this point on, `process_new_packets` will
+//! not do any new work and will return that error continually.
 //!
 //! You can extract newly received data by calling `client.read()` (via the `io::Read`
 //! trait).  You can send data to the peer by calling `client.write()` (via the `io::Write`

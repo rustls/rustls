@@ -457,3 +457,25 @@ fn client_cert_resolve() {
     let err = do_handshake_until_error(&mut client, &mut server);
     assert_eq!(err.is_err(), true);
 }
+
+#[test]
+fn client_error_is_sticky() {
+    let client_config = make_client_config();
+    let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+    client.read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref()).unwrap();
+    let mut err = client.process_new_packets();
+    assert_eq!(err.is_err(), true);
+    err = client.process_new_packets();
+    assert_eq!(err.is_err(), true);
+}
+
+#[test]
+fn server_error_is_sticky() {
+    let server_config = make_server_config();
+    let mut server = ServerSession::new(&Arc::new(server_config));
+    server.read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref()).unwrap();
+    let mut err = server.process_new_packets();
+    assert_eq!(err.is_err(), true);
+    err = server.process_new_packets();
+    assert_eq!(err.is_err(), true);
+}
