@@ -212,8 +212,8 @@ static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 pub struct SessionCommon {
     pub is_tls13: bool,
     pub is_client: bool,
-    message_encrypter: Box<MessageEncrypter + Send + Sync>,
-    message_decrypter: Box<MessageDecrypter + Send + Sync>,
+    message_encrypter: Box<MessageEncrypter>,
+    message_decrypter: Box<MessageDecrypter>,
     key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
     write_seq: u64,
@@ -277,14 +277,14 @@ impl SessionCommon {
     }
 
     pub fn set_message_encrypter(&mut self,
-                                 cipher: Box<MessageEncrypter + Send + Sync>) {
+                                 cipher: Box<MessageEncrypter>) {
         self.message_encrypter = cipher;
         self.write_seq = 0;
         self.we_encrypting = true;
     }
 
     pub fn set_message_decrypter(&mut self,
-                                 cipher: Box<MessageDecrypter + Send + Sync>) {
+                                 cipher: Box<MessageDecrypter>) {
         self.message_decrypter = cipher;
         self.read_seq = 0;
         self.peer_encrypting = true;

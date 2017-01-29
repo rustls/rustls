@@ -18,29 +18,28 @@ fn xor(accum: &mut [u8], offset: &[u8]) {
 }
 
 /// Objects with this trait can decrypt TLS messages.
-pub trait MessageDecrypter {
+pub trait MessageDecrypter : Send + Sync {
     fn decrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub trait MessageEncrypter {
+pub trait MessageEncrypter : Send + Sync {
     fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TLSError>;
 }
 
 impl MessageEncrypter {
-    pub fn invalid() -> Box<MessageEncrypter + Send + Sync> {
+    pub fn invalid() -> Box<MessageEncrypter> {
         Box::new(InvalidMessageEncrypter {})
     }
 }
 
 impl MessageDecrypter {
-    pub fn invalid() -> Box<MessageDecrypter + Send + Sync> {
+    pub fn invalid() -> Box<MessageDecrypter> {
         Box::new(InvalidMessageDecrypter {})
     }
 }
 
-pub type MessageCipherPair = (Box<MessageDecrypter + Send + Sync>,
-                              Box<MessageEncrypter + Send + Sync>);
+pub type MessageCipherPair = (Box<MessageDecrypter>, Box<MessageEncrypter>);
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 fn make_tls12_aad(seq: u64,
@@ -112,7 +111,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
 }
 
 pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
-                      secret: &[u8]) -> Box<MessageDecrypter + Send + Sync> {
+                      secret: &[u8]) -> Box<MessageDecrypter> {
     let hash = scs.get_hash();
     let key = hkdf_expand_label(hash, secret, b"key", &[], scs.enc_key_len as u16);
     let iv = hkdf_expand_label(hash, secret, b"iv", &[], scs.fixed_iv_len as u16);
@@ -122,7 +121,7 @@ pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
 }
 
 pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
-                       secret: &[u8]) -> Box<MessageEncrypter + Send + Sync> {
+                       secret: &[u8]) -> Box<MessageEncrypter> {
     let hash = scs.get_hash();
     let key = hkdf_expand_label(hash, secret, b"key", &[], scs.enc_key_len as u16);
     let iv = hkdf_expand_label(hash, secret, b"iv", &[], scs.fixed_iv_len as u16);

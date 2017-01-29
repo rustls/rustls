@@ -25,7 +25,7 @@ use std::io;
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
-pub trait StoresClientSessions {
+pub trait StoresClientSessions : Send + Sync {
     /// Stores a new `value` for `key`.  Returns `true`
     /// if the value was stored.
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool;
@@ -87,7 +87,7 @@ impl StoresClientSessions for ClientSessionMemoryCache {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert {
+pub trait ResolvesClientCert : Send + Sync {
     /// With the server-supplied acceptable issuers in `acceptable_issuers`,
     /// the server's supported signature schemes in `sigschemes`,
     /// return a certificate chain and signing key to authenticate.
@@ -102,7 +102,7 @@ pub trait ResolvesClientCert {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>)>;
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -114,7 +114,7 @@ impl ResolvesClientCert for FailResolveClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>)> {
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
         None
     }
 
@@ -125,7 +125,7 @@ impl ResolvesClientCert for FailResolveClientCert {
 
 struct AlwaysResolvesClientCert {
     chain: Vec<key::Certificate>,
-    key: Arc<Box<sign::Signer + Send + Sync>>,
+    key: Arc<Box<sign::Signer>>,
 }
 
 impl AlwaysResolvesClientCert {
@@ -144,7 +144,7 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>)> {
+               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
         Some((self.chain.clone(), self.key.clone()))
     }
 
@@ -170,13 +170,13 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<String>,
 
     /// How we store session data or tickets.
-    pub session_persistence: Mutex<Box<StoresClientSessions + Send + Sync>>,
+    pub session_persistence: Mutex<Box<StoresClientSessions>>,
 
     /// Our MTU.  If None, we don't limit TLS message sizes.
     pub mtu: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Box<ResolvesClientCert + Send + Sync>,
+    pub client_auth_cert_resolver: Box<ResolvesClientCert>,
 
     /// Whether to support RFC5077 tickets.  You must provide a working
     /// `session_persistence` member for this to have any meaningful
@@ -217,7 +217,7 @@ impl ClientConfig {
     }
 
     /// Sets persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Box<StoresClientSessions + Send + Sync>) {
+    pub fn set_persistence(&mut self, persist: Box<StoresClientSessions>) {
         self.session_persistence = Mutex::new(persist);
     }
 
@@ -267,7 +267,7 @@ pub struct ClientHandshakeData {
     pub doing_client_auth: bool,
     pub client_auth_sigscheme: Option<SignatureScheme>,
     pub client_auth_cert: Option<CertificatePayload>,
-    pub client_auth_key: Option<Arc<Box<sign::Signer + Send + Sync>>>,
+    pub client_auth_key: Option<Arc<Box<sign::Signer>>>,
     pub client_auth_context: Option<Vec<u8>>,
     pub offered_key_shares: Vec<suites::KeyExchange>,
 }

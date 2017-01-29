@@ -168,7 +168,7 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
 fn emit_server_kx(sess: &mut ServerSessionImpl,
                   sigscheme: SignatureScheme,
                   group: &NamedGroup,
-                  signer: Arc<Box<sign::Signer + Send + Sync>>)
+                  signer: Arc<Box<sign::Signer>>)
                   -> Result<(), TLSError> {
     let kx = try! {
         sess.common.get_suite()
@@ -472,7 +472,7 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
 
 fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
                                  schemes: &SupportedSignatureSchemes,
-                                 signer: &Arc<Box<sign::Signer + Send + Sync>>)
+                                 signer: &Arc<Box<sign::Signer>>)
                                  -> Result<(), TLSError> {
     let mut message = Vec::new();
     message.resize(64, 0x20u8);
@@ -564,7 +564,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
 
 fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
                              chm: &Message,
-                             signer: &Arc<Box<sign::Signer + Send + Sync>>)
+                             signer: &Arc<Box<sign::Signer>>)
                              -> Result<ConnState, TLSError> {
     let client_hello = extract_handshake!(chm, HandshakePayload::ClientHello).unwrap();
 

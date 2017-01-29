@@ -365,7 +365,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-        -> Result<(Vec<Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+        -> Result<(Vec<Certificate>, Arc<Box<sign::Signer>>), ()> {
         if let Some(ref got_dns_name) = server_name {
             if got_dns_name.to_string() != self.expected {
                 panic!("unexpected dns name (wanted '{}' got '{}')", &self.expected, got_dns_name);
@@ -422,7 +422,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-        -> Option<(Vec<Certificate>, Arc<Box<sign::Signer + Send + Sync>>)> {
+        -> Option<(Vec<Certificate>, Arc<Box<sign::Signer>>)> {
         let mut count = self.query_count.lock()
             .unwrap();
         *count.deref_mut() = (*count.deref() as usize) + 1;

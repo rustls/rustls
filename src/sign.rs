@@ -7,7 +7,7 @@ use std::sync::Arc;
 use key;
 
 /// A thing that can sign a message.
-pub trait Signer {
+pub trait Signer : Send + Sync {
     /// Choose a SignatureScheme from those offered.
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<SignatureScheme>;
 

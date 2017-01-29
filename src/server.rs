@@ -23,7 +23,7 @@ use std::io;
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
-pub trait StoresServerSessions {
+pub trait StoresServerSessions : Send + Sync {
     /// Generate a session ID.
     fn generate(&self) -> SessionID;
 
@@ -42,7 +42,7 @@ pub trait StoresServerSessions {
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.
-pub trait ProducesTickets {
+pub trait ProducesTickets : Send + Sync {
     /// Returns true if this implementation will encrypt/decrypt
     /// tickets.  Should return false if this is a dummy
     /// implementation: the server will not send the SessionTicket
@@ -76,7 +76,7 @@ pub trait ProducesTickets {
 
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
-pub trait ResolvesServerCert {
+pub trait ResolvesServerCert : Send + Sync {
     /// Choose a certificate chain and matching key given any server DNS
     /// name provided via SNI, and signature schemes.
     ///
@@ -85,7 +85,7 @@ pub trait ResolvesServerCert {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()>;
+               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer>>), ()>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -105,10 +105,10 @@ pub struct ServerConfig {
     pub session_storage: Mutex<Box<StoresServerSessions + Send>>,
 
     /// How to produce tickets.
-    pub ticketer: Box<ProducesTickets + Send + Sync>,
+    pub ticketer: Box<ProducesTickets>,
 
     /// How to choose a server cert and key.
-    pub cert_resolver: Box<ResolvesServerCert + Send + Sync>,
+    pub cert_resolver: Box<ResolvesServerCert>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
@@ -219,7 +219,7 @@ impl ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer>>), ()> {
         Err(())
     }
 }
@@ -227,7 +227,7 @@ impl ResolvesServerCert for FailResolveChain {
 /// Something which always resolves to the same cert chain.
 struct AlwaysResolvesChain {
     chain: Vec<key::Certificate>,
-    key: Arc<Box<sign::Signer + Send + Sync>>,
+    key: Arc<Box<sign::Signer>>,
 }
 
 impl AlwaysResolvesChain {
@@ -244,7 +244,7 @@ impl ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer + Send + Sync>>), ()> {
+               -> Result<(Vec<key::Certificate>, Arc<Box<sign::Signer>>), ()> {
         Ok((self.chain.clone(), self.key.clone()))
     }
 }
@@ -269,7 +269,7 @@ impl ServerConfig {
     }
 
     /// Sets the session persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Box<StoresServerSessions + Send + Sync>) {
+    pub fn set_persistence(&mut self, persist: Box<StoresServerSessions + Send>) {
         self.session_storage = Mutex::new(persist);
     }
 
