@@ -35,7 +35,7 @@ obsolete cryptography.
 
 ## Current features
 
-* TLS1.2 only.
+* TLS1.2 and TLS1.3 (draft 18) only.
 * ECDSA or RSA server authentication by clients.
 * RSA server authentication by servers.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
@@ -44,8 +44,9 @@ obsolete cryptography.
 * ALPN support.
 * SNI support.
 * Tunable MTU to make TLS messages match size of underlying transport.
-* Resumption.
-* Resumption via tickets (RFC5077).
+* TLS1.2 session resumption.
+* TLS1.2 resumption via tickets (RFC5077).
+* TLS1.3 resumption via tickets.
 * Client authentication by clients.
 * Client authentication by servers.
 
