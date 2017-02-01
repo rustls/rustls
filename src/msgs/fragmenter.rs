@@ -1,6 +1,6 @@
 
 use std::collections::VecDeque;
-use msgs::message::{BorrowMessage, Message, MessagePayload};
+use msgs::tls_message::{BorrowMessage, TLSMessage, MessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
@@ -24,7 +24,7 @@ impl MessageFragmenter {
     /// messages whose fragment is no more than max_frag.
     /// The new messages are appended to the `out` deque.
     /// Payloads are copied.
-    pub fn fragment(&self, msg: Message, out: &mut VecDeque<Message>) {
+    pub fn fragment(&self, msg: TLSMessage, out: &mut VecDeque<TLSMessage>) {
         // Non-fragment path
         if msg.payload.length() <= self.max_frag {
             out.push_back(msg.into_opaque());
@@ -36,7 +36,7 @@ impl MessageFragmenter {
         let payload = msg.take_payload();
 
         for chunk in payload.chunks(self.max_frag) {
-            let m = Message {
+            let m = TLSMessage {
                 typ: typ,
                 version: version,
                 payload: MessagePayload::new_opaque(chunk.to_vec())
@@ -66,12 +66,12 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use msgs::message::{MessagePayload, Message};
+    use msgs::tls_message::{MessagePayload, TLSMessage};
     use msgs::enums::{ContentType, ProtocolVersion};
     use msgs::codec::Codec;
     use std::collections::VecDeque;
 
-    fn msg_eq(mm: Option<Message>,
+    fn msg_eq(mm: Option<TLSMessage>,
               total_len: usize,
               typ: &ContentType,
               version: &ProtocolVersion,
@@ -92,7 +92,7 @@ mod tests {
     fn smoke() {
         let typ = ContentType::Handshake;
         let version = ProtocolVersion::TLSv1_2;
-        let m = Message {
+        let m = TLSMessage {
             typ: typ,
             version: version,
             payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn non_fragment() {
-        let m = Message {
+        let m = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),

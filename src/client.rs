@@ -5,7 +5,7 @@ use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
 use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::message::Message;
+use msgs::tls_message::TLSMessage;
 use msgs::persist;
 use client_hs;
 use hash_hs;
@@ -374,7 +374,7 @@ impl ClientSessionImpl {
         !self.common.traffic
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
+    pub fn process_msg(&mut self, mut msg: TLSMessage) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
         if self.common.peer_encrypting {
             let dm = try!(self.common.decrypt_incoming(msg));
@@ -433,7 +433,7 @@ impl ClientSessionImpl {
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via a `Expectation`.  Finally, we ask the handler
     /// to handle the message.
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
+    fn process_main_protocol(&mut self, msg: TLSMessage) -> Result<(), TLSError> {
         if msg.is_handshake_type(HandshakeType::HelloRequest) && !self.common.is_tls13() {
             self.process_hello_req();
             return Ok(());

@@ -1,5 +1,5 @@
 use msgs::enums::{ContentType, HandshakeType};
-use msgs::message::{Message, MessagePayload};
+use msgs::tls_message::{TLSMessage, MessagePayload};
 use error::TLSError;
 
 #[derive(Debug, Clone)]
@@ -9,7 +9,7 @@ pub struct Expectation {
 }
 
 impl Expectation {
-    pub fn check_message(&self, m: &Message) -> Result<(), TLSError> {
+    pub fn check_message(&self, m: &TLSMessage) -> Result<(), TLSError> {
         if !self.content_types.contains(&m.typ) {
             warn!("Received a {:?} message while expecting {:?}",
                   m.typ,

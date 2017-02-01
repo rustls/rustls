@@ -3,7 +3,7 @@ use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::message::{BorrowMessage, Message, MessagePayload};
+use msgs::tls_message::{BorrowMessage, TLSMessage, MessagePayload};
 use msgs::fragmenter::MAX_FRAGMENT_LEN;
 use error::TLSError;
 use session::SessionSecrets;
@@ -19,12 +19,12 @@ fn xor(accum: &mut [u8], offset: &[u8]) {
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter : Send + Sync {
-    fn decrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
+    fn decrypt(&self, m: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter : Send + Sync {
-    fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TLSError>;
+    fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError>;
 }
 
 impl MessageEncrypter {
@@ -148,7 +148,7 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GCMMessageDecrypter {
-    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let payload = try!(msg.take_opaque_payload().ok_or(TLSError::DecryptError));
         let mut buf = payload.0;
 
@@ -178,7 +178,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
 
         buf.truncate(plain_len);
 
-        Ok(Message {
+        Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
             payload: MessagePayload::new_opaque(buf),
@@ -187,7 +187,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
 }
 
 impl MessageEncrypter for GCMMessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         // The GCM nonce is constructed from a 32-bit 'salt' derived
         // from the master-secret, and a 64-bit explicit part,
         // with no specified construction.  Thanks for that.
@@ -215,7 +215,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf[8..], tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
-        Ok(Message {
+        Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
             payload: MessagePayload::new_opaque(buf),
@@ -285,7 +285,7 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
 }
 
 impl MessageEncrypter for TLS13MessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.enc_offset);
@@ -301,7 +301,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &[], &mut buf, tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
-        Ok(Message {
+        Ok(TLSMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_0,
             payload: MessagePayload::new_opaque(buf),
@@ -310,7 +310,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
 }
 
 impl MessageDecrypter for TLS13MessageDecrypter {
-    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.dec_offset);
@@ -339,7 +339,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
             return Err(TLSError::PeerMisbehavedError(msg));
         }
 
-        Ok(Message {
+        Ok(TLSMessage {
             typ: content_type,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::new_opaque(buf),
@@ -426,7 +426,7 @@ impl ChaCha20Poly1305MessageDecrypter {
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
-    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let payload = try!(msg.take_opaque_payload().ok_or(TLSError::DecryptError));
         let mut buf = payload.0;
 
@@ -453,7 +453,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
         buf.truncate(plain_len);
 
-        Ok(Message {
+        Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
             payload: MessagePayload::new_opaque(buf),
@@ -462,7 +462,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.enc_offset);
@@ -480,7 +480,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf, tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
-        Ok(Message {
+        Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
             payload: MessagePayload::new_opaque(buf),
@@ -492,7 +492,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 pub struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&self, _m: BorrowMessage, _seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, _m: BorrowMessage, _seq: u64) -> Result<TLSMessage, TLSError> {
         Err(TLSError::General("encrypt not yet available".to_string()))
     }
 }
@@ -501,7 +501,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 pub struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt(&self, _m: Message, _seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, _m: TLSMessage, _seq: u64) -> Result<TLSMessage, TLSError> {
         Err(TLSError::DecryptError)
     }
 }

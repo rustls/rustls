@@ -72,14 +72,14 @@ impl MessagePayload {
 /// A TLS frame, named TLSPlaintext in the standard.
 /// This type owns all memory for its interior parts.
 #[derive(Debug)]
-pub struct Message {
+pub struct TLSMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
     pub payload: MessagePayload,
 }
 
-impl Codec for Message {
-    fn read(r: &mut Reader) -> Option<Message> {
+impl Codec for TLSMessage {
+    fn read(r: &mut Reader) -> Option<TLSMessage> {
         let typ = try_ret!(ContentType::read(r));
         let version = try_ret!(ProtocolVersion::read(r));
         let len = try_ret!(read_u16(r));
@@ -87,7 +87,7 @@ impl Codec for Message {
         let mut sub = try_ret!(r.sub(len as usize));
         let payload = try_ret!(Payload::read(&mut sub));
 
-        Some(Message {
+        Some(TLSMessage {
             typ: typ,
             version: version,
             payload: MessagePayload::Opaque(payload),
@@ -102,7 +102,7 @@ impl Codec for Message {
     }
 }
 
-impl Message {
+impl TLSMessage {
     /// Do some *very* lax checks on the header, and return
     /// None if it looks really broken.  Otherwise, return
     /// the length field.
@@ -172,7 +172,7 @@ impl Message {
         }
     }
 
-    pub fn into_opaque(self) -> Message {
+    pub fn into_opaque(self) -> TLSMessage {
         if let MessagePayload::Opaque(_) = self.payload {
             return self;
         }
@@ -180,15 +180,15 @@ impl Message {
         let mut buf = Vec::new();
         self.payload.encode(&mut buf);
 
-        Message {
+        TLSMessage {
             typ: self.typ,
             version: self.version,
             payload: MessagePayload::new_opaque(buf),
         }
     }
 
-    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message {
-        Message {
+    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> TLSMessage {
+        TLSMessage {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
@@ -198,8 +198,8 @@ impl Message {
         }
     }
 
-    pub fn build_key_update_notify() -> Message {
-        Message {
+    pub fn build_key_update_notify() -> TLSMessage {
+        TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
@@ -207,7 +207,7 @@ impl Message {
     }
 }
 
-impl<'a> Message {
+impl<'a> TLSMessage {
     pub fn to_borrowed(&'a self) -> BorrowMessage<'a> {
         if let MessagePayload::Opaque(ref p) = self.payload {
             BorrowMessage {

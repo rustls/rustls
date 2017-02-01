@@ -4,7 +4,7 @@ use std::io;
 
 use msgs::codec;
 use msgs::codec::Codec;
-use msgs::message::Message;
+use msgs::tls_message::TLSMessage;
 
 const HEADER_SIZE: usize = 1 + 2 + 2;
 
@@ -18,7 +18,7 @@ const MAX_MESSAGE: usize = 16384 + 2048 + HEADER_SIZE;
 /// The input is `read()`, the output is the `frames` deque.
 pub struct MessageDeframer {
     /// Completed frames for output.
-    pub frames: VecDeque<Message>,
+    pub frames: VecDeque<TLSMessage>,
 
     /// Set to true if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
@@ -91,7 +91,7 @@ impl MessageDeframer {
             return Some(false);
         }
 
-        let len_maybe = Message::check_header(&self.buf);
+        let len_maybe = TLSMessage::check_header(&self.buf);
 
         // Header damaged.
         if len_maybe == None {
@@ -114,7 +114,7 @@ impl MessageDeframer {
     fn deframe_one(&mut self) {
         let used = {
             let mut rd = codec::Reader::init(&self.buf);
-            let m = Message::read(&mut rd).unwrap();
+            let m = TLSMessage::read(&mut rd).unwrap();
             self.frames.push_back(m);
             rd.used()
         };

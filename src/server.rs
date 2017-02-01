@@ -3,7 +3,7 @@ use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use msgs::handshake::{SessionID, CertificatePayload};
-use msgs::message::Message;
+use msgs::tls_message::TLSMessage;
 use msgs::codec::Codec;
 use hash_hs;
 use server_hs;
@@ -391,7 +391,7 @@ impl ServerSessionImpl {
         !self.common.traffic
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
+    pub fn process_msg(&mut self, mut msg: TLSMessage) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
         if self.common.peer_encrypting {
             let dm = try!(self.common.decrypt_incoming(msg));
@@ -433,7 +433,7 @@ impl ServerSessionImpl {
         self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
-    pub fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
+    pub fn process_main_protocol(&mut self, msg: TLSMessage) -> Result<(), TLSError> {
         if self.common.traffic && !self.common.is_tls13() &&
            msg.is_handshake_type(HandshakeType::ClientHello) {
             self.common.send_warning_alert(AlertDescription::NoRenegotiation);
