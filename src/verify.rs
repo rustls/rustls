@@ -11,6 +11,8 @@ use pemfile;
 use x509;
 use key;
 use std::io;
+use crossbeam;
+use rayon::prelude::*;
 
 /// Disable all verifications, for testing purposes.
 const DANGEROUS_DISABLE_VERIFY: bool = false;
@@ -49,7 +51,7 @@ impl OwnedTrustAnchor {
     }
   }
 
-  fn to_trust_anchor(&self) -> webpki::TrustAnchor {
+  pub fn to_trust_anchor(&self) -> webpki::TrustAnchor {
     webpki::TrustAnchor {
       subject: &self.subject,
       spki: &self.spki,
@@ -75,6 +77,12 @@ impl RootCertStore {
     self.roots.len()
   }
 
+  pub fn get_roots_as_trust_anchor(&self) -> Vec<webpki::TrustAnchor> {
+    self.roots.iter()
+    .map(|x| x.to_trust_anchor())
+    .collect()
+  }
+
   /// Return the Subject Names for certificates in the container.
   pub fn get_subjects(&self) -> DistinguishedNames {
     let mut r = DistinguishedNames::new();
@@ -96,6 +104,7 @@ impl RootCertStore {
     );
 
     let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
+    //this is where i need to check what's going on with the certs
     self.roots.push(ota);
     Ok(())
   }
@@ -127,15 +136,11 @@ impl RootCertStore {
       match self.add(&der) {
         Ok(_) => valid_count += 1,
         Err(err) => {
-          debug!("invalid cert der {:?}", der);
           info!("certificate parsing failed: {:?}", err);
           invalid_count += 1
         }
       }
     }
-
-    info!("add_pem_file processed {} valid and {} invalid certs",
-          valid_count, invalid_count);
 
     Ok((valid_count, invalid_count))
   }
@@ -151,7 +156,7 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
     return Err(TLSError::NoCertificatesPresented);
   }
 
-  /* EE cert must appear first. */
+    /* EE cert must appear first. */
   let cert_der = untrusted::Input::from(&presented_certs[0].0);
   let cert = try!(
     webpki::EndEntityCert::from(cert_der)
@@ -195,6 +200,64 @@ pub fn verify_server_cert(roots: &RootCertStore,
 
   cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
     .map_err(|err| TLSError::WebPKIError(err))
+}
+
+pub fn parallel_verify_server_cert(roots: &RootCertStore,
+                                   presented_certs: &Vec<ASN1Cert>,
+                                   dns_name: &str) -> Result<(), TLSError> {
+  crossbeam::scope(|scope| {
+    scope.spawn(move || {
+      parallel_verify_common_cert(roots, presented_certs);
+    });
+    let r = scope.spawn(move || {
+      let cert_der = untrusted::Input::from(&presented_certs[0].0);
+      let cert = try!(
+        webpki::EndEntityCert::from(cert_der)
+          .map_err(|err| TLSError::WebPKIError(err))
+      );
+      cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
+      .map_err(|err| TLSError::WebPKIError(err))
+    });
+    r.join()
+  })
+  
+}
+
+fn parallel_verify_common_cert<'a>(roots: &RootCertStore,
+                          presented_certs: &'a [ASN1Cert])
+    -> Result<webpki::EndEntityCert<'a>, TLSError> {
+  if presented_certs.is_empty() {
+    return Err(TLSError::NoCertificatesPresented);
+  }
+
+    /* EE cert must appear first. */
+  let cert_der = untrusted::Input::from(&presented_certs[0].0);
+  let cert = try!(
+    webpki::EndEntityCert::from(cert_der)
+      .map_err(|err| TLSError::WebPKIError(err))
+  );
+
+  let chain: Vec<untrusted::Input> = presented_certs.par_iter()
+    .skip(1)
+    .map(|cert| untrusted::Input::from(&cert.0))
+    .collect();
+  
+
+  let trustroots: Vec<webpki::TrustAnchor> = roots.roots.par_iter()
+    .map(|x| x.to_trust_anchor())
+    .collect();
+
+  if DANGEROUS_DISABLE_VERIFY {
+    warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping certificate verification");
+    return Ok(cert);
+  }
+
+  cert.verify_is_valid_tls_server_cert(&SUPPORTED_SIG_ALGS,
+                                       &trustroots,
+                                       &chain,
+                                       time::get_time())
+    .map_err(|err| TLSError::WebPKIError(err))
+    .map(|_| cert)
 }
 
 /// Verify a certificate chain `presented_certs` is rooted in `roots`.

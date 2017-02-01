@@ -15,6 +15,8 @@ base64 = "~0.2.0"
 log = { version = "0.3.6", optional = true }
 ring = { version = "0.6.0-alpha1", features = ["rsa_signing"] }
 webpki = "0.8.0"
+crossbeam = "0.2.10"
+rayon = "0.6.0"
 
 [features]
 default = ["logging"]
@@ -27,3 +29,6 @@ mio = "0.5.1"
 docopt = "0.6"
 rustc-serialize = "0.3"
 webpki-roots = "0.6.0"
+
+[replace]
+"webpki:0.8.0" = {path = "/Users/ddh/mozilla/servo/webpki" }

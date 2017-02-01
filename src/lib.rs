@@ -178,6 +178,9 @@ extern crate base64;
 #[macro_use]
 extern crate log;
 
+extern crate crossbeam;
+extern crate rayon;
+
 #[cfg(not(feature = "logging"))]
 #[macro_use]
 mod compile_out_log {
@@ -226,7 +229,7 @@ pub mod internal {
 /* The public interface is: */
 pub use error::TLSError;
 pub use session::Session;
-pub use verify::{RootCertStore};
+pub use verify::{RootCertStore, verify_server_cert, parallel_verify_server_cert};
 pub use client::{StoresClientSessions, ClientSessionMemoryCache, ClientConfig, ClientSession};
 pub use server::{StoresServerSessions, ServerSessionMemoryCache, ServerConfig, ServerSession};
 pub use server::ProducesTickets;
