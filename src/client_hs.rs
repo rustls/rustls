@@ -1,6 +1,6 @@
 use msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
-use msgs::tls_message::{TLSMessage, MessagePayload};
+use msgs::tls_message::{TLSMessage, TLSMessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random, ServerHelloPayload};
@@ -38,7 +38,7 @@ const TLS13_DRAFT: u16 = 0x7f12;
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
     match $m.payload {
-      MessagePayload::Handshake(ref hsp) => match hsp.payload {
+      TLSMessagePayload::Handshake(ref hsp) => match hsp.payload {
         $t(ref hm) => Some(hm),
         _ => None
       },
@@ -308,7 +308,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     let ch = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_0,
-        payload: MessagePayload::Handshake(chp),
+        payload: TLSMessagePayload::Handshake(chp),
     };
 
     debug!("Sending ClientHello {:#?}", ch);
@@ -870,7 +870,7 @@ fn emit_certificate(sess: &mut ClientSessionImpl) {
     let cert = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
             payload: HandshakePayload::Certificate(chosen_cert.unwrap_or_else(Vec::new)),
         }),
@@ -889,7 +889,7 @@ fn emit_clientkx(sess: &mut ClientSessionImpl, kxd: &suites::KeyExchangeResult) 
     let ckx = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::ClientKeyExchange,
             payload: HandshakePayload::ClientKeyExchange(pubkey),
         }),
@@ -918,7 +918,7 @@ fn emit_certverify(sess: &mut ClientSessionImpl) {
     let m = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
             payload: HandshakePayload::CertificateVerify(body),
         }),
@@ -932,7 +932,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
     let ccs = TLSMessage {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        payload: TLSMessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
 
     sess.common.send_msg(ccs, false);
@@ -947,7 +947,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
     let f = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
             payload: HandshakePayload::Finished(verify_data_payload),
         }),
@@ -1300,7 +1300,7 @@ fn emit_certificate_tls13(sess: &mut ClientSessionImpl) {
     let m = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
             payload: HandshakePayload::CertificateTLS13(cert_payload),
         }),
@@ -1332,7 +1332,7 @@ fn emit_certverify_tls13(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     let m = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
             payload: HandshakePayload::CertificateVerify(verf),
         }),
@@ -1353,7 +1353,7 @@ fn emit_finished_tls13(sess: &mut ClientSessionImpl) {
     let m = TLSMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
             payload: HandshakePayload::Finished(verify_data_payload),
         }),

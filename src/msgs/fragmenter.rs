@@ -1,6 +1,6 @@
 
 use std::collections::VecDeque;
-use msgs::tls_message::{BorrowMessage, TLSMessage, MessagePayload};
+use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
@@ -39,7 +39,7 @@ impl MessageFragmenter {
             let m = TLSMessage {
                 typ: typ,
                 version: version,
-                payload: MessagePayload::new_opaque(chunk.to_vec())
+                payload: TLSMessagePayload::new_opaque(chunk.to_vec())
             };
             out.push_back(m);
         }
@@ -66,7 +66,7 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use msgs::tls_message::{MessagePayload, TLSMessage};
+    use msgs::tls_message::{TLSMessagePayload, TLSMessage};
     use msgs::enums::{ContentType, ProtocolVersion};
     use msgs::codec::Codec;
     use std::collections::VecDeque;
@@ -95,7 +95,7 @@ mod tests {
         let m = TLSMessage {
             typ: typ,
             version: version,
-            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
         let frag = MessageFragmenter::new(3);
@@ -124,7 +124,7 @@ mod tests {
         let m = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
         let frag = MessageFragmenter::new(8);

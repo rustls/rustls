@@ -1,6 +1,6 @@
 use ring;
 use std::io::{Read, Write};
-use msgs::tls_message::{BorrowMessage, TLSMessage, MessagePayload};
+use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
 use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
@@ -345,7 +345,7 @@ impl SessionCommon {
     }
 
     pub fn process_alert(&mut self, msg: TLSMessage) -> Result<(), TLSError> {
-        if let MessagePayload::Alert(ref alert) = msg.payload {
+        if let TLSMessagePayload::Alert(ref alert) = msg.payload {
             // If we get a CloseNotify, make a note to declare EOF to our
             // caller.
             if alert.description == AlertDescription::CloseNotify {

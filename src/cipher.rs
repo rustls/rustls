@@ -3,7 +3,7 @@ use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::tls_message::{BorrowMessage, TLSMessage, MessagePayload};
+use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
 use msgs::fragmenter::MAX_FRAGMENT_LEN;
 use error::TLSError;
 use session::SessionSecrets;
@@ -181,7 +181,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
         Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         })
     }
 }
@@ -218,7 +218,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
         Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         })
     }
 }
@@ -304,7 +304,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         Ok(TLSMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_0,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         })
     }
 }
@@ -342,7 +342,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
         Ok(TLSMessage {
             typ: content_type,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         })
     }
 }
@@ -456,7 +456,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         })
     }
 }
@@ -483,7 +483,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         Ok(TLSMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         })
     }
 }

@@ -2,7 +2,7 @@
 use std::collections::VecDeque;
 
 use msgs::codec;
-use msgs::tls_message::{TLSMessage, MessagePayload};
+use msgs::tls_message::{TLSMessage, TLSMessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::handshake::HandshakeMessagePayload;
 
@@ -88,7 +88,7 @@ impl HandshakeJoiner {
             let m = TLSMessage {
                 typ: ContentType::Handshake,
                 version: version,
-                payload: MessagePayload::Handshake(payload.unwrap()),
+                payload: TLSMessagePayload::Handshake(payload.unwrap()),
             };
 
             self.frames.push_back(m);
@@ -104,7 +104,7 @@ mod tests {
     use super::HandshakeJoiner;
     use msgs::enums::{ProtocolVersion, ContentType, HandshakeType};
     use msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
-    use msgs::tls_message::{TLSMessage, MessagePayload};
+    use msgs::tls_message::{TLSMessage, TLSMessagePayload};
     use msgs::base::Payload;
 
     #[test]
@@ -115,13 +115,13 @@ mod tests {
         let wanted = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"hello world".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"hello world".to_vec()),
         };
 
         let unwanted = TLSMessage {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"ponytown".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"ponytown".to_vec()),
         };
 
         assert_eq!(hj.want_message(&wanted), true);
@@ -149,7 +149,7 @@ mod tests {
         let msg = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec()),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -159,7 +159,7 @@ mod tests {
         let expect = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::HelloRequest,
                 payload: HandshakePayload::HelloRequest,
             }),
@@ -178,7 +178,7 @@ mod tests {
         let msg = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x01\x00\x00\x02\xff\xff".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x01\x00\x00\x02\xff\xff".to_vec()),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -195,7 +195,7 @@ mod tests {
         let mut msg = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec()),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -206,7 +206,7 @@ mod tests {
         msg = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec()),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -217,7 +217,7 @@ mod tests {
         msg = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x0f".to_vec()),
+            payload: TLSMessagePayload::new_opaque(b"\x0f".to_vec()),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -228,7 +228,7 @@ mod tests {
         let expect = TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Finished,
                 payload: HandshakePayload::Finished(Payload::new(payload)),
             }),

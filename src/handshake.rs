@@ -1,5 +1,5 @@
 use msgs::enums::{ContentType, HandshakeType};
-use msgs::tls_message::{TLSMessage, MessagePayload};
+use msgs::tls_message::{TLSMessage, TLSMessagePayload};
 use error::TLSError;
 
 #[derive(Debug, Clone)]
@@ -20,7 +20,7 @@ impl Expectation {
             });
         }
 
-        if let MessagePayload::Handshake(ref hsp) = m.payload {
+        if let TLSMessagePayload::Handshake(ref hsp) = m.payload {
             if self.handshake_types.len() > 0 && !self.handshake_types.contains(&hsp.typ) {
                 warn!("Received a {:?} handshake message while expecting {:?}",
                       hsp.typ,

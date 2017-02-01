@@ -11,40 +11,40 @@ use msgs::enums::HandshakeType;
 use std::mem;
 
 #[derive(Debug)]
-pub enum MessagePayload {
+pub enum TLSMessagePayload {
     Alert(AlertMessagePayload),
     Handshake(HandshakeMessagePayload),
     ChangeCipherSpec(ChangeCipherSpecPayload),
     Opaque(Payload),
 }
 
-impl MessagePayload {
+impl TLSMessagePayload {
     pub fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            MessagePayload::Alert(ref x) => x.encode(bytes),
-            MessagePayload::Handshake(ref x) => x.encode(bytes),
-            MessagePayload::ChangeCipherSpec(ref x) => x.encode(bytes),
-            MessagePayload::Opaque(ref x) => x.encode(bytes),
+            TLSMessagePayload::Alert(ref x) => x.encode(bytes),
+            TLSMessagePayload::Handshake(ref x) => x.encode(bytes),
+            TLSMessagePayload::ChangeCipherSpec(ref x) => x.encode(bytes),
+            TLSMessagePayload::Opaque(ref x) => x.encode(bytes),
         }
     }
 
     pub fn decode_given_type(&self,
                              typ: ContentType,
                              vers: ProtocolVersion)
-                             -> Option<MessagePayload> {
-        if let MessagePayload::Opaque(ref payload) = *self {
+                             -> Option<TLSMessagePayload> {
+        if let TLSMessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
             let parsed = match typ {
                 ContentType::Alert => {
-                    Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r))))
+                    Some(TLSMessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r))))
                 }
                 ContentType::Handshake => {
                     let p = try_ret!(HandshakeMessagePayload::read_version(&mut r, vers));
-                    Some(MessagePayload::Handshake(p))
+                    Some(TLSMessagePayload::Handshake(p))
                 }
                 ContentType::ChangeCipherSpec => {
                     let p = try_ret!(ChangeCipherSpecPayload::read(&mut r));
-                    Some(MessagePayload::ChangeCipherSpec(p))
+                    Some(TLSMessagePayload::ChangeCipherSpec(p))
                 }
                 _ => None,
             };
@@ -57,15 +57,15 @@ impl MessagePayload {
 
     pub fn length(&self) -> usize {
         match *self {
-            MessagePayload::Alert(ref x) => x.length(),
-            MessagePayload::Handshake(ref x) => x.length(),
-            MessagePayload::ChangeCipherSpec(ref x) => x.length(),
-            MessagePayload::Opaque(ref x) => x.len(),
+            TLSMessagePayload::Alert(ref x) => x.length(),
+            TLSMessagePayload::Handshake(ref x) => x.length(),
+            TLSMessagePayload::ChangeCipherSpec(ref x) => x.length(),
+            TLSMessagePayload::Opaque(ref x) => x.len(),
         }
     }
 
-    pub fn new_opaque(data: Vec<u8>) -> MessagePayload {
-        MessagePayload::Opaque(Payload::new(data))
+    pub fn new_opaque(data: Vec<u8>) -> TLSMessagePayload {
+        TLSMessagePayload::Opaque(Payload::new(data))
     }
 }
 
@@ -75,7 +75,7 @@ impl MessagePayload {
 pub struct TLSMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: MessagePayload,
+    pub payload: TLSMessagePayload,
 }
 
 impl Codec for TLSMessage {
@@ -90,7 +90,7 @@ impl Codec for TLSMessage {
         Some(TLSMessage {
             typ: typ,
             version: version,
-            payload: MessagePayload::Opaque(payload),
+            payload: TLSMessagePayload::Opaque(payload),
         })
     }
 
@@ -139,7 +139,7 @@ impl TLSMessage {
             return false;
         }
 
-        if let MessagePayload::Handshake(ref hsp) = self.payload {
+        if let TLSMessagePayload::Handshake(ref hsp) = self.payload {
             hsp.typ == hstyp
         } else {
             false
@@ -165,7 +165,7 @@ impl TLSMessage {
     }
 
     pub fn take_opaque_payload(&mut self) -> Option<Payload> {
-        if let MessagePayload::Opaque(ref mut op) = self.payload {
+        if let TLSMessagePayload::Opaque(ref mut op) = self.payload {
             Some(mem::replace(op, Payload::empty()))
         } else {
             None
@@ -173,7 +173,7 @@ impl TLSMessage {
     }
 
     pub fn into_opaque(self) -> TLSMessage {
-        if let MessagePayload::Opaque(_) = self.payload {
+        if let TLSMessagePayload::Opaque(_) = self.payload {
             return self;
         }
 
@@ -183,7 +183,7 @@ impl TLSMessage {
         TLSMessage {
             typ: self.typ,
             version: self.version,
-            payload: MessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf),
         }
     }
 
@@ -191,7 +191,7 @@ impl TLSMessage {
         TLSMessage {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Alert(AlertMessagePayload {
+            payload: TLSMessagePayload::Alert(AlertMessagePayload {
                 level: level,
                 description: desc,
             }),
@@ -202,14 +202,14 @@ impl TLSMessage {
         TLSMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
+            payload: TLSMessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
 }
 
 impl<'a> TLSMessage {
     pub fn to_borrowed(&'a self) -> BorrowMessage<'a> {
-        if let MessagePayload::Opaque(ref p) = self.payload {
+        if let TLSMessagePayload::Opaque(ref p) = self.payload {
             BorrowMessage {
                 typ: self.typ,
                 version: self.version,
