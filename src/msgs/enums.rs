@@ -58,6 +58,34 @@ impl ProtocolVersion {
             ProtocolVersion::Unknown(v) => v,
         }
     }
+
+    pub fn is_tls(&self) -> bool {
+        match *self {
+            ProtocolVersion::SSLv2 => true,
+            ProtocolVersion::SSLv3 => true,
+            ProtocolVersion::TLSv1_0 => true,
+            ProtocolVersion::TLSv1_1 => true,
+            ProtocolVersion::TLSv1_2 => true,
+            ProtocolVersion::TLSv1_3 => true,
+            ProtocolVersion::DTLSv1_0 => false,
+            ProtocolVersion::DTLSv1_2 => false,
+            ProtocolVersion::Unknown(_) => false,
+        }
+    }
+
+    pub fn is_dtls(&self) -> bool {
+        match *self {
+            ProtocolVersion::SSLv2 => false,
+            ProtocolVersion::SSLv3 => false,
+            ProtocolVersion::TLSv1_0 => false,
+            ProtocolVersion::TLSv1_1 => false,
+            ProtocolVersion::TLSv1_2 => false,
+            ProtocolVersion::TLSv1_3 => false,
+            ProtocolVersion::DTLSv1_0 => true,
+            ProtocolVersion::DTLSv1_2 => true,
+            ProtocolVersion::Unknown(_) => false,
+        }
+    }
 }
 
 /// The `HashAlgorithm` TLS protocol enum.  Values in this enum are taken
