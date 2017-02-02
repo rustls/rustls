@@ -1774,7 +1774,7 @@ pub enum HandshakePayload {
 }
 
 impl HandshakePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    pub fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             HandshakePayload::HelloRequest |
                 HandshakePayload::ServerHelloDone => {}
@@ -1804,6 +1804,8 @@ pub struct HandshakeMessagePayload {
     pub payload: HandshakePayload,
 }
 
+/// this trait is not used for DTLS. Instead ``DTLSHandshakeFragment`` takes
+/// care of encoding/decoding in this.
 impl Codec for HandshakeMessagePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         // encode payload to learn length

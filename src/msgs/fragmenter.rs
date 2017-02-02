@@ -2,6 +2,7 @@
 use std::collections::VecDeque;
 use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
+use msgs::message::MessagePayload;
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -67,6 +68,7 @@ impl MessageFragmenter {
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
     use msgs::tls_message::{TLSMessagePayload, TLSMessage};
+    use msgs::message::MessagePayload;
     use msgs::enums::{ContentType, ProtocolVersion};
     use msgs::codec::Codec;
     use std::collections::VecDeque;

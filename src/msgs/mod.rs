@@ -9,7 +9,10 @@ pub mod alert;
 #[allow(non_camel_case_types)]
 pub mod handshake;
 pub mod ccs;
+pub mod message;
 pub mod tls_message;
+#[cfg(feature="dtls")]
+pub mod dtls_message;
 pub mod persist;
 pub mod deframer;
 pub mod fragmenter;

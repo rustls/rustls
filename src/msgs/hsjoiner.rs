@@ -105,6 +105,7 @@ mod tests {
     use msgs::enums::{ProtocolVersion, ContentType, HandshakeType};
     use msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
     use msgs::tls_message::{TLSMessage, TLSMessagePayload};
+    use msgs::message::MessagePayload;
     use msgs::base::Payload;
 
     #[test]

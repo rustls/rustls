@@ -2,6 +2,7 @@ use ring;
 use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
+use msgs::message::MessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
 use msgs::fragmenter::MAX_FRAGMENT_LEN;

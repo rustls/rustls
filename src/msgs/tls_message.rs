@@ -1,4 +1,3 @@
-
 use msgs::codec::{Codec, Reader, encode_u16, read_u16};
 use msgs::base::Payload;
 use msgs::alert::AlertMessagePayload;
@@ -7,6 +6,7 @@ use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::enums::{AlertLevel, AlertDescription};
 use msgs::enums::HandshakeType;
+use msgs::message::MessagePayload;
 
 use std::mem;
 
@@ -18,8 +18,8 @@ pub enum TLSMessagePayload {
     Opaque(Payload),
 }
 
-impl TLSMessagePayload {
-    pub fn encode(&self, bytes: &mut Vec<u8>) {
+impl MessagePayload for TLSMessagePayload {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             TLSMessagePayload::Alert(ref x) => x.encode(bytes),
             TLSMessagePayload::Handshake(ref x) => x.encode(bytes),
@@ -28,10 +28,10 @@ impl TLSMessagePayload {
         }
     }
 
-    pub fn decode_given_type(&self,
-                             typ: ContentType,
-                             vers: ProtocolVersion)
-                             -> Option<TLSMessagePayload> {
+    fn decode_given_type(&self,
+                         typ: ContentType,
+                         vers: ProtocolVersion)
+                         -> Option<TLSMessagePayload> {
         if let TLSMessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
             let parsed = match typ {
@@ -55,7 +55,7 @@ impl TLSMessagePayload {
         }
     }
 
-    pub fn length(&self) -> usize {
+    fn length(&self) -> usize {
         match *self {
             TLSMessagePayload::Alert(ref x) => x.length(),
             TLSMessagePayload::Handshake(ref x) => x.length(),
@@ -64,7 +64,7 @@ impl TLSMessagePayload {
         }
     }
 
-    pub fn new_opaque(data: Vec<u8>) -> TLSMessagePayload {
+    fn new_opaque(data: Vec<u8>) -> TLSMessagePayload {
         TLSMessagePayload::Opaque(Payload::new(data))
     }
 }
