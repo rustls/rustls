@@ -74,6 +74,103 @@ impl Random {
     }
 }
 
+#[derive(Copy)]
+pub struct Cookie {
+    len: usize,
+    data: [u8; 255],
+}
+
+impl fmt::Debug for Cookie {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut t = f.debug_tuple("SessionID");
+        for i in 0..self.len() {
+            t.field(&self.data[i]);
+        }
+        t.finish()
+    }
+}
+
+impl Clone for Cookie {
+    fn clone(&self) -> Self {
+        Cookie {
+            data: self.data,
+            len: self.len,
+        }
+    }
+}
+
+impl Codec for Cookie {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        debug_assert!(self.len <= self.data.len());
+        bytes.push(self.len as u8);
+        bytes.extend_from_slice(&self.data[..self.len]);
+    }
+
+    fn read(r: &mut Reader) -> Option<Cookie> {
+        let len = try_ret!(codec::read_u8(r)) as usize;
+        if len > 255 {
+            return None;
+        }
+
+        let bytes = try_ret!(r.take(len));
+        let mut out = [0u8; 255];
+        for i in 0..len {
+            out[i] = bytes[i];
+        }
+
+        Some(Cookie {
+            data: out,
+            len: len,
+        })
+    }
+}
+
+impl PartialEq for Cookie {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+
+        let l = self.len as usize;
+        let mut diff = 0u8;
+        for i in 0..l {
+            diff |= self.data[i] ^ other.data[i]
+        }
+
+        diff == 0u8
+    }
+}
+
+impl Cookie {
+    pub fn new(bytes: &[u8]) -> Cookie {
+        debug_assert!(bytes.len() <= 255);
+        let mut d = [0u8; 255];
+        for i in 0..bytes.len() {
+            d[i] = bytes[i];
+        }
+        Cookie {
+            data: d,
+            len: bytes.len(),
+        }
+    }
+
+    pub fn empty() -> Cookie {
+        Cookie {
+            data: [0u8; 255],
+            len: 0,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+
 #[derive(Copy, Clone)]
 pub struct SessionID {
     len: usize,
@@ -761,6 +858,7 @@ pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
     pub session_id: SessionID,
+    pub cookie: Option<Cookie>, // DTLS only
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
     pub extensions: Vec<ClientExtension>,
@@ -771,6 +869,12 @@ impl Codec for ClientHelloPayload {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
         self.session_id.encode(bytes);
+
+        debug_assert!(self.cookie.is_some() == self.client_version.is_dtls());
+        if let Some(ref cookie) = self.cookie {
+            cookie.encode(bytes);
+        }
+
         codec::encode_vec_u16(bytes, &self.cipher_suites);
         codec::encode_vec_u8(bytes, &self.compression_methods);
 
@@ -780,11 +884,17 @@ impl Codec for ClientHelloPayload {
     }
 
     fn read(r: &mut Reader) -> Option<ClientHelloPayload> {
+        let version = try_ret!(ProtocolVersion::read(r));
+        let random = try_ret!(Random::read(r));
+        let session_id = try_ret!(SessionID::read(r));
+
+        let cookie = if version.is_dtls() { Some(try_ret!(Cookie::read(r))) } else { None };
 
         let mut ret = ClientHelloPayload {
-            client_version: try_ret!(ProtocolVersion::read(r)),
-            random: try_ret!(Random::read(r)),
-            session_id: try_ret!(SessionID::read(r)),
+            client_version: version,
+            random: random,
+            session_id: session_id,
+            cookie: cookie,
             cipher_suites: try_ret!(codec::read_vec_u16::<CipherSuite>(r)),
             compression_methods: try_ret!(codec::read_vec_u8::<Compression>(r)),
             extensions: Vec::new(),
