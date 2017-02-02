@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 use msgs::base::Payload;
@@ -29,6 +30,30 @@ impl DTLSHandshakeFragment {
         let mut buf = Vec::new();
         self.encode(&mut buf);
         buf.len()
+    }
+
+    pub fn fragment(self, max_frag: usize, out: &mut VecDeque<Self>) {
+        match self {
+            DTLSHandshakeFragment::Complete { message_seq, ref payload } => {
+                let mut buf = Vec::new();
+                payload.encode(&mut buf);
+
+                let mut offset = 0;
+                for chunk in buf.chunks(max_frag) {
+                    let frag = DTLSHandshakeFragment::Fragment {
+                        typ:         payload.typ,
+                        message_seq: message_seq,
+                        offset: offset,
+                        total_len: buf.len(),
+                        payload: Payload::from_slice(chunk),
+                    };
+
+                    out.push_back(frag);
+                    offset += chunk.len();
+                }
+            },
+            DTLSHandshakeFragment::Fragment {..} =>  out.push_back(self)
+        }
     }
 }
 
