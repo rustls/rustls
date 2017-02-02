@@ -13,6 +13,8 @@ pub enum ProtocolVersion {
     TLSv1_1,
     TLSv1_2,
     TLSv1_3,
+    DTLSv1_0,
+    DTLSv1_2,
     Unknown(u16),
 }
 
@@ -35,6 +37,8 @@ impl Codec for ProtocolVersion {
             0x0302 => ProtocolVersion::TLSv1_1,
             0x0303 => ProtocolVersion::TLSv1_2,
             0x0304 => ProtocolVersion::TLSv1_3,
+            0xFEFF => ProtocolVersion::DTLSv1_0,
+            0xFEFD => ProtocolVersion::DTLSv1_2,
             x => ProtocolVersion::Unknown(x),
         })
     }
@@ -49,6 +53,8 @@ impl ProtocolVersion {
             ProtocolVersion::TLSv1_1 => 0x0302,
             ProtocolVersion::TLSv1_2 => 0x0303,
             ProtocolVersion::TLSv1_3 => 0x0304,
+            ProtocolVersion::DTLSv1_0 => 0xFEFF,
+            ProtocolVersion::DTLSv1_2 => 0xFEFD,
             ProtocolVersion::Unknown(v) => v,
         }
     }
