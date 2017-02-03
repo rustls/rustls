@@ -13,6 +13,12 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.5.5:
+  - Crate categories.
+  - Protocol errors now permanent for given session.
+  - Exposed `ResolvesServerCert` trait for customising certification
+    selection.
+  - Exposed `SignatureScheme` enum.
 * 0.5.4:
   - First release with TLS1.3-draft-18 support.
   - More performance improvements (now ~15Gbps per core).
