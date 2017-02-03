@@ -26,6 +26,13 @@ pub enum DTLSHandshakeFragment {
 }
 
 impl DTLSHandshakeFragment {
+    pub fn message_seq(&self) -> u16 {
+        match *self {
+            DTLSHandshakeFragment::Fragment { message_seq, .. } => message_seq,
+            DTLSHandshakeFragment::Complete { message_seq, .. } => message_seq,
+        }
+    }
+
     pub fn length(&self) -> usize {
         let mut buf = Vec::new();
         self.encode(&mut buf);
