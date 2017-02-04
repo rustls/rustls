@@ -211,7 +211,7 @@ static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 
 pub struct SessionCommon {
-    pub is_tls13: bool,
+    pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
     message_encrypter: Box<MessageEncrypter>,
     message_decrypter: Box<MessageDecrypter>,
@@ -235,7 +235,7 @@ pub struct SessionCommon {
 impl SessionCommon {
     pub fn new(mtu: Option<usize>, client: bool) -> SessionCommon {
         SessionCommon {
-            is_tls13: false,
+            negotiated_version: None,
             is_client: client,
             suite: None,
             message_encrypter: MessageEncrypter::invalid(),
@@ -255,6 +255,13 @@ impl SessionCommon {
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
         }
+    }
+
+    pub fn is_tls13(&self) -> bool {
+      match self.negotiated_version {
+        Some(ProtocolVersion::TLSv1_3) => true,
+        _ => false
+      }
     }
 
     pub fn get_suite(&self) -> &'static SupportedCipherSuite {
@@ -326,7 +333,7 @@ impl SessionCommon {
 
             // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3.
             if alert.level == AlertLevel::Warning {
-                if self.is_tls13 {
+                if self.is_tls13() {
                     self.send_fatal_alert(AlertDescription::DecodeError);
                 } else {
                     warn!("TLS alert warning received: {:#?}", msg);

@@ -22,7 +22,7 @@ use msgs::codec::Codec;
 use msgs::persist;
 use session::SessionSecrets;
 use cipher;
-use server::{ServerSessionImpl, ConnState};
+use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
 use suites;
 use hash_hs;
@@ -48,12 +48,13 @@ macro_rules! extract_handshake(
   )
 );
 
-pub type HandleFunction = fn(&mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError>;
-
 // These are effectively operations on the ServerSessionImpl, variant on the
 // connection state. They must not have state of their own -- so they're
 // functions rather than a trait.
-pub struct Handler {
+pub type HandleFunction = fn(&mut ServerSessionImpl, m: Message) -> StateResult;
+type StateResult = Result<&'static State, TLSError>;
+
+pub struct State {
     pub expect: Expectation,
     pub handle: HandleFunction,
 }
@@ -89,7 +90,7 @@ fn process_extensions(sess: &mut ServerSessionImpl,
         ret.push(ServerExtension::ServerNameAcknowledgement);
     }
 
-    if !sess.common.is_tls13 {
+    if !sess.common.is_tls13() {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
         let secure_reneg_offered =
@@ -277,7 +278,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
                     client_hello: &ClientHelloPayload,
                     id: &SessionID,
                     resumedata: persist::ServerSessionValue)
-                    -> Result<ConnState, TLSError> {
+                    -> StateResult {
     info!("Resuming session");
 
     sess.handshake_data.session_id = id.clone();
@@ -294,7 +295,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
     emit_ticket(sess);
     emit_ccs(sess);
     emit_finished(sess);
-    return Ok(ConnState::ExpectCCS);
+    Ok(&EXPECT_TLS12_CCS)
 }
 
 // Changing the keys must not span any fragmented handshake
@@ -565,7 +566,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
 fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
                              chm: &Message,
                              signer: &Arc<Box<sign::Signer>>)
-                             -> Result<ConnState, TLSError> {
+                             -> StateResult {
     let client_hello = extract_handshake!(chm, HandshakePayload::ClientHello).unwrap();
 
     if client_hello.compression_methods.len() != 1 {
@@ -606,7 +607,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
             } else {
                 emit_hello_retry_request(sess, group);
                 sess.handshake_data.done_retry = true;
-                return Ok(ConnState::ExpectClientHello);
+                return Ok(&EXPECT_CLIENT_HELLO);
             }
         } else {
             return Err(incompatible(sess, "no kx group overlap with client"));
@@ -679,13 +680,13 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     emit_finished_tls13(sess);
 
     if sess.handshake_data.doing_client_auth && full_handshake {
-        Ok(ConnState::ExpectCertificateTLS13)
+        Ok(&EXPECT_TLS13_CERTIFICATE)
     } else {
-        Ok(ConnState::ExpectFinishedTLS13)
+        Ok(&EXPECT_TLS13_FINISHED)
     }
 }
 
-fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
     let tls13_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
     let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
@@ -710,7 +711,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     let maybe_versions_ext = client_hello.get_versions_extension();
     if let Some(versions) = maybe_versions_ext {
         if versions.contains(&ProtocolVersion::Unknown(0x7f12)) && tls13_enabled {
-            sess.common.is_tls13 = true;
+            sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
         } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
@@ -720,6 +721,10 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
         }
+    }
+
+    if sess.common.negotiated_version == None {
+        sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_2);
     }
 
     // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
@@ -748,12 +753,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
                                                       &private_key.algorithm());
 
     // And version
-    let protocol_version = if sess.common.is_tls13 {
-        ProtocolVersion::TLSv1_3
-    } else {
-        ProtocolVersion::TLSv1_2
-    };
-
+    let protocol_version = sess.common.negotiated_version.unwrap();
     let suitable_suites = suites::reduce_given_version(&suitable_suites, protocol_version);
 
     let maybe_ciphersuite = if sess.config.ignore_client_order {
@@ -776,7 +776,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
             .to_string()));
     }
 
-    if sess.common.is_tls13 {
+    if sess.common.is_tls13() {
         return handle_client_hello_tls13(sess, &m, &private_key);
     }
 
@@ -884,13 +884,13 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnS
     emit_server_hello_done(sess);
 
     if sess.handshake_data.doing_client_auth {
-        Ok(ConnState::ExpectCertificate)
+        Ok(&EXPECT_TLS12_CERTIFICATE)
     } else {
-        Ok(ConnState::ExpectClientKX)
+        Ok(&EXPECT_TLS12_CLIENT_KX)
     }
 }
 
-pub static EXPECT_CLIENT_HELLO: Handler = Handler {
+pub static EXPECT_CLIENT_HELLO: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::ClientHello],
@@ -899,7 +899,7 @@ pub static EXPECT_CLIENT_HELLO: Handler = Handler {
 };
 
 // --- Process client's Certificate for client auth ---
-fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+fn handle_certificate_tls12(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     sess.handshake_data.transcript.add_message(&m);
     let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
 
@@ -907,7 +907,7 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnSt
         info!("client auth requested but no certificate supplied");
         sess.handshake_data.doing_client_auth = false;
         sess.handshake_data.transcript.abandon_client_auth();
-        return Ok(ConnState::ExpectClientKX);
+        return Ok(&EXPECT_TLS12_CLIENT_KX);
     }
 
     debug!("certs {:?}", cert_chain);
@@ -922,20 +922,20 @@ fn handle_certificate(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnSt
     };
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain.clone());
-    Ok(ConnState::ExpectClientKX)
+    Ok(&EXPECT_TLS12_CLIENT_KX)
 }
 
-pub static EXPECT_CERTIFICATE: Handler = Handler {
+static EXPECT_TLS12_CERTIFICATE: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::Certificate],
     },
-    handle: handle_certificate,
+    handle: handle_certificate_tls12,
 };
 
 fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
                             m: Message)
-                            -> Result<ConnState, TLSError> {
+                            -> StateResult {
     sess.handshake_data.transcript.add_message(&m);
     let certp = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
     let cert_chain = certp.convert();
@@ -945,7 +945,7 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
             info!("client auth requested but no certificate supplied");
             sess.handshake_data.doing_client_auth = false;
             sess.handshake_data.transcript.abandon_client_auth();
-            return Ok(ConnState::ExpectFinishedTLS13);
+            return Ok(&EXPECT_TLS13_FINISHED);
         }
 
         sess.common.send_fatal_alert(AlertDescription::CertificateRequired);
@@ -958,10 +958,10 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
     };
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain);
-    Ok(ConnState::ExpectCertificateVerifyTLS13)
+    Ok(&EXPECT_TLS13_CERTIFICATE_VERIFY)
 }
 
-pub static EXPECT_CERTIFICATE_TLS13: Handler = Handler {
+static EXPECT_TLS13_CERTIFICATE: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::Certificate],
@@ -970,7 +970,7 @@ pub static EXPECT_CERTIFICATE_TLS13: Handler = Handler {
 };
 
 // --- Process client's KeyExchange ---
-fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
     sess.handshake_data.transcript.add_message(&m);
 
@@ -994,13 +994,13 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnStat
     sess.start_encryption_tls12();
 
     if sess.handshake_data.doing_client_auth {
-        Ok(ConnState::ExpectCertificateVerify)
+        Ok(&EXPECT_TLS12_CERTIFICATE_VERIFY)
     } else {
-        Ok(ConnState::ExpectCCS)
+        Ok(&EXPECT_TLS12_CCS)
     }
 }
 
-pub static EXPECT_CLIENT_KX: Handler = Handler {
+static EXPECT_TLS12_CLIENT_KX: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::ClientKeyExchange],
@@ -1009,9 +1009,8 @@ pub static EXPECT_CLIENT_KX: Handler = Handler {
 };
 
 // --- Process client's certificate proof ---
-fn handle_certificate_verify(sess: &mut ServerSessionImpl,
-                             m: Message)
-                             -> Result<ConnState, TLSError> {
+fn handle_certificate_verify_tls12(sess: &mut ServerSessionImpl,
+                                   m: Message) -> StateResult {
     let rc = {
         let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
         let certs = sess.handshake_data.valid_client_cert_chain.as_ref().unwrap();
@@ -1028,20 +1027,20 @@ fn handle_certificate_verify(sess: &mut ServerSessionImpl,
     }
 
     sess.handshake_data.transcript.add_message(&m);
-    Ok(ConnState::ExpectCCS)
+    Ok(&EXPECT_TLS12_CCS)
 }
 
-pub static EXPECT_CERTIFICATE_VERIFY: Handler = Handler {
+static EXPECT_TLS12_CERTIFICATE_VERIFY: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::CertificateVerify],
     },
-    handle: handle_certificate_verify,
+    handle: handle_certificate_verify_tls12,
 };
 
 fn handle_certificate_verify_tls13(sess: &mut ServerSessionImpl,
                                    m: Message)
-                                   -> Result<ConnState, TLSError> {
+                                   -> StateResult {
     let rc = {
         let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
         let certs = sess.handshake_data.valid_client_cert_chain.as_ref().unwrap();
@@ -1062,10 +1061,10 @@ fn handle_certificate_verify_tls13(sess: &mut ServerSessionImpl,
     }
 
     sess.handshake_data.transcript.add_message(&m);
-    Ok(ConnState::ExpectFinishedTLS13)
+    Ok(&EXPECT_TLS13_FINISHED)
 }
 
-pub static EXPECT_CERTIFICATE_VERIFY_TLS13: Handler = Handler {
+static EXPECT_TLS13_CERTIFICATE_VERIFY: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::CertificateVerify],
@@ -1074,7 +1073,7 @@ pub static EXPECT_CERTIFICATE_VERIFY_TLS13: Handler = Handler {
 };
 
 // --- Process client's ChangeCipherSpec ---
-fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> Result<ConnState, TLSError> {
+fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> StateResult {
     // CCS should not be received interleaved with fragmented handshake-level
     // message.
     if !sess.common.handshake_joiner.is_empty() {
@@ -1086,10 +1085,10 @@ fn handle_ccs(sess: &mut ServerSessionImpl, _m: Message) -> Result<ConnState, TL
     }
 
     sess.common.peer_now_encrypting();
-    Ok(ConnState::ExpectFinished)
+    Ok(&EXPECT_TLS12_FINISHED)
 }
 
-pub static EXPECT_CCS: Handler = Handler {
+static EXPECT_TLS12_CCS: State = State {
     expect: Expectation {
         content_types: &[ContentType::ChangeCipherSpec],
         handshake_types: &[],
@@ -1160,8 +1159,7 @@ fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionV
     let scs = sess.common.get_suite();
     let client_certs = &sess.handshake_data.valid_client_cert_chain;
 
-    // nb cannot use get_protocol_version here; FIXME
-    let (version, secret) = if sess.common.is_tls13 {
+    let (version, secret) = if sess.common.is_tls13() {
         let handshake_hash = sess.handshake_data
             .transcript
             .get_current_hash();
@@ -1176,7 +1174,7 @@ fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionV
     persist::ServerSessionValue::new(version, scs.suite, secret, client_certs)
 }
 
-fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
     let vh = sess.handshake_data.transcript.get_current_hash();
@@ -1211,10 +1209,13 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState
         emit_ccs(sess);
         emit_finished(sess);
     }
-    Ok(ConnState::TrafficTLS12)
+
+    sess.common.we_now_encrypting();
+    sess.common.start_traffic();
+    Ok(&EXPECT_TLS12_TRAFFIC)
 }
 
-pub static EXPECT_FINISHED: Handler = Handler {
+static EXPECT_TLS12_FINISHED: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::Finished],
@@ -1254,7 +1255,7 @@ fn emit_ticket_tls13(sess: &mut ServerSessionImpl) {
     sess.common.send_msg(m, true);
 }
 
-fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
@@ -1294,10 +1295,12 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<Con
         emit_ticket_tls13(sess);
     }
 
-    Ok(ConnState::TrafficTLS13)
+    sess.common.we_now_encrypting();
+    sess.common.start_traffic();
+    Ok(&EXPECT_TLS13_TRAFFIC)
 }
 
-pub static EXPECT_FINISHED_TLS13: Handler = Handler {
+static EXPECT_TLS13_FINISHED: State = State {
     expect: Expectation {
         content_types: &[ContentType::Handshake],
         handshake_types: &[HandshakeType::Finished],
@@ -1306,12 +1309,12 @@ pub static EXPECT_FINISHED_TLS13: Handler = Handler {
 };
 
 // --- Process traffic ---
-fn handle_traffic(sess: &mut ServerSessionImpl, mut m: Message) -> Result<ConnState, TLSError> {
+fn handle_traffic(sess: &mut ServerSessionImpl, mut m: Message) -> StateResult {
     sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
-    Ok(ConnState::TrafficTLS12)
+    Ok(&EXPECT_TLS12_TRAFFIC)
 }
 
-pub static TRAFFIC_TLS12: Handler = Handler {
+static EXPECT_TLS12_TRAFFIC: State = State {
     expect: Expectation {
         content_types: &[ContentType::ApplicationData],
         handshake_types: &[],
@@ -1324,17 +1327,17 @@ fn handle_key_update(sess: &mut ServerSessionImpl, m: Message) -> Result<(), TLS
     sess.common.process_key_update(kur, SecretKind::ClientApplicationTrafficSecret)
 }
 
-fn handle_traffic_tls13(sess: &mut ServerSessionImpl, m: Message) -> Result<ConnState, TLSError> {
+fn handle_traffic_tls13(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     if m.is_content_type(ContentType::ApplicationData) {
         try!(handle_traffic(sess, m));
     } else if m.is_handshake_type(HandshakeType::KeyUpdate) {
         try!(handle_key_update(sess, m));
     }
 
-    Ok(ConnState::TrafficTLS13)
+    Ok(&EXPECT_TLS13_TRAFFIC)
 }
 
-pub static TRAFFIC_TLS13: Handler = Handler {
+static EXPECT_TLS13_TRAFFIC: State = State {
     expect: Expectation {
         content_types: &[ContentType::ApplicationData, ContentType::Handshake],
         handshake_types: &[HandshakeType::KeyUpdate],

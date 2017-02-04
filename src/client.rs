@@ -297,27 +297,6 @@ impl ClientHandshakeData {
     }
 }
 
-#[derive(PartialEq)]
-pub enum ConnState {
-    ExpectServerHello,
-    ExpectServerHelloOrHelloRetryRequest,
-    ExpectEncryptedExtensions,
-    ExpectCertificate,
-    ExpectCertificateOrCertReq,
-    ExpectServerKX,
-    ExpectCertificateVerify,
-    ExpectServerHelloDoneOrCertRequest,
-    ExpectServerHelloDone,
-    ExpectNewTicket,
-    ExpectCCS,
-    ExpectFinished,
-    ExpectNewTicketResume,
-    ExpectCCSResume,
-    ExpectFinishedResume,
-    TrafficTLS12,
-    TrafficTLS13,
-}
-
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub handshake_data: ClientHandshakeData,
@@ -325,7 +304,7 @@ pub struct ClientSessionImpl {
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
-    pub state: ConnState,
+    pub state: &'static client_hs::State,
 }
 
 impl ClientSessionImpl {
@@ -337,7 +316,7 @@ impl ClientSessionImpl {
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
-            state: ConnState::ExpectServerHello,
+            state: &client_hs::EXPECT_SERVER_HELLO,
         };
 
         if cs.config.client_auth_cert_resolver.has_certs() {
@@ -390,11 +369,7 @@ impl ClientSessionImpl {
     }
 
     pub fn is_handshaking(&self) -> bool {
-        match self.state {
-            ConnState::TrafficTLS12 |
-            ConnState::TrafficTLS13 => false,
-            _ => true,
-        }
+        !self.common.traffic
     }
 
     pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
@@ -453,54 +428,25 @@ impl ClientSessionImpl {
         }
     }
 
-    /// Process `msg`.  First, we get the current `Handler`.  Then we ask what
-    /// that Handler expects.  Finally, we ask the handler to handle the message.
+    /// Process `msg`.  First, we get the current state.  Then we ask what messages
+    /// that state expects, enforced via a `Expectation`.  Finally, we ask the handler
+    /// to handle the message.
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
-        if msg.is_handshake_type(HandshakeType::HelloRequest) && !self.common.is_tls13 {
+        if msg.is_handshake_type(HandshakeType::HelloRequest) && !self.common.is_tls13() {
             self.process_hello_req();
             return Ok(());
         }
 
-        let handler = self.get_handler();
-        try!(handler.expect
+        try!(self.state.expect
             .check_message(&msg)
             .map_err(|err| {
                 self.queue_unexpected_alert();
                 err
             }));
-        let new_state = try!((handler.handle)(self, msg));
+        let new_state = try!((self.state.handle)(self, msg));
         self.state = new_state;
 
-        // Once we're connected, start flushing sendable_plaintext.
-        if !self.is_handshaking() && !self.common.traffic {
-            self.common.start_traffic();
-        }
-
         Ok(())
-    }
-
-    fn get_handler(&self) -> &'static client_hs::Handler {
-        match self.state {
-            ConnState::ExpectServerHello => &client_hs::EXPECT_SERVER_HELLO,
-            ConnState::ExpectServerHelloOrHelloRetryRequest => {
-                &client_hs::EXPECT_SERVER_HELLO_OR_RETRY
-            }
-            ConnState::ExpectEncryptedExtensions => &client_hs::EXPECT_ENCRYPTED_EXTENSIONS,
-            ConnState::ExpectCertificate => &client_hs::EXPECT_CERTIFICATE,
-            ConnState::ExpectCertificateOrCertReq => &client_hs::EXPECT_CERTIFICATE_OR_CERTREQ,
-            ConnState::ExpectServerKX => &client_hs::EXPECT_SERVER_KX,
-            ConnState::ExpectCertificateVerify => &client_hs::EXPECT_CERTIFICATE_VERIFY,
-            ConnState::ExpectServerHelloDoneOrCertRequest => &client_hs::EXPECT_DONE_OR_CERTREQ,
-            ConnState::ExpectServerHelloDone => &client_hs::EXPECT_SERVER_HELLO_DONE,
-            ConnState::ExpectNewTicket => &client_hs::EXPECT_NEW_TICKET,
-            ConnState::ExpectCCS => &client_hs::EXPECT_CCS,
-            ConnState::ExpectFinished => &client_hs::EXPECT_FINISHED,
-            ConnState::ExpectNewTicketResume => &client_hs::EXPECT_NEW_TICKET_RESUME,
-            ConnState::ExpectCCSResume => &client_hs::EXPECT_CCS_RESUME,
-            ConnState::ExpectFinishedResume => &client_hs::EXPECT_FINISHED_RESUME,
-            ConnState::TrafficTLS12 => &client_hs::TRAFFIC_TLS12,
-            ConnState::TrafficTLS13 => &client_hs::TRAFFIC_TLS13,
-        }
     }
 
     pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
@@ -543,17 +489,7 @@ impl ClientSessionImpl {
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        match self.state {
-            ConnState::ExpectServerHello => None,
-            ConnState::ExpectServerHelloOrHelloRetryRequest => None,
-            _ => {
-                if self.common.is_tls13 {
-                    Some(ProtocolVersion::TLSv1_3)
-                } else {
-                    Some(ProtocolVersion::TLSv1_2)
-                }
-            }
-        }
+        self.common.negotiated_version
     }
 }
 
