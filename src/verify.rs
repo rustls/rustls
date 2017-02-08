@@ -12,7 +12,10 @@ use x509;
 use key;
 use std::io;
 
-/// Disable all verifications, for testing purposes.
+#[cfg(feature = "dangerous")]
+const DANGEROUS_DISABLE_VERIFY: bool = true;
+
+#[cfg(not(feature = "dangerous"))]
 const DANGEROUS_DISABLE_VERIFY: bool = false;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
