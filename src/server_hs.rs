@@ -5,7 +5,7 @@ use msgs::enums::{ClientCertificateType, SignatureScheme, PSKKeyExchangeMode};
 use msgs::tls_message::{TLSMessage, TLSMessagePayload};
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
-use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
+use msgs::handshake::{ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use msgs::handshake::{NamedGroups, SupportedGroups, ClientExtension};
@@ -21,6 +21,7 @@ use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
 use session::SessionSecrets;
+use transport_layer::{TransportLayer, MessageSecrecy};
 use cipher;
 use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
@@ -130,42 +131,27 @@ fn emit_server_hello(sess: &mut ServerSessionImpl,
         sess.handshake_data.session_id = sessid;
     }
 
-    let sh = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                server_version: ProtocolVersion::TLSv1_2,
-                random: Random::from_slice(&sess.handshake_data.randoms.server),
-                session_id: sess.handshake_data.session_id,
-                cipher_suite: sess.transport.get_suite().suite,
-                compression_method: Compression::Null,
-                extensions: extensions,
-            }),
-        }),
-    };
+    let sh = HandshakePayload::ServerHello(ServerHelloPayload {
+        server_version: ProtocolVersion::TLSv1_2,
+        random: Random::from_slice(&sess.handshake_data.randoms.server),
+        session_id: sess.handshake_data.session_id,
+        cipher_suite: sess.transport.get_suite().suite,
+        compression_method: Compression::Null,
+        extensions: extensions,
+    });
 
     debug!("sending server hello {:?}", sh);
-    sess.handshake_data.transcript.add_message(&sh);
-    sess.transport.send_msg(sh, false);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, sh, MessageSecrecy::MayBeUnencrypted);
+
     Ok(())
 }
 
 fn emit_certificate(sess: &mut ServerSessionImpl) {
     let cert_chain = sess.handshake_data.server_cert_chain.as_ref().unwrap().clone();
 
-    let c = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(cert_chain),
-        }),
-    };
+    let c = HandshakePayload::Certificate(cert_chain);
 
-    sess.handshake_data.transcript.add_message(&c);
-    sess.transport.send_msg(c, false);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, c, MessageSecrecy::MayBeUnencrypted);
 }
 
 fn emit_server_kx(sess: &mut ServerSessionImpl,
@@ -195,18 +181,10 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
         dss: DigitallySignedStruct::new(sigscheme, sig),
     });
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(skx),
-        }),
-    };
+    let m = HandshakePayload::ServerKeyExchange(skx);
 
     sess.handshake_data.kx_data = Some(kx);
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, false);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, m, MessageSecrecy::MayBeUnencrypted);
     Ok(())
 }
 
@@ -224,33 +202,17 @@ fn emit_certificate_req(sess: &mut ServerSessionImpl) {
         canames: names,
     };
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequest(cr),
-        }),
-    };
+    let m = HandshakePayload::CertificateRequest(cr);
 
     debug!("Sending CertificateRequest {:?}", m);
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, false);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, m, MessageSecrecy::MayBeUnencrypted);
     sess.handshake_data.doing_client_auth = true;
 }
 
 fn emit_server_hello_done(sess: &mut ServerSessionImpl) {
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ServerHelloDone,
-            payload: HandshakePayload::ServerHelloDone,
-        }),
-    };
+    let m = HandshakePayload::ServerHelloDone;
 
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, false);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, m, MessageSecrecy::MayBeUnencrypted);
 }
 
 fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
@@ -342,27 +304,19 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
         extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
     }
 
-    let sh = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_0,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                server_version: ProtocolVersion::Unknown(0x7f12),
-                random: Random::from_slice(&sess.handshake_data.randoms.server),
-                session_id: SessionID::empty(),
-                cipher_suite: sess.transport.get_suite().suite,
-                compression_method: Compression::Null,
-                extensions: extensions,
-            }),
-        }),
-    };
+    let sh = HandshakePayload::ServerHello(ServerHelloPayload {
+        server_version: ProtocolVersion::Unknown(0x7f12),
+        random: Random::from_slice(&sess.handshake_data.randoms.server),
+        session_id: SessionID::empty(),
+        cipher_suite: sess.transport.get_suite().suite,
+        compression_method: Compression::Null,
+        extensions: extensions,
+    });
 
     try!(check_aligned_handshake(sess));
 
     debug!("sending server hello {:?}", sh);
-    sess.handshake_data.transcript.add_message(&sh);
-    sess.transport.send_msg(sh, false);
+    sess.transport.send_handshake_msg_v10(&mut sess.handshake_data.transcript, sh, MessageSecrecy::MayBeUnencrypted);
 
     // Start key schedule
     let suite = sess.transport.get_suite();
@@ -394,36 +348,20 @@ fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
 
     req.extensions.push(HelloRetryExtension::KeyShare(group));
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_0,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::HelloRetryRequest,
-            payload: HandshakePayload::HelloRetryRequest(req),
-        }),
-    };
+    let m = HandshakePayload::HelloRetryRequest(req);
 
     debug!("Requesting retry {:?}", m);
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, false);
+    sess.transport.send_handshake_msg_v10(&mut sess.handshake_data.transcript, m, MessageSecrecy::MayBeUnencrypted);
 }
 
 fn emit_encrypted_extensions(sess: &mut ServerSessionImpl,
                              hello: &ClientHelloPayload)
                              -> Result<(), TLSError> {
     let encrypted_exts = try!(process_extensions(sess, hello));
-    let ee = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(encrypted_exts),
-        }),
-    };
+    let ee = HandshakePayload::EncryptedExtensions(encrypted_exts);
 
     debug!("sending encrypted extensions {:?}", ee);
-    sess.handshake_data.transcript.add_message(&ee);
-    sess.transport.send_msg(ee, true);
+    sess.transport.send_handshake_msg_v13(&mut sess.handshake_data.transcript, ee, MessageSecrecy::MustEncrypt);
     Ok(())
 }
 
@@ -441,18 +379,10 @@ fn emit_certificate_req_tls13(sess: &mut ServerSessionImpl) {
         extensions: Vec::new(),
     };
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequestTLS13(cr),
-        }),
-    };
+    let m = HandshakePayload::CertificateRequestTLS13(cr);
 
     debug!("Sending CertificateRequest {:?}", m);
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, true);
+    sess.transport.send_handshake_msg_v13(&mut sess.handshake_data.transcript, m, MessageSecrecy::MustEncrypt);
     sess.handshake_data.doing_client_auth = true;
 }
 
@@ -468,18 +398,10 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
         cert_body.list.push(entry);
     }
 
-    let c = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTLS13(cert_body),
-        }),
-    };
+    let c = HandshakePayload::CertificateTLS13(cert_body);
 
     debug!("sending certificate {:?}", c);
-    sess.handshake_data.transcript.add_message(&c);
-    sess.transport.send_msg(c, true);
+    sess.transport.send_handshake_msg_v13(&mut sess.handshake_data.transcript, c, MessageSecrecy::MustEncrypt);
 }
 
 fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
@@ -503,18 +425,10 @@ fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
 
     let cv = DigitallySignedStruct::new(scheme, sig);
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(cv),
-        }),
-    };
+    let m = HandshakePayload::CertificateVerify(cv);
 
     debug!("sending certificate-verify {:?}", m);
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, true);
+    sess.transport.send_handshake_msg_v13(&mut sess.handshake_data.transcript, m, MessageSecrecy::MustEncrypt);
     Ok(())
 }
 
@@ -525,19 +439,11 @@ fn emit_finished_tls13(sess: &mut ServerSessionImpl) {
         .sign_finish(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
     let verify_data_payload = Payload::new(verify_data);
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
-    };
+    let m = HandshakePayload::Finished(verify_data_payload);
 
     debug!("sending finished {:?}", m);
-    sess.handshake_data.transcript.add_message(&m);
+    sess.transport.send_handshake_msg_v13(&mut sess.handshake_data.transcript, m, MessageSecrecy::MustEncrypt);
     sess.handshake_data.hash_at_server_fin = sess.handshake_data.transcript.get_current_hash();
-    sess.transport.send_msg(m, true);
 
     // Now move to application data keys.
     sess.transport.get_mut_key_schedule().input_empty();
@@ -1132,19 +1038,10 @@ fn emit_ticket(sess: &mut ServerSessionImpl) {
         .unwrap_or_else(Vec::new);
     let ticket_lifetime = sess.config.ticketer.get_lifetime();
 
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload:
-                HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(ticket_lifetime,
-                                                                                ticket)),
-        }),
-    };
+    let m = HandshakePayload::NewSessionTicket(NewSessionTicketPayload::new(ticket_lifetime,
+                                                                            ticket));
 
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, false);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, m, MessageSecrecy::MayBeUnencrypted);
 }
 
 fn emit_ccs(sess: &mut ServerSessionImpl) {
@@ -1154,7 +1051,7 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
         payload: TLSMessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
 
-    sess.transport.send_msg(m, false);
+    sess.transport.send_msg(m, MessageSecrecy::MayBeUnencrypted);
     sess.transport.we_now_encrypting();
 }
 
@@ -1163,17 +1060,9 @@ fn emit_finished(sess: &mut ServerSessionImpl) {
     let verify_data = sess.secrets.as_ref().unwrap().server_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
-    let f = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
-    };
+    let f = HandshakePayload::Finished(verify_data_payload);
 
-    sess.handshake_data.transcript.add_message(&f);
-    sess.transport.send_msg(f, true);
+    sess.transport.send_handshake_msg_v12(&mut sess.handshake_data.transcript, f, MessageSecrecy::MustEncrypt);
 }
 
 fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionValue {
@@ -1268,18 +1157,10 @@ fn emit_ticket_tls13(sess: &mut ServerSessionImpl) {
     let ticket = maybe_ticket.unwrap();
     let age_add = rand::random_u32(); // nb, we don't do 0-RTT data, so whatever
     let payload = NewSessionTicketPayloadTLS13::new(ticket_lifetime, age_add, ticket);
-    let m = TLSMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
-        payload: TLSMessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicketTLS13(payload),
-        }),
-    };
+    let m = HandshakePayload::NewSessionTicketTLS13(payload);
 
     debug!("sending new ticket {:?}", m);
-    sess.handshake_data.transcript.add_message(&m);
-    sess.transport.send_msg(m, true);
+    sess.transport.send_handshake_msg_v13(&mut sess.handshake_data.transcript, m, MessageSecrecy::MustEncrypt);
 }
 
 fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResult {

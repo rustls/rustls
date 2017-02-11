@@ -1,12 +1,13 @@
 use msgs::enums::CipherSuite;
 use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
-use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
+use session::{Session, SessionSecrets, SessionRandoms};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
 use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::tls_message::TLSMessage;
 use msgs::persist;
+use transport_layer::{StreamTransport, TransportLayer};
 use client_hs;
 use hash_hs;
 use verify;
@@ -304,7 +305,7 @@ pub struct ClientSessionImpl {
     pub handshake_data: ClientHandshakeData,
     pub secrets: Option<SessionSecrets>,
     pub alpn_protocol: Option<String>,
-    pub transport: SessionCommon,
+    pub transport: StreamTransport,
     pub error: Option<TLSError>,
     pub state: &'static client_hs::State,
 }
@@ -316,7 +317,7 @@ impl ClientSessionImpl {
             handshake_data: ClientHandshakeData::new(hostname),
             secrets: None,
             alpn_protocol: None,
-            transport: SessionCommon::new(config.mtu, true),
+            transport: StreamTransport::new(true, config.mtu),
             error: None,
             state: &client_hs::EXPECT_SERVER_HELLO,
         };

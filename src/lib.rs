@@ -213,6 +213,7 @@ mod ticketer;
 mod server;
 mod client;
 mod key;
+mod transport_layer;
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {

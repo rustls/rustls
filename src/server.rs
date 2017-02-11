@@ -1,10 +1,11 @@
-use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
+use session::{Session, SessionRandoms, SessionSecrets};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use msgs::handshake::{SessionID, CertificatePayload};
 use msgs::tls_message::TLSMessage;
 use msgs::codec::Codec;
+use transport_layer::{StreamTransport, TransportLayer};
 use hash_hs;
 use server_hs;
 use error::TLSError;
@@ -348,7 +349,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub handshake_data: ServerHandshakeData,
     pub secrets: Option<SessionSecrets>,
-    pub transport: SessionCommon,
+    pub transport: StreamTransport,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
     pub state: &'static server_hs::State,
@@ -360,7 +361,7 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             handshake_data: ServerHandshakeData::new(),
             secrets: None,
-            transport: SessionCommon::new(None, false),
+            transport: StreamTransport::new(false, None),
             alpn_protocol: None,
             error: None,
             state: &server_hs::EXPECT_CLIENT_HELLO,

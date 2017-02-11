@@ -1917,6 +1917,30 @@ impl HandshakePayload {
             HandshakePayload::Unknown(ref x) => x.encode(bytes),
         }
     }
+
+    pub fn handshake_type(&self) -> HandshakeType {
+        match *self {
+            HandshakePayload::HelloRequest => HandshakeType::HelloRequest,
+            HandshakePayload::ClientHello(_) => HandshakeType::ClientHello,
+            HandshakePayload::ServerHello(_) => HandshakeType::ServerHello,
+            HandshakePayload::HelloRetryRequest(_) => HandshakeType::HelloRetryRequest,
+            HandshakePayload::Certificate(_) => HandshakeType::Certificate,
+            HandshakePayload::CertificateTLS13(_) => HandshakeType::Certificate,
+            HandshakePayload::ServerKeyExchange(_) => HandshakeType::ServerKeyExchange,
+            HandshakePayload::ServerHelloDone => HandshakeType::ServerHelloDone,
+            HandshakePayload::ClientKeyExchange(_) => HandshakeType::ClientKeyExchange,
+            HandshakePayload::CertificateRequest(_) => HandshakeType::CertificateRequest,
+            HandshakePayload::CertificateRequestTLS13(_) => HandshakeType::CertificateRequest,
+            HandshakePayload::CertificateVerify(_) => HandshakeType::CertificateVerify,
+            HandshakePayload::NewSessionTicket(_) => HandshakeType::NewSessionTicket,
+            HandshakePayload::NewSessionTicketTLS13(_) => HandshakeType::NewSessionTicket,
+            HandshakePayload::EncryptedExtensions(_) => HandshakeType::EncryptedExtensions,
+            HandshakePayload::KeyUpdate(_) => HandshakeType::KeyUpdate,
+            HandshakePayload::Finished(_) => HandshakeType::Finished,
+            HandshakePayload::Unknown(_) => unreachable!(),
+//            HandshakePayload::Unknown(x) => HandshakeType::Unknown(x),
+        }
+    }
 }
 
 #[derive(Debug)]
