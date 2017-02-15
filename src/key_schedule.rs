@@ -3,6 +3,7 @@
 use ring::{hmac, digest, hkdf};
 use msgs::codec;
 
+/// The kinds of secret we can extract from KeySchedule.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SecretKind {
     ResumptionPSKBinderKey,
@@ -26,7 +27,9 @@ impl SecretKind {
     }
 }
 
-
+/// This is the TLS1.3 key schedule.  It stores the current secret,
+/// the type of hash, plus the two current traffic keys which form their
+/// own lineage of keys over successive key updates.
 pub struct KeySchedule {
     current: hmac::SigningKey,
     hash: &'static digest::Algorithm,
@@ -45,17 +48,20 @@ impl KeySchedule {
         }
     }
 
+    /// Input the empty secret.
     pub fn input_empty(&mut self) {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
         let hash_len = self.hash.output_len;
         self.input_secret(&zeroes[..hash_len]);
     }
 
+    /// Input the given secret.
     pub fn input_secret(&mut self, secret: &[u8]) {
         let new = hkdf::extract(&self.current, secret);
         self.current = new
     }
 
+    /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
     pub fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         debug_assert!(hs_hash.len() == self.hash.output_len);
 
@@ -65,6 +71,7 @@ impl KeySchedule {
                            self.hash.output_len as u16)
     }
 
+    /// Return the current traffic secret, of given `kind`.
     fn current_traffic_secret(&self, kind: SecretKind) -> &[u8] {
         match kind {
             SecretKind::ServerHandshakeTrafficSecret |
@@ -75,11 +82,15 @@ impl KeySchedule {
         }
     }
 
+    /// Sign the finished message consisting of `hs_hash` using the current
+    /// traffic secret.
     pub fn sign_finish(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
         self.sign_verify_data(&base_key, hs_hash)
     }
 
+    /// Sign the finished message consisting of `hs_hash` using the key material
+    /// `base_key`.
     pub fn sign_verify_data(&self, base_key: &[u8], hs_hash: &[u8]) -> Vec<u8> {
         debug_assert!(hs_hash.len() == self.hash.output_len);
 
@@ -94,6 +105,8 @@ impl KeySchedule {
             .to_vec()
     }
 
+    /// Derive the next application traffic secret of given `kind`, returning
+    /// it.
     pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
         hkdf_expand_label(self.hash,

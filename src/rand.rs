@@ -13,6 +13,7 @@ pub fn fill_random(bytes: &mut [u8]) {
         .unwrap();
 }
 
+/// Return a uniformly random u32.
 pub fn random_u32() -> u32 {
     let mut buf = [0u8; 4];
     fill_random(&mut buf);

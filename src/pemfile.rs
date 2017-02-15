@@ -1,6 +1,10 @@
 use std::io;
 use base64;
 use key;
+
+/// Extract and decode all PEM sections from `rd`, which begin with `start_mark`
+/// and end with `end_mark`.  Apply the functor `f` to each decoded buffer,
+/// and return a Vec of `f`'s return values.
 fn extract<A>(rd: &mut io::BufRead,
               start_mark: &str,
               end_mark: &str,
@@ -41,7 +45,7 @@ fn extract<A>(rd: &mut io::BufRead,
 }
 
 
-/// Extract all the certificates from rd, and return a vec of bytevecs
+/// Extract all the certificates from rd, and return a vec of `key::Certificate`s
 /// containing the der-format contents.
 pub fn certs(rd: &mut io::BufRead) -> Result<Vec<key::Certificate>, ()> {
     extract(rd,
@@ -50,7 +54,7 @@ pub fn certs(rd: &mut io::BufRead) -> Result<Vec<key::Certificate>, ()> {
             &|v| key::Certificate(v))
 }
 
-/// Extract all RSA private keys from rd, and return a vec of bytevecs
+/// Extract all RSA private keys from rd, and return a vec of `key::PrivateKey`s
 /// containing the der-format contents.
 pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
     extract(rd,

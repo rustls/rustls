@@ -246,7 +246,7 @@ fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
                             sig: &[u8])
                             -> Result<(), webpki::Error> {
     // TLS doesn't itself give us enough info to map to a single webpki::SignatureAlgorithm.
-    // Therefore, in convert_algs maps to several and we try them all.
+    // Therefore, convert_algs maps to several and we try them all.
     for alg in algs {
         match cert.verify_signature(alg,
                                     untrusted::Input::from(message),

@@ -207,6 +207,7 @@ impl SupportedCipherSuite {
         (self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
     }
 
+    /// Return true if this suite is usable for TLS `version`.
     pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         match version {
             ProtocolVersion::TLSv1_3 => self.sign == SignatureAlgorithm::Anonymous,
