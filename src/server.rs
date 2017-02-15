@@ -348,7 +348,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub handshake_data: ServerHandshakeData,
     pub secrets: Option<SessionSecrets>,
-    pub common: SessionCommon,
+    pub transport: SessionCommon,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
     pub state: &'static server_hs::State,
@@ -360,7 +360,7 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             handshake_data: ServerHandshakeData::new(),
             secrets: None,
-            common: SessionCommon::new(None, false),
+            transport: SessionCommon::new(None, false),
             alpn_protocol: None,
             error: None,
             state: &server_hs::EXPECT_CLIENT_HELLO,
@@ -380,31 +380,31 @@ impl ServerSessionImpl {
         //
         // This also covers the handshake case, because we don't have
         // readable plaintext before handshake has completed.
-        !self.common.has_readable_plaintext()
+        !self.transport.has_readable_plaintext()
     }
 
     pub fn wants_write(&self) -> bool {
-        !self.common.sendable_tls.is_empty()
+        !self.transport.sendable_tls.is_empty()
     }
 
     pub fn is_handshaking(&self) -> bool {
-        !self.common.traffic
+        !self.transport.traffic
     }
 
     pub fn process_msg(&mut self, mut msg: TLSMessage) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
-        if self.common.peer_encrypting {
-            let dm = try!(self.common.decrypt_incoming(msg));
+        if self.transport.peer_encrypting {
+            let dm = try!(self.transport.decrypt_incoming(msg));
             msg = dm;
         }
 
         // For handshake messages, we need to join them before parsing
         // and processing.
-        if self.common.handshake_joiner.want_message(&msg) {
+        if self.transport.handshake_joiner.want_message(&msg) {
             try! {
-                self.common.handshake_joiner.take_message(msg)
+                self.transport.handshake_joiner.take_message(msg)
                     .ok_or_else(|| {
-                                self.common.send_fatal_alert(AlertDescription::DecodeError);
+                                self.transport.send_fatal_alert(AlertDescription::DecodeError);
                                 TLSError::CorruptMessagePayload(ContentType::Handshake)
                                 })
             };
@@ -415,14 +415,14 @@ impl ServerSessionImpl {
         msg.decode_payload();
 
         if msg.is_content_type(ContentType::Alert) {
-            return self.common.process_alert(msg);
+            return self.transport.process_alert(msg);
         }
 
         self.process_main_protocol(msg)
     }
 
     fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
-        while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
+        while let Some(msg) = self.transport.handshake_joiner.frames.pop_front() {
             try!(self.process_main_protocol(msg));
         }
 
@@ -430,13 +430,13 @@ impl ServerSessionImpl {
     }
 
     fn queue_unexpected_alert(&mut self) {
-        self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+        self.transport.send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     pub fn process_main_protocol(&mut self, msg: TLSMessage) -> Result<(), TLSError> {
-        if self.common.traffic && !self.common.is_tls13() &&
+        if self.transport.traffic && !self.transport.is_tls13() &&
            msg.is_handshake_type(HandshakeType::ClientHello) {
-            self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+            self.transport.send_warning_alert(AlertDescription::NoRenegotiation);
             return Ok(());
         }
 
@@ -453,11 +453,11 @@ impl ServerSessionImpl {
             return Err(err.clone());
         }
 
-        if self.common.message_deframer.desynced {
+        if self.transport.message_deframer.desynced {
             return Err(TLSError::CorruptMessage);
         }
 
-        while let Some(msg) = self.common.message_deframer.frames.pop_front() {
+        while let Some(msg) = self.transport.message_deframer.frames.pop_front() {
             match self.process_msg(msg) {
                 Ok(_) => {}
                 Err(err) => {
@@ -472,7 +472,7 @@ impl ServerSessionImpl {
     }
 
     pub fn start_encryption_tls12(&mut self) {
-        self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
+        self.transport.start_encryption_tls12(self.secrets.as_ref().unwrap());
     }
 
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
@@ -494,7 +494,7 @@ impl ServerSessionImpl {
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common.negotiated_version
+        self.transport.negotiated_version
     }
 }
 
@@ -517,12 +517,12 @@ impl ServerSession {
 
 impl Session for ServerSession {
     fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
-        self.imp.common.read_tls(rd)
+        self.imp.transport.read_tls(rd)
     }
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
-        self.imp.common.write_tls(wr)
+        self.imp.transport.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<(), TLSError> {
@@ -542,7 +542,7 @@ impl Session for ServerSession {
     }
 
     fn send_close_notify(&mut self) {
-        self.imp.common.send_close_notify()
+        self.imp.transport.send_close_notify()
     }
 
     fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
@@ -562,7 +562,7 @@ impl io::Read for ServerSession {
     /// Obtain plaintext data received from the peer over
     /// this TLS connection.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.imp.common.read(buf)
+        self.imp.transport.read(buf)
     }
 }
 
@@ -578,12 +578,12 @@ impl io::Write for ServerSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.imp.common.send_plain(buf);
+        self.imp.transport.send_plain(buf);
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.imp.common.flush_plaintext();
+        self.imp.transport.flush_plaintext();
         Ok(())
     }
 }
