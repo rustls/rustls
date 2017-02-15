@@ -128,31 +128,35 @@ fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
-pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl, hmp: &mut HandshakeMessagePayload) {
-    // We need to know the hash function of the suite we're trying to resume into.
-    let resuming = sess.handshake_data.resuming_session.as_ref().unwrap();
-    let suite_hash = sess.find_cipher_suite(resuming.cipher_suite).unwrap().get_hash();
-
+pub fn fill_in_psk_binder(transcript: &hash_hs::HandshakeHash, hmp: &mut HandshakeMessagePayload) {
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.get_encoding_for_binder_signing();
-    let handshake_hash =
-        sess.handshake_data.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
-    let mut empty_hash_ctx = hash_hs::HandshakeHash::new();
-    empty_hash_ctx.start_hash(suite_hash);
-    let empty_hash = empty_hash_ctx.get_current_hash();
+    let real_binder = if let HandshakePayload::ClientHello(ref ch) = hmp.payload {
+        let key_schedule = ch.get_psk().unwrap().key_schedule.as_ref().unwrap();
+        let suite_hash = ch.get_psk().unwrap().suite_hash.as_ref().unwrap();
 
-    // Run a fake key_schedule to simulate what the server will do if it choses
-    // to resume.
-    let mut key_schedule = KeySchedule::new(suite_hash);
-    key_schedule.input_secret(&resuming.master_secret.0);
-    let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
-    let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
+        let handshake_hash =
+            transcript.get_hash_given(suite_hash, &binder_plaintext);
+
+        let mut empty_hash_ctx = hash_hs::HandshakeHash::new();
+        empty_hash_ctx.start_hash(suite_hash);
+        let empty_hash = empty_hash_ctx.get_current_hash();
+
+        // Run a fake key_schedule to simulate what the server will do if it choses
+        // to resume.
+        let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
+        let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
+
+        real_binder
+    } else {
+        unreachable!()
+    };
 
     if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
         ch.set_psk_binder(real_binder);
-    };
+    }
 }
 
 pub fn emit_client_hello(sess: &mut ClientSessionImpl) -> &'static State {
@@ -257,19 +261,28 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         //
         // Include an empty binder. It gets filled in below because it depends on
         // the message it's contained in (!!!).
-        let (obfuscated_ticket_age, suite) = {
+        let (obfuscated_ticket_age, suite_hash, key_schedule) = {
             let resuming = sess.handshake_data
                 .resuming_session
                 .as_ref()
                 .unwrap();
-            (resuming.get_obfuscated_ticket_age(ticket_timebase()), resuming.cipher_suite)
+
+            // We need to know the hash function of the suite we're trying to resume into.
+            let suite_hash = sess.find_cipher_suite(resuming.cipher_suite).unwrap().get_hash();
+
+            // Create a key_schedule to simulate what the server will do if it choses
+            // to resume.
+            let mut key_schedule = KeySchedule::new(suite_hash);
+            key_schedule.input_secret(&resuming.master_secret.0);
+
+            (resuming.get_obfuscated_ticket_age(ticket_timebase()), suite_hash, key_schedule)
         };
 
-        let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
+        let binder_len = suite_hash.output_len;
         let binder = vec![0u8; binder_len];
 
         let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
-        let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
+        let psk_ext = PresharedKeyOffer::new(psk_identity, binder, key_schedule, suite_hash);
         exts.push(ClientExtension::PresharedKey(psk_ext));
         true
     } else if sess.config.enable_tickets {
@@ -303,7 +316,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     };
 
     if fill_in_binder {
-        fill_in_psk_binder(sess, &mut chp);
+        fill_in_psk_binder(&sess.handshake_data.transcript, &mut chp);
     }
 
     let ch = TLSMessage {

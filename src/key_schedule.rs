@@ -2,6 +2,7 @@
 
 use ring::{hmac, digest, hkdf};
 use msgs::codec;
+use std::fmt;
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,6 +36,14 @@ pub struct KeySchedule {
     hash: &'static digest::Algorithm,
     pub current_client_traffic_secret: Vec<u8>,
     pub current_server_traffic_secret: Vec<u8>,
+}
+
+impl fmt::Debug for KeySchedule {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        // we should not leak any secrets here
+        let mut t = f.debug_tuple("KeySchedule");
+        t.finish()
+    }
 }
 
 impl KeySchedule {

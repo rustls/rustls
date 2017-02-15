@@ -6,12 +6,14 @@ use msgs::enums::ClientCertificateType;
 use msgs::enums::ECCurveType;
 use msgs::enums::PSKKeyExchangeMode;
 use msgs::base::{Payload, PayloadU8, PayloadU16};
+use key_schedule::{KeySchedule};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 use std::fmt;
 use std::io::Write;
 use std::collections;
 use key;
+use ring;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -592,14 +594,21 @@ pub type PresharedKeyBinders = VecU16OfPayloadU8;
 pub struct PresharedKeyOffer {
     pub identities: PresharedKeyIdentities,
     pub binders: PresharedKeyBinders,
+    pub key_schedule: Option<KeySchedule>,
+    pub suite_hash: Option<&'static ring::digest::Algorithm>,
 }
 
 impl PresharedKeyOffer {
     /// Make a new one with one entry.
-    pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> PresharedKeyOffer {
+    pub fn new(id: PresharedKeyIdentity,
+               binder: Vec<u8>,
+               key_schedule: KeySchedule,
+               suite_hash: &'static ring::digest::Algorithm) -> PresharedKeyOffer {
         PresharedKeyOffer {
             identities: vec![ id ],
             binders: vec![ PresharedKeyBinder::new(binder) ],
+            key_schedule: Some(key_schedule),
+            suite_hash: Some(suite_hash),
         }
     }
 }
@@ -614,6 +623,8 @@ impl Codec for PresharedKeyOffer {
         Some(PresharedKeyOffer {
             identities: try_ret!(PresharedKeyIdentities::read(r)),
             binders: try_ret!(PresharedKeyBinders::read(r)),
+            key_schedule: None,
+            suite_hash: None,
         })
     }
 }
