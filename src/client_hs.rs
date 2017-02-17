@@ -230,6 +230,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
     exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
+    exts.push(ClientExtension::ExtendedMasterSecretRequest);
 
     if support_tls13 {
         exts.push(ClientExtension::KeyShare(key_shares));
@@ -381,7 +382,8 @@ static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
 static DISALLOWED_TLS13_EXTS: &'static [ExtensionType] = &[
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
-    ExtensionType::RenegotiationInfo
+    ExtensionType::RenegotiationInfo,
+    ExtensionType::ExtendedMasterSecret,
 ];
 
 fn validate_server_hello_tls13(sess: &mut ClientSessionImpl,
@@ -561,6 +563,11 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> StateResult 
     server_hello.random.write_slice(&mut sess.handshake_data.randoms.server);
     sess.handshake_data.session_id = server_hello.session_id.clone();
 
+    // Doing EMS?
+    if server_hello.ems_support_acked() {
+        sess.handshake_data.using_ems = true;
+    }
+
     // Might the server send a ticket?
     if server_hello.find_extension(ExtensionType::SessionTicket).is_some() {
         info!("Server supports tickets");
@@ -577,6 +584,12 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> StateResult 
             // Is the server telling lies about the ciphersuite?
             if resuming.cipher_suite != scs.unwrap().suite {
                 let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
+                return Err(TLSError::PeerMisbehavedError(error_msg));
+            }
+
+            // And about EMS support?
+            if resuming.extended_ms != sess.handshake_data.using_ems {
+                let error_msg = "server varied ems support over resume".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
             }
 
@@ -1127,6 +1140,8 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
 
     // 4b.
     emit_clientkx(sess, &kxd);
+    // nb. EMS handshake hash only runs up to ClientKeyExchange.
+    let handshake_hash = sess.handshake_data.transcript.get_current_hash();
 
     // 4c.
     if sess.handshake_data.doing_client_auth {
@@ -1138,8 +1153,16 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
 
     // 4e. Now commit secrets.
     let hashalg = sess.common.get_suite().get_hash();
-    sess.secrets =
-        Some(SessionSecrets::new(&sess.handshake_data.randoms, hashalg, &kxd.premaster_secret));
+    if sess.handshake_data.using_ems {
+        sess.secrets = Some(SessionSecrets::new_ems(&sess.handshake_data.randoms,
+                                                    &handshake_hash,
+                                                    hashalg,
+                                                    &kxd.premaster_secret));
+    } else {
+        sess.secrets = Some(SessionSecrets::new(&sess.handshake_data.randoms,
+                                                hashalg,
+                                                &kxd.premaster_secret));
+    }
     sess.start_encryption_tls12();
 
     // 5.
@@ -1253,6 +1276,9 @@ fn save_session(sess: &mut ClientSessionImpl) {
     value.set_times(ticket_timebase(),
                     sess.handshake_data.new_ticket_lifetime,
                     0);
+    if sess.handshake_data.using_ems {
+        value.set_extended_ms_used();
+    }
 
     let mut persist = sess.config.session_persistence.lock().unwrap();
     let worked = persist.put(key.get_encoding(), value.get_encoding());

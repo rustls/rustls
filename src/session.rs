@@ -150,6 +150,24 @@ impl SessionSecrets {
         ret
     }
 
+    pub fn new_ems(randoms: &SessionRandoms,
+                   hs_hash: &[u8],
+                   hashalg: &'static ring::digest::Algorithm,
+                   pms: &[u8]) -> SessionSecrets {
+        let mut ret = SessionSecrets {
+            randoms: randoms.clone(),
+            hash: hashalg,
+            master_secret: [0u8; 48]
+        };
+
+        prf::prf(&mut ret.master_secret,
+                 ret.hash,
+                 pms,
+                 b"extended master secret",
+                 hs_hash);
+        ret
+    }
+
     pub fn new_resume(randoms: &SessionRandoms,
                       hashalg: &'static ring::digest::Algorithm,
                       master_secret: &[u8])

@@ -14,8 +14,6 @@
     "ConflictingVersionNegotiation": "",
     "ConflictingVersionNegotiation-2": "",
     "PointFormat-Server-Missing": "we require ecc",
-    "EMS-Forbidden-TLS13": "TODO: unsupported but should be",
-    "ExtendedMasterSecret-*": "",
     "ECDSAKeyUsage-*": "TODO: we don't do anything with key usages",
     "CheckRecordVersion-*": "we don't look at record version",
     "TLS13-WrongOuterRecord": "we're lax on this",
@@ -76,6 +74,7 @@
     "Renegotiate-Client-*": "no reneg",
     "Renegotiate-Server-*": "",
     "SendHalfHelloRequest-*": "",
+    "ExtendedMasterSecret-Renego-*": "",
 
     "Agree-Digest-SHA1": "the remainder are tests that are UNIMPLEMENTED (ie that need an option the shim doesn't support).  including them here makes running the tests quicker under kcov",
     "Agree-Digest-SHA256": "delete these when doing development of the shim or upgrading bogo!",
@@ -324,8 +323,6 @@
     "NoCommonAlgorithms": "",
     "NoCommonAlgorithms-Digests": "",
     "NoCommonAlgorithms-TLS13": "",
-    "NoExtendedMasterSecret-TLS13-Client": "",
-    "NoExtendedMasterSecret-TLS13-Server": "",
     "NoFalseStart-DHE_RSA": "",
     "NoFalseStart-NoAEAD": "",
     "NoFalseStart-NoALPN": "",
@@ -688,6 +685,10 @@
     "SendUnsolicitedOCSPOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "SendUnsolicitedSCTOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "SendUnknownExtensionOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
-    "LargePlaintext": ":PEER_MISBEHAVIOUR:"
+    "LargePlaintext": ":PEER_MISBEHAVIOUR:",
+    "EMS-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
+    "ExtendedMasterSecret-NoToYes-Client": ":PEER_MISBEHAVIOUR:",
+    "ExtendedMasterSecret-YesToNo-Server": ":PEER_MISBEHAVIOUR:",
+    "ExtendedMasterSecret-YesToNo-Client": ":PEER_MISBEHAVIOUR:"
   }
 }

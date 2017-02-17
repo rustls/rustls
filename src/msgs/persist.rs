@@ -56,7 +56,8 @@ pub struct ClientSessionValue {
     pub master_secret: PayloadU8,
     pub epoch: u64,
     pub lifetime: u32,
-    pub age_add: u32
+    pub age_add: u32,
+    pub extended_ms: bool,
 }
 
 impl Codec for ClientSessionValue {
@@ -69,6 +70,7 @@ impl Codec for ClientSessionValue {
         codec::encode_u64(self.epoch, bytes);
         codec::encode_u32(self.lifetime, bytes);
         codec::encode_u32(self.age_add, bytes);
+        codec::encode_u8(if self.extended_ms { 1u8 } else { 0u8 }, bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
@@ -80,6 +82,7 @@ impl Codec for ClientSessionValue {
         let epoch = try_ret!(codec::read_u64(r));
         let lifetime = try_ret!(codec::read_u32(r));
         let age_add = try_ret!(codec::read_u32(r));
+        let extended_ms = try_ret!(codec::read_u8(r));
 
         Some(ClientSessionValue {
             version: v,
@@ -89,7 +92,8 @@ impl Codec for ClientSessionValue {
             master_secret: ms,
             epoch: epoch,
             lifetime: lifetime,
-            age_add: age_add
+            age_add: age_add,
+            extended_ms: extended_ms == 1u8,
         })
     }
 }
@@ -111,8 +115,13 @@ impl ClientSessionValue {
             master_secret: PayloadU8::new(ms),
             epoch: 0,
             lifetime: 0,
-            age_add: 0
+            age_add: 0,
+            extended_ms: false,
         }
+    }
+
+    pub fn set_extended_ms_used(&mut self) {
+        self.extended_ms = true;
     }
 
     pub fn set_times(&mut self, receipt_time_secs: u64,
@@ -147,6 +156,7 @@ pub struct ServerSessionValue {
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
+    pub extended_ms: bool,
     pub client_cert_chain: Option<CertificatePayload>,
 }
 
@@ -155,6 +165,7 @@ impl Codec for ServerSessionValue {
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
+        codec::encode_u8(if self.extended_ms { 1u8 } else { 0u8 }, bytes);
         if self.client_cert_chain.is_some() {
             self.client_cert_chain.as_ref().unwrap().encode(bytes);
         }
@@ -164,6 +175,7 @@ impl Codec for ServerSessionValue {
         let v = try_ret!(ProtocolVersion::read(r));
         let cs = try_ret!(CipherSuite::read(r));
         let ms = try_ret!(PayloadU8::read(r));
+        let ems = try_ret!(codec::read_u8(r));
         let ccert = if r.any_left() {
             CertificatePayload::read(r)
         } else {
@@ -174,6 +186,7 @@ impl Codec for ServerSessionValue {
             version: v,
             cipher_suite: cs,
             master_secret: ms,
+            extended_ms: ems == 1u8,
             client_cert_chain: ccert,
         })
     }
@@ -189,7 +202,12 @@ impl ServerSessionValue {
             version: v,
             cipher_suite: cs,
             master_secret: PayloadU8::new(ms),
+            extended_ms: false,
             client_cert_chain: cert_chain.clone(),
         }
+    }
+
+    pub fn set_extended_ms_used(&mut self) {
+        self.extended_ms = true;
     }
 }

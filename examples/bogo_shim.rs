@@ -336,6 +336,7 @@ fn main() {
             }
             "-expect-no-session" |
             "-expect-session-miss" |
+            "-expect-extended-master-secret" |
             "-expect-ticket-renewal" => {}
 
             "-select-alpn" => {
@@ -407,7 +408,6 @@ fn main() {
             "-use-ticket-callback" |
             "-enable-grease" |
             "-enable-channel-id" |
-            "-expect-extended-master-secret" |
             "-expect-resume-curve-id" |
             "-resumption-delay" |
             "-expect-early-data-info" |

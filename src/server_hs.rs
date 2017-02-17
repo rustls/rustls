@@ -87,7 +87,7 @@ fn process_extensions(sess: &mut ServerSessionImpl,
 
     // SNI
     if hello.get_sni_extension().is_some() {
-        ret.push(ServerExtension::ServerNameAcknowledgement);
+        ret.push(ServerExtension::ServerNameAck);
     }
 
     if !sess.common.is_tls13() {
@@ -107,7 +107,12 @@ fn process_extensions(sess: &mut ServerSessionImpl,
         if hello.find_extension(ExtensionType::SessionTicket).is_some() &&
            sess.config.ticketer.enabled() {
             sess.handshake_data.send_ticket = true;
-            ret.push(ServerExtension::SessionTicketAcknowledgement);
+            ret.push(ServerExtension::SessionTicketAck);
+        }
+
+        // Confirm use of EMS if offered.
+        if sess.handshake_data.using_ems {
+            ret.push(ServerExtension::ExtendedMasterSecretAck);
         }
     }
 
@@ -270,8 +275,13 @@ fn can_resume(sess: &ServerSessionImpl,
               resumedata: &Option<persist::ServerSessionValue>) -> bool {
     // The RFCs underspecify what happens if we try to resume to
     // an unoffered/varying suite.  We merely don't resume in weird cases.
-    resumedata.is_some() &&
-        resumedata.as_ref().unwrap().cipher_suite == sess.common.get_suite().suite
+    if let Some(ref resume) = *resumedata {
+        resume.cipher_suite == sess.common.get_suite().suite &&
+            (resume.extended_ms == sess.handshake_data.using_ems ||
+             (resume.extended_ms && !sess.handshake_data.using_ems))
+    } else {
+        false
+    }
 }
 
 fn start_resumption(sess: &mut ServerSessionImpl,
@@ -280,6 +290,10 @@ fn start_resumption(sess: &mut ServerSessionImpl,
                     resumedata: persist::ServerSessionValue)
                     -> StateResult {
     info!("Resuming session");
+
+    if resumedata.extended_ms && !sess.handshake_data.using_ems {
+        return Err(illegal_param(sess, "refusing to resume without ems"));
+    }
 
     sess.handshake_data.session_id = id.clone();
     try!(emit_server_hello(sess, client_hello));
@@ -785,6 +799,10 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     // Save their Random.
     client_hello.random.write_slice(&mut sess.handshake_data.randoms.client);
 
+    if client_hello.ems_support_offered() {
+        sess.handshake_data.using_ems = true;
+    }
+
     let groups_ext = try!(client_hello.get_namedgroups_extension()
                           .ok_or_else(|| incompatible(sess, "client didn't describe groups")));
     let ecpoints_ext = try!(client_hello.get_ecpoints_extension()
@@ -989,8 +1007,17 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     };
 
     let hashalg = sess.common.get_suite().get_hash();
-    sess.secrets =
-        Some(SessionSecrets::new(&sess.handshake_data.randoms, hashalg, &kxd.premaster_secret));
+    if sess.handshake_data.using_ems {
+        let handshake_hash = sess.handshake_data.transcript.get_current_hash();
+        sess.secrets = Some(SessionSecrets::new_ems(&sess.handshake_data.randoms,
+                                                    &handshake_hash,
+                                                    hashalg,
+                                                    &kxd.premaster_secret));
+    } else {
+        sess.secrets = Some(SessionSecrets::new(&sess.handshake_data.randoms,
+                                                hashalg,
+                                                &kxd.premaster_secret));
+    }
     sess.start_encryption_tls12();
 
     if sess.handshake_data.doing_client_auth {
@@ -1171,7 +1198,13 @@ fn get_server_session_value(sess: &ServerSessionImpl) -> persist::ServerSessionV
         (ProtocolVersion::TLSv1_2, sess.secrets.as_ref().unwrap().get_master_secret())
     };
 
-    persist::ServerSessionValue::new(version, scs.suite, secret, client_certs)
+    let mut v = persist::ServerSessionValue::new(version, scs.suite, secret, client_certs);
+
+    if sess.handshake_data.using_ems {
+        v.set_extended_ms_used();
+    }
+
+    v
 }
 
 fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> StateResult {

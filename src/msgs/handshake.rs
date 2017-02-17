@@ -555,6 +555,7 @@ pub enum ClientExtension {
     PresharedKeyModes(PSKKeyExchangeModes),
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16),
+    ExtendedMasterSecretRequest,
     Unknown(UnknownExtension),
 }
 
@@ -574,6 +575,7 @@ impl ClientExtension {
             ClientExtension::PresharedKeyModes(_) => ExtensionType::PSKKeyExchangeModes,
             ClientExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
             ClientExtension::Cookie(_) => ExtensionType::Cookie,
+            ClientExtension::ExtendedMasterSecretRequest => ExtensionType::ExtendedMasterSecret,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -598,6 +600,7 @@ impl Codec for ClientExtension {
             ClientExtension::PresharedKeyModes(ref r) => r.encode(&mut sub),
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
+            ClientExtension::ExtendedMasterSecretRequest => (),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -617,8 +620,10 @@ impl Codec for ClientExtension {
             ExtensionType::EllipticCurves => {
                 ClientExtension::NamedGroups(try_ret!(NamedGroups::read(&mut sub)))
             }
-            ExtensionType::SignatureAlgorithms =>
-        ClientExtension::SignatureAlgorithms(try_ret!(SupportedSignatureSchemes::read(&mut sub))),
+            ExtensionType::SignatureAlgorithms => {
+                let schemes = try_ret!(SupportedSignatureSchemes::read(&mut sub));
+                ClientExtension::SignatureAlgorithms(schemes)
+            }
             ExtensionType::Heartbeat => {
                 ClientExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub)))
             }
@@ -648,6 +653,9 @@ impl Codec for ClientExtension {
                 ClientExtension::PresharedKey(try_ret!(PresharedKeyOffer::read(&mut sub)))
             }
             ExtensionType::Cookie => ClientExtension::Cookie(try_ret!(PayloadU16::read(&mut sub))),
+            ExtensionType::ExtendedMasterSecret if !sub.any_left() => {
+                ClientExtension::ExtendedMasterSecretRequest
+            }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -669,12 +677,13 @@ impl ClientExtension {
 pub enum ServerExtension {
     ECPointFormats(ECPointFormatList),
     Heartbeat(HeartbeatMode),
-    ServerNameAcknowledgement,
-    SessionTicketAcknowledgement,
+    ServerNameAck,
+    SessionTicketAck,
     RenegotiationInfo(PayloadU8),
     Protocols(ProtocolNameList),
     KeyShare(KeyShareEntry),
     PresharedKey(u16),
+    ExtendedMasterSecretAck,
     Unknown(UnknownExtension),
 }
 
@@ -683,12 +692,13 @@ impl ServerExtension {
         match *self {
             ServerExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
             ServerExtension::Heartbeat(_) => ExtensionType::Heartbeat,
-            ServerExtension::ServerNameAcknowledgement => ExtensionType::ServerName,
-            ServerExtension::SessionTicketAcknowledgement => ExtensionType::SessionTicket,
+            ServerExtension::ServerNameAck => ExtensionType::ServerName,
+            ServerExtension::SessionTicketAck => ExtensionType::SessionTicket,
             ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             ServerExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             ServerExtension::KeyShare(_) => ExtensionType::KeyShare,
             ServerExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
+            ServerExtension::ExtendedMasterSecretAck => ExtensionType::ExtendedMasterSecret,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -702,12 +712,13 @@ impl Codec for ServerExtension {
         match *self {
             ServerExtension::ECPointFormats(ref r) => r.encode(&mut sub),
             ServerExtension::Heartbeat(ref r) => r.encode(&mut sub),
-            ServerExtension::ServerNameAcknowledgement => (),
-            ServerExtension::SessionTicketAcknowledgement => (),
+            ServerExtension::ServerNameAck => (),
+            ServerExtension::SessionTicketAck => (),
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
             ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
+            ServerExtension::ExtendedMasterSecretAck => (),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -727,8 +738,8 @@ impl Codec for ServerExtension {
             ExtensionType::Heartbeat => {
                 ServerExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub)))
             }
-            ExtensionType::ServerName => ServerExtension::ServerNameAcknowledgement,
-            ExtensionType::SessionTicket => ServerExtension::SessionTicketAcknowledgement,
+            ExtensionType::ServerName => ServerExtension::ServerNameAck,
+            ExtensionType::SessionTicket => ServerExtension::SessionTicketAck,
             ExtensionType::RenegotiationInfo => {
                 ServerExtension::RenegotiationInfo(try_ret!(PayloadU8::read(&mut sub)))
             }
@@ -741,6 +752,7 @@ impl Codec for ServerExtension {
             ExtensionType::PreSharedKey => {
                 ServerExtension::PresharedKey(try_ret!(codec::read_u16(&mut sub)))
             }
+            ExtensionType::ExtendedMasterSecret => ServerExtension::ExtendedMasterSecretAck,
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -940,6 +952,11 @@ impl ClientHelloPayload {
             }
             _ => {}
         };
+    }
+
+    pub fn ems_support_offered(&self) -> bool {
+        self.find_extension(ExtensionType::ExtendedMasterSecret)
+            .is_some()
     }
 }
 
@@ -1150,6 +1167,11 @@ impl ServerHelloPayload {
             ServerExtension::ECPointFormats(ref fmts) => Some(fmts),
             _ => None,
         }
+    }
+
+    pub fn ems_support_acked(&self) -> bool {
+        self.find_extension(ExtensionType::ExtendedMasterSecret)
+            .is_some()
     }
 }
 
