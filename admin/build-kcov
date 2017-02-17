@@ -4,7 +4,7 @@
 
 set -e
 
-KCOV_KNOWN_GOOD=1e13fa40156c6717d1efd1f1c13fee8a94b8eea0
+KCOV_KNOWN_GOOD=eedf728147b40a5887596d7b92f5ad94a17b3300
 
 sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev
 
