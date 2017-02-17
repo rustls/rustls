@@ -4,13 +4,15 @@
 
 set -e
 
+KCOV_KNOWN_GOOD=1e13fa40156c6717d1efd1f1c13fee8a94b8eea0
+
 sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev
 
-mkdir -p kcov
+rm -rf kcov && mkdir -p kcov
 cd kcov
-wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz
-tar xzf master.tar.gz
-cd kcov-master
+wget https://github.com/SimonKagstrom/kcov/archive/$KCOV_KNOWN_GOOD.tar.gz
+tar xzf $KCOV_KNOWN_GOOD.tar.gz
+cd kcov-$KCOV_KNOWN_GOOD
 mkdir build
 cd build
 cmake ..
