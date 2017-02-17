@@ -60,6 +60,6 @@ impl ChunkVecBuffer {
             self.chunks[0] = self.chunks[0].split_off(used);
         }
 
-        return Ok(used);
+        Ok(used)
     }
 }

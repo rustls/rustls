@@ -110,7 +110,7 @@ impl ClientSessionValue {
         ClientSessionValue {
             version: v,
             cipher_suite: cs,
-            session_id: sessid.clone(),
+            session_id: *sessid,
             ticket: PayloadU16::new(ticket),
             master_secret: PayloadU8::new(ms),
             epoch: 0,

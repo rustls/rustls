@@ -64,17 +64,17 @@ impl Codec for Random {
 
 impl Random {
     pub fn from_slice(bytes: &[u8]) -> Random {
-        let mut rd = Reader::init(&bytes);
+        let mut rd = Reader::init(bytes);
         Random::read(&mut rd).unwrap()
     }
 
     pub fn write_slice(&self, mut bytes: &mut [u8]) {
         let buf = self.get_encoding();
-        bytes.write(&buf).unwrap();
+        bytes.write_all(&buf).unwrap();
     }
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct SessionID {
     len: usize,
     data: [u8; 32],
@@ -87,15 +87,6 @@ impl fmt::Debug for SessionID {
             t.field(&self.data[i]);
         }
         t.finish()
-    }
-}
-
-impl Clone for SessionID {
-    fn clone(&self) -> Self {
-        SessionID {
-            data: self.data,
-            len: self.len,
-        }
     }
 }
 
@@ -225,16 +216,16 @@ pub trait DecomposedSignatureScheme {
 impl DecomposedSignatureScheme for SignatureScheme {
     fn sign(&self) -> SignatureAlgorithm {
         match *self {
-            SignatureScheme::RSA_PKCS1_SHA1 => SignatureAlgorithm::RSA,
-            SignatureScheme::RSA_PKCS1_SHA256 => SignatureAlgorithm::RSA,
-            SignatureScheme::RSA_PKCS1_SHA384 => SignatureAlgorithm::RSA,
-            SignatureScheme::RSA_PKCS1_SHA512 => SignatureAlgorithm::RSA,
-            SignatureScheme::RSA_PSS_SHA256 => SignatureAlgorithm::RSA,
-            SignatureScheme::RSA_PSS_SHA384 => SignatureAlgorithm::RSA,
-            SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
-            SignatureScheme::ECDSA_NISTP256_SHA256 => SignatureAlgorithm::ECDSA,
-            SignatureScheme::ECDSA_NISTP384_SHA384 => SignatureAlgorithm::ECDSA,
-            SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
+            SignatureScheme::RSA_PKCS1_SHA1 |
+                SignatureScheme::RSA_PKCS1_SHA256 |
+                SignatureScheme::RSA_PKCS1_SHA384 |
+                SignatureScheme::RSA_PKCS1_SHA512 |
+                SignatureScheme::RSA_PSS_SHA256 |
+                SignatureScheme::RSA_PSS_SHA384 |
+                SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            SignatureScheme::ECDSA_NISTP256_SHA256 |
+                SignatureScheme::ECDSA_NISTP384_SHA384 |
+                SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
             _ => SignatureAlgorithm::Unknown(0),
         }
     }
@@ -242,15 +233,15 @@ impl DecomposedSignatureScheme for SignatureScheme {
     fn hash(&self) -> HashAlgorithm {
         match *self {
             SignatureScheme::RSA_PKCS1_SHA1 => HashAlgorithm::SHA1,
-            SignatureScheme::RSA_PKCS1_SHA256 => HashAlgorithm::SHA256,
-            SignatureScheme::RSA_PKCS1_SHA384 => HashAlgorithm::SHA384,
-            SignatureScheme::RSA_PKCS1_SHA512 => HashAlgorithm::SHA512,
-            SignatureScheme::RSA_PSS_SHA256 => HashAlgorithm::SHA256,
-            SignatureScheme::RSA_PSS_SHA384 => HashAlgorithm::SHA384,
-            SignatureScheme::RSA_PSS_SHA512 => HashAlgorithm::SHA512,
-            SignatureScheme::ECDSA_NISTP256_SHA256 => HashAlgorithm::SHA256,
-            SignatureScheme::ECDSA_NISTP384_SHA384 => HashAlgorithm::SHA384,
-            SignatureScheme::ECDSA_NISTP521_SHA512 => HashAlgorithm::SHA512,
+            SignatureScheme::RSA_PKCS1_SHA256 |
+                SignatureScheme::RSA_PSS_SHA256 |
+                SignatureScheme::ECDSA_NISTP256_SHA256 => HashAlgorithm::SHA256,
+            SignatureScheme::RSA_PKCS1_SHA384 |
+                SignatureScheme::RSA_PSS_SHA384 |
+                SignatureScheme::ECDSA_NISTP384_SHA384 => HashAlgorithm::SHA384,
+            SignatureScheme::RSA_PKCS1_SHA512 |
+                SignatureScheme::RSA_PSS_SHA512 |
+                SignatureScheme::ECDSA_NISTP521_SHA512 => HashAlgorithm::SHA512,
             _ => HashAlgorithm::NONE,
         }
     }
@@ -336,7 +327,7 @@ impl ServerNamePayload {
         }
     }
 
-    fn encode_hostname(name: &String, bytes: &mut Vec<u8>) {
+    fn encode_hostname(name: &str, bytes: &mut Vec<u8>) {
         codec::encode_u16(name.len() as u16, bytes);
         bytes.extend_from_slice(name.as_bytes());
     }
@@ -385,11 +376,8 @@ pub trait ConvertServerNameList {
 impl ConvertServerNameList for ServerNameRequest {
     fn get_hostname(&self) -> Option<&str> {
         for name in self {
-            match name.payload {
-                ServerNamePayload::HostName(ref hostname) => {
-                    return Some(&hostname)
-                }
-                ServerNamePayload::Unknown(_) => {}
+            if let ServerNamePayload::HostName(ref hostname) = name.payload {
+                return Some(hostname);
             }
         }
 
@@ -420,9 +408,8 @@ impl ConvertProtocolNameList for ProtocolNameList {
     fn to_strings(&self) -> Vec<String> {
         let mut ret = Vec::new();
         for proto in self {
-            match String::from_utf8(proto.0.clone()).ok() {
-                Some(st) => ret.push(st),
-                _ => {}
+            if let Ok(st) = String::from_utf8(proto.0.clone()) {
+                ret.push(st);
             }
         }
         ret
@@ -567,8 +554,8 @@ impl ClientExtension {
             ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             ClientExtension::Heartbeat(_) => ExtensionType::Heartbeat,
             ClientExtension::ServerName(_) => ExtensionType::ServerName,
-            ClientExtension::SessionTicketRequest => ExtensionType::SessionTicket,
-            ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
+            ClientExtension::SessionTicketRequest |
+                ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
             ClientExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             ClientExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ClientExtension::KeyShare(_) => ExtensionType::KeyShare,
@@ -592,7 +579,8 @@ impl Codec for ClientExtension {
             ClientExtension::SignatureAlgorithms(ref r) => r.encode(&mut sub),
             ClientExtension::Heartbeat(ref r) => r.encode(&mut sub),
             ClientExtension::ServerName(ref r) => r.encode(&mut sub),
-            ClientExtension::SessionTicketRequest => (),
+            ClientExtension::SessionTicketRequest |
+                ClientExtension::ExtendedMasterSecretRequest => (),
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
             ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
@@ -600,7 +588,6 @@ impl Codec for ClientExtension {
             ClientExtension::PresharedKeyModes(ref r) => r.encode(&mut sub),
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
-            ClientExtension::ExtendedMasterSecretRequest => (),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -712,13 +699,13 @@ impl Codec for ServerExtension {
         match *self {
             ServerExtension::ECPointFormats(ref r) => r.encode(&mut sub),
             ServerExtension::Heartbeat(ref r) => r.encode(&mut sub),
-            ServerExtension::ServerNameAck => (),
-            ServerExtension::SessionTicketAck => (),
+            ServerExtension::ServerNameAck |
+                ServerExtension::SessionTicketAck |
+                ServerExtension::ExtendedMasterSecretAck => (),
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
             ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
-            ServerExtension::ExtendedMasterSecretAck => (),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -787,7 +774,7 @@ impl Codec for ClientHelloPayload {
         codec::encode_vec_u16(bytes, &self.cipher_suites);
         codec::encode_vec_u8(bytes, &self.compression_methods);
 
-        if self.extensions.len() > 0 {
+        if !self.extensions.is_empty() {
             codec::encode_vec_u16(bytes, &self.extensions);
         }
     }
@@ -946,12 +933,9 @@ impl ClientHelloPayload {
 
     pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
         let last_extension = self.extensions.last_mut().unwrap();
-        match *last_extension {
-            ClientExtension::PresharedKey(ref mut offer) => {
-                offer.binders[0] = PresharedKeyBinder::new(binder);
-            }
-            _ => {}
-        };
+        if let ClientExtension::PresharedKey(ref mut offer) = *last_extension {
+            offer.binders[0] = PresharedKeyBinder::new(binder);
+        }
     }
 
     pub fn ems_support_offered(&self) -> bool {
@@ -1180,7 +1164,7 @@ pub type CertificatePayload = Vec<key::Certificate>;
 
 impl Codec for CertificatePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u24(bytes, &self);
+        codec::encode_vec_u24(bytes, self);
     }
 
     fn read(r: &mut Reader) -> Option<CertificatePayload> {
@@ -1433,13 +1417,13 @@ pub struct ServerECDHParams {
 }
 
 impl ServerECDHParams {
-    pub fn new(named_group: &NamedGroup, pubkey: &Vec<u8>) -> ServerECDHParams {
+    pub fn new(named_group: &NamedGroup, pubkey: &[u8]) -> ServerECDHParams {
         ServerECDHParams {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: *named_group,
             },
-            public: PayloadU8::new(pubkey.clone()),
+            public: PayloadU8::new(pubkey.to_vec()),
         }
     }
 }
@@ -1583,7 +1567,7 @@ pub trait HasServerExtensions {
 
 impl HasServerExtensions for EncryptedExtensions {
     fn get_extensions(&self) -> &[ServerExtension] {
-        &self
+        self
     }
 }
 
@@ -1792,14 +1776,14 @@ pub enum HandshakePayload {
 impl HandshakePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            HandshakePayload::HelloRequest => {}
+            HandshakePayload::HelloRequest |
+                HandshakePayload::ServerHelloDone => {}
             HandshakePayload::ClientHello(ref x) => x.encode(bytes),
             HandshakePayload::ServerHello(ref x) => x.encode(bytes),
             HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
             HandshakePayload::Certificate(ref x) => x.encode(bytes),
             HandshakePayload::CertificateTLS13(ref x) => x.encode(bytes),
             HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
-            HandshakePayload::ServerHelloDone => {}
             HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
             HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
             HandshakePayload::CertificateRequestTLS13(ref x) => x.encode(bytes),
@@ -1838,7 +1822,7 @@ impl Codec for HandshakeMessagePayload {
 }
 
 impl HandshakeMessagePayload {
-    pub fn len(&self) -> usize {
+    pub fn length(&self) -> usize {
         let mut buf = Vec::new();
         self.encode(&mut buf);
         buf.len()

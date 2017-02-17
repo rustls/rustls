@@ -54,8 +54,8 @@ pub enum TLSError {
     General(String),
 }
 
-fn join<T: fmt::Debug>(vec: &Vec<T>) -> String {
-    vec.iter()
+fn join<T: fmt::Debug>(items: &[T]) -> String {
+    items.iter()
         .map(|x| format!("{:?}", x))
         .collect::<Vec<String>>()
         .join(" or ")
@@ -100,8 +100,8 @@ impl error::Error for TLSError {
             TLSError::InappropriateHandshakeMessage { .. } => {
                 "received unexpected handshake message"
             }
-            TLSError::CorruptMessage => "received corrupt message",
-            TLSError::CorruptMessagePayload(_) => "received corrupt message",
+            TLSError::CorruptMessage |
+                TLSError::CorruptMessagePayload(_) => "received corrupt message",
             TLSError::NoCertificatesPresented => "peer sent no certificates",
             TLSError::DecryptError => "cannot decrypt peer's message",
             TLSError::PeerIncompatibleError(_) => "peer is incompatible",

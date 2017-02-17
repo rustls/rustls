@@ -150,11 +150,8 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl, hmp: &mut HandshakeMessa
     let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
-    match hmp.payload {
-        HandshakePayload::ClientHello(ref mut ch) => {
-            ch.set_psk_binder(real_binder);
-        }
-        _ => {}
+    if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
+        ch.set_psk_binder(real_binder);
     };
 }
 
@@ -173,7 +170,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             randomise_sessionid_for_ticket(resuming);
         }
         info!("Resuming session");
-        (resuming.session_id.clone(), resuming.ticket.0.clone(), resuming.version)
+        (resuming.session_id, resuming.ticket.0.clone(), resuming.version)
     } else {
         info!("Not resuming any session");
         (SessionID::empty(), Vec::new(), ProtocolVersion::Unknown(0))
@@ -353,13 +350,9 @@ fn find_key_share(sess: &mut ClientSessionImpl,
                   group: NamedGroup)
                   -> Option<suites::KeyExchange> {
     let shares = &mut sess.handshake_data.offered_key_shares;
-    for i in 0..shares.len() {
-        if shares[i].group == group {
-            return Some(shares.remove(i));
-        }
-    }
-
-    None
+    shares.iter()
+        .position(|s| s.group == group)
+        .map(|idx| shares.remove(idx))
 }
 
 fn find_key_share_and_discard_others(sess: &mut ClientSessionImpl,
@@ -468,10 +461,9 @@ fn process_alpn_protocol(sess: &mut ClientSessionImpl,
                          proto: Option<String>)
                          -> Result<(), TLSError> {
     sess.alpn_protocol = proto;
-    if sess.alpn_protocol.is_some() {
-        if !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
-            return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
-        }
+    if sess.alpn_protocol.is_some() &&
+        !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
+        return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
     }
     info!("ALPN protocol is {:?}", sess.alpn_protocol);
     Ok(())
@@ -561,7 +553,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> StateResult 
 
     // Save ServerRandom and SessionID
     server_hello.random.write_slice(&mut sess.handshake_data.randoms.server);
-    sess.handshake_data.session_id = server_hello.session_id.clone();
+    sess.handshake_data.session_id = server_hello.session_id;
 
     // Doing EMS?
     if server_hello.ems_support_acked() {
@@ -702,7 +694,7 @@ fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
                                                  .to_string()));
     }
 
-    if sent_unsolicited_extensions(sess, &exts, &[]) {
+    if sent_unsolicited_extensions(sess, exts, &[]) {
         sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
         let msg = "server sent unsolicited encrypted extension".to_string();
         return Err(TLSError::PeerMisbehavedError(msg));
@@ -824,11 +816,8 @@ fn handle_server_kx(sess: &mut ClientSessionImpl, m: Message) -> StateResult {
     sess.handshake_data.server_kx_sig = decoded_kx.get_sig();
     decoded_kx.encode_params(&mut sess.handshake_data.server_kx_params);
 
-    match decoded_kx {
-        ServerKeyExchangePayload::ECDHE(ecdhe) => {
-            info!("ECDHE curve is {:?}", ecdhe.params.curve_params)
-        }
-        _ => (),
+    if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
+        info!("ECDHE curve is {:?}", ecdhe.params.curve_params);
     }
 
     Ok(&EXPECT_TLS12_SERVER_DONE_OR_CERTREQ)
@@ -919,7 +908,6 @@ fn emit_certverify(sess: &mut ClientSessionImpl) {
     let key = sess.handshake_data.client_auth_key.take().unwrap();
     let sigscheme = sess.handshake_data
         .client_auth_sigscheme
-        .clone()
         .unwrap();
     let sig = key.sign(sigscheme, &message)
         .expect("client auth signing failed unexpectedly");
@@ -1013,7 +1001,7 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> StateResu
 // Unfortunately the CertificateRequest type changed in an annoying way in TLS1.3.
 fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
                                 m: Message) -> StateResult {
-    let ref mut certreq = extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
+    let certreq = &extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
     sess.handshake_data.transcript.add_message(&m);
     sess.handshake_data.doing_client_auth = true;
     info!("Got CertificateRequest {:?}", certreq);
@@ -1294,7 +1282,7 @@ fn emit_certificate_tls13(sess: &mut ClientSessionImpl) {
     let context = sess.handshake_data
         .client_auth_context
         .take()
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_else(Vec::new);
 
     let mut cert_payload = CertificatePayloadTLS13 {
         context: PayloadU8::new(context),

@@ -254,7 +254,7 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
 
     for _ in 0..total_mb {
         time_send += time(|| {
-            server.write(&buf).unwrap();
+            server.write_all(&buf).unwrap();
             ()
         });
         time_recv += time(|| {
@@ -276,7 +276,7 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
 
 fn main() {
     for version in &[rustls::ProtocolVersion::TLSv1_3, rustls::ProtocolVersion::TLSv1_2] {
-        for suite in rustls::ALL_CIPHERSUITES.iter() {
+        for suite in &rustls::ALL_CIPHERSUITES {
             if suite.sign == SignatureAlgorithm::ECDSA {
                 // TODO: Need ECDSA server support for this.
                 continue;

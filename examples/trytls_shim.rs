@@ -21,7 +21,7 @@ enum Verdict {
     Reject(TLSError),
 }
 
-fn parse_args(args: &Vec<String>) -> Result<(String, u16, ClientConfig), Box<Error>> {
+fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<Error>> {
     let mut config = ClientConfig::new();
     match args.len() {
         3 => {
@@ -30,7 +30,7 @@ fn parse_args(args: &Vec<String>) -> Result<(String, u16, ClientConfig), Box<Err
         4 => {
             let f = try!(File::open(&args[3]));
             let mut f = BufReader::new(f);
-            if let Err(_) = config.root_store.add_pem_file(&mut f) {
+            if config.root_store.add_pem_file(&mut f).is_err() {
                 return Err(From::from("Could not load PEM data"));
             }
         }
@@ -47,7 +47,7 @@ fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict,
     let mut client = ClientSession::new(&rc_config, &host);
     let mut stream = try!(TcpStream::connect((&*host, port)));
 
-    try!(client.write(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"));
+    try!(client.write_all(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"));
     loop {
         while client.wants_write() {
             try!(client.write_tls(&mut stream));

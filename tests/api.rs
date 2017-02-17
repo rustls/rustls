@@ -1,7 +1,6 @@
 // Assorted public API tests.
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::ops::{Deref, DerefMut};
+use std::sync::atomic;
 use std::fs;
 use std::io::{self, Write};
 
@@ -365,9 +364,9 @@ impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-        -> Option<(Vec<Certificate>, Arc<Box<sign::Signer>>)> {
-        if let Some(ref got_dns_name) = server_name {
-            if got_dns_name.to_string() != self.expected {
+        -> Option<sign::CertChainAndSigner> {
+        if let Some(got_dns_name) = server_name {
+            if got_dns_name != self.expected {
                 panic!("unexpected dns name (wanted '{}' got '{}')", &self.expected, got_dns_name);
             }
         } else {
@@ -397,14 +396,14 @@ fn server_cert_resolve_with_sni() {
 }
 
 struct ClientCheckCertResolve {
-    query_count: Mutex<usize>,
+    query_count: atomic::AtomicUsize,
     expect_queries: usize
 }
 
 impl ClientCheckCertResolve {
     fn new(expect_queries: usize) -> ClientCheckCertResolve {
         ClientCheckCertResolve {
-            query_count: Mutex::new(0),
+            query_count: atomic::AtomicUsize::new(0),
             expect_queries: expect_queries
         }
     }
@@ -412,9 +411,8 @@ impl ClientCheckCertResolve {
 
 impl Drop for ClientCheckCertResolve {
     fn drop(&mut self) {
-        let count = self.query_count.lock()
-            .unwrap();
-        assert_eq!(*count.deref(), self.expect_queries);
+        let count = self.query_count.load(atomic::Ordering::SeqCst);
+        assert_eq!(count, self.expect_queries);
     }
 }
 
@@ -422,10 +420,8 @@ impl ResolvesClientCert for ClientCheckCertResolve {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-        -> Option<(Vec<Certificate>, Arc<Box<sign::Signer>>)> {
-        let mut count = self.query_count.lock()
-            .unwrap();
-        *count.deref_mut() = (*count.deref() as usize) + 1;
+        -> Option<sign::CertChainAndSigner> {
+        self.query_count.fetch_add(1, atomic::Ordering::SeqCst);
 
         if acceptable_issuers.len() == 0 {
             panic!("no issuers offered by server");

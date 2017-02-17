@@ -20,7 +20,7 @@ use rand;
 use std::io;
 use std::collections::VecDeque;
 
-/// Generalises ClientSession and ServerSession
+/// Generalises `ClientSession` and `ServerSession`
 pub trait Session: Read + Write + Send {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
@@ -119,8 +119,8 @@ impl SessionRandoms {
 
 fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
     let mut randoms = [0u8; 64];
-    randoms.as_mut().write(first).unwrap();
-    randoms[32..].as_mut().write(second).unwrap();
+    randoms.as_mut().write_all(first).unwrap();
+    randoms[32..].as_mut().write_all(second).unwrap();
     randoms
 }
 
@@ -177,7 +177,7 @@ impl SessionSecrets {
             hash: hashalg,
             master_secret: [0u8; 48],
         };
-        ret.master_secret.as_mut().write(master_secret).unwrap();
+        ret.master_secret.as_mut().write_all(master_secret).unwrap();
         ret
     }
 
@@ -203,7 +203,7 @@ impl SessionSecrets {
         ret
     }
 
-    pub fn make_verify_data(&self, handshake_hash: &Vec<u8>, label: &[u8]) -> Vec<u8> {
+    pub fn make_verify_data(&self, handshake_hash: &[u8], label: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         out.resize(12, 0u8);
 
@@ -211,15 +211,15 @@ impl SessionSecrets {
                  self.hash,
                  &self.master_secret,
                  label,
-                 &handshake_hash);
+                 handshake_hash);
         out
     }
 
-    pub fn client_verify_data(&self, handshake_hash: &Vec<u8>) -> Vec<u8> {
+    pub fn client_verify_data(&self, handshake_hash: &[u8]) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"client finished")
     }
 
-    pub fn server_verify_data(&self, handshake_hash: &Vec<u8>) -> Vec<u8> {
+    pub fn server_verify_data(&self, handshake_hash: &[u8]) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"server finished")
     }
 }
@@ -401,7 +401,7 @@ impl SessionCommon {
         self.message_fragmenter.fragment(m, &mut plain_messages);
 
         for m in plain_messages {
-            self.send_single_fragment(m.into_borrowed());
+            self.send_single_fragment(m.to_borrowed());
         }
     }
 

@@ -230,7 +230,7 @@ impl Connection {
             return;
         }
 
-        if buf.len() > 0 {
+        if !buf.is_empty() {
             info!("plaintext read {:?}", buf.len());
             self.incoming_plaintext(&buf);
         }
@@ -262,7 +262,7 @@ impl Connection {
                 self.closing = true;
             }
             Some(len) => {
-                self.tls_session.write(&buf[..len]).unwrap();
+                self.tls_session.write_all(&buf[..len]).unwrap();
             }
             None => {}
         };
@@ -272,22 +272,23 @@ impl Connection {
     fn incoming_plaintext(&mut self, buf: &[u8]) {
         match self.mode {
             ServerMode::Echo => {
-                self.tls_session.write(buf).unwrap();
+                self.tls_session.write_all(buf).unwrap();
             }
             ServerMode::Http => {
                 self.send_http_response_once();
             }
             ServerMode::Forward(_) => {
-                self.back.as_mut().unwrap().write(buf).unwrap();
+                self.back.as_mut().unwrap().write_all(buf).unwrap();
             }
         }
     }
 
     fn send_http_response_once(&mut self) {
+        let response = b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
             self.tls_session
-        .write(b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n")
-        .unwrap();
+                .write_all(response)
+                .unwrap();
             self.sent_http_response = true;
             self.tls_session.send_close_notify();
         }
@@ -437,7 +438,7 @@ struct Args {
 }
 
 fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
-    for suite in rustls::ALL_CIPHERSUITES.iter() {
+    for suite in &rustls::ALL_CIPHERSUITES {
         let sname = format!("{:?}", suite.suite).to_lowercase();
 
         if sname == name.to_string().to_lowercase() {
@@ -448,7 +449,7 @@ fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
     None
 }
 
-fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSuite> {
+fn lookup_suites(suites: &[String]) -> Vec<&'static rustls::SupportedCipherSuite> {
     let mut out = Vec::new();
 
     for csname in suites {
@@ -479,16 +480,16 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
 fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let mut config = rustls::ServerConfig::new();
 
-    let certs = load_certs(&args.flag_certs.as_ref().expect("--certs option missing"));
-    let privkey = load_private_key(&args.flag_key.as_ref().expect("--key option missing"));
+    let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
+    let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
     config.set_single_cert(certs, privkey);
 
     if args.flag_auth.is_some() {
-        let client_auth_roots = load_certs(&args.flag_auth.as_ref().unwrap());
+        let client_auth_roots = load_certs(args.flag_auth.as_ref().unwrap());
         config.set_client_auth_roots(client_auth_roots, args.flag_require_auth);
     }
 
-    if args.flag_suite.len() != 0 {
+    if !args.flag_suite.is_empty() {
         config.ciphersuites = lookup_suites(&args.flag_suite);
     }
 

@@ -25,7 +25,7 @@ impl Codec for AlertMessagePayload {
 }
 
 impl AlertMessagePayload {
-    pub fn len(&self) -> usize {
+    pub fn length(&self) -> usize {
         1 + 1
     }
 }

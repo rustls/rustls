@@ -18,6 +18,8 @@ pub trait Signer : Send + Sync {
     fn algorithm(&self) -> SignatureAlgorithm;
 }
 
+pub type CertChainAndSigner = (Vec<key::Certificate>, Arc<Box<Signer>>);
+
 /// A Signer for RSA-PKCS1 or RSA-PSS
 pub struct RSASigner {
     key: Arc<signature::RSAKeyPair>,

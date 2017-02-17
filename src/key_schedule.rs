@@ -3,7 +3,7 @@
 use ring::{hmac, digest, hkdf};
 use msgs::codec;
 
-/// The kinds of secret we can extract from KeySchedule.
+/// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SecretKind {
     ResumptionPSKBinderKey,
@@ -86,7 +86,7 @@ impl KeySchedule {
     /// traffic secret.
     pub fn sign_finish(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
-        self.sign_verify_data(&base_key, hs_hash)
+        self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
@@ -95,7 +95,7 @@ impl KeySchedule {
         debug_assert!(hs_hash.len() == self.hash.output_len);
 
         let hmac_key = hkdf_expand_label(self.hash,
-                                         &base_key,
+                                         base_key,
                                          b"finished",
                                          &[],
                                          self.hash.output_len as u16);
@@ -110,7 +110,7 @@ impl KeySchedule {
     pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
         hkdf_expand_label(self.hash,
-                          &base_key,
+                          base_key,
                           b"application traffic secret",
                           &[],
                           self.hash.output_len as u16)
@@ -133,7 +133,7 @@ fn _hkdf_expand_label(secret: &hmac::SigningKey,
     hkdflabel.extend_from_slice(label_prefix);
     hkdflabel.extend_from_slice(label);
     codec::encode_u8(context.len() as u8, &mut hkdflabel);
-    hkdflabel.extend_from_slice(&context);
+    hkdflabel.extend_from_slice(context);
 
     hkdf::expand(secret, &hkdflabel, &mut out);
     out

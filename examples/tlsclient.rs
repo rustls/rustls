@@ -70,7 +70,7 @@ impl mio::Handler for TlsClient {
     }
 }
 
-/// We implement io::Write and pass through to the TLS session
+/// We implement `io::Write` and pass through to the TLS session
 impl io::Write for TlsClient {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.tls_session.write(bytes)
@@ -100,7 +100,7 @@ impl TlsClient {
     fn read_source_to_end(&mut self, rd: &mut io::Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = try!(rd.read_to_end(&mut buf));
-        self.tls_session.write(&buf).unwrap();
+        self.tls_session.write_all(&buf).unwrap();
         Ok(len)
     }
 
@@ -139,8 +139,8 @@ impl TlsClient {
         // Read it and then write it to stdout.
         let mut plaintext = Vec::new();
         let rc = self.tls_session.read_to_end(&mut plaintext);
-        if plaintext.len() > 0 {
-            io::stdout().write(&plaintext).unwrap();
+        if !plaintext.is_empty() {
+            io::stdout().write_all(&plaintext).unwrap();
         }
 
         // If that fails, the peer might have started a clean TLS-level
@@ -273,7 +273,7 @@ impl rustls::StoresClientSessions for PersistCache {
 
     /// get: from in-memory cache
     fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.get(key).map(|x| x.clone())
+        self.cache.get(key).cloned()
     }
 }
 
@@ -335,7 +335,7 @@ fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
     let addrs = (host, port).to_socket_addrs().unwrap();
     for addr in addrs {
         if let SocketAddr::V4(_) = addr {
-            return addr.clone();
+            return addr;
         }
     }
 
@@ -344,7 +344,7 @@ fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
 
 /// Find a ciphersuite with the given name
 fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
-    for suite in rustls::ALL_CIPHERSUITES.iter() {
+    for suite in &rustls::ALL_CIPHERSUITES {
         let sname = format!("{:?}", suite.suite).to_lowercase();
 
         if sname == name.to_string().to_lowercase() {
@@ -356,7 +356,7 @@ fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
 }
 
 /// Make a vector of ciphersuites named in `suites`
-fn lookup_suites(suites: &Vec<String>) -> Vec<&'static rustls::SupportedCipherSuite> {
+fn lookup_suites(suites: &[String]) -> Vec<&'static rustls::SupportedCipherSuite> {
     let mut out = Vec::new();
 
     for csname in suites {
@@ -391,11 +391,11 @@ fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile
     config.set_single_client_cert(certs, privkey);
 }
 
-/// Build a ClientConfig from our arguments
+/// Build a `ClientConfig` from our arguments
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let mut config = rustls::ClientConfig::new();
 
-    if args.flag_suite.len() != 0 {
+    if !args.flag_suite.is_empty() {
         config.ciphersuites = lookup_suites(&args.flag_suite);
     }
 
@@ -463,7 +463,7 @@ fn main() {
         let httpreq = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: \
                                close\r\nAccept-Encoding: identity\r\n\r\n",
                               args.arg_hostname);
-        tlsclient.write(httpreq.as_bytes()).unwrap();
+        tlsclient.write_all(httpreq.as_bytes()).unwrap();
     } else {
         let mut stdin = io::stdin();
         tlsclient.read_source_to_end(&mut stdin).unwrap();

@@ -1,7 +1,6 @@
 use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
 use msgs::enums::{NamedGroup, ProtocolVersion};
 use msgs::handshake::KeyExchangeAlgorithm;
-use msgs::handshake::SupportedSignatureSchemes;
 use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
@@ -46,7 +45,7 @@ impl KeyExchange {
     }
 
     pub fn client_ecdhe(kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        let mut rd = Reader::init(&kx_params);
+        let mut rd = Reader::init(kx_params);
         let ecdh_params = try_ret!(ServerECDHParams::read(&mut rd));
 
         try_ret!(KeyExchange::start_ecdhe(ecdh_params.curve_params.named_group))
@@ -114,7 +113,7 @@ impl KeyExchange {
 /// A cipher suite supported by rustls.
 ///
 /// All possible instances of this class are provided by the library in
-/// the ALL_CIPHERSUITES array.
+/// the `ALL_CIPHERSUITES` array.
 #[derive(Debug)]
 pub struct SupportedCipherSuite {
     /// The TLS enumeration naming this cipher suite.
@@ -141,11 +140,11 @@ impl PartialEq for SupportedCipherSuite {
 
 impl SupportedCipherSuite {
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
-        match &self.hash {
-            &HashAlgorithm::SHA1 => &ring::digest::SHA1,
-            &HashAlgorithm::SHA256 => &ring::digest::SHA256,
-            &HashAlgorithm::SHA384 => &ring::digest::SHA384,
-            &HashAlgorithm::SHA512 => &ring::digest::SHA512,
+        match self.hash {
+            HashAlgorithm::SHA1 => &ring::digest::SHA1,
+            HashAlgorithm::SHA256 => &ring::digest::SHA256,
+            HashAlgorithm::SHA384 => &ring::digest::SHA384,
+            HashAlgorithm::SHA512 => &ring::digest::SHA512,
             _ => unreachable!(),
         }
     }
@@ -154,15 +153,15 @@ impl SupportedCipherSuite {
     /// Generate an ephemeral key, generate the shared secret, and
     /// return it and the public half in a `KeyExchangeResult`.
     pub fn do_client_kx(&self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        match &self.kx {
-            &KeyExchangeAlgorithm::ECDHE => KeyExchange::client_ecdhe(kx_params),
+        match self.kx {
+            KeyExchangeAlgorithm::ECDHE => KeyExchange::client_ecdhe(kx_params),
             _ => None,
         }
     }
 
     pub fn start_server_kx(&self, named_group: NamedGroup) -> Option<KeyExchange> {
-        match &self.kx {
-            &KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_group),
+        match self.kx {
+            KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_group),
             _ => None,
         }
     }
@@ -171,7 +170,7 @@ impl SupportedCipherSuite {
     /// offered `SupportedSignatureSchemes`.  If we return None,
     /// the handshake terminates.
     pub fn resolve_sig_scheme(&self,
-                              offered: &SupportedSignatureSchemes)
+                              offered: &[SignatureScheme])
                               -> Option<SignatureScheme> {
         let mut our_preference = vec![
             // Prefer the designated hash algorithm of this suite, for
@@ -192,14 +191,14 @@ impl SupportedCipherSuite {
             our_preference.push(SignatureScheme::RSA_PSS_SHA256);
         }
 
-        util::first_in_both(our_preference.as_slice(), offered.as_slice())
+        util::first_in_both(our_preference.as_slice(), offered)
     }
 
     pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
-        match &self.bulk {
-            &BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
-            &BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM,
-            &BulkAlgorithm::CHACHA20_POLY1305 => &ring::aead::CHACHA20_POLY1305,
+        match self.bulk {
+            BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
+            BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM,
+            BulkAlgorithm::CHACHA20_POLY1305 => &ring::aead::CHACHA20_POLY1305,
         }
     }
 
@@ -375,7 +374,7 @@ pub fn choose_ciphersuite_preferring_server(client_suites: &[CipherSuite],
 }
 
 /// Return a list of the ciphersuites in `all` with the suites
-/// incompatible with SignatureAlgorithm `sigalg` removed.
+/// incompatible with `SignatureAlgorithm` `sigalg` removed.
 pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite],
                            sigalg: &SignatureAlgorithm)
                            -> Vec<&'static SupportedCipherSuite> {

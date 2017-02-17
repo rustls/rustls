@@ -26,7 +26,7 @@ impl MessageFragmenter {
     /// Payloads are copied.
     pub fn fragment(&self, msg: Message, out: &mut VecDeque<Message>) {
         // Non-fragment path
-        if msg.payload.len() <= self.max_frag {
+        if msg.payload.length() <= self.max_frag {
             out.push_back(msg.into_opaque());
             return;
         }

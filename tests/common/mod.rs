@@ -15,7 +15,7 @@ fn wait_for_port(port: u16) -> Option<()> {
     let mut count = 0;
     loop {
         thread::sleep(time::Duration::from_millis(500));
-        if let Ok(_) = net::TcpStream::connect(("127.0.0.1", port)) {
+        if net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
             return Some(());
         }
         count += 1;
@@ -28,7 +28,7 @@ fn wait_for_port(port: u16) -> Option<()> {
 // Find an unused port
 fn unused_port(mut port: u16) -> u16 {
     loop {
-        if let Err(_) = net::TcpStream::connect(("127.0.0.1", port)) {
+        if net::TcpStream::connect(("127.0.0.1", port)).is_err() {
             return port;
         }
 
@@ -69,7 +69,7 @@ pub fn openssl_find() -> &'static str {
         return "/usr/local/opt/openssl/bin/openssl";
     }
 
-    return "openssl";
+    "openssl"
 }
 
 // Does openssl s_client support -alpn?
@@ -520,7 +520,7 @@ impl TlsServer {
             args.push("--tickets");
         }
 
-        if self.client_auth_roots.len() > 0 {
+        if !self.client_auth_roots.is_empty() {
             args.push("--auth");
             args.push(&self.client_auth_roots);
 

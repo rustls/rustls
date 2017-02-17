@@ -35,7 +35,7 @@ pub trait StoresClientSessions : Send + Sync {
     fn get(&mut self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
-/// An implementor of StoresClientSessions which does nothing.
+/// An implementor of `StoresClientSessions` which does nothing.
 struct NoSessionStorage {}
 
 impl StoresClientSessions for NoSessionStorage {
@@ -48,7 +48,7 @@ impl StoresClientSessions for NoSessionStorage {
     }
 }
 
-/// An implementor of StoresClientSessions that stores everything
+/// An implementor of `StoresClientSessions` that stores everything
 /// in memory.  It enforces a limit on the number of sessions
 /// to bound memory usage.
 pub struct ClientSessionMemoryCache {
@@ -102,7 +102,7 @@ pub trait ResolvesClientCert : Send + Sync {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)>;
+               -> Option<sign::CertChainAndSigner>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -114,7 +114,7 @@ impl ResolvesClientCert for FailResolveClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
+               -> Option<sign::CertChainAndSigner> {
         None
     }
 
@@ -144,7 +144,7 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
+               -> Option<sign::CertChainAndSigner> {
         Some((self.chain.clone(), self.key.clone()))
     }
 
@@ -404,7 +404,7 @@ impl ClientSessionImpl {
             return self.common.process_alert(msg);
         }
 
-        return self.process_main_protocol(msg);
+        self.process_main_protocol(msg)
     }
 
     fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {

@@ -53,7 +53,7 @@ fn make_tls12_aad(seq: u64,
     codec::put_u16(len as u16, &mut out[11..]);
 }
 
-/// Make a MessageCipherPair based on the given supported ciphersuite `scs`,
+/// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
 /// and the session's `secrets`.
 pub fn new_tls12(scs: &'static SupportedCipherSuite,
                  secrets: &SessionSecrets)
@@ -130,7 +130,7 @@ pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
     Box::new(TLS13MessageEncrypter::new(aead_alg, &key, &iv))
 }
 
-/// A MessageEncrypter for AES-GCM AEAD ciphersuites. TLS 1.2 only.
+/// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
 pub struct GCMMessageEncrypter {
     alg: &'static ring::aead::Algorithm,
     enc_key: ring::aead::SealingKey,
@@ -138,7 +138,7 @@ pub struct GCMMessageEncrypter {
     nonce_offset: [u8; 8],
 }
 
-/// A MessageDecrypter for AES-GCM AEAD ciphersuites.  TLS1.2 only.
+/// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
 pub struct GCMMessageDecrypter {
     dec_key: ring::aead::OpeningKey,
     dec_salt: [u8; 4],
@@ -157,8 +157,8 @@ impl MessageDecrypter for GCMMessageDecrypter {
         }
 
         let mut nonce = [0u8; 12];
-        nonce.as_mut().write(&self.dec_salt).unwrap();
-        nonce[4..].as_mut().write(&buf).unwrap();
+        nonce.as_mut().write_all(&self.dec_salt).unwrap();
+        nonce[4..].as_mut().write_all(&buf[..8]).unwrap();
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
         make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD, &mut aad);
@@ -196,7 +196,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
         // the sequence number.
         //
         let mut nonce = [0u8; 12];
-        nonce.as_mut().write(&self.enc_salt).unwrap();
+        nonce.as_mut().write_all(&self.enc_salt).unwrap();
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce[4..], &self.nonce_offset);
 
@@ -238,8 +238,8 @@ impl GCMMessageEncrypter {
         debug_assert_eq!(enc_iv.len(), 4);
         debug_assert_eq!(nonce_offset.len(), 8);
 
-        ret.enc_salt.as_mut().write(enc_iv).unwrap();
-        ret.nonce_offset.as_mut().write(nonce_offset).unwrap();
+        ret.enc_salt.as_mut().write_all(enc_iv).unwrap();
+        ret.nonce_offset.as_mut().write_all(nonce_offset).unwrap();
         ret
     }
 }
@@ -254,7 +254,7 @@ impl GCMMessageDecrypter {
         };
 
         debug_assert_eq!(dec_iv.len(), 4);
-        ret.dec_salt.as_mut().write(dec_iv).unwrap();
+        ret.dec_salt.as_mut().write_all(dec_iv).unwrap();
         ret
     }
 }
@@ -355,7 +355,7 @@ impl TLS13MessageEncrypter {
             enc_offset: [0u8; 12],
         };
 
-        ret.enc_offset.as_mut().write(enc_iv).unwrap();
+        ret.enc_offset.as_mut().write_all(enc_iv).unwrap();
         ret
     }
 }
@@ -370,14 +370,14 @@ impl TLS13MessageDecrypter {
             dec_offset: [0u8; 12],
         };
 
-        ret.dec_offset.as_mut().write(dec_iv).unwrap();
+        ret.dec_offset.as_mut().write_all(dec_iv).unwrap();
         ret
     }
 }
 
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses TLS13MessageEncrypter.
+/// TLS1.3 uses `TLS13MessageEncrypter`.
 pub struct ChaCha20Poly1305MessageEncrypter {
     alg: &'static ring::aead::Algorithm,
     enc_key: ring::aead::SealingKey,
@@ -386,7 +386,7 @@ pub struct ChaCha20Poly1305MessageEncrypter {
 
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
-/// TLS1.3 uses TLS13MessageDecrypter.
+/// TLS1.3 uses `TLS13MessageDecrypter`.
 pub struct ChaCha20Poly1305MessageDecrypter {
     dec_key: ring::aead::OpeningKey,
     dec_offset: [u8; 12],
@@ -402,7 +402,7 @@ impl ChaCha20Poly1305MessageEncrypter {
             enc_offset: [0u8; 12],
         };
 
-        ret.enc_offset.as_mut().write(enc_iv).unwrap();
+        ret.enc_offset.as_mut().write_all(enc_iv).unwrap();
         ret
     }
 }
@@ -416,7 +416,7 @@ impl ChaCha20Poly1305MessageDecrypter {
             dec_offset: [0u8; 12],
         };
 
-        ret.dec_offset.as_mut().write(dec_iv).unwrap();
+        ret.dec_offset.as_mut().write_all(dec_iv).unwrap();
         ret
     }
 }
@@ -485,7 +485,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     }
 }
 
-/// A MessageEncrypter which doesn't work.
+/// A `MessageEncrypter` which doesn't work.
 pub struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
@@ -494,7 +494,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
     }
 }
 
-/// A MessageDecrypter which doesn't work.
+/// A `MessageDecrypter` which doesn't work.
 pub struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {

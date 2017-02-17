@@ -32,7 +32,7 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
                                                    &webpki::RSA_PKCS1_2048_8192_SHA512,
                                                    &webpki::RSA_PKCS1_3072_8192_SHA384];
 
-/// This is like a webpki::TrustAnchor, except it owns
+/// This is like a `webpki::TrustAnchor`, except it owns
 /// rather than borrows its memory.  That prevents lifetimes
 /// leaking up the object tree.
 struct OwnedTrustAnchor {
@@ -69,6 +69,11 @@ impl RootCertStore {
     /// Make a new, empty `RootCertStore`.
     pub fn empty() -> RootCertStore {
         RootCertStore { roots: Vec::new() }
+    }
+
+    /// Return true if there are no certificates.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Say how many certificates are in the container.
@@ -145,7 +150,7 @@ impl RootCertStore {
 }
 
 /// Check `presented_certs` is non-empty and rooted in `roots`.
-/// Return the webpki::EndEntityCert for the top certificate
+/// Return the `webpki::EndEntityCert` for the top certificate
 /// in `presented_certs`.
 fn verify_common_cert<'a>(roots: &RootCertStore,
                           presented_certs: &'a [ASN1Cert])
@@ -156,8 +161,10 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
 
     // EE cert must appear first.
     let cert_der = untrusted::Input::from(&presented_certs[0].0);
-    let cert = try!(webpki::EndEntityCert::from(cert_der)
-        .map_err(|err| TLSError::WebPKIError(err)));
+    let cert = try! {
+        webpki::EndEntityCert::from(cert_der)
+        .map_err(TLSError::WebPKIError)
+    };
 
     let chain: Vec<untrusted::Input> = presented_certs.iter()
         .skip(1)
@@ -174,8 +181,8 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
         return Ok(cert);
     }
 
-    cert.verify_is_valid_tls_server_cert(&SUPPORTED_SIG_ALGS, &trustroots, &chain, time::get_time())
-        .map_err(|err| TLSError::WebPKIError(err))
+    cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, time::get_time())
+        .map_err(TLSError::WebPKIError)
         .map(|_| cert)
 }
 
@@ -183,7 +190,7 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
 /// configured in `roots`.  Make sure that `dns_name` is quoted by
 /// the top certificate in the chain.
 pub fn verify_server_cert(roots: &RootCertStore,
-                          presented_certs: &Vec<ASN1Cert>,
+                          presented_certs: &[ASN1Cert],
                           dns_name: &str)
                           -> Result<(), TLSError> {
     let cert = try!(verify_common_cert(roots, presented_certs));
@@ -194,13 +201,13 @@ pub fn verify_server_cert(roots: &RootCertStore,
     }
 
     cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
-        .map_err(|err| TLSError::WebPKIError(err))
+        .map_err(TLSError::WebPKIError)
 }
 
 /// Verify a certificate chain `presented_certs` is rooted in `roots`.
 /// Does no further checking of the certificate.
 pub fn verify_client_cert(roots: &RootCertStore,
-                          presented_certs: &Vec<ASN1Cert>)
+                          presented_certs: &[ASN1Cert])
                           -> Result<(), TLSError> {
     verify_common_cert(roots, presented_certs).map(|_| ())
 }
@@ -271,10 +278,13 @@ pub fn verify_signed_struct(message: &[u8],
 
     let possible_algs = try!(convert_scheme(dss.scheme));
     let cert_in = untrusted::Input::from(&cert.0);
-    let cert = try!(webpki::EndEntityCert::from(cert_in).map_err(|err| TLSError::WebPKIError(err)));
+    let cert = try! {
+        webpki::EndEntityCert::from(cert_in)
+        .map_err(TLSError::WebPKIError)
+    };
 
-    verify_sig_using_any_alg(&cert, &possible_algs, message, &dss.sig.0)
-        .map_err(|err| TLSError::WebPKIError(err))
+    verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
+        .map_err(TLSError::WebPKIError)
 }
 
 fn convert_alg_tls13(scheme: SignatureScheme)
@@ -307,10 +317,13 @@ pub fn verify_tls13(cert: &ASN1Cert,
     msg.extend_from_slice(handshake_hash);
 
     let cert_in = untrusted::Input::from(&cert.0);
-    let cert = try!(webpki::EndEntityCert::from(cert_in).map_err(|err| TLSError::WebPKIError(err)));
-    try!(cert.verify_signature(alg,
+    let cert = try! {
+        webpki::EndEntityCert::from(cert_in)
+        .map_err(TLSError::WebPKIError)
+    };
+
+    cert.verify_signature(alg,
                           untrusted::Input::from(&msg),
                           untrusted::Input::from(&dss.sig.0))
-        .map_err(|err| TLSError::WebPKIError(err)));
-    Ok(())
+    .map_err(TLSError::WebPKIError)
 }

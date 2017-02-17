@@ -7,8 +7,8 @@ use std::mem;
 use std::sync::Mutex;
 use ring::aead;
 
-/// This is a ProducesTickets implementation which uses
-/// any *ring* aead::Algorithm to encrypt and authentication
+/// This is a `ProducesTickets` implementation which uses
+/// any *ring* `aead::Algorithm` to encrypt and authentication
 /// the ticket payload.  It does not enforce any lifetime
 /// constraint.
 pub struct AEADTicketer {
@@ -19,7 +19,7 @@ pub struct AEADTicketer {
 }
 
 impl AEADTicketer {
-    /// Make a new AEADTicketer using the given `alg`, `key` material
+    /// Make a new `AEADTicketer` using the given `alg`, `key` material
     /// and advertised `lifetime_seconds`.  Note that `lifetime_seconds`
     /// does not affect the lifetime of the key.  `key` must be the
     /// right length for `alg` or this will panic.
@@ -59,7 +59,7 @@ impl ProducesTickets for AEADTicketer {
 
         let mut out = Vec::new();
         out.extend_from_slice(&nonce);
-        out.extend_from_slice(&message);
+        out.extend_from_slice(message);
         out.resize(nonce.len() + message.len() + self.alg.max_overhead_len(),
                    0u8);
 

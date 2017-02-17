@@ -39,7 +39,7 @@ fn extract<A>(rd: &mut io::BufRead,
         }
 
         if take_base64 {
-            b64buf.push_str(&line.trim());
+            b64buf.push_str(line.trim());
         }
     }
 }

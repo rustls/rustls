@@ -55,11 +55,11 @@ impl MessagePayload {
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn length(&self) -> usize {
         match *self {
-            MessagePayload::Alert(ref x) => x.len(),
-            MessagePayload::Handshake(ref x) => x.len(),
-            MessagePayload::ChangeCipherSpec(ref x) => x.len(),
+            MessagePayload::Alert(ref x) => x.length(),
+            MessagePayload::Handshake(ref x) => x.length(),
+            MessagePayload::ChangeCipherSpec(ref x) => x.length(),
             MessagePayload::Opaque(ref x) => x.len(),
         }
     }
@@ -97,7 +97,7 @@ impl Codec for Message {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.typ.encode(bytes);
         self.version.encode(bytes);
-        encode_u16(self.payload.len() as u16, bytes);
+        encode_u16(self.payload.length() as u16, bytes);
         self.payload.encode(bytes);
     }
 }
@@ -208,7 +208,7 @@ impl Message {
 }
 
 impl<'a> Message {
-    pub fn into_borrowed(&'a self) -> BorrowMessage<'a> {
+    pub fn to_borrowed(&'a self) -> BorrowMessage<'a> {
         if let MessagePayload::Opaque(ref p) = self.payload {
             BorrowMessage {
                 typ: self.typ,
@@ -216,7 +216,7 @@ impl<'a> Message {
                 payload: &p.0
             }
         } else {
-            unreachable!("into_borrowed must have opaque message");
+            unreachable!("to_borrowed must have opaque message");
         }
     }
 }

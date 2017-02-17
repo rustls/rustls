@@ -85,7 +85,7 @@ pub trait ResolvesServerCert : Send + Sync {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)>;
+               -> Option<sign::CertChainAndSigner>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -147,7 +147,7 @@ impl StoresServerSessions for NoSessionStorage {
     }
 }
 
-/// An implementor of StoresServerSessions that stores everything
+/// An implementor of `StoresServerSessions` that stores everything
 /// in memory.  If enforces a limit on the number of stored sessions
 /// to bound memory usage.
 pub struct ServerSessionMemoryCache {
@@ -219,7 +219,7 @@ impl ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
+               -> Option<sign::CertChainAndSigner> {
         None
     }
 }
@@ -244,7 +244,7 @@ impl ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Option<(Vec<key::Certificate>, Arc<Box<sign::Signer>>)> {
+               -> Option<sign::CertChainAndSigner> {
         Some((self.chain.clone(), self.key.clone()))
     }
 }
@@ -418,7 +418,7 @@ impl ServerSessionImpl {
             return self.common.process_alert(msg);
         }
 
-        return self.process_main_protocol(msg);
+        self.process_main_protocol(msg)
     }
 
     fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
@@ -500,8 +500,8 @@ impl ServerSessionImpl {
 
 /// This represents a single TLS server session.
 ///
-/// Send TLS-protected data to the peer using the io::Write trait implementation.
-/// Read data from the peer using the io::Read trait implementation.
+/// Send TLS-protected data to the peer using the `io::Write` trait implementation.
+/// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerSession {
     // We use the pimpl idiom to hide unimportant details.
     imp: ServerSessionImpl,

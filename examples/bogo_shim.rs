@@ -136,7 +136,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         cfg.ticketer = rustls::Ticketer::new();
     }
 
-    if opts.protocols.len() > 0 {
+    if !opts.protocols.is_empty() {
         cfg.set_protocols(&opts.protocols);
     }
 
@@ -159,13 +159,13 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     cfg.set_persistence(persist);
     cfg.root_store.add(&load_cert("cert.pem")[0]).unwrap();
 
-    if opts.cert_file.len() > 0 && opts.key_file.len() > 0 {
+    if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
         let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
         cfg.set_single_client_cert(cert, key);
     }
 
-    if opts.protocols.len() > 0 {
+    if !opts.protocols.is_empty() {
         cfg.set_protocols(&opts.protocols);
     }
 
@@ -239,7 +239,7 @@ fn flush(sess: &mut Box<rustls::Session>, conn: &mut net::TcpStream) {
 
 fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
     if opts.queue_data {
-        sess.write(b"hello world")
+        sess.write_all(b"hello world")
             .unwrap();
     }
 
@@ -257,12 +257,9 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
                 return;
             }
 
-            match sess.process_new_packets() {
-                Err(err) => {
-                    flush(sess, &mut conn); /* send any alerts before exiting */
-                    handle_err(err)
-                }
-                Ok(_) => {}
+            if let Err(err) = sess.process_new_packets() {
+                flush(sess, &mut conn); /* send any alerts before exiting */
+                handle_err(err);
             }
         }
 
@@ -276,11 +273,11 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             Err(err) => panic!("unhandled read error {:?}", err),
         };
 
-        for i in 0..len {
-            buf[i] ^= 0xff;
+        for b in buf.iter_mut() {
+            *b ^= 0xff;
         }
 
-        sess.write(&buf[..len]).unwrap();
+        sess.write_all(&buf[..len]).unwrap();
     }
 }
 
@@ -293,7 +290,7 @@ fn main() {
 
     let mut opts = Options::new();
 
-    while args.len() > 0 {
+    while !args.is_empty() {
         let arg = args.remove(0);
         match arg.as_ref() {
             "-port" => {
@@ -334,10 +331,6 @@ fn main() {
             "-expect-certificate-types" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
-            "-expect-no-session" |
-            "-expect-session-miss" |
-            "-expect-extended-master-secret" |
-            "-expect-ticket-renewal" => {}
 
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));
@@ -364,8 +357,11 @@ fn main() {
             "-no-tls11" |
             "-no-tls1" |
             "-no-ssl3" |
-            "-decline-alpn" => {}
-
+            "-decline-alpn" |
+            "-expect-no-session" |
+            "-expect-session-miss" |
+            "-expect-extended-master-secret" |
+            "-expect-ticket-renewal" |
             // internal openssl details:
             "-async" |
             "-implicit-handshake" |

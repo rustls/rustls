@@ -75,14 +75,11 @@ fn process_extensions(sess: &mut ServerSessionImpl,
                 .to_string()));
         }
 
-        sess.alpn_protocol = util::first_in_both(&our_protocols, &their_proto_strings);
-        match sess.alpn_protocol {
-            Some(ref selected_protocol) => {
-                info!("Chosen ALPN protocol {:?}", selected_protocol);
-                ret.push(ServerExtension::make_alpn(selected_protocol.clone()))
-            }
-            _ => {}
-        };
+        sess.alpn_protocol = util::first_in_both(our_protocols, &their_proto_strings);
+        if let Some(ref selected_protocol) = sess.alpn_protocol {
+            info!("Chosen ALPN protocol {:?}", selected_protocol);
+            ret.push(ServerExtension::make_alpn(selected_protocol.clone()));
+        }
     }
 
     // SNI
@@ -141,7 +138,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl,
             payload: HandshakePayload::ServerHello(ServerHelloPayload {
                 server_version: ProtocolVersion::TLSv1_2,
                 random: Random::from_slice(&sess.handshake_data.randoms.server),
-                session_id: sess.handshake_data.session_id.clone(),
+                session_id: sess.handshake_data.session_id,
                 cipher_suite: sess.common.get_suite().suite,
                 compression_method: Compression::Null,
                 extensions: extensions,
@@ -295,7 +292,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
         return Err(illegal_param(sess, "refusing to resume without ems"));
     }
 
-    sess.handshake_data.session_id = id.clone();
+    sess.handshake_data.session_id = *id;
     try!(emit_server_hello(sess, client_hello));
 
     let hashalg = sess.common.get_suite().get_hash();
@@ -486,7 +483,7 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
 }
 
 fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
-                                 schemes: &SupportedSignatureSchemes,
+                                 schemes: &[SignatureScheme],
                                  signer: &Arc<Box<sign::Signer>>)
                                  -> Result<(), TLSError> {
     let mut message = Vec::new();
@@ -494,11 +491,15 @@ fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
     message.extend_from_slice(b"TLS 1.3, server CertificateVerify\x00");
     message.extend_from_slice(&sess.handshake_data.transcript.get_current_hash());
 
-    let scheme = try!(signer.choose_scheme(schemes)
-    .ok_or_else(|| TLSError::PeerIncompatibleError("no overlapping sigschemes".to_string())));
+    let scheme = try! {
+        signer.choose_scheme(schemes)
+        .ok_or_else(|| TLSError::PeerIncompatibleError("no overlapping sigschemes".to_string()))
+    };
 
-    let sig = try!(signer.sign(scheme, &message)
-    .map_err(|_| TLSError::General("cannot sign".to_string())));
+    let sig = try! {
+        signer.sign(scheme, &message)
+        .map_err(|_| TLSError::General("cannot sign".to_string()))
+    };
 
     let cv = DigitallySignedStruct::new(scheme, sig);
 
@@ -574,7 +575,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
     let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
-    ring::constant_time::verify_slices_are_equal(&real_binder, &binder).is_ok()
+    ring::constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
 }
 
 fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
@@ -640,7 +641,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
             return Err(illegal_param(sess, "psk extension in wrong position"));
         }
 
-        if psk_offer.binders.len() == 0 {
+        if psk_offer.binders.is_empty() {
             return Err(decode_error(sess, "psk extension missing binder"));
         }
 
@@ -730,11 +731,9 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
         }
-    } else {
-        if !tls12_enabled && tls13_enabled {
-            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-            return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
-        }
+    } else if !tls12_enabled && tls13_enabled {
+        sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
+        return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
     }
 
     if sess.common.negotiated_version == None {
@@ -832,28 +831,23 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     let mut ticket_received = false;
 
     if let Some(ticket_ext) = client_hello.get_ticket_extension() {
-        match ticket_ext {
-            &ClientExtension::SessionTicketOffer(ref ticket) => {
-                ticket_received = true;
-                info!("Ticket received");
+        if let ClientExtension::SessionTicketOffer(ref ticket) = *ticket_ext {
+            ticket_received = true;
+            info!("Ticket received");
 
-                let maybe_resume = sess.config
-                    .ticketer
-                    .decrypt(&ticket.0)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
+            let maybe_resume = sess.config
+                .ticketer
+                .decrypt(&ticket.0)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
 
-                if can_resume(sess, &maybe_resume) {
-                    return start_resumption(sess,
-                                            client_hello,
-                                            &client_hello.session_id,
-                                            maybe_resume.unwrap());
-                } else {
-                    info!("Ticket didn't decrypt");
-                }
+            if can_resume(sess, &maybe_resume) {
+                return start_resumption(sess,
+                                        client_hello,
+                                        &client_hello.session_id,
+                                        maybe_resume.unwrap());
+            } else {
+                info!("Ticket didn't decrypt");
             }
-
-            // eg ClientExtension::SessionTicketRequest
-            _ => (),
         }
     }
 
@@ -1043,7 +1037,7 @@ fn handle_certificate_verify_tls12(sess: &mut ServerSessionImpl,
         let certs = sess.handshake_data.valid_client_cert_chain.as_ref().unwrap();
         let handshake_msgs = sess.handshake_data.transcript.take_handshake_buf();
 
-        verify::verify_signed_struct(&handshake_msgs, &certs[0], &sig)
+        verify::verify_signed_struct(&handshake_msgs, &certs[0], sig)
     };
 
     if rc.is_err() {
@@ -1075,7 +1069,7 @@ fn handle_certificate_verify_tls13(sess: &mut ServerSessionImpl,
         sess.handshake_data.transcript.abandon_client_auth();
 
         verify::verify_tls13(&certs[0],
-                             &sig,
+                             sig,
                              &handshake_hash,
                              b"TLS 1.3, client CertificateVerify\x00")
     };
