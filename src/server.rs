@@ -389,12 +389,12 @@ impl ServerSessionImpl {
     }
 
     pub fn is_handshaking(&self) -> bool {
-        !self.transport.traffic
+        !self.transport.traffic()
     }
 
     pub fn process_msg(&mut self, mut msg: TLSMessage) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
-        if self.transport.peer_encrypting {
+        if self.transport.peer_encrypting() {
             let dm = try!(self.transport.decrypt_incoming(msg));
             msg = dm;
         }
@@ -435,7 +435,7 @@ impl ServerSessionImpl {
     }
 
     pub fn process_main_protocol(&mut self, msg: TLSMessage) -> Result<(), TLSError> {
-        if self.transport.traffic && !self.transport.is_tls13() &&
+        if self.transport.traffic() && !self.transport.is_tls13() &&
            msg.is_handshake_type(HandshakeType::ClientHello) {
             self.transport.send_warning_alert(AlertDescription::NoRenegotiation);
             return Ok(());
@@ -472,8 +472,8 @@ impl ServerSessionImpl {
         Ok(())
     }
 
-    pub fn start_encryption_tls12(&mut self) {
-        self.transport.start_encryption_tls12(self.secrets.as_ref().unwrap());
+    pub fn start_encryption_v12(&mut self) {
+        self.transport.start_encryption_v12(self.secrets.as_ref().unwrap());
     }
 
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
@@ -495,7 +495,7 @@ impl ServerSessionImpl {
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.transport.negotiated_version
+        self.transport.negotiated_version()
     }
 }
 

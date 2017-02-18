@@ -343,8 +343,8 @@ impl ClientSessionImpl {
         ret
     }
 
-    pub fn start_encryption_tls12(&mut self) {
-        self.transport.start_encryption_tls12(self.secrets.as_ref().unwrap());
+    pub fn start_encryption_v12(&mut self) {
+        self.transport.start_encryption_v12(self.secrets.as_ref().unwrap());
     }
 
     pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
@@ -372,12 +372,12 @@ impl ClientSessionImpl {
     }
 
     pub fn is_handshaking(&self) -> bool {
-        !self.transport.traffic
+        !self.transport.traffic()
     }
 
     pub fn process_msg(&mut self, mut msg: TLSMessage) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
-        if self.transport.peer_encrypting {
+        if self.transport.peer_encrypting() {
             let dm = try!(self.transport.decrypt_incoming(msg));
             msg = dm;
         }
@@ -492,7 +492,7 @@ impl ClientSessionImpl {
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.transport.negotiated_version
+        self.transport.negotiated_version()
     }
 }
 

@@ -261,7 +261,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
     sess.secrets = Some(SessionSecrets::new_resume(&sess.handshake_data.randoms,
                                                    hashalg,
                                                    &resumedata.master_secret.0));
-    sess.start_encryption_tls12();
+    sess.start_encryption_v12();
     sess.handshake_data.valid_client_cert_chain = resumedata.client_cert_chain;
     sess.handshake_data.doing_resume = true;
 
@@ -632,7 +632,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResu
     let maybe_versions_ext = client_hello.get_versions_extension();
     if let Some(versions) = maybe_versions_ext {
         if versions.contains(&ProtocolVersion::Unknown(0x7f12)) && tls13_enabled {
-            sess.transport.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+            sess.transport.set_negotiated_version(ProtocolVersion::TLSv1_3);
         } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
             sess.transport.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
@@ -642,8 +642,8 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResu
         return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
     }
 
-    if sess.transport.negotiated_version == None {
-        sess.transport.negotiated_version = Some(ProtocolVersion::TLSv1_2);
+    if sess.transport.negotiated_version() == None {
+        sess.transport.set_negotiated_version(ProtocolVersion::TLSv1_2);
     }
 
     // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
@@ -672,7 +672,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResu
                                                       &private_key.algorithm());
 
     // And version
-    let protocol_version = sess.transport.negotiated_version.unwrap();
+    let protocol_version = sess.transport.negotiated_version().unwrap();
     let suitable_suites = suites::reduce_given_version(&suitable_suites, protocol_version);
 
     let maybe_ciphersuite = if sess.config.ignore_client_order {
@@ -918,7 +918,7 @@ fn handle_client_kx(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResult 
                                                 hashalg,
                                                 &kxd.premaster_secret));
     }
-    sess.start_encryption_tls12();
+    sess.start_encryption_v12();
 
     if sess.handshake_data.doing_client_auth {
         Ok(&EXPECT_TLS12_CERTIFICATE_VERIFY)

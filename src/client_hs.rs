@@ -472,13 +472,13 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResu
 
     match server_hello.server_version {
         ProtocolVersion::TLSv1_2 if sess.config.versions.contains(&ProtocolVersion::TLSv1_2) => {
-            sess.transport.negotiated_version = Some(ProtocolVersion::TLSv1_2);
+            sess.transport.set_negotiated_version(ProtocolVersion::TLSv1_2);
         }
         ProtocolVersion::TLSv1_3 |
         ProtocolVersion::Unknown(TLS13_DRAFT) if sess.config
             .versions
             .contains(&ProtocolVersion::TLSv1_3) => {
-            sess.transport.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+            sess.transport.set_negotiated_version(ProtocolVersion::TLSv1_3);
         }
         _ => {
             sess.transport.send_fatal_alert(AlertDescription::ProtocolVersion);
@@ -529,7 +529,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResu
     info!("Using ciphersuite {:?}", server_hello.cipher_suite);
     sess.transport.set_suite(scs.unwrap());
 
-    let version = sess.transport.negotiated_version.unwrap();
+    let version = sess.transport.negotiated_version().unwrap();
     if !sess.transport.get_suite().usable_for_version(version) {
         return Err(illegal_param(sess, "server chose unusable ciphersuite for version"));
     }
@@ -589,7 +589,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResu
     }
 
     if abbreviated_handshake {
-        sess.start_encryption_tls12();
+        sess.start_encryption_v12();
 
         if sess.handshake_data.must_issue_new_ticket {
             Ok(&EXPECT_TLS12_NEW_TICKET_RESUME)
@@ -1112,7 +1112,7 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
                                                 hashalg,
                                                 &kxd.premaster_secret));
     }
-    sess.start_encryption_tls12();
+    sess.start_encryption_v12();
 
     // 5.
     emit_finished(sess);
