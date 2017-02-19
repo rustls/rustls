@@ -475,3 +475,17 @@ fn server_error_is_sticky() {
     err = server.process_new_packets();
     assert_eq!(err.is_err(), true);
 }
+
+#[test]
+fn server_is_send() {
+    let server_config = make_server_config();
+    let server = ServerSession::new(&Arc::new(server_config));
+    &server as &Send;
+}
+
+#[test]
+fn client_is_send() {
+    let client_config = make_client_config();
+    let client = ClientSession::new(&Arc::new(client_config), "localhost");
+    &client as &Send;
+}
