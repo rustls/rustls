@@ -60,21 +60,20 @@ impl ProducesTickets for AEADTicketer {
         let mut out = Vec::new();
         out.extend_from_slice(&nonce);
         out.extend_from_slice(message);
-        out.resize(nonce.len() + message.len() + self.alg.max_overhead_len(),
-                   0u8);
+        out.resize(nonce.len() + message.len() + self.alg.tag_len(), 0u8);
 
         let rc = aead::seal_in_place(&self.enc,
                                      &nonce,
+                                     &[],
                                      &mut out[nonce.len()..],
-                                     self.alg.max_overhead_len(),
-                                     &[0u8; 0]);
+                                     self.alg.tag_len());
         if rc.is_err() { None } else { Some(out) }
     }
 
     /// Decrypt `ciphertext` and recover the original message.
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
         let nonce_len = self.alg.nonce_len();
-        let tag_len = self.alg.max_overhead_len();
+        let tag_len = self.alg.tag_len();
 
         if ciphertext.len() < nonce_len + tag_len {
             return None;
@@ -84,13 +83,12 @@ impl ProducesTickets for AEADTicketer {
         let mut out = Vec::new();
         out.extend_from_slice(&ciphertext[nonce_len..]);
 
-        let len = aead::open_in_place(&self.dec, nonce, 0, &mut out, &[0u8; 0]);
+        let plain_len = match aead::open_in_place(&self.dec, nonce, &[], 0, &mut out) {
+            Ok(plaintext) => plaintext.len(),
+            Err(..) => { return None; }
+        };
 
-        if len.is_err() {
-            return None;
-        }
-
-        out.truncate(len.unwrap());
+        out.truncate(plain_len);
         Some(out)
     }
 }
