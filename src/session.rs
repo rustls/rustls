@@ -31,6 +31,10 @@ pub trait Session: Read + Write + Send {
     ///
     /// The returned error only relates to IO on `rd`.  TLS-level
     /// errors are emitted from `process_new_packets`.
+    ///
+    /// This function returns `Ok(0)` when the underlying `rd` does
+    /// so.  This typically happens when a socket is cleanly closed,
+    /// or a file is at EOF.
     fn read_tls(&mut self, rd: &mut Read) -> Result<usize, io::Error>;
 
     /// Writes TLS messages to `wr`.
