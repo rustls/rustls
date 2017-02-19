@@ -13,6 +13,9 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.5.6:
+  - RFC7627 extended master secret support
+  - Assorted documentation improvements
 * 0.5.5:
   - Crate categories.
   - Protocol errors now permanent for given session.
@@ -55,6 +58,7 @@ obsolete cryptography.
 * TLS1.3 resumption via tickets.
 * Client authentication by clients.
 * Client authentication by servers.
+* Extended master secret support (RFC7627).
 
 ## Possible future features
 

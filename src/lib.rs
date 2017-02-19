@@ -19,6 +19,7 @@
 //! * TLS1.3 resumption via tickets.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
+//! * Extended master secret support (RFC7627).
 //!
 //! ## Possible future features
 //!
