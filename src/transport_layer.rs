@@ -62,6 +62,8 @@ pub struct DatagramTransport {
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub sendable_tls: ChunkVecBuffer,
+    read_seq_bitmask: u64,
+    in_transmission: Vec<DTLSMessage>,
 }
 
 pub trait TransportLayer {
@@ -443,6 +445,25 @@ impl StreamTransport {
     }
 }
 
+impl TransportCommon {
+    fn new(client: bool) -> TransportCommon {
+        TransportCommon {
+            is_client: client,
+            key_schedule: None,
+            message_encrypter: MessageEncrypter::invalid(),
+            message_decrypter: MessageDecrypter::invalid(),
+            negotiated_version: None,
+            write_seq: 0,
+            read_seq: 0,
+            peer_encrypting: false,
+            we_encrypting: false,
+            traffic: false,
+            suite: None,
+            want_write_key_update: false,
+        }
+    }
+}
+
 impl TransportLayer for StreamTransport {
     fn new(client: bool, mtu: Option<usize>) -> Self {
         StreamTransport {
@@ -453,20 +474,7 @@ impl TransportLayer for StreamTransport {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            common: TransportCommon {
-                is_client: client,
-                key_schedule: None,
-                message_encrypter: MessageEncrypter::invalid(),
-                message_decrypter: MessageDecrypter::invalid(),
-                negotiated_version: None,
-                write_seq: 0,
-                read_seq: 0,
-                peer_encrypting: false,
-                we_encrypting: false,
-                traffic: false,
-                suite: None,
-                want_write_key_update: false,
-            },
+            common: TransportCommon::new(client),
         }
     }
 
@@ -520,6 +528,89 @@ impl TransportLayer for StreamTransport {
         };
 
         self.send_msg(ccs, secrecy)
+    }
+}
+
+impl DatagramTransport {
+    fn new(client: bool, mtu: Option<usize>) -> Self {
+        DatagramTransport {
+            common: TransportCommon::new(client),
+            read_seq_bitmask: 0,
+            received_plaintext: ChunkVecBuffer::new(),
+            sendable_plaintext: ChunkVecBuffer::new(),
+            sendable_tls: ChunkVecBuffer::new(),
+        }
+    }
+
+    /// Verifies that `common.read_seq <= num < 64` and `num`
+    /// has not been used before
+    fn check_seq_number(&mut self, num: u64) -> bool {
+        let i = num.saturating_sub(self.common.read_seq);
+        if i > 63 {
+            return false;
+        }
+
+        let bit = 1 << i;
+        if self.read_seq_bitmask & bit != 0 {
+            return false;
+        }
+        self.read_seq_bitmask |= bit;
+
+        while self.read_seq_bitmask & 1 == 1 {
+            self.read_seq_bitmask = self.read_seq_bitmask >> 1;
+
+            if let Some(i) = self.common.read_seq.checked_add(1) {
+                self.common.read_seq = i;
+            } else {
+                // max sequence number reached
+                // TODO: re-negotiate? fatal alert?
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DatagramTransport;
+
+    #[test]
+    fn test_check_seq_number() {
+        let mut transport = DatagramTransport::new(true, None);
+
+        // check for exceeding 64 bit window
+        assert_eq!(false, transport.check_seq_number(64));
+        assert_eq!(false, transport.check_seq_number((1 << 48) - 1));
+        assert_eq!(false, transport.check_seq_number(0xffffffffffffffff));
+
+        assert!(transport.check_seq_number(0));
+
+        // check for wrapping
+        assert_eq!(false, transport.check_seq_number(0xffffffffffffffff));
+
+        // check for reuse
+        for num in 1..128 {
+            assert!(transport.check_seq_number(num));
+        }
+        for num in 0..128 {
+            assert_eq!(false, transport.check_seq_number(num));
+        }
+
+        // check for unordered packet
+        assert!(transport.check_seq_number(128 + 63));
+        for num in 128..(128 + 63) {
+            assert!(transport.check_seq_number(num));
+        }
+        assert_eq!(false, transport.check_seq_number(128 + 63));
+
+        // check for overflow
+        transport.common.read_seq = 0xffffffffffffffff;
+        transport.read_seq_bitmask = 0;
+        assert_eq!(false, transport.check_seq_number(0xffffffffffffffff));
+        assert_eq!(false, transport.check_seq_number(0));
+        assert_eq!(false, transport.check_seq_number(1));
     }
 }
 
