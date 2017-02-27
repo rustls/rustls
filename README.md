@@ -13,6 +13,8 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.5.7:
+  - No changes from 0.5.6; republished with nightly cargo for category support.
 * 0.5.6:
   - RFC7627 extended master secret support
   - Assorted documentation improvements
