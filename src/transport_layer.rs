@@ -6,6 +6,10 @@ use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use msgs::enums::KeyUpdateRequest;
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload};
 use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
+#[cfg(feature="dtls")]
+use msgs::dtls_message::{DTLSMessage, DTLSMessagePayload};
+#[cfg(feature="dtls")]
+use msgs::hsjoiner::dtls::HandshakeJoiner as DTLSHandshakeJoiner;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::deframer::MessageDeframer;
@@ -54,16 +58,17 @@ pub struct StreamTransport {
     pub sendable_tls: ChunkVecBuffer,
 }
 
+#[cfg(feature="dtls")]
 pub struct DatagramTransport {
     common: TransportCommon,
-///    pub message_deframer: MessageDeframer,
-///    pub message_fragmenter: MessageFragmenter,
-///    pub handshake_joiner: HandshakeJoiner,
+    pub handshake_joiner: DTLSHandshakeJoiner,
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
-    pub sendable_tls: ChunkVecBuffer,
+    pub sendable_dtls: ChunkVecBuffer,
     read_seq_bitmask: u64,
     in_transmission: Vec<DTLSMessage>,
+    epoch: u16,
+    seq_number: u64,
 }
 
 pub trait TransportLayer {
@@ -531,17 +536,8 @@ impl TransportLayer for StreamTransport {
     }
 }
 
+#[cfg(feature="dtls")]
 impl DatagramTransport {
-    fn new(client: bool, mtu: Option<usize>) -> Self {
-        DatagramTransport {
-            common: TransportCommon::new(client),
-            read_seq_bitmask: 0,
-            received_plaintext: ChunkVecBuffer::new(),
-            sendable_plaintext: ChunkVecBuffer::new(),
-            sendable_tls: ChunkVecBuffer::new(),
-        }
-    }
-
     /// Verifies that `common.read_seq <= num < 64` and `num`
     /// has not been used before
     fn check_seq_number(&mut self, num: u64) -> bool {
@@ -570,10 +566,147 @@ impl DatagramTransport {
 
         true
     }
+
+    pub fn do_write_key_update(&mut self) {
+        unimplemented!()
+    }
+
+    /// Encrypt a message, and then queue
+    /// the encrypted message for sending.
+    pub fn send_msg_encrypt(&mut self, m: DTLSMessage) {
+        unimplemented!();
+        if self.common().want_write_key_update {
+            self.do_write_key_update();
+        }
+
+//        let mut plain_messages = VecDeque::new();
+  //      self.message_fragmenter.fragment(m, &mut plain_messages);
+
+    //    for m in plain_messages {
+      //      self.send_single_fragment(m.into_borrowed());
+        //}
+    }
+
+    /// Send a raw DTLS message.
+    pub fn send_msg(&mut self, m: DTLSMessage, secrecy: MessageSecrecy) {
+        match secrecy {
+            MessageSecrecy::MustEncrypt => {
+                self.send_msg_encrypt(m)
+            },
+            MessageSecrecy::MayBeUnencrypted if self.we_encrypting() => {
+                // This can happen for CloseNotify
+                self.send_msg_encrypt(m)
+            },
+            MessageSecrecy::MayBeUnencrypted => {
+                /*let mut to_send = VecDeque::new();
+                self.message_fragmenter.fragment(m, &mut to_send);
+                for mm in to_send {
+                    self.queue_tls_message(mm);
+                }*/
+                unimplemented!()
+            },
+        }
+    }
+
+    fn handshake_into_msg(msg_version: ProtocolVersion,
+                          transcript: &hash_hs::HandshakeHash,
+                          payload: HandshakePayload) -> DTLSMessage
+    {
+/*        let fill_in_binder = match payload {
+            HandshakePayload::ClientHello(ref p) => {
+                p.get_psk().is_some()
+            },
+            _ => false,
+        };
+
+        let mut msg_payload = HandshakeMessagePayload {
+            typ: payload.handshake_type(),
+            payload: payload,
+        };
+
+        if fill_in_binder {
+            client_hs::fill_in_psk_binder(transcript, &mut msg_payload);
+        }
+
+        TLSMessage {
+            typ: ContentType::Handshake,
+            version: msg_version,
+            payload: TLSMessagePayload::Handshake(msg_payload),
+        }*/
+        unimplemented!()
+    }
+
 }
 
+#[cfg(feature="dtls")]
+impl TransportLayer for DatagramTransport {
+    fn new(client: bool, mtu: Option<usize>) -> Self {
+        DatagramTransport {
+            common: TransportCommon::new(client),
+            read_seq_bitmask: 0,
+            received_plaintext: ChunkVecBuffer::new(),
+            sendable_plaintext: ChunkVecBuffer::new(),
+            sendable_dtls: ChunkVecBuffer::new(),
+            handshake_joiner: DTLSHandshakeJoiner::new(),
+            in_transmission: Vec::new(),
+            epoch: 0,
+            seq_number: 0,
+        }
+    }
+
+    fn send_handshake_msg_v10(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
+        let msg = Self::handshake_into_msg(ProtocolVersion::DTLSv1_0, transcript, payload);
+        transcript.add_message(&msg);
+        self.send_msg(msg, secrecy);
+    }
+
+    fn send_handshake_msg_v12(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
+        let msg = Self::handshake_into_msg(ProtocolVersion::DTLSv1_2, transcript, payload);
+        transcript.add_message(&msg);
+        self.send_msg(msg, secrecy);
+    }
+
+    fn send_handshake_msg_v13(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
+        unimplemented!()
+    }
+
+    fn common(&self) -> &TransportCommon {
+        &self.common
+    }
+
+    fn mut_common(&mut self) -> &mut TransportCommon {
+        &mut self.common
+    }
+
+    fn has_readable_plaintext(&self) -> bool {
+        !self.received_plaintext.is_empty()
+    }
+
+    fn send_warning_alert(&mut self, desc: AlertDescription) {
+        unimplemented!()
+    }
+
+    fn send_fatal_alert(&mut self, desc: AlertDescription) {
+        unimplemented!()
+    }
+
+    fn send_change_cipher_spec_v12(&mut self, secrecy: MessageSecrecy) {
+        let ccs = DTLSMessage {
+            typ: ContentType::ChangeCipherSpec,
+            version: ProtocolVersion::DTLSv1_2,
+            epoch: self.epoch,
+            sequence: self.seq_number,
+            payload: DTLSMessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        };
+
+        self.send_msg(ccs, secrecy)
+    }
+}
+
+#[cfg(feature="dtls")]
 #[cfg(test)]
 mod tests {
+    use super::TransportLayer;
     use super::DatagramTransport;
 
     #[test]
