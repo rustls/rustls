@@ -485,19 +485,19 @@ impl TransportLayer for StreamTransport {
 
     fn send_handshake_msg_v10(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
         let msg = Self::handshake_into_msg(ProtocolVersion::TLSv1_0, transcript, payload);
-        transcript.add_message(&msg);
+        transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
 
     fn send_handshake_msg_v12(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
         let msg = Self::handshake_into_msg(ProtocolVersion::TLSv1_2, transcript, payload);
-        transcript.add_message(&msg);
+        transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
 
     fn send_handshake_msg_v13(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
         let msg = Self::handshake_into_msg(ProtocolVersion::TLSv1_3, transcript, payload);
-        transcript.add_message(&msg);
+        transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
 
@@ -656,13 +656,13 @@ impl TransportLayer for DatagramTransport {
 
     fn send_handshake_msg_v10(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
         let msg = Self::handshake_into_msg(ProtocolVersion::DTLSv1_0, transcript, payload);
-        transcript.add_message(&msg);
+        transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
 
     fn send_handshake_msg_v12(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
         let msg = Self::handshake_into_msg(ProtocolVersion::DTLSv1_2, transcript, payload);
-        transcript.add_message(&msg);
+        transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
 

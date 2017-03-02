@@ -536,7 +536,7 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResu
 
     // Start our handshake hash, and input the server-hello.
     sess.handshake_data.transcript.start_hash(sess.transport.get_suite().get_hash());
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     // For TLS1.3, start message encryption using
     // handshake_traffic_secret.
@@ -612,7 +612,7 @@ pub static EXPECT_SERVER_HELLO: State = State {
 fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
                               m: TLSMessage) -> StateResult {
     let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     debug!("Got HRR {:?}", hrr);
 
     let has_cookie = hrr.get_cookie().is_some();
@@ -714,7 +714,7 @@ fn handle_encrypted_extensions(sess: &mut ClientSessionImpl,
                                -> StateResult {
     let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
     info!("TLS1.3 encrypted extensions: {:?}", exts);
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     try!(validate_encrypted_extensions(sess, exts));
     try!(process_alpn_protocol(sess, exts.get_alpn_protocol()));
@@ -736,7 +736,7 @@ static EXPECT_TLS13_ENCRYPTED_EXTENSIONS: State = State {
 
 fn handle_certificate_tls13(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResult {
     let cert_chain = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     // This is only non-empty for client auth.
     if cert_chain.context.len() > 0 {
@@ -766,7 +766,7 @@ static EXPECT_TLS13_CERTIFICATE: State = State {
 
 fn handle_certificate_tls12(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResult {
     let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     sess.handshake_data.server_cert_chain = cert_chain.clone();
     Ok(&EXPECT_TLS12_SERVER_KX)
@@ -800,7 +800,7 @@ static EXPECT_TLS13_CERTIFICATE_OR_CERTREQ: State = State {
 fn handle_server_kx(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResult {
     let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
     let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.transport.get_suite().kx);
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     if maybe_decoded_kx.is_none() {
         sess.transport.send_fatal_alert(AlertDescription::DecodeError);
@@ -848,7 +848,7 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
                             &handshake_hash,
                             b"TLS 1.3, server CertificateVerify\x00"));
 
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     Ok(&EXPECT_TLS13_FINISHED)
 }
@@ -921,7 +921,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
 // client auth.  Otherwise we go straight to ServerHelloDone.
 fn handle_certificate_req(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResult {
     let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     sess.handshake_data.doing_client_auth = true;
     info!("Got CertificateRequest {:?}", certreq);
 
@@ -963,7 +963,7 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateR
 fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
                                 m: TLSMessage) -> StateResult {
     let certreq = &extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     sess.handshake_data.doing_client_auth = true;
     info!("Got CertificateRequest {:?}", certreq);
 
@@ -1030,7 +1030,7 @@ static EXPECT_TLS12_SERVER_DONE_OR_CERTREQ: State = State {
 
 fn handle_server_hello_done(sess: &mut ClientSessionImpl,
                             m: TLSMessage) -> StateResult {
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
     info!("Server DNS name is {:?}", sess.handshake_data.dns_name);
@@ -1159,7 +1159,7 @@ static EXPECT_TLS12_CCS: State = State {
 
 fn handle_new_ticket(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateResult {
     let ticket = extract_handshake!(m, HandshakePayload::NewSessionTicket).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     sess.handshake_data.new_ticket = ticket.ticket.0.clone();
     sess.handshake_data.new_ticket_lifetime = ticket.lifetime_hint;
     Ok(&EXPECT_TLS12_CCS)
@@ -1315,7 +1315,7 @@ fn handle_finished_tls13(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateRe
                      })
     };
 
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     /* Transition to application data */
     sess.transport.get_mut_key_schedule().input_empty();
@@ -1382,7 +1382,7 @@ fn _handle_finished_tls12(sess: &mut ClientSessionImpl, m: TLSMessage) -> StateR
     };
 
     // Hash this message too.
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     save_session(sess);
 

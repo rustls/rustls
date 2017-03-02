@@ -11,4 +11,7 @@ pub trait MessagePayload: Sized {
     fn length(&self) -> usize;
 
     fn new_opaque(data: Vec<u8>) -> Self;
+
+    fn encode_for_transcript(&self) -> Vec<u8>;
 }
+

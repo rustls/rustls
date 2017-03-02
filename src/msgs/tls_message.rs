@@ -67,6 +67,14 @@ impl MessagePayload for TLSMessagePayload {
     fn new_opaque(data: Vec<u8>) -> TLSMessagePayload {
         TLSMessagePayload::Opaque(Payload::new(data))
     }
+
+    fn encode_for_transcript(&self) -> Vec<u8> {
+        if let &TLSMessagePayload::Handshake(ref hs) = self {
+            hs.get_encoding()
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 /// A TLS frame, named TLSPlaintext in the standard.
@@ -220,7 +228,6 @@ impl<'a> TLSMessage {
         }
     }
 }
-
 
 /// A TLS frame, named TLSPlaintext in the standard.
 ///

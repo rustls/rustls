@@ -520,7 +520,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
         // We don't have a suitable key share.  Choose a suitable group and
         // send a HelloRetryRequest.
         let retry_group_maybe = util::first_in_both(&NamedGroups::supported(), groups_ext);
-        sess.handshake_data.transcript.add_message(chm);
+        sess.handshake_data.transcript.add_message(&chm.payload);
 
         if let Some(group) = retry_group_maybe {
             if sess.handshake_data.done_retry {
@@ -588,7 +588,7 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     }
 
     let full_handshake = resuming_psk.is_none();
-    sess.handshake_data.transcript.add_message(chm);
+    sess.handshake_data.transcript.add_message(&chm.payload);
     try!(emit_server_hello_tls13(sess, chosen_share, chosen_psk_index, resuming_psk));
     try!(emit_encrypted_extensions(sess, client_hello));
 
@@ -700,7 +700,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResu
     }
 
     // -- TLS1.2 only from hereon in --
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     // Save their Random.
     client_hello.random.write_slice(&mut sess.handshake_data.randoms.client);
 
@@ -818,7 +818,7 @@ pub static EXPECT_CLIENT_HELLO: State = State {
 
 // --- Process client's Certificate for client auth ---
 fn handle_certificate_tls12(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResult {
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
 
     if cert_chain.is_empty() && !sess.config.client_auth_mandatory {
@@ -854,7 +854,7 @@ static EXPECT_TLS12_CERTIFICATE: State = State {
 fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
                             m: TLSMessage)
                             -> StateResult {
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     let certp = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
     let cert_chain = certp.convert();
 
@@ -890,7 +890,7 @@ static EXPECT_TLS13_CERTIFICATE: State = State {
 // --- Process client's KeyExchange ---
 fn handle_client_kx(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResult {
     let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     // Complete key agreement, and set up encryption with the
     // resulting premaster secret.
@@ -953,7 +953,7 @@ fn handle_certificate_verify_tls12(sess: &mut ServerSessionImpl,
         debug!("client CertificateVerify OK");
     }
 
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     Ok(&EXPECT_TLS12_CCS)
 }
 
@@ -987,7 +987,7 @@ fn handle_certificate_verify_tls13(sess: &mut ServerSessionImpl,
         debug!("client CertificateVerify OK");
     }
 
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     Ok(&EXPECT_TLS13_FINISHED)
 }
 
@@ -1119,7 +1119,7 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateResult {
     }
 
     // Send our CCS and Finished.
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
     if !sess.handshake_data.doing_resume {
         emit_ticket(sess);
         emit_ccs(sess);
@@ -1183,7 +1183,7 @@ fn handle_finished_tls13(sess: &mut ServerSessionImpl, m: TLSMessage) -> StateRe
 
     // nb. future derivations include Client Finished, but not the
     // main application data keying.
-    sess.handshake_data.transcript.add_message(&m);
+    sess.handshake_data.transcript.add_message(&m.payload);
 
     // Now move to using application data keys for client traffic.
     // Server traffic is already done.

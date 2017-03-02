@@ -2,6 +2,7 @@ use ring::digest;
 use std::mem;
 use msgs::codec::Codec;
 use msgs::tls_message::{TLSMessage, TLSMessagePayload};
+use msgs::message::MessagePayload;
 
 /// This deals with keeping a running hash of the handshake
 /// payloads.  This is computed by buffering initially.  Once
@@ -86,14 +87,9 @@ impl HandshakeHash {
     }
 
     /// Hash/buffer a handshake message.
-    pub fn add_message(&mut self, m: &TLSMessage) -> &mut HandshakeHash {
-        match m.payload {
-            TLSMessagePayload::Handshake(ref hs) => {
-                let buf = hs.get_encoding();
-                self.update_raw(&buf);
-            }
-            _ => unreachable!(),
-        };
+    pub fn add_message<P:MessagePayload>(&mut self, payload: &P) -> &mut HandshakeHash {
+        let buf = payload.encode_for_transcript();
+        self.update_raw(&buf);
         self
     }
 

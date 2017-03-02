@@ -174,6 +174,14 @@ impl MessagePayload for DTLSMessagePayload {
     fn new_opaque(data: Vec<u8>) -> DTLSMessagePayload {
         DTLSMessagePayload::Opaque(Payload::new(data))
     }
+
+    fn encode_for_transcript(&self) -> Vec<u8> {
+        if let &DTLSMessagePayload::Handshake(ref hs) = self {
+            hs.get_encoding()
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 #[derive(Debug)]
