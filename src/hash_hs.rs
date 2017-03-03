@@ -1,7 +1,5 @@
 use ring::digest;
 use std::mem;
-use msgs::codec::Codec;
-use msgs::tls_message::{TLSMessage, TLSMessagePayload};
 use msgs::message::MessagePayload;
 
 /// This deals with keeping a running hash of the handshake

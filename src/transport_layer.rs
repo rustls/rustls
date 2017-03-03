@@ -7,9 +7,11 @@ use msgs::enums::KeyUpdateRequest;
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload};
 use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
 #[cfg(feature="dtls")]
-use msgs::dtls_message::{DTLSMessage, DTLSMessagePayload};
+use msgs::dtls_message::{DTLSMessage, DTLSMessagePayload, DTLSHandshakeFragment};
 #[cfg(feature="dtls")]
 use msgs::hsjoiner::dtls::HandshakeJoiner as DTLSHandshakeJoiner;
+#[cfg(feature="dtls")]
+use msgs::alert::AlertMessagePayload;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::deframer::MessageDeframer;
@@ -69,6 +71,7 @@ pub struct DatagramTransport {
     in_transmission: Vec<DTLSMessage>,
     epoch: u16,
     seq_number: u64,
+    hs_seq_number: u16,
 }
 
 pub trait TransportLayer {
@@ -608,11 +611,12 @@ impl DatagramTransport {
         }
     }
 
-    fn handshake_into_msg(msg_version: ProtocolVersion,
+    fn handshake_into_msg(&self,
+                          msg_version: ProtocolVersion,
                           transcript: &hash_hs::HandshakeHash,
                           payload: HandshakePayload) -> DTLSMessage
     {
-/*        let fill_in_binder = match payload {
+        let fill_in_binder = match payload {
             HandshakePayload::ClientHello(ref p) => {
                 p.get_psk().is_some()
             },
@@ -628,14 +632,18 @@ impl DatagramTransport {
             client_hs::fill_in_psk_binder(transcript, &mut msg_payload);
         }
 
-        TLSMessage {
+        let frag = DTLSHandshakeFragment::Complete {
+            message_seq: self.hs_seq_number,
+            payload: msg_payload,
+        };
+        DTLSMessage {
             typ: ContentType::Handshake,
             version: msg_version,
-            payload: TLSMessagePayload::Handshake(msg_payload),
-        }*/
-        unimplemented!()
+            epoch: self.epoch,
+            sequence: self.seq_number,
+            payload: DTLSMessagePayload::Handshake(frag),
+        }
     }
-
 }
 
 #[cfg(feature="dtls")]
@@ -651,17 +659,18 @@ impl TransportLayer for DatagramTransport {
             in_transmission: Vec::new(),
             epoch: 0,
             seq_number: 0,
+            hs_seq_number: 0,
         }
     }
 
     fn send_handshake_msg_v10(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
-        let msg = Self::handshake_into_msg(ProtocolVersion::DTLSv1_0, transcript, payload);
+        let msg = self.handshake_into_msg(ProtocolVersion::DTLSv1_0, transcript, payload);
         transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
 
     fn send_handshake_msg_v12(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
-        let msg = Self::handshake_into_msg(ProtocolVersion::DTLSv1_2, transcript, payload);
+        let msg = self.handshake_into_msg(ProtocolVersion::DTLSv1_2, transcript, payload);
         transcript.add_message(&msg.payload);
         self.send_msg(msg, secrecy);
     }
@@ -683,11 +692,33 @@ impl TransportLayer for DatagramTransport {
     }
 
     fn send_warning_alert(&mut self, desc: AlertDescription) {
-        unimplemented!()
+        warn!("Sending warning alert {:?}", desc);
+        let msg = DTLSMessage {
+            typ: ContentType::ChangeCipherSpec,
+            version: ProtocolVersion::DTLSv1_2,
+            epoch: self.epoch,
+            sequence: self.seq_number,
+            payload: DTLSMessagePayload::Alert(AlertMessagePayload {
+                level: AlertLevel::Warning,
+                description: desc,
+            }),
+        };
+        self.send_msg(msg, MessageSecrecy::MayBeUnencrypted);
     }
 
     fn send_fatal_alert(&mut self, desc: AlertDescription) {
-        unimplemented!()
+        warn!("Sending fatal alert {:?}", desc);
+        let msg = DTLSMessage {
+            typ: ContentType::ChangeCipherSpec,
+            version: ProtocolVersion::DTLSv1_2,
+            epoch: self.epoch,
+            sequence: self.seq_number,
+            payload: DTLSMessagePayload::Alert(AlertMessagePayload {
+                level: AlertLevel::Fatal,
+                description: desc,
+            }),
+        };
+        self.send_msg(msg, MessageSecrecy::MayBeUnencrypted);
     }
 
     fn send_change_cipher_spec_v12(&mut self, secrecy: MessageSecrecy) {
