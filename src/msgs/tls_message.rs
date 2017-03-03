@@ -6,7 +6,7 @@ use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::enums::{AlertLevel, AlertDescription};
 use msgs::enums::HandshakeType;
-use msgs::message::MessagePayload;
+use msgs::message::{BorrowMessage, Message, MessagePayload};
 
 use std::mem;
 
@@ -172,14 +172,6 @@ impl TLSMessage {
         self.into_opaque().take_opaque_payload().unwrap().0
     }
 
-    pub fn take_opaque_payload(&mut self) -> Option<Payload> {
-        if let TLSMessagePayload::Opaque(ref mut op) = self.payload {
-            Some(mem::replace(op, Payload::empty()))
-        } else {
-            None
-        }
-    }
-
     pub fn into_opaque(self) -> TLSMessage {
         if let TLSMessagePayload::Opaque(_) = self.payload {
             return self;
@@ -213,19 +205,54 @@ impl TLSMessage {
             payload: TLSMessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
-}
 
-impl<'a> TLSMessage {
-    pub fn to_borrowed(&'a self) -> BorrowMessage<'a> {
-        if let TLSMessagePayload::Opaque(ref p) = self.payload {
-            BorrowMessage {
+    pub fn to_borrowed<'a>(&'a self) -> TLSBorrowMessage {
+        if let TLSMessagePayload::Opaque(Payload(ref payload)) = self.payload {
+            TLSBorrowMessage {
                 typ: self.typ,
                 version: self.version,
-                payload: &p.0
+                payload: &payload[..],
             }
         } else {
-            unreachable!("to_borrowed must have opaque message");
+            unreachable!()
         }
+    }
+}
+
+impl Message for TLSMessage {
+    type Payload = TLSMessagePayload;
+
+    fn version(&self) -> ProtocolVersion {
+        self.version
+    }
+
+    fn typ(&self) -> ContentType {
+        self.typ
+    }
+
+    fn payload<'a>(&'a self) -> &'a Self::Payload {
+        &self.payload
+    }
+
+    fn take_opaque_payload(&mut self) -> Option<Payload> {
+        if let TLSMessagePayload::Opaque(ref mut op) = self.payload {
+            Some(mem::replace(op, Payload::empty()))
+        } else {
+            None
+        }
+    }
+
+    fn to_tls(&mut self) -> TLSMessage {
+        let buf = self.take_opaque_payload().unwrap().0;
+        TLSMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: TLSMessagePayload::new_opaque(buf),
+        }
+    }
+
+    fn clone_from_tls(&self, msg: TLSMessage) -> Self {
+        msg
     }
 }
 
@@ -238,8 +265,41 @@ impl<'a> TLSMessage {
 /// This type also cannot decode its internals and
 /// is not a `Codec` type, only `Message` can do that.
 #[derive(Debug)]
-pub struct BorrowMessage<'a> {
+pub struct TLSBorrowMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
     pub payload: &'a [u8],
 }
+
+impl<'a> BorrowMessage for TLSBorrowMessage<'a> {
+    type Message = TLSMessage;
+
+    fn version(&self) -> ProtocolVersion {
+        self.version
+    }
+
+    fn typ(&self) -> ContentType {
+        self.typ
+    }
+
+    fn payload<'b>(&'b self) -> &'b [u8] {
+        self.payload
+    }
+
+    fn to_tls_borrowed(&self) -> TLSBorrowMessage {
+        TLSBorrowMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: &self.payload[..],
+        }
+    }
+
+    fn clone_from_tls(&self, msg: TLSMessage) -> Self::Message {
+        TLSMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: TLSMessagePayload::new_opaque(msg.take_payload()),
+        }
+    }
+}
+

@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::mem;
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 use msgs::base::Payload;
@@ -6,9 +7,9 @@ use msgs::alert::AlertMessagePayload;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::handshake::HandshakeMessagePayload;
 use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::enums::{AlertLevel, AlertDescription};
 use msgs::enums::HandshakeType;
-use msgs::message::MessagePayload;
+use msgs::message::{BorrowMessage, Message, MessagePayload};
+use msgs::tls_message::{TLSBorrowMessage, TLSMessage, TLSMessagePayload};
 
 #[derive(Debug)]
 pub enum DTLSHandshakeFragment {
@@ -39,7 +40,8 @@ impl DTLSHandshakeFragment {
         buf.len()
     }
 
-    pub fn fragment(self, max_frag: usize, out: &mut VecDeque<Self>) {
+    pub fn fragment(self, max_frag: usize) -> VecDeque<Self> {
+        let mut out = VecDeque::with_capacity(1);
         match self {
             DTLSHandshakeFragment::Complete { message_seq, ref payload } => {
                 let mut buf = Vec::new();
@@ -61,6 +63,7 @@ impl DTLSHandshakeFragment {
             },
             DTLSHandshakeFragment::Fragment {..} =>  out.push_back(self)
         }
+        out
     }
 }
 
@@ -137,7 +140,7 @@ impl MessagePayload for DTLSMessagePayload {
 
     fn decode_given_type(&self,
                          typ: ContentType,
-                         vers: ProtocolVersion)
+                         _: ProtocolVersion)
                          -> Option<DTLSMessagePayload> {
         if let DTLSMessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
@@ -184,6 +187,51 @@ impl MessagePayload for DTLSMessagePayload {
     }
 }
 
+impl Message for DTLSMessage {
+    type Payload = DTLSMessagePayload;
+
+    fn version(&self) -> ProtocolVersion {
+        self.version
+    }
+
+    fn typ(&self) -> ContentType {
+        self.typ
+    }
+
+    fn payload<'a>(&'a self) -> &'a Self::Payload {
+        &self.payload
+    }
+
+    fn take_opaque_payload(&mut self) -> Option<Payload> {
+        if let DTLSMessagePayload::Opaque(ref mut op) = self.payload {
+            Some(mem::replace(op, Payload::empty()))
+        } else {
+            None
+        }
+    }
+
+    fn to_tls(&mut self) -> TLSMessage {
+        let buf = self.take_opaque_payload().unwrap().0;
+        TLSMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: TLSMessagePayload::new_opaque(buf),
+        }
+    }
+
+    fn clone_from_tls(&self, mut msg: TLSMessage) -> Self {
+        let payload = msg.take_opaque_payload().unwrap().0;
+
+        DTLSMessage {
+            typ: msg.typ,
+            version: msg.version,
+            epoch: self.epoch,
+            sequence: self.sequence,
+            payload: DTLSMessagePayload::new_opaque(payload),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct DTLSMessage {
     pub typ: ContentType,
@@ -191,6 +239,39 @@ pub struct DTLSMessage {
     pub epoch: u16,
     pub sequence: u64,
     pub payload: DTLSMessagePayload,
+}
+
+impl DTLSMessage {
+    pub fn into_opaque(self) -> DTLSMessage {
+        if let DTLSMessagePayload::Opaque(_) = self.payload {
+            return self;
+        }
+
+        let mut buf = Vec::new();
+        self.payload.encode(&mut buf);
+
+        DTLSMessage {
+            typ: self.typ,
+            version: self.version,
+            epoch: self.epoch,
+            sequence: self.sequence,
+            payload: DTLSMessagePayload::new_opaque(buf),
+        }
+    }
+
+    pub fn to_borrowed<'a>(&'a self) -> DTLSBorrowMessage {
+        if let DTLSMessagePayload::Opaque(Payload(ref payload)) = self.payload {
+            DTLSBorrowMessage {
+                typ: self.typ,
+                version: self.version,
+                epoch: self.epoch,
+                sequence: self.sequence,
+                payload: &payload[..],
+            }
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 impl Codec for DTLSMessage {
@@ -222,3 +303,55 @@ impl Codec for DTLSMessage {
         self.payload.encode(bytes);
     }
 }
+
+/// A TLS frame, named TLSPlaintext in the standard.
+///
+/// This type differs from `Message` because it borrows
+/// its payload.  You can make a `Message` from an
+/// `BorrowMessage`, but this involves a copy.
+///
+/// This type also cannot decode its internals and
+/// is not a `Codec` type, only `Message` can do that.
+#[derive(Debug)]
+pub struct DTLSBorrowMessage<'a> {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: &'a [u8],
+    pub epoch: u16,
+    pub sequence: u64,
+}
+
+impl<'a> BorrowMessage for DTLSBorrowMessage<'a> {
+    type Message = DTLSMessage;
+
+    fn version(&self) -> ProtocolVersion {
+        self.version
+    }
+
+    fn typ(&self) -> ContentType {
+        self.typ
+    }
+
+    fn payload(&self) -> &[u8] {
+        self.payload
+    }
+
+    fn to_tls_borrowed(&self) -> TLSBorrowMessage {
+        TLSBorrowMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: &self.payload[..],
+        }
+    }
+
+    fn clone_from_tls(&self, msg: TLSMessage) -> Self::Message {
+        DTLSMessage {
+            typ: msg.typ,
+            version: msg.version,
+            epoch: self.epoch,
+            sequence: self.sequence,
+            payload: DTLSMessagePayload::new_opaque(msg.take_payload()),
+        }
+    }
+}
+

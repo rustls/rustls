@@ -1,6 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
 use msgs::tls_message::{TLSMessage, TLSMessagePayload};
+use msgs::message::Message;
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random, ServerHelloPayload};

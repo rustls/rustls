@@ -3,6 +3,7 @@ use msgs::enums::{Compression, NamedGroup, ECPointFormat, CipherSuite};
 use msgs::enums::{ExtensionType, AlertDescription};
 use msgs::enums::{ClientCertificateType, SignatureScheme, PSKKeyExchangeMode};
 use msgs::tls_message::{TLSMessage, TLSMessagePayload};
+use msgs::message::Message;
 use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use msgs::handshake::{ServerHelloPayload, Random};

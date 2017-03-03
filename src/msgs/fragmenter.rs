@@ -1,6 +1,5 @@
-
 use std::collections::VecDeque;
-use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
+use msgs::tls_message::{TLSMessage, TLSBorrowMessage, TLSMessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::message::MessagePayload;
 
@@ -52,9 +51,9 @@ impl MessageFragmenter {
                                typ: ContentType,
                                version: ProtocolVersion,
                                payload: &'a [u8],
-                               out: &mut VecDeque<BorrowMessage<'a>>) {
+                               out: &mut VecDeque<TLSBorrowMessage<'a>>) {
         for chunk in payload.chunks(self.max_frag) {
-            let cm = BorrowMessage {
+            let cm = TLSBorrowMessage {
                 typ: typ,
                 version: version,
                 payload: chunk
@@ -68,7 +67,7 @@ impl MessageFragmenter {
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
     use msgs::tls_message::{TLSMessagePayload, TLSMessage};
-    use msgs::message::MessagePayload;
+    use msgs::message::{Message, MessagePayload};
     use msgs::enums::{ContentType, ProtocolVersion};
     use msgs::codec::Codec;
     use std::collections::VecDeque;

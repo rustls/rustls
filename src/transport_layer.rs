@@ -5,9 +5,9 @@ use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use msgs::enums::KeyUpdateRequest;
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload};
-use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
+use msgs::tls_message::{TLSMessage, TLSBorrowMessage, TLSMessagePayload};
 #[cfg(feature="dtls")]
-use msgs::dtls_message::{DTLSMessage, DTLSMessagePayload, DTLSHandshakeFragment};
+use msgs::dtls_message::{DTLSMessage, DTLSMessagePayload, DTLSBorrowMessage, DTLSHandshakeFragment};
 #[cfg(feature="dtls")]
 use msgs::hsjoiner::dtls::HandshakeJoiner as DTLSHandshakeJoiner;
 #[cfg(feature="dtls")]
@@ -16,6 +16,7 @@ use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::deframer::MessageDeframer;
 use msgs::base::Payload;
+use msgs::message::BorrowMessage;
 use cipher::{MessageDecrypter, MessageEncrypter, self};
 use vecbuf::ChunkVecBuffer;
 use key_schedule::{SecretKind, KeySchedule};
@@ -63,6 +64,7 @@ pub struct StreamTransport {
 #[cfg(feature="dtls")]
 pub struct DatagramTransport {
     common: TransportCommon,
+    mtu: usize,
     pub handshake_joiner: DTLSHandshakeJoiner,
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
@@ -74,7 +76,7 @@ pub struct DatagramTransport {
     hs_seq_number: u16,
 }
 
-pub trait TransportLayer {
+pub trait TransportLayer<B:BorrowMessage> {
     fn new(client: bool, mtu: Option<usize>) -> Self;
     fn send_handshake_msg_v10(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy);
     fn send_handshake_msg_v12(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy);
@@ -136,7 +138,7 @@ pub trait TransportLayer {
         self.mut_common().peer_encrypting = true;
     }
 
-    fn encrypt_outgoing(&mut self, plain: BorrowMessage) -> TLSMessage {
+    fn encrypt_outgoing(&mut self, plain: B) -> B::Message {
         let seq = self.common().write_seq;
         self.mut_common().write_seq += 1;
         self.mut_common().message_encrypter.encrypt(plain, seq).unwrap()
@@ -182,6 +184,26 @@ pub trait TransportLayer {
     }
 
     fn send_change_cipher_spec_v12(&mut self, secrecy: MessageSecrecy);
+
+    fn send_single_fragment(&mut self, m: B) {
+        // Close connection once we start to run out of
+        // sequence space.
+        if self.common().write_seq == SEQ_SOFT_LIMIT {
+            self.send_close_notify();
+        }
+
+        // Refuse to wrap counter at all costs.  This
+        // is basically untestable unfortunately.
+        if self.common().write_seq >= SEQ_HARD_LIMIT {
+            return;
+        }
+
+        let em = self.encrypt_outgoing(m);
+        self.queue_tls_message(em);
+    }
+
+    // Put m into sendable_tls for writing.
+    fn queue_tls_message(&mut self, m: B::Message);
 }
 
 impl StreamTransport {
@@ -296,23 +318,6 @@ impl StreamTransport {
         }
     }
 
-    pub fn send_single_fragment(&mut self, m: BorrowMessage) {
-        // Close connection once we start to run out of
-        // sequence space.
-        if self.common().write_seq == SEQ_SOFT_LIMIT {
-            self.send_close_notify();
-        }
-
-        // Refuse to wrap counter at all costs.  This
-        // is basically untestable unfortunately.
-        if self.common().write_seq >= SEQ_HARD_LIMIT {
-            return;
-        }
-
-        let em = self.encrypt_outgoing(m);
-        self.queue_tls_message(em);
-    }
-
     /// Are we done? ie, have we processed all received messages,
     /// and received a close_notify to indicate that no new messages
     /// will arrive?
@@ -367,11 +372,6 @@ impl StreamTransport {
             let buf = self.sendable_plaintext.take_one();
             self.send_plain(&buf);
         }
-    }
-
-    // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: TLSMessage) {
-        self.sendable_tls.append(m.get_encoding());
     }
 
     pub fn take_received_plaintext(&mut self, bytes: Payload) {
@@ -472,7 +472,7 @@ impl TransportCommon {
     }
 }
 
-impl TransportLayer for StreamTransport {
+impl<'a> TransportLayer<TLSBorrowMessage<'a>> for StreamTransport {
     fn new(client: bool, mtu: Option<usize>) -> Self {
         StreamTransport {
             peer_eof: false,
@@ -537,6 +537,11 @@ impl TransportLayer for StreamTransport {
 
         self.send_msg(ccs, secrecy)
     }
+
+    // Put m into sendable_tls for writing.
+    fn queue_tls_message<'b>(&mut self, m: <TLSBorrowMessage<'b> as BorrowMessage>::Message) {
+        self.sendable_tls.append(m.get_encoding());
+    }
 }
 
 #[cfg(feature="dtls")]
@@ -571,23 +576,44 @@ impl DatagramTransport {
     }
 
     pub fn do_write_key_update(&mut self) {
-        unimplemented!()
+        unreachable!("DTLS v1.3 is not implement!")
+    }
+
+    fn fragment(&self, m: DTLSMessage) -> VecDeque<DTLSMessage> {
+        let mut vec = VecDeque::new();
+
+        let typ = m.typ;
+        let version = m.version;
+        let epoch = m.epoch;
+        let seq = m.sequence;
+
+        if let DTLSMessagePayload::Handshake(hs) = m.payload {
+            for frag in hs.fragment(self.mtu).into_iter() {
+                vec.push_back(DTLSMessage {
+                    typ: typ,
+                    version: version,
+                    epoch: epoch,
+                    sequence: seq,
+                    payload: DTLSMessagePayload::Handshake(frag),
+                });
+            }
+        } else {
+            vec.push_back(m);
+        }
+
+        vec
     }
 
     /// Encrypt a message, and then queue
     /// the encrypted message for sending.
     pub fn send_msg_encrypt(&mut self, m: DTLSMessage) {
-        unimplemented!();
         if self.common().want_write_key_update {
             self.do_write_key_update();
         }
 
-//        let mut plain_messages = VecDeque::new();
-  //      self.message_fragmenter.fragment(m, &mut plain_messages);
-
-    //    for m in plain_messages {
-      //      self.send_single_fragment(m.into_borrowed());
-        //}
+        for m in self.fragment(m) {
+            self.send_single_fragment(m.to_borrowed());
+        }
     }
 
     /// Send a raw DTLS message.
@@ -601,12 +627,9 @@ impl DatagramTransport {
                 self.send_msg_encrypt(m)
             },
             MessageSecrecy::MayBeUnencrypted => {
-                /*let mut to_send = VecDeque::new();
-                self.message_fragmenter.fragment(m, &mut to_send);
-                for mm in to_send {
+                for mm in self.fragment(m) {
                     self.queue_tls_message(mm);
-                }*/
-                unimplemented!()
+                }
             },
         }
     }
@@ -647,9 +670,10 @@ impl DatagramTransport {
 }
 
 #[cfg(feature="dtls")]
-impl TransportLayer for DatagramTransport {
+impl<'a> TransportLayer<DTLSBorrowMessage<'a>> for DatagramTransport {
     fn new(client: bool, mtu: Option<usize>) -> Self {
         DatagramTransport {
+            mtu: mtu.unwrap_or(MAX_FRAGMENT_LEN),
             common: TransportCommon::new(client),
             read_seq_bitmask: 0,
             received_plaintext: ChunkVecBuffer::new(),
@@ -676,7 +700,7 @@ impl TransportLayer for DatagramTransport {
     }
 
     fn send_handshake_msg_v13(&mut self, transcript: &mut hash_hs::HandshakeHash, payload: HandshakePayload, secrecy: MessageSecrecy) {
-        unimplemented!()
+        unreachable!("DTLS v1.3 is not implement!")
     }
 
     fn common(&self) -> &TransportCommon {
@@ -731,6 +755,12 @@ impl TransportLayer for DatagramTransport {
         };
 
         self.send_msg(ccs, secrecy)
+    }
+
+    // Put m into sendable_tls for writing.
+//    fn queue_tls_message<'b>(&mut self, m: <DTLSBorrowMessage<'b> as BorrowMessage>::Message) {
+    fn queue_tls_message(&mut self, m: DTLSMessage) {
+        self.sendable_dtls.append(m.get_encoding());
     }
 }
 

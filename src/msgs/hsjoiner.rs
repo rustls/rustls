@@ -5,6 +5,7 @@ use msgs::codec;
 use msgs::tls_message::{TLSMessage, TLSMessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::handshake::HandshakeMessagePayload;
+use msgs::message::Message;
 
 const HEADER_SIZE: usize = 1 + 3;
 

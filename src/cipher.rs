@@ -2,9 +2,10 @@ use ring;
 use std::io::Write;
 use msgs::codec;
 use msgs::codec::Codec;
-use msgs::message::MessagePayload;
+use msgs::message::BorrowMessage;
+use msgs::tls_message::{TLSMessage, TLSBorrowMessage, TLSMessagePayload};
 use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::tls_message::{BorrowMessage, TLSMessage, TLSMessagePayload};
+use msgs::message::{Message, MessagePayload};
 use msgs::fragmenter::MAX_FRAGMENT_LEN;
 use error::TLSError;
 use session::SessionSecrets;
@@ -20,23 +21,44 @@ fn xor(accum: &mut [u8], offset: &[u8]) {
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter : Send + Sync {
-    fn decrypt(&self, m: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError>;
+    fn decrypt_tls(&self, m: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter : Send + Sync {
-    fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError>;
+    fn encrypt_tls(&self, m: TLSBorrowMessage, seq: u64) -> Result<TLSMessage, TLSError>;
 }
 
 impl MessageEncrypter {
     pub fn invalid() -> Box<MessageEncrypter> {
         Box::new(InvalidMessageEncrypter {})
     }
+
+    pub fn encrypt<'a, M:BorrowMessage>(&self, m: M, seq: u64) -> Result<M::Message, TLSError> {
+        let msg = try!(self.encrypt_tls(m.to_tls_borrowed(), seq));
+        Ok(m.clone_from_tls(msg))
+    }
 }
 
 impl MessageDecrypter {
     pub fn invalid() -> Box<MessageDecrypter> {
         Box::new(InvalidMessageDecrypter {})
+    }
+
+    pub fn decrypt<M:Message>(&self, mut msg: M, seq: u64) -> Result<M, TLSError> {
+        let m = try!(self.decrypt_tls(msg.to_tls(), seq));
+
+        if let TLSMessagePayload::Opaque(ref op) = m.payload {
+            if op.len() > MAX_FRAGMENT_LEN {
+                let msg = "peer sent oversized fragment".to_string();
+                return Err(TLSError::PeerMisbehavedError(msg));
+            }
+        } else {
+            unreachable!()
+        }
+
+
+        Ok(msg.clone_from_tls(m))
     }
 }
 
@@ -149,7 +171,7 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GCMMessageDecrypter {
-    fn decrypt(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
+    fn decrypt_tls(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let payload = try!(msg.take_opaque_payload().ok_or(TLSError::DecryptError));
         let mut buf = payload.0;
 
@@ -162,7 +184,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
         nonce[4..].as_mut().write_all(&buf[..8]).unwrap();
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD, &mut aad);
+        make_tls12_aad(seq, msg.typ(), msg.version(), buf.len() - GCM_OVERHEAD, &mut aad);
 
         let plain_len = try!(ring::aead::open_in_place(&self.dec_key,
                                                        &nonce,
@@ -172,23 +194,18 @@ impl MessageDecrypter for GCMMessageDecrypter {
             .map_err(|_| TLSError::DecryptError))
             .len();
 
-        if plain_len > MAX_FRAGMENT_LEN {
-            let msg = "peer sent oversized fragment".to_string();
-            return Err(TLSError::PeerMisbehavedError(msg));
-        }
-
         buf.truncate(plain_len);
 
         Ok(TLSMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload: TLSMessagePayload::new_opaque(buf),
+            typ: msg.typ(),
+            version: msg.version(),
+            payload: TLSMessagePayload::new_opaque(buf)
         })
     }
 }
 
 impl MessageEncrypter for GCMMessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
+    fn encrypt_tls(&self, msg: TLSBorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         // The GCM nonce is constructed from a 32-bit 'salt' derived
         // from the master-secret, and a 64-bit explicit part,
         // with no specified construction.  Thanks for that.
@@ -204,22 +221,22 @@ impl MessageEncrypter for GCMMessageEncrypter {
 
         // make output buffer with room for nonce/tag
         let tag_len = self.alg.tag_len();
-        let total_len = 8 + msg.payload.len() + tag_len;
+        let total_len = 8 + msg.payload().len() + tag_len;
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&nonce[4..]);
-        buf.extend_from_slice(msg.payload);
+        buf.extend_from_slice(msg.payload());
         buf.resize(total_len, 0u8);
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
+        make_tls12_aad(seq, msg.typ(), msg.version(), msg.payload().len(), &mut aad);
 
-       try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf[8..], tag_len)
+        try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf[8..], tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
         Ok(TLSMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload: TLSMessagePayload::new_opaque(buf),
+            typ: msg.typ(),
+            version: msg.version(),
+            payload: TLSMessagePayload::new_opaque(buf)
         })
     }
 }
@@ -286,16 +303,16 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
 }
 
 impl MessageEncrypter for TLS13MessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
+    fn encrypt_tls(&self, msg: TLSBorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.enc_offset);
 
         // make output buffer with room for content type and tag
         let tag_len = self.alg.tag_len();
-        let total_len = msg.payload.len() + 1 + tag_len;
+        let total_len = msg.payload().len() + 1 + tag_len;
         let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(msg.payload);
+        buf.extend_from_slice(msg.payload());
         msg.typ.encode(&mut buf);
         buf.resize(total_len, 0u8);
 
@@ -305,13 +322,13 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         Ok(TLSMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_0,
-            payload: TLSMessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf)
         })
     }
 }
 
 impl MessageDecrypter for TLS13MessageDecrypter {
-    fn decrypt(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
+    fn decrypt_tls(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.dec_offset);
@@ -335,15 +352,10 @@ impl MessageDecrypter for TLS13MessageDecrypter {
             return Err(TLSError::PeerMisbehavedError(msg));
         }
 
-        if buf.len() > MAX_FRAGMENT_LEN {
-            let msg = "peer sent oversized fragment".to_string();
-            return Err(TLSError::PeerMisbehavedError(msg));
-        }
-
         Ok(TLSMessage {
             typ: content_type,
             version: ProtocolVersion::TLSv1_3,
-            payload: TLSMessagePayload::new_opaque(buf),
+            payload: TLSMessagePayload::new_opaque(buf)
         })
     }
 }
@@ -427,7 +439,7 @@ impl ChaCha20Poly1305MessageDecrypter {
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
-    fn decrypt(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
+    fn decrypt_tls(&self, mut msg: TLSMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let payload = try!(msg.take_opaque_payload().ok_or(TLSError::DecryptError));
         let mut buf = payload.0;
 
@@ -441,50 +453,45 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         xor(&mut nonce, &self.dec_offset);
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, buf.len() - CHACHAPOLY1305_OVERHEAD, &mut aad);
+        make_tls12_aad(seq, msg.typ(), msg.version(), buf.len() - CHACHAPOLY1305_OVERHEAD, &mut aad);
 
         let plain_len = try!(ring::aead::open_in_place(&self.dec_key, &nonce, &aad, 0, &mut buf)
             .map_err(|_| TLSError::DecryptError))
             .len();
 
-        if plain_len > MAX_FRAGMENT_LEN {
-            let err_msg = "peer sent oversized fragment".to_string();
-            return Err(TLSError::PeerMisbehavedError(err_msg));
-        }
-
         buf.truncate(plain_len);
 
         Ok(TLSMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload: TLSMessagePayload::new_opaque(buf),
+            typ: msg.typ(),
+            version: msg.version(),
+            payload: TLSMessagePayload::new_opaque(buf)
         })
     }
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
+    fn encrypt_tls(&self, msg: TLSBorrowMessage, seq: u64) -> Result<TLSMessage, TLSError> {
         let mut nonce = [0u8; 12];
         codec::put_u64(seq, &mut nonce[4..]);
         xor(&mut nonce, &self.enc_offset);
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
+        make_tls12_aad(seq, msg.typ(), msg.version(), msg.payload().len(), &mut aad);
 
         // make result buffer with room for tag, etc.
         let tag_len = self.alg.tag_len();
-        let total_len = msg.payload.len() + tag_len;
+        let total_len = msg.payload().len() + tag_len;
         let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(msg.payload);
+        buf.extend_from_slice(msg.payload());
         buf.resize(total_len, 0u8);
 
         try!(ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf, tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string())));
 
         Ok(TLSMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload: TLSMessagePayload::new_opaque(buf),
+            typ: msg.typ(),
+            version: msg.version(),
+            payload: TLSMessagePayload::new_opaque(buf)
         })
     }
 }
@@ -493,7 +500,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 pub struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&self, _m: BorrowMessage, _seq: u64) -> Result<TLSMessage, TLSError> {
+    fn encrypt_tls(&self, _: TLSBorrowMessage, _: u64) -> Result<TLSMessage, TLSError> {
         Err(TLSError::General("encrypt not yet available".to_string()))
     }
 }
@@ -502,7 +509,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 pub struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt(&self, _m: TLSMessage, _seq: u64) -> Result<TLSMessage, TLSError> {
+    fn decrypt_tls(&self, _: TLSMessage, _: u64) -> Result<TLSMessage, TLSError> {
         Err(TLSError::DecryptError)
     }
 }
