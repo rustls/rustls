@@ -28,3 +28,23 @@ mio = "0.5.1"
 docopt = "0.6"
 rustc-serialize = "0.3"
 webpki-roots = "0.7"
+
+[[example]]
+name = "bogo_shim"
+path = "examples/internal/bogo_shim.rs"
+
+[[example]]
+name = "trytls_shim"
+path = "examples/internal/trytls_shim.rs"
+
+[[example]]
+name = "bench"
+path = "examples/internal/bench.rs"
+
+[[example]]
+name = "tlsclient"
+path = "examples/tlsclient.rs"
+
+[[example]]
+name = "tlsserver"
+path = "examples/tlsserver.rs"
