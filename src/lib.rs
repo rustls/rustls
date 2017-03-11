@@ -203,6 +203,8 @@ mod session;
 mod pemfile;
 mod x509;
 mod verify;
+#[cfg(test)]
+mod verifybench;
 mod handshake;
 mod server_hs;
 mod client_hs;

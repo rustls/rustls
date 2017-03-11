@@ -837,6 +837,8 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
                              -> StateResult {
     let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
 
+    info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
+
     // 1. Verify the certificate chain.
     // 2. Verify their signature on the handshake.
     try!(verify::verify_server_cert(&sess.config.root_store,

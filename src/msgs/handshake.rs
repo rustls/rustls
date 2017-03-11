@@ -1159,7 +1159,7 @@ impl ServerHelloPayload {
     }
 }
 
-pub type ASN1Cert = key::Certificate; // PayloadU24;
+pub type ASN1Cert = key::Certificate;
 pub type CertificatePayload = Vec<key::Certificate>;
 
 impl Codec for CertificatePayload {
