@@ -72,30 +72,31 @@ pub fn openssl_find() -> &'static str {
     "openssl"
 }
 
-// Does openssl s_client support -alpn?
-pub fn openssl_client_supports_alpn() -> bool {
+fn openssl_supports_option(cmd: &str, opt: &str) -> bool {
     let output = process::Command::new(openssl_find())
-        .arg("s_client")
+        .arg(cmd)
         .arg("-help")
         .output()
         .unwrap();
 
     String::from_utf8(output.stderr)
         .unwrap()
-        .contains(" -alpn ")
+        .contains(opt)
 }
 
 // Does openssl s_client support -alpn?
-pub fn openssl_server_supports_alpn() -> bool {
-    let output = process::Command::new(openssl_find())
-        .arg("s_server")
-        .arg("-help")
-        .output()
-        .unwrap();
+pub fn openssl_client_supports_alpn() -> bool {
+    openssl_supports_option("s_client", " -alpn ")
+}
 
-    String::from_utf8(output.stderr)
-        .unwrap()
-        .contains(" -alpn ")
+// Does openssl s_server support -alpn?
+pub fn openssl_server_supports_alpn() -> bool {
+    openssl_supports_option("s_server", " -alpn ")
+}
+
+// Does openssl s_server support -no_ecdhe?
+pub fn openssl_server_supports_no_echde() -> bool {
+    openssl_supports_option("s_server", " -no_ecdhe ")
 }
 
 pub struct TlsClient {

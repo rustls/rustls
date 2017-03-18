@@ -21,7 +21,12 @@ fn no_tls12() {
 #[test]
 fn no_ecdhe() {
     let mut server = OpenSSLServer::new_rsa(8010);
-    server.arg("-no_ecdhe");
+    if common::openssl_server_supports_no_echde() {
+        server.arg("-no_ecdhe");
+    } else {
+        common::skipped("openssl s_server -no_ecdhe");
+        return;
+    }
     server.run();
 
     server.client()
