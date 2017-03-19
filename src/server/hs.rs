@@ -26,7 +26,6 @@ use cipher;
 use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
 use suites;
-use hash_hs;
 use verify;
 use util;
 use rand;
@@ -304,13 +303,10 @@ impl ExpectClientHello {
         let suite_hash = sess.common.get_suite().get_hash();
         let handshake_hash = self.handshake.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
-        let mut empty_hash_ctx = hash_hs::HandshakeHash::new();
-        empty_hash_ctx.start_hash(suite_hash);
-        let empty_hash = empty_hash_ctx.get_current_hash();
-
         let mut key_schedule = KeySchedule::new(suite_hash);
         key_schedule.input_secret(psk);
-        let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
+        let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey,
+                                           key_schedule.get_hash_of_empty_message());
         let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
         constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
