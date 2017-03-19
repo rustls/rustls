@@ -320,6 +320,7 @@ pub enum HandshakeType {
     ClientHello,
     ServerHello,
     NewSessionTicket,
+    EndOfEarlyData,
     HelloRetryRequest,
     EncryptedExtensions,
     Certificate,
@@ -332,6 +333,7 @@ pub enum HandshakeType {
     CertificateURL,
     CertificateStatus,
     KeyUpdate,
+    MessageHash,
     Unknown(u8),
 }
 
@@ -352,6 +354,7 @@ impl Codec for HandshakeType {
             0x01 => HandshakeType::ClientHello,
             0x02 => HandshakeType::ServerHello,
             0x04 => HandshakeType::NewSessionTicket,
+            0x05 => HandshakeType::EndOfEarlyData,
             0x06 => HandshakeType::HelloRetryRequest,
             0x08 => HandshakeType::EncryptedExtensions,
             0x0b => HandshakeType::Certificate,
@@ -364,6 +367,7 @@ impl Codec for HandshakeType {
             0x15 => HandshakeType::CertificateURL,
             0x16 => HandshakeType::CertificateStatus,
             0x18 => HandshakeType::KeyUpdate,
+            0xfe => HandshakeType::MessageHash,
             x => HandshakeType::Unknown(x),
         })
     }
@@ -376,6 +380,7 @@ impl HandshakeType {
             HandshakeType::ClientHello => 0x01,
             HandshakeType::ServerHello => 0x02,
             HandshakeType::NewSessionTicket => 0x04,
+            HandshakeType::EndOfEarlyData => 0x05,
             HandshakeType::HelloRetryRequest => 0x06,
             HandshakeType::EncryptedExtensions => 0x08,
             HandshakeType::Certificate => 0x0b,
@@ -388,6 +393,7 @@ impl HandshakeType {
             HandshakeType::CertificateURL => 0x15,
             HandshakeType::CertificateStatus => 0x16,
             HandshakeType::KeyUpdate => 0x18,
+            HandshakeType::MessageHash => 0xfe,
             HandshakeType::Unknown(v) => v,
         }
     }
@@ -638,6 +644,8 @@ pub enum ExtensionType {
     Cookie,
     PSKKeyExchangeModes,
     TicketEarlyDataInfo,
+    CertificateAuthorities,
+    OIDFilters,
     NextProtocolNegotiation,
     ChannelId,
     RenegotiationInfo,
@@ -684,6 +692,8 @@ impl Codec for ExtensionType {
             0x002c => ExtensionType::Cookie,
             0x002d => ExtensionType::PSKKeyExchangeModes,
             0x002e => ExtensionType::TicketEarlyDataInfo,
+            0x002f => ExtensionType::CertificateAuthorities,
+            0x0030 => ExtensionType::OIDFilters,
             0x3374 => ExtensionType::NextProtocolNegotiation,
             0x754f => ExtensionType::ChannelId,
             0xff01 => ExtensionType::RenegotiationInfo,
@@ -722,6 +732,8 @@ impl ExtensionType {
             ExtensionType::Cookie => 0x002c,
             ExtensionType::PSKKeyExchangeModes => 0x002d,
             ExtensionType::TicketEarlyDataInfo => 0x002e,
+            ExtensionType::CertificateAuthorities => 0x002f,
+            ExtensionType::OIDFilters => 0x0030,
             ExtensionType::NextProtocolNegotiation => 0x3374,
             ExtensionType::ChannelId => 0x754f,
             ExtensionType::RenegotiationInfo => 0xff01,
