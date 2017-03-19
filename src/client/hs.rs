@@ -1374,7 +1374,9 @@ impl State for ExpectTLS13CertificateRequest {
         }
 
         let tls13_sign_schemes = SupportedSignatureSchemes::supported_sign_tls13();
-        let compat_sigschemes = certreq.sigschemes
+        let no_sigschemes = Vec::new();
+        let compat_sigschemes = certreq.get_sigalgs_extension()
+            .unwrap_or(&no_sigschemes)
             .iter()
             .cloned()
             .filter(|scheme| tls13_sign_schemes.contains(scheme))
@@ -1385,7 +1387,9 @@ impl State for ExpectTLS13CertificateRequest {
             return Err(TLSError::PeerIncompatibleError("server sent bad certreq schemes".to_string()));
         }
 
-        let canames = certreq.canames
+        let no_canames = Vec::new();
+        let canames = certreq.get_authorities_extension()
+            .unwrap_or(&no_canames)
             .iter()
             .map(|p| p.0.as_slice())
             .collect::<Vec<&[u8]>>();

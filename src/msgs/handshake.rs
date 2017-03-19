@@ -1875,33 +1875,100 @@ impl Codec for CertificateRequestPayload {
 }
 
 #[derive(Debug)]
+pub enum CertReqExtension {
+    SignatureAlgorithms(SupportedSignatureSchemes),
+    AuthorityNames(DistinguishedNames),
+    Unknown(UnknownExtension),
+}
+
+impl CertReqExtension {
+    pub fn get_type(&self) -> ExtensionType {
+        match *self {
+            CertReqExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
+            CertReqExtension::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
+            CertReqExtension::Unknown(ref r) => r.typ,
+        }
+    }
+}
+
+impl Codec for CertReqExtension {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.get_type().encode(bytes);
+
+        let mut sub: Vec<u8> = Vec::new();
+        match *self {
+            CertReqExtension::SignatureAlgorithms(ref r) => r.encode(&mut sub),
+            CertReqExtension::AuthorityNames(ref r) => r.encode(&mut sub),
+            CertReqExtension::Unknown(ref r) => r.encode(&mut sub),
+        }
+
+        codec::encode_u16(sub.len() as u16, bytes);
+        bytes.append(&mut sub);
+    }
+
+    fn read(r: &mut Reader) -> Option<CertReqExtension> {
+        let typ = try_ret!(ExtensionType::read(r));
+        let len = try_ret!(codec::read_u16(r)) as usize;
+        let mut sub = try_ret!(r.sub(len));
+
+        Some(match typ {
+            ExtensionType::SignatureAlgorithms => {
+                let schemes = try_ret!(SupportedSignatureSchemes::read(&mut sub));
+                CertReqExtension::SignatureAlgorithms(schemes)
+            }
+            ExtensionType::CertificateAuthorities => {
+                let cas = try_ret!(DistinguishedNames::read(&mut sub));
+                CertReqExtension::AuthorityNames(cas)
+            }
+            _ => CertReqExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
+        })
+    }
+}
+
+declare_u16_vec!(CertReqExtensions, CertReqExtension);
+
+#[derive(Debug)]
 pub struct CertificateRequestPayloadTLS13 {
     pub context: PayloadU8,
-    pub sigschemes: SupportedSignatureSchemes,
-    pub canames: DistinguishedNames,
-    pub extensions: CertificateExtensions,
+    pub extensions: CertReqExtensions,
 }
 
 impl Codec for CertificateRequestPayloadTLS13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
-        self.sigschemes.encode(bytes);
-        self.canames.encode(bytes);
         self.extensions.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<CertificateRequestPayloadTLS13> {
         let context = try_ret!(PayloadU8::read(r));
-        let sigschemes = try_ret!(SupportedSignatureSchemes::read(r));
-        let canames = try_ret!(DistinguishedNames::read(r));
-        let extensions = try_ret!(CertificateExtensions::read(r));
+        let extensions = try_ret!(CertReqExtensions::read(r));
 
         Some(CertificateRequestPayloadTLS13 {
             context: context,
-            sigschemes: sigschemes,
-            canames: canames,
             extensions: extensions,
         })
+    }
+}
+
+impl CertificateRequestPayloadTLS13 {
+    pub fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
+        self.extensions.iter().find(|x| x.get_type() == ext)
+    }
+
+    pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureSchemes> {
+        let ext = try_ret!(self.find_extension(ExtensionType::SignatureAlgorithms));
+        match *ext {
+            CertReqExtension::SignatureAlgorithms(ref sa) => Some(sa),
+            _ => None,
+        }
+    }
+
+    pub fn get_authorities_extension(&self) -> Option<&DistinguishedNames> {
+        let ext = try_ret!(self.find_extension(ExtensionType::CertificateAuthorities));
+        match *ext {
+            CertReqExtension::AuthorityNames(ref an) => Some(an),
+            _ => None,
+        }
     }
 }
 

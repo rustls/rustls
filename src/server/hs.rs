@@ -17,7 +17,7 @@ use msgs::handshake::{CertificateRequestPayloadTLS13, NewSessionTicketPayloadTLS
 use msgs::handshake::{HelloRetryRequest, HelloRetryExtension, KeyShareEntry};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::{CertificateStatus, CertificateExtension};
-use msgs::handshake::SupportedMandatedSignatureSchemes;
+use msgs::handshake::{CertReqExtension, SupportedMandatedSignatureSchemes};
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
@@ -429,14 +429,18 @@ impl ExpectClientHello {
             return false;
         }
 
-        let names = sess.config.verifier.client_auth_root_subjects();
-
-        let cr = CertificateRequestPayloadTLS13 {
+        let mut cr = CertificateRequestPayloadTLS13 {
             context: PayloadU8::empty(),
-            sigschemes: SupportedSignatureSchemes::supported_verify(),
-            canames: names,
             extensions: Vec::new(),
         };
+
+        let schemes = SupportedSignatureSchemes::supported_verify();
+        cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes));
+
+        let names = sess.config.verifier.client_auth_root_subjects();
+        if !names.is_empty() {
+            cr.extensions.push(CertReqExtension::AuthorityNames(names));
+        }
 
         let m = Message {
             typ: ContentType::Handshake,
