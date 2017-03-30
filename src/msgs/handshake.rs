@@ -1186,18 +1186,21 @@ impl Codec for HelloRetryExtension {
 #[derive(Debug)]
 pub struct HelloRetryRequest {
     pub server_version: ProtocolVersion,
+    pub cipher_suite: CipherSuite,
     pub extensions: Vec<HelloRetryExtension>,
 }
 
 impl Codec for HelloRetryRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.server_version.encode(bytes);
+        self.cipher_suite.encode(bytes);
         codec::encode_vec_u16(bytes, &self.extensions);
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
         Some(HelloRetryRequest {
             server_version: try_ret!(ProtocolVersion::read(r)),
+            cipher_suite: try_ret!(CipherSuite::read(r)),
             extensions: try_ret!(codec::read_vec_u16::<HelloRetryExtension>(r)),
         })
     }
@@ -2148,6 +2151,7 @@ pub enum HandshakePayload {
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
     CertificateStatus(CertificateStatus),
+    MessageHash(Payload),
     Unknown(Payload),
 }
 
@@ -2172,6 +2176,7 @@ impl HandshakePayload {
             HandshakePayload::KeyUpdate(ref x) => x.encode(bytes),
             HandshakePayload::Finished(ref x) => x.encode(bytes),
             HandshakePayload::CertificateStatus(ref x) => x.encode(bytes),
+            HandshakePayload::MessageHash(ref x) => x.encode(bytes),
             HandshakePayload::Unknown(ref x) => x.encode(bytes),
         }
     }
@@ -2274,6 +2279,10 @@ impl HandshakeMessagePayload {
             HandshakeType::CertificateStatus => {
                 HandshakePayload::CertificateStatus(try_ret!(CertificateStatus::read(&mut sub)))
             }
+            HandshakeType::MessageHash => {
+                // does not appear on the wire
+                return None;
+            }
             _ => HandshakePayload::Unknown(try_ret!(Payload::read(&mut sub))),
         };
 
@@ -2311,5 +2320,12 @@ impl HandshakeMessagePayload {
         let ret_len = ret.len() - binder_len;
         ret.truncate(ret_len);
         ret
+    }
+
+    pub fn build_handshake_hash(hash: &[u8]) -> HandshakeMessagePayload {
+        HandshakeMessagePayload {
+            typ: HandshakeType::MessageHash,
+            payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec()))
+        }
     }
 }

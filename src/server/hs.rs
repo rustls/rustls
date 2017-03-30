@@ -381,6 +381,7 @@ impl ExpectClientHello {
                                 group: NamedGroup) {
         let mut req = HelloRetryRequest {
             server_version: ProtocolVersion::Unknown(TLS13_DRAFT),
+            cipher_suite: sess.common.get_suite().suite,
             extensions: Vec::new(),
         };
 
@@ -396,6 +397,7 @@ impl ExpectClientHello {
         };
 
         trace!("Requesting retry {:?}", m);
+        self.handshake.transcript.rollup_for_hrr();
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, false);
     }
