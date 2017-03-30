@@ -390,6 +390,7 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
 fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
     let mut req = HelloRetryRequest {
         server_version: ProtocolVersion::Unknown(TLS13_DRAFT),
+        cipher_suite: sess.common.get_suite().suite,
         extensions: Vec::new(),
     };
 
@@ -405,6 +406,7 @@ fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
     };
 
     debug!("Requesting retry {:?}", m);
+    sess.handshake_data.transcript.rollup_for_hrr();
     sess.handshake_data.transcript.add_message(&m);
     sess.common.send_msg(m, false);
 }
