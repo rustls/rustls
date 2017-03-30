@@ -615,7 +615,6 @@ pub static EXPECT_SERVER_HELLO: State = State {
 fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
                               m: Message) -> StateResult {
     let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
     debug!("Got HRR {:?}", hrr);
 
     let has_cookie = hrr.get_cookie().is_some();
@@ -664,6 +663,20 @@ fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
             return Err(illegal_param(sess, "server requested unsupported version in hrr"));
         }
     }
+
+    // Or asks us to use a ciphersuite we didn't offer.
+    let maybe_cs = sess.find_cipher_suite(hrr.cipher_suite);
+    let cs = match maybe_cs {
+        Some(cs) => cs,
+        None => {
+            return Err(illegal_param(sess, "server requested unsupported cs in hrr"));
+        }
+    };
+
+    // This is the draft19 change where the transcript became a tree
+    sess.handshake_data.transcript.start_hash(cs.get_hash());
+    sess.handshake_data.transcript.rollup_for_hrr();
+    sess.handshake_data.transcript.add_message(&m);
 
     Ok(emit_client_hello_for_retry(sess, Some(hrr)))
 }
