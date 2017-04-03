@@ -14,6 +14,7 @@ use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
+use msgs::handshake::CertificateStatusRequest;
 use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode, ECPointFormat};
 use msgs::codec::Codec;
 use msgs::persist;
@@ -226,6 +227,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
     exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
+    exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
 
     if support_tls13 {
         exts.push(ClientExtension::KeyShare(key_shares));

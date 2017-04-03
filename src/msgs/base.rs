@@ -61,6 +61,10 @@ impl PayloadU16 {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    pub fn empty() -> PayloadU16 {
+        PayloadU16::new(Vec::new())
+    }
 }
 
 impl Codec for PayloadU16 {

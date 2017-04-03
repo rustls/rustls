@@ -2,10 +2,10 @@ use msgs::enums::{ProtocolVersion, HandshakeType};
 use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat};
 use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
 use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
-use msgs::enums::ClientCertificateType;
+use msgs::enums::{ClientCertificateType, CertificateStatusType};
 use msgs::enums::ECCurveType;
 use msgs::enums::PSKKeyExchangeMode;
-use msgs::base::{Payload, PayloadU8, PayloadU16};
+use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
 use std::fmt;
@@ -494,6 +494,73 @@ impl Codec for PresharedKeyOffer {
     }
 }
 
+// --- RFC6066 certificate status request ---
+type ResponderIDs = DistinguishedNames;
+
+#[derive(Debug)]
+pub struct OCSPCertificateStatusRequest {
+    pub responder_ids: ResponderIDs,
+    pub extensions: PayloadU16,
+}
+
+impl Codec for OCSPCertificateStatusRequest {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        CertificateStatusType::OCSP.encode(bytes);
+        self.responder_ids.encode(bytes);
+        self.extensions.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<OCSPCertificateStatusRequest> {
+        Some(OCSPCertificateStatusRequest {
+            responder_ids: try_ret!(ResponderIDs::read(r)),
+            extensions: try_ret!(PayloadU16::read(r)),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub enum CertificateStatusRequest {
+    OCSP(OCSPCertificateStatusRequest),
+    Unknown((CertificateStatusType, Payload))
+}
+
+impl Codec for CertificateStatusRequest {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match *self {
+            CertificateStatusRequest::OCSP(ref r) => r.encode(bytes),
+            CertificateStatusRequest::Unknown((typ, ref payload)) => {
+                typ.encode(bytes);
+                payload.encode(bytes);
+            }
+        }
+    }
+
+    fn read(r: &mut Reader) -> Option<CertificateStatusRequest> {
+        let typ = try_ret!(CertificateStatusType::read(r));
+
+        match typ {
+            CertificateStatusType::OCSP => {
+                let ocsp_req = try_ret!(OCSPCertificateStatusRequest::read(r));
+                Some(CertificateStatusRequest::OCSP(ocsp_req))
+            }
+            _ => {
+                let data = try_ret!(Payload::read(r));
+                Some(CertificateStatusRequest::Unknown((typ, data)))
+            }
+        }
+    }
+}
+
+impl CertificateStatusRequest {
+    pub fn build_ocsp() -> CertificateStatusRequest {
+        let ocsp = OCSPCertificateStatusRequest {
+            responder_ids: ResponderIDs::new(),
+            extensions: PayloadU16::empty(),
+        };
+        CertificateStatusRequest::OCSP(ocsp)
+    }
+}
+
 // ---
 
 declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
@@ -516,6 +583,7 @@ pub enum ClientExtension {
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
+    CertificateStatusRequest(CertificateStatusRequest),
     Unknown(UnknownExtension),
 }
 
@@ -536,6 +604,7 @@ impl ClientExtension {
             ClientExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
             ClientExtension::Cookie(_) => ExtensionType::Cookie,
             ClientExtension::ExtendedMasterSecretRequest => ExtensionType::ExtendedMasterSecret,
+            ClientExtension::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -561,6 +630,7 @@ impl Codec for ClientExtension {
             ClientExtension::PresharedKeyModes(ref r) => r.encode(&mut sub),
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
+            ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -615,6 +685,10 @@ impl Codec for ClientExtension {
             ExtensionType::Cookie => ClientExtension::Cookie(try_ret!(PayloadU16::read(&mut sub))),
             ExtensionType::ExtendedMasterSecret if !sub.any_left() => {
                 ClientExtension::ExtendedMasterSecretRequest
+            }
+            ExtensionType::StatusRequest => {
+                let csr = try_ret!(CertificateStatusRequest::read(&mut sub));
+                ClientExtension::CertificateStatusRequest(csr)
             }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -752,6 +826,7 @@ pub enum ServerExtension {
     KeyShare(KeyShareEntry),
     PresharedKey(u16),
     ExtendedMasterSecretAck,
+    CertificateStatusAck,
     Unknown(UnknownExtension),
 }
 
@@ -767,6 +842,7 @@ impl ServerExtension {
             ServerExtension::KeyShare(_) => ExtensionType::KeyShare,
             ServerExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
             ServerExtension::ExtendedMasterSecretAck => ExtensionType::ExtendedMasterSecret,
+            ServerExtension::CertificateStatusAck => ExtensionType::StatusRequest,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -782,7 +858,8 @@ impl Codec for ServerExtension {
             ServerExtension::Heartbeat(ref r) => r.encode(&mut sub),
             ServerExtension::ServerNameAck |
                 ServerExtension::SessionTicketAck |
-                ServerExtension::ExtendedMasterSecretAck => (),
+                ServerExtension::ExtendedMasterSecretAck |
+                ServerExtension::CertificateStatusAck => (),
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
@@ -808,6 +885,7 @@ impl Codec for ServerExtension {
             }
             ExtensionType::ServerName => ServerExtension::ServerNameAck,
             ExtensionType::SessionTicket => ServerExtension::SessionTicketAck,
+            ExtensionType::StatusRequest => ServerExtension::CertificateStatusAck,
             ExtensionType::RenegotiationInfo => {
                 ServerExtension::RenegotiationInfo(try_ret!(PayloadU8::read(&mut sub)))
             }
@@ -1259,12 +1337,14 @@ impl Codec for CertificatePayload {
 
 #[derive(Debug)]
 pub enum CertificateExtension {
+    CertificateStatus(CertificateStatus),
     Unknown(UnknownExtension),
 }
 
 impl CertificateExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
+            CertificateExtension::CertificateStatus(_) => ExtensionType::StatusRequest,
             CertificateExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -1276,6 +1356,7 @@ impl Codec for CertificateExtension {
 
         let mut sub: Vec<u8> = Vec::new();
         match *self {
+            CertificateExtension::CertificateStatus(ref r) => r.encode(&mut sub),
             CertificateExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -1289,6 +1370,9 @@ impl Codec for CertificateExtension {
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
+            ExtensionType::StatusRequest => {
+              CertificateExtension::CertificateStatus(try_ret!(CertificateStatus::read(&mut sub)))
+            }
             _ => CertificateExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -1340,7 +1424,11 @@ impl CertificateEntry {
     }
 
     pub fn has_unknown_extension(&self) -> bool {
-        !self.exts.is_empty()
+        self.exts
+            .iter()
+            .any(|ext| {
+                 ext.get_type() != ExtensionType::StatusRequest
+                 })
     }
 }
 
@@ -1831,6 +1919,34 @@ impl Codec for NewSessionTicketPayloadTLS13 {
     }
 }
 
+// -- RFC6066 certificate status types
+
+/// Only supports OCSP
+#[derive(Debug)]
+pub struct CertificateStatus {
+    pub ocsp_response: PayloadU24
+}
+
+impl Codec for CertificateStatus {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        CertificateStatusType::OCSP.encode(bytes);
+        self.ocsp_response.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<CertificateStatus> {
+        let typ = try_ret!(CertificateStatusType::read(r));
+
+        match typ {
+            CertificateStatusType::OCSP => {
+                Some(CertificateStatus {
+                    ocsp_response: try_ret!(PayloadU24::read(r))
+                })
+            }
+            _ => None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum HandshakePayload {
     HelloRequest,
@@ -1850,6 +1966,7 @@ pub enum HandshakePayload {
     EncryptedExtensions(EncryptedExtensions),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
+    CertificateStatus(CertificateStatus),
     Unknown(Payload),
 }
 
@@ -1873,6 +1990,7 @@ impl HandshakePayload {
             HandshakePayload::EncryptedExtensions(ref x) => x.encode(bytes),
             HandshakePayload::KeyUpdate(ref x) => x.encode(bytes),
             HandshakePayload::Finished(ref x) => x.encode(bytes),
+            HandshakePayload::CertificateStatus(ref x) => x.encode(bytes),
             HandshakePayload::Unknown(ref x) => x.encode(bytes),
         }
     }
@@ -1971,6 +2089,9 @@ impl HandshakeMessagePayload {
             }
             HandshakeType::Finished => {
                 HandshakePayload::Finished(try_ret!(Payload::read(&mut sub)))
+            }
+            HandshakeType::CertificateStatus => {
+                HandshakePayload::CertificateStatus(try_ret!(CertificateStatus::read(&mut sub)))
             }
             _ => HandshakePayload::Unknown(try_ret!(Payload::read(&mut sub))),
         };
