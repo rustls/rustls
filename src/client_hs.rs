@@ -49,6 +49,18 @@ macro_rules! extract_handshake(
   )
 );
 
+macro_rules! extract_handshake_mut(
+  ( $m:expr, $t:path ) => (
+    match $m.payload {
+      MessagePayload::Handshake(hsp) => match hsp.payload {
+        $t(hm) => Some(hm),
+        _ => None
+      },
+      _ => None
+    }
+  )
+);
+
 // These are effectively operations on the ClientSessionImpl, variant on the
 // connection state. They must not have state of their own -- so they're
 // functions rather than a trait.
@@ -562,6 +574,13 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> StateResult 
         sess.handshake_data.must_issue_new_ticket = true;
     }
 
+    // Might the server send a CertificateStatus between Certificate and
+    // ServerKeyExchange?
+    if server_hello.find_extension(ExtensionType::StatusRequest).is_some() {
+        info!("Server may staple OCSP response");
+        sess.handshake_data.may_send_cert_status = true;
+    }
+
     // See if we're successfully resuming.
     let mut abbreviated_handshake = false;
     if let Some(ref resuming) = sess.handshake_data.resuming_session {
@@ -768,7 +787,12 @@ fn handle_certificate_tls12(sess: &mut ClientSessionImpl, m: Message) -> StateRe
     sess.handshake_data.transcript.add_message(&m);
 
     sess.handshake_data.server_cert_chain = cert_chain.clone();
-    Ok(&EXPECT_TLS12_SERVER_KX)
+
+    if sess.handshake_data.may_send_cert_status {
+        Ok(&EXPECT_TLS12_CERTIFICATE_STATUS_OR_SERVER_KX)
+    } else {
+        Ok(&EXPECT_TLS12_SERVER_KX)
+    }
 }
 
 static EXPECT_TLS12_CERTIFICATE: State = State {
@@ -777,6 +801,32 @@ static EXPECT_TLS12_CERTIFICATE: State = State {
         handshake_types: &[HandshakeType::Certificate],
     },
     handle: handle_certificate_tls12,
+};
+
+fn handle_certificate_status(sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    sess.handshake_data.transcript.add_message(&m);
+    let mut status = extract_handshake_mut!(m, HandshakePayload::CertificateStatus).unwrap();
+
+    sess.handshake_data.server_cert_ocsp_response = status.take_ocsp_response();
+    Ok(&EXPECT_TLS12_SERVER_KX)
+}
+
+fn handle_certificate_status_or_server_kx(sess: &mut ClientSessionImpl,
+                                          m: Message) -> StateResult {
+    if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
+        handle_server_kx(sess, m)
+    } else {
+        handle_certificate_status(sess, m)
+    }
+}
+
+static EXPECT_TLS12_CERTIFICATE_STATUS_OR_SERVER_KX: State = State {
+    expect: Expectation {
+        content_types: &[ContentType::Handshake],
+        handshake_types: &[HandshakeType::ServerKeyExchange,
+                           HandshakeType::CertificateStatus],
+    },
+    handle: handle_certificate_status_or_server_kx
 };
 
 fn handle_certificate_or_cert_req(sess: &mut ClientSessionImpl,
@@ -842,7 +892,8 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
 
     sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
                                                   &sess.handshake_data.server_cert_chain,
-                                                  &sess.handshake_data.dns_name)?;
+                                                  &sess.handshake_data.dns_name,
+                                                  &sess.handshake_data.server_cert_ocsp_response)?;
 
     // 2. Verify their signature on the handshake.
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
@@ -1086,7 +1137,8 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
 
     sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
                                                   &sess.handshake_data.server_cert_chain,
-                                                  &sess.handshake_data.dns_name)?;
+                                                  &sess.handshake_data.dns_name,
+                                                  &sess.handshake_data.server_cert_ocsp_response)?;
 
     // 2.
     // Build up the contents of the signed message.

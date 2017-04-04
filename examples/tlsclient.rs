@@ -396,7 +396,8 @@ mod danger {
         fn verify_server_cert(&self,
                               _roots: &rustls::RootCertStore,
                               _presented_certs: &[rustls::Certificate],
-                              _dns_name: &str) -> Result<(), rustls::TLSError> {
+                              _dns_name: &str,
+                              _ocsp: &[u8]) -> Result<(), rustls::TLSError> {
             Ok(())
         }
     }

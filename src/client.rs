@@ -307,6 +307,7 @@ pub mod danger {
 
 pub struct ClientHandshakeData {
     pub server_cert_chain: CertificatePayload,
+    pub server_cert_ocsp_response: Vec<u8>,
     pub dns_name: String,
     pub session_id: SessionID,
     pub sent_extensions: Vec<ExtensionType>,
@@ -316,6 +317,7 @@ pub struct ClientHandshakeData {
     pub resuming_session: Option<persist::ClientSessionValue>,
     pub randoms: SessionRandoms,
     pub must_issue_new_ticket: bool,
+    pub may_send_cert_status: bool,
     pub using_ems: bool,
     pub new_ticket: Vec<u8>,
     pub new_ticket_lifetime: u32,
@@ -330,6 +332,7 @@ impl ClientHandshakeData {
     fn new(host_name: &str) -> ClientHandshakeData {
         ClientHandshakeData {
             server_cert_chain: Vec::new(),
+            server_cert_ocsp_response: Vec::new(),
             dns_name: host_name.to_string(),
             session_id: SessionID::empty(),
             sent_extensions: Vec::new(),
@@ -339,6 +342,7 @@ impl ClientHandshakeData {
             resuming_session: None,
             randoms: SessionRandoms::for_client(),
             must_issue_new_ticket: false,
+            may_send_cert_status: false,
             using_ems: false,
             new_ticket: Vec::new(),
             new_ticket_lifetime: 0,

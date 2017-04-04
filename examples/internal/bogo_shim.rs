@@ -130,7 +130,8 @@ impl rustls::ServerCertVerifier for NoVerification {
     fn verify_server_cert(&self,
                           _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate],
-                          _hostname: &str) -> Result<(), rustls::TLSError> {
+                          _hostname: &str,
+                          _ocsp: &[u8]) -> Result<(), rustls::TLSError> {
         Ok(())
     }
 }

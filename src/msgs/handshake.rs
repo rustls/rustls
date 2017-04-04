@@ -11,6 +11,7 @@ use msgs::codec::{Codec, Reader};
 use std::fmt;
 use std::io::Write;
 use std::collections;
+use std::mem;
 use key;
 
 macro_rules! declare_u8_vec(
@@ -1944,6 +1945,13 @@ impl Codec for CertificateStatus {
             }
             _ => None
         }
+    }
+}
+
+impl CertificateStatus {
+    pub fn take_ocsp_response(&mut self) -> Vec<u8> {
+        let new = PayloadU24::new(Vec::new());
+        mem::replace(&mut self.ocsp_response, new).0
     }
 }
 

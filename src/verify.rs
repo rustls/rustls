@@ -33,7 +33,8 @@ pub trait ServerCertVerifier : Send + Sync {
     fn verify_server_cert(&self,
                           roots: &RootCertStore,
                           presented_certs: &[Certificate],
-                          dns_name: &str) -> Result<(), TLSError>;
+                          dns_name: &str,
+                          ocsp_response: &[u8]) -> Result<(), TLSError>;
 }
 
 /// Something that can verify a client certificate chain
@@ -51,8 +52,13 @@ impl ServerCertVerifier for WebPKIVerifier {
     fn verify_server_cert(&self,
                           roots: &RootCertStore,
                           presented_certs: &[Certificate],
-                          dns_name: &str) -> Result<(), TLSError> {
+                          dns_name: &str,
+                          ocsp_response: &[u8]) -> Result<(), TLSError> {
         let cert = self.verify_common_cert(roots, presented_certs)?;
+
+        if !ocsp_response.is_empty() {
+            info!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
+        }
 
         cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
             .map_err(TLSError::WebPKIError)
