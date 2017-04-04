@@ -808,6 +808,7 @@ fn handle_certificate_status(sess: &mut ClientSessionImpl, m: Message) -> StateR
     let mut status = extract_handshake_mut!(m, HandshakePayload::CertificateStatus).unwrap();
 
     sess.handshake_data.server_cert_ocsp_response = status.take_ocsp_response();
+    info!("Server stapled OCSP response is {:?}", sess.handshake_data.server_cert_ocsp_response);
     Ok(&EXPECT_TLS12_SERVER_KX)
 }
 

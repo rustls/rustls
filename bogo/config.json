@@ -103,6 +103,7 @@
     "TrailingMessageData-ServerHelloDone": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-ServerKeyExchange": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-ClientKeyExchange": ":BAD_HANDSHAKE_MSG:",
+    "TrailingMessageData-CertificateStatus": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-TLS13-ClientHello": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-TLS13-ServerHello": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-TLS13-EncryptedExtensions": ":BAD_HANDSHAKE_MSG:",
