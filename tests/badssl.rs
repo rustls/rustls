@@ -18,7 +18,7 @@ mod online {
         polite();
         connect("cbc.badssl.com")
             .fails()
-            .expect("TLS error: AlertReceived(HandshakeFailure)")
+            .expect(r"TLS error: AlertReceived\(HandshakeFailure\)")
             .go()
             .unwrap();
     }
@@ -28,7 +28,7 @@ mod online {
         polite();
         connect("rc4.badssl.com")
             .fails()
-            .expect("TLS error: AlertReceived(HandshakeFailure)")
+            .expect(r"TLS error: AlertReceived\(HandshakeFailure\)")
             .go()
             .unwrap();
     }
@@ -38,7 +38,7 @@ mod online {
         polite();
         connect("expired.badssl.com")
             .fails()
-            .expect("TLS error: WebPKIError(CertExpired)")
+            .expect(r"TLS error: WebPKIError\(CertExpired\)")
             .go()
             .unwrap();
     }
@@ -48,7 +48,7 @@ mod online {
         polite();
         connect("wrong.host.badssl.com")
             .fails()
-            .expect("TLS error: WebPKIError(CertNotValidForName)")
+            .expect(r"TLS error: WebPKIError\(CertNotValidForName\)")
             .go()
             .unwrap();
     }
@@ -58,7 +58,7 @@ mod online {
         polite();
         connect("self-signed.badssl.com")
             .fails()
-            .expect("TLS error: WebPKIError(UnknownIssuer)")
+            .expect(r"TLS error: WebPKIError\(UnknownIssuer\)")
             .go()
             .unwrap();
     }
@@ -68,7 +68,7 @@ mod online {
         polite();
         connect("dh2048.badssl.com")
             .fails()
-            .expect("TLS error: AlertReceived(HandshakeFailure)")
+            .expect(r"TLS error: AlertReceived\(HandshakeFailure\)")
             .go()
             .unwrap();
     }
@@ -124,7 +124,7 @@ mod online {
         polite();
         connect("10000-sans.badssl.com")
             .fails()
-            .expect("TLS error: CorruptMessagePayload(Handshake)")
+            .expect(r"TLS error: CorruptMessagePayload\(Handshake\)")
             .go()
             .unwrap();
     }
@@ -143,7 +143,7 @@ mod online {
         polite();
         connect("sha1-2016.badssl.com")
             .fails()
-            .expect("TLS error: WebPKIError(CertExpired)")
+            .expect(r"TLS error: WebPKIError\(CertExpired\)")
             .go()
             .unwrap();
     }

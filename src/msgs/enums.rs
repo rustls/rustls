@@ -320,6 +320,7 @@ pub enum HandshakeType {
     ClientHello,
     ServerHello,
     NewSessionTicket,
+    EndOfEarlyData,
     HelloRetryRequest,
     EncryptedExtensions,
     Certificate,
@@ -332,6 +333,7 @@ pub enum HandshakeType {
     CertificateURL,
     CertificateStatus,
     KeyUpdate,
+    MessageHash,
     Unknown(u8),
 }
 
@@ -352,6 +354,7 @@ impl Codec for HandshakeType {
             0x01 => HandshakeType::ClientHello,
             0x02 => HandshakeType::ServerHello,
             0x04 => HandshakeType::NewSessionTicket,
+            0x05 => HandshakeType::EndOfEarlyData,
             0x06 => HandshakeType::HelloRetryRequest,
             0x08 => HandshakeType::EncryptedExtensions,
             0x0b => HandshakeType::Certificate,
@@ -364,6 +367,7 @@ impl Codec for HandshakeType {
             0x15 => HandshakeType::CertificateURL,
             0x16 => HandshakeType::CertificateStatus,
             0x18 => HandshakeType::KeyUpdate,
+            0xfe => HandshakeType::MessageHash,
             x => HandshakeType::Unknown(x),
         })
     }
@@ -376,6 +380,7 @@ impl HandshakeType {
             HandshakeType::ClientHello => 0x01,
             HandshakeType::ServerHello => 0x02,
             HandshakeType::NewSessionTicket => 0x04,
+            HandshakeType::EndOfEarlyData => 0x05,
             HandshakeType::HelloRetryRequest => 0x06,
             HandshakeType::EncryptedExtensions => 0x08,
             HandshakeType::Certificate => 0x0b,
@@ -388,6 +393,7 @@ impl HandshakeType {
             HandshakeType::CertificateURL => 0x15,
             HandshakeType::CertificateStatus => 0x16,
             HandshakeType::KeyUpdate => 0x18,
+            HandshakeType::MessageHash => 0xfe,
             HandshakeType::Unknown(v) => v,
         }
     }
@@ -471,6 +477,7 @@ pub enum AlertDescription {
     BadCertificateHashValue,
     UnknownPSKIdentity,
     CertificateRequired,
+    NoApplicationProtocol,
     Unknown(u8),
 }
 
@@ -520,6 +527,7 @@ impl Codec for AlertDescription {
             0x72 => AlertDescription::BadCertificateHashValue,
             0x73 => AlertDescription::UnknownPSKIdentity,
             0x74 => AlertDescription::CertificateRequired,
+            0x78 => AlertDescription::NoApplicationProtocol,
             x => AlertDescription::Unknown(x),
         })
     }
@@ -561,6 +569,7 @@ impl AlertDescription {
             AlertDescription::BadCertificateHashValue => 0x72,
             AlertDescription::UnknownPSKIdentity => 0x73,
             AlertDescription::CertificateRequired => 0x74,
+            AlertDescription::NoApplicationProtocol => 0x78,
             AlertDescription::Unknown(v) => v,
         }
     }
@@ -638,6 +647,8 @@ pub enum ExtensionType {
     Cookie,
     PSKKeyExchangeModes,
     TicketEarlyDataInfo,
+    CertificateAuthorities,
+    OIDFilters,
     NextProtocolNegotiation,
     ChannelId,
     RenegotiationInfo,
@@ -684,6 +695,8 @@ impl Codec for ExtensionType {
             0x002c => ExtensionType::Cookie,
             0x002d => ExtensionType::PSKKeyExchangeModes,
             0x002e => ExtensionType::TicketEarlyDataInfo,
+            0x002f => ExtensionType::CertificateAuthorities,
+            0x0030 => ExtensionType::OIDFilters,
             0x3374 => ExtensionType::NextProtocolNegotiation,
             0x754f => ExtensionType::ChannelId,
             0xff01 => ExtensionType::RenegotiationInfo,
@@ -722,6 +735,8 @@ impl ExtensionType {
             ExtensionType::Cookie => 0x002c,
             ExtensionType::PSKKeyExchangeModes => 0x002d,
             ExtensionType::TicketEarlyDataInfo => 0x002e,
+            ExtensionType::CertificateAuthorities => 0x002f,
+            ExtensionType::OIDFilters => 0x0030,
             ExtensionType::NextProtocolNegotiation => 0x3374,
             ExtensionType::ChannelId => 0x754f,
             ExtensionType::RenegotiationInfo => 0xff01,
@@ -2386,6 +2401,43 @@ impl KeyUpdateRequest {
             KeyUpdateRequest::UpdateNotRequested => 0x00,
             KeyUpdateRequest::UpdateRequested => 0x01,
             KeyUpdateRequest::Unknown(v) => v,
+        }
+    }
+}
+
+/// The `CertificateStatusType` TLS protocol enum.  Values in this enum are taken
+/// from the various RFCs covering TLS, and are listed by IANA.
+/// The `Unknown` item is used when processing unrecognised ordinals.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CertificateStatusType {
+    OCSP,
+    Unknown(u8),
+}
+
+impl Codec for CertificateStatusType {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u8(self.get_u8(), bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<CertificateStatusType> {
+        let u = read_u8(r);
+
+        if u.is_none() {
+            return None;
+        }
+
+        Some(match u.unwrap() {
+            0x01 => CertificateStatusType::OCSP,
+            x => CertificateStatusType::Unknown(x),
+        })
+    }
+}
+
+impl CertificateStatusType {
+    pub fn get_u8(&self) -> u8 {
+        match *self {
+            CertificateStatusType::OCSP => 0x01,
+            CertificateStatusType::Unknown(v) => v,
         }
     }
 }

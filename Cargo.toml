@@ -28,6 +28,7 @@ mio = "0.5.1"
 docopt = "0.6"
 rustc-serialize = "0.3"
 webpki-roots = "0.7"
+regex = "0.2"
 
 [[example]]
 name = "bogo_shim"

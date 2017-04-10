@@ -25,22 +25,14 @@ fn alpn_offer() {
     // Basic workingness.
     server.client()
         .proto("breakfast")
-        .expect_log("ALPN protocol is Some(\"breakfast\")")
+        .expect_log("ALPN protocol is Some\\(\"breakfast\"\\)")
         .go();
 
     // Client preference has little effect (we're testing openssl here really)
     server.client()
         .proto("edgware")
         .proto("ponytown")
-        .expect_log("ALPN protocol is Some(\"ponytown\")")
-        .go();
-
-    // No overlap should fail with an alert.
-    // (Except it doesn't, because openssl rightly ignores this part
-    // of the RFC.)
-    server.client()
-        .proto("mayfair")
-        .expect_log("ALPN protocol is None")
+        .expect_log("ALPN protocol is Some\\(\"ponytown\"\\)")
         .go();
 
     server.kill();
@@ -125,7 +117,7 @@ fn client_auth_required_but_unsupported() {
     server.client()
         .expect_log("Got CertificateRequest")
         .expect_log("Client auth requested but no cert/sigscheme available")
-        .expect("TLS error: AlertReceived(HandshakeFailure)")
+        .expect(r"TLS error: AlertReceived\(HandshakeFailure\)")
         .fails()
         .go();
 
@@ -167,7 +159,7 @@ fn client_auth_by_server_required() {
     // Handshake *doesn't* work without client auth.
     server.client()
         .fails()
-        .expect_log("ssl handshake failure")
+        .expect_log(r"(ssl handshake failure|verify return:1)")
         .go();
 
     // ... but does with.
@@ -230,32 +222,32 @@ fn server_resumes() {
     server.client()
         .arg("-sess_out")
         .arg(sess1)
-        .expect("New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+        .expect(r"New, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
         .go();
 
     server.client()
         .arg("-sess_in")
         .arg(sess1)
-        .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+        .expect(r"Reused, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
         .go();
 
     server.client()
         .arg("-sess_out")
         .arg(sess2)
-        .expect("New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+        .expect(r"New, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
         .go();
 
     for _ in 0..2 {
         server.client()
             .arg("-sess_in")
             .arg(sess1)
-            .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+            .expect(r"Reused, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
             .go();
 
         server.client()
             .arg("-sess_in")
             .arg(sess2)
-            .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+            .expect(r"Reused, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
             .go();
     }
 }
@@ -272,18 +264,18 @@ fn server_resumes_with_tickets() {
     server.client()
         .arg("-sess_out")
         .arg(sess)
-        .expect("New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+        .expect(r"New, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
         .expect("TLS session ticket:")
-        .expect("TLS session ticket lifetime hint: 43200 (seconds)")
+        .expect(r"TLS session ticket lifetime hint: 43200 \(seconds\)")
         .go();
 
     for _ in 0..8 {
         server.client()
             .arg("-sess_in")
             .arg(sess)
-            .expect("Reused, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384")
+            .expect(r"Reused, (TLSv1/SSLv3|TLSv1\.2), Cipher is ECDHE-RSA-AES256-GCM-SHA384")
             .expect("TLS session ticket:")
-            .expect("TLS session ticket lifetime hint: 43200 (seconds)")
+            .expect(r"TLS session ticket lifetime hint: 43200 \(seconds\)")
             .go();
     }
 }

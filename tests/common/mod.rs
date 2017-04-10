@@ -5,6 +5,9 @@ use std::time;
 use std::net;
 use std::env;
 
+extern crate regex;
+use self::regex::Regex;
+
 // For tests which connect to internet servers, don't go crazy.
 pub fn polite() {
     thread::sleep(time::Duration::from_secs(1));
@@ -266,7 +269,8 @@ impl TlsClient {
         let stderr_str = unsafe { String::from_utf8_unchecked(output.stderr.clone()) };
 
         for expect in &self.expect_output {
-            if stdout_str.find(expect).is_none() {
+            let re = Regex::new(expect).unwrap();
+            if re.find(&stdout_str).is_none() {
                 println!("We expected to find '{}' in the following output:", expect);
                 println!("{:?}", output);
                 panic!("Test failed");
@@ -274,7 +278,8 @@ impl TlsClient {
         }
 
         for expect in &self.expect_log {
-            if stderr_str.find(expect).is_none() {
+            let re = Regex::new(expect).unwrap();
+            if re.find(&stderr_str).is_none() {
                 println!("We expected to find '{}' in the following output:", expect);
                 println!("{:?}", output);
                 panic!("Test failed");
@@ -648,7 +653,8 @@ impl OpenSSLClient {
         print!("{}", stderr_str);
 
         for expect in &self.expect_output {
-            if stdout_str.find(expect).is_none() {
+            let re = Regex::new(expect).unwrap();
+            if re.find(&stdout_str).is_none() {
                 println!("We expected to find '{}' in the following output:", expect);
                 println!("{:?}", output);
                 panic!("Test failed");
@@ -656,7 +662,8 @@ impl OpenSSLClient {
         }
 
         for expect in &self.expect_log {
-            if stderr_str.find(expect).is_none() {
+            let re = Regex::new(expect).unwrap();
+            if re.find(&stderr_str).is_none() {
                 println!("We expected to find '{}' in the following output:", expect);
                 println!("{:?}", output);
                 panic!("Test failed");

@@ -11,8 +11,7 @@ fn curve_nistp256() {
     server.run();
     server.client()
         .verbose()
-        .expect_log("ECDHE curve is ECParameters { curve_type: NamedCurve, named_group: \
-                     secp256r1 }")
+        .expect_log(r"ECDHE curve is ECParameters \{ curve_type: NamedCurve, named_group: secp256r1 \}")
         .go();
     server.kill();
 }
@@ -24,8 +23,7 @@ fn curve_nistp384() {
     server.run();
     server.client()
         .verbose()
-        .expect_log("ECDHE curve is ECParameters { curve_type: NamedCurve, named_group: \
-                     secp384r1 }")
+        .expect_log(r"ECDHE curve is ECParameters \{ curve_type: NamedCurve, named_group: secp384r1 \}")
         .go();
     server.kill();
 }

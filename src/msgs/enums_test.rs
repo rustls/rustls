@@ -56,7 +56,7 @@ fn test_enums() {
     test_enum8::<HandshakeType>(HandshakeType::HelloRequest, HandshakeType::KeyUpdate);
     test_enum8::<AlertLevel>(AlertLevel::Warning, AlertLevel::Fatal);
     test_enum8::<AlertDescription>(AlertDescription::CloseNotify,
-                                   AlertDescription::CertificateRequired);
+                                   AlertDescription::NoApplicationProtocol);
     test_enum8::<HeartbeatMessageType>(HeartbeatMessageType::Request,
                                        HeartbeatMessageType::Response);
     test_enum16::<ExtensionType>(ExtensionType::ServerName, ExtensionType::RenegotiationInfo);
