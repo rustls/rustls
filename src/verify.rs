@@ -99,7 +99,12 @@ impl ServerCertVerifier for WebPKIVerifier {
                           presented_certs: &[Certificate],
                           dns_name: webpki::DNSNameRef,
                           ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError> {
-        let cert = self.verify_common_cert(roots, presented_certs)?;
+        let (cert, chain, trustroots) = prepare(roots, presented_certs)?;
+        let now = (self.time)()?;
+        let cert = cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS,
+                &webpki::TLSServerTrustAnchors(&trustroots), &chain, now)
+            .map_err(TLSError::WebPKIError)
+            .map(|_| cert)?;
 
         if !ocsp_response.is_empty() {
             info!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
@@ -114,47 +119,41 @@ impl ServerCertVerifier for WebPKIVerifier {
 impl WebPKIVerifier {
     pub fn new() -> WebPKIVerifier {
         WebPKIVerifier {
-            time: ||
-                webpki::Time::try_from(std::time::SystemTime::now())
-                    .map_err(|_| TLSError::FailedToGetCurrentTime),
+            time: try_now,
         }
-    }
-
-    /// Check `presented_certs` is non-empty and rooted in `roots`.
-    /// Return the `webpki::EndEntityCert` for the top certificate
-    /// in `presented_certs`.
-    fn verify_common_cert<'a>(&self,
-                              roots: &RootCertStore,
-                              presented_certs: &'a [Certificate])
-                              -> Result<webpki::EndEntityCert<'a>, TLSError> {
-        if presented_certs.is_empty() {
-            return Err(TLSError::NoCertificatesPresented);
-        }
-
-        // EE cert must appear first.
-        let cert_der = untrusted::Input::from(&presented_certs[0].0);
-        let cert = webpki::EndEntityCert::from(cert_der)
-            .map_err(TLSError::WebPKIError)?;
-
-        let now = (self.time)()?;
-
-        let chain: Vec<untrusted::Input> = presented_certs.iter()
-            .skip(1)
-            .map(|cert| untrusted::Input::from(&cert.0))
-            .collect();
-
-        let trustroots: Vec<webpki::TrustAnchor> = roots.roots
-            .iter()
-            .map(|x| x.to_trust_anchor())
-            .collect();
-        let trustroots = webpki::TLSServerTrustAnchors(&trustroots);
-
-        cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, now)
-            .map_err(TLSError::WebPKIError)
-            .map(|_| cert)
     }
 }
 
+fn prepare<'a, 'b>(roots: &'b RootCertStore, presented_certs: &'a [Certificate])
+                   -> Result<(webpki::EndEntityCert<'a>,
+                              Vec<untrusted::Input<'a>>,
+                              Vec<webpki::TrustAnchor<'b>>), TLSError> {
+    if presented_certs.is_empty() {
+        return Err(TLSError::NoCertificatesPresented);
+    }
+
+    // EE cert must appear first.
+    let cert_der = untrusted::Input::from(&presented_certs[0].0);
+    let cert =
+        webpki::EndEntityCert::from(cert_der).map_err(TLSError::WebPKIError)?;
+
+    let chain: Vec<untrusted::Input> = presented_certs.iter()
+        .skip(1)
+        .map(|cert| untrusted::Input::from(&cert.0))
+        .collect();
+
+    let trustroots: Vec<webpki::TrustAnchor> = roots.roots
+        .iter()
+        .map(|x| x.to_trust_anchor())
+        .collect();
+
+    Ok((cert, chain, trustroots))
+}
+
+fn try_now() -> Result<webpki::Time, TLSError> {
+    webpki::Time::try_from(std::time::SystemTime::now())
+        .map_err( |_ | TLSError::FailedToGetCurrentTime)
+}
 
 /// Client certificate verification using the webpki crate.
 pub struct WebPKIClientAuth {
@@ -199,7 +198,12 @@ impl ClientCertVerifier for WebPKIClientAuth {
 
     fn verify_client_cert(&self, presented_certs: &[Certificate])
                           -> Result<ClientCertVerified, TLSError> {
-        WebPKIVerifier::new().verify_common_cert(&self.roots, presented_certs)
+        let (cert, chain, trustroots) = prepare(&self.roots, presented_certs)?;
+        let now = try_now()?;
+        cert.verify_is_valid_tls_client_cert(
+                SUPPORTED_SIG_ALGS, &webpki::TLSClientTrustAnchors(&trustroots),
+                &chain, now)
+            .map_err(TLSError::WebPKIError)
             .map(|_| ClientCertVerified::assertion())
     }
 }
