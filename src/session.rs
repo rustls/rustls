@@ -62,6 +62,14 @@ pub trait Session: Read + Write + Send {
     /// session is buffered in memory.
     fn is_handshaking(&self) -> bool;
 
+    /// Sets a limit on the internal buffers used to buffer
+    /// unsent plaintext (prior to completing the TLS handshake)
+    /// and unsent TLS records.
+    ///
+    /// By default, there is no limit.  The limit can be set
+    /// at any time, even if the current buffer use is higher.
+    fn set_buffer_limit(&mut self, limit: usize);
+
     /// Queues a close_notify fatal alert to be sent in the next
     /// `write_tls` call.  This informs the peer that the
     /// connection is being closed.
@@ -232,6 +240,11 @@ impl SessionSecrets {
 static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 
+enum Limit {
+    Yes,
+    No
+}
+
 pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
@@ -324,6 +337,11 @@ impl SessionCommon {
         !self.received_plaintext.is_empty()
     }
 
+    pub fn set_buffer_limit(&mut self, limit: usize) {
+        self.sendable_plaintext.set_limit(limit);
+        self.sendable_tls.set_limit(limit);
+    }
+
     pub fn encrypt_outgoing(&mut self, plain: BorrowMessage) -> Message {
         let seq = self.write_seq;
         self.write_seq += 1;
@@ -411,20 +429,32 @@ impl SessionCommon {
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
     fn send_appdata_encrypt(&mut self,
-                            payload: &[u8]) {
+                            payload: &[u8],
+                            limit: Limit) -> usize {
         if self.want_write_key_update {
             self.do_write_key_update();
         }
 
+        // Here, the limit on sendable_tls applies to encrypted data,
+        // but we're respecting it for plaintext data -- so we'll
+        // be out by whatever the cipher+record overhead is.  That's a
+        // constant and predictable amount, so it's not a terrible issue.
+        let len = match limit {
+            Limit::Yes => self.sendable_tls.apply_limit(payload.len()),
+            Limit::No => payload.len()
+        };
+
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter.fragment_borrow(ContentType::ApplicationData,
                                                 ProtocolVersion::TLSv1_2,
-                                                payload,
+                                                &payload[..len],
                                                 &mut plain_messages);
 
         for m in plain_messages {
             self.send_single_fragment(m);
         }
+
+        len
     }
 
     fn send_single_fragment(&mut self, m: BorrowMessage) {
@@ -464,22 +494,33 @@ impl SessionCommon {
 
     /// Send plaintext application data, fragmenting and
     /// encrypting it as it goes out.
-    pub fn send_plain(&mut self, data: &[u8]) {
+    ///
+    /// If internal buffers are too small, this function will not accept
+    /// all the data.
+    pub fn send_some_plaintext(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.send_plain(data, Limit::Yes)
+    }
+
+
+    fn send_plain(&mut self, data: &[u8], limit: Limit) -> io::Result<usize> {
         if !self.traffic {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
-            self.sendable_plaintext.append(data.to_vec());
-            return;
+            let len = match limit {
+                Limit::Yes => self.sendable_plaintext.append_limited_copy(data),
+                Limit::No => self.sendable_plaintext.append(data.to_vec())
+            };
+            return Ok(len);
         }
 
         debug_assert!(self.we_encrypting);
 
         if data.len() == 0 {
             // Don't send empty fragments.
-            return;
+            return Ok(0);
         }
 
-        self.send_appdata_encrypt(data);
+        Ok(self.send_appdata_encrypt(data, limit))
     }
 
     pub fn start_traffic(&mut self) {
@@ -496,7 +537,8 @@ impl SessionCommon {
 
         while !self.sendable_plaintext.is_empty() {
             let buf = self.sendable_plaintext.take_one();
-            self.send_plain(&buf);
+            self.send_plain(&buf, Limit::No)
+                .unwrap();
         }
     }
 

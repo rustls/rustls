@@ -374,6 +374,10 @@ impl ClientSessionImpl {
         !self.common.traffic
     }
 
+    pub fn set_buffer_limit(&mut self, len: usize) {
+        self.common.set_buffer_limit(len)
+    }
+
     pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
         if self.common.peer_encrypting {
@@ -536,6 +540,10 @@ impl Session for ClientSession {
         self.imp.is_handshaking()
     }
 
+    fn set_buffer_limit(&mut self, len: usize) {
+        self.imp.set_buffer_limit(len)
+    }
+
     fn send_close_notify(&mut self) {
         self.imp.common.send_close_notify()
     }
@@ -573,8 +581,7 @@ impl io::Write for ClientSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.imp.common.send_plain(buf);
-        Ok(buf.len())
+        self.imp.common.send_some_plaintext(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {

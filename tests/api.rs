@@ -489,3 +489,72 @@ fn client_is_send() {
     let client = ClientSession::new(&Arc::new(client_config), "localhost");
     &client as &Send;
 }
+
+#[test]
+fn server_respects_buffer_limit_pre_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    server.set_buffer_limit(32);
+
+    assert_eq!(server.write(b"01234567890123456789").unwrap(), 20);
+    assert_eq!(server.write(b"01234567890123456789").unwrap(), 12);
+
+    do_handshake(&mut client, &mut server);
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    check_read(&mut client, b"01234567890123456789012345678901");
+}
+
+#[test]
+fn server_respects_buffer_limit_post_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    // this test will vary in behaviour depending on the default suites
+    do_handshake(&mut client, &mut server);
+    server.set_buffer_limit(48);
+
+    assert_eq!(server.write(b"01234567890123456789").unwrap(), 20);
+    assert_eq!(server.write(b"01234567890123456789").unwrap(), 6);
+
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    check_read(&mut client, b"01234567890123456789012345");
+}
+
+#[test]
+fn client_respects_buffer_limit_pre_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    client.set_buffer_limit(32);
+
+    assert_eq!(client.write(b"01234567890123456789").unwrap(), 20);
+    assert_eq!(client.write(b"01234567890123456789").unwrap(), 12);
+
+    do_handshake(&mut client, &mut server);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    check_read(&mut server, b"01234567890123456789012345678901");
+}
+
+#[test]
+fn client_respects_buffer_limit_post_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+    client.set_buffer_limit(48);
+
+    assert_eq!(client.write(b"01234567890123456789").unwrap(), 20);
+    assert_eq!(client.write(b"01234567890123456789").unwrap(), 6);
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    check_read(&mut server, b"01234567890123456789012345");
+}

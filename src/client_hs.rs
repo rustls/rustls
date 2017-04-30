@@ -767,7 +767,7 @@ static EXPECT_TLS13_CERTIFICATE: State = State {
     handle: handle_certificate_tls13,
 };
 
-fn handle_certificate_tls12(sess: &mut ClientSessionImpl, m: Message) -> StateResult { 
+fn handle_certificate_tls12(sess: &mut ClientSessionImpl, m: Message) -> StateResult {
     let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
     sess.handshake_data.transcript.add_message(&m);
 
