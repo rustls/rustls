@@ -1075,7 +1075,7 @@ pub struct ServerHelloPayload {
 }
 
 fn is_tls13(vers: ProtocolVersion) -> bool {
-    vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::Unknown(0x7f13)
+    vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::Unknown(0x7f14)
 }
 
 impl Codec for ServerHelloPayload {

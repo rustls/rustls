@@ -32,8 +32,8 @@ use handshake::Expectation;
 
 use std::mem;
 
-// draft-ietf-tls-tls13-19
-const TLS13_DRAFT: u16 = 0x7f13;
+// draft-ietf-tls-tls13-20
+const TLS13_DRAFT: u16 = 0x7f14;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (

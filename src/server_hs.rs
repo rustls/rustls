@@ -35,7 +35,7 @@ use handshake::Expectation;
 
 use std::sync::Arc;
 
-const TLS13_DRAFT: u16 = 0x7f13;
+const TLS13_DRAFT: u16 = 0x7f14;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
