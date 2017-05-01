@@ -78,7 +78,7 @@ obsolete cryptography.
 
 ## Current features
 
-* TLS1.2 and TLS1.3 (draft 18) only.
+* TLS1.2 and TLS1.3 (draft 20) only.
 * ECDSA or RSA server authentication by clients.
 * RSA server authentication by servers.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
