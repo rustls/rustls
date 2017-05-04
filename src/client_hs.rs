@@ -839,11 +839,12 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
 
     info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
 
-    // 1. Verify the certificate chain.
+    // 1. Verify the certificate chain. (unless configured not to)
     // 2. Verify their signature on the handshake.
     try!(verify::verify_server_cert(&sess.config.root_store,
                                   &sess.handshake_data.server_cert_chain,
-                                  &sess.handshake_data.dns_name));
+                                  &sess.handshake_data.dns_name,
+                                  !sess.config.do_host_name_verification()));
 
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     try!(verify::verify_tls13(&sess.handshake_data.server_cert_chain[0],
@@ -1076,7 +1077,7 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
     info!("Server DNS name is {:?}", sess.handshake_data.dns_name);
 
-    // 1. Verify the cert chain.
+    // 1. Verify the cert chain. (unless configured not to)
     // 2. Verify that the top certificate signed their kx.
     // 3. If doing client auth, send our Certificate.
     // 4. Complete the key exchange:
@@ -1090,7 +1091,8 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     // 1.
     try!(verify::verify_server_cert(&sess.config.root_store,
                                   &sess.handshake_data.server_cert_chain,
-                                  &sess.handshake_data.dns_name));
+                                  &sess.handshake_data.dns_name,
+                                  !sess.config.do_host_name_verification()));
 
     // 2.
     // Build up the contents of the signed message.
