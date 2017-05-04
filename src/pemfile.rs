@@ -32,7 +32,10 @@ fn extract<A>(rd: &mut io::BufRead,
 
         if line.starts_with(end_mark) {
             take_base64 = false;
-            let der = try!(base64::decode_ws(&b64buf).map_err(|_| ()));
+            let der = try! {
+                base64::decode_config(&b64buf, base64::MIME)
+                    .map_err(|_| ())
+            };
             ders.push(f(der));
             b64buf = String::new();
             continue;
@@ -60,5 +63,14 @@ pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()
     extract(rd,
             "-----BEGIN RSA PRIVATE KEY-----",
             "-----END RSA PRIVATE KEY-----",
+            &|v| key::PrivateKey(v))
+}
+
+/// Extract all PKCS8-encoded private keys from rd, and return a vec of
+/// `key::PrivateKey`s containing the der-format contents.
+pub fn pkcs8_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
+    extract(rd,
+            "-----BEGIN PRIVATE KEY-----",
+            "-----END PRIVATE KEY-----",
             &|v| key::PrivateKey(v))
 }

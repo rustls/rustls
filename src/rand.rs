@@ -3,12 +3,12 @@
 /// for our own use.  These functions never fail,
 /// they panic on error.
 
-use ring;
+use ring::rand::{SystemRandom, SecureRandom};
 use msgs::codec;
 
 /// Fill the whole slice with random material.
 pub fn fill_random(bytes: &mut [u8]) {
-    ring::rand::SystemRandom::new()
+    SystemRandom::new()
         .fill(bytes)
         .unwrap();
 }

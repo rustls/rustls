@@ -3,7 +3,7 @@ use ring::hmac;
 
 use std::io::Write;
 
-fn concat_sign(key: &hmac::SigningKey, a: &[u8], b: &[u8]) -> digest::Digest {
+fn concat_sign(key: &hmac::SigningKey, a: &[u8], b: &[u8]) -> hmac::Signature {
     let mut ctx = hmac::SigningContext::with_key(key);
     ctx.update(a);
     ctx.update(b);
