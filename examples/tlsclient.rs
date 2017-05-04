@@ -304,7 +304,7 @@ Options:
                         May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
-    --insecure          Allow connections to sites without certs.
+    --insecure          Do not do hostname verification on presented server certificates.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
     --version, -v       Show tool version.
