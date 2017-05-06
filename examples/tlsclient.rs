@@ -33,22 +33,17 @@ struct TlsClient {
     tls_session: rustls::ClientSession,
 }
 
-impl mio::Handler for TlsClient {
-    type Timeout = ();
-    type Message = ();
-
-    /// Called by mio each time events we register() for happen.
+impl TlsClient {
     fn ready(&mut self,
-             event_loop: &mut mio::EventLoop<TlsClient>,
-             token: mio::Token,
-             events: mio::EventSet) {
-        assert_eq!(token, CLIENT);
+             poll: &mut mio::Poll,
+             ev: &mio::Event) {
+        assert_eq!(ev.token(), CLIENT);
 
-        if events.is_readable() {
+        if ev.readiness().is_readable() {
             self.do_read();
         }
 
-        if events.is_writable() {
+        if ev.readiness().is_writable() {
             self.do_write();
         }
 
@@ -57,16 +52,7 @@ impl mio::Handler for TlsClient {
             process::exit(if self.clean_closure { 0 } else { 1 });
         }
 
-        self.reregister(event_loop);
-    }
-
-    // XXX: this won't be called currently, but could be used in the future
-    // to have timeout behaviour.
-    fn timeout(&mut self,
-               _event_loop: &mut mio::EventLoop<TlsClient>,
-               _timeout: <TlsClient as mio::Handler>::Timeout) {
-        println!("connection timed out");
-        process::exit(1);
+        self.reregister(poll);
     }
 }
 
@@ -158,34 +144,34 @@ impl TlsClient {
         self.tls_session.write_tls(&mut self.socket).unwrap();
     }
 
-    fn register(&self, event_loop: &mut mio::EventLoop<TlsClient>) {
-        event_loop.register(&self.socket,
+    fn register(&self, poll: &mut mio::Poll) {
+        poll.register(&self.socket,
                       CLIENT,
-                      self.event_set(),
+                      self.ready_interest(),
                       mio::PollOpt::level() | mio::PollOpt::oneshot())
             .unwrap();
     }
 
-    fn reregister(&self, event_loop: &mut mio::EventLoop<TlsClient>) {
-        event_loop.reregister(&self.socket,
+    fn reregister(&self, poll: &mut mio::Poll) {
+        poll.reregister(&self.socket,
                         CLIENT,
-                        self.event_set(),
+                        self.ready_interest(),
                         mio::PollOpt::level() | mio::PollOpt::oneshot())
             .unwrap();
     }
 
     // Use wants_read/wants_write to register for different mio-level
     // IO readiness events.
-    fn event_set(&self) -> mio::EventSet {
+    fn ready_interest(&self) -> mio::Ready {
         let rd = self.tls_session.wants_read();
         let wr = self.tls_session.wants_write();
 
         if rd && wr {
-            mio::EventSet::readable() | mio::EventSet::writable()
+            mio::Ready::readable() | mio::Ready::writable()
         } else if wr {
-            mio::EventSet::writable()
+            mio::Ready::writable()
         } else {
-            mio::EventSet::readable()
+            mio::Ready::readable()
         }
     }
 
@@ -469,7 +455,17 @@ fn main() {
         tlsclient.read_source_to_end(&mut stdin).unwrap();
     }
 
-    let mut event_loop = mio::EventLoop::new().unwrap();
-    tlsclient.register(&mut event_loop);
-    event_loop.run(&mut tlsclient).unwrap();
+    let mut poll = mio::Poll::new()
+        .unwrap();
+    let mut events = mio::Events::with_capacity(32);
+    tlsclient.register(&mut poll);
+
+    loop {
+        poll.poll(&mut events, None)
+            .unwrap();
+
+        for ev in events.iter() {
+            tlsclient.ready(&mut poll, &ev);
+        }
+    }
 }

@@ -24,7 +24,7 @@ logging = ["log"]
 [dev-dependencies]
 log = "0.3.7"
 env_logger = "0.4.2"
-mio = "0.5"
+mio = "0.6"
 docopt = "0.7"
 rustc-serialize = "0.3"
 webpki-roots = "0.9"
