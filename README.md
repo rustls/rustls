@@ -13,6 +13,10 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.6.0:
+  - Update dependencies.
+  - Expose ring's new support for PKCS#8-format private keys.
+  - New API for applying limitation to internal buffer sizes.
 * 0.5.8:
   - Fix build on later rustc.
 * 0.5.7:
