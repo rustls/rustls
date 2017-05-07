@@ -14,8 +14,8 @@ untrusted = "0.5"
 time = "0.1.37"
 base64 = "0.5"
 log = { version = "0.3.6", optional = true }
-ring = { version = "0.8", features = ["rsa_signing"] }
-webpki = "0.11"
+ring = { version = "0.9", features = ["rsa_signing"] }
+webpki = "0.12"
 
 [features]
 default = ["logging"]
@@ -27,7 +27,7 @@ env_logger = "0.4.2"
 mio = "0.6"
 docopt = "0.7"
 rustc-serialize = "0.3"
-webpki-roots = "0.9"
+webpki-roots = "0.10"
 regex = "0.2"
 
 [[example]]
