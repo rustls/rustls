@@ -1,0 +1,34 @@
+YHTTP/1.1 200 OK
+Date: Mon, 08 May 2017 22:57:43 GMT
+Content-Type: text/html; charset=utf-8
+Transfer-Encoding: chunked
+Connection: close
+Set-Cookie: __cfduid=d1755eb7822a3999117381353fbdf59c41494284263; expires=Tue, 08-May-18 22:57:43 GMT; path=/; domain=.jbp.io; HttpOnly
+Last-Modified: Mon, 03 Apr 2017 20:07:46 GMT
+Access-Control-Allow-Origin: *
+Expires: Mon, 08 May 2017 23:07:43 GMT
+Cache-Control: max-age=600
+X-GitHub-Request-Id: 8857:5FC2:18DD116:208AB68:5910F7E7
+Strict-Transport-Security: max-age=2592000
+X-Content-Type-Options: nosniff
+Server: cloudflare-nginx
+CF-RAY: 35c00506a9303536-LHR
+
+be2
+
+
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+   <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+   <meta name="google-site-verification" content="8_3Lj_0Yt688wzUrjZYeLzrNX5RuAaFgyJuma8yTv5k" />
+   <title>jbp.io :: </title>
+   <meta name="author" content="Joseph Birr-Pixton" />
+   <link rel="alternate" type="application/atom+xml" title="Atom feed" href="/atom.xml" />
+   <link rel="alternate" type="application/rss+xml" title="RSS feed" href="/rss.xml" />
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   
+   <!-- Fancy font -->
+   <link rel="stylesheet" href="/assets/themes/jbp/css/lily-script.css" type="text/css" />
+
+   <!-- Syntax highlighti
