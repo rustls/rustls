@@ -73,6 +73,7 @@ obsolete cryptography.
 * ECDSA server authentication by servers.
 * PSK support.
 * OCSP stapling.
+* SCT stapling.
 * Certificate pinning.
 
 ## Non-features
