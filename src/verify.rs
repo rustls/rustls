@@ -149,12 +149,11 @@ impl RootCertStore {
     }
 }
 
-/// Check `presented_certs` is non-empty and rooted in `roots`.
-/// Return the `webpki::EndEntityCert` for the top certificate
-/// in `presented_certs`.
-fn verify_common_cert<'a>(roots: &RootCertStore,
-                          presented_certs: &'a [ASN1Cert])
-                          -> Result<webpki::EndEntityCert<'a>, TLSError> {
+fn prepare<'a, 'b>(roots: &'b RootCertStore,
+               presented_certs: &'a [ASN1Cert])
+        -> Result<(webpki::EndEntityCert<'a>,
+                   Vec<untrusted::Input<'a>>,
+                   Vec<webpki::TrustAnchor<'b>>), TLSError> {
     if presented_certs.is_empty() {
         return Err(TLSError::NoCertificatesPresented);
     }
@@ -176,14 +175,7 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
         .map(|x| x.to_trust_anchor())
         .collect();
 
-    if DANGEROUS_DISABLE_VERIFY {
-        warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping certificate verification");
-        return Ok(cert);
-    }
-
-    cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, time::get_time())
-        .map_err(TLSError::WebPKIError)
-        .map(|_| cert)
+    Ok((cert, chain, trustroots))
 }
 
 /// Verify a the certificate chain `presented_certs` against the roots
@@ -193,12 +185,20 @@ pub fn verify_server_cert(roots: &RootCertStore,
                           presented_certs: &[ASN1Cert],
                           dns_name: &str)
                           -> Result<(), TLSError> {
-    let cert = try!(verify_common_cert(roots, presented_certs));
+    let (cert, chain, roots) = try!(prepare(roots, presented_certs));
 
     if DANGEROUS_DISABLE_VERIFY {
-        warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping server name verification");
+        warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping server certificate verification");
         return Ok(());
     }
+
+    try! {
+        cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS,
+                                             &roots,
+                                             &chain,
+                                             time::get_time())
+            .map_err(TLSError::WebPKIError)
+    };
 
     cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
         .map_err(TLSError::WebPKIError)
@@ -209,7 +209,18 @@ pub fn verify_server_cert(roots: &RootCertStore,
 pub fn verify_client_cert(roots: &RootCertStore,
                           presented_certs: &[ASN1Cert])
                           -> Result<(), TLSError> {
-    verify_common_cert(roots, presented_certs).map(|_| ())
+    let (cert, chain, roots) = try!(prepare(roots, presented_certs));
+
+    if DANGEROUS_DISABLE_VERIFY {
+        warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping client certificate verification");
+        return Ok(());
+    }
+
+    cert.verify_is_valid_tls_client_cert(SUPPORTED_SIG_ALGS,
+                                         &roots,
+                                         &chain,
+                                         time::get_time())
+        .map_err(TLSError::WebPKIError)
 }
 
 static ECDSA_SHA256: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
