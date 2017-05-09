@@ -153,7 +153,8 @@ impl RootCertStore {
 /// Return the `webpki::EndEntityCert` for the top certificate
 /// in `presented_certs`.
 fn verify_common_cert<'a>(roots: &RootCertStore,
-                          presented_certs: &'a [ASN1Cert])
+                          presented_certs: &'a [ASN1Cert],
+                          skip_verify: bool)
                           -> Result<webpki::EndEntityCert<'a>, TLSError> {
     if presented_certs.is_empty() {
         return Err(TLSError::NoCertificatesPresented);
@@ -176,7 +177,7 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
         .map(|x| x.to_trust_anchor())
         .collect();
 
-    if DANGEROUS_DISABLE_VERIFY {
+    if DANGEROUS_DISABLE_VERIFY || skip_verify {
         warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping certificate verification");
         return Ok(cert);
     }
@@ -191,11 +192,12 @@ fn verify_common_cert<'a>(roots: &RootCertStore,
 /// the top certificate in the chain.
 pub fn verify_server_cert(roots: &RootCertStore,
                           presented_certs: &[ASN1Cert],
-                          dns_name: &str)
+                          dns_name: &str,
+                          skip_host_name_verify: bool)
                           -> Result<(), TLSError> {
-    let cert = try!(verify_common_cert(roots, presented_certs));
+    let cert = try!(verify_common_cert(roots, presented_certs, skip_host_name_verify));
 
-    if DANGEROUS_DISABLE_VERIFY {
+    if DANGEROUS_DISABLE_VERIFY || skip_host_name_verify {
         warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping server name verification");
         return Ok(());
     }
@@ -209,7 +211,7 @@ pub fn verify_server_cert(roots: &RootCertStore,
 pub fn verify_client_cert(roots: &RootCertStore,
                           presented_certs: &[ASN1Cert])
                           -> Result<(), TLSError> {
-    verify_common_cert(roots, presented_certs).map(|_| ())
+    verify_common_cert(roots, presented_certs, false).map(|_| ())
 }
 
 static ECDSA_SHA256: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,

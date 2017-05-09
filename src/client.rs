@@ -188,6 +188,11 @@ pub struct ClientConfig {
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
     pub versions: Vec<ProtocolVersion>,
+
+    /// Whether to do host name verification or not.  WARNING: turning
+    /// this off is *insecure* as the host will not be verified to be
+    /// who it says it is.
+    host_verification: bool,
 }
 
 impl ClientConfig {
@@ -204,6 +209,7 @@ impl ClientConfig {
             client_auth_cert_resolver: Box::new(FailResolveClientCert {}),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
+            host_verification: true,
         }
     }
 
@@ -248,6 +254,25 @@ impl ClientConfig {
                                   key_der: key::PrivateKey) {
         self.client_auth_cert_resolver = Box::new(AlwaysResolvesClientCert::new_rsa(cert_chain,
                                                                                     &key_der));
+    }
+
+    /// Allow creation of a TLS stream without verification of host
+    /// names.  WARNING: This is a dangerous option to enable, as it
+    /// will allow any valid certificate for any site to be trusted
+    /// for any other site.  This opens up a major risk of
+    /// man-in-the-middle attaks.
+    pub fn danger_disable_host_name_verification(&mut self) {
+        self.host_verification = false;
+    }
+
+    /// Enable host name verification.
+    pub fn enable_host_name_verification(&mut self) {
+        self.host_verification = true;
+    }
+
+    /// Should this connection do host name verification
+    pub fn do_host_name_verification(&self) -> bool {
+        self.host_verification
     }
 }
 

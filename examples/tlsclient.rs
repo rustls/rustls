@@ -290,6 +290,7 @@ Options:
                         May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
+    --insecure          Do not do hostname verification on presented server certificates.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
     --version, -v       Show tool version.
@@ -310,6 +311,7 @@ struct Args {
     flag_auth_key: Option<String>,
     flag_auth_certs: Option<String>,
     arg_hostname: String,
+    flag_insecure: bool,
 }
 
 // TODO: um, well, it turns out that openssl s_client/s_server
@@ -399,6 +401,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
 
     if args.flag_no_tickets {
         config.enable_tickets = false;
+    }
+
+    if args.flag_insecure {
+        config.danger_disable_host_name_verification();
     }
 
     let persist = Box::new(PersistCache::new(&args.flag_cache));
