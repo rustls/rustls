@@ -22,7 +22,7 @@ use msgs::codec::Codec;
 use msgs::persist;
 use session::SessionSecrets;
 use cipher;
-use server::ServerSessionImpl;
+use server::{ServerConfig, ServerSessionImpl};
 use key_schedule::{KeySchedule, SecretKind};
 use suites;
 use hash_hs;
@@ -924,14 +924,16 @@ fn handle_certificate_tls12(sess: &mut ServerSessionImpl, m: Message) -> StateRe
 
     debug!("certs {:?}", cert_chain);
 
-    try! {
-        verify::verify_client_cert(&sess.config.client_auth_roots,
-                                   &cert_chain)
-            .or_else(|err| {
-                     incompatible(sess, "certificate invalid");
-                     Err(err)
-                     })
-    };
+    if !verification_disabled(&sess.config) {
+        try! {
+            verify::verify_client_cert(&sess.config.client_auth_roots,
+                                       &cert_chain)
+                .or_else(|err| {
+                         incompatible(sess, "certificate invalid");
+                         Err(err)
+                         })
+        };
+    }
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain.clone());
     Ok(&EXPECT_TLS12_CLIENT_KX)
@@ -944,6 +946,15 @@ static EXPECT_TLS12_CERTIFICATE: State = State {
     },
     handle: handle_certificate_tls12,
 };
+
+#[cfg(feature = "dangerous_configuration")]
+fn verification_disabled(config: &ServerConfig) -> bool {
+    return config.dangerous_config.as_ref().map(|c| c.disable_certificate_verification).unwrap_or(false);
+}
+#[cfg(not(feature = "dangerous_configuration"))]
+fn verification_disabled(_: &ServerConfig) -> bool {
+    return false;
+}
 
 fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
                             m: Message)
@@ -964,10 +975,12 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
         return Err(TLSError::NoCertificatesPresented);
     }
 
-    try! {
-        verify::verify_client_cert(&sess.config.client_auth_roots,
-                                   &cert_chain)
-    };
+    if !verification_disabled(&sess.config) {
+        try! {
+            verify::verify_client_cert(&sess.config.client_auth_roots,
+                                       &cert_chain)
+        };
+    }
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain);
     Ok(&EXPECT_TLS13_CERTIFICATE_VERIFY)

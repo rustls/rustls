@@ -127,6 +127,18 @@ pub struct ServerConfig {
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
     pub versions: Vec<ProtocolVersion>,
+
+    /// Dangerous configuration options.
+    #[cfg(feature = "dangerous_configuration")]
+    pub dangerous_config: Option<DangerousServerConfig>
+}
+
+/// Configuration options whose usage is danerous because they introduce security problems.
+#[cfg(feature = "dangerous_configuration")]
+pub struct DangerousServerConfig {
+    /// Whether to disable checking that the client's certificate is signed by an author in
+    /// `client_auth_roots`.
+    pub disable_certificate_verification: bool,
 }
 
 /// Something which never stores sessions.
@@ -251,6 +263,7 @@ impl ResolvesServerCert for AlwaysResolvesChain {
 }
 
 impl ServerConfig {
+    #[cfg(not(feature = "dangerous_configuration"))]
     /// Make a `ServerConfig` with a default set of ciphersuites,
     /// no keys/certificates, no ALPN protocols, no client auth, and
     /// no session persistence.
@@ -266,6 +279,25 @@ impl ServerConfig {
             client_auth_offer: false,
             client_auth_mandatory: false,
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
+        }
+    }
+
+    #[cfg(feature = "dangerous_configuration")]
+    pub fn new() -> ServerConfig {
+        // TODO: use #![cfg()] on a single field once the feature is stable:
+        // https://github.com/rust-lang/rust/issues/41681
+        ServerConfig {
+            ciphersuites: ALL_CIPHERSUITES.to_vec(),
+            ignore_client_order: false,
+            session_storage: Mutex::new(Box::new(NoSessionStorage {})),
+            ticketer: Box::new(NeverProducesTickets {}),
+            alpn_protocols: Vec::new(),
+            cert_resolver: Box::new(FailResolveChain {}),
+            client_auth_roots: verify::RootCertStore::empty(),
+            client_auth_offer: false,
+            client_auth_mandatory: false,
+            versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
+            dangerous_config: None,
         }
     }
 
