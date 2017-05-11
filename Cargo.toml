@@ -20,6 +20,7 @@ webpki = "0.12"
 [features]
 default = ["logging"]
 logging = ["log"]
+dangerous_configuration = []
 
 [dev-dependencies]
 log = "0.3.7"
