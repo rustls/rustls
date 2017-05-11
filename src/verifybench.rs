@@ -39,7 +39,7 @@ fn test_reddit_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-reddit.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = verify::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_trust_anchors(&webpki_roots::ROOTS[..]);
     bench(100, "verify_server_cert(reddit)", 
           || (),
           |_| verify::verify_server_cert(&anchors, &chain[..], "reddit.com").unwrap());
@@ -151,7 +151,7 @@ fn test_duckduckgo_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-duckduckgo.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = verify::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_trust_anchors(&webpki_roots::ROOTS[..]);
     bench(100, "verify_server_cert(duckduckgo)", 
           || (),
           |_| verify::verify_server_cert(&anchors, &chain[..], "duckduckgo.com").unwrap());
@@ -164,7 +164,7 @@ fn test_rustlang_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-rustlang.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = verify::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_trust_anchors(&webpki_roots::ROOTS[..]);
     bench(100, "verify_server_cert(rustlang)", 
           || (),
           |_| verify::verify_server_cert(&anchors, &chain[..], "www.rust-lang.org").unwrap());
@@ -177,7 +177,7 @@ fn test_wapo_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-wapo.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = verify::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_trust_anchors(&webpki_roots::ROOTS[..]);
     bench(100, "verify_server_cert(wapo)", 
           || (),
           |_| verify::verify_server_cert(&anchors, &chain[..], "www.washingtonpost.com").unwrap());
