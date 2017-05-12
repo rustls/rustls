@@ -290,6 +290,7 @@ Options:
                         May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
+    --insecure          Disable certificate verification.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
     --version, -v       Show tool version.
@@ -307,6 +308,7 @@ struct Args {
     flag_cafile: Option<String>,
     flag_cache: Option<String>,
     flag_no_tickets: bool,
+    flag_insecure: bool,
     flag_auth_key: Option<String>,
     flag_auth_certs: Option<String>,
     arg_hostname: String,
@@ -377,6 +379,40 @@ fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile
     config.set_single_client_cert(certs, privkey);
 }
 
+#[cfg(feature = "dangerous_configuration")]
+mod danger {
+    use super::rustls;
+
+    pub struct NoCertificateVerification {}
+
+    impl rustls::ServerCertVerifier for NoCertificateVerification {
+        fn verify_server_cert(&self,
+                              _roots: &rustls::RootCertStore,
+                              _presented_certs: &[rustls::Certificate],
+                              _dns_name: &str) -> Result<(), rustls::TLSError> {
+            Ok(())
+        }
+    }
+
+    pub static NO_CERT_VERIFICATION: NoCertificateVerification = NoCertificateVerification {};
+}
+
+#[cfg(feature = "dangerous_configuration")]
+fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
+    if args.flag_insecure {
+        cfg
+            .dangerous()
+            .set_certificate_verifier(&danger::NO_CERT_VERIFICATION)
+    }
+}
+
+#[cfg(not(feature = "dangerous_configuration"))]
+fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig) {
+    if args.flag_insecure {
+        panic!("This build does not support --insecure.");
+    }
+}
+
 /// Build a `ClientConfig` from our arguments
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let mut config = rustls::ClientConfig::new();
@@ -406,6 +442,8 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.set_protocols(&args.flag_proto);
     config.set_persistence(persist);
     config.set_mtu(&args.flag_mtu);
+
+    apply_dangerous_options(args, &mut config);
 
     if args.flag_auth_key.is_some() || args.flag_auth_certs.is_some() {
         load_key_and_cert(&mut config,
