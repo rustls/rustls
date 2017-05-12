@@ -11,6 +11,7 @@ use error::TLSError;
 use rand;
 use sign;
 use verify;
+use anchors;
 use key;
 
 use std::collections;
@@ -115,7 +116,7 @@ pub struct ServerConfig {
     pub alpn_protocols: Vec<String>,
 
     /// List of client authentication root certificates.
-    pub client_auth_roots: verify::RootCertStore,
+    pub client_auth_roots: anchors::RootCertStore,
 
     /// Whether to attempt client auth.
     pub client_auth_offer: bool,
@@ -262,7 +263,7 @@ impl ServerConfig {
             ticketer: Box::new(NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
             cert_resolver: Box::new(FailResolveChain {}),
-            client_auth_roots: verify::RootCertStore::empty(),
+            client_auth_roots: anchors::RootCertStore::empty(),
             client_auth_offer: false,
             client_auth_mandatory: false,
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],

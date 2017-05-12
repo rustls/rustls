@@ -1,0 +1,125 @@
+use webpki;
+use untrusted;
+
+use msgs::handshake::{DistinguishedName, DistinguishedNames};
+use pemfile;
+use x509;
+use key;
+use std::io;
+
+/// This is like a `webpki::TrustAnchor`, except it owns
+/// rather than borrows its memory.  That prevents lifetimes
+/// leaking up the object tree.
+pub struct OwnedTrustAnchor {
+    subject: Vec<u8>,
+    spki: Vec<u8>,
+    name_constraints: Option<Vec<u8>>,
+}
+
+impl OwnedTrustAnchor {
+    fn from_trust_anchor(t: &webpki::TrustAnchor) -> OwnedTrustAnchor {
+        OwnedTrustAnchor {
+            subject: t.subject.to_vec(),
+            spki: t.spki.to_vec(),
+            name_constraints: t.name_constraints.map(|x| x.to_vec()),
+        }
+    }
+
+    pub fn to_trust_anchor(&self) -> webpki::TrustAnchor {
+        webpki::TrustAnchor {
+            subject: &self.subject,
+            spki: &self.spki,
+            name_constraints: self.name_constraints.as_ref().map(|x| x.as_slice()),
+        }
+    }
+}
+
+/// A container for root certificates able to provide a root-of-trust
+/// for connection authentication.
+pub struct RootCertStore {
+    pub roots: Vec<OwnedTrustAnchor>,
+}
+
+impl RootCertStore {
+    /// Make a new, empty `RootCertStore`.
+    pub fn empty() -> RootCertStore {
+        RootCertStore { roots: Vec::new() }
+    }
+
+    /// Return true if there are no certificates.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Say how many certificates are in the container.
+    pub fn len(&self) -> usize {
+        self.roots.len()
+    }
+
+    /// Return the Subject Names for certificates in the container.
+    pub fn get_subjects(&self) -> DistinguishedNames {
+        let mut r = DistinguishedNames::new();
+
+        for ota in &self.roots {
+            let mut name = Vec::new();
+            name.extend_from_slice(&ota.subject);
+            x509::wrap_in_sequence(&mut name);
+            r.push(DistinguishedName::new(name));
+        }
+
+        r
+    }
+
+    /// Add a single DER-encoded certificate to the store.
+    pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
+        let ta = {
+            let inp = untrusted::Input::from(&der.0);
+            try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(inp))
+        };
+
+        let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
+        self.roots.push(ota);
+        Ok(())
+    }
+
+    /// Adds all the given TrustAnchors `anchors`.  This does not
+    /// fail.
+    pub fn add_trust_anchors(&mut self, anchors: &[webpki::TrustAnchor]) {
+        for ta in anchors {
+            self.roots.push(OwnedTrustAnchor::from_trust_anchor(ta));
+        }
+    }
+
+    /// Parse a PEM file and add all certificates found inside.
+    /// Errors are non-specific; they may be io errors in `rd` and
+    /// PEM format errors, but not certificate validity errors.
+    ///
+    /// This is because large collections of root certificates often
+    /// include ancient or syntactictally invalid certificates.  CAs
+    /// are competent like that.
+    ///
+    /// Returns the number of certificates added, and the number
+    /// which were extracted from the PEM but ultimately unsuitable.
+    pub fn add_pem_file(&mut self, rd: &mut io::BufRead) -> Result<(usize, usize), ()> {
+        let ders = try!(pemfile::certs(rd));
+        let mut valid_count = 0;
+        let mut invalid_count = 0;
+
+        for der in ders {
+            match self.add(&der) {
+                Ok(_) => valid_count += 1,
+                Err(err) => {
+                    debug!("invalid cert der {:?}", der);
+                    info!("certificate parsing failed: {:?}", err);
+                    invalid_count += 1
+                }
+            }
+        }
+
+        info!("add_pem_file processed {} valid and {} invalid certs",
+              valid_count,
+              invalid_count);
+
+        Ok((valid_count, invalid_count))
+    }
+}

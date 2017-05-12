@@ -10,6 +10,7 @@ use msgs::persist;
 use client_hs;
 use hash_hs;
 use verify;
+use anchors;
 use sign;
 use suites;
 use error::TLSError;
@@ -163,7 +164,7 @@ pub struct ClientConfig {
     pub ciphersuites: Vec<&'static SupportedCipherSuite>,
 
     /// Collection of root certificates.
-    pub root_store: verify::RootCertStore,
+    pub root_store: anchors::RootCertStore,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -197,7 +198,7 @@ impl ClientConfig {
     pub fn new() -> ClientConfig {
         ClientConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
-            root_store: verify::RootCertStore::empty(),
+            root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
             session_persistence: Mutex::new(Box::new(NoSessionStorage {})),
             mtu: None,

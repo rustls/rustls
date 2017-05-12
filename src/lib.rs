@@ -202,6 +202,7 @@ mod key_schedule;
 mod session;
 mod pemfile;
 mod x509;
+mod anchors;
 mod verify;
 #[cfg(test)]
 mod verifybench;
@@ -232,7 +233,7 @@ pub use msgs::enums::ProtocolVersion;
 pub use msgs::enums::SignatureScheme;
 pub use error::TLSError;
 pub use session::Session;
-pub use verify::RootCertStore;
+pub use anchors::RootCertStore;
 pub use client::{StoresClientSessions, ClientSessionMemoryCache};
 pub use client::{ClientConfig, ClientSession};
 pub use client::ResolvesClientCert;

@@ -67,7 +67,7 @@ if __name__ == '__main__':
         for i in range(len(certchain)):
             print '    let cert%d = key::Certificate(include_bytes!("testdata/cert-%s.%d.der").to_vec());' % (i, name, i)
         print '    let chain = [ %s ];' % (', '.join('cert%d' % i for i in range(len(certchain))))
-        print '    let mut anchors = verify::RootCertStore::empty();'
+        print '    let mut anchors = anchors::RootCertStore::empty();'
         print '    anchors.add_trust_anchors(&webpki_roots::ROOTS);'
         print '    bench(100, "verify_server_cert(%s)", ' % name
         print '          || (),'
