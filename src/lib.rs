@@ -239,11 +239,16 @@ pub use client::{ClientConfig, ClientSession};
 pub use client::ResolvesClientCert;
 pub use server::{StoresServerSessions, ServerSessionMemoryCache};
 pub use server::{ServerConfig, ServerSession};
-#[cfg(feature = "dangerous_configuration")]
-pub use server::{DangerousServerConfig};
 pub use server::ResolvesServerCert;
 pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
 pub mod sign;
+
+#[cfg(feature = "dangerous_configuration")]
+pub use verify::{ServerCertVerifier, ClientCertVerifier};
+#[cfg(feature = "dangerous_configuration")]
+pub use client::danger::DangerousClientConfig;
+#[cfg(feature = "dangerous_configuration")]
+pub use server::danger::DangerousServerConfig;

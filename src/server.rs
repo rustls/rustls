@@ -128,6 +128,9 @@ pub struct ServerConfig {
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
     pub versions: Vec<ProtocolVersion>,
+
+    /// How to verify client certificates.
+    verifier: &'static verify::ClientCertVerifier,
 }
 
 /// Something which never stores sessions.
@@ -267,7 +270,12 @@ impl ServerConfig {
             client_auth_offer: false,
             client_auth_mandatory: false,
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
+            verifier: &verify::WEB_PKI
         }
+    }
+
+    pub fn get_verifier(&self) -> &'static verify::ClientCertVerifier {
+        self.verifier
     }
 
     /// Sets the session persistence layer to `persist`.
@@ -309,6 +317,29 @@ impl ServerConfig {
         }
         self.client_auth_offer = true;
         self.client_auth_mandatory = mandatory;
+    }
+
+    /// Access configuration options whose use is dangerous and requires
+    /// extra care.
+    #[cfg(feature = "dangerous_configuration")]
+    pub fn dangerous(&mut self) -> danger::DangerousServerConfig {
+        danger::DangerousServerConfig { cfg: self }
+    }
+}
+
+/// Container for unsafe APIs
+#[cfg(feature = "dangerous_configuration")]
+pub mod danger {
+    pub struct DangerousServerConfig<'a> {
+        pub cfg: &'a mut super::ServerConfig
+    }
+
+    impl<'a> DangerousServerConfig<'a> {
+        /// Overrides the default `ClientCertVerifier` with something else.
+        pub fn set_certificate_verifier(&mut self,
+                                        verifier: &'static super::verify::ClientCertVerifier) {
+            self.cfg.verifier = verifier;
+        }
     }
 }
 

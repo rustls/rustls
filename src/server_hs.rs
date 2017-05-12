@@ -925,8 +925,8 @@ fn handle_certificate_tls12(sess: &mut ServerSessionImpl, m: Message) -> StateRe
     debug!("certs {:?}", cert_chain);
 
     try! {
-        verify::verify_client_cert(&sess.config.client_auth_roots,
-                                   &cert_chain)
+        sess.config.get_verifier().verify_client_cert(&sess.config.client_auth_roots,
+                                                      &cert_chain)
             .or_else(|err| {
                      incompatible(sess, "certificate invalid");
                      Err(err)
@@ -965,8 +965,8 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
     }
 
     try! {
-        verify::verify_client_cert(&sess.config.client_auth_roots,
-                                   &cert_chain)
+        sess.config.get_verifier().verify_client_cert(&sess.config.client_auth_roots,
+                                                      &cert_chain)
     };
 
     sess.handshake_data.valid_client_cert_chain = Some(cert_chain);

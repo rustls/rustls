@@ -841,15 +841,19 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
 
     // 1. Verify the certificate chain.
     // 2. Verify their signature on the handshake.
-    try!(verify::verify_server_cert(&sess.config.root_store,
-                                  &sess.handshake_data.server_cert_chain,
-                                  &sess.handshake_data.dns_name));
+    try! {
+        sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
+                                                      &sess.handshake_data.server_cert_chain,
+                                                      &sess.handshake_data.dns_name)
+    };
 
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
-    try!(verify::verify_tls13(&sess.handshake_data.server_cert_chain[0],
-                            &cert_verify,
-                            &handshake_hash,
-                            b"TLS 1.3, server CertificateVerify\x00"));
+    try! {
+        verify::verify_tls13(&sess.handshake_data.server_cert_chain[0],
+                             &cert_verify,
+                             &handshake_hash,
+                             b"TLS 1.3, server CertificateVerify\x00")
+    };
 
     sess.handshake_data.transcript.add_message(&m);
 
@@ -1088,9 +1092,11 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     // 5. emit a Finished, our first encrypted message under the new keys.
 
     // 1.
-    try!(verify::verify_server_cert(&sess.config.root_store,
-                                  &sess.handshake_data.server_cert_chain,
-                                  &sess.handshake_data.dns_name));
+    try! {
+        sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
+                                                      &sess.handshake_data.server_cert_chain,
+                                                      &sess.handshake_data.dns_name)
+    };
 
     // 2.
     // Build up the contents of the signed message.

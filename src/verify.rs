@@ -8,9 +8,6 @@ use msgs::enums::SignatureScheme;
 use error::TLSError;
 use anchors::RootCertStore;
 
-/// Disable all verifications, for testing purposes.
-const DANGEROUS_DISABLE_VERIFY: bool = false;
-
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
@@ -28,67 +25,82 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
                                                    &webpki::RSA_PKCS1_2048_8192_SHA512,
                                                    &webpki::RSA_PKCS1_3072_8192_SHA384];
 
-/// Check `presented_certs` is non-empty and rooted in `roots`.
-/// Return the `webpki::EndEntityCert` for the top certificate
-/// in `presented_certs`.
-fn verify_common_cert<'a>(roots: &RootCertStore,
-                          presented_certs: &'a [ASN1Cert])
-                          -> Result<webpki::EndEntityCert<'a>, TLSError> {
-    if presented_certs.is_empty() {
-        return Err(TLSError::NoCertificatesPresented);
-    }
-
-    // EE cert must appear first.
-    let cert_der = untrusted::Input::from(&presented_certs[0].0);
-    let cert = try! {
-        webpki::EndEntityCert::from(cert_der)
-        .map_err(TLSError::WebPKIError)
-    };
-
-    let chain: Vec<untrusted::Input> = presented_certs.iter()
-        .skip(1)
-        .map(|cert| untrusted::Input::from(&cert.0))
-        .collect();
-
-    let trustroots: Vec<webpki::TrustAnchor> = roots.roots
-        .iter()
-        .map(|x| x.to_trust_anchor())
-        .collect();
-
-    if DANGEROUS_DISABLE_VERIFY {
-        warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping certificate verification");
-        return Ok(cert);
-    }
-
-    cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, time::get_time())
-        .map_err(TLSError::WebPKIError)
-        .map(|_| cert)
-}
-
-/// Verify a the certificate chain `presented_certs` against the roots
-/// configured in `roots`.  Make sure that `dns_name` is quoted by
-/// the top certificate in the chain.
-pub fn verify_server_cert(roots: &RootCertStore,
+/// Something that can verify a server certificate chain
+pub trait ServerCertVerifier : Send + Sync {
+    /// Verify a the certificate chain `presented_certs` against the roots
+    /// configured in `roots`.  Make sure that `dns_name` is quoted by
+    /// the top certificate in the chain.
+    fn verify_server_cert(&self,
+                          roots: &RootCertStore,
                           presented_certs: &[ASN1Cert],
-                          dns_name: &str)
-                          -> Result<(), TLSError> {
-    let cert = try!(verify_common_cert(roots, presented_certs));
-
-    if DANGEROUS_DISABLE_VERIFY {
-        warn!("DANGEROUS_DISABLE_VERIFY is turned on, skipping server name verification");
-        return Ok(());
-    }
-
-    cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
-        .map_err(TLSError::WebPKIError)
+                          dns_name: &str) -> Result<(), TLSError>;
 }
 
-/// Verify a certificate chain `presented_certs` is rooted in `roots`.
-/// Does no further checking of the certificate.
-pub fn verify_client_cert(roots: &RootCertStore,
-                          presented_certs: &[ASN1Cert])
-                          -> Result<(), TLSError> {
-    verify_common_cert(roots, presented_certs).map(|_| ())
+/// Something that can verify a client certificate chain
+pub trait ClientCertVerifier : Send + Sync {
+    /// Verify a certificate chain `presented_certs` is rooted in `roots`.
+    /// Does no further checking of the certificate.
+    fn verify_client_cert(&self,
+                          roots: &RootCertStore,
+                          presented_certs: &[ASN1Cert]) -> Result<(), TLSError>;
+}
+
+pub struct WebPKIVerifier {}
+pub static WEB_PKI: WebPKIVerifier = WebPKIVerifier {};
+
+impl ServerCertVerifier for WebPKIVerifier {
+    fn verify_server_cert(&self,
+                          roots: &RootCertStore,
+                          presented_certs: &[ASN1Cert],
+                          dns_name: &str) -> Result<(), TLSError> {
+        let cert = try!(self.verify_common_cert(roots, presented_certs));
+
+        cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
+            .map_err(TLSError::WebPKIError)
+    }
+}
+
+impl ClientCertVerifier for WebPKIVerifier {
+    fn verify_client_cert(&self,
+                          roots: &RootCertStore,
+                          presented_certs: &[ASN1Cert]) -> Result<(), TLSError> {
+        self.verify_common_cert(roots, presented_certs).map(|_| ())
+    }
+}
+
+impl WebPKIVerifier {
+    /// Check `presented_certs` is non-empty and rooted in `roots`.
+    /// Return the `webpki::EndEntityCert` for the top certificate
+    /// in `presented_certs`.
+    fn verify_common_cert<'a>(&self,
+                              roots: &RootCertStore,
+                              presented_certs: &'a [ASN1Cert])
+                              -> Result<webpki::EndEntityCert<'a>, TLSError> {
+        if presented_certs.is_empty() {
+            return Err(TLSError::NoCertificatesPresented);
+        }
+
+        // EE cert must appear first.
+        let cert_der = untrusted::Input::from(&presented_certs[0].0);
+        let cert = try! {
+            webpki::EndEntityCert::from(cert_der)
+            .map_err(TLSError::WebPKIError)
+        };
+
+        let chain: Vec<untrusted::Input> = presented_certs.iter()
+            .skip(1)
+            .map(|cert| untrusted::Input::from(&cert.0))
+            .collect();
+
+        let trustroots: Vec<webpki::TrustAnchor> = roots.roots
+            .iter()
+            .map(|x| x.to_trust_anchor())
+            .collect();
+
+        cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, time::get_time())
+            .map_err(TLSError::WebPKIError)
+            .map(|_| cert)
+    }
 }
 
 static ECDSA_SHA256: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
