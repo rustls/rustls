@@ -212,6 +212,7 @@ impl ClientConfig {
         }
     }
 
+    #[doc(hidden)]
     pub fn get_verifier(&self) -> &'static verify::ServerCertVerifier {
         self.verifier
     }
