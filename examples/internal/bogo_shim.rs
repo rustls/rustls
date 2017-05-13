@@ -116,6 +116,27 @@ fn split_protocols(protos: &str) -> Vec<String> {
     ret
 }
 
+struct NoVerification {}
+
+impl rustls::ClientCertVerifier for NoVerification {
+    fn verify_client_cert(&self,
+                          _roots: &rustls::RootCertStore,
+                          _certs: &[rustls::Certificate]) -> Result<(), rustls::TLSError> {
+        Ok(())
+    }
+}
+
+impl rustls::ServerCertVerifier for NoVerification {
+    fn verify_server_cert(&self,
+                          _roots: &rustls::RootCertStore,
+                          _certs: &[rustls::Certificate],
+                          _hostname: &str) -> Result<(), rustls::TLSError> {
+        Ok(())
+    }
+}
+
+static NO_VERIFICATION: NoVerification = NoVerification {};
+
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let mut cfg = rustls::ServerConfig::new();
     let persist = rustls::ServerSessionMemoryCache::new(32);
@@ -125,10 +146,13 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
     cfg.set_single_cert(cert.clone(), key);
 
-    if opts.offer_no_client_cas {
+    if opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
-    } else if opts.require_any_client_cert {
-        cfg.client_auth_offer = true;
+        cfg.dangerous()
+            .set_certificate_verifier(&NO_VERIFICATION);
+    }
+
+    if opts.require_any_client_cert {
         cfg.client_auth_mandatory = true;
     }
 
@@ -164,6 +188,9 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
         cfg.set_single_client_cert(cert, key);
     }
+
+    cfg.dangerous()
+        .set_certificate_verifier(&NO_VERIFICATION);
 
     if !opts.protocols.is_empty() {
         cfg.set_protocols(&opts.protocols);

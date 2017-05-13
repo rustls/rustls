@@ -148,4 +148,16 @@ mod online {
             .unwrap();
     }
 
+    #[cfg(feature = "dangerous_configuration")]
+    mod danger {
+        #[test]
+        fn self_signed() {
+            super::polite();
+            super::connect("self-signed.badssl.com")
+                .insecure()
+                .expect("<title>self-signed.badssl.com</title>")
+                .go()
+                .unwrap();
+        }
+    }
 }

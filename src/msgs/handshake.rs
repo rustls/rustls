@@ -1159,7 +1159,6 @@ impl ServerHelloPayload {
     }
 }
 
-pub type ASN1Cert = key::Certificate;
 pub type CertificatePayload = Vec<key::Certificate>;
 
 impl Codec for CertificatePayload {
@@ -1218,7 +1217,7 @@ declare_u16_vec!(CertificateExtensions, CertificateExtension);
 
 #[derive(Debug)]
 pub struct CertificateEntry {
-    pub cert: ASN1Cert,
+    pub cert: key::Certificate,
     pub exts: CertificateExtensions,
 }
 
@@ -1230,14 +1229,14 @@ impl Codec for CertificateEntry {
 
     fn read(r: &mut Reader) -> Option<CertificateEntry> {
         Some(CertificateEntry {
-            cert: try_ret!(ASN1Cert::read(r)),
+            cert: try_ret!(key::Certificate::read(r)),
             exts: try_ret!(CertificateExtensions::read(r)),
         })
     }
 }
 
 impl CertificateEntry {
-    pub fn new(cert: ASN1Cert) -> CertificateEntry {
+    pub fn new(cert: key::Certificate) -> CertificateEntry {
         CertificateEntry {
             cert: cert,
             exts: Vec::new(),

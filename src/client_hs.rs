@@ -840,13 +840,17 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
     info!("Server cert is {:?}", sess.handshake_data.server_cert_chain);
 
     // 1. Verify the certificate chain.
-    // 2. Verify their signature on the handshake.
+    if sess.handshake_data.server_cert_chain.is_empty() {
+        return Err(TLSError::NoCertificatesPresented);
+    }
+
     try! {
         sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
                                                       &sess.handshake_data.server_cert_chain,
                                                       &sess.handshake_data.dns_name)
     };
 
+    // 2. Verify their signature on the handshake.
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
     try! {
         verify::verify_tls13(&sess.handshake_data.server_cert_chain[0],
@@ -1092,6 +1096,10 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     // 5. emit a Finished, our first encrypted message under the new keys.
 
     // 1.
+    if sess.handshake_data.server_cert_chain.is_empty() {
+        return Err(TLSError::NoCertificatesPresented);
+    }
+
     try! {
         sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
                                                       &sess.handshake_data.server_cert_chain,

@@ -2,7 +2,7 @@ use webpki;
 use time;
 use untrusted;
 
-use msgs::handshake::ASN1Cert;
+use key::Certificate;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::enums::SignatureScheme;
 use error::TLSError;
@@ -32,7 +32,7 @@ pub trait ServerCertVerifier : Send + Sync {
     /// the top certificate in the chain.
     fn verify_server_cert(&self,
                           roots: &RootCertStore,
-                          presented_certs: &[ASN1Cert],
+                          presented_certs: &[Certificate],
                           dns_name: &str) -> Result<(), TLSError>;
 }
 
@@ -42,7 +42,7 @@ pub trait ClientCertVerifier : Send + Sync {
     /// Does no further checking of the certificate.
     fn verify_client_cert(&self,
                           roots: &RootCertStore,
-                          presented_certs: &[ASN1Cert]) -> Result<(), TLSError>;
+                          presented_certs: &[Certificate]) -> Result<(), TLSError>;
 }
 
 pub struct WebPKIVerifier {}
@@ -51,7 +51,7 @@ pub static WEB_PKI: WebPKIVerifier = WebPKIVerifier {};
 impl ServerCertVerifier for WebPKIVerifier {
     fn verify_server_cert(&self,
                           roots: &RootCertStore,
-                          presented_certs: &[ASN1Cert],
+                          presented_certs: &[Certificate],
                           dns_name: &str) -> Result<(), TLSError> {
         let cert = try!(self.verify_common_cert(roots, presented_certs));
 
@@ -63,7 +63,7 @@ impl ServerCertVerifier for WebPKIVerifier {
 impl ClientCertVerifier for WebPKIVerifier {
     fn verify_client_cert(&self,
                           roots: &RootCertStore,
-                          presented_certs: &[ASN1Cert]) -> Result<(), TLSError> {
+                          presented_certs: &[Certificate]) -> Result<(), TLSError> {
         self.verify_common_cert(roots, presented_certs).map(|_| ())
     }
 }
@@ -74,7 +74,7 @@ impl WebPKIVerifier {
     /// in `presented_certs`.
     fn verify_common_cert<'a>(&self,
                               roots: &RootCertStore,
-                              presented_certs: &'a [ASN1Cert])
+                              presented_certs: &'a [Certificate])
                               -> Result<webpki::EndEntityCert<'a>, TLSError> {
         if presented_certs.is_empty() {
             return Err(TLSError::NoCertificatesPresented);
@@ -163,7 +163,7 @@ fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
 /// `cert` MUST have been authenticated before using this function,
 /// typically using `verify_cert`.
 pub fn verify_signed_struct(message: &[u8],
-                            cert: &ASN1Cert,
+                            cert: &Certificate,
                             dss: &DigitallySignedStruct)
                             -> Result<(), TLSError> {
 
@@ -195,7 +195,7 @@ fn convert_alg_tls13(scheme: SignatureScheme)
     }
 }
 
-pub fn verify_tls13(cert: &ASN1Cert,
+pub fn verify_tls13(cert: &Certificate,
                     dss: &DigitallySignedStruct,
                     handshake_hash: &[u8],
                     context_string_with_0: &[u8])

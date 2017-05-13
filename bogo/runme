@@ -5,9 +5,7 @@
 
 set -xe
 
-cp ../src/verify.rs ../src/verify-secure.rs
-sed -i -e 's/\(DANGEROUS_DISABLE_VERIFY: bool = \)false/\1true/g' ../src/verify.rs
-cargo test --no-run
+cargo test --no-run --features dangerous_configuration
 
 if [ ! -e bogo/ ] ; then
   ./fetch-and-build
@@ -17,4 +15,3 @@ fi
      -shim-config ../config.json \
      -test.parallel 1 -num-workers 1 \
      -pipe -allow-unimplemented )
-mv ../src/verify-secure.rs ../src/verify.rs

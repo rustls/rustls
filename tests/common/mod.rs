@@ -113,6 +113,7 @@ pub struct TlsClient {
     pub suites: Vec<String>,
     pub protos: Vec<String>,
     pub no_tickets: bool,
+    pub insecure: bool,
     pub verbose: bool,
     pub mtu: Option<usize>,
     pub expect_fails: bool,
@@ -131,6 +132,7 @@ impl TlsClient {
             client_auth_certs: None,
             cache: None,
             no_tickets: false,
+            insecure: false,
             verbose: false,
             mtu: None,
             suites: Vec::new(),
@@ -159,6 +161,11 @@ impl TlsClient {
 
     pub fn no_tickets(&mut self) -> &mut TlsClient {
         self.no_tickets = true;
+        self
+    }
+
+    pub fn insecure(&mut self) -> &mut TlsClient {
+        self.insecure = true;
         self
     }
 
@@ -223,6 +230,10 @@ impl TlsClient {
 
         if self.no_tickets {
             args.push("--no-tickets");
+        }
+
+        if self.insecure {
+            args.push("--insecure");
         }
 
         if self.cafile.is_some() {
