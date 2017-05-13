@@ -78,7 +78,7 @@
 //!
 //! ### Rustls takes care of server certificate verification
 //! You do not need to provide anything other than a set of root certificates to trust.
-//! Certificate verification cannot be turned off or disabled.
+//! Certificate verification cannot be turned off or disabled in the main API.
 //!
 //! ## Getting started
 //! This is the minimum you need to do to make a TLS client connection.
@@ -156,6 +156,21 @@
 //!
 //! # Examples
 //! `tlsserver` and `tlsclient` are full worked examples.  These both use mio.
+//!
+//! # Crate features
+//! Here's a list of what features are exposed by the rustls crate and what
+//! they mean.
+//!
+//! - `logging`: this makes the rustls crate depend on the `log` crate.
+//!   rustls outputs interesting protocol-level messages at `debug!` and `info!`
+//!   level, and protocol-level errors at `warn!` and `error!` level.  The log
+//!   messages do not contain secret key data, and so are safe to archive without
+//!   affecting session security.  This feature is in the default set.
+//!
+//! - `dangerous_configuration`: this feature enables a `dangerous()` method on
+//!   `ClientConfig` and `ServerConfig` that allows setting inadvisable options,
+//!   such as replacing the certificate verification process.  Applications
+//!   requesting this feature should be reviewed carefully.
 //!
 
 // Our dependencies:
