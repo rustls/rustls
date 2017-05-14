@@ -191,7 +191,7 @@ pub struct ClientConfig {
     pub versions: Vec<ProtocolVersion>,
 
     /// How to verify the server certificate chain.
-    verifier: &'static verify::ServerCertVerifier,
+    verifier: Box<verify::ServerCertVerifier>,
 }
 
 impl ClientConfig {
@@ -208,13 +208,13 @@ impl ClientConfig {
             client_auth_cert_resolver: Box::new(FailResolveClientCert {}),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
-            verifier: &verify::WEB_PKI
+            verifier: Box::new(verify::WebPKIVerifier {})
         }
     }
 
     #[doc(hidden)]
-    pub fn get_verifier(&self) -> &'static verify::ServerCertVerifier {
-        self.verifier
+    pub fn get_verifier(&self) -> &verify::ServerCertVerifier {
+        self.verifier.as_ref()
     }
 
     /// Set the ALPN protocol list to the given protocol names.
@@ -271,14 +271,17 @@ impl ClientConfig {
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
 pub mod danger {
+    use super::ClientConfig;
+    use super::verify::ServerCertVerifier;
+
     pub struct DangerousClientConfig<'a> {
-        pub cfg: &'a mut super::ClientConfig
+        pub cfg: &'a mut ClientConfig
     }
 
     impl<'a> DangerousClientConfig<'a> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self,
-                                        verifier: &'static super::verify::ServerCertVerifier) {
+                                        verifier: Box<ServerCertVerifier>) {
             self.cfg.verifier = verifier;
         }
     }

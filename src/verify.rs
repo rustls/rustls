@@ -46,7 +46,6 @@ pub trait ClientCertVerifier : Send + Sync {
 }
 
 pub struct WebPKIVerifier {}
-pub static WEB_PKI: WebPKIVerifier = WebPKIVerifier {};
 
 impl ServerCertVerifier for WebPKIVerifier {
     fn verify_server_cert(&self,

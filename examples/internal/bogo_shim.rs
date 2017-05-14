@@ -135,8 +135,6 @@ impl rustls::ServerCertVerifier for NoVerification {
     }
 }
 
-static NO_VERIFICATION: NoVerification = NoVerification {};
-
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let mut cfg = rustls::ServerConfig::new();
     let persist = rustls::ServerSessionMemoryCache::new(32);
@@ -149,7 +147,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     if opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
         cfg.dangerous()
-            .set_certificate_verifier(&NO_VERIFICATION);
+            .set_certificate_verifier(Box::new(NoVerification {}));
     }
 
     if opts.require_any_client_cert {
@@ -190,7 +188,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     }
 
     cfg.dangerous()
-        .set_certificate_verifier(&NO_VERIFICATION);
+        .set_certificate_verifier(Box::new(NoVerification {}));
 
     if !opts.protocols.is_empty() {
         cfg.set_protocols(&opts.protocols);

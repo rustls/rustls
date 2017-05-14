@@ -35,7 +35,7 @@ fn bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_
              times.iter().min().unwrap() / 1000);
 }
 
-static V: &'static verify::WebPKIVerifier = &verify::WEB_PKI;
+static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier {};
 
 #[test]
 fn test_reddit_cert() {

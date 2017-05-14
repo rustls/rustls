@@ -393,8 +393,6 @@ mod danger {
             Ok(())
         }
     }
-
-    pub static NO_CERT_VERIFICATION: NoCertificateVerification = NoCertificateVerification {};
 }
 
 #[cfg(feature = "dangerous_configuration")]
@@ -402,7 +400,7 @@ fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
     if args.flag_insecure {
         cfg
             .dangerous()
-            .set_certificate_verifier(&danger::NO_CERT_VERIFICATION)
+            .set_certificate_verifier(Box::new(danger::NoCertificateVerification {}));
     }
 }
 
