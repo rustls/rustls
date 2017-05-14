@@ -13,30 +13,32 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
-* 0.7.0:
+* 0.8.0 (2017-05-14):
+  - Add `dangerous_configuration` feature for unsafe features.
+* 0.7.0 (2017-05-08):
   - Update dependencies.
-* 0.6.0:
+* 0.6.0 (2017-05-06):
   - Update dependencies.
   - Expose ring's new support for PKCS#8-format private keys.
   - New API for applying limitation to internal buffer sizes.
-* 0.5.8:
+* 0.5.8 (2017-03-16):
   - Fix build on later rustc.
-* 0.5.7:
+* 0.5.7 (2017-02-27):
   - No changes from 0.5.6; republished with nightly cargo for category support.
-* 0.5.6:
+* 0.5.6 (2017-02-19):
   - RFC7627 extended master secret support
   - Assorted documentation improvements
-* 0.5.5:
+* 0.5.5 (2017-02-03):
   - Crate categories.
   - Protocol errors now permanent for given session.
   - Exposed `ResolvesServerCert` trait for customising certification
     selection.
   - Exposed `SignatureScheme` enum.
-* 0.5.4:
+* 0.5.4 (2017-01-26):
   - First release with TLS1.3-draft-18 support.
   - More performance improvements (now ~15Gbps per core).
   - New API to learn version of negotiated connection.
-* 0.5.0:
+* 0.5.0 (2016-09-27):
   - Tickets.
   - Coverage testing.
   - Benchmarking.
