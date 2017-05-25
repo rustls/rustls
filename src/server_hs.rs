@@ -16,7 +16,7 @@ use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload};
 use msgs::handshake::{CertificateRequestPayloadTLS13, NewSessionTicketPayloadTLS13};
 use msgs::handshake::{HelloRetryRequest, HelloRetryExtension, KeyShareEntry};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
-use msgs::handshake::SupportedMandatedSignatureSchemes;
+use msgs::handshake::{CertReqExtension, SupportedMandatedSignatureSchemes};
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
@@ -25,7 +25,6 @@ use cipher;
 use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
 use suites;
-use hash_hs;
 use sign;
 use ring;
 use verify;
@@ -35,6 +34,8 @@ use error::TLSError;
 use handshake::Expectation;
 
 use std::sync::Arc;
+
+const TLS13_DRAFT: u16 = 0x7f13;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -348,7 +349,7 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::ServerHello,
             payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                server_version: ProtocolVersion::Unknown(0x7f12),
+                server_version: ProtocolVersion::Unknown(TLS13_DRAFT),
                 random: Random::from_slice(&sess.handshake_data.randoms.server),
                 session_id: SessionID::empty(),
                 cipher_suite: sess.common.get_suite().suite,
@@ -388,7 +389,8 @@ fn emit_server_hello_tls13(sess: &mut ServerSessionImpl,
 
 fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
     let mut req = HelloRetryRequest {
-        server_version: ProtocolVersion::Unknown(0x7f12),
+        server_version: ProtocolVersion::Unknown(TLS13_DRAFT),
+        cipher_suite: sess.common.get_suite().suite,
         extensions: Vec::new(),
     };
 
@@ -404,6 +406,7 @@ fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
     };
 
     debug!("Requesting retry {:?}", m);
+    sess.handshake_data.transcript.rollup_for_hrr();
     sess.handshake_data.transcript.add_message(&m);
     sess.common.send_msg(m, false);
 }
@@ -432,14 +435,18 @@ fn emit_certificate_req_tls13(sess: &mut ServerSessionImpl) {
         return;
     }
 
-    let names = sess.config.client_auth_roots.get_subjects();
-
-    let cr = CertificateRequestPayloadTLS13 {
+    let mut cr = CertificateRequestPayloadTLS13 {
         context: PayloadU8::empty(),
-        sigschemes: SupportedSignatureSchemes::supported_verify(),
-        canames: names,
         extensions: Vec::new(),
     };
+
+    let schemes = SupportedSignatureSchemes::supported_verify();
+    cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes));
+
+    let names = sess.config.client_auth_roots.get_subjects();
+    if !names.is_empty() {
+        cr.extensions.push(CertReqExtension::AuthorityNames(names));
+    }
 
     let m = Message {
         typ: ContentType::Handshake,
@@ -566,13 +573,10 @@ fn check_binder(sess: &mut ServerSessionImpl,
     let handshake_hash =
         sess.handshake_data.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
-    let mut empty_hash_ctx = hash_hs::HandshakeHash::new();
-    empty_hash_ctx.start_hash(suite_hash);
-    let empty_hash = empty_hash_ctx.get_current_hash();
-
     let mut key_schedule = KeySchedule::new(suite_hash);
     key_schedule.input_secret(psk);
-    let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
+    let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey,
+                                       key_schedule.get_hash_of_empty_message());
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
     ring::constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
@@ -725,7 +729,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     // Are we doing TLS1.3?
     let maybe_versions_ext = client_hello.get_versions_extension();
     if let Some(versions) = maybe_versions_ext {
-        if versions.contains(&ProtocolVersion::Unknown(0x7f12)) && tls13_enabled {
+        if versions.contains(&ProtocolVersion::Unknown(TLS13_DRAFT)) && tls13_enabled {
             sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
         } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
