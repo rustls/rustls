@@ -32,8 +32,8 @@ use handshake::Expectation;
 
 use std::mem;
 
-// draft-ietf-tls-tls13-18
-const TLS13_DRAFT: u16 = 0x7f12;
+// draft-ietf-tls-tls13-20
+const TLS13_DRAFT: u16 = 0x7f14;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -615,7 +615,6 @@ pub static EXPECT_SERVER_HELLO: State = State {
 fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
                               m: Message) -> StateResult {
     let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
-    sess.handshake_data.transcript.add_message(&m);
     debug!("Got HRR {:?}", hrr);
 
     let has_cookie = hrr.get_cookie().is_some();
@@ -664,6 +663,20 @@ fn handle_hello_retry_request(sess: &mut ClientSessionImpl,
             return Err(illegal_param(sess, "server requested unsupported version in hrr"));
         }
     }
+
+    // Or asks us to use a ciphersuite we didn't offer.
+    let maybe_cs = sess.find_cipher_suite(hrr.cipher_suite);
+    let cs = match maybe_cs {
+        Some(cs) => cs,
+        None => {
+            return Err(illegal_param(sess, "server requested unsupported cs in hrr"));
+        }
+    };
+
+    // This is the draft19 change where the transcript became a tree
+    sess.handshake_data.transcript.start_hash(cs.get_hash());
+    sess.handshake_data.transcript.rollup_for_hrr();
+    sess.handshake_data.transcript.add_message(&m);
 
     Ok(emit_client_hello_for_retry(sess, Some(hrr)))
 }
@@ -1027,7 +1040,9 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
     }
 
     let tls13_sign_schemes = SupportedSignatureSchemes::supported_sign_tls13();
-    let compat_sigschemes = certreq.sigschemes
+    let no_sigschemes = Vec::new();
+    let compat_sigschemes = certreq.get_sigalgs_extension()
+        .unwrap_or(&no_sigschemes)
         .iter()
         .cloned()
         .filter(|scheme| tls13_sign_schemes.contains(scheme))
@@ -1038,7 +1053,9 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
         return Err(TLSError::PeerIncompatibleError("server sent bad certreq schemes".to_string()));
     }
 
-    let canames = certreq.canames
+    let no_canames = Vec::new();
+    let canames = certreq.get_authorities_extension()
+        .unwrap_or(&no_canames)
         .iter()
         .map(|p| p.0.as_slice())
         .collect::<Vec<&[u8]>>();
