@@ -1,0 +1,7 @@
+#!/bin/sh
+set -xe
+
+if [ ! -e lcov/ ] ; then
+  git clone https://github.com/linux-test-project/lcov.git
+  cd lcov && sudo make install
+fi

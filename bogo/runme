@@ -5,13 +5,15 @@
 
 set -xe
 
-cargo test --no-run --features dangerous_configuration
+if [ ! -e ../target/debug/examples/bogo_shim ] ; then
+  cargo test --no-run --features dangerous_configuration
+fi
 
 if [ ! -e bogo/ ] ; then
   ./fetch-and-build
 fi
 
-( cd bogo && ./bogo.test -shim-path ../../admin/covbin/bogo_shim \
+( cd bogo && ./bogo.test -shim-path ../../target/debug/examples/bogo_shim \
      -shim-config ../config.json \
      -test.parallel 1 -num-workers 1 \
      -pipe -allow-unimplemented )

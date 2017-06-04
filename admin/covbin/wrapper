@@ -1,6 +1,0 @@
-#!/bin/bash
-
-ME=$([[ $0 = /* ]] && echo "$0" || echo "$PWD/${0#./}")
-WHICH=$(basename "$0")
-HERE=$(dirname "$ME")
-exec $COVERAGE $HERE/../../target/${RELEASE:-debug}/examples/$WHICH "$@"

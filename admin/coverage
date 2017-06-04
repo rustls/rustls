@@ -1,21 +1,77 @@
-#!/bin/sh
+#!/usr/bin/env python
 
-export COVERAGE_OUT=$PWD/target/coverage
-export KCOV_OPTIONS="kcov --exclude-pattern=/.cargo/,intrin.h --verify"
-export COVERAGE="$KCOV_OPTIONS $COVERAGE_OUT"
-export RUST_TEST_THREADS=1
+import os
+import glob
+import subprocess
 
-# unit and integration tests. run these twice, first to capture coverage of
-# child processes and then to capture coverage of the test themselves
-for test in $(cargo test notexist 2>&1 | grep Running | awk '{ print $2 }') ; do
-  WITH_COVBIN_WRAPPERS=1 ./$test
-  $COVERAGE ./$test
-done
+LLVM_PATH = glob.glob('/usr/lib/llvm-3.8/lib/clang/3.8.[0-9]/lib/linux/')[0]
+COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Cpasses=insert-gcov-profiling -Zno-landing-pads -L%s -lclang_rt.profile-x86_64' % LLVM_PATH
+LCOVOPTS = '--gcov-tool ./admin/llvm-gcov --rc lcov_branch_coverage=1 --rc lcov_excl_line=assert'.split()
 
-# bogo tests
-( cd bogo && ./runme )
+def lcov_exe(*args):
+    return ['lcov'] + LCOVOPTS + list(args)
 
-# trytls tests
-( cd trytls && ./runme )
+def sh(cmd):
+    subprocess.check_call(cmd, shell = True)
 
-$KCOV_OPTIONS --coveralls-id=$TRAVIS_JOB_ID --report-only target/coverage/ ./target/debug/examples/tlsclient
+def cleanup():
+    sh('cargo clean')
+    sh("rm -rf *.gcda *.gcno cov/ && mkdir cov/")
+
+def run(which):
+    exe = filter(lambda x: '.d' not in x, glob.glob('target/debug/' + which + '-*'))[0]
+    sh('./' + exe)
+
+def rustc(*args):
+    exe = ['cargo', 'rustc', '--all-features'] + list(args)
+    env = dict(os.environ)
+    env.update(RUSTC_WRAPPER = './admin/coverage-rustc',
+               COVERAGE_OPTIONS = COVERAGE_OPTIONS)
+    subprocess.check_call(exe, env = env)
+
+def lcov(outfile):
+    exe = lcov_exe('--capture', '--directory', '.', '--base-directory', '.', '-o', outfile)
+    subprocess.check_call(exe)
+    return outfile
+
+def merge(outfile, infiles):
+    arg = []
+    for i in infiles:
+        arg.append('--add')
+        arg.append(i)
+    arg.append('-o')
+    arg.append(outfile)
+    subprocess.check_call(lcov_exe(*arg))
+
+def extract(outfile, infile):
+    subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/*', '-o', outfile))
+
+def genhtml(outdir, infile):
+    subprocess.check_call(['genhtml', '--branch-coverage', '--demangle-cpp', '--legend',
+        infile, '-o', outdir, '--ignore-errors', 'source'])
+
+all_infos = []
+
+# unit tests
+cleanup()
+rustc('--profile', 'test', '--lib')
+run('rustls')
+all_infos.append(lcov('rustls.info'))
+
+cleanup()
+for example in 'tlsclient tlsserver bench bogo_shim trytls_shim'.split():
+    rustc('--profile', 'dev', '--example', example)
+
+# tests
+for test in 'api badssl bugs client_suites curves errors features server_suites topsites'.split():
+    rustc('--profile', 'dev', '--test', test)
+    run(test)
+
+# trytls
+sh('cd trytls && ./runme')
+sh('cd bogo && ./runme')
+all_infos.append(lcov('tests.info'))
+
+merge('coverage.info', all_infos)
+extract('final.info', 'coverage.info')
+genhtml('target/coverage/', 'final.info')

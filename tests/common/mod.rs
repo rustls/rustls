@@ -3,7 +3,6 @@ use std::process;
 use std::thread;
 use std::time;
 use std::net;
-use std::env;
 
 extern crate regex;
 use self::regex::Regex;
@@ -50,19 +49,11 @@ pub fn skipped(why: &str) {
 }
 
 pub fn tlsserver_find() -> &'static str {
-    if env::var("WITH_COVBIN_WRAPPERS").is_ok() {
-        "admin/covbin/tlsserver"
-    } else {
-        "target/debug/examples/tlsserver"
-    }
+    "target/debug/examples/tlsserver"
 }
 
 pub fn tlsclient_find() -> &'static str {
-    if env::var("WITH_COVBIN_WRAPPERS").is_ok() {
-        "admin/covbin/tlsclient"
-    } else {
-        "target/debug/examples/tlsclient"
-    }
+    "target/debug/examples/tlsclient"
 }
 
 pub fn openssl_find() -> &'static str {

@@ -11,4 +11,4 @@ if [ ! -e trytls/ ] ; then
 fi
 
 export PYTHONPATH=trytls/lib/python2.7/site-packages/
-./trytls/bin/trytls https ../admin/covbin/trytls_shim
+./trytls/bin/trytls https ../target/${RELEASE:-debug}/examples/trytls_shim

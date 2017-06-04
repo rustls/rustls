@@ -1,0 +1,3 @@
+#!/bin/sh -e
+echo "llvm-cov gcov $*"
+llvm-cov gcov $*
