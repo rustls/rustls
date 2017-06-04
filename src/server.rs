@@ -435,20 +435,18 @@ impl ServerSessionImpl {
     pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
         // Decrypt if demanded by current state.
         if self.common.peer_encrypting {
-            let dm = try!(self.common.decrypt_incoming(msg));
+            let dm = self.common.decrypt_incoming(msg)?;
             msg = dm;
         }
 
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.common.handshake_joiner.want_message(&msg) {
-            try! {
-                self.common.handshake_joiner.take_message(msg)
-                    .ok_or_else(|| {
-                                self.common.send_fatal_alert(AlertDescription::DecodeError);
-                                TLSError::CorruptMessagePayload(ContentType::Handshake)
-                                })
-            };
+            self.common.handshake_joiner.take_message(msg)
+                .ok_or_else(|| {
+                            self.common.send_fatal_alert(AlertDescription::DecodeError);
+                            TLSError::CorruptMessagePayload(ContentType::Handshake)
+                            })?;
             return self.process_new_handshake_messages();
         }
 
@@ -464,7 +462,7 @@ impl ServerSessionImpl {
 
     fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
         while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
-            try!(self.process_main_protocol(msg));
+            self.process_main_protocol(msg)?;
         }
 
         Ok(())
@@ -481,9 +479,9 @@ impl ServerSessionImpl {
             return Ok(());
         }
 
-        try!(self.state.expect.check_message(&msg)
-         .map_err(|err| { self.queue_unexpected_alert(); err }));
-        let new_state = try!((self.state.handle)(self, msg));
+        self.state.expect.check_message(&msg)
+            .map_err(|err| { self.queue_unexpected_alert(); err })?;
+        let new_state = (self.state.handle)(self, msg)?;
         self.state = new_state;
 
         Ok(())

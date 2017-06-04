@@ -84,7 +84,7 @@ impl ChunkVecBuffer {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
-            let used = try!(self.chunks[0].as_slice().read(&mut buf[offs..]));
+            let used = self.chunks[0].as_slice().read(&mut buf[offs..])?;
 
             if used == self.chunks[0].len() {
                 self.chunks.remove(0);
@@ -105,7 +105,7 @@ impl ChunkVecBuffer {
             return Ok(0);
         }
 
-        let used = try!(wr.write(&self.chunks[0]));
+        let used = wr.write(&self.chunks[0])?;
 
         if used == self.chunks[0].len() {
             self.chunks.remove(0);

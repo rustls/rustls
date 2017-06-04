@@ -69,7 +69,8 @@ impl Signer for RSASigner {
         };
 
         let rng = ring::rand::SystemRandom::new();
-        let mut signer = try!(signature::RSASigningState::new(self.key.clone()).map_err(|_| ()));
+        let mut signer = signature::RSASigningState::new(self.key.clone())
+            .map_err(|_| ())?;
 
         signer.sign(encoding, &rng, message, &mut sig)
             .map(|_| sig)

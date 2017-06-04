@@ -74,7 +74,7 @@ impl RootCertStore {
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
         let ta = {
             let inp = untrusted::Input::from(&der.0);
-            try!(webpki::trust_anchor_util::cert_der_as_trust_anchor(inp))
+            webpki::trust_anchor_util::cert_der_as_trust_anchor(inp)?
         };
 
         let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
@@ -101,7 +101,7 @@ impl RootCertStore {
     /// Returns the number of certificates added, and the number
     /// which were extracted from the PEM but ultimately unsuitable.
     pub fn add_pem_file(&mut self, rd: &mut io::BufRead) -> Result<(usize, usize), ()> {
-        let ders = try!(pemfile::certs(rd));
+        let ders = pemfile::certs(rd)?;
         let mut valid_count = 0;
         let mut invalid_count = 0;
 

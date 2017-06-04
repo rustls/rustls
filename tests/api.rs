@@ -74,9 +74,9 @@ fn do_handshake_until_error(client: &mut ClientSession,
                             -> Result<(), TLSError> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
-        try!(server.process_new_packets());
+        server.process_new_packets()?;
         transfer(server, client);
-        try!(client.process_new_packets());
+        client.process_new_packets()?;
     }
 
     Ok(())

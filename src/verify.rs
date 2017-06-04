@@ -52,7 +52,7 @@ impl ServerCertVerifier for WebPKIVerifier {
                           roots: &RootCertStore,
                           presented_certs: &[Certificate],
                           dns_name: &str) -> Result<(), TLSError> {
-        let cert = try!(self.verify_common_cert(roots, presented_certs));
+        let cert = self.verify_common_cert(roots, presented_certs)?;
 
         cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
             .map_err(TLSError::WebPKIError)
@@ -81,10 +81,8 @@ impl WebPKIVerifier {
 
         // EE cert must appear first.
         let cert_der = untrusted::Input::from(&presented_certs[0].0);
-        let cert = try! {
-            webpki::EndEntityCert::from(cert_der)
-            .map_err(TLSError::WebPKIError)
-        };
+        let cert = webpki::EndEntityCert::from(cert_der)
+            .map_err(TLSError::WebPKIError)?;
 
         let chain: Vec<untrusted::Input> = presented_certs.iter()
             .skip(1)
@@ -166,12 +164,10 @@ pub fn verify_signed_struct(message: &[u8],
                             dss: &DigitallySignedStruct)
                             -> Result<(), TLSError> {
 
-    let possible_algs = try!(convert_scheme(dss.scheme));
+    let possible_algs = convert_scheme(dss.scheme)?;
     let cert_in = untrusted::Input::from(&cert.0);
-    let cert = try! {
-        webpki::EndEntityCert::from(cert_in)
-        .map_err(TLSError::WebPKIError)
-    };
+    let cert = webpki::EndEntityCert::from(cert_in)
+        .map_err(TLSError::WebPKIError)?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
         .map_err(TLSError::WebPKIError)
@@ -199,7 +195,7 @@ pub fn verify_tls13(cert: &Certificate,
                     handshake_hash: &[u8],
                     context_string_with_0: &[u8])
                     -> Result<(), TLSError> {
-    let alg = try!(convert_alg_tls13(dss.scheme));
+    let alg = convert_alg_tls13(dss.scheme)?;
 
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
@@ -207,10 +203,8 @@ pub fn verify_tls13(cert: &Certificate,
     msg.extend_from_slice(handshake_hash);
 
     let cert_in = untrusted::Input::from(&cert.0);
-    let cert = try! {
-        webpki::EndEntityCert::from(cert_in)
-        .map_err(TLSError::WebPKIError)
-    };
+    let cert = webpki::EndEntityCert::from(cert_in)
+        .map_err(TLSError::WebPKIError)?;
 
     cert.verify_signature(alg,
                           untrusted::Input::from(&msg),

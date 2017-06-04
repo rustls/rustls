@@ -17,8 +17,8 @@ fn extract<A>(rd: &mut io::BufRead,
     let mut raw_line = Vec::<u8>::new();
     loop {
         raw_line.clear();
-        let len = try!(rd.read_until(b'\n', &mut raw_line)
-            .map_err(|_| ()));
+        let len = rd.read_until(b'\n', &mut raw_line)
+            .map_err(|_| ())?;
 
         if len == 0 {
             return Ok(ders);
@@ -32,10 +32,8 @@ fn extract<A>(rd: &mut io::BufRead,
 
         if line.starts_with(end_mark) {
             take_base64 = false;
-            let der = try! {
-                base64::decode_config(&b64buf, base64::MIME)
-                    .map_err(|_| ())
-            };
+            let der = base64::decode_config(&b64buf, base64::MIME)
+                .map_err(|_| ())?;
             ders.push(f(der));
             b64buf = String::new();
             continue;

@@ -565,7 +565,7 @@ impl SessionCommon {
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = try!(self.received_plaintext.read(buf));
+        let len = self.received_plaintext.read(buf)?;
 
         if len == 0 && self.connection_at_eof() && self.received_plaintext.is_empty() {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted,
