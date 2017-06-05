@@ -188,7 +188,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     }
 
     cfg.dangerous()
-        .set_certificate_verifier(Box::new(NoVerification {}));
+        .set_certificate_verifier(Arc::new(NoVerification {}));
 
     if !opts.protocols.is_empty() {
         cfg.set_protocols(&opts.protocols);

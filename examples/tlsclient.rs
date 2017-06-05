@@ -400,7 +400,7 @@ fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
     if args.flag_insecure {
         cfg
             .dangerous()
-            .set_certificate_verifier(Box::new(danger::NoCertificateVerification {}));
+            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification {}));
     }
 }
 
