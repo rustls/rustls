@@ -10,7 +10,7 @@ use std::io;
 /// This is like a `webpki::TrustAnchor`, except it owns
 /// rather than borrows its memory.  That prevents lifetimes
 /// leaking up the object tree.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OwnedTrustAnchor {
     subject: Vec<u8>,
     spki: Vec<u8>,
@@ -37,7 +37,7 @@ impl OwnedTrustAnchor {
 
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RootCertStore {
     /// The list of roots.
     pub roots: Vec<OwnedTrustAnchor>,
