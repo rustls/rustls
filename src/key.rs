@@ -1,6 +1,6 @@
 /// This type contains a private key by value.
 ///
-/// The private key must be in either DER-encoded ASN.1 in either
+/// The private key must be DER-encoded ASN.1 in either
 /// PKCS#8 or PKCS#1 format.
 ///
 /// `rustls::pemfile::pkcs8_private_keys` or `rustls::pemfile::rsa_private_keys`
