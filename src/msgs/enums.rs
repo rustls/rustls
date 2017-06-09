@@ -2,2442 +2,836 @@
 
 use msgs::codec::{encode_u8, read_u8, encode_u16, read_u16, Reader, Codec};
 
+/*
+ * Define a large macro that does _everything_ a head of time
+ * 
+ */
+macro_rules! enum_builder {
+  (@U8
+    EnumName: $enum_name: ident;
+    EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
+  ) => {
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub enum $enum_name {
+      $( $enum_var),*
+      ,Unknown(u8)
+    }
+    impl $enum_name {
+      pub fn get_u8(&self) -> u8 {
+        let x = self.clone();
+        match x {
+          $( $enum_name::$enum_var => $enum_val),*
+          ,$enum_name::Unknown(x) => x
+        }
+      }
+    }
+    impl Codec for $enum_name {
+      fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u8(self.get_u8(), bytes);
+      }
+
+      fn read(r: &mut Reader) -> Option<Self> {
+        Some(match read_u8(r) {
+          Option::None => return None,
+          $( Option::Some($enum_val) => $enum_name::$enum_var),*
+          ,Option::Some(x) => $enum_name::Unknown(x)
+        })
+      }
+    }
+  };
+  (@U16
+    EnumName: $enum_name: ident;
+    EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
+  ) => {
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub enum $enum_name {
+      $( $enum_var),*
+      ,Unknown(u16)
+    }
+    impl $enum_name {
+      pub fn get_u16(&self) -> u16 {
+        let x = self.clone();
+        match x {
+          $( $enum_name::$enum_var => $enum_val),*
+          ,$enum_name::Unknown(x) => x
+        }
+      }
+    }
+    impl Codec for $enum_name {
+      fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u16(self.get_u16(), bytes);
+      }
+
+      fn read(r: &mut Reader) -> Option<Self> {
+        Some(match read_u16(r) {
+          Option::None => return None,
+          $( Option::Some($enum_val) => $enum_name::$enum_var),*
+          ,Option::Some(x) => $enum_name::Unknown(x)
+        })
+      }
+    }
+  };
+}
+
+
 /// The `ProtocolVersion` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ProtocolVersion {
-    SSLv2,
-    SSLv3,
-    TLSv1_0,
-    TLSv1_1,
-    TLSv1_2,
-    TLSv1_3,
-    Unknown(u16),
-}
-
-impl Codec for ProtocolVersion {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16(self.get_u16(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ProtocolVersion> {
-        let u = read_u16(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x0200 => ProtocolVersion::SSLv2,
-            0x0300 => ProtocolVersion::SSLv3,
-            0x0301 => ProtocolVersion::TLSv1_0,
-            0x0302 => ProtocolVersion::TLSv1_1,
-            0x0303 => ProtocolVersion::TLSv1_2,
-            0x0304 => ProtocolVersion::TLSv1_3,
-            x => ProtocolVersion::Unknown(x),
-        })
-    }
-}
-
-impl ProtocolVersion {
-    pub fn get_u16(&self) -> u16 {
-        match *self {
-            ProtocolVersion::SSLv2 => 0x0200,
-            ProtocolVersion::SSLv3 => 0x0300,
-            ProtocolVersion::TLSv1_0 => 0x0301,
-            ProtocolVersion::TLSv1_1 => 0x0302,
-            ProtocolVersion::TLSv1_2 => 0x0303,
-            ProtocolVersion::TLSv1_3 => 0x0304,
-            ProtocolVersion::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U16
+  EnumName: ProtocolVersion;
+  EnumVal{
+    SSLv2 => 0x0200,
+    SSLv3 => 0x0300,
+    TLSv1_0 => 0x0301,
+    TLSv1_1 => 0x0302,
+    TLSv1_2 => 0x0303,
+    TLSv1_3 => 0x0304
+  }
 }
 
 /// The `HashAlgorithm` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum HashAlgorithm {
-    NONE,
-    MD5,
-    SHA1,
-    SHA224,
-    SHA256,
-    SHA384,
-    SHA512,
-    Unknown(u8),
-}
-
-impl Codec for HashAlgorithm {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<HashAlgorithm> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => HashAlgorithm::NONE,
-            0x01 => HashAlgorithm::MD5,
-            0x02 => HashAlgorithm::SHA1,
-            0x03 => HashAlgorithm::SHA224,
-            0x04 => HashAlgorithm::SHA256,
-            0x05 => HashAlgorithm::SHA384,
-            0x06 => HashAlgorithm::SHA512,
-            x => HashAlgorithm::Unknown(x),
-        })
-    }
-}
-
-impl HashAlgorithm {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            HashAlgorithm::NONE => 0x00,
-            HashAlgorithm::MD5 => 0x01,
-            HashAlgorithm::SHA1 => 0x02,
-            HashAlgorithm::SHA224 => 0x03,
-            HashAlgorithm::SHA256 => 0x04,
-            HashAlgorithm::SHA384 => 0x05,
-            HashAlgorithm::SHA512 => 0x06,
-            HashAlgorithm::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: HashAlgorithm;
+  EnumVal{
+    NONE => 0x00,
+    MD5 => 0x01,
+    SHA1 => 0x02,
+    SHA224 => 0x03,
+    SHA256 => 0x04,
+    SHA384 => 0x05,
+    SHA512 => 0x06
+  }
 }
 
 /// The `SignatureAlgorithm` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum SignatureAlgorithm {
-    Anonymous,
-    RSA,
-    DSA,
-    ECDSA,
-    Unknown(u8),
-}
-
-impl Codec for SignatureAlgorithm {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<SignatureAlgorithm> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => SignatureAlgorithm::Anonymous,
-            0x01 => SignatureAlgorithm::RSA,
-            0x02 => SignatureAlgorithm::DSA,
-            0x03 => SignatureAlgorithm::ECDSA,
-            x => SignatureAlgorithm::Unknown(x),
-        })
-    }
-}
-
-impl SignatureAlgorithm {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            SignatureAlgorithm::Anonymous => 0x00,
-            SignatureAlgorithm::RSA => 0x01,
-            SignatureAlgorithm::DSA => 0x02,
-            SignatureAlgorithm::ECDSA => 0x03,
-            SignatureAlgorithm::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: SignatureAlgorithm;
+  EnumVal{
+    Anonymous => 0x00,
+    RSA => 0x01,
+    DSA => 0x02,
+    ECDSA => 0x03
+  }
 }
 
 /// The `ClientCertificateType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ClientCertificateType {
-    RSASign,
-    DSSSign,
-    RSAFixedDH,
-    DSSFixedDH,
-    RSAEphemeralDH,
-    DSSEphemeralDH,
-    FortezzaDMS,
-    ECDSASign,
-    RSAFixedECDH,
-    ECDSAFixedECDH,
-    Unknown(u8),
-}
-
-impl Codec for ClientCertificateType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ClientCertificateType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x01 => ClientCertificateType::RSASign,
-            0x02 => ClientCertificateType::DSSSign,
-            0x03 => ClientCertificateType::RSAFixedDH,
-            0x04 => ClientCertificateType::DSSFixedDH,
-            0x05 => ClientCertificateType::RSAEphemeralDH,
-            0x06 => ClientCertificateType::DSSEphemeralDH,
-            0x14 => ClientCertificateType::FortezzaDMS,
-            0x40 => ClientCertificateType::ECDSASign,
-            0x41 => ClientCertificateType::RSAFixedECDH,
-            0x42 => ClientCertificateType::ECDSAFixedECDH,
-            x => ClientCertificateType::Unknown(x),
-        })
-    }
-}
-
-impl ClientCertificateType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            ClientCertificateType::RSASign => 0x01,
-            ClientCertificateType::DSSSign => 0x02,
-            ClientCertificateType::RSAFixedDH => 0x03,
-            ClientCertificateType::DSSFixedDH => 0x04,
-            ClientCertificateType::RSAEphemeralDH => 0x05,
-            ClientCertificateType::DSSEphemeralDH => 0x06,
-            ClientCertificateType::FortezzaDMS => 0x14,
-            ClientCertificateType::ECDSASign => 0x40,
-            ClientCertificateType::RSAFixedECDH => 0x41,
-            ClientCertificateType::ECDSAFixedECDH => 0x42,
-            ClientCertificateType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: ClientCertificateType;
+  EnumVal{
+    RSASign => 0x01,
+    DSSSign => 0x02,
+    RSAFixedDH => 0x03,
+    DSSFixedDH => 0x04,
+    RSAEphemeralDH => 0x05,
+    DSSEphemeralDH => 0x06,
+    FortezzaDMS => 0x14,
+    ECDSASign => 0x40,
+    RSAFixedECDH => 0x41,
+    ECDSAFixedECDH => 0x42
+  }
 }
 
 /// The `Compression` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Compression {
-    Null,
-    Deflate,
-    LSZ,
-    Unknown(u8),
-}
-
-impl Codec for Compression {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<Compression> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => Compression::Null,
-            0x01 => Compression::Deflate,
-            0x40 => Compression::LSZ,
-            x => Compression::Unknown(x),
-        })
-    }
-}
-
-impl Compression {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            Compression::Null => 0x00,
-            Compression::Deflate => 0x01,
-            Compression::LSZ => 0x40,
-            Compression::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: Compression;
+  EnumVal{
+    Null => 0x00,
+    Deflate => 0x01,
+    LSZ => 0x40
+  }
 }
 
 /// The `ContentType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ContentType {
-    ChangeCipherSpec,
-    Alert,
-    Handshake,
-    ApplicationData,
-    Heartbeat,
-    Unknown(u8),
-}
-
-impl Codec for ContentType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ContentType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x14 => ContentType::ChangeCipherSpec,
-            0x15 => ContentType::Alert,
-            0x16 => ContentType::Handshake,
-            0x17 => ContentType::ApplicationData,
-            0x18 => ContentType::Heartbeat,
-            x => ContentType::Unknown(x),
-        })
-    }
-}
-
-impl ContentType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            ContentType::ChangeCipherSpec => 0x14,
-            ContentType::Alert => 0x15,
-            ContentType::Handshake => 0x16,
-            ContentType::ApplicationData => 0x17,
-            ContentType::Heartbeat => 0x18,
-            ContentType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: ContentType;
+  EnumVal{
+    ChangeCipherSpec => 0x14,
+    Alert => 0x15,
+    Handshake => 0x16,
+    ApplicationData => 0x17,
+    Heartbeat => 0x18
+  }
 }
 
 /// The `HandshakeType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum HandshakeType {
-    HelloRequest,
-    ClientHello,
-    ServerHello,
-    NewSessionTicket,
-    EndOfEarlyData,
-    HelloRetryRequest,
-    EncryptedExtensions,
-    Certificate,
-    ServerKeyExchange,
-    CertificateRequest,
-    ServerHelloDone,
-    CertificateVerify,
-    ClientKeyExchange,
-    Finished,
-    CertificateURL,
-    CertificateStatus,
-    KeyUpdate,
-    MessageHash,
-    Unknown(u8),
-}
-
-impl Codec for HandshakeType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<HandshakeType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => HandshakeType::HelloRequest,
-            0x01 => HandshakeType::ClientHello,
-            0x02 => HandshakeType::ServerHello,
-            0x04 => HandshakeType::NewSessionTicket,
-            0x05 => HandshakeType::EndOfEarlyData,
-            0x06 => HandshakeType::HelloRetryRequest,
-            0x08 => HandshakeType::EncryptedExtensions,
-            0x0b => HandshakeType::Certificate,
-            0x0c => HandshakeType::ServerKeyExchange,
-            0x0d => HandshakeType::CertificateRequest,
-            0x0e => HandshakeType::ServerHelloDone,
-            0x0f => HandshakeType::CertificateVerify,
-            0x10 => HandshakeType::ClientKeyExchange,
-            0x14 => HandshakeType::Finished,
-            0x15 => HandshakeType::CertificateURL,
-            0x16 => HandshakeType::CertificateStatus,
-            0x18 => HandshakeType::KeyUpdate,
-            0xfe => HandshakeType::MessageHash,
-            x => HandshakeType::Unknown(x),
-        })
-    }
-}
-
-impl HandshakeType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            HandshakeType::HelloRequest => 0x00,
-            HandshakeType::ClientHello => 0x01,
-            HandshakeType::ServerHello => 0x02,
-            HandshakeType::NewSessionTicket => 0x04,
-            HandshakeType::EndOfEarlyData => 0x05,
-            HandshakeType::HelloRetryRequest => 0x06,
-            HandshakeType::EncryptedExtensions => 0x08,
-            HandshakeType::Certificate => 0x0b,
-            HandshakeType::ServerKeyExchange => 0x0c,
-            HandshakeType::CertificateRequest => 0x0d,
-            HandshakeType::ServerHelloDone => 0x0e,
-            HandshakeType::CertificateVerify => 0x0f,
-            HandshakeType::ClientKeyExchange => 0x10,
-            HandshakeType::Finished => 0x14,
-            HandshakeType::CertificateURL => 0x15,
-            HandshakeType::CertificateStatus => 0x16,
-            HandshakeType::KeyUpdate => 0x18,
-            HandshakeType::MessageHash => 0xfe,
-            HandshakeType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: HandshakeType;
+  EnumVal{
+    HelloRequest => 0x00,
+    ClientHello => 0x01,
+    ServerHello => 0x02,
+    NewSessionTicket => 0x04,
+    EndOfEarlyData => 0x05,
+    HelloRetryRequest => 0x06,
+    EncryptedExtensions => 0x08,
+    Certificate => 0x0b,
+    ServerKeyExchange => 0x0c,
+    CertificateRequest => 0x0d,
+    ServerHelloDone => 0x0e,
+    CertificateVerify => 0x0f,
+    ClientKeyExchange => 0x10,
+    Finished => 0x14,
+    CertificateURL => 0x15,
+    CertificateStatus => 0x16,
+    KeyUpdate => 0x18,
+    MessageHash => 0xfe
+  }
 }
 
 /// The `AlertLevel` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum AlertLevel {
-    Warning,
-    Fatal,
-    Unknown(u8),
-}
-
-impl Codec for AlertLevel {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<AlertLevel> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x01 => AlertLevel::Warning,
-            0x02 => AlertLevel::Fatal,
-            x => AlertLevel::Unknown(x),
-        })
-    }
-}
-
-impl AlertLevel {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            AlertLevel::Warning => 0x01,
-            AlertLevel::Fatal => 0x02,
-            AlertLevel::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: AlertLevel;
+  EnumVal{
+    Warning => 0x01,
+    Fatal => 0x02
+  }
 }
 
 /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum AlertDescription {
-    CloseNotify,
-    UnexpectedMessage,
-    BadRecordMac,
-    DecryptionFailed,
-    RecordOverflow,
-    DecompressionFailure,
-    HandshakeFailure,
-    NoCertificate,
-    BadCertificate,
-    UnsupportedCertificate,
-    CertificateRevoked,
-    CertificateExpired,
-    CertificateUnknown,
-    IllegalParameter,
-    UnknownCA,
-    AccessDenied,
-    DecodeError,
-    DecryptError,
-    ExportRestriction,
-    ProtocolVersion,
-    InsufficientSecurity,
-    InternalError,
-    InappropriateFallback,
-    UserCanceled,
-    NoRenegotiation,
-    MissingExtension,
-    UnsupportedExtension,
-    CertificateUnobtainable,
-    UnrecognisedName,
-    BadCertificateStatusResponse,
-    BadCertificateHashValue,
-    UnknownPSKIdentity,
-    CertificateRequired,
-    NoApplicationProtocol,
-    Unknown(u8),
-}
-
-impl Codec for AlertDescription {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<AlertDescription> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => AlertDescription::CloseNotify,
-            0x0a => AlertDescription::UnexpectedMessage,
-            0x14 => AlertDescription::BadRecordMac,
-            0x15 => AlertDescription::DecryptionFailed,
-            0x16 => AlertDescription::RecordOverflow,
-            0x1e => AlertDescription::DecompressionFailure,
-            0x28 => AlertDescription::HandshakeFailure,
-            0x29 => AlertDescription::NoCertificate,
-            0x2a => AlertDescription::BadCertificate,
-            0x2b => AlertDescription::UnsupportedCertificate,
-            0x2c => AlertDescription::CertificateRevoked,
-            0x2d => AlertDescription::CertificateExpired,
-            0x2e => AlertDescription::CertificateUnknown,
-            0x2f => AlertDescription::IllegalParameter,
-            0x30 => AlertDescription::UnknownCA,
-            0x31 => AlertDescription::AccessDenied,
-            0x32 => AlertDescription::DecodeError,
-            0x33 => AlertDescription::DecryptError,
-            0x3c => AlertDescription::ExportRestriction,
-            0x46 => AlertDescription::ProtocolVersion,
-            0x47 => AlertDescription::InsufficientSecurity,
-            0x50 => AlertDescription::InternalError,
-            0x56 => AlertDescription::InappropriateFallback,
-            0x5a => AlertDescription::UserCanceled,
-            0x64 => AlertDescription::NoRenegotiation,
-            0x6d => AlertDescription::MissingExtension,
-            0x6e => AlertDescription::UnsupportedExtension,
-            0x6f => AlertDescription::CertificateUnobtainable,
-            0x70 => AlertDescription::UnrecognisedName,
-            0x71 => AlertDescription::BadCertificateStatusResponse,
-            0x72 => AlertDescription::BadCertificateHashValue,
-            0x73 => AlertDescription::UnknownPSKIdentity,
-            0x74 => AlertDescription::CertificateRequired,
-            0x78 => AlertDescription::NoApplicationProtocol,
-            x => AlertDescription::Unknown(x),
-        })
-    }
-}
-
-impl AlertDescription {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            AlertDescription::CloseNotify => 0x00,
-            AlertDescription::UnexpectedMessage => 0x0a,
-            AlertDescription::BadRecordMac => 0x14,
-            AlertDescription::DecryptionFailed => 0x15,
-            AlertDescription::RecordOverflow => 0x16,
-            AlertDescription::DecompressionFailure => 0x1e,
-            AlertDescription::HandshakeFailure => 0x28,
-            AlertDescription::NoCertificate => 0x29,
-            AlertDescription::BadCertificate => 0x2a,
-            AlertDescription::UnsupportedCertificate => 0x2b,
-            AlertDescription::CertificateRevoked => 0x2c,
-            AlertDescription::CertificateExpired => 0x2d,
-            AlertDescription::CertificateUnknown => 0x2e,
-            AlertDescription::IllegalParameter => 0x2f,
-            AlertDescription::UnknownCA => 0x30,
-            AlertDescription::AccessDenied => 0x31,
-            AlertDescription::DecodeError => 0x32,
-            AlertDescription::DecryptError => 0x33,
-            AlertDescription::ExportRestriction => 0x3c,
-            AlertDescription::ProtocolVersion => 0x46,
-            AlertDescription::InsufficientSecurity => 0x47,
-            AlertDescription::InternalError => 0x50,
-            AlertDescription::InappropriateFallback => 0x56,
-            AlertDescription::UserCanceled => 0x5a,
-            AlertDescription::NoRenegotiation => 0x64,
-            AlertDescription::MissingExtension => 0x6d,
-            AlertDescription::UnsupportedExtension => 0x6e,
-            AlertDescription::CertificateUnobtainable => 0x6f,
-            AlertDescription::UnrecognisedName => 0x70,
-            AlertDescription::BadCertificateStatusResponse => 0x71,
-            AlertDescription::BadCertificateHashValue => 0x72,
-            AlertDescription::UnknownPSKIdentity => 0x73,
-            AlertDescription::CertificateRequired => 0x74,
-            AlertDescription::NoApplicationProtocol => 0x78,
-            AlertDescription::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: AlertDescription;
+  EnumVal{
+    CloseNotify => 0x00,
+    UnexpectedMessage => 0x0a,
+    BadRecordMac => 0x14,
+    DecryptionFailed => 0x15,
+    RecordOverflow => 0x16,
+    DecompressionFailure => 0x1e,
+    HandshakeFailure => 0x28,
+    NoCertificate => 0x29,
+    BadCertificate => 0x2a,
+    UnsupportedCertificate => 0x2b,
+    CertificateRevoked => 0x2c,
+    CertificateExpired => 0x2d,
+    CertificateUnknown => 0x2e,
+    IllegalParameter => 0x2f,
+    UnknownCA => 0x30,
+    AccessDenied => 0x31,
+    DecodeError => 0x32,
+    DecryptError => 0x33,
+    ExportRestriction => 0x3c,
+    ProtocolVersion => 0x46,
+    InsufficientSecurity => 0x47,
+    InternalError => 0x50,
+    InappropriateFallback => 0x56,
+    UserCanceled => 0x5a,
+    NoRenegotiation => 0x64,
+    MissingExtension => 0x6d,
+    UnsupportedExtension => 0x6e,
+    CertificateUnobtainable => 0x6f,
+    UnrecognisedName => 0x70,
+    BadCertificateStatusResponse => 0x71,
+    BadCertificateHashValue => 0x72,
+    UnknownPSKIdentity => 0x73,
+    CertificateRequired => 0x74,
+    NoApplicationProtocol => 0x78
+  }
 }
 
 /// The `HeartbeatMessageType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum HeartbeatMessageType {
-    Request,
-    Response,
-    Unknown(u8),
-}
-
-impl Codec for HeartbeatMessageType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<HeartbeatMessageType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x01 => HeartbeatMessageType::Request,
-            0x02 => HeartbeatMessageType::Response,
-            x => HeartbeatMessageType::Unknown(x),
-        })
-    }
-}
-
-impl HeartbeatMessageType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            HeartbeatMessageType::Request => 0x01,
-            HeartbeatMessageType::Response => 0x02,
-            HeartbeatMessageType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: HeartbeatMessageType;
+  EnumVal{
+    Request => 0x01,
+    Response => 0x02
+  }
 }
 
 /// The `ExtensionType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ExtensionType {
-    ServerName,
-    MaxFragmentLength,
-    ClientCertificateUrl,
-    TrustedCAKeys,
-    TruncatedHMAC,
-    StatusRequest,
-    UserMapping,
-    ClientAuthz,
-    ServerAuthz,
-    CertificateType,
-    EllipticCurves,
-    ECPointFormats,
-    SRP,
-    SignatureAlgorithms,
-    UseSRTP,
-    Heartbeat,
-    ALProtocolNegotiation,
-    Padding,
-    ExtendedMasterSecret,
-    SessionTicket,
-    KeyShare,
-    PreSharedKey,
-    EarlyData,
-    SupportedVersions,
-    Cookie,
-    PSKKeyExchangeModes,
-    TicketEarlyDataInfo,
-    CertificateAuthorities,
-    OIDFilters,
-    NextProtocolNegotiation,
-    ChannelId,
-    RenegotiationInfo,
-    Unknown(u16),
-}
-
-impl Codec for ExtensionType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16(self.get_u16(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ExtensionType> {
-        let u = read_u16(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x0000 => ExtensionType::ServerName,
-            0x0001 => ExtensionType::MaxFragmentLength,
-            0x0002 => ExtensionType::ClientCertificateUrl,
-            0x0003 => ExtensionType::TrustedCAKeys,
-            0x0004 => ExtensionType::TruncatedHMAC,
-            0x0005 => ExtensionType::StatusRequest,
-            0x0006 => ExtensionType::UserMapping,
-            0x0007 => ExtensionType::ClientAuthz,
-            0x0008 => ExtensionType::ServerAuthz,
-            0x0009 => ExtensionType::CertificateType,
-            0x000a => ExtensionType::EllipticCurves,
-            0x000b => ExtensionType::ECPointFormats,
-            0x000c => ExtensionType::SRP,
-            0x000d => ExtensionType::SignatureAlgorithms,
-            0x000e => ExtensionType::UseSRTP,
-            0x000f => ExtensionType::Heartbeat,
-            0x0010 => ExtensionType::ALProtocolNegotiation,
-            0x0015 => ExtensionType::Padding,
-            0x0017 => ExtensionType::ExtendedMasterSecret,
-            0x0023 => ExtensionType::SessionTicket,
-            0x0028 => ExtensionType::KeyShare,
-            0x0029 => ExtensionType::PreSharedKey,
-            0x002a => ExtensionType::EarlyData,
-            0x002b => ExtensionType::SupportedVersions,
-            0x002c => ExtensionType::Cookie,
-            0x002d => ExtensionType::PSKKeyExchangeModes,
-            0x002e => ExtensionType::TicketEarlyDataInfo,
-            0x002f => ExtensionType::CertificateAuthorities,
-            0x0030 => ExtensionType::OIDFilters,
-            0x3374 => ExtensionType::NextProtocolNegotiation,
-            0x754f => ExtensionType::ChannelId,
-            0xff01 => ExtensionType::RenegotiationInfo,
-            x => ExtensionType::Unknown(x),
-        })
-    }
-}
-
-impl ExtensionType {
-    pub fn get_u16(&self) -> u16 {
-        match *self {
-            ExtensionType::ServerName => 0x0000,
-            ExtensionType::MaxFragmentLength => 0x0001,
-            ExtensionType::ClientCertificateUrl => 0x0002,
-            ExtensionType::TrustedCAKeys => 0x0003,
-            ExtensionType::TruncatedHMAC => 0x0004,
-            ExtensionType::StatusRequest => 0x0005,
-            ExtensionType::UserMapping => 0x0006,
-            ExtensionType::ClientAuthz => 0x0007,
-            ExtensionType::ServerAuthz => 0x0008,
-            ExtensionType::CertificateType => 0x0009,
-            ExtensionType::EllipticCurves => 0x000a,
-            ExtensionType::ECPointFormats => 0x000b,
-            ExtensionType::SRP => 0x000c,
-            ExtensionType::SignatureAlgorithms => 0x000d,
-            ExtensionType::UseSRTP => 0x000e,
-            ExtensionType::Heartbeat => 0x000f,
-            ExtensionType::ALProtocolNegotiation => 0x0010,
-            ExtensionType::Padding => 0x0015,
-            ExtensionType::ExtendedMasterSecret => 0x0017,
-            ExtensionType::SessionTicket => 0x0023,
-            ExtensionType::KeyShare => 0x0028,
-            ExtensionType::PreSharedKey => 0x0029,
-            ExtensionType::EarlyData => 0x002a,
-            ExtensionType::SupportedVersions => 0x002b,
-            ExtensionType::Cookie => 0x002c,
-            ExtensionType::PSKKeyExchangeModes => 0x002d,
-            ExtensionType::TicketEarlyDataInfo => 0x002e,
-            ExtensionType::CertificateAuthorities => 0x002f,
-            ExtensionType::OIDFilters => 0x0030,
-            ExtensionType::NextProtocolNegotiation => 0x3374,
-            ExtensionType::ChannelId => 0x754f,
-            ExtensionType::RenegotiationInfo => 0xff01,
-            ExtensionType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U16
+  EnumName: ExtensionType;
+  EnumVal{
+    ServerName => 0x0000,
+    MaxFragmentLength => 0x0001,
+    ClientCertificateUrl => 0x0002,
+    TrustedCAKeys => 0x0003,
+    TruncatedHMAC => 0x0004,
+    StatusRequest => 0x0005,
+    UserMapping => 0x0006,
+    ClientAuthz => 0x0007,
+    ServerAuthz => 0x0008,
+    CertificateType => 0x0009,
+    EllipticCurves => 0x000a,
+    ECPointFormats => 0x000b,
+    SRP => 0x000c,
+    SignatureAlgorithms => 0x000d,
+    UseSRTP => 0x000e,
+    Heartbeat => 0x000f,
+    ALProtocolNegotiation => 0x0010,
+    Padding => 0x0015,
+    ExtendedMasterSecret => 0x0017,
+    SessionTicket => 0x0023,
+    KeyShare => 0x0028,
+    PreSharedKey => 0x0029,
+    EarlyData => 0x002a,
+    SupportedVersions => 0x002b,
+    Cookie => 0x002c,
+    PSKKeyExchangeModes => 0x002d,
+    TicketEarlyDataInfo => 0x002e,
+    CertificateAuthorities => 0x002f,
+    OIDFilters => 0x0030,
+    NextProtocolNegotiation => 0x3374,
+    ChannelId => 0x754f,
+    RenegotiationInfo => 0xff01
+  }
 }
 
 /// The `ServerNameType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ServerNameType {
-    HostName,
-    Unknown(u8),
-}
-
-impl Codec for ServerNameType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ServerNameType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => ServerNameType::HostName,
-            x => ServerNameType::Unknown(x),
-        })
-    }
-}
-
-impl ServerNameType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            ServerNameType::HostName => 0x00,
-            ServerNameType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: ServerNameType;
+  EnumVal{
+    HostName => 0x00
+  }
 }
 
 /// The `NamedCurve` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum NamedCurve {
-    sect163k1,
-    sect163r1,
-    sect163r2,
-    sect193r1,
-    sect193r2,
-    sect233k1,
-    sect233r1,
-    sect239k1,
-    sect283k1,
-    sect283r1,
-    sect409k1,
-    sect409r1,
-    sect571k1,
-    sect571r1,
-    secp160k1,
-    secp160r1,
-    secp160r2,
-    secp192k1,
-    secp192r1,
-    secp224k1,
-    secp224r1,
-    secp256k1,
-    secp256r1,
-    secp384r1,
-    secp521r1,
-    brainpoolp256r1,
-    brainpoolp384r1,
-    brainpoolp512r1,
-    X25519,
-    X448,
-    arbitrary_explicit_prime_curves,
-    arbitrary_explicit_char2_curves,
-    Unknown(u16),
-}
-
-impl Codec for NamedCurve {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16(self.get_u16(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<NamedCurve> {
-        let u = read_u16(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x0001 => NamedCurve::sect163k1,
-            0x0002 => NamedCurve::sect163r1,
-            0x0003 => NamedCurve::sect163r2,
-            0x0004 => NamedCurve::sect193r1,
-            0x0005 => NamedCurve::sect193r2,
-            0x0006 => NamedCurve::sect233k1,
-            0x0007 => NamedCurve::sect233r1,
-            0x0008 => NamedCurve::sect239k1,
-            0x0009 => NamedCurve::sect283k1,
-            0x000a => NamedCurve::sect283r1,
-            0x000b => NamedCurve::sect409k1,
-            0x000c => NamedCurve::sect409r1,
-            0x000d => NamedCurve::sect571k1,
-            0x000e => NamedCurve::sect571r1,
-            0x000f => NamedCurve::secp160k1,
-            0x0010 => NamedCurve::secp160r1,
-            0x0011 => NamedCurve::secp160r2,
-            0x0012 => NamedCurve::secp192k1,
-            0x0013 => NamedCurve::secp192r1,
-            0x0014 => NamedCurve::secp224k1,
-            0x0015 => NamedCurve::secp224r1,
-            0x0016 => NamedCurve::secp256k1,
-            0x0017 => NamedCurve::secp256r1,
-            0x0018 => NamedCurve::secp384r1,
-            0x0019 => NamedCurve::secp521r1,
-            0x001a => NamedCurve::brainpoolp256r1,
-            0x001b => NamedCurve::brainpoolp384r1,
-            0x001c => NamedCurve::brainpoolp512r1,
-            0x001d => NamedCurve::X25519,
-            0x001e => NamedCurve::X448,
-            0xff01 => NamedCurve::arbitrary_explicit_prime_curves,
-            0xff02 => NamedCurve::arbitrary_explicit_char2_curves,
-            x => NamedCurve::Unknown(x),
-        })
-    }
-}
-
-impl NamedCurve {
-    pub fn get_u16(&self) -> u16 {
-        match *self {
-            NamedCurve::sect163k1 => 0x0001,
-            NamedCurve::sect163r1 => 0x0002,
-            NamedCurve::sect163r2 => 0x0003,
-            NamedCurve::sect193r1 => 0x0004,
-            NamedCurve::sect193r2 => 0x0005,
-            NamedCurve::sect233k1 => 0x0006,
-            NamedCurve::sect233r1 => 0x0007,
-            NamedCurve::sect239k1 => 0x0008,
-            NamedCurve::sect283k1 => 0x0009,
-            NamedCurve::sect283r1 => 0x000a,
-            NamedCurve::sect409k1 => 0x000b,
-            NamedCurve::sect409r1 => 0x000c,
-            NamedCurve::sect571k1 => 0x000d,
-            NamedCurve::sect571r1 => 0x000e,
-            NamedCurve::secp160k1 => 0x000f,
-            NamedCurve::secp160r1 => 0x0010,
-            NamedCurve::secp160r2 => 0x0011,
-            NamedCurve::secp192k1 => 0x0012,
-            NamedCurve::secp192r1 => 0x0013,
-            NamedCurve::secp224k1 => 0x0014,
-            NamedCurve::secp224r1 => 0x0015,
-            NamedCurve::secp256k1 => 0x0016,
-            NamedCurve::secp256r1 => 0x0017,
-            NamedCurve::secp384r1 => 0x0018,
-            NamedCurve::secp521r1 => 0x0019,
-            NamedCurve::brainpoolp256r1 => 0x001a,
-            NamedCurve::brainpoolp384r1 => 0x001b,
-            NamedCurve::brainpoolp512r1 => 0x001c,
-            NamedCurve::X25519 => 0x001d,
-            NamedCurve::X448 => 0x001e,
-            NamedCurve::arbitrary_explicit_prime_curves => 0xff01,
-            NamedCurve::arbitrary_explicit_char2_curves => 0xff02,
-            NamedCurve::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U16
+  EnumName: NamedCurve;
+  EnumVal{
+    sect163k1 => 0x0001,
+    sect163r1 => 0x0002,
+    sect163r2 => 0x0003,
+    sect193r1 => 0x0004,
+    sect193r2 => 0x0005,
+    sect233k1 => 0x0006,
+    sect233r1 => 0x0007,
+    sect239k1 => 0x0008,
+    sect283k1 => 0x0009,
+    sect283r1 => 0x000a,
+    sect409k1 => 0x000b,
+    sect409r1 => 0x000c,
+    sect571k1 => 0x000d,
+    sect571r1 => 0x000e,
+    secp160k1 => 0x000f,
+    secp160r1 => 0x0010,
+    secp160r2 => 0x0011,
+    secp192k1 => 0x0012,
+    secp192r1 => 0x0013,
+    secp224k1 => 0x0014,
+    secp224r1 => 0x0015,
+    secp256k1 => 0x0016,
+    secp256r1 => 0x0017,
+    secp384r1 => 0x0018,
+    secp521r1 => 0x0019,
+    brainpoolp256r1 => 0x001a,
+    brainpoolp384r1 => 0x001b,
+    brainpoolp512r1 => 0x001c,
+    X25519 => 0x001d,
+    X448 => 0x001e,
+    arbitrary_explicit_prime_curves => 0xff01,
+    arbitrary_explicit_char2_curves => 0xff02
+  }
 }
 
 /// The `NamedGroup` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum NamedGroup {
-    secp256r1,
-    secp384r1,
-    secp521r1,
-    X25519,
-    X448,
-    FFDHE2048,
-    FFDHE3072,
-    FFDHE4096,
-    FFDHE6144,
-    FFDHE8192,
-    Unknown(u16),
-}
-
-impl Codec for NamedGroup {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16(self.get_u16(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<NamedGroup> {
-        let u = read_u16(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x0017 => NamedGroup::secp256r1,
-            0x0018 => NamedGroup::secp384r1,
-            0x0019 => NamedGroup::secp521r1,
-            0x001d => NamedGroup::X25519,
-            0x001e => NamedGroup::X448,
-            0x0100 => NamedGroup::FFDHE2048,
-            0x0101 => NamedGroup::FFDHE3072,
-            0x0102 => NamedGroup::FFDHE4096,
-            0x0103 => NamedGroup::FFDHE6144,
-            0x0104 => NamedGroup::FFDHE8192,
-            x => NamedGroup::Unknown(x),
-        })
-    }
-}
-
-impl NamedGroup {
-    pub fn get_u16(&self) -> u16 {
-        match *self {
-            NamedGroup::secp256r1 => 0x0017,
-            NamedGroup::secp384r1 => 0x0018,
-            NamedGroup::secp521r1 => 0x0019,
-            NamedGroup::X25519 => 0x001d,
-            NamedGroup::X448 => 0x001e,
-            NamedGroup::FFDHE2048 => 0x0100,
-            NamedGroup::FFDHE3072 => 0x0101,
-            NamedGroup::FFDHE4096 => 0x0102,
-            NamedGroup::FFDHE6144 => 0x0103,
-            NamedGroup::FFDHE8192 => 0x0104,
-            NamedGroup::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U16
+  EnumName: NamedGroup;
+  EnumVal{
+    secp256r1 => 0x0017,
+    secp384r1 => 0x0018,
+    secp521r1 => 0x0019,
+    X25519 => 0x001d,
+    X448 => 0x001e,
+    FFDHE2048 => 0x0100,
+    FFDHE3072 => 0x0101,
+    FFDHE4096 => 0x0102,
+    FFDHE6144 => 0x0103,
+    FFDHE8192 => 0x0104
+  }
 }
 
 /// The `CipherSuite` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum CipherSuite {
-    TLS_NULL_WITH_NULL_NULL,
-    TLS_RSA_WITH_NULL_MD5,
-    TLS_RSA_WITH_NULL_SHA,
-    TLS_RSA_EXPORT_WITH_RC4_40_MD5,
-    TLS_RSA_WITH_RC4_128_MD5,
-    TLS_RSA_WITH_RC4_128_SHA,
-    TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5,
-    TLS_RSA_WITH_IDEA_CBC_SHA,
-    TLS_RSA_EXPORT_WITH_DES40_CBC_SHA,
-    TLS_RSA_WITH_DES_CBC_SHA,
-    TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA,
-    TLS_DH_DSS_WITH_DES_CBC_SHA,
-    TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA,
-    TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA,
-    TLS_DH_RSA_WITH_DES_CBC_SHA,
-    TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA,
-    TLS_DHE_DSS_WITH_DES_CBC_SHA,
-    TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA,
-    TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA,
-    TLS_DHE_RSA_WITH_DES_CBC_SHA,
-    TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_DH_anon_EXPORT_WITH_RC4_40_MD5,
-    TLS_DH_anon_WITH_RC4_128_MD5,
-    TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA,
-    TLS_DH_anon_WITH_DES_CBC_SHA,
-    TLS_DH_anon_WITH_3DES_EDE_CBC_SHA,
-    SSL_FORTEZZA_KEA_WITH_NULL_SHA,
-    SSL_FORTEZZA_KEA_WITH_FORTEZZA_CBC_SHA,
-    TLS_KRB5_WITH_DES_CBC_SHA_or_SSL_FORTEZZA_KEA_WITH_RC4_128_SHA,
-    TLS_KRB5_WITH_3DES_EDE_CBC_SHA,
-    TLS_KRB5_WITH_RC4_128_SHA,
-    TLS_KRB5_WITH_IDEA_CBC_SHA,
-    TLS_KRB5_WITH_DES_CBC_MD5,
-    TLS_KRB5_WITH_3DES_EDE_CBC_MD5,
-    TLS_KRB5_WITH_RC4_128_MD5,
-    TLS_KRB5_WITH_IDEA_CBC_MD5,
-    TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA,
-    TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA,
-    TLS_KRB5_EXPORT_WITH_RC4_40_SHA,
-    TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5,
-    TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5,
-    TLS_KRB5_EXPORT_WITH_RC4_40_MD5,
-    TLS_PSK_WITH_NULL_SHA,
-    TLS_DHE_PSK_WITH_NULL_SHA,
-    TLS_RSA_PSK_WITH_NULL_SHA,
-    TLS_RSA_WITH_AES_128_CBC_SHA,
-    TLS_DH_DSS_WITH_AES_128_CBC_SHA,
-    TLS_DH_RSA_WITH_AES_128_CBC_SHA,
-    TLS_DHE_DSS_WITH_AES_128_CBC_SHA,
-    TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
-    TLS_DH_anon_WITH_AES_128_CBC_SHA,
-    TLS_RSA_WITH_AES_256_CBC_SHA,
-    TLS_DH_DSS_WITH_AES_256_CBC_SHA,
-    TLS_DH_RSA_WITH_AES_256_CBC_SHA,
-    TLS_DHE_DSS_WITH_AES_256_CBC_SHA,
-    TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
-    TLS_DH_anon_WITH_AES_256_CBC_SHA,
-    TLS_RSA_WITH_NULL_SHA256,
-    TLS_RSA_WITH_AES_128_CBC_SHA256,
-    TLS_RSA_WITH_AES_256_CBC_SHA256,
-    TLS_DH_DSS_WITH_AES_128_CBC_SHA256,
-    TLS_DH_RSA_WITH_AES_128_CBC_SHA256,
-    TLS_DHE_DSS_WITH_AES_128_CBC_SHA256,
-    TLS_RSA_WITH_CAMELLIA_128_CBC_SHA,
-    TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA,
-    TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA,
-    TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA,
-    TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA,
-    TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA,
-    TLS_ECDH_ECDSA_WITH_NULL_SHA_draft,
-    TLS_ECDH_ECDSA_WITH_RC4_128_SHA_draft,
-    TLS_ECDH_ECDSA_WITH_DES_CBC_SHA_draft,
-    TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA_draft,
-    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA_draft,
-    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA_draft,
-    TLS_ECDH_ECNRA_WITH_DES_CBC_SHA_draft,
-    TLS_ECDH_ECNRA_WITH_3DES_EDE_CBC_SHA_draft,
-    TLS_ECMQV_ECDSA_NULL_SHA_draft,
-    TLS_ECMQV_ECDSA_WITH_RC4_128_SHA_draft,
-    TLS_ECMQV_ECDSA_WITH_DES_CBC_SHA_draft,
-    TLS_ECMQV_ECDSA_WITH_3DES_EDE_CBC_SHA_draft,
-    TLS_ECMQV_ECNRA_NULL_SHA_draft,
-    TLS_ECMQV_ECNRA_WITH_RC4_128_SHA_draft,
-    TLS_ECMQV_ECNRA_WITH_DES_CBC_SHA_draft,
-    TLS_ECMQV_ECNRA_WITH_3DES_EDE_CBC_SHA_draft,
-    TLS_ECDH_anon_NULL_WITH_SHA_draft,
-    TLS_ECDH_anon_WITH_RC4_128_SHA_draft,
-    TLS_ECDH_anon_WITH_DES_CBC_SHA_draft,
-    TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA_draft,
-    TLS_ECDH_anon_EXPORT_WITH_DES40_CBC_SHA_draft,
-    TLS_ECDH_anon_EXPORT_WITH_RC4_40_SHA_draft,
-    TLS_RSA_EXPORT1024_WITH_RC4_56_MD5,
-    TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5,
-    TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA,
-    TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA,
-    TLS_RSA_EXPORT1024_WITH_RC4_56_SHA,
-    TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA,
-    TLS_DHE_DSS_WITH_RC4_128_SHA,
-    TLS_DHE_RSA_WITH_AES_128_CBC_SHA256,
-    TLS_DH_DSS_WITH_AES_256_CBC_SHA256,
-    TLS_DH_RSA_WITH_AES_256_CBC_SHA256,
-    TLS_DHE_DSS_WITH_AES_256_CBC_SHA256,
-    TLS_DHE_RSA_WITH_AES_256_CBC_SHA256,
-    TLS_DH_anon_WITH_AES_128_CBC_SHA256,
-    TLS_DH_anon_WITH_AES_256_CBC_SHA256,
-    TLS_DHE_DSS_WITH_3DES_EDE_CBC_RMD,
-    TLS_DHE_DSS_WITH_AES_128_CBC_RMD,
-    TLS_DHE_DSS_WITH_AES_256_CBC_RMD,
-    TLS_DHE_RSA_WITH_3DES_EDE_CBC_RMD,
-    TLS_DHE_RSA_WITH_AES_128_CBC_RMD,
-    TLS_DHE_RSA_WITH_AES_256_CBC_RMD,
-    TLS_RSA_WITH_3DES_EDE_CBC_RMD,
-    TLS_RSA_WITH_AES_128_CBC_RMD,
-    TLS_RSA_WITH_AES_256_CBC_RMD,
-    TLS_GOSTR341094_WITH_28147_CNT_IMIT,
-    TLS_GOSTR341001_WITH_28147_CNT_IMIT,
-    TLS_GOSTR341094_WITH_NULL_GOSTR3411,
-    TLS_GOSTR341001_WITH_NULL_GOSTR3411,
-    TLS_RSA_WITH_CAMELLIA_256_CBC_SHA,
-    TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA,
-    TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA,
-    TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA,
-    TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA,
-    TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA,
-    TLS_PSK_WITH_RC4_128_SHA,
-    TLS_PSK_WITH_3DES_EDE_CBC_SHA,
-    TLS_PSK_WITH_AES_128_CBC_SHA,
-    TLS_PSK_WITH_AES_256_CBC_SHA,
-    TLS_DHE_PSK_WITH_RC4_128_SHA,
-    TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA,
-    TLS_DHE_PSK_WITH_AES_128_CBC_SHA,
-    TLS_DHE_PSK_WITH_AES_256_CBC_SHA,
-    TLS_RSA_PSK_WITH_RC4_128_SHA,
-    TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA,
-    TLS_RSA_PSK_WITH_AES_128_CBC_SHA,
-    TLS_RSA_PSK_WITH_AES_256_CBC_SHA,
-    TLS_RSA_WITH_SEED_CBC_SHA,
-    TLS_DH_DSS_WITH_SEED_CBC_SHA,
-    TLS_DH_RSA_WITH_SEED_CBC_SHA,
-    TLS_DHE_DSS_WITH_SEED_CBC_SHA,
-    TLS_DHE_RSA_WITH_SEED_CBC_SHA,
-    TLS_DH_anon_WITH_SEED_CBC_SHA,
-    TLS_RSA_WITH_AES_128_GCM_SHA256,
-    TLS_RSA_WITH_AES_256_GCM_SHA384,
-    TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-    TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-    TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
-    TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
-    TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-    TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
-    TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
-    TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
-    TLS_DH_anon_WITH_AES_128_GCM_SHA256,
-    TLS_DH_anon_WITH_AES_256_GCM_SHA384,
-    TLS_PSK_WITH_AES_128_GCM_SHA256,
-    TLS_PSK_WITH_AES_256_GCM_SHA384,
-    TLS_DHE_PSK_WITH_AES_128_GCM_SHA256,
-    TLS_DHE_PSK_WITH_AES_256_GCM_SHA384,
-    TLS_RSA_PSK_WITH_AES_128_GCM_SHA256,
-    TLS_RSA_PSK_WITH_AES_256_GCM_SHA384,
-    TLS_PSK_WITH_AES_128_CBC_SHA256,
-    TLS_PSK_WITH_AES_256_CBC_SHA384,
-    TLS_PSK_WITH_NULL_SHA256,
-    TLS_PSK_WITH_NULL_SHA384,
-    TLS_DHE_PSK_WITH_AES_128_CBC_SHA256,
-    TLS_DHE_PSK_WITH_AES_256_CBC_SHA384,
-    TLS_DHE_PSK_WITH_NULL_SHA256,
-    TLS_DHE_PSK_WITH_NULL_SHA384,
-    TLS_RSA_PSK_WITH_AES_128_CBC_SHA256,
-    TLS_RSA_PSK_WITH_AES_256_CBC_SHA384,
-    TLS_RSA_PSK_WITH_NULL_SHA256,
-    TLS_RSA_PSK_WITH_NULL_SHA384,
-    TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-    TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256,
-    TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-    TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256,
-    TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-    TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256,
-    TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
-    TLS13_AES_128_GCM_SHA256,
-    TLS13_AES_256_GCM_SHA384,
-    TLS13_CHACHA20_POLY1305_SHA256,
-    TLS13_AES_128_CCM_SHA256,
-    TLS13_AES_128_CCM_8_SHA256,
-    TLS_ECDH_ECDSA_WITH_NULL_SHA,
-    TLS_ECDH_ECDSA_WITH_RC4_128_SHA,
-    TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA,
-    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_NULL_SHA,
-    TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-    TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-    TLS_ECDH_RSA_WITH_NULL_SHA,
-    TLS_ECDH_RSA_WITH_RC4_128_SHA,
-    TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDH_RSA_WITH_AES_128_CBC_SHA,
-    TLS_ECDH_RSA_WITH_AES_256_CBC_SHA,
-    TLS_ECDHE_RSA_WITH_NULL_SHA,
-    TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-    TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-    TLS_ECDH_anon_WITH_NULL_SHA,
-    TLS_ECDH_anon_WITH_RC4_128_SHA,
-    TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDH_anon_WITH_AES_128_CBC_SHA,
-    TLS_ECDH_anon_WITH_AES_256_CBC_SHA,
-    TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA,
-    TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA,
-    TLS_SRP_SHA_WITH_AES_128_CBC_SHA,
-    TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA,
-    TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA,
-    TLS_SRP_SHA_WITH_AES_256_CBC_SHA,
-    TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA,
-    TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
-    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384,
-    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256,
-    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384,
-    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,
-    TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256,
-    TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384,
-    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-    TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-    TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
-    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
-    TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384,
-    TLS_ECDHE_PSK_WITH_RC4_128_SHA,
-    TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA,
-    TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA,
-    TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256,
-    TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384,
-    TLS_ECDHE_PSK_WITH_NULL_SHA,
-    TLS_ECDHE_PSK_WITH_NULL_SHA256,
-    TLS_ECDHE_PSK_WITH_NULL_SHA384,
-    TLS_RSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_RSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256,
-    TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384,
-    TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256,
-    TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384,
-    TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_DH_anon_WITH_ARIA_128_CBC_SHA256,
-    TLS_DH_anon_WITH_ARIA_256_CBC_SHA384,
-    TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256,
-    TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384,
-    TLS_RSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_RSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256,
-    TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384,
-    TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256,
-    TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384,
-    TLS_DH_anon_WITH_ARIA_128_GCM_SHA256,
-    TLS_DH_anon_WITH_ARIA_256_GCM_SHA384,
-    TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256,
-    TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384,
-    TLS_PSK_WITH_ARIA_128_CBC_SHA256,
-    TLS_PSK_WITH_ARIA_256_CBC_SHA384,
-    TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256,
-    TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384,
-    TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256,
-    TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384,
-    TLS_PSK_WITH_ARIA_128_GCM_SHA256,
-    TLS_PSK_WITH_ARIA_256_GCM_SHA384,
-    TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256,
-    TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384,
-    TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256,
-    TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384,
-    TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256,
-    TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384,
-    TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256,
-    TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384,
-    TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-    TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-    TLS_RSA_WITH_AES_128_CCM,
-    TLS_RSA_WITH_AES_256_CCM,
-    TLS_DHE_RSA_WITH_AES_128_CCM,
-    TLS_DHE_RSA_WITH_AES_256_CCM,
-    TLS_RSA_WITH_AES_128_CCM_8,
-    TLS_RSA_WITH_AES_256_CCM_8,
-    TLS_DHE_RSA_WITH_AES_128_CCM_8,
-    TLS_DHE_RSA_WITH_AES_256_CCM_8,
-    TLS_PSK_WITH_AES_128_CCM,
-    TLS_PSK_WITH_AES_256_CCM,
-    TLS_DHE_PSK_WITH_AES_128_CCM,
-    TLS_DHE_PSK_WITH_AES_256_CCM,
-    TLS_PSK_WITH_AES_128_CCM_8,
-    TLS_PSK_WITH_AES_256_CCM_8,
-    TLS_PSK_DHE_WITH_AES_128_CCM_8,
-    TLS_PSK_DHE_WITH_AES_256_CCM_8,
-    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_PSK_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256,
-    SSL_RSA_FIPS_WITH_DES_CBC_SHA,
-    SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA,
-    Unknown(u16),
-}
-
-impl Codec for CipherSuite {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16(self.get_u16(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<CipherSuite> {
-        let u = read_u16(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x0000 => CipherSuite::TLS_NULL_WITH_NULL_NULL,
-            0x0001 => CipherSuite::TLS_RSA_WITH_NULL_MD5,
-            0x0002 => CipherSuite::TLS_RSA_WITH_NULL_SHA,
-            0x0003 => CipherSuite::TLS_RSA_EXPORT_WITH_RC4_40_MD5,
-            0x0004 => CipherSuite::TLS_RSA_WITH_RC4_128_MD5,
-            0x0005 => CipherSuite::TLS_RSA_WITH_RC4_128_SHA,
-            0x0006 => CipherSuite::TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5,
-            0x0007 => CipherSuite::TLS_RSA_WITH_IDEA_CBC_SHA,
-            0x0008 => CipherSuite::TLS_RSA_EXPORT_WITH_DES40_CBC_SHA,
-            0x0009 => CipherSuite::TLS_RSA_WITH_DES_CBC_SHA,
-            0x000a => CipherSuite::TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-            0x000b => CipherSuite::TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA,
-            0x000c => CipherSuite::TLS_DH_DSS_WITH_DES_CBC_SHA,
-            0x000d => CipherSuite::TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA,
-            0x000e => CipherSuite::TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA,
-            0x000f => CipherSuite::TLS_DH_RSA_WITH_DES_CBC_SHA,
-            0x0010 => CipherSuite::TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA,
-            0x0011 => CipherSuite::TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA,
-            0x0012 => CipherSuite::TLS_DHE_DSS_WITH_DES_CBC_SHA,
-            0x0013 => CipherSuite::TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA,
-            0x0014 => CipherSuite::TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA,
-            0x0015 => CipherSuite::TLS_DHE_RSA_WITH_DES_CBC_SHA,
-            0x0016 => CipherSuite::TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA,
-            0x0017 => CipherSuite::TLS_DH_anon_EXPORT_WITH_RC4_40_MD5,
-            0x0018 => CipherSuite::TLS_DH_anon_WITH_RC4_128_MD5,
-            0x0019 => CipherSuite::TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA,
-            0x001a => CipherSuite::TLS_DH_anon_WITH_DES_CBC_SHA,
-            0x001b => CipherSuite::TLS_DH_anon_WITH_3DES_EDE_CBC_SHA,
-            0x001c => CipherSuite::SSL_FORTEZZA_KEA_WITH_NULL_SHA,
-            0x001d => CipherSuite::SSL_FORTEZZA_KEA_WITH_FORTEZZA_CBC_SHA,
-            0x001e => CipherSuite::TLS_KRB5_WITH_DES_CBC_SHA_or_SSL_FORTEZZA_KEA_WITH_RC4_128_SHA,
-            0x001f => CipherSuite::TLS_KRB5_WITH_3DES_EDE_CBC_SHA,
-            0x0020 => CipherSuite::TLS_KRB5_WITH_RC4_128_SHA,
-            0x0021 => CipherSuite::TLS_KRB5_WITH_IDEA_CBC_SHA,
-            0x0022 => CipherSuite::TLS_KRB5_WITH_DES_CBC_MD5,
-            0x0023 => CipherSuite::TLS_KRB5_WITH_3DES_EDE_CBC_MD5,
-            0x0024 => CipherSuite::TLS_KRB5_WITH_RC4_128_MD5,
-            0x0025 => CipherSuite::TLS_KRB5_WITH_IDEA_CBC_MD5,
-            0x0026 => CipherSuite::TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA,
-            0x0027 => CipherSuite::TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA,
-            0x0028 => CipherSuite::TLS_KRB5_EXPORT_WITH_RC4_40_SHA,
-            0x0029 => CipherSuite::TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5,
-            0x002a => CipherSuite::TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5,
-            0x002b => CipherSuite::TLS_KRB5_EXPORT_WITH_RC4_40_MD5,
-            0x002c => CipherSuite::TLS_PSK_WITH_NULL_SHA,
-            0x002d => CipherSuite::TLS_DHE_PSK_WITH_NULL_SHA,
-            0x002e => CipherSuite::TLS_RSA_PSK_WITH_NULL_SHA,
-            0x002f => CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA,
-            0x0030 => CipherSuite::TLS_DH_DSS_WITH_AES_128_CBC_SHA,
-            0x0031 => CipherSuite::TLS_DH_RSA_WITH_AES_128_CBC_SHA,
-            0x0032 => CipherSuite::TLS_DHE_DSS_WITH_AES_128_CBC_SHA,
-            0x0033 => CipherSuite::TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
-            0x0034 => CipherSuite::TLS_DH_anon_WITH_AES_128_CBC_SHA,
-            0x0035 => CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA,
-            0x0036 => CipherSuite::TLS_DH_DSS_WITH_AES_256_CBC_SHA,
-            0x0037 => CipherSuite::TLS_DH_RSA_WITH_AES_256_CBC_SHA,
-            0x0038 => CipherSuite::TLS_DHE_DSS_WITH_AES_256_CBC_SHA,
-            0x0039 => CipherSuite::TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
-            0x003a => CipherSuite::TLS_DH_anon_WITH_AES_256_CBC_SHA,
-            0x003b => CipherSuite::TLS_RSA_WITH_NULL_SHA256,
-            0x003c => CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256,
-            0x003d => CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256,
-            0x003e => CipherSuite::TLS_DH_DSS_WITH_AES_128_CBC_SHA256,
-            0x003f => CipherSuite::TLS_DH_RSA_WITH_AES_128_CBC_SHA256,
-            0x0040 => CipherSuite::TLS_DHE_DSS_WITH_AES_128_CBC_SHA256,
-            0x0041 => CipherSuite::TLS_RSA_WITH_CAMELLIA_128_CBC_SHA,
-            0x0042 => CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA,
-            0x0043 => CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA,
-            0x0044 => CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA,
-            0x0045 => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA,
-            0x0046 => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA,
-            0x0047 => CipherSuite::TLS_ECDH_ECDSA_WITH_NULL_SHA_draft,
-            0x0048 => CipherSuite::TLS_ECDH_ECDSA_WITH_RC4_128_SHA_draft,
-            0x0049 => CipherSuite::TLS_ECDH_ECDSA_WITH_DES_CBC_SHA_draft,
-            0x004a => CipherSuite::TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA_draft,
-            0x004b => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA_draft,
-            0x004c => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA_draft,
-            0x004d => CipherSuite::TLS_ECDH_ECNRA_WITH_DES_CBC_SHA_draft,
-            0x004e => CipherSuite::TLS_ECDH_ECNRA_WITH_3DES_EDE_CBC_SHA_draft,
-            0x004f => CipherSuite::TLS_ECMQV_ECDSA_NULL_SHA_draft,
-            0x0050 => CipherSuite::TLS_ECMQV_ECDSA_WITH_RC4_128_SHA_draft,
-            0x0051 => CipherSuite::TLS_ECMQV_ECDSA_WITH_DES_CBC_SHA_draft,
-            0x0052 => CipherSuite::TLS_ECMQV_ECDSA_WITH_3DES_EDE_CBC_SHA_draft,
-            0x0053 => CipherSuite::TLS_ECMQV_ECNRA_NULL_SHA_draft,
-            0x0054 => CipherSuite::TLS_ECMQV_ECNRA_WITH_RC4_128_SHA_draft,
-            0x0055 => CipherSuite::TLS_ECMQV_ECNRA_WITH_DES_CBC_SHA_draft,
-            0x0056 => CipherSuite::TLS_ECMQV_ECNRA_WITH_3DES_EDE_CBC_SHA_draft,
-            0x0057 => CipherSuite::TLS_ECDH_anon_NULL_WITH_SHA_draft,
-            0x0058 => CipherSuite::TLS_ECDH_anon_WITH_RC4_128_SHA_draft,
-            0x0059 => CipherSuite::TLS_ECDH_anon_WITH_DES_CBC_SHA_draft,
-            0x005a => CipherSuite::TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA_draft,
-            0x005b => CipherSuite::TLS_ECDH_anon_EXPORT_WITH_DES40_CBC_SHA_draft,
-            0x005c => CipherSuite::TLS_ECDH_anon_EXPORT_WITH_RC4_40_SHA_draft,
-            0x0060 => CipherSuite::TLS_RSA_EXPORT1024_WITH_RC4_56_MD5,
-            0x0061 => CipherSuite::TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5,
-            0x0062 => CipherSuite::TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA,
-            0x0063 => CipherSuite::TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA,
-            0x0064 => CipherSuite::TLS_RSA_EXPORT1024_WITH_RC4_56_SHA,
-            0x0065 => CipherSuite::TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA,
-            0x0066 => CipherSuite::TLS_DHE_DSS_WITH_RC4_128_SHA,
-            0x0067 => CipherSuite::TLS_DHE_RSA_WITH_AES_128_CBC_SHA256,
-            0x0068 => CipherSuite::TLS_DH_DSS_WITH_AES_256_CBC_SHA256,
-            0x0069 => CipherSuite::TLS_DH_RSA_WITH_AES_256_CBC_SHA256,
-            0x006a => CipherSuite::TLS_DHE_DSS_WITH_AES_256_CBC_SHA256,
-            0x006b => CipherSuite::TLS_DHE_RSA_WITH_AES_256_CBC_SHA256,
-            0x006c => CipherSuite::TLS_DH_anon_WITH_AES_128_CBC_SHA256,
-            0x006d => CipherSuite::TLS_DH_anon_WITH_AES_256_CBC_SHA256,
-            0x0072 => CipherSuite::TLS_DHE_DSS_WITH_3DES_EDE_CBC_RMD,
-            0x0073 => CipherSuite::TLS_DHE_DSS_WITH_AES_128_CBC_RMD,
-            0x0074 => CipherSuite::TLS_DHE_DSS_WITH_AES_256_CBC_RMD,
-            0x0077 => CipherSuite::TLS_DHE_RSA_WITH_3DES_EDE_CBC_RMD,
-            0x0078 => CipherSuite::TLS_DHE_RSA_WITH_AES_128_CBC_RMD,
-            0x0079 => CipherSuite::TLS_DHE_RSA_WITH_AES_256_CBC_RMD,
-            0x007c => CipherSuite::TLS_RSA_WITH_3DES_EDE_CBC_RMD,
-            0x007d => CipherSuite::TLS_RSA_WITH_AES_128_CBC_RMD,
-            0x007e => CipherSuite::TLS_RSA_WITH_AES_256_CBC_RMD,
-            0x0080 => CipherSuite::TLS_GOSTR341094_WITH_28147_CNT_IMIT,
-            0x0081 => CipherSuite::TLS_GOSTR341001_WITH_28147_CNT_IMIT,
-            0x0082 => CipherSuite::TLS_GOSTR341094_WITH_NULL_GOSTR3411,
-            0x0083 => CipherSuite::TLS_GOSTR341001_WITH_NULL_GOSTR3411,
-            0x0084 => CipherSuite::TLS_RSA_WITH_CAMELLIA_256_CBC_SHA,
-            0x0085 => CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA,
-            0x0086 => CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA,
-            0x0087 => CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA,
-            0x0088 => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA,
-            0x0089 => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA,
-            0x008a => CipherSuite::TLS_PSK_WITH_RC4_128_SHA,
-            0x008b => CipherSuite::TLS_PSK_WITH_3DES_EDE_CBC_SHA,
-            0x008c => CipherSuite::TLS_PSK_WITH_AES_128_CBC_SHA,
-            0x008d => CipherSuite::TLS_PSK_WITH_AES_256_CBC_SHA,
-            0x008e => CipherSuite::TLS_DHE_PSK_WITH_RC4_128_SHA,
-            0x008f => CipherSuite::TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA,
-            0x0090 => CipherSuite::TLS_DHE_PSK_WITH_AES_128_CBC_SHA,
-            0x0091 => CipherSuite::TLS_DHE_PSK_WITH_AES_256_CBC_SHA,
-            0x0092 => CipherSuite::TLS_RSA_PSK_WITH_RC4_128_SHA,
-            0x0093 => CipherSuite::TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA,
-            0x0094 => CipherSuite::TLS_RSA_PSK_WITH_AES_128_CBC_SHA,
-            0x0095 => CipherSuite::TLS_RSA_PSK_WITH_AES_256_CBC_SHA,
-            0x0096 => CipherSuite::TLS_RSA_WITH_SEED_CBC_SHA,
-            0x0097 => CipherSuite::TLS_DH_DSS_WITH_SEED_CBC_SHA,
-            0x0098 => CipherSuite::TLS_DH_RSA_WITH_SEED_CBC_SHA,
-            0x0099 => CipherSuite::TLS_DHE_DSS_WITH_SEED_CBC_SHA,
-            0x009a => CipherSuite::TLS_DHE_RSA_WITH_SEED_CBC_SHA,
-            0x009b => CipherSuite::TLS_DH_anon_WITH_SEED_CBC_SHA,
-            0x009c => CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256,
-            0x009d => CipherSuite::TLS_RSA_WITH_AES_256_GCM_SHA384,
-            0x009e => CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            0x009f => CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-            0x00a0 => CipherSuite::TLS_DH_RSA_WITH_AES_128_GCM_SHA256,
-            0x00a1 => CipherSuite::TLS_DH_RSA_WITH_AES_256_GCM_SHA384,
-            0x00a2 => CipherSuite::TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-            0x00a3 => CipherSuite::TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
-            0x00a4 => CipherSuite::TLS_DH_DSS_WITH_AES_128_GCM_SHA256,
-            0x00a5 => CipherSuite::TLS_DH_DSS_WITH_AES_256_GCM_SHA384,
-            0x00a6 => CipherSuite::TLS_DH_anon_WITH_AES_128_GCM_SHA256,
-            0x00a7 => CipherSuite::TLS_DH_anon_WITH_AES_256_GCM_SHA384,
-            0x00a8 => CipherSuite::TLS_PSK_WITH_AES_128_GCM_SHA256,
-            0x00a9 => CipherSuite::TLS_PSK_WITH_AES_256_GCM_SHA384,
-            0x00aa => CipherSuite::TLS_DHE_PSK_WITH_AES_128_GCM_SHA256,
-            0x00ab => CipherSuite::TLS_DHE_PSK_WITH_AES_256_GCM_SHA384,
-            0x00ac => CipherSuite::TLS_RSA_PSK_WITH_AES_128_GCM_SHA256,
-            0x00ad => CipherSuite::TLS_RSA_PSK_WITH_AES_256_GCM_SHA384,
-            0x00ae => CipherSuite::TLS_PSK_WITH_AES_128_CBC_SHA256,
-            0x00af => CipherSuite::TLS_PSK_WITH_AES_256_CBC_SHA384,
-            0x00b0 => CipherSuite::TLS_PSK_WITH_NULL_SHA256,
-            0x00b1 => CipherSuite::TLS_PSK_WITH_NULL_SHA384,
-            0x00b2 => CipherSuite::TLS_DHE_PSK_WITH_AES_128_CBC_SHA256,
-            0x00b3 => CipherSuite::TLS_DHE_PSK_WITH_AES_256_CBC_SHA384,
-            0x00b4 => CipherSuite::TLS_DHE_PSK_WITH_NULL_SHA256,
-            0x00b5 => CipherSuite::TLS_DHE_PSK_WITH_NULL_SHA384,
-            0x00b6 => CipherSuite::TLS_RSA_PSK_WITH_AES_128_CBC_SHA256,
-            0x00b7 => CipherSuite::TLS_RSA_PSK_WITH_AES_256_CBC_SHA384,
-            0x00b8 => CipherSuite::TLS_RSA_PSK_WITH_NULL_SHA256,
-            0x00b9 => CipherSuite::TLS_RSA_PSK_WITH_NULL_SHA384,
-            0x00ba => CipherSuite::TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0x00bb => CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256,
-            0x00bc => CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0x00bd => CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256,
-            0x00be => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0x00bf => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256,
-            0x00c0 => CipherSuite::TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-            0x00c1 => CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256,
-            0x00c2 => CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-            0x00c3 => CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256,
-            0x00c4 => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-            0x00c5 => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256,
-            0x00ff => CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
-            0x1301 => CipherSuite::TLS13_AES_128_GCM_SHA256,
-            0x1302 => CipherSuite::TLS13_AES_256_GCM_SHA384,
-            0x1303 => CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-            0x1304 => CipherSuite::TLS13_AES_128_CCM_SHA256,
-            0x1305 => CipherSuite::TLS13_AES_128_CCM_8_SHA256,
-            0xc001 => CipherSuite::TLS_ECDH_ECDSA_WITH_NULL_SHA,
-            0xc002 => CipherSuite::TLS_ECDH_ECDSA_WITH_RC4_128_SHA,
-            0xc003 => CipherSuite::TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
-            0xc004 => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA,
-            0xc005 => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA,
-            0xc006 => CipherSuite::TLS_ECDHE_ECDSA_WITH_NULL_SHA,
-            0xc007 => CipherSuite::TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-            0xc008 => CipherSuite::TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA,
-            0xc009 => CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-            0xc00a => CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-            0xc00b => CipherSuite::TLS_ECDH_RSA_WITH_NULL_SHA,
-            0xc00c => CipherSuite::TLS_ECDH_RSA_WITH_RC4_128_SHA,
-            0xc00d => CipherSuite::TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA,
-            0xc00e => CipherSuite::TLS_ECDH_RSA_WITH_AES_128_CBC_SHA,
-            0xc00f => CipherSuite::TLS_ECDH_RSA_WITH_AES_256_CBC_SHA,
-            0xc010 => CipherSuite::TLS_ECDHE_RSA_WITH_NULL_SHA,
-            0xc011 => CipherSuite::TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-            0xc012 => CipherSuite::TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
-            0xc013 => CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-            0xc014 => CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-            0xc015 => CipherSuite::TLS_ECDH_anon_WITH_NULL_SHA,
-            0xc016 => CipherSuite::TLS_ECDH_anon_WITH_RC4_128_SHA,
-            0xc017 => CipherSuite::TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA,
-            0xc018 => CipherSuite::TLS_ECDH_anon_WITH_AES_128_CBC_SHA,
-            0xc019 => CipherSuite::TLS_ECDH_anon_WITH_AES_256_CBC_SHA,
-            0xc01a => CipherSuite::TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA,
-            0xc01b => CipherSuite::TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA,
-            0xc01c => CipherSuite::TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA,
-            0xc01d => CipherSuite::TLS_SRP_SHA_WITH_AES_128_CBC_SHA,
-            0xc01e => CipherSuite::TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA,
-            0xc01f => CipherSuite::TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA,
-            0xc020 => CipherSuite::TLS_SRP_SHA_WITH_AES_256_CBC_SHA,
-            0xc021 => CipherSuite::TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA,
-            0xc022 => CipherSuite::TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA,
-            0xc023 => CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
-            0xc024 => CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384,
-            0xc025 => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256,
-            0xc026 => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384,
-            0xc027 => CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-            0xc028 => CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,
-            0xc029 => CipherSuite::TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256,
-            0xc02a => CipherSuite::TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384,
-            0xc02b => CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-            0xc02c => CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-            0xc02d => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-            0xc02e => CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
-            0xc02f => CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-            0xc030 => CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-            0xc031 => CipherSuite::TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
-            0xc032 => CipherSuite::TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384,
-            0xc033 => CipherSuite::TLS_ECDHE_PSK_WITH_RC4_128_SHA,
-            0xc034 => CipherSuite::TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA,
-            0xc035 => CipherSuite::TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA,
-            0xc036 => CipherSuite::TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA,
-            0xc037 => CipherSuite::TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256,
-            0xc038 => CipherSuite::TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384,
-            0xc039 => CipherSuite::TLS_ECDHE_PSK_WITH_NULL_SHA,
-            0xc03a => CipherSuite::TLS_ECDHE_PSK_WITH_NULL_SHA256,
-            0xc03b => CipherSuite::TLS_ECDHE_PSK_WITH_NULL_SHA384,
-            0xc03c => CipherSuite::TLS_RSA_WITH_ARIA_128_CBC_SHA256,
-            0xc03d => CipherSuite::TLS_RSA_WITH_ARIA_256_CBC_SHA384,
-            0xc03e => CipherSuite::TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256,
-            0xc03f => CipherSuite::TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384,
-            0xc040 => CipherSuite::TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256,
-            0xc041 => CipherSuite::TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384,
-            0xc042 => CipherSuite::TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256,
-            0xc043 => CipherSuite::TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384,
-            0xc044 => CipherSuite::TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256,
-            0xc045 => CipherSuite::TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384,
-            0xc046 => CipherSuite::TLS_DH_anon_WITH_ARIA_128_CBC_SHA256,
-            0xc047 => CipherSuite::TLS_DH_anon_WITH_ARIA_256_CBC_SHA384,
-            0xc048 => CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256,
-            0xc049 => CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384,
-            0xc04a => CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256,
-            0xc04b => CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384,
-            0xc04c => CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256,
-            0xc04d => CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384,
-            0xc04e => CipherSuite::TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256,
-            0xc04f => CipherSuite::TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384,
-            0xc050 => CipherSuite::TLS_RSA_WITH_ARIA_128_GCM_SHA256,
-            0xc051 => CipherSuite::TLS_RSA_WITH_ARIA_256_GCM_SHA384,
-            0xc052 => CipherSuite::TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256,
-            0xc053 => CipherSuite::TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384,
-            0xc054 => CipherSuite::TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256,
-            0xc055 => CipherSuite::TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384,
-            0xc056 => CipherSuite::TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256,
-            0xc057 => CipherSuite::TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384,
-            0xc058 => CipherSuite::TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256,
-            0xc059 => CipherSuite::TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384,
-            0xc05a => CipherSuite::TLS_DH_anon_WITH_ARIA_128_GCM_SHA256,
-            0xc05b => CipherSuite::TLS_DH_anon_WITH_ARIA_256_GCM_SHA384,
-            0xc05c => CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256,
-            0xc05d => CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384,
-            0xc05e => CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256,
-            0xc05f => CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384,
-            0xc060 => CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256,
-            0xc061 => CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384,
-            0xc062 => CipherSuite::TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256,
-            0xc063 => CipherSuite::TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384,
-            0xc064 => CipherSuite::TLS_PSK_WITH_ARIA_128_CBC_SHA256,
-            0xc065 => CipherSuite::TLS_PSK_WITH_ARIA_256_CBC_SHA384,
-            0xc066 => CipherSuite::TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256,
-            0xc067 => CipherSuite::TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384,
-            0xc068 => CipherSuite::TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256,
-            0xc069 => CipherSuite::TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384,
-            0xc06a => CipherSuite::TLS_PSK_WITH_ARIA_128_GCM_SHA256,
-            0xc06b => CipherSuite::TLS_PSK_WITH_ARIA_256_GCM_SHA384,
-            0xc06c => CipherSuite::TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256,
-            0xc06d => CipherSuite::TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384,
-            0xc06e => CipherSuite::TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256,
-            0xc06f => CipherSuite::TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384,
-            0xc070 => CipherSuite::TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256,
-            0xc071 => CipherSuite::TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384,
-            0xc072 => CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc073 => CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc074 => CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc075 => CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc076 => CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc077 => CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc078 => CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc079 => CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc07a => CipherSuite::TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc07b => CipherSuite::TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc07c => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc07d => CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc07e => CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc07f => CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc080 => CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc081 => CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc082 => CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc083 => CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc084 => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc085 => CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc086 => CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc087 => CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc088 => CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc089 => CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc08a => CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc08b => CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc08c => CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc08d => CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc08e => CipherSuite::TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc08f => CipherSuite::TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc090 => CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc091 => CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc092 => CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256,
-            0xc093 => CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384,
-            0xc094 => CipherSuite::TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc095 => CipherSuite::TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc096 => CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc097 => CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc098 => CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc099 => CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc09a => CipherSuite::TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-            0xc09b => CipherSuite::TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-            0xc09c => CipherSuite::TLS_RSA_WITH_AES_128_CCM,
-            0xc09d => CipherSuite::TLS_RSA_WITH_AES_256_CCM,
-            0xc09e => CipherSuite::TLS_DHE_RSA_WITH_AES_128_CCM,
-            0xc09f => CipherSuite::TLS_DHE_RSA_WITH_AES_256_CCM,
-            0xc0a0 => CipherSuite::TLS_RSA_WITH_AES_128_CCM_8,
-            0xc0a1 => CipherSuite::TLS_RSA_WITH_AES_256_CCM_8,
-            0xc0a2 => CipherSuite::TLS_DHE_RSA_WITH_AES_128_CCM_8,
-            0xc0a3 => CipherSuite::TLS_DHE_RSA_WITH_AES_256_CCM_8,
-            0xc0a4 => CipherSuite::TLS_PSK_WITH_AES_128_CCM,
-            0xc0a5 => CipherSuite::TLS_PSK_WITH_AES_256_CCM,
-            0xc0a6 => CipherSuite::TLS_DHE_PSK_WITH_AES_128_CCM,
-            0xc0a7 => CipherSuite::TLS_DHE_PSK_WITH_AES_256_CCM,
-            0xc0a8 => CipherSuite::TLS_PSK_WITH_AES_128_CCM_8,
-            0xc0a9 => CipherSuite::TLS_PSK_WITH_AES_256_CCM_8,
-            0xc0aa => CipherSuite::TLS_PSK_DHE_WITH_AES_128_CCM_8,
-            0xc0ab => CipherSuite::TLS_PSK_DHE_WITH_AES_256_CCM_8,
-            0xcca8 => CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-            0xcca9 => CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-            0xccaa => CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-            0xccab => CipherSuite::TLS_PSK_WITH_CHACHA20_POLY1305_SHA256,
-            0xccac => CipherSuite::TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256,
-            0xccad => CipherSuite::TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256,
-            0xccae => CipherSuite::TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256,
-            0xfefe => CipherSuite::SSL_RSA_FIPS_WITH_DES_CBC_SHA,
-            0xfeff => CipherSuite::SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA,
-            x => CipherSuite::Unknown(x),
-        })
-    }
-}
-
-impl CipherSuite {
-    pub fn get_u16(&self) -> u16 {
-        match *self {
-            CipherSuite::TLS_NULL_WITH_NULL_NULL => 0x0000,
-            CipherSuite::TLS_RSA_WITH_NULL_MD5 => 0x0001,
-            CipherSuite::TLS_RSA_WITH_NULL_SHA => 0x0002,
-            CipherSuite::TLS_RSA_EXPORT_WITH_RC4_40_MD5 => 0x0003,
-            CipherSuite::TLS_RSA_WITH_RC4_128_MD5 => 0x0004,
-            CipherSuite::TLS_RSA_WITH_RC4_128_SHA => 0x0005,
-            CipherSuite::TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 => 0x0006,
-            CipherSuite::TLS_RSA_WITH_IDEA_CBC_SHA => 0x0007,
-            CipherSuite::TLS_RSA_EXPORT_WITH_DES40_CBC_SHA => 0x0008,
-            CipherSuite::TLS_RSA_WITH_DES_CBC_SHA => 0x0009,
-            CipherSuite::TLS_RSA_WITH_3DES_EDE_CBC_SHA => 0x000a,
-            CipherSuite::TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA => 0x000b,
-            CipherSuite::TLS_DH_DSS_WITH_DES_CBC_SHA => 0x000c,
-            CipherSuite::TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA => 0x000d,
-            CipherSuite::TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA => 0x000e,
-            CipherSuite::TLS_DH_RSA_WITH_DES_CBC_SHA => 0x000f,
-            CipherSuite::TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA => 0x0010,
-            CipherSuite::TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA => 0x0011,
-            CipherSuite::TLS_DHE_DSS_WITH_DES_CBC_SHA => 0x0012,
-            CipherSuite::TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA => 0x0013,
-            CipherSuite::TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA => 0x0014,
-            CipherSuite::TLS_DHE_RSA_WITH_DES_CBC_SHA => 0x0015,
-            CipherSuite::TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA => 0x0016,
-            CipherSuite::TLS_DH_anon_EXPORT_WITH_RC4_40_MD5 => 0x0017,
-            CipherSuite::TLS_DH_anon_WITH_RC4_128_MD5 => 0x0018,
-            CipherSuite::TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA => 0x0019,
-            CipherSuite::TLS_DH_anon_WITH_DES_CBC_SHA => 0x001a,
-            CipherSuite::TLS_DH_anon_WITH_3DES_EDE_CBC_SHA => 0x001b,
-            CipherSuite::SSL_FORTEZZA_KEA_WITH_NULL_SHA => 0x001c,
-            CipherSuite::SSL_FORTEZZA_KEA_WITH_FORTEZZA_CBC_SHA => 0x001d,
-            CipherSuite::TLS_KRB5_WITH_DES_CBC_SHA_or_SSL_FORTEZZA_KEA_WITH_RC4_128_SHA => 0x001e,
-            CipherSuite::TLS_KRB5_WITH_3DES_EDE_CBC_SHA => 0x001f,
-            CipherSuite::TLS_KRB5_WITH_RC4_128_SHA => 0x0020,
-            CipherSuite::TLS_KRB5_WITH_IDEA_CBC_SHA => 0x0021,
-            CipherSuite::TLS_KRB5_WITH_DES_CBC_MD5 => 0x0022,
-            CipherSuite::TLS_KRB5_WITH_3DES_EDE_CBC_MD5 => 0x0023,
-            CipherSuite::TLS_KRB5_WITH_RC4_128_MD5 => 0x0024,
-            CipherSuite::TLS_KRB5_WITH_IDEA_CBC_MD5 => 0x0025,
-            CipherSuite::TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA => 0x0026,
-            CipherSuite::TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA => 0x0027,
-            CipherSuite::TLS_KRB5_EXPORT_WITH_RC4_40_SHA => 0x0028,
-            CipherSuite::TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5 => 0x0029,
-            CipherSuite::TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5 => 0x002a,
-            CipherSuite::TLS_KRB5_EXPORT_WITH_RC4_40_MD5 => 0x002b,
-            CipherSuite::TLS_PSK_WITH_NULL_SHA => 0x002c,
-            CipherSuite::TLS_DHE_PSK_WITH_NULL_SHA => 0x002d,
-            CipherSuite::TLS_RSA_PSK_WITH_NULL_SHA => 0x002e,
-            CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA => 0x002f,
-            CipherSuite::TLS_DH_DSS_WITH_AES_128_CBC_SHA => 0x0030,
-            CipherSuite::TLS_DH_RSA_WITH_AES_128_CBC_SHA => 0x0031,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_128_CBC_SHA => 0x0032,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_128_CBC_SHA => 0x0033,
-            CipherSuite::TLS_DH_anon_WITH_AES_128_CBC_SHA => 0x0034,
-            CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA => 0x0035,
-            CipherSuite::TLS_DH_DSS_WITH_AES_256_CBC_SHA => 0x0036,
-            CipherSuite::TLS_DH_RSA_WITH_AES_256_CBC_SHA => 0x0037,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_256_CBC_SHA => 0x0038,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_256_CBC_SHA => 0x0039,
-            CipherSuite::TLS_DH_anon_WITH_AES_256_CBC_SHA => 0x003a,
-            CipherSuite::TLS_RSA_WITH_NULL_SHA256 => 0x003b,
-            CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA256 => 0x003c,
-            CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA256 => 0x003d,
-            CipherSuite::TLS_DH_DSS_WITH_AES_128_CBC_SHA256 => 0x003e,
-            CipherSuite::TLS_DH_RSA_WITH_AES_128_CBC_SHA256 => 0x003f,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_128_CBC_SHA256 => 0x0040,
-            CipherSuite::TLS_RSA_WITH_CAMELLIA_128_CBC_SHA => 0x0041,
-            CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA => 0x0042,
-            CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA => 0x0043,
-            CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA => 0x0044,
-            CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA => 0x0045,
-            CipherSuite::TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA => 0x0046,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_NULL_SHA_draft => 0x0047,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_RC4_128_SHA_draft => 0x0048,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_DES_CBC_SHA_draft => 0x0049,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA_draft => 0x004a,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA_draft => 0x004b,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA_draft => 0x004c,
-            CipherSuite::TLS_ECDH_ECNRA_WITH_DES_CBC_SHA_draft => 0x004d,
-            CipherSuite::TLS_ECDH_ECNRA_WITH_3DES_EDE_CBC_SHA_draft => 0x004e,
-            CipherSuite::TLS_ECMQV_ECDSA_NULL_SHA_draft => 0x004f,
-            CipherSuite::TLS_ECMQV_ECDSA_WITH_RC4_128_SHA_draft => 0x0050,
-            CipherSuite::TLS_ECMQV_ECDSA_WITH_DES_CBC_SHA_draft => 0x0051,
-            CipherSuite::TLS_ECMQV_ECDSA_WITH_3DES_EDE_CBC_SHA_draft => 0x0052,
-            CipherSuite::TLS_ECMQV_ECNRA_NULL_SHA_draft => 0x0053,
-            CipherSuite::TLS_ECMQV_ECNRA_WITH_RC4_128_SHA_draft => 0x0054,
-            CipherSuite::TLS_ECMQV_ECNRA_WITH_DES_CBC_SHA_draft => 0x0055,
-            CipherSuite::TLS_ECMQV_ECNRA_WITH_3DES_EDE_CBC_SHA_draft => 0x0056,
-            CipherSuite::TLS_ECDH_anon_NULL_WITH_SHA_draft => 0x0057,
-            CipherSuite::TLS_ECDH_anon_WITH_RC4_128_SHA_draft => 0x0058,
-            CipherSuite::TLS_ECDH_anon_WITH_DES_CBC_SHA_draft => 0x0059,
-            CipherSuite::TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA_draft => 0x005a,
-            CipherSuite::TLS_ECDH_anon_EXPORT_WITH_DES40_CBC_SHA_draft => 0x005b,
-            CipherSuite::TLS_ECDH_anon_EXPORT_WITH_RC4_40_SHA_draft => 0x005c,
-            CipherSuite::TLS_RSA_EXPORT1024_WITH_RC4_56_MD5 => 0x0060,
-            CipherSuite::TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 => 0x0061,
-            CipherSuite::TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA => 0x0062,
-            CipherSuite::TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA => 0x0063,
-            CipherSuite::TLS_RSA_EXPORT1024_WITH_RC4_56_SHA => 0x0064,
-            CipherSuite::TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA => 0x0065,
-            CipherSuite::TLS_DHE_DSS_WITH_RC4_128_SHA => 0x0066,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 => 0x0067,
-            CipherSuite::TLS_DH_DSS_WITH_AES_256_CBC_SHA256 => 0x0068,
-            CipherSuite::TLS_DH_RSA_WITH_AES_256_CBC_SHA256 => 0x0069,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_256_CBC_SHA256 => 0x006a,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 => 0x006b,
-            CipherSuite::TLS_DH_anon_WITH_AES_128_CBC_SHA256 => 0x006c,
-            CipherSuite::TLS_DH_anon_WITH_AES_256_CBC_SHA256 => 0x006d,
-            CipherSuite::TLS_DHE_DSS_WITH_3DES_EDE_CBC_RMD => 0x0072,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_128_CBC_RMD => 0x0073,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_256_CBC_RMD => 0x0074,
-            CipherSuite::TLS_DHE_RSA_WITH_3DES_EDE_CBC_RMD => 0x0077,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_128_CBC_RMD => 0x0078,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_256_CBC_RMD => 0x0079,
-            CipherSuite::TLS_RSA_WITH_3DES_EDE_CBC_RMD => 0x007c,
-            CipherSuite::TLS_RSA_WITH_AES_128_CBC_RMD => 0x007d,
-            CipherSuite::TLS_RSA_WITH_AES_256_CBC_RMD => 0x007e,
-            CipherSuite::TLS_GOSTR341094_WITH_28147_CNT_IMIT => 0x0080,
-            CipherSuite::TLS_GOSTR341001_WITH_28147_CNT_IMIT => 0x0081,
-            CipherSuite::TLS_GOSTR341094_WITH_NULL_GOSTR3411 => 0x0082,
-            CipherSuite::TLS_GOSTR341001_WITH_NULL_GOSTR3411 => 0x0083,
-            CipherSuite::TLS_RSA_WITH_CAMELLIA_256_CBC_SHA => 0x0084,
-            CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA => 0x0085,
-            CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA => 0x0086,
-            CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA => 0x0087,
-            CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA => 0x0088,
-            CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA => 0x0089,
-            CipherSuite::TLS_PSK_WITH_RC4_128_SHA => 0x008a,
-            CipherSuite::TLS_PSK_WITH_3DES_EDE_CBC_SHA => 0x008b,
-            CipherSuite::TLS_PSK_WITH_AES_128_CBC_SHA => 0x008c,
-            CipherSuite::TLS_PSK_WITH_AES_256_CBC_SHA => 0x008d,
-            CipherSuite::TLS_DHE_PSK_WITH_RC4_128_SHA => 0x008e,
-            CipherSuite::TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA => 0x008f,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_128_CBC_SHA => 0x0090,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_256_CBC_SHA => 0x0091,
-            CipherSuite::TLS_RSA_PSK_WITH_RC4_128_SHA => 0x0092,
-            CipherSuite::TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA => 0x0093,
-            CipherSuite::TLS_RSA_PSK_WITH_AES_128_CBC_SHA => 0x0094,
-            CipherSuite::TLS_RSA_PSK_WITH_AES_256_CBC_SHA => 0x0095,
-            CipherSuite::TLS_RSA_WITH_SEED_CBC_SHA => 0x0096,
-            CipherSuite::TLS_DH_DSS_WITH_SEED_CBC_SHA => 0x0097,
-            CipherSuite::TLS_DH_RSA_WITH_SEED_CBC_SHA => 0x0098,
-            CipherSuite::TLS_DHE_DSS_WITH_SEED_CBC_SHA => 0x0099,
-            CipherSuite::TLS_DHE_RSA_WITH_SEED_CBC_SHA => 0x009a,
-            CipherSuite::TLS_DH_anon_WITH_SEED_CBC_SHA => 0x009b,
-            CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256 => 0x009c,
-            CipherSuite::TLS_RSA_WITH_AES_256_GCM_SHA384 => 0x009d,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 => 0x009e,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 => 0x009f,
-            CipherSuite::TLS_DH_RSA_WITH_AES_128_GCM_SHA256 => 0x00a0,
-            CipherSuite::TLS_DH_RSA_WITH_AES_256_GCM_SHA384 => 0x00a1,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_128_GCM_SHA256 => 0x00a2,
-            CipherSuite::TLS_DHE_DSS_WITH_AES_256_GCM_SHA384 => 0x00a3,
-            CipherSuite::TLS_DH_DSS_WITH_AES_128_GCM_SHA256 => 0x00a4,
-            CipherSuite::TLS_DH_DSS_WITH_AES_256_GCM_SHA384 => 0x00a5,
-            CipherSuite::TLS_DH_anon_WITH_AES_128_GCM_SHA256 => 0x00a6,
-            CipherSuite::TLS_DH_anon_WITH_AES_256_GCM_SHA384 => 0x00a7,
-            CipherSuite::TLS_PSK_WITH_AES_128_GCM_SHA256 => 0x00a8,
-            CipherSuite::TLS_PSK_WITH_AES_256_GCM_SHA384 => 0x00a9,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_128_GCM_SHA256 => 0x00aa,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_256_GCM_SHA384 => 0x00ab,
-            CipherSuite::TLS_RSA_PSK_WITH_AES_128_GCM_SHA256 => 0x00ac,
-            CipherSuite::TLS_RSA_PSK_WITH_AES_256_GCM_SHA384 => 0x00ad,
-            CipherSuite::TLS_PSK_WITH_AES_128_CBC_SHA256 => 0x00ae,
-            CipherSuite::TLS_PSK_WITH_AES_256_CBC_SHA384 => 0x00af,
-            CipherSuite::TLS_PSK_WITH_NULL_SHA256 => 0x00b0,
-            CipherSuite::TLS_PSK_WITH_NULL_SHA384 => 0x00b1,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_128_CBC_SHA256 => 0x00b2,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_256_CBC_SHA384 => 0x00b3,
-            CipherSuite::TLS_DHE_PSK_WITH_NULL_SHA256 => 0x00b4,
-            CipherSuite::TLS_DHE_PSK_WITH_NULL_SHA384 => 0x00b5,
-            CipherSuite::TLS_RSA_PSK_WITH_AES_128_CBC_SHA256 => 0x00b6,
-            CipherSuite::TLS_RSA_PSK_WITH_AES_256_CBC_SHA384 => 0x00b7,
-            CipherSuite::TLS_RSA_PSK_WITH_NULL_SHA256 => 0x00b8,
-            CipherSuite::TLS_RSA_PSK_WITH_NULL_SHA384 => 0x00b9,
-            CipherSuite::TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0x00ba,
-            CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bb,
-            CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bc,
-            CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bd,
-            CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0x00be,
-            CipherSuite::TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bf,
-            CipherSuite::TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c0,
-            CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c1,
-            CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c2,
-            CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c3,
-            CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c4,
-            CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c5,
-            CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
-            CipherSuite::TLS13_AES_128_GCM_SHA256 => 0x1301,
-            CipherSuite::TLS13_AES_256_GCM_SHA384 => 0x1302,
-            CipherSuite::TLS13_CHACHA20_POLY1305_SHA256 => 0x1303,
-            CipherSuite::TLS13_AES_128_CCM_SHA256 => 0x1304,
-            CipherSuite::TLS13_AES_128_CCM_8_SHA256 => 0x1305,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_NULL_SHA => 0xc001,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_RC4_128_SHA => 0xc002,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc003,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA => 0xc004,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA => 0xc005,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_NULL_SHA => 0xc006,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_RC4_128_SHA => 0xc007,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc008,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA => 0xc009,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA => 0xc00a,
-            CipherSuite::TLS_ECDH_RSA_WITH_NULL_SHA => 0xc00b,
-            CipherSuite::TLS_ECDH_RSA_WITH_RC4_128_SHA => 0xc00c,
-            CipherSuite::TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA => 0xc00d,
-            CipherSuite::TLS_ECDH_RSA_WITH_AES_128_CBC_SHA => 0xc00e,
-            CipherSuite::TLS_ECDH_RSA_WITH_AES_256_CBC_SHA => 0xc00f,
-            CipherSuite::TLS_ECDHE_RSA_WITH_NULL_SHA => 0xc010,
-            CipherSuite::TLS_ECDHE_RSA_WITH_RC4_128_SHA => 0xc011,
-            CipherSuite::TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA => 0xc012,
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA => 0xc013,
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA => 0xc014,
-            CipherSuite::TLS_ECDH_anon_WITH_NULL_SHA => 0xc015,
-            CipherSuite::TLS_ECDH_anon_WITH_RC4_128_SHA => 0xc016,
-            CipherSuite::TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA => 0xc017,
-            CipherSuite::TLS_ECDH_anon_WITH_AES_128_CBC_SHA => 0xc018,
-            CipherSuite::TLS_ECDH_anon_WITH_AES_256_CBC_SHA => 0xc019,
-            CipherSuite::TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA => 0xc01a,
-            CipherSuite::TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA => 0xc01b,
-            CipherSuite::TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA => 0xc01c,
-            CipherSuite::TLS_SRP_SHA_WITH_AES_128_CBC_SHA => 0xc01d,
-            CipherSuite::TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA => 0xc01e,
-            CipherSuite::TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA => 0xc01f,
-            CipherSuite::TLS_SRP_SHA_WITH_AES_256_CBC_SHA => 0xc020,
-            CipherSuite::TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA => 0xc021,
-            CipherSuite::TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA => 0xc022,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc023,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc024,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc025,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc026,
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => 0xc027,
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => 0xc028,
-            CipherSuite::TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256 => 0xc029,
-            CipherSuite::TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384 => 0xc02a,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02b,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02c,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02d,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02e,
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => 0xc02f,
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => 0xc030,
-            CipherSuite::TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256 => 0xc031,
-            CipherSuite::TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384 => 0xc032,
-            CipherSuite::TLS_ECDHE_PSK_WITH_RC4_128_SHA => 0xc033,
-            CipherSuite::TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA => 0xc034,
-            CipherSuite::TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA => 0xc035,
-            CipherSuite::TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA => 0xc036,
-            CipherSuite::TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256 => 0xc037,
-            CipherSuite::TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384 => 0xc038,
-            CipherSuite::TLS_ECDHE_PSK_WITH_NULL_SHA => 0xc039,
-            CipherSuite::TLS_ECDHE_PSK_WITH_NULL_SHA256 => 0xc03a,
-            CipherSuite::TLS_ECDHE_PSK_WITH_NULL_SHA384 => 0xc03b,
-            CipherSuite::TLS_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc03c,
-            CipherSuite::TLS_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc03d,
-            CipherSuite::TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256 => 0xc03e,
-            CipherSuite::TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384 => 0xc03f,
-            CipherSuite::TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc040,
-            CipherSuite::TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc041,
-            CipherSuite::TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256 => 0xc042,
-            CipherSuite::TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384 => 0xc043,
-            CipherSuite::TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc044,
-            CipherSuite::TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc045,
-            CipherSuite::TLS_DH_anon_WITH_ARIA_128_CBC_SHA256 => 0xc046,
-            CipherSuite::TLS_DH_anon_WITH_ARIA_256_CBC_SHA384 => 0xc047,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256 => 0xc048,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384 => 0xc049,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256 => 0xc04a,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384 => 0xc04b,
-            CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc04c,
-            CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc04d,
-            CipherSuite::TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc04e,
-            CipherSuite::TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc04f,
-            CipherSuite::TLS_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc050,
-            CipherSuite::TLS_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc051,
-            CipherSuite::TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc052,
-            CipherSuite::TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc053,
-            CipherSuite::TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc054,
-            CipherSuite::TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc055,
-            CipherSuite::TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256 => 0xc056,
-            CipherSuite::TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384 => 0xc057,
-            CipherSuite::TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256 => 0xc058,
-            CipherSuite::TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384 => 0xc059,
-            CipherSuite::TLS_DH_anon_WITH_ARIA_128_GCM_SHA256 => 0xc05a,
-            CipherSuite::TLS_DH_anon_WITH_ARIA_256_GCM_SHA384 => 0xc05b,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256 => 0xc05c,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384 => 0xc05d,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256 => 0xc05e,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384 => 0xc05f,
-            CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc060,
-            CipherSuite::TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc061,
-            CipherSuite::TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc062,
-            CipherSuite::TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc063,
-            CipherSuite::TLS_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc064,
-            CipherSuite::TLS_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc065,
-            CipherSuite::TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc066,
-            CipherSuite::TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc067,
-            CipherSuite::TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc068,
-            CipherSuite::TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc069,
-            CipherSuite::TLS_PSK_WITH_ARIA_128_GCM_SHA256 => 0xc06a,
-            CipherSuite::TLS_PSK_WITH_ARIA_256_GCM_SHA384 => 0xc06b,
-            CipherSuite::TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256 => 0xc06c,
-            CipherSuite::TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384 => 0xc06d,
-            CipherSuite::TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256 => 0xc06e,
-            CipherSuite::TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384 => 0xc06f,
-            CipherSuite::TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc070,
-            CipherSuite::TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc071,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc072,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc073,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc074,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc075,
-            CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc076,
-            CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc077,
-            CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc078,
-            CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc079,
-            CipherSuite::TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc07a,
-            CipherSuite::TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc07b,
-            CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc07c,
-            CipherSuite::TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc07d,
-            CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc07e,
-            CipherSuite::TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc07f,
-            CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256 => 0xc080,
-            CipherSuite::TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384 => 0xc081,
-            CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256 => 0xc082,
-            CipherSuite::TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384 => 0xc083,
-            CipherSuite::TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256 => 0xc084,
-            CipherSuite::TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384 => 0xc085,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc086,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc087,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc088,
-            CipherSuite::TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc089,
-            CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc08a,
-            CipherSuite::TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc08b,
-            CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc08c,
-            CipherSuite::TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc08d,
-            CipherSuite::TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256 => 0xc08e,
-            CipherSuite::TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384 => 0xc08f,
-            CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256 => 0xc090,
-            CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384 => 0xc091,
-            CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256 => 0xc092,
-            CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384 => 0xc093,
-            CipherSuite::TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc094,
-            CipherSuite::TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc095,
-            CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc096,
-            CipherSuite::TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc097,
-            CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc098,
-            CipherSuite::TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc099,
-            CipherSuite::TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc09a,
-            CipherSuite::TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc09b,
-            CipherSuite::TLS_RSA_WITH_AES_128_CCM => 0xc09c,
-            CipherSuite::TLS_RSA_WITH_AES_256_CCM => 0xc09d,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_128_CCM => 0xc09e,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_256_CCM => 0xc09f,
-            CipherSuite::TLS_RSA_WITH_AES_128_CCM_8 => 0xc0a0,
-            CipherSuite::TLS_RSA_WITH_AES_256_CCM_8 => 0xc0a1,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_128_CCM_8 => 0xc0a2,
-            CipherSuite::TLS_DHE_RSA_WITH_AES_256_CCM_8 => 0xc0a3,
-            CipherSuite::TLS_PSK_WITH_AES_128_CCM => 0xc0a4,
-            CipherSuite::TLS_PSK_WITH_AES_256_CCM => 0xc0a5,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_128_CCM => 0xc0a6,
-            CipherSuite::TLS_DHE_PSK_WITH_AES_256_CCM => 0xc0a7,
-            CipherSuite::TLS_PSK_WITH_AES_128_CCM_8 => 0xc0a8,
-            CipherSuite::TLS_PSK_WITH_AES_256_CCM_8 => 0xc0a9,
-            CipherSuite::TLS_PSK_DHE_WITH_AES_128_CCM_8 => 0xc0aa,
-            CipherSuite::TLS_PSK_DHE_WITH_AES_256_CCM_8 => 0xc0ab,
-            CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca8,
-            CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca9,
-            CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xccaa,
-            CipherSuite::TLS_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccab,
-            CipherSuite::TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccac,
-            CipherSuite::TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccad,
-            CipherSuite::TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccae,
-            CipherSuite::SSL_RSA_FIPS_WITH_DES_CBC_SHA => 0xfefe,
-            CipherSuite::SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA => 0xfeff,
-            CipherSuite::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U16
+  EnumName: CipherSuite;
+  EnumVal{
+    TLS_NULL_WITH_NULL_NULL => 0x0000,
+    TLS_RSA_WITH_NULL_MD5 => 0x0001,
+    TLS_RSA_WITH_NULL_SHA => 0x0002,
+    TLS_RSA_EXPORT_WITH_RC4_40_MD5 => 0x0003,
+    TLS_RSA_WITH_RC4_128_MD5 => 0x0004,
+    TLS_RSA_WITH_RC4_128_SHA => 0x0005,
+    TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5 => 0x0006,
+    TLS_RSA_WITH_IDEA_CBC_SHA => 0x0007,
+    TLS_RSA_EXPORT_WITH_DES40_CBC_SHA => 0x0008,
+    TLS_RSA_WITH_DES_CBC_SHA => 0x0009,
+    TLS_RSA_WITH_3DES_EDE_CBC_SHA => 0x000a,
+    TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA => 0x000b,
+    TLS_DH_DSS_WITH_DES_CBC_SHA => 0x000c,
+    TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA => 0x000d,
+    TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA => 0x000e,
+    TLS_DH_RSA_WITH_DES_CBC_SHA => 0x000f,
+    TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA => 0x0010,
+    TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA => 0x0011,
+    TLS_DHE_DSS_WITH_DES_CBC_SHA => 0x0012,
+    TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA => 0x0013,
+    TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA => 0x0014,
+    TLS_DHE_RSA_WITH_DES_CBC_SHA => 0x0015,
+    TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA => 0x0016,
+    TLS_DH_anon_EXPORT_WITH_RC4_40_MD5 => 0x0017,
+    TLS_DH_anon_WITH_RC4_128_MD5 => 0x0018,
+    TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA => 0x0019,
+    TLS_DH_anon_WITH_DES_CBC_SHA => 0x001a,
+    TLS_DH_anon_WITH_3DES_EDE_CBC_SHA => 0x001b,
+    SSL_FORTEZZA_KEA_WITH_NULL_SHA => 0x001c,
+    SSL_FORTEZZA_KEA_WITH_FORTEZZA_CBC_SHA => 0x001d,
+    TLS_KRB5_WITH_DES_CBC_SHA_or_SSL_FORTEZZA_KEA_WITH_RC4_128_SHA => 0x001e,
+    TLS_KRB5_WITH_3DES_EDE_CBC_SHA => 0x001f,
+    TLS_KRB5_WITH_RC4_128_SHA => 0x0020,
+    TLS_KRB5_WITH_IDEA_CBC_SHA => 0x0021,
+    TLS_KRB5_WITH_DES_CBC_MD5 => 0x0022,
+    TLS_KRB5_WITH_3DES_EDE_CBC_MD5 => 0x0023,
+    TLS_KRB5_WITH_RC4_128_MD5 => 0x0024,
+    TLS_KRB5_WITH_IDEA_CBC_MD5 => 0x0025,
+    TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA => 0x0026,
+    TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA => 0x0027,
+    TLS_KRB5_EXPORT_WITH_RC4_40_SHA => 0x0028,
+    TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5 => 0x0029,
+    TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5 => 0x002a,
+    TLS_KRB5_EXPORT_WITH_RC4_40_MD5 => 0x002b,
+    TLS_PSK_WITH_NULL_SHA => 0x002c,
+    TLS_DHE_PSK_WITH_NULL_SHA => 0x002d,
+    TLS_RSA_PSK_WITH_NULL_SHA => 0x002e,
+    TLS_RSA_WITH_AES_128_CBC_SHA => 0x002f,
+    TLS_DH_DSS_WITH_AES_128_CBC_SHA => 0x0030,
+    TLS_DH_RSA_WITH_AES_128_CBC_SHA => 0x0031,
+    TLS_DHE_DSS_WITH_AES_128_CBC_SHA => 0x0032,
+    TLS_DHE_RSA_WITH_AES_128_CBC_SHA => 0x0033,
+    TLS_DH_anon_WITH_AES_128_CBC_SHA => 0x0034,
+    TLS_RSA_WITH_AES_256_CBC_SHA => 0x0035,
+    TLS_DH_DSS_WITH_AES_256_CBC_SHA => 0x0036,
+    TLS_DH_RSA_WITH_AES_256_CBC_SHA => 0x0037,
+    TLS_DHE_DSS_WITH_AES_256_CBC_SHA => 0x0038,
+    TLS_DHE_RSA_WITH_AES_256_CBC_SHA => 0x0039,
+    TLS_DH_anon_WITH_AES_256_CBC_SHA => 0x003a,
+    TLS_RSA_WITH_NULL_SHA256 => 0x003b,
+    TLS_RSA_WITH_AES_128_CBC_SHA256 => 0x003c,
+    TLS_RSA_WITH_AES_256_CBC_SHA256 => 0x003d,
+    TLS_DH_DSS_WITH_AES_128_CBC_SHA256 => 0x003e,
+    TLS_DH_RSA_WITH_AES_128_CBC_SHA256 => 0x003f,
+    TLS_DHE_DSS_WITH_AES_128_CBC_SHA256 => 0x0040,
+    TLS_RSA_WITH_CAMELLIA_128_CBC_SHA => 0x0041,
+    TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA => 0x0042,
+    TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA => 0x0043,
+    TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA => 0x0044,
+    TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA => 0x0045,
+    TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA => 0x0046,
+    TLS_ECDH_ECDSA_WITH_NULL_SHA_draft => 0x0047,
+    TLS_ECDH_ECDSA_WITH_RC4_128_SHA_draft => 0x0048,
+    TLS_ECDH_ECDSA_WITH_DES_CBC_SHA_draft => 0x0049,
+    TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA_draft => 0x004a,
+    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA_draft => 0x004b,
+    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA_draft => 0x004c,
+    TLS_ECDH_ECNRA_WITH_DES_CBC_SHA_draft => 0x004d,
+    TLS_ECDH_ECNRA_WITH_3DES_EDE_CBC_SHA_draft => 0x004e,
+    TLS_ECMQV_ECDSA_NULL_SHA_draft => 0x004f,
+    TLS_ECMQV_ECDSA_WITH_RC4_128_SHA_draft => 0x0050,
+    TLS_ECMQV_ECDSA_WITH_DES_CBC_SHA_draft => 0x0051,
+    TLS_ECMQV_ECDSA_WITH_3DES_EDE_CBC_SHA_draft => 0x0052,
+    TLS_ECMQV_ECNRA_NULL_SHA_draft => 0x0053,
+    TLS_ECMQV_ECNRA_WITH_RC4_128_SHA_draft => 0x0054,
+    TLS_ECMQV_ECNRA_WITH_DES_CBC_SHA_draft => 0x0055,
+    TLS_ECMQV_ECNRA_WITH_3DES_EDE_CBC_SHA_draft => 0x0056,
+    TLS_ECDH_anon_NULL_WITH_SHA_draft => 0x0057,
+    TLS_ECDH_anon_WITH_RC4_128_SHA_draft => 0x0058,
+    TLS_ECDH_anon_WITH_DES_CBC_SHA_draft => 0x0059,
+    TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA_draft => 0x005a,
+    TLS_ECDH_anon_EXPORT_WITH_DES40_CBC_SHA_draft => 0x005b,
+    TLS_ECDH_anon_EXPORT_WITH_RC4_40_SHA_draft => 0x005c,
+    TLS_RSA_EXPORT1024_WITH_RC4_56_MD5 => 0x0060,
+    TLS_RSA_EXPORT1024_WITH_RC2_CBC_56_MD5 => 0x0061,
+    TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA => 0x0062,
+    TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA => 0x0063,
+    TLS_RSA_EXPORT1024_WITH_RC4_56_SHA => 0x0064,
+    TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA => 0x0065,
+    TLS_DHE_DSS_WITH_RC4_128_SHA => 0x0066,
+    TLS_DHE_RSA_WITH_AES_128_CBC_SHA256 => 0x0067,
+    TLS_DH_DSS_WITH_AES_256_CBC_SHA256 => 0x0068,
+    TLS_DH_RSA_WITH_AES_256_CBC_SHA256 => 0x0069,
+    TLS_DHE_DSS_WITH_AES_256_CBC_SHA256 => 0x006a,
+    TLS_DHE_RSA_WITH_AES_256_CBC_SHA256 => 0x006b,
+    TLS_DH_anon_WITH_AES_128_CBC_SHA256 => 0x006c,
+    TLS_DH_anon_WITH_AES_256_CBC_SHA256 => 0x006d,
+    TLS_DHE_DSS_WITH_3DES_EDE_CBC_RMD => 0x0072,
+    TLS_DHE_DSS_WITH_AES_128_CBC_RMD => 0x0073,
+    TLS_DHE_DSS_WITH_AES_256_CBC_RMD => 0x0074,
+    TLS_DHE_RSA_WITH_3DES_EDE_CBC_RMD => 0x0077,
+    TLS_DHE_RSA_WITH_AES_128_CBC_RMD => 0x0078,
+    TLS_DHE_RSA_WITH_AES_256_CBC_RMD => 0x0079,
+    TLS_RSA_WITH_3DES_EDE_CBC_RMD => 0x007c,
+    TLS_RSA_WITH_AES_128_CBC_RMD => 0x007d,
+    TLS_RSA_WITH_AES_256_CBC_RMD => 0x007e,
+    TLS_GOSTR341094_WITH_28147_CNT_IMIT => 0x0080,
+    TLS_GOSTR341001_WITH_28147_CNT_IMIT => 0x0081,
+    TLS_GOSTR341094_WITH_NULL_GOSTR3411 => 0x0082,
+    TLS_GOSTR341001_WITH_NULL_GOSTR3411 => 0x0083,
+    TLS_RSA_WITH_CAMELLIA_256_CBC_SHA => 0x0084,
+    TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA => 0x0085,
+    TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA => 0x0086,
+    TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA => 0x0087,
+    TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA => 0x0088,
+    TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA => 0x0089,
+    TLS_PSK_WITH_RC4_128_SHA => 0x008a,
+    TLS_PSK_WITH_3DES_EDE_CBC_SHA => 0x008b,
+    TLS_PSK_WITH_AES_128_CBC_SHA => 0x008c,
+    TLS_PSK_WITH_AES_256_CBC_SHA => 0x008d,
+    TLS_DHE_PSK_WITH_RC4_128_SHA => 0x008e,
+    TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA => 0x008f,
+    TLS_DHE_PSK_WITH_AES_128_CBC_SHA => 0x0090,
+    TLS_DHE_PSK_WITH_AES_256_CBC_SHA => 0x0091,
+    TLS_RSA_PSK_WITH_RC4_128_SHA => 0x0092,
+    TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA => 0x0093,
+    TLS_RSA_PSK_WITH_AES_128_CBC_SHA => 0x0094,
+    TLS_RSA_PSK_WITH_AES_256_CBC_SHA => 0x0095,
+    TLS_RSA_WITH_SEED_CBC_SHA => 0x0096,
+    TLS_DH_DSS_WITH_SEED_CBC_SHA => 0x0097,
+    TLS_DH_RSA_WITH_SEED_CBC_SHA => 0x0098,
+    TLS_DHE_DSS_WITH_SEED_CBC_SHA => 0x0099,
+    TLS_DHE_RSA_WITH_SEED_CBC_SHA => 0x009a,
+    TLS_DH_anon_WITH_SEED_CBC_SHA => 0x009b,
+    TLS_RSA_WITH_AES_128_GCM_SHA256 => 0x009c,
+    TLS_RSA_WITH_AES_256_GCM_SHA384 => 0x009d,
+    TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 => 0x009e,
+    TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 => 0x009f,
+    TLS_DH_RSA_WITH_AES_128_GCM_SHA256 => 0x00a0,
+    TLS_DH_RSA_WITH_AES_256_GCM_SHA384 => 0x00a1,
+    TLS_DHE_DSS_WITH_AES_128_GCM_SHA256 => 0x00a2,
+    TLS_DHE_DSS_WITH_AES_256_GCM_SHA384 => 0x00a3,
+    TLS_DH_DSS_WITH_AES_128_GCM_SHA256 => 0x00a4,
+    TLS_DH_DSS_WITH_AES_256_GCM_SHA384 => 0x00a5,
+    TLS_DH_anon_WITH_AES_128_GCM_SHA256 => 0x00a6,
+    TLS_DH_anon_WITH_AES_256_GCM_SHA384 => 0x00a7,
+    TLS_PSK_WITH_AES_128_GCM_SHA256 => 0x00a8,
+    TLS_PSK_WITH_AES_256_GCM_SHA384 => 0x00a9,
+    TLS_DHE_PSK_WITH_AES_128_GCM_SHA256 => 0x00aa,
+    TLS_DHE_PSK_WITH_AES_256_GCM_SHA384 => 0x00ab,
+    TLS_RSA_PSK_WITH_AES_128_GCM_SHA256 => 0x00ac,
+    TLS_RSA_PSK_WITH_AES_256_GCM_SHA384 => 0x00ad,
+    TLS_PSK_WITH_AES_128_CBC_SHA256 => 0x00ae,
+    TLS_PSK_WITH_AES_256_CBC_SHA384 => 0x00af,
+    TLS_PSK_WITH_NULL_SHA256 => 0x00b0,
+    TLS_PSK_WITH_NULL_SHA384 => 0x00b1,
+    TLS_DHE_PSK_WITH_AES_128_CBC_SHA256 => 0x00b2,
+    TLS_DHE_PSK_WITH_AES_256_CBC_SHA384 => 0x00b3,
+    TLS_DHE_PSK_WITH_NULL_SHA256 => 0x00b4,
+    TLS_DHE_PSK_WITH_NULL_SHA384 => 0x00b5,
+    TLS_RSA_PSK_WITH_AES_128_CBC_SHA256 => 0x00b6,
+    TLS_RSA_PSK_WITH_AES_256_CBC_SHA384 => 0x00b7,
+    TLS_RSA_PSK_WITH_NULL_SHA256 => 0x00b8,
+    TLS_RSA_PSK_WITH_NULL_SHA384 => 0x00b9,
+    TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0x00ba,
+    TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bb,
+    TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bc,
+    TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bd,
+    TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0x00be,
+    TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256 => 0x00bf,
+    TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c0,
+    TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c1,
+    TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c2,
+    TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c3,
+    TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c4,
+    TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c5,
+    TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
+    TLS13_AES_128_GCM_SHA256 => 0x1301,
+    TLS13_AES_256_GCM_SHA384 => 0x1302,
+    TLS13_CHACHA20_POLY1305_SHA256 => 0x1303,
+    TLS13_AES_128_CCM_SHA256 => 0x1304,
+    TLS13_AES_128_CCM_8_SHA256 => 0x1305,
+    TLS_ECDH_ECDSA_WITH_NULL_SHA => 0xc001,
+    TLS_ECDH_ECDSA_WITH_RC4_128_SHA => 0xc002,
+    TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc003,
+    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA => 0xc004,
+    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA => 0xc005,
+    TLS_ECDHE_ECDSA_WITH_NULL_SHA => 0xc006,
+    TLS_ECDHE_ECDSA_WITH_RC4_128_SHA => 0xc007,
+    TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc008,
+    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA => 0xc009,
+    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA => 0xc00a,
+    TLS_ECDH_RSA_WITH_NULL_SHA => 0xc00b,
+    TLS_ECDH_RSA_WITH_RC4_128_SHA => 0xc00c,
+    TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA => 0xc00d,
+    TLS_ECDH_RSA_WITH_AES_128_CBC_SHA => 0xc00e,
+    TLS_ECDH_RSA_WITH_AES_256_CBC_SHA => 0xc00f,
+    TLS_ECDHE_RSA_WITH_NULL_SHA => 0xc010,
+    TLS_ECDHE_RSA_WITH_RC4_128_SHA => 0xc011,
+    TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA => 0xc012,
+    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA => 0xc013,
+    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA => 0xc014,
+    TLS_ECDH_anon_WITH_NULL_SHA => 0xc015,
+    TLS_ECDH_anon_WITH_RC4_128_SHA => 0xc016,
+    TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA => 0xc017,
+    TLS_ECDH_anon_WITH_AES_128_CBC_SHA => 0xc018,
+    TLS_ECDH_anon_WITH_AES_256_CBC_SHA => 0xc019,
+    TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA => 0xc01a,
+    TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA => 0xc01b,
+    TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA => 0xc01c,
+    TLS_SRP_SHA_WITH_AES_128_CBC_SHA => 0xc01d,
+    TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA => 0xc01e,
+    TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA => 0xc01f,
+    TLS_SRP_SHA_WITH_AES_256_CBC_SHA => 0xc020,
+    TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA => 0xc021,
+    TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA => 0xc022,
+    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc023,
+    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc024,
+    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc025,
+    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc026,
+    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => 0xc027,
+    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => 0xc028,
+    TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256 => 0xc029,
+    TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384 => 0xc02a,
+    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02b,
+    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02c,
+    TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02d,
+    TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02e,
+    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => 0xc02f,
+    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => 0xc030,
+    TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256 => 0xc031,
+    TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384 => 0xc032,
+    TLS_ECDHE_PSK_WITH_RC4_128_SHA => 0xc033,
+    TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA => 0xc034,
+    TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA => 0xc035,
+    TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA => 0xc036,
+    TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256 => 0xc037,
+    TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384 => 0xc038,
+    TLS_ECDHE_PSK_WITH_NULL_SHA => 0xc039,
+    TLS_ECDHE_PSK_WITH_NULL_SHA256 => 0xc03a,
+    TLS_ECDHE_PSK_WITH_NULL_SHA384 => 0xc03b,
+    TLS_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc03c,
+    TLS_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc03d,
+    TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256 => 0xc03e,
+    TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384 => 0xc03f,
+    TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc040,
+    TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc041,
+    TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256 => 0xc042,
+    TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384 => 0xc043,
+    TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc044,
+    TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc045,
+    TLS_DH_anon_WITH_ARIA_128_CBC_SHA256 => 0xc046,
+    TLS_DH_anon_WITH_ARIA_256_CBC_SHA384 => 0xc047,
+    TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256 => 0xc048,
+    TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384 => 0xc049,
+    TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256 => 0xc04a,
+    TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384 => 0xc04b,
+    TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc04c,
+    TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc04d,
+    TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256 => 0xc04e,
+    TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384 => 0xc04f,
+    TLS_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc050,
+    TLS_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc051,
+    TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc052,
+    TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc053,
+    TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc054,
+    TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc055,
+    TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256 => 0xc056,
+    TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384 => 0xc057,
+    TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256 => 0xc058,
+    TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384 => 0xc059,
+    TLS_DH_anon_WITH_ARIA_128_GCM_SHA256 => 0xc05a,
+    TLS_DH_anon_WITH_ARIA_256_GCM_SHA384 => 0xc05b,
+    TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256 => 0xc05c,
+    TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384 => 0xc05d,
+    TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256 => 0xc05e,
+    TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384 => 0xc05f,
+    TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc060,
+    TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc061,
+    TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256 => 0xc062,
+    TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384 => 0xc063,
+    TLS_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc064,
+    TLS_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc065,
+    TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc066,
+    TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc067,
+    TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc068,
+    TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc069,
+    TLS_PSK_WITH_ARIA_128_GCM_SHA256 => 0xc06a,
+    TLS_PSK_WITH_ARIA_256_GCM_SHA384 => 0xc06b,
+    TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256 => 0xc06c,
+    TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384 => 0xc06d,
+    TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256 => 0xc06e,
+    TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384 => 0xc06f,
+    TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256 => 0xc070,
+    TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384 => 0xc071,
+    TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc072,
+    TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc073,
+    TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc074,
+    TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc075,
+    TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc076,
+    TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc077,
+    TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256 => 0xc078,
+    TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384 => 0xc079,
+    TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc07a,
+    TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc07b,
+    TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc07c,
+    TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc07d,
+    TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc07e,
+    TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc07f,
+    TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256 => 0xc080,
+    TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384 => 0xc081,
+    TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256 => 0xc082,
+    TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384 => 0xc083,
+    TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256 => 0xc084,
+    TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384 => 0xc085,
+    TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc086,
+    TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc087,
+    TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc088,
+    TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc089,
+    TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc08a,
+    TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc08b,
+    TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256 => 0xc08c,
+    TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384 => 0xc08d,
+    TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256 => 0xc08e,
+    TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384 => 0xc08f,
+    TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256 => 0xc090,
+    TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384 => 0xc091,
+    TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256 => 0xc092,
+    TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384 => 0xc093,
+    TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc094,
+    TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc095,
+    TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc096,
+    TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc097,
+    TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc098,
+    TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc099,
+    TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256 => 0xc09a,
+    TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384 => 0xc09b,
+    TLS_RSA_WITH_AES_128_CCM => 0xc09c,
+    TLS_RSA_WITH_AES_256_CCM => 0xc09d,
+    TLS_DHE_RSA_WITH_AES_128_CCM => 0xc09e,
+    TLS_DHE_RSA_WITH_AES_256_CCM => 0xc09f,
+    TLS_RSA_WITH_AES_128_CCM_8 => 0xc0a0,
+    TLS_RSA_WITH_AES_256_CCM_8 => 0xc0a1,
+    TLS_DHE_RSA_WITH_AES_128_CCM_8 => 0xc0a2,
+    TLS_DHE_RSA_WITH_AES_256_CCM_8 => 0xc0a3,
+    TLS_PSK_WITH_AES_128_CCM => 0xc0a4,
+    TLS_PSK_WITH_AES_256_CCM => 0xc0a5,
+    TLS_DHE_PSK_WITH_AES_128_CCM => 0xc0a6,
+    TLS_DHE_PSK_WITH_AES_256_CCM => 0xc0a7,
+    TLS_PSK_WITH_AES_128_CCM_8 => 0xc0a8,
+    TLS_PSK_WITH_AES_256_CCM_8 => 0xc0a9,
+    TLS_PSK_DHE_WITH_AES_128_CCM_8 => 0xc0aa,
+    TLS_PSK_DHE_WITH_AES_256_CCM_8 => 0xc0ab,
+    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca8,
+    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca9,
+    TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xccaa,
+    TLS_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccab,
+    TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccac,
+    TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccad,
+    TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccae,
+    SSL_RSA_FIPS_WITH_DES_CBC_SHA => 0xfefe,
+    SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA => 0xfeff
+  }
 }
 
 /// The `ECPointFormat` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ECPointFormat {
-    Uncompressed,
-    ANSIX962CompressedPrime,
-    ANSIX962CompressedChar2,
-    Unknown(u8),
-}
-
-impl Codec for ECPointFormat {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ECPointFormat> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => ECPointFormat::Uncompressed,
-            0x01 => ECPointFormat::ANSIX962CompressedPrime,
-            0x02 => ECPointFormat::ANSIX962CompressedChar2,
-            x => ECPointFormat::Unknown(x),
-        })
-    }
-}
-
-impl ECPointFormat {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            ECPointFormat::Uncompressed => 0x00,
-            ECPointFormat::ANSIX962CompressedPrime => 0x01,
-            ECPointFormat::ANSIX962CompressedChar2 => 0x02,
-            ECPointFormat::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: ECPointFormat;
+  EnumVal{
+    Uncompressed => 0x00,
+    ANSIX962CompressedPrime => 0x01,
+    ANSIX962CompressedChar2 => 0x02
+  }
 }
 
 /// The `HeartbeatMode` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum HeartbeatMode {
-    PeerAllowedToSend,
-    PeerNotAllowedToSend,
-    Unknown(u8),
-}
-
-impl Codec for HeartbeatMode {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<HeartbeatMode> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x01 => HeartbeatMode::PeerAllowedToSend,
-            0x02 => HeartbeatMode::PeerNotAllowedToSend,
-            x => HeartbeatMode::Unknown(x),
-        })
-    }
-}
-
-impl HeartbeatMode {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            HeartbeatMode::PeerAllowedToSend => 0x01,
-            HeartbeatMode::PeerNotAllowedToSend => 0x02,
-            HeartbeatMode::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: HeartbeatMode;
+  EnumVal{
+    PeerAllowedToSend => 0x01,
+    PeerNotAllowedToSend => 0x02
+  }
 }
 
 /// The `ECCurveType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ECCurveType {
-    ExplicitPrime,
-    ExplicitChar2,
-    NamedCurve,
-    Unknown(u8),
-}
-
-impl Codec for ECCurveType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<ECCurveType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x01 => ECCurveType::ExplicitPrime,
-            0x02 => ECCurveType::ExplicitChar2,
-            0x03 => ECCurveType::NamedCurve,
-            x => ECCurveType::Unknown(x),
-        })
-    }
-}
-
-impl ECCurveType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            ECCurveType::ExplicitPrime => 0x01,
-            ECCurveType::ExplicitChar2 => 0x02,
-            ECCurveType::NamedCurve => 0x03,
-            ECCurveType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: ECCurveType;
+  EnumVal{
+    ExplicitPrime => 0x01,
+    ExplicitChar2 => 0x02,
+    NamedCurve => 0x03
+  }
 }
 
 /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum SignatureScheme {
-    RSA_PKCS1_SHA1,
-    ECDSA_SHA1_Legacy,
-    RSA_PKCS1_SHA256,
-    ECDSA_NISTP256_SHA256,
-    RSA_PKCS1_SHA384,
-    ECDSA_NISTP384_SHA384,
-    RSA_PKCS1_SHA512,
-    ECDSA_NISTP521_SHA512,
-    RSA_PSS_SHA256,
-    RSA_PSS_SHA384,
-    RSA_PSS_SHA512,
-    ED25519,
-    ED448,
-    Unknown(u16),
-}
-
-impl Codec for SignatureScheme {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16(self.get_u16(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<SignatureScheme> {
-        let u = read_u16(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x0201 => SignatureScheme::RSA_PKCS1_SHA1,
-            0x0203 => SignatureScheme::ECDSA_SHA1_Legacy,
-            0x0401 => SignatureScheme::RSA_PKCS1_SHA256,
-            0x0403 => SignatureScheme::ECDSA_NISTP256_SHA256,
-            0x0501 => SignatureScheme::RSA_PKCS1_SHA384,
-            0x0503 => SignatureScheme::ECDSA_NISTP384_SHA384,
-            0x0601 => SignatureScheme::RSA_PKCS1_SHA512,
-            0x0603 => SignatureScheme::ECDSA_NISTP521_SHA512,
-            0x0804 => SignatureScheme::RSA_PSS_SHA256,
-            0x0805 => SignatureScheme::RSA_PSS_SHA384,
-            0x0806 => SignatureScheme::RSA_PSS_SHA512,
-            0x0807 => SignatureScheme::ED25519,
-            0x0808 => SignatureScheme::ED448,
-            x => SignatureScheme::Unknown(x),
-        })
-    }
-}
-
-impl SignatureScheme {
-    pub fn get_u16(&self) -> u16 {
-        match *self {
-            SignatureScheme::RSA_PKCS1_SHA1 => 0x0201,
-            SignatureScheme::ECDSA_SHA1_Legacy => 0x0203,
-            SignatureScheme::RSA_PKCS1_SHA256 => 0x0401,
-            SignatureScheme::ECDSA_NISTP256_SHA256 => 0x0403,
-            SignatureScheme::RSA_PKCS1_SHA384 => 0x0501,
-            SignatureScheme::ECDSA_NISTP384_SHA384 => 0x0503,
-            SignatureScheme::RSA_PKCS1_SHA512 => 0x0601,
-            SignatureScheme::ECDSA_NISTP521_SHA512 => 0x0603,
-            SignatureScheme::RSA_PSS_SHA256 => 0x0804,
-            SignatureScheme::RSA_PSS_SHA384 => 0x0805,
-            SignatureScheme::RSA_PSS_SHA512 => 0x0806,
-            SignatureScheme::ED25519 => 0x0807,
-            SignatureScheme::ED448 => 0x0808,
-            SignatureScheme::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U16
+  EnumName: SignatureScheme;
+  EnumVal{
+    RSA_PKCS1_SHA1 => 0x0201,
+    ECDSA_SHA1_Legacy => 0x0203,
+    RSA_PKCS1_SHA256 => 0x0401,
+    ECDSA_NISTP256_SHA256 => 0x0403,
+    RSA_PKCS1_SHA384 => 0x0501,
+    ECDSA_NISTP384_SHA384 => 0x0503,
+    RSA_PKCS1_SHA512 => 0x0601,
+    ECDSA_NISTP521_SHA512 => 0x0603,
+    RSA_PSS_SHA256 => 0x0804,
+    RSA_PSS_SHA384 => 0x0805,
+    RSA_PSS_SHA512 => 0x0806,
+    ED25519 => 0x0807,
+    ED448 => 0x0808
+  }
 }
 
 /// The `PSKKeyExchangeMode` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum PSKKeyExchangeMode {
-    PSK_KE,
-    PSK_DHE_KE,
-    Unknown(u8),
-}
-
-impl Codec for PSKKeyExchangeMode {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<PSKKeyExchangeMode> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => PSKKeyExchangeMode::PSK_KE,
-            0x01 => PSKKeyExchangeMode::PSK_DHE_KE,
-            x => PSKKeyExchangeMode::Unknown(x),
-        })
-    }
-}
-
-impl PSKKeyExchangeMode {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            PSKKeyExchangeMode::PSK_KE => 0x00,
-            PSKKeyExchangeMode::PSK_DHE_KE => 0x01,
-            PSKKeyExchangeMode::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: PSKKeyExchangeMode;
+  EnumVal{
+    PSK_KE => 0x00,
+    PSK_DHE_KE => 0x01
+  }
 }
 
 /// The `KeyUpdateRequest` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum KeyUpdateRequest {
-    UpdateNotRequested,
-    UpdateRequested,
-    Unknown(u8),
-}
-
-impl Codec for KeyUpdateRequest {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<KeyUpdateRequest> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x00 => KeyUpdateRequest::UpdateNotRequested,
-            0x01 => KeyUpdateRequest::UpdateRequested,
-            x => KeyUpdateRequest::Unknown(x),
-        })
-    }
-}
-
-impl KeyUpdateRequest {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            KeyUpdateRequest::UpdateNotRequested => 0x00,
-            KeyUpdateRequest::UpdateRequested => 0x01,
-            KeyUpdateRequest::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: KeyUpdateRequest;
+  EnumVal{
+    UpdateNotRequested => 0x00,
+    UpdateRequested => 0x01
+  }
 }
 
 /// The `CertificateStatusType` TLS protocol enum.  Values in this enum are taken
 /// from the various RFCs covering TLS, and are listed by IANA.
 /// The `Unknown` item is used when processing unrecognised ordinals.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum CertificateStatusType {
-    OCSP,
-    Unknown(u8),
-}
-
-impl Codec for CertificateStatusType {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u8(self.get_u8(), bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<CertificateStatusType> {
-        let u = read_u8(r);
-
-        if u.is_none() {
-            return None;
-        }
-
-        Some(match u.unwrap() {
-            0x01 => CertificateStatusType::OCSP,
-            x => CertificateStatusType::Unknown(x),
-        })
-    }
-}
-
-impl CertificateStatusType {
-    pub fn get_u8(&self) -> u8 {
-        match *self {
-            CertificateStatusType::OCSP => 0x01,
-            CertificateStatusType::Unknown(v) => v,
-        }
-    }
+enum_builder! {@U8
+  EnumName: CertificateStatusType;
+  EnumVal{
+    OCSP => 0x01
+  }
 }
