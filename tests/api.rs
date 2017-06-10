@@ -8,6 +8,7 @@ extern crate rustls;
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ServerConfig, ServerSession, ResolvesServerCert};
 use rustls::Session;
+use rustls::Stream;
 use rustls::{ProtocolVersion, SignatureScheme};
 use rustls::TLSError;
 use rustls::sign;
@@ -681,4 +682,58 @@ fn server_complete_io_for_read() {
         assert_eq!(pipe.reads, 1);
     }
     check_read(&mut server, b"01234567890123456789");
+}
+
+#[test]
+fn client_stream_write() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let mut stream = Stream::new(&mut client, &mut pipe);
+        assert_eq!(stream.write(b"hello").unwrap(), 5);
+    }
+    check_read(&mut server, b"hello");
+}
+
+#[test]
+fn client_stream_read() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    server.write(b"world").unwrap();
+
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let mut stream = Stream::new(&mut client, &mut pipe);
+        check_read(&mut stream, b"world");
+    }
+}
+
+#[test]
+fn server_stream_write() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let mut stream = Stream::new(&mut server, &mut pipe);
+        assert_eq!(stream.write(b"hello").unwrap(), 5);
+    }
+    check_read(&mut client, b"hello");
+}
+
+#[test]
+fn server_stream_read() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    client.write(b"world").unwrap();
+
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let mut stream = Stream::new(&mut server, &mut pipe);
+        check_read(&mut stream, b"world");
+    }
 }
