@@ -51,3 +51,7 @@ path = "examples/tlsclient.rs"
 [[example]]
 name = "tlsserver"
 path = "examples/tlsserver.rs"
+
+[[example]]
+name = "simpleclient"
+path = "examples/simpleclient.rs"

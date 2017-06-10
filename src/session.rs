@@ -96,6 +96,57 @@ pub trait Session: Read + Write + Send {
     ///
     /// This returns None until the version is agreed.
     fn get_protocol_version(&self) -> Option<ProtocolVersion>;
+
+    /// This function uses `io` to complete any outstanding IO for
+    /// this session.
+    ///
+    /// This is a convenience function which solely uses other parts
+    /// of the public API.
+    ///
+    /// What this means depends on the session state:
+    ///
+    /// - If the session `is_handshaking()`, then IO is performed until
+    ///   the handshake is complete.
+    /// - Otherwise, if `wants_write` is true, `write_tls` is invoked
+    ///   until it is all written.
+    /// - Otherwise, if `wants_read` is true, `read_tls` is invoked
+    ///   once.
+    ///
+    /// The return value is the number of bytes read from and written
+    /// to `io`, respectively.
+    ///
+    /// This function will block if `io` blocks.
+    ///
+    /// Errors from TLS record handling (ie, from `process_new_packets()`)
+    /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
+    fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
+        where Self: Sized, T: Read + Write
+    {
+        let until_handshaked = self.is_handshaking();
+        let mut wrlen = 0;
+        let mut rdlen = 0;
+
+        loop {
+            while self.wants_write() {
+                wrlen += self.write_tls(io)?;
+            }
+
+            if !until_handshaked && wrlen > 0 {
+                return Ok((rdlen, wrlen));
+            }
+
+            rdlen += self.read_tls(io)?;
+
+            self.process_new_packets()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+            match (until_handshaked, self.is_handshaking()) {
+                (true, false) => return Ok((rdlen, wrlen)),
+                (false, _) => return Ok((rdlen, wrlen)),
+                (_, _) => {}
+            };
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

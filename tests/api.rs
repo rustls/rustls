@@ -2,7 +2,7 @@
 use std::sync::Arc;
 use std::sync::atomic;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Write, Read};
 
 extern crate rustls;
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
@@ -557,4 +557,128 @@ fn client_respects_buffer_limit_post_handshake() {
     server.process_new_packets().unwrap();
 
     check_read(&mut server, b"01234567890123456789012345");
+}
+
+struct OtherSession<'a> {
+    sess: &'a mut Session,
+    pub reads: usize,
+    pub writes: usize,
+}
+
+impl<'a> OtherSession<'a> {
+    fn new(sess: &'a mut Session) -> OtherSession<'a> {
+        OtherSession { sess, reads: 0, writes: 0 }
+    }
+}
+
+impl<'a> io::Read for OtherSession<'a> {
+    fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
+        self.reads += 1;
+        self.sess.write_tls(b.by_ref())
+    }
+}
+
+impl<'a> io::Write for OtherSession<'a> {
+    fn write(&mut self, mut b: &[u8]) -> io::Result<usize> {
+        self.writes += 1;
+        let l = self.sess.read_tls(b.by_ref())?;
+        self.sess.process_new_packets().unwrap();
+        Ok(l)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn client_complete_io_for_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    assert_eq!(true, client.is_handshaking());
+    let (rdlen, wrlen) = client.complete_io(&mut OtherSession::new(&mut server)).unwrap();
+    assert!(rdlen > 0 && wrlen > 0);
+    assert_eq!(false, client.is_handshaking());
+}
+
+#[test]
+fn client_complete_io_for_write() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+
+    client.write(b"01234567890123456789").unwrap();
+    client.write(b"01234567890123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+        assert!(rdlen == 0 && wrlen > 0);
+        assert_eq!(pipe.writes, 2);
+    }
+    check_read(&mut server, b"0123456789012345678901234567890123456789");
+}
+
+#[test]
+fn client_complete_io_for_read() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+
+    server.write(b"01234567890123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+        assert!(rdlen > 0 && wrlen == 0);
+        assert_eq!(pipe.reads, 1);
+    }
+    check_read(&mut client, b"01234567890123456789");
+}
+
+#[test]
+fn server_complete_io_for_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    assert_eq!(true, server.is_handshaking());
+    let (rdlen, wrlen) = server.complete_io(&mut OtherSession::new(&mut client)).unwrap();
+    assert!(rdlen > 0 && wrlen > 0);
+    assert_eq!(false, server.is_handshaking());
+}
+
+#[test]
+fn server_complete_io_for_write() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+
+    server.write(b"01234567890123456789").unwrap();
+    server.write(b"01234567890123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
+        assert!(rdlen == 0 && wrlen > 0);
+        assert_eq!(pipe.writes, 2);
+    }
+    check_read(&mut client, b"0123456789012345678901234567890123456789");
+}
+
+#[test]
+fn server_complete_io_for_read() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+
+    client.write(b"01234567890123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
+        assert!(rdlen > 0 && wrlen == 0);
+        assert_eq!(pipe.reads, 1);
+    }
+    check_read(&mut server, b"01234567890123456789");
 }
