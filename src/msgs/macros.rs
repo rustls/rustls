@@ -31,9 +31,9 @@ macro_rules! enum_builder {
 
             fn read(r: &mut Reader) -> Option<Self> {
                 Some(match read_u8(r) {
-                    Option::None => return None,
-                    $( Option::Some($enum_val) => $enum_name::$enum_var),*
-                    ,Option::Some(x) => $enum_name::Unknown(x)
+                    None => return None,
+                    $( Some($enum_val) => $enum_name::$enum_var),*
+                    ,Some(x) => $enum_name::Unknown(x)
                 })
             }
         }
@@ -63,9 +63,9 @@ macro_rules! enum_builder {
 
             fn read(r: &mut Reader) -> Option<Self> {
                 Some(match read_u16(r) {
-                    Option::None => return None,
-                    $( Option::Some($enum_val) => $enum_name::$enum_var),*
-                    ,Option::Some(x) => $enum_name::Unknown(x)
+                    None => return None,
+                    $( Some($enum_val) => $enum_name::$enum_var),*
+                    ,Some(x) => $enum_name::Unknown(x)
                 })
             }
         }

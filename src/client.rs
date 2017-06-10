@@ -58,6 +58,8 @@ pub struct ClientSessionMemoryCache {
 }
 
 impl ClientSessionMemoryCache {
+    /// Make a new ClientSessionMemoryCache.  `size` is the
+    /// maximum number of stored sessions.
     pub fn new(size: usize) -> Box<ClientSessionMemoryCache> {
         debug_assert!(size > 0);
         Box::new(ClientSessionMemoryCache {

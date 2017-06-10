@@ -535,11 +535,11 @@ impl SessionCommon {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
-    pub fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    pub fn read_tls(&mut self, rd: &mut Read) -> io::Result<usize> {
         self.message_deframer.read(rd)
     }
 
-    pub fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
+    pub fn write_tls(&mut self, wr: &mut Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
     }
 

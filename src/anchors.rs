@@ -37,6 +37,7 @@ impl OwnedTrustAnchor {
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.
 pub struct RootCertStore {
+    /// The list of roots.
     pub roots: Vec<OwnedTrustAnchor>,
 }
 

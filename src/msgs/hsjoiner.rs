@@ -21,6 +21,7 @@ pub struct HandshakeJoiner {
 }
 
 impl HandshakeJoiner {
+    /// Make a new HandshakeJoiner.
     pub fn new() -> HandshakeJoiner {
         HandshakeJoiner {
             frames: VecDeque::new(),

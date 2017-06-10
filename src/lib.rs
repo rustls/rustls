@@ -173,6 +173,16 @@
 //!   requesting this feature should be reviewed carefully.
 //!
 
+// Require docs for public APIs, deny unsafe code, etc.
+#![forbid(unsafe_code,
+          unstable_features)]
+#![deny(trivial_casts,
+        trivial_numeric_casts,
+        missing_docs,
+        unused_import_braces,
+        unused_extern_crates,
+        unused_qualifications)]
+
 // Our dependencies:
 
 // webpki for certificate verification.
@@ -205,6 +215,7 @@ mod compile_out_log {
 }
 
 mod util;
+#[allow(missing_docs)]
 #[macro_use]
 mod msgs;
 mod error;
@@ -261,6 +272,8 @@ pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
+
+/// Message signing interfaces and implementations.
 pub mod sign;
 
 #[cfg(feature = "dangerous_configuration")]

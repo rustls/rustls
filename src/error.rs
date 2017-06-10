@@ -1,4 +1,4 @@
-use std::{fmt, error};
+use std::fmt;
 use std::error::Error;
 use msgs::enums::{ContentType, HandshakeType, AlertDescription};
 use webpki;
@@ -12,7 +12,9 @@ pub enum TLSError {
     /// caused by a buggy TLS stack (the peer or this one), a broken
     /// network, or an attack.
     InappropriateMessage {
+        /// Which types we expected
         expect_types: Vec<ContentType>,
+        /// What type we received
         got_type: ContentType,
     },
 
@@ -20,7 +22,9 @@ pub enum TLSError {
     /// `expect_types` lists the handshake message types we can expect
     /// right now.  `got_type` is the type we found.
     InappropriateHandshakeMessage {
+        /// Which handshake type we expected
         expect_types: Vec<HandshakeType>,
+        /// What handshake type we received
         got_type: HandshakeType,
     },
 
@@ -93,7 +97,7 @@ impl fmt::Display for TLSError {
     }
 }
 
-impl error::Error for TLSError {
+impl Error for TLSError {
     fn description(&self) -> &str {
         match *self {
             TLSError::InappropriateMessage { .. } => "received unexpected message",

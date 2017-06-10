@@ -96,9 +96,8 @@ impl PartialEq for SessionID {
             return false;
         }
 
-        let l = self.len as usize;
         let mut diff = 0u8;
-        for i in 0..l {
+        for i in 0..self.len {
             diff |= self.data[i] ^ other.data[i]
         }
 

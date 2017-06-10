@@ -19,6 +19,7 @@ pub trait Signer : Send + Sync {
     fn algorithm(&self) -> SignatureAlgorithm;
 }
 
+/// A packaged together certificate chain and Signer for the certified key.
 pub type CertChainAndSigner = (Vec<key::Certificate>, Arc<Box<Signer>>);
 
 /// A Signer for RSA-PKCS1 or RSA-PSS
@@ -37,6 +38,8 @@ static ALL_SCHEMES: &'static [SignatureScheme] = &[
 ];
 
 impl RSASigner {
+    /// Make a new RSASigner from a DER encoding, in either
+    /// PKCS#1 or PKCS#8 format.
     pub fn new(der: &key::PrivateKey) -> Result<RSASigner, ()> {
         RSAKeyPair::from_der(untrusted::Input::from(&der.0))
             .or_else(|_| RSAKeyPair::from_pkcs8(untrusted::Input::from(&der.0)))

@@ -118,11 +118,26 @@ impl KeyExchange {
 pub struct SupportedCipherSuite {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
+
+    /// How to exchange/agree keys.
     pub kx: KeyExchangeAlgorithm,
+
+    /// How to do bulk encryption.
     pub bulk: BulkAlgorithm,
+
+    /// How to do hashing.
     pub hash: HashAlgorithm,
+
+    /// How to sign messages.
     pub sign: SignatureAlgorithm,
+
+    /// Encryption key length, for the bulk algorithm.
     pub enc_key_len: usize,
+
+    /// How long the fixed part of the 'IV' is.
+    ///
+    /// This isn't usually an IV, but we continue the
+    /// terminology misuse to match the standard.
     pub fixed_iv_len: usize,
 
     /// This is a non-standard extension which extends the
@@ -139,6 +154,7 @@ impl PartialEq for SupportedCipherSuite {
 }
 
 impl SupportedCipherSuite {
+    /// Which hash function to use with this suite.
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
         match self.hash {
             HashAlgorithm::SHA1 => &ring::digest::SHA1,
@@ -159,6 +175,8 @@ impl SupportedCipherSuite {
         }
     }
 
+    /// Start the KX process with the given group.  This generates
+    /// the server's share, but we don't yet have the client's share.
     pub fn start_server_kx(&self, named_group: NamedGroup) -> Option<KeyExchange> {
         match self.kx {
             KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_group),
@@ -194,6 +212,7 @@ impl SupportedCipherSuite {
         util::first_in_both(our_preference.as_slice(), offered)
     }
 
+    /// Which AEAD algorithm to use for this suite.
     pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
         match self.bulk {
             BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
@@ -202,6 +221,8 @@ impl SupportedCipherSuite {
         }
     }
 
+    /// Length of key block that needs to be output by the key
+    /// derivation phase for this suite.
     pub fn key_block_len(&self) -> usize {
         (self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
     }
