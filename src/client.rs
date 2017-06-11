@@ -276,7 +276,9 @@ pub mod danger {
     use super::ClientConfig;
     use super::verify::ServerCertVerifier;
 
+    /// Accessor for dangerous configuration options.
     pub struct DangerousClientConfig<'a> {
+        /// The underlying ClientConfig
         pub cfg: &'a mut ClientConfig
     }
 
