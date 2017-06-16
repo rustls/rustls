@@ -13,6 +13,11 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.9.0 (2017-06-16):
+  - Update dependencies.
+  - Add IO helper function (`complete_io`) to `rustls::Session`.
+  - Add blocking stream type -- `rustls::Stream` -- to ease use on top
+    of blocking sockets.
 * 0.8.0 (2017-05-14):
   - Add `dangerous_configuration` feature for unsafe features.
 * 0.7.0 (2017-05-08):
