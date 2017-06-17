@@ -94,6 +94,7 @@ pub trait ResolvesServerCert : Send + Sync {
 ///
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
+#[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
     pub ciphersuites: Vec<&'static SupportedCipherSuite>,
@@ -104,13 +105,13 @@ pub struct ServerConfig {
     pub ignore_client_order: bool,
 
     /// How to store client sessions.
-    pub session_storage: Mutex<Box<StoresServerSessions + Send>>,
+    pub session_storage: Arc<Mutex<Box<StoresServerSessions + Send>>>,
 
     /// How to produce tickets.
-    pub ticketer: Box<ProducesTickets>,
+    pub ticketer: Arc<ProducesTickets>,
 
     /// How to choose a server cert and key.
-    pub cert_resolver: Box<ResolvesServerCert>,
+    pub cert_resolver: Arc<ResolvesServerCert>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
@@ -131,7 +132,7 @@ pub struct ServerConfig {
     pub versions: Vec<ProtocolVersion>,
 
     /// How to verify client certificates.
-    verifier: Box<verify::ClientCertVerifier>,
+    verifier: Arc<verify::ClientCertVerifier>,
 }
 
 /// Something which never stores sessions.
@@ -265,15 +266,15 @@ impl ServerConfig {
         ServerConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             ignore_client_order: false,
-            session_storage: Mutex::new(Box::new(NoSessionStorage {})),
-            ticketer: Box::new(NeverProducesTickets {}),
+            session_storage: Arc::new(Mutex::new(Box::new(NoSessionStorage {}))),
+            ticketer: Arc::new(NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
-            cert_resolver: Box::new(FailResolveChain {}),
+            cert_resolver: Arc::new(FailResolveChain {}),
             client_auth_roots: anchors::RootCertStore::empty(),
             client_auth_offer: false,
             client_auth_mandatory: false,
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
-            verifier: Box::new(verify::WebPKIVerifier {}),
+            verifier: Arc::new(verify::WebPKIVerifier {}),
         }
     }
 
@@ -284,7 +285,7 @@ impl ServerConfig {
 
     /// Sets the session persistence layer to `persist`.
     pub fn set_persistence(&mut self, persist: Box<StoresServerSessions + Send>) {
-        self.session_storage = Mutex::new(persist);
+        self.session_storage = Arc::new(Mutex::new(persist));
     }
 
     /// Sets a single certificate chain and matching private key.  This
@@ -296,7 +297,7 @@ impl ServerConfig {
     pub fn set_single_cert(&mut self,
                            cert_chain: Vec<key::Certificate>,
                            key_der: key::PrivateKey) {
-        self.cert_resolver = Box::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
+        self.cert_resolver = Arc::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
     }
 
     /// Set the ALPN protocol list to the given protocol names.

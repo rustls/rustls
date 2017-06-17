@@ -387,7 +387,7 @@ fn server_cert_resolve_with_sni() {
     let client_config = make_client_config();
     let mut server_config = make_server_config();
 
-    server_config.cert_resolver = Box::new(ServerCheckCertResolve::new("the-value-from-sni"));
+    server_config.cert_resolver = Arc::new(ServerCheckCertResolve::new("the-value-from-sni"));
 
     let mut client = ClientSession::new(&Arc::new(client_config), "the-value-from-sni");
     let mut server = ServerSession::new(&Arc::new(server_config));
@@ -756,4 +756,26 @@ fn server_stream_read() {
         let mut stream = Stream::new(&mut server, &mut pipe);
         check_read(&mut stream, b"world");
     }
+}
+
+#[test]
+fn server_config_is_clone() {
+    make_server_config().clone();
+}
+
+#[test]
+fn client_config_is_clone() {
+    make_client_config().clone();
+}
+
+#[test]
+fn client_session_is_debug() {
+    let client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    println!("{:?}", client);
+}
+
+#[test]
+fn server_session_is_debug() {
+    let server = ServerSession::new(&Arc::new(make_server_config()));
+    println!("{:?}", server);
 }

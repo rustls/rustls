@@ -4,7 +4,7 @@ use rand;
 
 use time;
 use std::mem;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use ring::aead;
 
 /// This is a `ProducesTickets` implementation which uses
@@ -188,7 +188,7 @@ impl Ticketer {
     /// with a 12 hour life and randomly generated keys.
     ///
     /// The encryption mechanism used in Chacha20Poly1305.
-    pub fn new() -> Box<ProducesTickets> {
-        Box::new(TicketSwitcher::new(6 * 60 * 60, generate_inner))
+    pub fn new() -> Arc<ProducesTickets> {
+        Arc::new(TicketSwitcher::new(6 * 60 * 60, generate_inner))
     }
 }
