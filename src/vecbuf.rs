@@ -1,19 +1,20 @@
 use std::io::Read;
 use std::io;
 use std::cmp;
+use std::collections::VecDeque;
 
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
 /// appending a new byte vector, at the expense of
 /// more complexity when reading out.
 pub struct ChunkVecBuffer {
-    chunks: Vec<Vec<u8>>,
+    chunks: VecDeque<Vec<u8>>,
     limit: usize,
 }
 
 impl ChunkVecBuffer {
     pub fn new() -> ChunkVecBuffer {
-        ChunkVecBuffer { chunks: Vec::new(), limit: 0 }
+        ChunkVecBuffer { chunks: VecDeque::new(), limit: 0 }
     }
 
     /// Sets the upper limit on how many bytes this
@@ -66,7 +67,7 @@ impl ChunkVecBuffer {
         let len = bytes.len();
 
         if !bytes.is_empty() {
-            self.chunks.push(bytes);
+            self.chunks.push_back(bytes);
         }
 
         len
@@ -75,7 +76,7 @@ impl ChunkVecBuffer {
     /// Take one of the chunks from this object.  This
     /// function panics if the object `is_empty`.
     pub fn take_one(&mut self) -> Vec<u8> {
-        self.chunks.remove(0)
+        self.chunks.pop_front().unwrap()
     }
 
     /// Read data out of this object, writing it into `buf`
@@ -87,7 +88,7 @@ impl ChunkVecBuffer {
             let used = self.chunks[0].as_slice().read(&mut buf[offs..])?;
 
             if used == self.chunks[0].len() {
-                self.chunks.remove(0);
+                self.take_one();
             } else {
                 self.chunks[0] = self.chunks[0].split_off(used);
             }
@@ -108,7 +109,7 @@ impl ChunkVecBuffer {
         let used = wr.write(&self.chunks[0])?;
 
         if used == self.chunks[0].len() {
-            self.chunks.remove(0);
+            self.take_one();
         } else {
             self.chunks[0] = self.chunks[0].split_off(used);
         }
