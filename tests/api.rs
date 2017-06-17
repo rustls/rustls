@@ -445,7 +445,7 @@ fn client_cert_resolve() {
     let mut client_config = make_client_config();
     let mut server_config = make_server_config();
 
-    client_config.client_auth_cert_resolver = Box::new(ClientCheckCertResolve::new(1));
+    client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(1));
     server_config.set_client_auth_roots(get_chain(), true);
 
     let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
