@@ -35,34 +35,6 @@ impl Payload {
     }
 }
 
-/// An arbitrary, unknown-content, u24-length-prefixed payload
-#[derive(Debug, Clone, PartialEq)]
-pub struct PayloadU24(pub Vec<u8>);
-
-impl PayloadU24 {
-    pub fn new(bytes: Vec<u8>) -> PayloadU24 {
-        PayloadU24(bytes)
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-
-impl Codec for PayloadU24 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u24(self.0.len() as u32, bytes);
-        bytes.extend_from_slice(&self.0);
-    }
-
-    fn read(r: &mut Reader) -> Option<PayloadU24> {
-        let len = try_ret!(codec::read_u24(r)) as usize;
-        let mut sub = try_ret!(r.sub(len));
-        let body = sub.rest().to_vec();
-        Some(PayloadU24(body))
-    }
-}
-
 impl Codec for key::Certificate {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::encode_u24(self.0.len() as u32, bytes);
