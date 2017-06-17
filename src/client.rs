@@ -19,6 +19,7 @@ use key;
 use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
+use std::fmt;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -349,6 +350,12 @@ pub struct ClientSessionImpl {
     pub state: &'static client_hs::State,
 }
 
+impl fmt::Debug for ClientSessionImpl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ClientSessionImpl").finish()
+    }
+}
+
 impl ClientSessionImpl {
     pub fn new(config: &Arc<ClientConfig>, hostname: &str) -> ClientSessionImpl {
         let mut cs = ClientSessionImpl {
@@ -540,6 +547,7 @@ impl ClientSessionImpl {
 }
 
 /// This represents a single TLS client session.
+#[derive(Debug)]
 pub struct ClientSession {
     // We use the pimpl idiom to hide unimportant details.
     imp: ClientSessionImpl,
