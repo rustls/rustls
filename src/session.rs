@@ -123,6 +123,7 @@ pub trait Session: Read + Write + Send {
         where Self: Sized, T: Read + Write
     {
         let until_handshaked = self.is_handshaking();
+        let mut eof = false;
         let mut wrlen = 0;
         let mut rdlen = 0;
 
@@ -135,16 +136,22 @@ pub trait Session: Read + Write + Send {
                 return Ok((rdlen, wrlen));
             }
 
-            rdlen += self.read_tls(io)?;
+            if !eof && self.wants_read() {
+                match self.read_tls(io)? {
+                    0 => eof = true,
+                    n => rdlen += n
+                }
+            }
 
             self.process_new_packets()
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-            match (until_handshaked, self.is_handshaking()) {
-                (true, false) => return Ok((rdlen, wrlen)),
-                (false, _) => return Ok((rdlen, wrlen)),
-                (_, _) => {}
-            };
+            match (eof, until_handshaked, self.is_handshaking()) {
+                (_, true, false) => return Ok((rdlen, wrlen)),
+                (_, false, _) => return Ok((rdlen, wrlen)),
+                (true, true, true) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+                (..) => ()
+            }
         }
     }
 }

@@ -604,6 +604,16 @@ fn client_complete_io_for_handshake() {
 }
 
 #[test]
+fn client_complete_io_for_handshake_eof() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut input = io::Cursor::new(Vec::new());
+
+    assert_eq!(true, client.is_handshaking());
+    let err = client.complete_io(&mut input).unwrap_err();
+    assert_eq!(io::ErrorKind::UnexpectedEof, err.kind());
+}
+
+#[test]
 fn client_complete_io_for_write() {
     let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
@@ -647,6 +657,16 @@ fn server_complete_io_for_handshake() {
     let (rdlen, wrlen) = server.complete_io(&mut OtherSession::new(&mut client)).unwrap();
     assert!(rdlen > 0 && wrlen > 0);
     assert_eq!(false, server.is_handshaking());
+}
+
+#[test]
+fn server_complete_io_for_handshake_eof() {
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let mut input = io::Cursor::new(Vec::new());
+
+    assert_eq!(true, server.is_handshaking());
+    let err = server.complete_io(&mut input).unwrap_err();
+    assert_eq!(io::ErrorKind::UnexpectedEof, err.kind());
 }
 
 #[test]
