@@ -27,25 +27,30 @@ use std::fmt;
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
+///
+/// `put` is a mutating operation; this isn't expressed
+/// in the type system to allow implementations freedom in
+/// how to achieve interior mutability.  `Mutex` is a common
+/// choice.
 pub trait StoresClientSessions : Send + Sync {
     /// Stores a new `value` for `key`.  Returns `true`
     /// if the value was stored.
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool;
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
 
     /// Returns the latest value for `key`.  Returns `None`
     /// if there's no such value.
-    fn get(&mut self, key: &[u8]) -> Option<Vec<u8>>;
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
 /// An implementor of `StoresClientSessions` which does nothing.
 struct NoSessionStorage {}
 
 impl StoresClientSessions for NoSessionStorage {
-    fn put(&mut self, _key: Vec<u8>, _value: Vec<u8>) -> bool {
+    fn put(&self, _key: Vec<u8>, _value: Vec<u8>) -> bool {
         false
     }
 
-    fn get(&mut self, _key: &[u8]) -> Option<Vec<u8>> {
+    fn get(&self, _key: &[u8]) -> Option<Vec<u8>> {
         None
     }
 }
@@ -54,38 +59,43 @@ impl StoresClientSessions for NoSessionStorage {
 /// in memory.  It enforces a limit on the number of sessions
 /// to bound memory usage.
 pub struct ClientSessionMemoryCache {
-    cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
     max_entries: usize,
 }
 
 impl ClientSessionMemoryCache {
     /// Make a new ClientSessionMemoryCache.  `size` is the
     /// maximum number of stored sessions.
-    pub fn new(size: usize) -> Box<ClientSessionMemoryCache> {
+    pub fn new(size: usize) -> Arc<ClientSessionMemoryCache> {
         debug_assert!(size > 0);
-        Box::new(ClientSessionMemoryCache {
-            cache: collections::HashMap::new(),
+        Arc::new(ClientSessionMemoryCache {
+            cache: Mutex::new(collections::HashMap::new()),
             max_entries: size,
         })
     }
 
-    fn limit_size(&mut self) {
-        while self.cache.len() > self.max_entries {
-            let k = self.cache.keys().next().unwrap().clone();
-            self.cache.remove(&k);
+    fn limit_size(&self) {
+        let mut cache = self.cache.lock().unwrap();
+        while cache.len() > self.max_entries {
+            let k = cache.keys().next().unwrap().clone();
+            cache.remove(&k);
         }
     }
 }
 
 impl StoresClientSessions for ClientSessionMemoryCache {
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache.insert(key, value);
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+        self.cache.lock()
+            .unwrap()
+            .insert(key, value);
         self.limit_size();
         true
     }
 
-    fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.get(key).cloned()
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.cache.lock()
+            .unwrap()
+            .get(key).cloned()
     }
 }
 
@@ -175,7 +185,7 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<String>,
 
     /// How we store session data or tickets.
-    pub session_persistence: Arc<Mutex<Box<StoresClientSessions>>>,
+    pub session_persistence: Arc<StoresClientSessions>,
 
     /// Our MTU.  If None, we don't limit TLS message sizes.
     pub mtu: Option<usize>,
@@ -207,7 +217,7 @@ impl ClientConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
-            session_persistence: Arc::new(Mutex::new(Box::new(NoSessionStorage {}))),
+            session_persistence: Arc::new(NoSessionStorage {}),
             mtu: None,
             client_auth_cert_resolver: Arc::new(FailResolveClientCert {}),
             enable_tickets: true,
@@ -231,8 +241,8 @@ impl ClientConfig {
     }
 
     /// Sets persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Box<StoresClientSessions>) {
-        self.session_persistence = Arc::new(Mutex::new(persist));
+    pub fn set_persistence(&mut self, persist: Arc<StoresClientSessions>) {
+        self.session_persistence = persist;
     }
 
     /// Sets MTU to `mtu`.  If None, the default is used.

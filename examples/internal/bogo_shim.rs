@@ -147,7 +147,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     if opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
         cfg.dangerous()
-            .set_certificate_verifier(Box::new(NoVerification {}));
+            .set_certificate_verifier(Arc::new(NoVerification {}));
     }
 
     if opts.require_any_client_cert {

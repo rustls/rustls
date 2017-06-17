@@ -25,6 +25,11 @@ use std::fmt;
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
+///
+/// `put` and `del` are mutating operations; this isn't expressed
+/// in the type system to allow implementations freedom in
+/// how to achieve interior mutability.  `Mutex` is a common
+/// choice.
 pub trait StoresServerSessions : Send + Sync {
     /// Generate a session ID.
     fn generate(&self) -> SessionID;
@@ -32,7 +37,7 @@ pub trait StoresServerSessions : Send + Sync {
     /// Store session secrets encoded in `value` against key `id`,
     /// overwrites any existing value against `id`.  Returns `true`
     /// if the value was stored.
-    fn put(&mut self, id: &SessionID, value: Vec<u8>) -> bool;
+    fn put(&self, id: &SessionID, value: Vec<u8>) -> bool;
 
     /// Find a session with the given `id`.  Return it, or None
     /// if it doesn't exist.
@@ -40,7 +45,7 @@ pub trait StoresServerSessions : Send + Sync {
 
     /// Erase a session with the given `id`.  Return true if
     /// `id` existed and was removed.
-    fn del(&mut self, id: &SessionID) -> bool;
+    fn del(&self, id: &SessionID) -> bool;
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.
@@ -105,7 +110,7 @@ pub struct ServerConfig {
     pub ignore_client_order: bool,
 
     /// How to store client sessions.
-    pub session_storage: Arc<Mutex<Box<StoresServerSessions + Send>>>,
+    pub session_storage: Arc<StoresServerSessions + Send>,
 
     /// How to produce tickets.
     pub ticketer: Arc<ProducesTickets>,
@@ -142,13 +147,13 @@ impl StoresServerSessions for NoSessionStorage {
     fn generate(&self) -> SessionID {
         SessionID::empty()
     }
-    fn put(&mut self, _id: &SessionID, _sec: Vec<u8>) -> bool {
+    fn put(&self, _id: &SessionID, _sec: Vec<u8>) -> bool {
         false
     }
     fn get(&self, _id: &SessionID) -> Option<Vec<u8>> {
         None
     }
-    fn del(&mut self, _id: &SessionID) -> bool {
+    fn del(&self, _id: &SessionID) -> bool {
         false
     }
 }
@@ -157,25 +162,26 @@ impl StoresServerSessions for NoSessionStorage {
 /// in memory.  If enforces a limit on the number of stored sessions
 /// to bound memory usage.
 pub struct ServerSessionMemoryCache {
-    cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
     max_entries: usize,
 }
 
 impl ServerSessionMemoryCache {
     /// Make a new ServerSessionMemoryCache.  `size` is the maximum
     /// number of stored sessions.
-    pub fn new(size: usize) -> Box<ServerSessionMemoryCache> {
+    pub fn new(size: usize) -> Arc<ServerSessionMemoryCache> {
         debug_assert!(size > 0);
-        Box::new(ServerSessionMemoryCache {
-            cache: collections::HashMap::new(),
+        Arc::new(ServerSessionMemoryCache {
+            cache: Mutex::new(collections::HashMap::new()),
             max_entries: size,
         })
     }
 
-    fn limit_size(&mut self) {
-        while self.cache.len() > self.max_entries {
-            let k = self.cache.keys().next().unwrap().clone();
-            self.cache.remove(&k);
+    fn limit_size(&self) {
+        let mut cache = self.cache.lock().unwrap();
+        while cache.len() > self.max_entries {
+            let k = cache.keys().next().unwrap().clone();
+            cache.remove(&k);
         }
     }
 }
@@ -187,18 +193,24 @@ impl StoresServerSessions for ServerSessionMemoryCache {
         SessionID::new(&v)
     }
 
-    fn put(&mut self, id: &SessionID, sec: Vec<u8>) -> bool {
-        self.cache.insert(id.get_encoding(), sec);
+    fn put(&self, id: &SessionID, sec: Vec<u8>) -> bool {
+        self.cache.lock()
+            .unwrap()
+            .insert(id.get_encoding(), sec);
         self.limit_size();
         true
     }
 
     fn get(&self, id: &SessionID) -> Option<Vec<u8>> {
-        self.cache.get(&id.get_encoding()).cloned()
+        self.cache.lock()
+            .unwrap()
+            .get(&id.get_encoding()).cloned()
     }
 
-    fn del(&mut self, id: &SessionID) -> bool {
-        self.cache.remove(&id.get_encoding()).is_some()
+    fn del(&self, id: &SessionID) -> bool {
+        self.cache.lock()
+            .unwrap()
+            .remove(&id.get_encoding()).is_some()
     }
 }
 
@@ -266,7 +278,7 @@ impl ServerConfig {
         ServerConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             ignore_client_order: false,
-            session_storage: Arc::new(Mutex::new(Box::new(NoSessionStorage {}))),
+            session_storage: Arc::new(NoSessionStorage {}),
             ticketer: Arc::new(NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
             cert_resolver: Arc::new(FailResolveChain {}),
@@ -284,8 +296,8 @@ impl ServerConfig {
     }
 
     /// Sets the session persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Box<StoresServerSessions + Send>) {
-        self.session_storage = Arc::new(Mutex::new(persist));
+    pub fn set_persistence(&mut self, persist: Arc<StoresServerSessions + Send>) {
+        self.session_storage = persist;
     }
 
     /// Sets a single certificate chain and matching private key.  This
@@ -337,6 +349,7 @@ impl ServerConfig {
 pub mod danger {
     use super::ServerConfig;
     use super::verify::ClientCertVerifier;
+    use super::Arc;
 
     /// Accessor for dangerous configuration options.
     pub struct DangerousServerConfig<'a> {
@@ -347,7 +360,7 @@ pub mod danger {
     impl<'a> DangerousServerConfig<'a> {
         /// Overrides the default `ClientCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self,
-                                        verifier: Box<ClientCertVerifier>) {
+                                        verifier: Arc<ClientCertVerifier>) {
             self.cfg.verifier = verifier;
         }
     }

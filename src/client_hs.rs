@@ -81,8 +81,7 @@ fn find_session(sess: &mut ClientSessionImpl) -> Option<persist::ClientSessionVa
     let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
     let key_buf = key.get_encoding();
 
-    let mut persist = sess.config.session_persistence.lock().unwrap();
-    let maybe_value = persist.get(&key_buf);
+    let maybe_value = sess.config.session_persistence.get(&key_buf);
 
     if maybe_value.is_none() {
         info!("No cached session for {:?}", sess.handshake_data.dns_name);
@@ -105,16 +104,14 @@ fn find_kx_hint(sess: &mut ClientSessionImpl) -> Option<NamedGroup> {
     let key = persist::ClientSessionKey::hint_for_dns_name(&sess.handshake_data.dns_name);
     let key_buf = key.get_encoding();
 
-    let mut persist = sess.config.session_persistence.lock().unwrap();
-    let maybe_value = persist.get(&key_buf);
+    let maybe_value = sess.config.session_persistence.get(&key_buf);
     maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
 fn save_kx_hint(sess: &mut ClientSessionImpl, group: NamedGroup) {
     let key = persist::ClientSessionKey::hint_for_dns_name(&sess.handshake_data.dns_name);
 
-    let mut persist = sess.config.session_persistence.lock().unwrap();
-    persist.put(key.get_encoding(), group.get_encoding());
+    sess.config.session_persistence.put(key.get_encoding(), group.get_encoding());
 }
 
 /// If we have a ticket, we use the sessionid as a signal that we're
@@ -1273,8 +1270,8 @@ fn save_session(sess: &mut ClientSessionImpl) {
         value.set_extended_ms_used();
     }
 
-    let mut persist = sess.config.session_persistence.lock().unwrap();
-    let worked = persist.put(key.get_encoding(), value.get_encoding());
+    let worked = sess.config.session_persistence.put(key.get_encoding(),
+                                                     value.get_encoding());
 
     if worked {
         info!("Session saved");
@@ -1530,8 +1527,8 @@ fn handle_new_ticket_tls13(sess: &mut ClientSessionImpl, m: Message) -> Result<(
 
     let key = persist::ClientSessionKey::session_for_dns_name(&sess.handshake_data.dns_name);
 
-    let mut persist = sess.config.session_persistence.lock().unwrap();
-    let worked = persist.put(key.get_encoding(), value.get_encoding());
+    let worked = sess.config.session_persistence.put(key.get_encoding(),
+                                                     value.get_encoding());
 
     if worked {
         info!("Ticket saved");

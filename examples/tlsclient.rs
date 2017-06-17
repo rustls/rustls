@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::process;
 
 extern crate mio;
@@ -187,7 +187,7 @@ impl TlsClient {
 /// Note that the contents of such a file are extremely sensitive.
 /// Don't write this stuff to disk in production code.
 struct PersistCache {
-    cache: collections::HashMap<Vec<u8>, Vec<u8>>,
+    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
     filename: Option<String>,
 }
 
@@ -195,8 +195,8 @@ impl PersistCache {
     /// Make a new cache.  If filename is Some, load the cache
     /// from it and flush changes back to that file.
     fn new(filename: &Option<String>) -> PersistCache {
-        let mut cache = PersistCache {
-            cache: collections::HashMap::new(),
+        let cache = PersistCache {
+            cache: Mutex::new(collections::HashMap::new()),
             filename: filename.clone(),
         };
         if cache.filename.is_some() {
@@ -206,7 +206,7 @@ impl PersistCache {
     }
 
     /// If we have a filename, save the cache contents to it.
-    fn save(&mut self) {
+    fn save(&self) {
         use rustls::internal::msgs::codec::Codec;
         use rustls::internal::msgs::base::PayloadU16;
 
@@ -214,9 +214,10 @@ impl PersistCache {
             return;
         }
 
-        let mut file = fs::File::create(self.filename.as_ref().unwrap()).unwrap();
+        let mut file = fs::File::create(self.filename.as_ref().unwrap())
+            .expect("cannot open cache file");
 
-        for (key, val) in &self.cache {
+        for (key, val) in self.cache.lock().unwrap().iter() {
             let mut item = Vec::new();
             let key_pl = PayloadU16::new(key.clone());
             let val_pl = PayloadU16::new(val.clone());
@@ -227,7 +228,7 @@ impl PersistCache {
     }
 
     /// We have a filename, so replace the cache contents from it.
-    fn load(&mut self) {
+    fn load(&self) {
         use rustls::internal::msgs::codec::{Codec, Reader};
         use rustls::internal::msgs::base::PayloadU16;
 
@@ -238,28 +239,34 @@ impl PersistCache {
         let mut data = Vec::new();
         file.read_to_end(&mut data).unwrap();
 
-        self.cache.clear();
+        let mut cache = self.cache.lock()
+            .unwrap();
+        cache.clear();
         let mut rd = Reader::init(&data);
 
         while rd.any_left() {
             let key_pl = PayloadU16::read(&mut rd).unwrap();
             let val_pl = PayloadU16::read(&mut rd).unwrap();
-            self.cache.insert(key_pl.0, val_pl.0);
+            cache.insert(key_pl.0, val_pl.0);
         }
     }
 }
 
 impl rustls::StoresClientSessions for PersistCache {
     /// put: insert into in-memory cache, and perhaps persist to disk.
-    fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache.insert(key, value);
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+        self.cache.lock()
+            .unwrap()
+            .insert(key, value);
         self.save();
         true
     }
 
     /// get: from in-memory cache
-    fn get(&mut self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.get(key).cloned()
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.cache.lock()
+            .unwrap()
+            .get(key).cloned()
     }
 }
 
@@ -435,7 +442,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config.enable_tickets = false;
     }
 
-    let persist = Box::new(PersistCache::new(&args.flag_cache));
+    let persist = Arc::new(PersistCache::new(&args.flag_cache));
 
     config.set_protocols(&args.flag_proto);
     config.set_persistence(persist);

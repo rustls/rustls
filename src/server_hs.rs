@@ -125,8 +125,6 @@ fn emit_server_hello(sess: &mut ServerSessionImpl,
     if sess.handshake_data.session_id.is_empty() {
         let sessid = sess.config
             .session_storage
-            .lock()
-            .unwrap()
             .generate();
         sess.handshake_data.session_id = sessid;
     }
@@ -845,10 +843,8 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     // Perhaps resume?  If we received a ticket, the sessionid
     // does not correspond to a real session.
     if !client_hello.session_id.is_empty() && !ticket_received {
-        let maybe_resume = {
-                let persist = sess.config.session_storage.lock().unwrap();
-                persist.get(&client_hello.session_id)
-            }
+        let maybe_resume = sess.config.session_storage
+            .get(&client_hello.session_id)
             .and_then(|x| persist::ServerSessionValue::read_bytes(&x));
 
         if can_resume(sess, &maybe_resume) {
@@ -1197,8 +1193,9 @@ fn handle_finished(sess: &mut ServerSessionImpl, m: Message) -> StateResult {
     if !sess.handshake_data.doing_resume && !sess.handshake_data.session_id.is_empty() {
         let value = get_server_session_value(sess);
 
-        let mut persist = sess.config.session_storage.lock().unwrap();
-        if persist.put(&sess.handshake_data.session_id, value.get_encoding()) {
+        let worked = sess.config.session_storage
+            .put(&sess.handshake_data.session_id, value.get_encoding());
+        if worked {
             info!("Session saved");
         } else {
             info!("Session not saved");
