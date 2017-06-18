@@ -44,7 +44,7 @@ def merge(outfile, infiles):
     subprocess.check_call(lcov_exe(*arg))
 
 def extract(outfile, infile):
-    subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/*', '-o', outfile))
+    subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/src/*', '-o', outfile))
 
 def genhtml(outdir, infile):
     subprocess.check_call(['genhtml', '--branch-coverage', '--demangle-cpp', '--legend',
