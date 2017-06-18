@@ -1,9 +1,0 @@
-#!/usr/bin/env python
-
-import glob
-import os
-
-for file in sorted(glob.glob('fuzz/corpus/message/*.bin')):
-    name = os.path.basename(file).replace('.bin', '').replace('.', '_').lower()
-    print """test_parse_message!(test_%s,
-                    "../../%s");""" % (name, file)
