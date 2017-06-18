@@ -19,6 +19,9 @@ pub mod hsjoiner;
 mod enums_test;
 
 #[cfg(test)]
+mod message_test;
+
+#[cfg(test)]
 mod test {
     #[test]
     fn smoketest() {

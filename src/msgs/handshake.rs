@@ -633,6 +633,114 @@ impl ClientExtension {
     }
 }
 
+#[test]
+fn can_roundtrip_unknown_client_ext() {
+    let bytes = [0x12u8, 0x34u8, 0, 3, 1, 2, 3];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+
+    println!("{:?}", ext);
+    assert_eq!(ext.get_type(), ExtensionType::Unknown(0x1234));
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn can_roundtrip_single_sni() {
+    let bytes = [
+        0, 0,
+        0, 7,
+        0, 5,
+          0, 0, 2, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn can_roundtrip_multiname_sni() {
+    let bytes = [
+        0, 0,
+        0, 12,
+        0, 10,
+          0, 0, 2, 0x68, 0x69,
+          0, 0, 2, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::ServerName(req) => {
+            assert_eq!(2, req.len());
+            assert_eq!(req.get_hostname(), Some("hi"));
+            assert_eq!(req[0].typ, ServerNameType::HostName);
+            assert_eq!(req[1].typ, ServerNameType::HostName);
+        }
+        _ => unreachable!()
+    }
+}
+
+#[test]
+fn can_roundtrip_multi_proto() {
+    let bytes = [
+        0, 16,
+        0, 8,
+        0, 6,
+          2, 0x68, 0x69,
+          2, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ALProtocolNegotiation);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::Protocols(prot) => {
+            assert_eq!(2, prot.len());
+            assert_eq!(vec!["hi".to_string(), "lo".to_string()],
+                       prot.to_strings());
+            assert_eq!(prot.to_single_string(), None);
+        }
+        _ => unreachable!()
+    }
+}
+
+#[test]
+fn can_roundtrip_single_proto() {
+    let bytes = [
+        0, 16,
+        0, 5,
+        0, 3,
+          2, 0x68, 0x69,
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ALProtocolNegotiation);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::Protocols(prot) => {
+            assert_eq!(1, prot.len());
+            assert_eq!(vec!["hi".to_string()], prot.to_strings());
+            assert_eq!(prot.to_single_string(), Some("hi".to_string()));
+        }
+        _ => unreachable!()
+    }
+}
+
 #[derive(Debug)]
 pub enum ServerExtension {
     ECPointFormats(ECPointFormatList),

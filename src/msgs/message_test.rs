@@ -1,0 +1,1022 @@
+use super::codec::Reader;
+use super::codec::Codec;
+use super::message::Message;
+
+macro_rules! test_parse_message(
+    ($fn:ident, $file:expr) => {
+        #[test]
+        fn $fn() {
+            let bytes = include_bytes!($file);
+            let mut rd = Reader::init(bytes);
+            let msg = Message::read(&mut rd)
+                .unwrap();
+            println!("{:?}", msg);
+            assert_eq!(bytes.to_vec(), msg.get_encoding());
+        }
+    }
+);
+
+test_parse_message!(test_alert_10280050250016901720,
+                    "../../fuzz/corpus/message/Alert.10280050250016901720.bin");
+test_parse_message!(test_alert_10990289312340337901,
+                    "../../fuzz/corpus/message/Alert.10990289312340337901.bin");
+test_parse_message!(test_alert_11416797448165465899,
+                    "../../fuzz/corpus/message/Alert.11416797448165465899.bin");
+test_parse_message!(test_alert_11453208220996012273,
+                    "../../fuzz/corpus/message/Alert.11453208220996012273.bin");
+test_parse_message!(test_alert_11565037296979808272,
+                    "../../fuzz/corpus/message/Alert.11565037296979808272.bin");
+test_parse_message!(test_alert_11760376156357150936,
+                    "../../fuzz/corpus/message/Alert.11760376156357150936.bin");
+test_parse_message!(test_alert_12245208494696599323,
+                    "../../fuzz/corpus/message/Alert.12245208494696599323.bin");
+test_parse_message!(test_alert_12355157071787079801,
+                    "../../fuzz/corpus/message/Alert.12355157071787079801.bin");
+test_parse_message!(test_alert_12375939412686290950,
+                    "../../fuzz/corpus/message/Alert.12375939412686290950.bin");
+test_parse_message!(test_alert_12378204967172258450,
+                    "../../fuzz/corpus/message/Alert.12378204967172258450.bin");
+test_parse_message!(test_alert_12615425949843913652,
+                    "../../fuzz/corpus/message/Alert.12615425949843913652.bin");
+test_parse_message!(test_alert_12786326721221384799,
+                    "../../fuzz/corpus/message/Alert.12786326721221384799.bin");
+test_parse_message!(test_alert_13339784566695133300,
+                    "../../fuzz/corpus/message/Alert.13339784566695133300.bin");
+test_parse_message!(test_alert_13361831451407093096,
+                    "../../fuzz/corpus/message/Alert.13361831451407093096.bin");
+test_parse_message!(test_alert_13518407338280213965,
+                    "../../fuzz/corpus/message/Alert.13518407338280213965.bin");
+test_parse_message!(test_alert_13944372952187732560,
+                    "../../fuzz/corpus/message/Alert.13944372952187732560.bin");
+test_parse_message!(test_alert_14329079313034565007,
+                    "../../fuzz/corpus/message/Alert.14329079313034565007.bin");
+test_parse_message!(test_alert_14763597747152221220,
+                    "../../fuzz/corpus/message/Alert.14763597747152221220.bin");
+test_parse_message!(test_alert_15529719457323058694,
+                    "../../fuzz/corpus/message/Alert.15529719457323058694.bin");
+test_parse_message!(test_alert_16757745138222651512,
+                    "../../fuzz/corpus/message/Alert.16757745138222651512.bin");
+test_parse_message!(test_alert_17041130500670955403,
+                    "../../fuzz/corpus/message/Alert.17041130500670955403.bin");
+test_parse_message!(test_alert_17076052668804544911,
+                    "../../fuzz/corpus/message/Alert.17076052668804544911.bin");
+test_parse_message!(test_alert_17808584441538747011,
+                    "../../fuzz/corpus/message/Alert.17808584441538747011.bin");
+test_parse_message!(test_alert_1926005331368283096,
+                    "../../fuzz/corpus/message/Alert.1926005331368283096.bin");
+test_parse_message!(test_alert_2519011641324364265,
+                    "../../fuzz/corpus/message/Alert.2519011641324364265.bin");
+test_parse_message!(test_alert_3043772687617154178,
+                    "../../fuzz/corpus/message/Alert.3043772687617154178.bin");
+test_parse_message!(test_alert_3312711214589330727,
+                    "../../fuzz/corpus/message/Alert.3312711214589330727.bin");
+test_parse_message!(test_alert_3846875027962666933,
+                    "../../fuzz/corpus/message/Alert.3846875027962666933.bin");
+test_parse_message!(test_alert_3913777692829914411,
+                    "../../fuzz/corpus/message/Alert.3913777692829914411.bin");
+test_parse_message!(test_alert_4452180125344520836,
+                    "../../fuzz/corpus/message/Alert.4452180125344520836.bin");
+test_parse_message!(test_alert_4742310320599043602,
+                    "../../fuzz/corpus/message/Alert.4742310320599043602.bin");
+test_parse_message!(test_alert_5389179157252855041,
+                    "../../fuzz/corpus/message/Alert.5389179157252855041.bin");
+test_parse_message!(test_alert_5456718882703404602,
+                    "../../fuzz/corpus/message/Alert.5456718882703404602.bin");
+test_parse_message!(test_alert_6121018813528470199,
+                    "../../fuzz/corpus/message/Alert.6121018813528470199.bin");
+test_parse_message!(test_alert_6263407189670520235,
+                    "../../fuzz/corpus/message/Alert.6263407189670520235.bin");
+test_parse_message!(test_alert_7573777073329161362,
+                    "../../fuzz/corpus/message/Alert.7573777073329161362.bin");
+test_parse_message!(test_alert_7765214894001215959,
+                    "../../fuzz/corpus/message/Alert.7765214894001215959.bin");
+test_parse_message!(test_alert_8003974926653128830,
+                    "../../fuzz/corpus/message/Alert.8003974926653128830.bin");
+test_parse_message!(test_alert_8040902803342244309,
+                    "../../fuzz/corpus/message/Alert.8040902803342244309.bin");
+test_parse_message!(test_alert_9395714526513626176,
+                    "../../fuzz/corpus/message/Alert.9395714526513626176.bin");
+test_parse_message!(test_alert_9705133744397563296,
+                    "../../fuzz/corpus/message/Alert.9705133744397563296.bin");
+test_parse_message!(test_applicationdata_1679947195649814466,
+                    "../../fuzz/corpus/message/ApplicationData.1679947195649814466.bin");
+test_parse_message!(test_applicationdata_9982215765603175582,
+                    "../../fuzz/corpus/message/ApplicationData.9982215765603175582.bin");
+test_parse_message!(test_changecipherspec_5130871619167228381,
+                    "../../fuzz/corpus/message/ChangeCipherSpec.5130871619167228381.bin");
+test_parse_message!(test_handshake_10011143024461322467,
+                    "../../fuzz/corpus/message/Handshake.10011143024461322467.bin");
+test_parse_message!(test_handshake_10077665702210867505,
+                    "../../fuzz/corpus/message/Handshake.10077665702210867505.bin");
+test_parse_message!(test_handshake_10098879893470023836,
+                    "../../fuzz/corpus/message/Handshake.10098879893470023836.bin");
+test_parse_message!(test_handshake_1014094126958255749,
+                    "../../fuzz/corpus/message/Handshake.1014094126958255749.bin");
+test_parse_message!(test_handshake_10141290723738510057,
+                    "../../fuzz/corpus/message/Handshake.10141290723738510057.bin");
+test_parse_message!(test_handshake_10141834381331746219,
+                    "../../fuzz/corpus/message/Handshake.10141834381331746219.bin");
+test_parse_message!(test_handshake_10209460977184754837,
+                    "../../fuzz/corpus/message/Handshake.10209460977184754837.bin");
+test_parse_message!(test_handshake_10218605480040858007,
+                    "../../fuzz/corpus/message/Handshake.10218605480040858007.bin");
+test_parse_message!(test_handshake_10240025107753113811,
+                    "../../fuzz/corpus/message/Handshake.10240025107753113811.bin");
+test_parse_message!(test_handshake_10371497117445277776,
+                    "../../fuzz/corpus/message/Handshake.10371497117445277776.bin");
+test_parse_message!(test_handshake_10371726514864811512,
+                    "../../fuzz/corpus/message/Handshake.10371726514864811512.bin");
+test_parse_message!(test_handshake_10404861134591260329,
+                    "../../fuzz/corpus/message/Handshake.10404861134591260329.bin");
+test_parse_message!(test_handshake_10435794347579708741,
+                    "../../fuzz/corpus/message/Handshake.10435794347579708741.bin");
+test_parse_message!(test_handshake_10446208266497761172,
+                    "../../fuzz/corpus/message/Handshake.10446208266497761172.bin");
+test_parse_message!(test_handshake_10456857047407384689,
+                    "../../fuzz/corpus/message/Handshake.10456857047407384689.bin");
+test_parse_message!(test_handshake_10458215951434834175,
+                    "../../fuzz/corpus/message/Handshake.10458215951434834175.bin");
+test_parse_message!(test_handshake_10552517710869239241,
+                    "../../fuzz/corpus/message/Handshake.10552517710869239241.bin");
+test_parse_message!(test_handshake_10558811065537550384,
+                    "../../fuzz/corpus/message/Handshake.10558811065537550384.bin");
+test_parse_message!(test_handshake_10613091849924479756,
+                    "../../fuzz/corpus/message/Handshake.10613091849924479756.bin");
+test_parse_message!(test_handshake_10659216864320865342,
+                    "../../fuzz/corpus/message/Handshake.10659216864320865342.bin");
+test_parse_message!(test_handshake_10681270166105325453,
+                    "../../fuzz/corpus/message/Handshake.10681270166105325453.bin");
+test_parse_message!(test_handshake_10688022178565531040,
+                    "../../fuzz/corpus/message/Handshake.10688022178565531040.bin");
+test_parse_message!(test_handshake_10698695949247460925,
+                    "../../fuzz/corpus/message/Handshake.10698695949247460925.bin");
+test_parse_message!(test_handshake_10742438438534962209,
+                    "../../fuzz/corpus/message/Handshake.10742438438534962209.bin");
+test_parse_message!(test_handshake_10874002327852371828,
+                    "../../fuzz/corpus/message/Handshake.10874002327852371828.bin");
+test_parse_message!(test_handshake_10883949373270779757,
+                    "../../fuzz/corpus/message/Handshake.10883949373270779757.bin");
+test_parse_message!(test_handshake_10916777788113490974,
+                    "../../fuzz/corpus/message/Handshake.10916777788113490974.bin");
+test_parse_message!(test_handshake_11036929536862183793,
+                    "../../fuzz/corpus/message/Handshake.11036929536862183793.bin");
+test_parse_message!(test_handshake_11133859442970323138,
+                    "../../fuzz/corpus/message/Handshake.11133859442970323138.bin");
+test_parse_message!(test_handshake_11200934711857544531,
+                    "../../fuzz/corpus/message/Handshake.11200934711857544531.bin");
+test_parse_message!(test_handshake_11252751319713410600,
+                    "../../fuzz/corpus/message/Handshake.11252751319713410600.bin");
+test_parse_message!(test_handshake_11262390920595632125,
+                    "../../fuzz/corpus/message/Handshake.11262390920595632125.bin");
+test_parse_message!(test_handshake_11263729003567826431,
+                    "../../fuzz/corpus/message/Handshake.11263729003567826431.bin");
+test_parse_message!(test_handshake_1128253234623654886,
+                    "../../fuzz/corpus/message/Handshake.1128253234623654886.bin");
+test_parse_message!(test_handshake_11311319071620970474,
+                    "../../fuzz/corpus/message/Handshake.11311319071620970474.bin");
+test_parse_message!(test_handshake_11402577742008484913,
+                    "../../fuzz/corpus/message/Handshake.11402577742008484913.bin");
+test_parse_message!(test_handshake_11420916514041666430,
+                    "../../fuzz/corpus/message/Handshake.11420916514041666430.bin");
+test_parse_message!(test_handshake_11436898661660187192,
+                    "../../fuzz/corpus/message/Handshake.11436898661660187192.bin");
+test_parse_message!(test_handshake_11476587042910458435,
+                    "../../fuzz/corpus/message/Handshake.11476587042910458435.bin");
+test_parse_message!(test_handshake_11560651271531308535,
+                    "../../fuzz/corpus/message/Handshake.11560651271531308535.bin");
+test_parse_message!(test_handshake_11577081787284137323,
+                    "../../fuzz/corpus/message/Handshake.11577081787284137323.bin");
+test_parse_message!(test_handshake_11599548177419428055,
+                    "../../fuzz/corpus/message/Handshake.11599548177419428055.bin");
+test_parse_message!(test_handshake_11729926090369047740,
+                    "../../fuzz/corpus/message/Handshake.11729926090369047740.bin");
+test_parse_message!(test_handshake_11734105735310423560,
+                    "../../fuzz/corpus/message/Handshake.11734105735310423560.bin");
+test_parse_message!(test_handshake_11768011845890387011,
+                    "../../fuzz/corpus/message/Handshake.11768011845890387011.bin");
+test_parse_message!(test_handshake_11797635867773909803,
+                    "../../fuzz/corpus/message/Handshake.11797635867773909803.bin");
+test_parse_message!(test_handshake_11831695944078976098,
+                    "../../fuzz/corpus/message/Handshake.11831695944078976098.bin");
+test_parse_message!(test_handshake_11864301203407148532,
+                    "../../fuzz/corpus/message/Handshake.11864301203407148532.bin");
+test_parse_message!(test_handshake_11897948021151086611,
+                    "../../fuzz/corpus/message/Handshake.11897948021151086611.bin");
+test_parse_message!(test_handshake_1189983604093770200,
+                    "../../fuzz/corpus/message/Handshake.1189983604093770200.bin");
+test_parse_message!(test_handshake_11899913542638122182,
+                    "../../fuzz/corpus/message/Handshake.11899913542638122182.bin");
+test_parse_message!(test_handshake_1201340471094163820,
+                    "../../fuzz/corpus/message/Handshake.1201340471094163820.bin");
+test_parse_message!(test_handshake_12049357286072587683,
+                    "../../fuzz/corpus/message/Handshake.12049357286072587683.bin");
+test_parse_message!(test_handshake_12050074869185469294,
+                    "../../fuzz/corpus/message/Handshake.12050074869185469294.bin");
+test_parse_message!(test_handshake_12095880389901769183,
+                    "../../fuzz/corpus/message/Handshake.12095880389901769183.bin");
+test_parse_message!(test_handshake_12097987555572946602,
+                    "../../fuzz/corpus/message/Handshake.12097987555572946602.bin");
+test_parse_message!(test_handshake_12108739684593654595,
+                    "../../fuzz/corpus/message/Handshake.12108739684593654595.bin");
+test_parse_message!(test_handshake_1210891782701783637,
+                    "../../fuzz/corpus/message/Handshake.1210891782701783637.bin");
+test_parse_message!(test_handshake_12229778010996579180,
+                    "../../fuzz/corpus/message/Handshake.12229778010996579180.bin");
+test_parse_message!(test_handshake_12272542168539556446,
+                    "../../fuzz/corpus/message/Handshake.12272542168539556446.bin");
+test_parse_message!(test_handshake_12324399657563551716,
+                    "../../fuzz/corpus/message/Handshake.12324399657563551716.bin");
+test_parse_message!(test_handshake_12419794187727158761,
+                    "../../fuzz/corpus/message/Handshake.12419794187727158761.bin");
+test_parse_message!(test_handshake_12461674601026577652,
+                    "../../fuzz/corpus/message/Handshake.12461674601026577652.bin");
+test_parse_message!(test_handshake_12542921702091737503,
+                    "../../fuzz/corpus/message/Handshake.12542921702091737503.bin");
+test_parse_message!(test_handshake_12575443973166284515,
+                    "../../fuzz/corpus/message/Handshake.12575443973166284515.bin");
+test_parse_message!(test_handshake_12619619622709153468,
+                    "../../fuzz/corpus/message/Handshake.12619619622709153468.bin");
+test_parse_message!(test_handshake_12713618516910133238,
+                    "../../fuzz/corpus/message/Handshake.12713618516910133238.bin");
+test_parse_message!(test_handshake_12791027514067409694,
+                    "../../fuzz/corpus/message/Handshake.12791027514067409694.bin");
+test_parse_message!(test_handshake_12821925002150674327,
+                    "../../fuzz/corpus/message/Handshake.12821925002150674327.bin");
+test_parse_message!(test_handshake_12866691055333988812,
+                    "../../fuzz/corpus/message/Handshake.12866691055333988812.bin");
+test_parse_message!(test_handshake_12881350425646542526,
+                    "../../fuzz/corpus/message/Handshake.12881350425646542526.bin");
+test_parse_message!(test_handshake_12906714218699487516,
+                    "../../fuzz/corpus/message/Handshake.12906714218699487516.bin");
+test_parse_message!(test_handshake_12923847857105388415,
+                    "../../fuzz/corpus/message/Handshake.12923847857105388415.bin");
+test_parse_message!(test_handshake_12933585682510177240,
+                    "../../fuzz/corpus/message/Handshake.12933585682510177240.bin");
+test_parse_message!(test_handshake_12933927063134556696,
+                    "../../fuzz/corpus/message/Handshake.12933927063134556696.bin");
+test_parse_message!(test_handshake_12962951870000222901,
+                    "../../fuzz/corpus/message/Handshake.12962951870000222901.bin");
+test_parse_message!(test_handshake_12987742379477651587,
+                    "../../fuzz/corpus/message/Handshake.12987742379477651587.bin");
+test_parse_message!(test_handshake_12992305617680129286,
+                    "../../fuzz/corpus/message/Handshake.12992305617680129286.bin");
+test_parse_message!(test_handshake_13032428774562074898,
+                    "../../fuzz/corpus/message/Handshake.13032428774562074898.bin");
+test_parse_message!(test_handshake_1309579295029779311,
+                    "../../fuzz/corpus/message/Handshake.1309579295029779311.bin");
+test_parse_message!(test_handshake_13135207830642795575,
+                    "../../fuzz/corpus/message/Handshake.13135207830642795575.bin");
+test_parse_message!(test_handshake_13146595373118622951,
+                    "../../fuzz/corpus/message/Handshake.13146595373118622951.bin");
+test_parse_message!(test_handshake_13208116316761918660,
+                    "../../fuzz/corpus/message/Handshake.13208116316761918660.bin");
+test_parse_message!(test_handshake_13252009950983403856,
+                    "../../fuzz/corpus/message/Handshake.13252009950983403856.bin");
+test_parse_message!(test_handshake_13254954579228851613,
+                    "../../fuzz/corpus/message/Handshake.13254954579228851613.bin");
+test_parse_message!(test_handshake_13276329037903871174,
+                    "../../fuzz/corpus/message/Handshake.13276329037903871174.bin");
+test_parse_message!(test_handshake_13373545972366589631,
+                    "../../fuzz/corpus/message/Handshake.13373545972366589631.bin");
+test_parse_message!(test_handshake_13401359172328241694,
+                    "../../fuzz/corpus/message/Handshake.13401359172328241694.bin");
+test_parse_message!(test_handshake_13422631897482703892,
+                    "../../fuzz/corpus/message/Handshake.13422631897482703892.bin");
+test_parse_message!(test_handshake_13448396166617358694,
+                    "../../fuzz/corpus/message/Handshake.13448396166617358694.bin");
+test_parse_message!(test_handshake_13462900989360483027,
+                    "../../fuzz/corpus/message/Handshake.13462900989360483027.bin");
+test_parse_message!(test_handshake_13490041212957887113,
+                    "../../fuzz/corpus/message/Handshake.13490041212957887113.bin");
+test_parse_message!(test_handshake_13508856728571080946,
+                    "../../fuzz/corpus/message/Handshake.13508856728571080946.bin");
+test_parse_message!(test_handshake_13527476206349948098,
+                    "../../fuzz/corpus/message/Handshake.13527476206349948098.bin");
+test_parse_message!(test_handshake_13553527446655009046,
+                    "../../fuzz/corpus/message/Handshake.13553527446655009046.bin");
+test_parse_message!(test_handshake_13567655794415259226,
+                    "../../fuzz/corpus/message/Handshake.13567655794415259226.bin");
+test_parse_message!(test_handshake_13572499048018428911,
+                    "../../fuzz/corpus/message/Handshake.13572499048018428911.bin");
+test_parse_message!(test_handshake_13584197101871325906,
+                    "../../fuzz/corpus/message/Handshake.13584197101871325906.bin");
+test_parse_message!(test_handshake_13648713539106128587,
+                    "../../fuzz/corpus/message/Handshake.13648713539106128587.bin");
+test_parse_message!(test_handshake_1365796585825694264,
+                    "../../fuzz/corpus/message/Handshake.1365796585825694264.bin");
+test_parse_message!(test_handshake_13790749913165199198,
+                    "../../fuzz/corpus/message/Handshake.13790749913165199198.bin");
+test_parse_message!(test_handshake_13814068595971935296,
+                    "../../fuzz/corpus/message/Handshake.13814068595971935296.bin");
+test_parse_message!(test_handshake_13884570758846245053,
+                    "../../fuzz/corpus/message/Handshake.13884570758846245053.bin");
+test_parse_message!(test_handshake_1394349569218781788,
+                    "../../fuzz/corpus/message/Handshake.1394349569218781788.bin");
+test_parse_message!(test_handshake_13984063482272562700,
+                    "../../fuzz/corpus/message/Handshake.13984063482272562700.bin");
+test_parse_message!(test_handshake_13984770398439454092,
+                    "../../fuzz/corpus/message/Handshake.13984770398439454092.bin");
+test_parse_message!(test_handshake_13999267638725815508,
+                    "../../fuzz/corpus/message/Handshake.13999267638725815508.bin");
+test_parse_message!(test_handshake_14009877000152811622,
+                    "../../fuzz/corpus/message/Handshake.14009877000152811622.bin");
+test_parse_message!(test_handshake_14013883575498423468,
+                    "../../fuzz/corpus/message/Handshake.14013883575498423468.bin");
+test_parse_message!(test_handshake_14024049187646346995,
+                    "../../fuzz/corpus/message/Handshake.14024049187646346995.bin");
+test_parse_message!(test_handshake_14063675181380296895,
+                    "../../fuzz/corpus/message/Handshake.14063675181380296895.bin");
+test_parse_message!(test_handshake_14069660426092783164,
+                    "../../fuzz/corpus/message/Handshake.14069660426092783164.bin");
+test_parse_message!(test_handshake_14099606319859446532,
+                    "../../fuzz/corpus/message/Handshake.14099606319859446532.bin");
+test_parse_message!(test_handshake_14242200054858355158,
+                    "../../fuzz/corpus/message/Handshake.14242200054858355158.bin");
+test_parse_message!(test_handshake_1425510439158102692,
+                    "../../fuzz/corpus/message/Handshake.1425510439158102692.bin");
+test_parse_message!(test_handshake_14282273754635061222,
+                    "../../fuzz/corpus/message/Handshake.14282273754635061222.bin");
+test_parse_message!(test_handshake_14320193797455121029,
+                    "../../fuzz/corpus/message/Handshake.14320193797455121029.bin");
+test_parse_message!(test_handshake_14322628933094490808,
+                    "../../fuzz/corpus/message/Handshake.14322628933094490808.bin");
+test_parse_message!(test_handshake_14393665983695130074,
+                    "../../fuzz/corpus/message/Handshake.14393665983695130074.bin");
+test_parse_message!(test_handshake_14412410967361510993,
+                    "../../fuzz/corpus/message/Handshake.14412410967361510993.bin");
+test_parse_message!(test_handshake_14429326485950888401,
+                    "../../fuzz/corpus/message/Handshake.14429326485950888401.bin");
+test_parse_message!(test_handshake_14446821313588772895,
+                    "../../fuzz/corpus/message/Handshake.14446821313588772895.bin");
+test_parse_message!(test_handshake_14525786614546755913,
+                    "../../fuzz/corpus/message/Handshake.14525786614546755913.bin");
+test_parse_message!(test_handshake_14585480434123890306,
+                    "../../fuzz/corpus/message/Handshake.14585480434123890306.bin");
+test_parse_message!(test_handshake_14589551266924465272,
+                    "../../fuzz/corpus/message/Handshake.14589551266924465272.bin");
+test_parse_message!(test_handshake_14617410605578343341,
+                    "../../fuzz/corpus/message/Handshake.14617410605578343341.bin");
+test_parse_message!(test_handshake_14662564964928502601,
+                    "../../fuzz/corpus/message/Handshake.14662564964928502601.bin");
+test_parse_message!(test_handshake_14695493555000511183,
+                    "../../fuzz/corpus/message/Handshake.14695493555000511183.bin");
+test_parse_message!(test_handshake_1469590175970957671,
+                    "../../fuzz/corpus/message/Handshake.1469590175970957671.bin");
+test_parse_message!(test_handshake_14703099513472818837,
+                    "../../fuzz/corpus/message/Handshake.14703099513472818837.bin");
+test_parse_message!(test_handshake_1473135651763031014,
+                    "../../fuzz/corpus/message/Handshake.1473135651763031014.bin");
+test_parse_message!(test_handshake_14866688372795221766,
+                    "../../fuzz/corpus/message/Handshake.14866688372795221766.bin");
+test_parse_message!(test_handshake_14908741649050651227,
+                    "../../fuzz/corpus/message/Handshake.14908741649050651227.bin");
+test_parse_message!(test_handshake_14923365458552646986,
+                    "../../fuzz/corpus/message/Handshake.14923365458552646986.bin");
+test_parse_message!(test_handshake_15068056427013946956,
+                    "../../fuzz/corpus/message/Handshake.15068056427013946956.bin");
+test_parse_message!(test_handshake_15176487544662052367,
+                    "../../fuzz/corpus/message/Handshake.15176487544662052367.bin");
+test_parse_message!(test_handshake_1518320918629890656,
+                    "../../fuzz/corpus/message/Handshake.1518320918629890656.bin");
+test_parse_message!(test_handshake_15192629661718834661,
+                    "../../fuzz/corpus/message/Handshake.15192629661718834661.bin");
+test_parse_message!(test_handshake_15228554977041565944,
+                    "../../fuzz/corpus/message/Handshake.15228554977041565944.bin");
+test_parse_message!(test_handshake_1530973898026006702,
+                    "../../fuzz/corpus/message/Handshake.1530973898026006702.bin");
+test_parse_message!(test_handshake_15388918098225859116,
+                    "../../fuzz/corpus/message/Handshake.15388918098225859116.bin");
+test_parse_message!(test_handshake_15392005723087373547,
+                    "../../fuzz/corpus/message/Handshake.15392005723087373547.bin");
+test_parse_message!(test_handshake_15411291236989586884,
+                    "../../fuzz/corpus/message/Handshake.15411291236989586884.bin");
+test_parse_message!(test_handshake_15424787030236756886,
+                    "../../fuzz/corpus/message/Handshake.15424787030236756886.bin");
+test_parse_message!(test_handshake_15437232101358805623,
+                    "../../fuzz/corpus/message/Handshake.15437232101358805623.bin");
+test_parse_message!(test_handshake_15453568942617885946,
+                    "../../fuzz/corpus/message/Handshake.15453568942617885946.bin");
+test_parse_message!(test_handshake_15511476665456364419,
+                    "../../fuzz/corpus/message/Handshake.15511476665456364419.bin");
+test_parse_message!(test_handshake_15536109336749205379,
+                    "../../fuzz/corpus/message/Handshake.15536109336749205379.bin");
+test_parse_message!(test_handshake_156657696701620214,
+                    "../../fuzz/corpus/message/Handshake.156657696701620214.bin");
+test_parse_message!(test_handshake_15744220259092203702,
+                    "../../fuzz/corpus/message/Handshake.15744220259092203702.bin");
+test_parse_message!(test_handshake_15747644562524183318,
+                    "../../fuzz/corpus/message/Handshake.15747644562524183318.bin");
+test_parse_message!(test_handshake_15764035480274040664,
+                    "../../fuzz/corpus/message/Handshake.15764035480274040664.bin");
+test_parse_message!(test_handshake_15785092298493111633,
+                    "../../fuzz/corpus/message/Handshake.15785092298493111633.bin");
+test_parse_message!(test_handshake_15823145278767166593,
+                    "../../fuzz/corpus/message/Handshake.15823145278767166593.bin");
+test_parse_message!(test_handshake_15828817918393310647,
+                    "../../fuzz/corpus/message/Handshake.15828817918393310647.bin");
+test_parse_message!(test_handshake_15853804441626080064,
+                    "../../fuzz/corpus/message/Handshake.15853804441626080064.bin");
+test_parse_message!(test_handshake_15924521189391044303,
+                    "../../fuzz/corpus/message/Handshake.15924521189391044303.bin");
+test_parse_message!(test_handshake_15932636702503475692,
+                    "../../fuzz/corpus/message/Handshake.15932636702503475692.bin");
+test_parse_message!(test_handshake_15980728767105240219,
+                    "../../fuzz/corpus/message/Handshake.15980728767105240219.bin");
+test_parse_message!(test_handshake_16032892450728185496,
+                    "../../fuzz/corpus/message/Handshake.16032892450728185496.bin");
+test_parse_message!(test_handshake_16070677070745681985,
+                    "../../fuzz/corpus/message/Handshake.16070677070745681985.bin");
+test_parse_message!(test_handshake_16123262421179431974,
+                    "../../fuzz/corpus/message/Handshake.16123262421179431974.bin");
+test_parse_message!(test_handshake_16201754788736281125,
+                    "../../fuzz/corpus/message/Handshake.16201754788736281125.bin");
+test_parse_message!(test_handshake_16210478671713826865,
+                    "../../fuzz/corpus/message/Handshake.16210478671713826865.bin");
+test_parse_message!(test_handshake_1626390092489971117,
+                    "../../fuzz/corpus/message/Handshake.1626390092489971117.bin");
+test_parse_message!(test_handshake_16308850004059631606,
+                    "../../fuzz/corpus/message/Handshake.16308850004059631606.bin");
+test_parse_message!(test_handshake_16383259529830901736,
+                    "../../fuzz/corpus/message/Handshake.16383259529830901736.bin");
+test_parse_message!(test_handshake_16412278998098028101,
+                    "../../fuzz/corpus/message/Handshake.16412278998098028101.bin");
+test_parse_message!(test_handshake_16426857520717506228,
+                    "../../fuzz/corpus/message/Handshake.16426857520717506228.bin");
+test_parse_message!(test_handshake_16432119024468853176,
+                    "../../fuzz/corpus/message/Handshake.16432119024468853176.bin");
+test_parse_message!(test_handshake_1643490134021521720,
+                    "../../fuzz/corpus/message/Handshake.1643490134021521720.bin");
+test_parse_message!(test_handshake_16436699903170639558,
+                    "../../fuzz/corpus/message/Handshake.16436699903170639558.bin");
+test_parse_message!(test_handshake_16437683612303518319,
+                    "../../fuzz/corpus/message/Handshake.16437683612303518319.bin");
+test_parse_message!(test_handshake_16444098854362686463,
+                    "../../fuzz/corpus/message/Handshake.16444098854362686463.bin");
+test_parse_message!(test_handshake_16472122371040267626,
+                    "../../fuzz/corpus/message/Handshake.16472122371040267626.bin");
+test_parse_message!(test_handshake_16514529420505023990,
+                    "../../fuzz/corpus/message/Handshake.16514529420505023990.bin");
+test_parse_message!(test_handshake_16523657212788733702,
+                    "../../fuzz/corpus/message/Handshake.16523657212788733702.bin");
+test_parse_message!(test_handshake_16540589193778243567,
+                    "../../fuzz/corpus/message/Handshake.16540589193778243567.bin");
+test_parse_message!(test_handshake_16589685086502189050,
+                    "../../fuzz/corpus/message/Handshake.16589685086502189050.bin");
+test_parse_message!(test_handshake_16596178973076867541,
+                    "../../fuzz/corpus/message/Handshake.16596178973076867541.bin");
+test_parse_message!(test_handshake_16609173880091320790,
+                    "../../fuzz/corpus/message/Handshake.16609173880091320790.bin");
+test_parse_message!(test_handshake_16627757275148925447,
+                    "../../fuzz/corpus/message/Handshake.16627757275148925447.bin");
+test_parse_message!(test_handshake_16647171529249569913,
+                    "../../fuzz/corpus/message/Handshake.16647171529249569913.bin");
+test_parse_message!(test_handshake_16703222254862307860,
+                    "../../fuzz/corpus/message/Handshake.16703222254862307860.bin");
+test_parse_message!(test_handshake_16722115196302564440,
+                    "../../fuzz/corpus/message/Handshake.16722115196302564440.bin");
+test_parse_message!(test_handshake_16735862169122005385,
+                    "../../fuzz/corpus/message/Handshake.16735862169122005385.bin");
+test_parse_message!(test_handshake_16811966076719770617,
+                    "../../fuzz/corpus/message/Handshake.16811966076719770617.bin");
+test_parse_message!(test_handshake_16833941846957128371,
+                    "../../fuzz/corpus/message/Handshake.16833941846957128371.bin");
+test_parse_message!(test_handshake_16876551284119928887,
+                    "../../fuzz/corpus/message/Handshake.16876551284119928887.bin");
+test_parse_message!(test_handshake_1688845106119492085,
+                    "../../fuzz/corpus/message/Handshake.1688845106119492085.bin");
+test_parse_message!(test_handshake_16897951102744314465,
+                    "../../fuzz/corpus/message/Handshake.16897951102744314465.bin");
+test_parse_message!(test_handshake_16948215967012835893,
+                    "../../fuzz/corpus/message/Handshake.16948215967012835893.bin");
+test_parse_message!(test_handshake_16992819064390132752,
+                    "../../fuzz/corpus/message/Handshake.16992819064390132752.bin");
+test_parse_message!(test_handshake_17011818371765087662,
+                    "../../fuzz/corpus/message/Handshake.17011818371765087662.bin");
+test_parse_message!(test_handshake_17045079723342920595,
+                    "../../fuzz/corpus/message/Handshake.17045079723342920595.bin");
+test_parse_message!(test_handshake_17055562155747367704,
+                    "../../fuzz/corpus/message/Handshake.17055562155747367704.bin");
+test_parse_message!(test_handshake_17059185269347141233,
+                    "../../fuzz/corpus/message/Handshake.17059185269347141233.bin");
+test_parse_message!(test_handshake_17144558641001270304,
+                    "../../fuzz/corpus/message/Handshake.17144558641001270304.bin");
+test_parse_message!(test_handshake_17170083450142864624,
+                    "../../fuzz/corpus/message/Handshake.17170083450142864624.bin");
+test_parse_message!(test_handshake_1717690949369415293,
+                    "../../fuzz/corpus/message/Handshake.1717690949369415293.bin");
+test_parse_message!(test_handshake_17201788246676815961,
+                    "../../fuzz/corpus/message/Handshake.17201788246676815961.bin");
+test_parse_message!(test_handshake_17212335116719329178,
+                    "../../fuzz/corpus/message/Handshake.17212335116719329178.bin");
+test_parse_message!(test_handshake_17213792272579830434,
+                    "../../fuzz/corpus/message/Handshake.17213792272579830434.bin");
+test_parse_message!(test_handshake_17232270933043251133,
+                    "../../fuzz/corpus/message/Handshake.17232270933043251133.bin");
+test_parse_message!(test_handshake_17232478528388315092,
+                    "../../fuzz/corpus/message/Handshake.17232478528388315092.bin");
+test_parse_message!(test_handshake_17235335569215645063,
+                    "../../fuzz/corpus/message/Handshake.17235335569215645063.bin");
+test_parse_message!(test_handshake_17243615472388120296,
+                    "../../fuzz/corpus/message/Handshake.17243615472388120296.bin");
+test_parse_message!(test_handshake_17258521995883629147,
+                    "../../fuzz/corpus/message/Handshake.17258521995883629147.bin");
+test_parse_message!(test_handshake_17297754318680457736,
+                    "../../fuzz/corpus/message/Handshake.17297754318680457736.bin");
+test_parse_message!(test_handshake_17327628122216214740,
+                    "../../fuzz/corpus/message/Handshake.17327628122216214740.bin");
+test_parse_message!(test_handshake_17328079106849016450,
+                    "../../fuzz/corpus/message/Handshake.17328079106849016450.bin");
+test_parse_message!(test_handshake_17340575935546108314,
+                    "../../fuzz/corpus/message/Handshake.17340575935546108314.bin");
+test_parse_message!(test_handshake_17396092822317572139,
+                    "../../fuzz/corpus/message/Handshake.17396092822317572139.bin");
+test_parse_message!(test_handshake_17424255485062971368,
+                    "../../fuzz/corpus/message/Handshake.17424255485062971368.bin");
+test_parse_message!(test_handshake_17437492765421933494,
+                    "../../fuzz/corpus/message/Handshake.17437492765421933494.bin");
+test_parse_message!(test_handshake_17540384758876388884,
+                    "../../fuzz/corpus/message/Handshake.17540384758876388884.bin");
+test_parse_message!(test_handshake_17547321132119983797,
+                    "../../fuzz/corpus/message/Handshake.17547321132119983797.bin");
+test_parse_message!(test_handshake_17557757898202736160,
+                    "../../fuzz/corpus/message/Handshake.17557757898202736160.bin");
+test_parse_message!(test_handshake_17613422452194830485,
+                    "../../fuzz/corpus/message/Handshake.17613422452194830485.bin");
+test_parse_message!(test_handshake_17617549015880478672,
+                    "../../fuzz/corpus/message/Handshake.17617549015880478672.bin");
+test_parse_message!(test_handshake_17661739364750810786,
+                    "../../fuzz/corpus/message/Handshake.17661739364750810786.bin");
+test_parse_message!(test_handshake_17696885369015774525,
+                    "../../fuzz/corpus/message/Handshake.17696885369015774525.bin");
+test_parse_message!(test_handshake_17701872256997425665,
+                    "../../fuzz/corpus/message/Handshake.17701872256997425665.bin");
+test_parse_message!(test_handshake_17707996754987920669,
+                    "../../fuzz/corpus/message/Handshake.17707996754987920669.bin");
+test_parse_message!(test_handshake_17724600262439791970,
+                    "../../fuzz/corpus/message/Handshake.17724600262439791970.bin");
+test_parse_message!(test_handshake_17741930369821550680,
+                    "../../fuzz/corpus/message/Handshake.17741930369821550680.bin");
+test_parse_message!(test_handshake_17792295585508497057,
+                    "../../fuzz/corpus/message/Handshake.17792295585508497057.bin");
+test_parse_message!(test_handshake_17807555105284792060,
+                    "../../fuzz/corpus/message/Handshake.17807555105284792060.bin");
+test_parse_message!(test_handshake_17986253032725764827,
+                    "../../fuzz/corpus/message/Handshake.17986253032725764827.bin");
+test_parse_message!(test_handshake_17998948064626831739,
+                    "../../fuzz/corpus/message/Handshake.17998948064626831739.bin");
+test_parse_message!(test_handshake_18016443855650646498,
+                    "../../fuzz/corpus/message/Handshake.18016443855650646498.bin");
+test_parse_message!(test_handshake_18048927047726097126,
+                    "../../fuzz/corpus/message/Handshake.18048927047726097126.bin");
+test_parse_message!(test_handshake_18063173879318671919,
+                    "../../fuzz/corpus/message/Handshake.18063173879318671919.bin");
+test_parse_message!(test_handshake_18132524175804122004,
+                    "../../fuzz/corpus/message/Handshake.18132524175804122004.bin");
+test_parse_message!(test_handshake_18169800317578718557,
+                    "../../fuzz/corpus/message/Handshake.18169800317578718557.bin");
+test_parse_message!(test_handshake_18232661073919066265,
+                    "../../fuzz/corpus/message/Handshake.18232661073919066265.bin");
+test_parse_message!(test_handshake_18255834500943036769,
+                    "../../fuzz/corpus/message/Handshake.18255834500943036769.bin");
+test_parse_message!(test_handshake_18266666495466432220,
+                    "../../fuzz/corpus/message/Handshake.18266666495466432220.bin");
+test_parse_message!(test_handshake_18375574386254795987,
+                    "../../fuzz/corpus/message/Handshake.18375574386254795987.bin");
+test_parse_message!(test_handshake_18391395525380228165,
+                    "../../fuzz/corpus/message/Handshake.18391395525380228165.bin");
+test_parse_message!(test_handshake_18397226621308013042,
+                    "../../fuzz/corpus/message/Handshake.18397226621308013042.bin");
+test_parse_message!(test_handshake_18755738257883875,
+                    "../../fuzz/corpus/message/Handshake.18755738257883875.bin");
+test_parse_message!(test_handshake_1928293452725324866,
+                    "../../fuzz/corpus/message/Handshake.1928293452725324866.bin");
+test_parse_message!(test_handshake_1936432102197506390,
+                    "../../fuzz/corpus/message/Handshake.1936432102197506390.bin");
+test_parse_message!(test_handshake_1990053809936248450,
+                    "../../fuzz/corpus/message/Handshake.1990053809936248450.bin");
+test_parse_message!(test_handshake_2027703828861302684,
+                    "../../fuzz/corpus/message/Handshake.2027703828861302684.bin");
+test_parse_message!(test_handshake_212219147091687617,
+                    "../../fuzz/corpus/message/Handshake.212219147091687617.bin");
+test_parse_message!(test_handshake_2152889732115087441,
+                    "../../fuzz/corpus/message/Handshake.2152889732115087441.bin");
+test_parse_message!(test_handshake_216457176383865358,
+                    "../../fuzz/corpus/message/Handshake.216457176383865358.bin");
+test_parse_message!(test_handshake_2240049362618089459,
+                    "../../fuzz/corpus/message/Handshake.2240049362618089459.bin");
+test_parse_message!(test_handshake_2307436573390925099,
+                    "../../fuzz/corpus/message/Handshake.2307436573390925099.bin");
+test_parse_message!(test_handshake_2313677203008364520,
+                    "../../fuzz/corpus/message/Handshake.2313677203008364520.bin");
+test_parse_message!(test_handshake_236915854650365330,
+                    "../../fuzz/corpus/message/Handshake.236915854650365330.bin");
+test_parse_message!(test_handshake_2394528942117922419,
+                    "../../fuzz/corpus/message/Handshake.2394528942117922419.bin");
+test_parse_message!(test_handshake_2413796706176055860,
+                    "../../fuzz/corpus/message/Handshake.2413796706176055860.bin");
+test_parse_message!(test_handshake_2460040447535057550,
+                    "../../fuzz/corpus/message/Handshake.2460040447535057550.bin");
+test_parse_message!(test_handshake_2480875953640570249,
+                    "../../fuzz/corpus/message/Handshake.2480875953640570249.bin");
+test_parse_message!(test_handshake_2527216998239295833,
+                    "../../fuzz/corpus/message/Handshake.2527216998239295833.bin");
+test_parse_message!(test_handshake_2541693875114751894,
+                    "../../fuzz/corpus/message/Handshake.2541693875114751894.bin");
+test_parse_message!(test_handshake_2544717604075640181,
+                    "../../fuzz/corpus/message/Handshake.2544717604075640181.bin");
+test_parse_message!(test_handshake_2557834332224711296,
+                    "../../fuzz/corpus/message/Handshake.2557834332224711296.bin");
+test_parse_message!(test_handshake_2673545329900462347,
+                    "../../fuzz/corpus/message/Handshake.2673545329900462347.bin");
+test_parse_message!(test_handshake_2796810502847829071,
+                    "../../fuzz/corpus/message/Handshake.2796810502847829071.bin");
+test_parse_message!(test_handshake_2826272846341584836,
+                    "../../fuzz/corpus/message/Handshake.2826272846341584836.bin");
+test_parse_message!(test_handshake_2861014807371483795,
+                    "../../fuzz/corpus/message/Handshake.2861014807371483795.bin");
+test_parse_message!(test_handshake_2949493553066767632,
+                    "../../fuzz/corpus/message/Handshake.2949493553066767632.bin");
+test_parse_message!(test_handshake_2961173759902739226,
+                    "../../fuzz/corpus/message/Handshake.2961173759902739226.bin");
+test_parse_message!(test_handshake_2979609226092629843,
+                    "../../fuzz/corpus/message/Handshake.2979609226092629843.bin");
+test_parse_message!(test_handshake_2984998126444994396,
+                    "../../fuzz/corpus/message/Handshake.2984998126444994396.bin");
+test_parse_message!(test_handshake_298518078319368406,
+                    "../../fuzz/corpus/message/Handshake.298518078319368406.bin");
+test_parse_message!(test_handshake_3014389673921418933,
+                    "../../fuzz/corpus/message/Handshake.3014389673921418933.bin");
+test_parse_message!(test_handshake_3014957178821188133,
+                    "../../fuzz/corpus/message/Handshake.3014957178821188133.bin");
+test_parse_message!(test_handshake_311760158055179110,
+                    "../../fuzz/corpus/message/Handshake.311760158055179110.bin");
+test_parse_message!(test_handshake_312526042889499214,
+                    "../../fuzz/corpus/message/Handshake.312526042889499214.bin");
+test_parse_message!(test_handshake_3128225394297022352,
+                    "../../fuzz/corpus/message/Handshake.3128225394297022352.bin");
+test_parse_message!(test_handshake_3166330578799441096,
+                    "../../fuzz/corpus/message/Handshake.3166330578799441096.bin");
+test_parse_message!(test_handshake_3312843528368099392,
+                    "../../fuzz/corpus/message/Handshake.3312843528368099392.bin");
+test_parse_message!(test_handshake_3313106910834900992,
+                    "../../fuzz/corpus/message/Handshake.3313106910834900992.bin");
+test_parse_message!(test_handshake_3347571752696288062,
+                    "../../fuzz/corpus/message/Handshake.3347571752696288062.bin");
+test_parse_message!(test_handshake_337084820905431502,
+                    "../../fuzz/corpus/message/Handshake.337084820905431502.bin");
+test_parse_message!(test_handshake_3424182835622235744,
+                    "../../fuzz/corpus/message/Handshake.3424182835622235744.bin");
+test_parse_message!(test_handshake_3429739447374499365,
+                    "../../fuzz/corpus/message/Handshake.3429739447374499365.bin");
+test_parse_message!(test_handshake_3475973011125062162,
+                    "../../fuzz/corpus/message/Handshake.3475973011125062162.bin");
+test_parse_message!(test_handshake_3513484021335611760,
+                    "../../fuzz/corpus/message/Handshake.3513484021335611760.bin");
+test_parse_message!(test_handshake_3651484916918355509,
+                    "../../fuzz/corpus/message/Handshake.3651484916918355509.bin");
+test_parse_message!(test_handshake_3705955763815240136,
+                    "../../fuzz/corpus/message/Handshake.3705955763815240136.bin");
+test_parse_message!(test_handshake_3710356333193877990,
+                    "../../fuzz/corpus/message/Handshake.3710356333193877990.bin");
+test_parse_message!(test_handshake_3804365713197001559,
+                    "../../fuzz/corpus/message/Handshake.3804365713197001559.bin");
+test_parse_message!(test_handshake_3808040219747534364,
+                    "../../fuzz/corpus/message/Handshake.3808040219747534364.bin");
+test_parse_message!(test_handshake_3919273420495969490,
+                    "../../fuzz/corpus/message/Handshake.3919273420495969490.bin");
+test_parse_message!(test_handshake_3932516291045283953,
+                    "../../fuzz/corpus/message/Handshake.3932516291045283953.bin");
+test_parse_message!(test_handshake_4039761311411713437,
+                    "../../fuzz/corpus/message/Handshake.4039761311411713437.bin");
+test_parse_message!(test_handshake_4144209600586588395,
+                    "../../fuzz/corpus/message/Handshake.4144209600586588395.bin");
+test_parse_message!(test_handshake_4191645962065905074,
+                    "../../fuzz/corpus/message/Handshake.4191645962065905074.bin");
+test_parse_message!(test_handshake_41955172152373455,
+                    "../../fuzz/corpus/message/Handshake.41955172152373455.bin");
+test_parse_message!(test_handshake_4218531966621319110,
+                    "../../fuzz/corpus/message/Handshake.4218531966621319110.bin");
+test_parse_message!(test_handshake_4241179859159128002,
+                    "../../fuzz/corpus/message/Handshake.4241179859159128002.bin");
+test_parse_message!(test_handshake_4249735697352582921,
+                    "../../fuzz/corpus/message/Handshake.4249735697352582921.bin");
+test_parse_message!(test_handshake_42758048396447472,
+                    "../../fuzz/corpus/message/Handshake.42758048396447472.bin");
+test_parse_message!(test_handshake_4293087073316750727,
+                    "../../fuzz/corpus/message/Handshake.4293087073316750727.bin");
+test_parse_message!(test_handshake_4296382558190650032,
+                    "../../fuzz/corpus/message/Handshake.4296382558190650032.bin");
+test_parse_message!(test_handshake_4325811598920991662,
+                    "../../fuzz/corpus/message/Handshake.4325811598920991662.bin");
+test_parse_message!(test_handshake_4355816358040777333,
+                    "../../fuzz/corpus/message/Handshake.4355816358040777333.bin");
+test_parse_message!(test_handshake_4386518903704075196,
+                    "../../fuzz/corpus/message/Handshake.4386518903704075196.bin");
+test_parse_message!(test_handshake_4389944769660451751,
+                    "../../fuzz/corpus/message/Handshake.4389944769660451751.bin");
+test_parse_message!(test_handshake_4476635384469125163,
+                    "../../fuzz/corpus/message/Handshake.4476635384469125163.bin");
+test_parse_message!(test_handshake_4477750639374584176,
+                    "../../fuzz/corpus/message/Handshake.4477750639374584176.bin");
+test_parse_message!(test_handshake_4542241670017875095,
+                    "../../fuzz/corpus/message/Handshake.4542241670017875095.bin");
+test_parse_message!(test_handshake_4543184149485589730,
+                    "../../fuzz/corpus/message/Handshake.4543184149485589730.bin");
+test_parse_message!(test_handshake_4611628590351112109,
+                    "../../fuzz/corpus/message/Handshake.4611628590351112109.bin");
+test_parse_message!(test_handshake_4619114321623197837,
+                    "../../fuzz/corpus/message/Handshake.4619114321623197837.bin");
+test_parse_message!(test_handshake_4642615169580265307,
+                    "../../fuzz/corpus/message/Handshake.4642615169580265307.bin");
+test_parse_message!(test_handshake_4649155104014981666,
+                    "../../fuzz/corpus/message/Handshake.4649155104014981666.bin");
+test_parse_message!(test_handshake_4667273675775908022,
+                    "../../fuzz/corpus/message/Handshake.4667273675775908022.bin");
+test_parse_message!(test_handshake_4674721369255096757,
+                    "../../fuzz/corpus/message/Handshake.4674721369255096757.bin");
+test_parse_message!(test_handshake_478596588601994286,
+                    "../../fuzz/corpus/message/Handshake.478596588601994286.bin");
+test_parse_message!(test_handshake_4786048730765981951,
+                    "../../fuzz/corpus/message/Handshake.4786048730765981951.bin");
+test_parse_message!(test_handshake_4865792012087462837,
+                    "../../fuzz/corpus/message/Handshake.4865792012087462837.bin");
+test_parse_message!(test_handshake_4908233617135292311,
+                    "../../fuzz/corpus/message/Handshake.4908233617135292311.bin");
+test_parse_message!(test_handshake_4933016559055960857,
+                    "../../fuzz/corpus/message/Handshake.4933016559055960857.bin");
+test_parse_message!(test_handshake_4938077362928474541,
+                    "../../fuzz/corpus/message/Handshake.4938077362928474541.bin");
+test_parse_message!(test_handshake_4962843938424694078,
+                    "../../fuzz/corpus/message/Handshake.4962843938424694078.bin");
+test_parse_message!(test_handshake_4989740266270094088,
+                    "../../fuzz/corpus/message/Handshake.4989740266270094088.bin");
+test_parse_message!(test_handshake_5048545998314720549,
+                    "../../fuzz/corpus/message/Handshake.5048545998314720549.bin");
+test_parse_message!(test_handshake_5073427320423541646,
+                    "../../fuzz/corpus/message/Handshake.5073427320423541646.bin");
+test_parse_message!(test_handshake_5217191805520860833,
+                    "../../fuzz/corpus/message/Handshake.5217191805520860833.bin");
+test_parse_message!(test_handshake_5286900913693115812,
+                    "../../fuzz/corpus/message/Handshake.5286900913693115812.bin");
+test_parse_message!(test_handshake_529945189212952632,
+                    "../../fuzz/corpus/message/Handshake.529945189212952632.bin");
+test_parse_message!(test_handshake_5301156670834358897,
+                    "../../fuzz/corpus/message/Handshake.5301156670834358897.bin");
+test_parse_message!(test_handshake_5334486403455255697,
+                    "../../fuzz/corpus/message/Handshake.5334486403455255697.bin");
+test_parse_message!(test_handshake_5343060974765799244,
+                    "../../fuzz/corpus/message/Handshake.5343060974765799244.bin");
+test_parse_message!(test_handshake_5362217997294593162,
+                    "../../fuzz/corpus/message/Handshake.5362217997294593162.bin");
+test_parse_message!(test_handshake_5380983266882457468,
+                    "../../fuzz/corpus/message/Handshake.5380983266882457468.bin");
+test_parse_message!(test_handshake_5402136492075007865,
+                    "../../fuzz/corpus/message/Handshake.5402136492075007865.bin");
+test_parse_message!(test_handshake_5405917007365442721,
+                    "../../fuzz/corpus/message/Handshake.5405917007365442721.bin");
+test_parse_message!(test_handshake_5443290700947309763,
+                    "../../fuzz/corpus/message/Handshake.5443290700947309763.bin");
+test_parse_message!(test_handshake_5481698826224529923,
+                    "../../fuzz/corpus/message/Handshake.5481698826224529923.bin");
+test_parse_message!(test_handshake_556291143183377611,
+                    "../../fuzz/corpus/message/Handshake.556291143183377611.bin");
+test_parse_message!(test_handshake_5586540596524415926,
+                    "../../fuzz/corpus/message/Handshake.5586540596524415926.bin");
+test_parse_message!(test_handshake_5594608350705202011,
+                    "../../fuzz/corpus/message/Handshake.5594608350705202011.bin");
+test_parse_message!(test_handshake_5603812265702676658,
+                    "../../fuzz/corpus/message/Handshake.5603812265702676658.bin");
+test_parse_message!(test_handshake_5604960497954348281,
+                    "../../fuzz/corpus/message/Handshake.5604960497954348281.bin");
+test_parse_message!(test_handshake_5659375494835764612,
+                    "../../fuzz/corpus/message/Handshake.5659375494835764612.bin");
+test_parse_message!(test_handshake_5663356738021631797,
+                    "../../fuzz/corpus/message/Handshake.5663356738021631797.bin");
+test_parse_message!(test_handshake_5707260217432481891,
+                    "../../fuzz/corpus/message/Handshake.5707260217432481891.bin");
+test_parse_message!(test_handshake_5716774200892842818,
+                    "../../fuzz/corpus/message/Handshake.5716774200892842818.bin");
+test_parse_message!(test_handshake_5830259757122116254,
+                    "../../fuzz/corpus/message/Handshake.5830259757122116254.bin");
+test_parse_message!(test_handshake_5837042724063548647,
+                    "../../fuzz/corpus/message/Handshake.5837042724063548647.bin");
+test_parse_message!(test_handshake_5871341296679804474,
+                    "../../fuzz/corpus/message/Handshake.5871341296679804474.bin");
+test_parse_message!(test_handshake_5874804588086026422,
+                    "../../fuzz/corpus/message/Handshake.5874804588086026422.bin");
+test_parse_message!(test_handshake_5945093118224632448,
+                    "../../fuzz/corpus/message/Handshake.5945093118224632448.bin");
+test_parse_message!(test_handshake_5947361360692291135,
+                    "../../fuzz/corpus/message/Handshake.5947361360692291135.bin");
+test_parse_message!(test_handshake_609922810419403201,
+                    "../../fuzz/corpus/message/Handshake.609922810419403201.bin");
+test_parse_message!(test_handshake_6128290413270962414,
+                    "../../fuzz/corpus/message/Handshake.6128290413270962414.bin");
+test_parse_message!(test_handshake_6148392331334603742,
+                    "../../fuzz/corpus/message/Handshake.6148392331334603742.bin");
+test_parse_message!(test_handshake_6167545766526183896,
+                    "../../fuzz/corpus/message/Handshake.6167545766526183896.bin");
+test_parse_message!(test_handshake_6183457994786268025,
+                    "../../fuzz/corpus/message/Handshake.6183457994786268025.bin");
+test_parse_message!(test_handshake_6246254988516583397,
+                    "../../fuzz/corpus/message/Handshake.6246254988516583397.bin");
+test_parse_message!(test_handshake_6256301128162194777,
+                    "../../fuzz/corpus/message/Handshake.6256301128162194777.bin");
+test_parse_message!(test_handshake_6270507649448991536,
+                    "../../fuzz/corpus/message/Handshake.6270507649448991536.bin");
+test_parse_message!(test_handshake_6286086053383889700,
+                    "../../fuzz/corpus/message/Handshake.6286086053383889700.bin");
+test_parse_message!(test_handshake_6299110277522314252,
+                    "../../fuzz/corpus/message/Handshake.6299110277522314252.bin");
+test_parse_message!(test_handshake_6303189164313223915,
+                    "../../fuzz/corpus/message/Handshake.6303189164313223915.bin");
+test_parse_message!(test_handshake_6317949579808964373,
+                    "../../fuzz/corpus/message/Handshake.6317949579808964373.bin");
+test_parse_message!(test_handshake_6349375420330136752,
+                    "../../fuzz/corpus/message/Handshake.6349375420330136752.bin");
+test_parse_message!(test_handshake_6373804566315576832,
+                    "../../fuzz/corpus/message/Handshake.6373804566315576832.bin");
+test_parse_message!(test_handshake_645143445693394463,
+                    "../../fuzz/corpus/message/Handshake.645143445693394463.bin");
+test_parse_message!(test_handshake_6473429051855997343,
+                    "../../fuzz/corpus/message/Handshake.6473429051855997343.bin");
+test_parse_message!(test_handshake_6483112328197560295,
+                    "../../fuzz/corpus/message/Handshake.6483112328197560295.bin");
+test_parse_message!(test_handshake_6514385179381560358,
+                    "../../fuzz/corpus/message/Handshake.6514385179381560358.bin");
+test_parse_message!(test_handshake_6556857782474775662,
+                    "../../fuzz/corpus/message/Handshake.6556857782474775662.bin");
+test_parse_message!(test_handshake_6560990876465882110,
+                    "../../fuzz/corpus/message/Handshake.6560990876465882110.bin");
+test_parse_message!(test_handshake_6575881671932139607,
+                    "../../fuzz/corpus/message/Handshake.6575881671932139607.bin");
+test_parse_message!(test_handshake_6628510697901476085,
+                    "../../fuzz/corpus/message/Handshake.6628510697901476085.bin");
+test_parse_message!(test_handshake_6647381434165417392,
+                    "../../fuzz/corpus/message/Handshake.6647381434165417392.bin");
+test_parse_message!(test_handshake_6673499158063844346,
+                    "../../fuzz/corpus/message/Handshake.6673499158063844346.bin");
+test_parse_message!(test_handshake_6711490333833806543,
+                    "../../fuzz/corpus/message/Handshake.6711490333833806543.bin");
+test_parse_message!(test_handshake_6784046683896858205,
+                    "../../fuzz/corpus/message/Handshake.6784046683896858205.bin");
+test_parse_message!(test_handshake_6825348629043782682,
+                    "../../fuzz/corpus/message/Handshake.6825348629043782682.bin");
+test_parse_message!(test_handshake_6845537131354319507,
+                    "../../fuzz/corpus/message/Handshake.6845537131354319507.bin");
+test_parse_message!(test_handshake_6904555378333487352,
+                    "../../fuzz/corpus/message/Handshake.6904555378333487352.bin");
+test_parse_message!(test_handshake_691322331639227581,
+                    "../../fuzz/corpus/message/Handshake.691322331639227581.bin");
+test_parse_message!(test_handshake_6930647023716087459,
+                    "../../fuzz/corpus/message/Handshake.6930647023716087459.bin");
+test_parse_message!(test_handshake_6934963550557282434,
+                    "../../fuzz/corpus/message/Handshake.6934963550557282434.bin");
+test_parse_message!(test_handshake_706496323736965313,
+                    "../../fuzz/corpus/message/Handshake.706496323736965313.bin");
+test_parse_message!(test_handshake_7139546534683738103,
+                    "../../fuzz/corpus/message/Handshake.7139546534683738103.bin");
+test_parse_message!(test_handshake_7140789886103116970,
+                    "../../fuzz/corpus/message/Handshake.7140789886103116970.bin");
+test_parse_message!(test_handshake_7165460482174603572,
+                    "../../fuzz/corpus/message/Handshake.7165460482174603572.bin");
+test_parse_message!(test_handshake_7169103668165722696,
+                    "../../fuzz/corpus/message/Handshake.7169103668165722696.bin");
+test_parse_message!(test_handshake_7204317303965803185,
+                    "../../fuzz/corpus/message/Handshake.7204317303965803185.bin");
+test_parse_message!(test_handshake_7215377677155798562,
+                    "../../fuzz/corpus/message/Handshake.7215377677155798562.bin");
+test_parse_message!(test_handshake_7239483366845560219,
+                    "../../fuzz/corpus/message/Handshake.7239483366845560219.bin");
+test_parse_message!(test_handshake_7247230710855987371,
+                    "../../fuzz/corpus/message/Handshake.7247230710855987371.bin");
+test_parse_message!(test_handshake_7307410286450529411,
+                    "../../fuzz/corpus/message/Handshake.7307410286450529411.bin");
+test_parse_message!(test_handshake_7315528097243481803,
+                    "../../fuzz/corpus/message/Handshake.7315528097243481803.bin");
+test_parse_message!(test_handshake_7346079841998135763,
+                    "../../fuzz/corpus/message/Handshake.7346079841998135763.bin");
+test_parse_message!(test_handshake_7346234843398406674,
+                    "../../fuzz/corpus/message/Handshake.7346234843398406674.bin");
+test_parse_message!(test_handshake_7417584038269759849,
+                    "../../fuzz/corpus/message/Handshake.7417584038269759849.bin");
+test_parse_message!(test_handshake_7455508748687829568,
+                    "../../fuzz/corpus/message/Handshake.7455508748687829568.bin");
+test_parse_message!(test_handshake_7465643599440370514,
+                    "../../fuzz/corpus/message/Handshake.7465643599440370514.bin");
+test_parse_message!(test_handshake_748961855245476356,
+                    "../../fuzz/corpus/message/Handshake.748961855245476356.bin");
+test_parse_message!(test_handshake_7516591636737017402,
+                    "../../fuzz/corpus/message/Handshake.7516591636737017402.bin");
+test_parse_message!(test_handshake_7567177748330669261,
+                    "../../fuzz/corpus/message/Handshake.7567177748330669261.bin");
+test_parse_message!(test_handshake_761091977985466479,
+                    "../../fuzz/corpus/message/Handshake.761091977985466479.bin");
+test_parse_message!(test_handshake_7656268277965224869,
+                    "../../fuzz/corpus/message/Handshake.7656268277965224869.bin");
+test_parse_message!(test_handshake_7690239762888976874,
+                    "../../fuzz/corpus/message/Handshake.7690239762888976874.bin");
+test_parse_message!(test_handshake_7719692407614242099,
+                    "../../fuzz/corpus/message/Handshake.7719692407614242099.bin");
+test_parse_message!(test_handshake_7720957275282168636,
+                    "../../fuzz/corpus/message/Handshake.7720957275282168636.bin");
+test_parse_message!(test_handshake_7794784808116194704,
+                    "../../fuzz/corpus/message/Handshake.7794784808116194704.bin");
+test_parse_message!(test_handshake_7813730008683262876,
+                    "../../fuzz/corpus/message/Handshake.7813730008683262876.bin");
+test_parse_message!(test_handshake_7885327095706217153,
+                    "../../fuzz/corpus/message/Handshake.7885327095706217153.bin");
+test_parse_message!(test_handshake_7906248215225931460,
+                    "../../fuzz/corpus/message/Handshake.7906248215225931460.bin");
+test_parse_message!(test_handshake_7948817873499846774,
+                    "../../fuzz/corpus/message/Handshake.7948817873499846774.bin");
+test_parse_message!(test_handshake_7952341792523028764,
+                    "../../fuzz/corpus/message/Handshake.7952341792523028764.bin");
+test_parse_message!(test_handshake_8013259530313775093,
+                    "../../fuzz/corpus/message/Handshake.8013259530313775093.bin");
+test_parse_message!(test_handshake_8075604299203105949,
+                    "../../fuzz/corpus/message/Handshake.8075604299203105949.bin");
+test_parse_message!(test_handshake_8172081604114400514,
+                    "../../fuzz/corpus/message/Handshake.8172081604114400514.bin");
+test_parse_message!(test_handshake_8189830343061708537,
+                    "../../fuzz/corpus/message/Handshake.8189830343061708537.bin");
+test_parse_message!(test_handshake_8221216873901994192,
+                    "../../fuzz/corpus/message/Handshake.8221216873901994192.bin");
+test_parse_message!(test_handshake_8248374086501392768,
+                    "../../fuzz/corpus/message/Handshake.8248374086501392768.bin");
+test_parse_message!(test_handshake_8392255840240310515,
+                    "../../fuzz/corpus/message/Handshake.8392255840240310515.bin");
+test_parse_message!(test_handshake_8396327429954042116,
+                    "../../fuzz/corpus/message/Handshake.8396327429954042116.bin");
+test_parse_message!(test_handshake_8406587813025302152,
+                    "../../fuzz/corpus/message/Handshake.8406587813025302152.bin");
+test_parse_message!(test_handshake_8407774444968010290,
+                    "../../fuzz/corpus/message/Handshake.8407774444968010290.bin");
+test_parse_message!(test_handshake_8440398803691469570,
+                    "../../fuzz/corpus/message/Handshake.8440398803691469570.bin");
+test_parse_message!(test_handshake_8485098093571729014,
+                    "../../fuzz/corpus/message/Handshake.8485098093571729014.bin");
+test_parse_message!(test_handshake_849776811515966891,
+                    "../../fuzz/corpus/message/Handshake.849776811515966891.bin");
+test_parse_message!(test_handshake_8560931306029320922,
+                    "../../fuzz/corpus/message/Handshake.8560931306029320922.bin");
+test_parse_message!(test_handshake_864255644696956933,
+                    "../../fuzz/corpus/message/Handshake.864255644696956933.bin");
+test_parse_message!(test_handshake_8693230236911388473,
+                    "../../fuzz/corpus/message/Handshake.8693230236911388473.bin");
+test_parse_message!(test_handshake_8729890745367494493,
+                    "../../fuzz/corpus/message/Handshake.8729890745367494493.bin");
+test_parse_message!(test_handshake_8860398728547306665,
+                    "../../fuzz/corpus/message/Handshake.8860398728547306665.bin");
+test_parse_message!(test_handshake_8867642025619914951,
+                    "../../fuzz/corpus/message/Handshake.8867642025619914951.bin");
+test_parse_message!(test_handshake_8904084412973289274,
+                    "../../fuzz/corpus/message/Handshake.8904084412973289274.bin");
+test_parse_message!(test_handshake_8969192033003128338,
+                    "../../fuzz/corpus/message/Handshake.8969192033003128338.bin");
+test_parse_message!(test_handshake_8971115354707129304,
+                    "../../fuzz/corpus/message/Handshake.8971115354707129304.bin");
+test_parse_message!(test_handshake_8984984283856126818,
+                    "../../fuzz/corpus/message/Handshake.8984984283856126818.bin");
+test_parse_message!(test_handshake_8991433515362915263,
+                    "../../fuzz/corpus/message/Handshake.8991433515362915263.bin");
+test_parse_message!(test_handshake_9069047612017088350,
+                    "../../fuzz/corpus/message/Handshake.9069047612017088350.bin");
+test_parse_message!(test_handshake_9089706207584821560,
+                    "../../fuzz/corpus/message/Handshake.9089706207584821560.bin");
+test_parse_message!(test_handshake_9240147047837819581,
+                    "../../fuzz/corpus/message/Handshake.9240147047837819581.bin");
+test_parse_message!(test_handshake_9243195678680727758,
+                    "../../fuzz/corpus/message/Handshake.9243195678680727758.bin");
+test_parse_message!(test_handshake_9252077617801921335,
+                    "../../fuzz/corpus/message/Handshake.9252077617801921335.bin");
+test_parse_message!(test_handshake_9297844479670622147,
+                    "../../fuzz/corpus/message/Handshake.9297844479670622147.bin");
+test_parse_message!(test_handshake_9311845630904179522,
+                    "../../fuzz/corpus/message/Handshake.9311845630904179522.bin");
+test_parse_message!(test_handshake_9312662581830733323,
+                    "../../fuzz/corpus/message/Handshake.9312662581830733323.bin");
+test_parse_message!(test_handshake_9317589580822515162,
+                    "../../fuzz/corpus/message/Handshake.9317589580822515162.bin");
+test_parse_message!(test_handshake_9429010528239790739,
+                    "../../fuzz/corpus/message/Handshake.9429010528239790739.bin");
+test_parse_message!(test_handshake_9454286992762375905,
+                    "../../fuzz/corpus/message/Handshake.9454286992762375905.bin");
+test_parse_message!(test_handshake_9525167095567049454,
+                    "../../fuzz/corpus/message/Handshake.9525167095567049454.bin");
+test_parse_message!(test_handshake_9550899685530869009,
+                    "../../fuzz/corpus/message/Handshake.9550899685530869009.bin");
+test_parse_message!(test_handshake_9745946828873281910,
+                    "../../fuzz/corpus/message/Handshake.9745946828873281910.bin");
+test_parse_message!(test_handshake_9818098016546753604,
+                    "../../fuzz/corpus/message/Handshake.9818098016546753604.bin");
+test_parse_message!(test_handshake_9850803183111560401,
+                    "../../fuzz/corpus/message/Handshake.9850803183111560401.bin");
+test_parse_message!(test_handshake_9890336611007943713,
+                    "../../fuzz/corpus/message/Handshake.9890336611007943713.bin");
+test_parse_message!(test_handshake_9921068590203068234,
+                    "../../fuzz/corpus/message/Handshake.9921068590203068234.bin");
+test_parse_message!(test_handshake_9967963985197802467,
+                    "../../fuzz/corpus/message/Handshake.9967963985197802467.bin");
+test_parse_message!(test_handshake_9996393024757669485,
+                    "../../fuzz/corpus/message/Handshake.9996393024757669485.bin");
