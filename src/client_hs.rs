@@ -981,12 +981,10 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> StateResu
     let maybe_certkey =
         sess.config.client_auth_cert_resolver.resolve(&canames, &certreq.sigschemes);
 
-    let scs = sess.common.get_suite();
-    let maybe_sigscheme = scs.resolve_sig_scheme(&certreq.sigschemes);
-
-    if maybe_certkey.is_some() && maybe_sigscheme.is_some() {
+    if maybe_certkey.is_some() {
         let (cert, key) = maybe_certkey.unwrap();
-        info!("Attempting client auth, will use {:?}", maybe_sigscheme.as_ref().unwrap());
+        let maybe_sigscheme = key.choose_scheme(&certreq.sigschemes);
+        info!("Attempting client auth, will use sigscheme {:?}", maybe_sigscheme);
         sess.handshake_data.client_auth_cert = Some(cert);
         sess.handshake_data.client_auth_key = Some(key);
         sess.handshake_data.client_auth_sigscheme = maybe_sigscheme;
