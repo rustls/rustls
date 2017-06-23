@@ -93,6 +93,23 @@ fn client_auth_by_client() {
 }
 
 #[test]
+fn client_auth_by_client_with_ecdsa_suite() {
+    let mut server = OpenSSLServer::new_ecdsa(9020);
+    server.arg("-verify").arg("0");
+    server.run();
+
+    server.client()
+        .client_auth("test-ca/ecdsa/end.fullchain", "test-ca/rsa/end.rsa")
+        .expect_log("Got CertificateRequest")
+        .expect_log("Attempting client auth")
+        .expect("Client certificate\n")
+        .expect("Ciphers common between both SSL end points:\n")
+        .go();
+
+    server.kill();
+}
+
+#[test]
 fn client_auth_requested_but_unsupported() {
     let mut server = OpenSSLServer::new_rsa(9030);
     server.arg("-verify").arg("0");
