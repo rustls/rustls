@@ -99,11 +99,11 @@ fn client_auth_by_client_with_ecdsa_suite() {
     server.run();
 
     server.client()
-        .client_auth("test-ca/ecdsa/end.fullchain", "test-ca/rsa/end.rsa")
+        .client_auth("test-ca/rsa/end.fullchain", "test-ca/rsa/end.rsa")
         .expect_log("Got CertificateRequest")
         .expect_log("Attempting client auth")
-        .expect("Client certificate\n")
-        .expect("Ciphers common between both SSL end points:\n")
+        .expect(r"AlertReceived\(UnknownCA\)")
+        .fails()
         .go();
 
     server.kill();
