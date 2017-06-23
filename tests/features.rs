@@ -94,7 +94,7 @@ fn client_auth_by_client() {
 
 #[test]
 fn client_auth_by_client_with_ecdsa_suite() {
-    let mut server = OpenSSLServer::new_ecdsa(9020);
+    let mut server = OpenSSLServer::new_ecdsa(9025);
     server.arg("-verify").arg("0");
     server.run();
 
