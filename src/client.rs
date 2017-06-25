@@ -116,7 +116,7 @@ pub trait ResolvesClientCert : Send + Sync {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigner>;
+               -> Option<sign::CertChainAndSigningKey>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -128,7 +128,7 @@ impl ResolvesClientCert for FailResolveClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigner> {
+               -> Option<sign::CertChainAndSigningKey> {
         None
     }
 
@@ -139,14 +139,14 @@ impl ResolvesClientCert for FailResolveClientCert {
 
 struct AlwaysResolvesClientCert {
     chain: Vec<key::Certificate>,
-    key: Arc<Box<sign::Signer>>,
+    key: Arc<Box<sign::SigningKey>>,
 }
 
 impl AlwaysResolvesClientCert {
     fn new_rsa(chain: Vec<key::Certificate>,
                priv_key: &key::PrivateKey)
                -> AlwaysResolvesClientCert {
-        let key = sign::RSASigner::new(priv_key).expect("Invalid RSA private key");
+        let key = sign::RSASigningKey::new(priv_key).expect("Invalid RSA private key");
         AlwaysResolvesClientCert {
             chain: chain,
             key: Arc::new(Box::new(key)),
@@ -158,7 +158,7 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigner> {
+               -> Option<sign::CertChainAndSigningKey> {
         Some((self.chain.clone(), self.key.clone()))
     }
 
@@ -320,9 +320,8 @@ pub struct ClientHandshakeData {
     pub new_ticket: Vec<u8>,
     pub new_ticket_lifetime: u32,
     pub doing_client_auth: bool,
-    pub client_auth_sigscheme: Option<SignatureScheme>,
     pub client_auth_cert: Option<CertificatePayload>,
-    pub client_auth_key: Option<Arc<Box<sign::Signer>>>,
+    pub client_auth_signer: Option<Box<sign::Signer>>,
     pub client_auth_context: Option<Vec<u8>>,
     pub offered_key_shares: Vec<suites::KeyExchange>,
 }
@@ -344,9 +343,8 @@ impl ClientHandshakeData {
             new_ticket: Vec::new(),
             new_ticket_lifetime: 0,
             doing_client_auth: false,
-            client_auth_sigscheme: None,
             client_auth_cert: None,
-            client_auth_key: None,
+            client_auth_signer: None,
             client_auth_context: None,
             offered_key_shares: Vec::new(),
         }

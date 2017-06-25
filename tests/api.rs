@@ -365,7 +365,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-        -> Option<sign::CertChainAndSigner> {
+        -> Option<sign::CertChainAndSigningKey> {
         if let Some(got_dns_name) = server_name {
             if got_dns_name != self.expected {
                 panic!("unexpected dns name (wanted '{}' got '{}')", &self.expected, got_dns_name);
@@ -421,7 +421,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-        -> Option<sign::CertChainAndSigner> {
+        -> Option<sign::CertChainAndSigningKey> {
         self.query_count.fetch_add(1, atomic::Ordering::SeqCst);
 
         if acceptable_issuers.len() == 0 {

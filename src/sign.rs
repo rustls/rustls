@@ -1,34 +1,46 @@
 use msgs::enums::{SignatureAlgorithm, SignatureScheme};
 use util;
+use key;
+use error::TLSError;
+
 use untrusted;
+
 use ring;
 use ring::signature;
 use ring::signature::RSAKeyPair;
+
 use std::sync::Arc;
-use key;
 
-/// A thing that can sign a message.
-pub trait Signer : Send + Sync {
+/// An abstract signing key.
+pub trait SigningKey : Send + Sync {
     /// Choose a SignatureScheme from those offered.
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<SignatureScheme>;
-
-    /// Signs `message` using `scheme`.
-    fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()>;
+    ///
+    /// Expresses the choice something that implements Signer,
+    /// using the chosen scheme.
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<Signer>>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
 }
 
-/// A packaged together certificate chain and Signer for the certified key.
-pub type CertChainAndSigner = (Vec<key::Certificate>, Arc<Box<Signer>>);
+/// A thing that can sign a message.
+pub trait Signer : Send + Sync {
+    /// Signs `message` using the selected scheme.
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError>;
 
-/// A Signer for RSA-PKCS1 or RSA-PSS
-pub struct RSASigner {
-    key: Arc<RSAKeyPair>,
-    schemes: &'static [SignatureScheme],
+    /// Reveals which scheme will be used when you call `sign()`.
+    fn get_scheme(&self) -> SignatureScheme;
 }
 
-static ALL_SCHEMES: &'static [SignatureScheme] = &[
+/// A packaged together certificate chain and matching SigningKey.
+pub type CertChainAndSigningKey = (Vec<key::Certificate>, Arc<Box<SigningKey>>);
+
+/// A SigningKey for RSA-PKCS1 or RSA-PSS
+pub struct RSASigningKey {
+    key: Arc<RSAKeyPair>,
+}
+
+static ALL_RSA_SCHEMES: &'static [SignatureScheme] = &[
      SignatureScheme::RSA_PSS_SHA512,
      SignatureScheme::RSA_PSS_SHA384,
      SignatureScheme::RSA_PSS_SHA256,
@@ -37,30 +49,40 @@ static ALL_SCHEMES: &'static [SignatureScheme] = &[
      SignatureScheme::RSA_PKCS1_SHA256,
 ];
 
-impl RSASigner {
-    /// Make a new RSASigner from a DER encoding, in either
+impl RSASigningKey {
+    /// Make a new RSASigningKey from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &key::PrivateKey) -> Result<RSASigner, ()> {
+    pub fn new(der: &key::PrivateKey) -> Result<RSASigningKey, ()> {
         RSAKeyPair::from_der(untrusted::Input::from(&der.0))
             .or_else(|_| RSAKeyPair::from_pkcs8(untrusted::Input::from(&der.0)))
             .map(|s| {
-                 RSASigner {
+                 RSASigningKey {
                      key: Arc::new(s),
-                     schemes: ALL_SCHEMES,
                  }
             })
             .map_err(|_| ())
     }
 }
 
-impl Signer for RSASigner {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<SignatureScheme> {
-        util::first_in_both(self.schemes, offered)
+impl SigningKey for RSASigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<Signer>> {
+        util::first_in_both(ALL_RSA_SCHEMES, offered)
+            .map(|scheme| RSASigner::new(self.key.clone(), scheme))
     }
 
-    fn sign(&self, scheme: SignatureScheme, message: &[u8]) -> Result<Vec<u8>, ()> {
-        let mut sig = vec![0; self.key.public_modulus_len()];
+    fn algorithm(&self) -> SignatureAlgorithm {
+        SignatureAlgorithm::RSA
+    }
+}
 
+struct RSASigner {
+    key: Arc<RSAKeyPair>,
+    scheme: SignatureScheme,
+    encoding: &'static signature::RSAEncoding
+}
+
+impl RSASigner {
+    fn new(key: Arc<RSAKeyPair>, scheme: SignatureScheme) -> Box<Signer> {
         let encoding: &signature::RSAEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
@@ -68,19 +90,27 @@ impl Signer for RSASigner {
             SignatureScheme::RSA_PSS_SHA256 => &signature::RSA_PSS_SHA256,
             SignatureScheme::RSA_PSS_SHA384 => &signature::RSA_PSS_SHA384,
             SignatureScheme::RSA_PSS_SHA512 => &signature::RSA_PSS_SHA512,
-            _ => return Err(()),
+            _ => unreachable!(),
         };
+
+        Box::new(RSASigner { key, scheme, encoding })
+    }
+}
+
+impl Signer for RSASigner {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
+        let mut sig = vec![0; self.key.public_modulus_len()];
 
         let rng = ring::rand::SystemRandom::new();
         let mut signer = signature::RSASigningState::new(self.key.clone())
-            .map_err(|_| ())?;
+            .map_err(|_| TLSError::General("signing state creation failed".to_string()))?;
 
-        signer.sign(encoding, &rng, message, &mut sig)
+        signer.sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
-            .map_err(|_| ())
+            .map_err(|_| TLSError::General("signing failed".to_string()))
     }
 
-    fn algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::RSA
+    fn get_scheme(&self) -> SignatureScheme {
+        self.scheme
     }
 }

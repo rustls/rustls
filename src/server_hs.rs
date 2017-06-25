@@ -170,7 +170,7 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
 fn emit_server_kx(sess: &mut ServerSessionImpl,
                   sigscheme: SignatureScheme,
                   group: &NamedGroup,
-                  signer: Arc<Box<sign::Signer>>)
+                  signing_key: Arc<Box<sign::SigningKey>>)
                   -> Result<(), TLSError> {
     let kx = sess.common.get_suite()
         .start_server_kx(*group)
@@ -182,8 +182,9 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
     msg.extend(&sess.handshake_data.randoms.server);
     secdh.encode(&mut msg);
 
-    let sig = signer.sign(sigscheme, &msg)
-        .map_err(|_| TLSError::General("signing failed".to_string()))?;
+    let sig = signing_key.choose_scheme(&[sigscheme])
+        .ok_or_else(|| TLSError::General("incompatible signing key".to_string()))
+        .and_then(|signer| signer.sign(&msg))?;
 
     let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
         params: secdh,
@@ -477,18 +478,18 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
 
 fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
                                  schemes: &[SignatureScheme],
-                                 signer: &Arc<Box<sign::Signer>>)
+                                 signing_key: &Arc<Box<sign::SigningKey>>)
                                  -> Result<(), TLSError> {
     let mut message = Vec::new();
     message.resize(64, 0x20u8);
     message.extend_from_slice(b"TLS 1.3, server CertificateVerify\x00");
     message.extend_from_slice(&sess.handshake_data.transcript.get_current_hash());
 
-    let scheme = signer.choose_scheme(schemes)
+    let signer = signing_key.choose_scheme(schemes)
         .ok_or_else(|| TLSError::PeerIncompatibleError("no overlapping sigschemes".to_string()))?;
 
-    let sig = signer.sign(scheme, &message)
-        .map_err(|_| TLSError::General("cannot sign".to_string()))?;
+    let scheme = signer.get_scheme();
+    let sig = signer.sign(&message)?;
 
     let cv = DigitallySignedStruct::new(scheme, sig);
 
@@ -569,7 +570,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
 
 fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
                              chm: &Message,
-                             signer: &Arc<Box<sign::Signer>>)
+                             signer: &Arc<Box<sign::SigningKey>>)
                              -> StateResult {
     let client_hello = extract_handshake!(chm, HandshakePayload::ClientHello).unwrap();
 
