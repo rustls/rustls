@@ -355,6 +355,7 @@ fn main() {
             "-expect-alpn" |
             "-expect-server-name" |
             "-expect-ocsp-response" |
+            "-ocsp-response" |
             "-expect-certificate-types" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }

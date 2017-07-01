@@ -74,6 +74,7 @@
     "Renegotiate-Client-*": "no reneg",
     "Renegotiate-Server-*": "",
     "SendHalfHelloRequest-*": "",
+    "RetainOnlySHA256-*": "",
     "ExtendedMasterSecret-Renego-*": ""
   },
   "ErrorMap": {
