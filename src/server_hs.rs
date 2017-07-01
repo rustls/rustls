@@ -742,18 +742,18 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     debug!("sig schemes {:?}", sigschemes_ext);
 
     // Choose a certificate.
-    let maybe_cert_key = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
-    if maybe_cert_key.is_none() {
+    let maybe_certkey = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
+    if maybe_certkey.is_none() {
         sess.common.send_fatal_alert(AlertDescription::AccessDenied);
         return Err(TLSError::General("no server certificate chain resolved".to_string()));
     }
-    let (cert_chain, private_key) = maybe_cert_key.unwrap();
-    sess.handshake_data.server_cert_chain = Some(cert_chain);
+    let mut certkey = maybe_certkey.unwrap();
+    sess.handshake_data.server_cert_chain = Some(certkey.take_cert());
 
     // Reduce our supported ciphersuites by the certificate.
     // (no-op for TLS1.3)
     let suitable_suites = suites::reduce_given_sigalg(&sess.config.ciphersuites,
-                                                      &private_key.algorithm());
+                                                      &certkey.key.algorithm());
 
     // And version
     let protocol_version = sess.common.negotiated_version.unwrap();
@@ -780,7 +780,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     }
 
     if sess.common.is_tls13() {
-        return handle_client_hello_tls13(sess, &m, &private_key);
+        return handle_client_hello_tls13(sess, &m, &certkey.key);
     }
 
     // -- TLS1.2 only from hereon in --
@@ -873,7 +873,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
 
     emit_server_hello(sess, client_hello)?;
     emit_certificate(sess);
-    emit_server_kx(sess, sigscheme, &group, private_key)?;
+    emit_server_kx(sess, sigscheme, &group, certkey.key)?;
     emit_certificate_req(sess);
     emit_server_hello_done(sess);
 

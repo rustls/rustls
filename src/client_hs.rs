@@ -1033,10 +1033,10 @@ fn handle_certificate_req(sess: &mut ClientSessionImpl, m: Message) -> StateResu
     let maybe_certkey =
         sess.config.client_auth_cert_resolver.resolve(&canames, &certreq.sigschemes);
 
-    if let Some((cert, key)) = maybe_certkey {
+    if let Some(mut certkey) = maybe_certkey {
         info!("Attempting client auth");
-        let maybe_signer = key.choose_scheme(&certreq.sigschemes);
-        sess.handshake_data.client_auth_cert = Some(cert);
+        let maybe_signer = certkey.key.choose_scheme(&certreq.sigschemes);
+        sess.handshake_data.client_auth_cert = Some(certkey.take_cert());
         sess.handshake_data.client_auth_signer = maybe_signer;
     } else {
         info!("Client auth requested but no cert/sigscheme available");
@@ -1083,10 +1083,10 @@ fn handle_certificate_req_tls13(sess: &mut ClientSessionImpl,
     let maybe_certkey =
         sess.config.client_auth_cert_resolver.resolve(&canames, &compat_sigschemes);
 
-    if let Some((cert, key)) = maybe_certkey {
+    if let Some(mut certkey) = maybe_certkey {
         info!("Attempting client auth");
-        let maybe_signer = key.choose_scheme(&compat_sigschemes);
-        sess.handshake_data.client_auth_cert = Some(cert);
+        let maybe_signer = certkey.key.choose_scheme(&compat_sigschemes);
+        sess.handshake_data.client_auth_cert = Some(certkey.take_cert());
         sess.handshake_data.client_auth_signer = maybe_signer;
         sess.handshake_data.client_auth_context = Some(certreq.context.0.clone());
     } else {

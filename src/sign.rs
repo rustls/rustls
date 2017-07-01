@@ -10,6 +10,7 @@ use ring::signature;
 use ring::signature::RSAKeyPair;
 
 use std::sync::Arc;
+use std::mem;
 
 /// An abstract signing key.
 pub trait SigningKey : Send + Sync {
@@ -32,8 +33,36 @@ pub trait Signer : Send + Sync {
     fn get_scheme(&self) -> SignatureScheme;
 }
 
-/// A packaged together certificate chain and matching SigningKey.
-pub type CertChainAndSigningKey = (Vec<key::Certificate>, Arc<Box<SigningKey>>);
+/// A packaged together certificate chain, matching SigningKey and
+/// optional stapled OCSP response and/or SCT.
+#[derive(Clone)]
+pub struct CertifiedKey {
+    /// The certificate chain.
+    pub cert: Vec<key::Certificate>,
+
+    /// The certified key.
+    pub key: Arc<Box<SigningKey>>,
+
+    /// An optional OCSP response from the certificate issuer,
+    /// attesting to its continued validity.
+    pub ocsp: Option<Vec<u8>>,
+
+    /// An optional SCT response from a CT log, proving the
+    /// certificate is included on that log.
+    pub sct: Option<Vec<u8>>,
+}
+
+impl CertifiedKey {
+    /// Make a new CertifiedKey, with the given chain and key.
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<SigningKey>>) -> CertifiedKey {
+        CertifiedKey { cert: cert, key: key, ocsp: None, sct: None }
+    }
+
+    /// Steal ownership of the certificate chain.
+    pub fn take_cert(&mut self) -> Vec<key::Certificate> {
+        mem::replace(&mut self.cert, Vec::new())
+    }
+}
 
 /// A SigningKey for RSA-PKCS1 or RSA-PSS
 pub struct RSASigningKey {

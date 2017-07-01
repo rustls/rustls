@@ -92,7 +92,7 @@ pub trait ResolvesServerCert : Send + Sync {
     fn resolve(&self,
                server_name: Option<&str>,
                sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey>;
+               -> Option<sign::CertifiedKey>;
 }
 
 /// Common configuration for a set of server sessions.
@@ -239,25 +239,20 @@ impl ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey> {
+               -> Option<sign::CertifiedKey> {
         None
     }
 }
 
 /// Something which always resolves to the same cert chain.
-struct AlwaysResolvesChain {
-    chain: Vec<key::Certificate>,
-    key: Arc<Box<sign::SigningKey>>,
-}
+struct AlwaysResolvesChain(sign::CertifiedKey);
 
 impl AlwaysResolvesChain {
     fn new_rsa(chain: Vec<key::Certificate>, priv_key: &key::PrivateKey) -> AlwaysResolvesChain {
         let key = sign::RSASigningKey::new(priv_key)
             .expect("Invalid RSA private key");
-        AlwaysResolvesChain {
-            chain: chain,
-            key: Arc::new(Box::new(key)),
-        }
+        let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
+        AlwaysResolvesChain(sign::CertifiedKey::new(chain, key))
     }
 }
 
@@ -265,8 +260,8 @@ impl ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
                _server_name: Option<&str>,
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey> {
-        Some((self.chain.clone(), self.key.clone()))
+               -> Option<sign::CertifiedKey> {
+        Some(self.0.clone())
     }
 }
 

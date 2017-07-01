@@ -116,7 +116,7 @@ pub trait ResolvesClientCert : Send + Sync {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey>;
+               -> Option<sign::CertifiedKey>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -128,7 +128,7 @@ impl ResolvesClientCert for FailResolveClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey> {
+               -> Option<sign::CertifiedKey> {
         None
     }
 
@@ -137,20 +137,15 @@ impl ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-struct AlwaysResolvesClientCert {
-    chain: Vec<key::Certificate>,
-    key: Arc<Box<sign::SigningKey>>,
-}
+struct AlwaysResolvesClientCert(sign::CertifiedKey);
 
 impl AlwaysResolvesClientCert {
     fn new_rsa(chain: Vec<key::Certificate>,
                priv_key: &key::PrivateKey)
                -> AlwaysResolvesClientCert {
         let key = sign::RSASigningKey::new(priv_key).expect("Invalid RSA private key");
-        AlwaysResolvesClientCert {
-            chain: chain,
-            key: Arc::new(Box::new(key)),
-        }
+        let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
+        AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, key))
     }
 }
 
@@ -158,8 +153,8 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey> {
-        Some((self.chain.clone(), self.key.clone()))
+               -> Option<sign::CertifiedKey> {
+        Some(self.0.clone())
     }
 
     fn has_certs(&self) -> bool {
