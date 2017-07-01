@@ -31,6 +31,7 @@ struct Options {
     port: u16,
     server: bool,
     resumes: usize,
+    verify_peer: bool,
     require_any_client_cert: bool,
     offer_no_client_cas: bool,
     tickets: bool,
@@ -52,6 +53,7 @@ impl Options {
             port: 0,
             server: false,
             resumes: 0,
+            verify_peer: false,
             tickets: true,
             host_name: "example.com".to_string(),
             queue_data: false,
@@ -145,7 +147,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
     cfg.set_single_cert(cert.clone(), key);
 
-    if opts.offer_no_client_cas || opts.require_any_client_cert {
+    if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
         cfg.dangerous()
             .set_certificate_verifier(Arc::new(NoVerification {}));
@@ -366,6 +368,9 @@ fn main() {
             "-require-any-client-certificate" => {
                 opts.require_any_client_cert = true;
             }
+            "-verify-peer" => {
+                opts.verify_peer = true;
+            }
             "-shim-writes-first" => {
                 opts.queue_data = true;
             }
@@ -390,7 +395,6 @@ fn main() {
             "-expect-session-miss" |
             "-expect-extended-master-secret" |
             "-expect-ticket-renewal" |
-            "-verify-peer" |
             "-enable-ocsp-stapling" |
             // internal openssl details:
             "-async" |
