@@ -7,6 +7,7 @@
 extern crate rustls;
 extern crate webpki;
 extern crate env_logger;
+extern crate base64;
 
 use std::env;
 use std::process;
@@ -44,6 +45,7 @@ struct Options {
     support_tls12: bool,
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
+    server_ocsp_response: Vec<u8>,
     expect_curve: u16,
 }
 
@@ -66,6 +68,7 @@ impl Options {
             support_tls12: true,
             min_version: None,
             max_version: None,
+            server_ocsp_response: vec![],
             expect_curve: 0,
         }
     }
@@ -145,7 +148,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
 
     let cert = load_cert(&opts.cert_file);
     let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
-    cfg.set_single_cert(cert.clone(), key);
+    cfg.set_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone());
 
     if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
@@ -357,11 +360,14 @@ fn main() {
             "-expect-alpn" |
             "-expect-server-name" |
             "-expect-ocsp-response" |
-            "-ocsp-response" |
             "-expect-certificate-types" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
 
+            "-ocsp-response" => {
+                opts.server_ocsp_response = base64::decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+            }
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));
             }

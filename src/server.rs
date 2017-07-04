@@ -2,7 +2,7 @@ use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::{SessionID, CertificatePayload};
+use msgs::handshake::SessionID;
 use msgs::message::Message;
 use msgs::codec::Codec;
 use hash_hs;
@@ -254,6 +254,16 @@ impl AlwaysResolvesChain {
         let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
         AlwaysResolvesChain(sign::CertifiedKey::new(chain, key))
     }
+
+    fn new_rsa_with_ocsp(chain: Vec<key::Certificate>,
+                         priv_key: &key::PrivateKey,
+                         ocsp: Vec<u8>) -> AlwaysResolvesChain {
+        let mut r = AlwaysResolvesChain::new_rsa(chain, priv_key);
+        if !ocsp.is_empty() {
+            r.0.ocsp = Some(ocsp);
+        }
+        r
+    }
 }
 
 impl ResolvesServerCert for AlwaysResolvesChain {
@@ -305,6 +315,22 @@ impl ServerConfig {
                            cert_chain: Vec<key::Certificate>,
                            key_der: key::PrivateKey) {
         self.cert_resolver = Arc::new(AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
+    }
+
+    /// Sets a single certificate chain, matching private key and OCSP
+    /// response.  This certificate and key is used for all subsequent
+    /// connections, irrespective of things like SNI hostname.
+    ///
+    /// `cert_chain` is a vector of DER-encoded certificates.
+    /// `key_der` is a DER-encoded RSA private key.
+    /// `ocsp` is a DER-encoded OCSP response.
+    pub fn set_single_cert_with_ocsp(&mut self,
+                                     cert_chain: Vec<key::Certificate>,
+                                     key_der: key::PrivateKey,
+                                     ocsp: Vec<u8>) {
+        self.cert_resolver = Arc::new(AlwaysResolvesChain::new_rsa_with_ocsp(cert_chain,
+                                                                             &key_der,
+                                                                             ocsp));
     }
 
     /// Set the ALPN protocol list to the given protocol names.
@@ -362,7 +388,7 @@ pub mod danger {
 }
 
 pub struct ServerHandshakeData {
-    pub server_cert_chain: Option<CertificatePayload>,
+    pub server_certkey: Option<sign::CertifiedKey>,
     pub session_id: SessionID,
     pub randoms: SessionRandoms,
     pub transcript: hash_hs::HandshakeHash,
@@ -370,6 +396,7 @@ pub struct ServerHandshakeData {
     pub kx_data: Option<KeyExchange>,
     pub doing_resume: bool,
     pub send_ticket: bool,
+    pub send_cert_status: bool,
     pub using_ems: bool,
     pub doing_client_auth: bool,
     pub done_retry: bool,
@@ -379,13 +406,14 @@ pub struct ServerHandshakeData {
 impl ServerHandshakeData {
     fn new() -> ServerHandshakeData {
         ServerHandshakeData {
-            server_cert_chain: None,
+            server_certkey: None,
             session_id: SessionID::empty(),
             randoms: SessionRandoms::for_server(),
             transcript: hash_hs::HandshakeHash::new(),
             hash_at_server_fin: vec![],
             kx_data: None,
             send_ticket: false,
+            send_cert_status: false,
             using_ems: false,
             doing_resume: false,
             doing_client_auth: false,

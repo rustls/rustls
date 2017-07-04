@@ -1481,6 +1481,16 @@ impl CertificatePayloadTLS13 {
         false
     }
 
+    pub fn any_entry_has_extension(&self) -> bool {
+        for ent in &self.list {
+            if !ent.exts.is_empty() {
+                return true;
+            }
+        }
+
+        false
+    }
+
     pub fn convert(&self) -> CertificatePayload {
         let mut ret = Vec::new();
         for entry in &self.list {
@@ -1949,6 +1959,10 @@ impl Codec for CertificateStatus {
 }
 
 impl CertificateStatus {
+    pub fn new(ocsp: Vec<u8>) -> CertificateStatus {
+        CertificateStatus { ocsp_response: PayloadU24::new(ocsp) }
+    }
+
     pub fn take_ocsp_response(&mut self) -> Vec<u8> {
         let new = PayloadU24::new(Vec::new());
         mem::replace(&mut self.ocsp_response, new).0

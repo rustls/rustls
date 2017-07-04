@@ -237,6 +237,7 @@
     "SendUnknownExtensionOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "LargePlaintext": ":PEER_MISBEHAVIOUR:",
     "EMS-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
+    "SendExtensionOnClientCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-NoToYes-Client": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-YesToNo-Server": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-YesToNo-Client": ":PEER_MISBEHAVIOUR:"
