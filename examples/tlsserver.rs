@@ -389,6 +389,8 @@ Options:
                         certify KEYFILE, the last should be a root CA).
     --key KEYFILE       Read private key from KEYFILE.  This should be a RSA
                         private key or PKCS8-encoded private key, in PEM format.
+    --ocsp OCSPFILE     Read DER-encoded OCSP response from OCSPFILE and staple
+                        to certificate.  Optional.
     --auth CERTFILE     Enable client authentication, and accept certificates
                         signed by those roots provided in CERTFILE.
     --require-auth      Send a fatal alert if the client does not complete client
@@ -415,6 +417,7 @@ struct Args {
     flag_proto: Vec<String>,
     flag_certs: Option<String>,
     flag_key: Option<String>,
+    flag_ocsp: Option<String>,
     flag_auth: Option<String>,
     flag_require_auth: bool,
     flag_resumption: bool,
@@ -480,12 +483,26 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
     }
 }
 
+fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
+    let mut ret = Vec::new();
+
+    if let &Some(ref name) = filename {
+        fs::File::open(name)
+            .expect("cannot open ocsp file")
+            .read_to_end(&mut ret)
+            .unwrap();
+    }
+
+    ret
+}
+
 fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let mut config = rustls::ServerConfig::new();
 
     let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
     let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
-    config.set_single_cert(certs, privkey);
+    let ocsp = load_ocsp(&args.flag_ocsp);
+    config.set_single_cert_with_ocsp(certs, privkey, ocsp);
 
     if args.flag_auth.is_some() {
         let client_auth_roots = load_certs(args.flag_auth.as_ref().unwrap());
