@@ -240,6 +240,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
+    exts.push(ClientExtension::SignedCertificateTimestampRequest);
 
     if support_tls13 {
         exts.push(ClientExtension::KeyShare(key_shares));

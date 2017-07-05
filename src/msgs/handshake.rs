@@ -585,6 +585,7 @@ pub enum ClientExtension {
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
+    SignedCertificateTimestampRequest,
     Unknown(UnknownExtension),
 }
 
@@ -606,6 +607,7 @@ impl ClientExtension {
             ClientExtension::Cookie(_) => ExtensionType::Cookie,
             ClientExtension::ExtendedMasterSecretRequest => ExtensionType::ExtendedMasterSecret,
             ClientExtension::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
+            ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -623,7 +625,8 @@ impl Codec for ClientExtension {
             ClientExtension::Heartbeat(ref r) => r.encode(&mut sub),
             ClientExtension::ServerName(ref r) => r.encode(&mut sub),
             ClientExtension::SessionTicketRequest |
-                ClientExtension::ExtendedMasterSecretRequest => (),
+                ClientExtension::ExtendedMasterSecretRequest |
+                ClientExtension::SignedCertificateTimestampRequest => (),
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
             ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
@@ -690,6 +693,9 @@ impl Codec for ClientExtension {
             ExtensionType::StatusRequest => {
                 let csr = try_ret!(CertificateStatusRequest::read(&mut sub));
                 ClientExtension::CertificateStatusRequest(csr)
+            }
+            ExtensionType::SCT if !sub.any_left() => {
+                ClientExtension::SignedCertificateTimestampRequest
             }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -828,6 +834,7 @@ pub enum ServerExtension {
     PresharedKey(u16),
     ExtendedMasterSecretAck,
     CertificateStatusAck,
+    SignedCertificateTimestamp(Payload),
     Unknown(UnknownExtension),
 }
 
@@ -844,6 +851,7 @@ impl ServerExtension {
             ServerExtension::PresharedKey(_) => ExtensionType::PreSharedKey,
             ServerExtension::ExtendedMasterSecretAck => ExtensionType::ExtendedMasterSecret,
             ServerExtension::CertificateStatusAck => ExtensionType::StatusRequest,
+            ServerExtension::SignedCertificateTimestamp(_) => ExtensionType::SCT,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -865,6 +873,7 @@ impl Codec for ServerExtension {
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
             ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
+            ServerExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -900,6 +909,9 @@ impl Codec for ServerExtension {
                 ServerExtension::PresharedKey(try_ret!(codec::read_u16(&mut sub)))
             }
             ExtensionType::ExtendedMasterSecret => ServerExtension::ExtendedMasterSecretAck,
+            ExtensionType::SCT => {
+                ServerExtension::SignedCertificateTimestamp(try_ret!(Payload::read(&mut sub)))
+            }
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -913,6 +925,10 @@ impl ServerExtension {
     pub fn make_empty_renegotiation_info() -> ServerExtension {
         let empty = Vec::new();
         ServerExtension::RenegotiationInfo(PayloadU8::new(empty))
+    }
+
+    pub fn make_sct(sctl: Vec<u8>) -> ServerExtension {
+        ServerExtension::SignedCertificateTimestamp(Payload::new(sctl))
     }
 }
 
@@ -1339,6 +1355,7 @@ impl Codec for CertificatePayload {
 #[derive(Debug)]
 pub enum CertificateExtension {
     CertificateStatus(CertificateStatus),
+    SignedCertificateTimestamp(Payload),
     Unknown(UnknownExtension),
 }
 
@@ -1346,8 +1363,13 @@ impl CertificateExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             CertificateExtension::CertificateStatus(_) => ExtensionType::StatusRequest,
+            CertificateExtension::SignedCertificateTimestamp(_) => ExtensionType::SCT,
             CertificateExtension::Unknown(ref r) => r.typ,
         }
+    }
+
+    pub fn make_sct(sct_list: Vec<u8>) -> CertificateExtension {
+        CertificateExtension::SignedCertificateTimestamp(Payload::new(sct_list))
     }
 }
 
@@ -1358,6 +1380,7 @@ impl Codec for CertificateExtension {
         let mut sub: Vec<u8> = Vec::new();
         match *self {
             CertificateExtension::CertificateStatus(ref r) => r.encode(&mut sub),
+            CertificateExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             CertificateExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -1372,7 +1395,12 @@ impl Codec for CertificateExtension {
 
         Some(match typ {
             ExtensionType::StatusRequest => {
-              CertificateExtension::CertificateStatus(try_ret!(CertificateStatus::read(&mut sub)))
+                let st = try_ret!(CertificateStatus::read(&mut sub));
+                CertificateExtension::CertificateStatus(st)
+            }
+            ExtensionType::SCT => {
+                let scts = try_ret!(Payload::read(&mut sub));
+                CertificateExtension::SignedCertificateTimestamp(scts)
             }
             _ => CertificateExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })

@@ -102,6 +102,22 @@ fn process_extensions(sess: &mut ServerSessionImpl,
         }
     }
 
+    if !for_resume &&
+       hello.find_extension(ExtensionType::SCT).is_some() &&
+       sess.handshake_data.server_certkey.is_some() &&
+       sess.handshake_data.server_certkey.as_ref().unwrap().has_sct_list() {
+        sess.handshake_data.send_sct = true;
+
+        if !sess.common.is_tls13() {
+            let sct_list = sess.handshake_data.server_certkey
+                .as_mut()
+                .unwrap()
+                .take_sct_list()
+                .unwrap();
+            ret.push(ServerExtension::make_sct(sct_list));
+        }
+    }
+
     if !sess.common.is_tls13() {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
@@ -492,9 +508,9 @@ fn emit_certificate_req_tls13(sess: &mut ServerSessionImpl) {
 fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
     let mut cert_body = CertificatePayloadTLS13::new();
 
-    let (certs, ocsp) = {
+    let (certs, ocsp, sct_list) = {
         let ck = sess.handshake_data.server_certkey.as_mut().unwrap();
-        (ck.take_cert(), ck.take_ocsp())
+        (ck.take_cert(), ck.take_ocsp(), ck.take_sct_list())
     };
 
     for cert in certs {
@@ -514,6 +530,14 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
         let last_entry = cert_body.list.last_mut().unwrap();
         let cst = CertificateStatus::new(ocsp.unwrap());
         last_entry.exts.push(CertificateExtension::CertificateStatus(cst));
+    }
+
+    // Likewise, SCT
+    if sess.handshake_data.send_sct &&
+       sct_list.is_some() &&
+       !cert_body.list.is_empty() {
+        let last_entry = cert_body.list.last_mut().unwrap();
+        last_entry.exts.push(CertificateExtension::make_sct(sct_list.unwrap()));
     }
 
     let c = Message {
