@@ -582,6 +582,12 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> StateResult 
         sess.handshake_data.may_send_cert_status = true;
     }
 
+    // Save any sent SCTs for verification against the certificate.
+    if let Some(sct_list) = server_hello.get_sct_list() {
+        info!("Server sent {:?} SCTs", sct_list.len());
+        sess.handshake_data.server_cert_scts = Some(sct_list.clone());
+    }
+
     // See if we're successfully resuming.
     let mut abbreviated_handshake = false;
     if let Some(ref resuming) = sess.handshake_data.resuming_session {
@@ -771,6 +777,8 @@ fn handle_certificate_tls13(sess: &mut ClientSessionImpl, m: Message) -> StateRe
         return Err(TLSError::PeerMisbehavedError("bad cert chain extensions".to_string()));
     }
 
+    sess.handshake_data.server_cert_ocsp_response = cert_chain.get_end_entity_ocsp();
+    sess.handshake_data.server_cert_scts = cert_chain.get_end_entity_scts();
     sess.handshake_data.server_cert_chain = cert_chain.convert();
     Ok(&EXPECT_TLS13_CERTIFICATE_VERIFY)
 }
@@ -903,6 +911,16 @@ fn handle_certificate_verify(sess: &mut ClientSessionImpl,
                          &cert_verify,
                          &handshake_hash,
                          b"TLS 1.3, server CertificateVerify\x00")?;
+
+    // 3. Verify any included SCTs.
+    match (sess.handshake_data.server_cert_scts.as_ref(), sess.config.ct_logs) {
+        (Some(ref scts), Some(logs)) => {
+            verify::verify_scts(&sess.handshake_data.server_cert_chain[0],
+                                &scts,
+                                &logs)?;
+        }
+        (_, _) => {}
+    }
 
     sess.handshake_data.transcript.add_message(&m);
 
@@ -1122,15 +1140,16 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     info!("Server DNS name is {:?}", sess.handshake_data.dns_name);
 
     // 1. Verify the cert chain.
-    // 2. Verify that the top certificate signed their kx.
-    // 3. If doing client auth, send our Certificate.
-    // 4. Complete the key exchange:
+    // 2. Verify any SCTs provided with the certificate.
+    // 3. Verify that the top certificate signed their kx.
+    // 4. If doing client auth, send our Certificate.
+    // 5. Complete the key exchange:
     //    a) generate our kx pair
     //    b) emit a ClientKeyExchange containing it
     //    c) if doing client auth, emit a CertificateVerify
     //    d) emit a CCS
     //    e) derive the shared keys, and start encryption
-    // 5. emit a Finished, our first encrypted message under the new keys.
+    // 6. emit a Finished, our first encrypted message under the new keys.
 
     // 1.
     if sess.handshake_data.server_cert_chain.is_empty() {
@@ -1142,7 +1161,17 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
                                                   &sess.handshake_data.dns_name,
                                                   &sess.handshake_data.server_cert_ocsp_response)?;
 
-    // 2.
+    // 2. Verify any included SCTs.
+    match (sess.handshake_data.server_cert_scts.as_ref(), sess.config.ct_logs) {
+        (Some(ref scts), Some(logs)) => {
+            verify::verify_scts(&sess.handshake_data.server_cert_chain[0],
+                                &scts,
+                                &logs)?;
+        }
+        (_, _) => {}
+    }
+
+    // 3.
     // Build up the contents of the signed message.
     // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
     {
@@ -1166,30 +1195,30 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
                                      sig)?;
     }
 
-    // 3.
+    // 4.
     if sess.handshake_data.doing_client_auth {
         emit_certificate(sess);
     }
 
-    // 4a.
+    // 5a.
     let kxd = sess.common.get_suite()
         .do_client_kx(&sess.handshake_data.server_kx_params)
         .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
-    // 4b.
+    // 5b.
     emit_clientkx(sess, &kxd);
     // nb. EMS handshake hash only runs up to ClientKeyExchange.
     let handshake_hash = sess.handshake_data.transcript.get_current_hash();
 
-    // 4c.
+    // 5c.
     if sess.handshake_data.doing_client_auth {
         emit_certverify(sess)?;
     }
 
-    // 4d.
+    // 5d.
     emit_ccs(sess);
 
-    // 4e. Now commit secrets.
+    // 5e. Now commit secrets.
     let hashalg = sess.common.get_suite().get_hash();
     if sess.handshake_data.using_ems {
         sess.secrets = Some(SessionSecrets::new_ems(&sess.handshake_data.randoms,
@@ -1203,7 +1232,7 @@ fn handle_server_hello_done(sess: &mut ClientSessionImpl,
     }
     sess.start_encryption_tls12();
 
-    // 5.
+    // 6.
     emit_finished(sess);
 
     if sess.handshake_data.must_issue_new_ticket {

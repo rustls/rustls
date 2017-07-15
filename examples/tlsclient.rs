@@ -19,6 +19,7 @@ use docopt::Docopt;
 
 extern crate rustls;
 extern crate webpki_roots;
+extern crate ct_logs;
 
 use rustls::Session;
 
@@ -437,6 +438,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             .unwrap();
     } else {
         config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+        config.ct_logs = Some(&ct_logs::LOGS);
     }
 
     if args.flag_no_tickets {

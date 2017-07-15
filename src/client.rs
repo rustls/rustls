@@ -3,6 +3,7 @@ use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
+use msgs::handshake::SCTList;
 use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::message::Message;
@@ -20,6 +21,8 @@ use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
 use std::fmt;
+
+use sct;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -199,6 +202,11 @@ pub struct ClientConfig {
     /// is all supported versions.
     pub versions: Vec<ProtocolVersion>,
 
+    /// Collection of certificate transparency logs.
+    /// If this collection is empty, then certificate transparency
+    /// checking is disabled.
+    pub ct_logs: Option<&'static [&'static sct::Log<'static>]>,
+
     /// How to verify the server certificate chain.
     verifier: Arc<verify::ServerCertVerifier>,
 }
@@ -217,6 +225,7 @@ impl ClientConfig {
             client_auth_cert_resolver: Arc::new(FailResolveClientCert {}),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
+            ct_logs: None,
             verifier: Arc::new(verify::WebPKIVerifier {})
         }
     }
@@ -303,6 +312,7 @@ pub mod danger {
 pub struct ClientHandshakeData {
     pub server_cert_chain: CertificatePayload,
     pub server_cert_ocsp_response: Vec<u8>,
+    pub server_cert_scts: Option<SCTList>,
     pub dns_name: String,
     pub session_id: SessionID,
     pub sent_extensions: Vec<ExtensionType>,
@@ -328,6 +338,7 @@ impl ClientHandshakeData {
         ClientHandshakeData {
             server_cert_chain: Vec::new(),
             server_cert_ocsp_response: Vec::new(),
+            server_cert_scts: None,
             dns_name: host_name.to_string(),
             session_id: SessionID::empty(),
             sent_extensions: Vec::new(),

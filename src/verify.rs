@@ -1,9 +1,11 @@
 use webpki;
 use time;
 use untrusted;
+use sct;
 
 use key::Certificate;
 use msgs::handshake::DigitallySignedStruct;
+use msgs::handshake::SCTList;
 use msgs::enums::SignatureScheme;
 use error::TLSError;
 use anchors::RootCertStore;
@@ -216,4 +218,39 @@ pub fn verify_tls13(cert: &Certificate,
                           untrusted::Input::from(&msg),
                           untrusted::Input::from(&dss.sig.0))
     .map_err(TLSError::WebPKIError)
+}
+
+pub fn verify_scts(cert: &Certificate,
+                   scts: &SCTList,
+                   logs: &[&sct::Log]) -> Result<(), TLSError> {
+    let mut valid_scts = 0;
+    let total_scts = scts.len();
+    let now = (time::get_time().sec * 1000) as u64;
+    let mut last_sct_error = None;
+
+    for sct in scts {
+        match sct::verify_sct(&cert.0, &sct.0, now, logs) {
+            Ok(index) => {
+                info!("Valid SCT signed by {} on {}",
+                      logs[index].operated_by, logs[index].description);
+                valid_scts += 1;
+            }
+            Err(e) => {
+                if e.should_be_fatal() {
+                    return Err(TLSError::InvalidSCT(e));
+                }
+                info!("SCT ignored because {:?}", e);
+                last_sct_error = Some(e);
+            }
+        }
+    }
+
+    /* If we were supplied with some logs, and some SCTs,
+     * but couldn't verify any of them, fail the handshake. */
+    if !logs.is_empty() && total_scts != 0 && valid_scts == 0 {
+        warn!("No valid SCTs provided");
+        return Err(TLSError::InvalidSCT(last_sct_error.unwrap()));
+    }
+
+    Ok(())
 }

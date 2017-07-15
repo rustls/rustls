@@ -46,6 +46,9 @@ macro_rules! declare_u16_vec(
   }
 );
 
+declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
+declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
+
 #[derive(Debug)]
 pub struct Random([u8; 32]);
 
@@ -360,7 +363,6 @@ impl ConvertServerNameList for ServerNameRequest {
 }
 
 pub type ProtocolNameList = VecU16OfPayloadU8;
-declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 
 pub trait ConvertProtocolNameList {
     fn from_strings(names: &[String]) -> Self;
@@ -561,6 +563,11 @@ impl CertificateStatusRequest {
         CertificateStatusRequest::OCSP(ocsp)
     }
 }
+
+// ---
+// SCTs
+
+pub type SCTList = VecU16OfPayloadU16;
 
 // ---
 
@@ -834,7 +841,7 @@ pub enum ServerExtension {
     PresharedKey(u16),
     ExtendedMasterSecretAck,
     CertificateStatusAck,
-    SignedCertificateTimestamp(Payload),
+    SignedCertificateTimestamp(SCTList),
     Unknown(UnknownExtension),
 }
 
@@ -910,7 +917,8 @@ impl Codec for ServerExtension {
             }
             ExtensionType::ExtendedMasterSecret => ServerExtension::ExtendedMasterSecretAck,
             ExtensionType::SCT => {
-                ServerExtension::SignedCertificateTimestamp(try_ret!(Payload::read(&mut sub)))
+                let scts = try_ret!(SCTList::read(&mut sub));
+                ServerExtension::SignedCertificateTimestamp(scts)
             }
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -928,7 +936,9 @@ impl ServerExtension {
     }
 
     pub fn make_sct(sctl: Vec<u8>) -> ServerExtension {
-        ServerExtension::SignedCertificateTimestamp(Payload::new(sctl))
+        let scts = SCTList::read_bytes(&sctl)
+            .expect("invalid SCT list");
+        ServerExtension::SignedCertificateTimestamp(scts)
     }
 }
 
@@ -1333,6 +1343,14 @@ impl ServerHelloPayload {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
     }
+
+    pub fn get_sct_list(&self) -> Option<&SCTList> {
+        let ext = try_ret!(self.find_extension(ExtensionType::SCT));
+        match *ext {
+            ServerExtension::SignedCertificateTimestamp(ref sctl) => Some(sctl),
+            _ => None,
+        }
+    }
 }
 
 pub type CertificatePayload = Vec<key::Certificate>;
@@ -1355,7 +1373,7 @@ impl Codec for CertificatePayload {
 #[derive(Debug)]
 pub enum CertificateExtension {
     CertificateStatus(CertificateStatus),
-    SignedCertificateTimestamp(Payload),
+    SignedCertificateTimestamp(SCTList),
     Unknown(UnknownExtension),
 }
 
@@ -1369,7 +1387,23 @@ impl CertificateExtension {
     }
 
     pub fn make_sct(sct_list: Vec<u8>) -> CertificateExtension {
-        CertificateExtension::SignedCertificateTimestamp(Payload::new(sct_list))
+        let sctl = SCTList::read_bytes(&sct_list)
+            .expect("invalid SCT list");
+        CertificateExtension::SignedCertificateTimestamp(sctl)
+    }
+
+    pub fn get_cert_status(&self) -> Option<&Vec<u8>> {
+        match self {
+            &CertificateExtension::CertificateStatus(ref cs) => Some(&cs.ocsp_response.0),
+            _ => None
+        }
+    }
+
+    pub fn get_sct_list(&self) -> Option<&SCTList> {
+        match self {
+            &CertificateExtension::SignedCertificateTimestamp(ref sctl) => Some(sctl),
+            _ => None
+        }
     }
 }
 
@@ -1399,7 +1433,7 @@ impl Codec for CertificateExtension {
                 CertificateExtension::CertificateStatus(st)
             }
             ExtensionType::SCT => {
-                let scts = try_ret!(Payload::read(&mut sub));
+                let scts = try_ret!(SCTList::read(&mut sub));
                 CertificateExtension::SignedCertificateTimestamp(scts)
             }
             _ => CertificateExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
@@ -1456,8 +1490,23 @@ impl CertificateEntry {
         self.exts
             .iter()
             .any(|ext| {
-                 ext.get_type() != ExtensionType::StatusRequest
+                 ext.get_type() != ExtensionType::StatusRequest &&
+                 ext.get_type() != ExtensionType::SCT
                  })
+    }
+
+    pub fn get_ocsp_response(&self) -> Option<&Vec<u8>> {
+        self.exts
+            .iter()
+            .find(|ext| ext.get_type() == ExtensionType::StatusRequest)
+            .and_then(|ext| ext.get_cert_status())
+    }
+
+    pub fn get_scts(&self) -> Option<&SCTList> {
+        self.exts
+            .iter()
+            .find(|ext| ext.get_type() == ExtensionType::SCT)
+            .and_then(|ext| ext.get_sct_list())
     }
 }
 
@@ -1517,6 +1566,19 @@ impl CertificatePayloadTLS13 {
         }
 
         false
+    }
+
+    pub fn get_end_entity_ocsp(&self) -> Vec<u8> {
+        self.list.first()
+            .and_then(|ent| ent.get_ocsp_response())
+            .map(|ocsp| ocsp.clone())
+            .unwrap_or_else(|| Vec::new())
+    }
+
+    pub fn get_end_entity_scts(&self) -> Option<SCTList> {
+        self.list.first()
+            .and_then(|ent| ent.get_scts())
+            .map(|scts| scts.clone())
     }
 
     pub fn convert(&self) -> CertificatePayload {
@@ -1781,7 +1843,7 @@ impl HasServerExtensions for EncryptedExtensions {
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
 pub type DistinguishedName = PayloadU16;
-declare_u16_vec!(DistinguishedNames, DistinguishedName);
+pub type DistinguishedNames = VecU16OfPayloadU16;
 
 #[derive(Debug)]
 pub struct CertificateRequestPayload {

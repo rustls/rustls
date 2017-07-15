@@ -197,6 +197,9 @@ extern crate time;
 // untrusted for feeding ring and webpki.
 extern crate untrusted;
 
+// sct for validation of stapled certificate transparency SCTs.
+extern crate sct;
+
 // rust-base64 for pemfile module.
 extern crate base64;
 
