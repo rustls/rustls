@@ -360,6 +360,7 @@ fn main() {
             "-expect-alpn" |
             "-expect-server-name" |
             "-expect-ocsp-response" |
+            "-expect-signed-cert-timestamps" |
             "-expect-certificate-types" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
@@ -402,6 +403,7 @@ fn main() {
             "-expect-extended-master-secret" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
+            "-enable-signed-cert-timestamps" |
             // internal openssl details:
             "-async" |
             "-implicit-handshake" |
@@ -418,7 +420,6 @@ fn main() {
             "-fail-early-callback" |
             "-fail-cert-callback" |
             "-install-ddos-callback" |
-            "-enable-signed-cert-timestamps" |
             "-advertise-npn" |
             "-verify-fail" |
             "-expect-channel-id" |
@@ -447,8 +448,7 @@ fn main() {
             "-enable-early-data" |
             "-expect-cipher-aes" |
             "-retain-only-sha256-client-cert-initial" |
-            "-expect-peer-cert-file" |
-            "-signed-cert-timestamps" => {
+            "-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
             }
