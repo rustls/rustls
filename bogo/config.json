@@ -236,6 +236,7 @@
     "SendUnsolicitedSCTOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "SendUnknownExtensionOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "LargePlaintext": ":PEER_MISBEHAVIOUR:",
+    "SendDuplicateExtensionsOnCerts-TLS13": ":PEER_MISBEHAVIOUR:",
     "EMS-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
     "SendExtensionOnClientCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-NoToYes-Client": ":PEER_MISBEHAVIOUR:",

@@ -46,6 +46,7 @@ struct Options {
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
     server_ocsp_response: Vec<u8>,
+    server_sct_list: Vec<u8>,
     expect_curve: u16,
 }
 
@@ -69,6 +70,7 @@ impl Options {
             min_version: None,
             max_version: None,
             server_ocsp_response: vec![],
+            server_sct_list: vec![],
             expect_curve: 0,
         }
     }
@@ -148,7 +150,9 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
 
     let cert = load_cert(&opts.cert_file);
     let key = load_key(&opts.key_file);
-    cfg.set_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone());
+    cfg.set_single_cert_with_ocsp_and_sct(cert.clone(), key,
+                                          opts.server_ocsp_response.clone(),
+                                          opts.server_sct_list.clone());
 
     if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
@@ -367,6 +371,10 @@ fn main() {
 
             "-ocsp-response" => {
                 opts.server_ocsp_response = base64::decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+            }
+            "-signed-cert-timestamps" => {
+                opts.server_sct_list = base64::decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
             }
             "-select-alpn" => {

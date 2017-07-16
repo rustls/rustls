@@ -502,7 +502,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
     let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
     let ocsp = load_ocsp(&args.flag_ocsp);
-    config.set_single_cert_with_ocsp(certs, privkey, ocsp);
+    config.set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![]);
 
     if args.flag_auth.is_some() {
         let client_auth_roots = load_certs(args.flag_auth.as_ref().unwrap());

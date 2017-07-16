@@ -255,12 +255,16 @@ impl AlwaysResolvesChain {
         AlwaysResolvesChain(sign::CertifiedKey::new(chain, key))
     }
 
-    fn new_rsa_with_ocsp(chain: Vec<key::Certificate>,
-                         priv_key: &key::PrivateKey,
-                         ocsp: Vec<u8>) -> AlwaysResolvesChain {
+    fn new_rsa_with_extras(chain: Vec<key::Certificate>,
+                           priv_key: &key::PrivateKey,
+                           ocsp: Vec<u8>,
+                           scts: Vec<u8>) -> AlwaysResolvesChain {
         let mut r = AlwaysResolvesChain::new_rsa(chain, priv_key);
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
+        }
+        if !scts.is_empty() {
+            r.0.sct_list = Some(scts);
         }
         r
     }
@@ -323,14 +327,18 @@ impl ServerConfig {
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
     /// `key_der` is a DER-encoded RSA private key.
-    /// `ocsp` is a DER-encoded OCSP response.
-    pub fn set_single_cert_with_ocsp(&mut self,
-                                     cert_chain: Vec<key::Certificate>,
-                                     key_der: key::PrivateKey,
-                                     ocsp: Vec<u8>) {
-        self.cert_resolver = Arc::new(AlwaysResolvesChain::new_rsa_with_ocsp(cert_chain,
-                                                                             &key_der,
-                                                                             ocsp));
+    /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
+    /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
+    /// and is ignored if empty.
+    pub fn set_single_cert_with_ocsp_and_sct(&mut self,
+                                             cert_chain: Vec<key::Certificate>,
+                                             key_der: key::PrivateKey,
+                                             ocsp: Vec<u8>,
+                                             scts: Vec<u8>) {
+        self.cert_resolver = Arc::new(AlwaysResolvesChain::new_rsa_with_extras(cert_chain,
+                                                                               &key_der,
+                                                                               ocsp,
+                                                                               scts));
     }
 
     /// Set the ALPN protocol list to the given protocol names.
