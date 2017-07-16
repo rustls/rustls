@@ -376,6 +376,12 @@ fn main() {
             "-signed-cert-timestamps" => {
                 opts.server_sct_list = base64::decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
+
+                if opts.server_sct_list.len() == 2 &&
+                    opts.server_sct_list[0] == 0x00 &&
+                    opts.server_sct_list[1] == 0x00 {
+                    quit(":INVALID_SCT_LIST:");
+                }
             }
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));

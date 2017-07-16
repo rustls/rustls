@@ -14,7 +14,7 @@ use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use msgs::handshake::ServerKeyExchangePayload;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
-use msgs::handshake::CertificateStatusRequest;
+use msgs::handshake::{CertificateStatusRequest, SCTList};
 use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode, ECPointFormat};
 use msgs::codec::Codec;
 use msgs::persist;
@@ -585,6 +585,11 @@ fn handle_server_hello(sess: &mut ClientSessionImpl, m: Message) -> StateResult 
     // Save any sent SCTs for verification against the certificate.
     if let Some(sct_list) = server_hello.get_sct_list() {
         info!("Server sent {:?} SCTs", sct_list.len());
+
+        if sct_list_is_invalid(&sct_list) {
+            let error_msg = "server sent invalid SCT list".to_string();
+            return Err(TLSError::PeerMisbehavedError(error_msg));
+        }
         sess.handshake_data.server_cert_scts = Some(sct_list.clone());
     }
 
@@ -759,6 +764,11 @@ static EXPECT_TLS13_ENCRYPTED_EXTENSIONS: State = State {
     handle: handle_encrypted_extensions,
 };
 
+fn sct_list_is_invalid(scts: &SCTList) -> bool {
+    scts.is_empty() ||
+        scts.iter().any(|sct| sct.0.is_empty())
+}
+
 fn handle_certificate_tls13(sess: &mut ClientSessionImpl, m: Message) -> StateResult {
     let cert_chain = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
     sess.handshake_data.transcript.add_message(&m);
@@ -780,6 +790,14 @@ fn handle_certificate_tls13(sess: &mut ClientSessionImpl, m: Message) -> StateRe
     sess.handshake_data.server_cert_ocsp_response = cert_chain.get_end_entity_ocsp();
     sess.handshake_data.server_cert_scts = cert_chain.get_end_entity_scts();
     sess.handshake_data.server_cert_chain = cert_chain.convert();
+
+    if let Some(sct_list) = sess.handshake_data.server_cert_scts.as_ref() {
+        if sct_list_is_invalid(&sct_list) {
+            let error_msg = "server sent invalid SCT list".to_string();
+            return Err(TLSError::PeerMisbehavedError(error_msg));
+        }
+    }
+
     Ok(&EXPECT_TLS13_CERTIFICATE_VERIFY)
 }
 

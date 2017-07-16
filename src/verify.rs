@@ -224,7 +224,6 @@ pub fn verify_scts(cert: &Certificate,
                    scts: &SCTList,
                    logs: &[&sct::Log]) -> Result<(), TLSError> {
     let mut valid_scts = 0;
-    let total_scts = scts.len();
     let now = (time::get_time().sec * 1000) as u64;
     let mut last_sct_error = None;
 
@@ -247,7 +246,7 @@ pub fn verify_scts(cert: &Certificate,
 
     /* If we were supplied with some logs, and some SCTs,
      * but couldn't verify any of them, fail the handshake. */
-    if !logs.is_empty() && total_scts != 0 && valid_scts == 0 {
+    if !logs.is_empty() && !scts.is_empty() && valid_scts == 0 {
         warn!("No valid SCTs provided");
         return Err(TLSError::InvalidSCT(last_sct_error.unwrap()));
     }
