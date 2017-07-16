@@ -19,6 +19,7 @@ use docopt::Docopt;
 
 extern crate rustls;
 extern crate webpki_roots;
+extern crate ct_logs;
 
 use rustls::Session;
 
@@ -396,7 +397,8 @@ mod danger {
         fn verify_server_cert(&self,
                               _roots: &rustls::RootCertStore,
                               _presented_certs: &[rustls::Certificate],
-                              _dns_name: &str) -> Result<(), rustls::TLSError> {
+                              _dns_name: &str,
+                              _ocsp: &[u8]) -> Result<(), rustls::TLSError> {
             Ok(())
         }
     }
@@ -436,6 +438,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             .unwrap();
     } else {
         config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+        config.ct_logs = Some(&ct_logs::LOGS);
     }
 
     if args.flag_no_tickets {

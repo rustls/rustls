@@ -10,6 +10,7 @@ use ring::signature;
 use ring::signature::RSAKeyPair;
 
 use std::sync::Arc;
+use std::mem;
 
 /// An abstract signing key.
 pub trait SigningKey : Send + Sync {
@@ -32,8 +33,57 @@ pub trait Signer : Send + Sync {
     fn get_scheme(&self) -> SignatureScheme;
 }
 
-/// A packaged together certificate chain and matching SigningKey.
-pub type CertChainAndSigningKey = (Vec<key::Certificate>, Arc<Box<SigningKey>>);
+/// A packaged together certificate chain, matching SigningKey and
+/// optional stapled OCSP response and/or SCT.
+#[derive(Clone)]
+pub struct CertifiedKey {
+    /// The certificate chain.
+    pub cert: Vec<key::Certificate>,
+
+    /// The certified key.
+    pub key: Arc<Box<SigningKey>>,
+
+    /// An optional OCSP response from the certificate issuer,
+    /// attesting to its continued validity.
+    pub ocsp: Option<Vec<u8>>,
+
+    /// An optional collection of SCTs from CT logs, proving the
+    /// certificate is included on those logs.  This must be
+    /// a `SignedCertificateTimestampList` encoding; see RFC6962.
+    pub sct_list: Option<Vec<u8>>,
+}
+
+impl CertifiedKey {
+    /// Make a new CertifiedKey, with the given chain and key.
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<SigningKey>>) -> CertifiedKey {
+        CertifiedKey { cert: cert, key: key, ocsp: None, sct_list: None }
+    }
+
+    /// Steal ownership of the certificate chain.
+    pub fn take_cert(&mut self) -> Vec<key::Certificate> {
+        mem::replace(&mut self.cert, Vec::new())
+    }
+
+    /// Return true if there's an OCSP response.
+    pub fn has_ocsp(&self) -> bool {
+        self.ocsp.is_some()
+    }
+
+    /// Steal ownership of the OCSP response.
+    pub fn take_ocsp(&mut self) -> Option<Vec<u8>> {
+        mem::replace(&mut self.ocsp, None)
+    }
+
+    /// Return true if there's an SCT list.
+    pub fn has_sct_list(&self) -> bool {
+        self.sct_list.is_some()
+    }
+
+    /// Steal ownership of the SCT list.
+    pub fn take_sct_list(&mut self) -> Option<Vec<u8>> {
+        mem::replace(&mut self.sct_list, None)
+    }
+}
 
 /// A SigningKey for RSA-PKCS1 or RSA-PSS
 pub struct RSASigningKey {

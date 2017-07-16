@@ -71,6 +71,6 @@ if __name__ == '__main__':
         print '    anchors.add_trust_anchors(&webpki_roots::ROOTS);'
         print '    bench(100, "verify_server_cert(%s)", ' % name
         print '          || (),'
-        print '          |_| verify::verify_server_cert(&anchors, &chain[..], "%s").unwrap());' % hostname
+        print '          |_| verify::verify_server_cert(&anchors, &chain[..], "%s", &[]).unwrap());' % hostname
         print '}'
         print

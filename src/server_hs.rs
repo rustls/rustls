@@ -16,6 +16,7 @@ use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload};
 use msgs::handshake::{CertificateRequestPayloadTLS13, NewSessionTicketPayloadTLS13};
 use msgs::handshake::{HelloRetryRequest, HelloRetryExtension, KeyShareEntry};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
+use msgs::handshake::{CertificateStatus, CertificateExtension};
 use msgs::handshake::SupportedMandatedSignatureSchemes;
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
@@ -26,14 +27,11 @@ use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
 use suites;
 use hash_hs;
-use sign;
 use verify;
 use util;
 use rand;
 use error::TLSError;
 use handshake::Expectation;
-
-use std::sync::Arc;
 
 use ring::constant_time;
 
@@ -61,7 +59,8 @@ pub struct State {
 }
 
 fn process_extensions(sess: &mut ServerSessionImpl,
-                      hello: &ClientHelloPayload)
+                      hello: &ClientHelloPayload,
+                      for_resume: bool)
                       -> Result<Vec<ServerExtension>, TLSError> {
     let mut ret = Vec::new();
 
@@ -84,8 +83,39 @@ fn process_extensions(sess: &mut ServerSessionImpl,
     }
 
     // SNI
-    if hello.get_sni_extension().is_some() {
+    if !for_resume && hello.get_sni_extension().is_some() {
         ret.push(ServerExtension::ServerNameAck);
+    }
+
+    // Send status_request response if we have one.  This is not allowed
+    // if we're resuming, and is only triggered if we have an OCSP response
+    // to send.
+    if !for_resume &&
+       hello.find_extension(ExtensionType::StatusRequest).is_some() &&
+       sess.handshake_data.server_certkey.is_some() &&
+       sess.handshake_data.server_certkey.as_ref().unwrap().has_ocsp() {
+        sess.handshake_data.send_cert_status = true;
+
+        if !sess.common.is_tls13() {
+            // Only TLS1.2 sends confirmation in ServerHello
+            ret.push(ServerExtension::CertificateStatusAck);
+        }
+    }
+
+    if !for_resume &&
+       hello.find_extension(ExtensionType::SCT).is_some() &&
+       sess.handshake_data.server_certkey.is_some() &&
+       sess.handshake_data.server_certkey.as_ref().unwrap().has_sct_list() {
+        sess.handshake_data.send_sct = true;
+
+        if !sess.common.is_tls13() {
+            let sct_list = sess.handshake_data.server_certkey
+                .as_mut()
+                .unwrap()
+                .take_sct_list()
+                .unwrap();
+            ret.push(ServerExtension::make_sct(sct_list));
+        }
     }
 
     if !sess.common.is_tls13() {
@@ -112,15 +142,17 @@ fn process_extensions(sess: &mut ServerSessionImpl,
         if sess.handshake_data.using_ems {
             ret.push(ServerExtension::ExtendedMasterSecretAck);
         }
+
     }
 
     Ok(ret)
 }
 
 fn emit_server_hello(sess: &mut ServerSessionImpl,
-                     hello: &ClientHelloPayload)
+                     hello: &ClientHelloPayload,
+                     for_resume: bool)
                      -> Result<(), TLSError> {
-    let extensions = process_extensions(sess, hello)?;
+    let extensions = process_extensions(sess, hello, for_resume)?;
 
     if sess.handshake_data.session_id.is_empty() {
         let sessid = sess.config
@@ -152,7 +184,7 @@ fn emit_server_hello(sess: &mut ServerSessionImpl,
 }
 
 fn emit_certificate(sess: &mut ServerSessionImpl) {
-    let cert_chain = sess.handshake_data.server_cert_chain.as_ref().unwrap().clone();
+    let cert_chain = sess.handshake_data.server_certkey.as_mut().unwrap().take_cert();
 
     let c = Message {
         typ: ContentType::Handshake,
@@ -167,10 +199,31 @@ fn emit_certificate(sess: &mut ServerSessionImpl) {
     sess.common.send_msg(c, false);
 }
 
+fn emit_cert_status(sess: &mut ServerSessionImpl) {
+    if !sess.handshake_data.send_cert_status ||
+       !sess.handshake_data.server_certkey.as_ref().unwrap().has_ocsp() {
+        return;
+    }
+
+    let ocsp = sess.handshake_data.server_certkey.as_mut().unwrap().take_ocsp();
+    let st = CertificateStatus::new(ocsp.unwrap());
+
+    let c = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateStatus,
+            payload: HandshakePayload::CertificateStatus(st)
+        }),
+    };
+
+    sess.handshake_data.transcript.add_message(&c);
+    sess.common.send_msg(c, false);
+}
+
 fn emit_server_kx(sess: &mut ServerSessionImpl,
                   sigscheme: SignatureScheme,
-                  group: &NamedGroup,
-                  signing_key: Arc<Box<sign::SigningKey>>)
+                  group: &NamedGroup)
                   -> Result<(), TLSError> {
     let kx = sess.common.get_suite()
         .start_server_kx(*group)
@@ -182,6 +235,7 @@ fn emit_server_kx(sess: &mut ServerSessionImpl,
     msg.extend(&sess.handshake_data.randoms.server);
     secdh.encode(&mut msg);
 
+    let signing_key = &sess.handshake_data.server_certkey.as_ref().unwrap().key;
     let sig = signing_key.choose_scheme(&[sigscheme])
         .ok_or_else(|| TLSError::General("incompatible signing key".to_string()))
         .and_then(|signer| signer.sign(&msg))?;
@@ -289,7 +343,7 @@ fn start_resumption(sess: &mut ServerSessionImpl,
     }
 
     sess.handshake_data.session_id = *id;
-    emit_server_hello(sess, client_hello)?;
+    emit_server_hello(sess, client_hello, true)?;
 
     let hashalg = sess.common.get_suite().get_hash();
     sess.secrets = Some(SessionSecrets::new_resume(&sess.handshake_data.randoms,
@@ -403,9 +457,10 @@ fn emit_hello_retry_request(sess: &mut ServerSessionImpl, group: NamedGroup) {
 }
 
 fn emit_encrypted_extensions(sess: &mut ServerSessionImpl,
-                             hello: &ClientHelloPayload)
+                             hello: &ClientHelloPayload,
+                             for_resume: bool)
                              -> Result<(), TLSError> {
-    let encrypted_exts = process_extensions(sess, hello)?;
+    let encrypted_exts = process_extensions(sess, hello, for_resume)?;
     let ee = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
@@ -453,13 +508,36 @@ fn emit_certificate_req_tls13(sess: &mut ServerSessionImpl) {
 fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
     let mut cert_body = CertificatePayloadTLS13::new();
 
-    for cert in sess.handshake_data.server_cert_chain.as_ref().unwrap() {
+    let (certs, ocsp, sct_list) = {
+        let ck = sess.handshake_data.server_certkey.as_mut().unwrap();
+        (ck.take_cert(), ck.take_ocsp(), ck.take_sct_list())
+    };
+
+    for cert in certs {
         let entry = CertificateEntry {
-            cert: cert.clone(),
+            cert: cert,
             exts: Vec::new(),
         };
 
         cert_body.list.push(entry);
+    }
+
+    // Apply OCSP response to first certificate (we don't support OCSP
+    // except for leaf certs).
+    if sess.handshake_data.send_cert_status &&
+       ocsp.is_some() &&
+       !cert_body.list.is_empty() {
+        let first_entry = cert_body.list.first_mut().unwrap();
+        let cst = CertificateStatus::new(ocsp.unwrap());
+        first_entry.exts.push(CertificateExtension::CertificateStatus(cst));
+    }
+
+    // Likewise, SCT
+    if sess.handshake_data.send_sct &&
+       sct_list.is_some() &&
+       !cert_body.list.is_empty() {
+        let first_entry = cert_body.list.first_mut().unwrap();
+        first_entry.exts.push(CertificateExtension::make_sct(sct_list.unwrap()));
     }
 
     let c = Message {
@@ -477,14 +555,14 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
 }
 
 fn emit_certificate_verify_tls13(sess: &mut ServerSessionImpl,
-                                 schemes: &[SignatureScheme],
-                                 signing_key: &Arc<Box<sign::SigningKey>>)
+                                 schemes: &[SignatureScheme])
                                  -> Result<(), TLSError> {
     let mut message = Vec::new();
     message.resize(64, 0x20u8);
     message.extend_from_slice(b"TLS 1.3, server CertificateVerify\x00");
     message.extend_from_slice(&sess.handshake_data.transcript.get_current_hash());
 
+    let signing_key = &sess.handshake_data.server_certkey.as_ref().unwrap().key;
     let signer = signing_key.choose_scheme(schemes)
         .ok_or_else(|| TLSError::PeerIncompatibleError("no overlapping sigschemes".to_string()))?;
 
@@ -569,8 +647,7 @@ fn check_binder(sess: &mut ServerSessionImpl,
 }
 
 fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
-                             chm: &Message,
-                             signer: &Arc<Box<sign::SigningKey>>)
+                             chm: &Message)
                              -> StateResult {
     let client_hello = extract_handshake!(chm, HandshakePayload::ClientHello).unwrap();
 
@@ -674,12 +751,12 @@ fn handle_client_hello_tls13(sess: &mut ServerSessionImpl,
     let full_handshake = resuming_psk.is_none();
     sess.handshake_data.transcript.add_message(chm);
     emit_server_hello_tls13(sess, chosen_share, chosen_psk_index, resuming_psk)?;
-    emit_encrypted_extensions(sess, client_hello)?;
+    emit_encrypted_extensions(sess, client_hello, !full_handshake)?;
 
     if full_handshake {
         emit_certificate_req_tls13(sess);
         emit_certificate_tls13(sess);
-        emit_certificate_verify_tls13(sess, &sigschemes_ext, signer)?;
+        emit_certificate_verify_tls13(sess, &sigschemes_ext)?;
     }
     check_aligned_handshake(sess)?;
     emit_finished_tls13(sess);
@@ -742,18 +819,18 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     debug!("sig schemes {:?}", sigschemes_ext);
 
     // Choose a certificate.
-    let maybe_cert_key = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
-    if maybe_cert_key.is_none() {
+    let maybe_certkey = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
+    if maybe_certkey.is_none() {
         sess.common.send_fatal_alert(AlertDescription::AccessDenied);
         return Err(TLSError::General("no server certificate chain resolved".to_string()));
     }
-    let (cert_chain, private_key) = maybe_cert_key.unwrap();
-    sess.handshake_data.server_cert_chain = Some(cert_chain);
+    let certkey = maybe_certkey.unwrap();
 
     // Reduce our supported ciphersuites by the certificate.
     // (no-op for TLS1.3)
     let suitable_suites = suites::reduce_given_sigalg(&sess.config.ciphersuites,
-                                                      &private_key.algorithm());
+                                                      &certkey.key.algorithm());
+    sess.handshake_data.server_certkey = Some(certkey);
 
     // And version
     let protocol_version = sess.common.negotiated_version.unwrap();
@@ -780,7 +857,7 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
     }
 
     if sess.common.is_tls13() {
-        return handle_client_hello_tls13(sess, &m, &private_key);
+        return handle_client_hello_tls13(sess, &m);
     }
 
     // -- TLS1.2 only from hereon in --
@@ -871,9 +948,10 @@ fn handle_client_hello(sess: &mut ServerSessionImpl, m: Message) -> StateResult 
 
     debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-    emit_server_hello(sess, client_hello)?;
+    emit_server_hello(sess, client_hello, false)?;
     emit_certificate(sess);
-    emit_server_kx(sess, sigscheme, &group, private_key)?;
+    emit_cert_status(sess);
+    emit_server_kx(sess, sigscheme, &group)?;
     emit_certificate_req(sess);
     emit_server_hello_done(sess);
 
@@ -930,6 +1008,14 @@ fn handle_certificate_tls13(sess: &mut ServerSessionImpl,
                             -> StateResult {
     sess.handshake_data.transcript.add_message(&m);
     let certp = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
+
+    // We don't send any CertificateRequest extensions, so any extensions
+    // here are illegal.
+    if certp.any_entry_has_extension() {
+        return Err(TLSError::PeerMisbehavedError("client sent unsolicited cert extension"
+                                                 .to_string()));
+    }
+
     let cert_chain = certp.convert();
 
     if cert_chain.is_empty() {

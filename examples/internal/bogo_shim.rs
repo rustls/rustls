@@ -7,6 +7,7 @@
 extern crate rustls;
 extern crate webpki;
 extern crate env_logger;
+extern crate base64;
 
 use std::env;
 use std::process;
@@ -31,6 +32,7 @@ struct Options {
     port: u16,
     server: bool,
     resumes: usize,
+    verify_peer: bool,
     require_any_client_cert: bool,
     offer_no_client_cas: bool,
     tickets: bool,
@@ -43,6 +45,8 @@ struct Options {
     support_tls12: bool,
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
+    server_ocsp_response: Vec<u8>,
+    server_sct_list: Vec<u8>,
     expect_curve: u16,
 }
 
@@ -52,6 +56,7 @@ impl Options {
             port: 0,
             server: false,
             resumes: 0,
+            verify_peer: false,
             tickets: true,
             host_name: "example.com".to_string(),
             queue_data: false,
@@ -64,6 +69,8 @@ impl Options {
             support_tls12: true,
             min_version: None,
             max_version: None,
+            server_ocsp_response: vec![],
+            server_sct_list: vec![],
             expect_curve: 0,
         }
     }
@@ -97,7 +104,7 @@ fn load_key(filename: &str) -> rustls::PrivateKey {
 
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
-    let keys = rustls::internal::pemfile::rsa_private_keys(&mut reader).unwrap();
+    let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut reader).unwrap();
     assert!(keys.len() == 1);
     keys[0].clone()
 }
@@ -130,7 +137,8 @@ impl rustls::ServerCertVerifier for NoVerification {
     fn verify_server_cert(&self,
                           _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate],
-                          _hostname: &str) -> Result<(), rustls::TLSError> {
+                          _hostname: &str,
+                          _ocsp: &[u8]) -> Result<(), rustls::TLSError> {
         Ok(())
     }
 }
@@ -141,10 +149,12 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     cfg.set_persistence(persist);
 
     let cert = load_cert(&opts.cert_file);
-    let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
-    cfg.set_single_cert(cert.clone(), key);
+    let key = load_key(&opts.key_file);
+    cfg.set_single_cert_with_ocsp_and_sct(cert.clone(), key,
+                                          opts.server_ocsp_response.clone(),
+                                          opts.server_sct_list.clone());
 
-    if opts.offer_no_client_cas || opts.require_any_client_cert {
+    if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
         cfg.client_auth_offer = true;
         cfg.dangerous()
             .set_certificate_verifier(Arc::new(NoVerification {}));
@@ -183,7 +193,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
 
     if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
-        let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
+        let key = load_key(&opts.key_file);
         cfg.set_single_client_cert(cert, key);
     }
 
@@ -349,19 +359,39 @@ fn main() {
             }
             "-max-cert-list" |
             "-expect-curve-id" |
+            "-expect-resume-curve-id" |
             "-expect-peer-signature-algorithm" |
             "-expect-advertised-alpn" |
             "-expect-alpn" |
             "-expect-server-name" |
+            "-expect-ocsp-response" |
+            "-expect-signed-cert-timestamps" |
             "-expect-certificate-types" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
 
+            "-ocsp-response" => {
+                opts.server_ocsp_response = base64::decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+            }
+            "-signed-cert-timestamps" => {
+                opts.server_sct_list = base64::decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+
+                if opts.server_sct_list.len() == 2 &&
+                    opts.server_sct_list[0] == 0x00 &&
+                    opts.server_sct_list[1] == 0x00 {
+                    quit(":INVALID_SCT_LIST:");
+                }
+            }
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));
             }
             "-require-any-client-certificate" => {
                 opts.require_any_client_cert = true;
+            }
+            "-verify-peer" => {
+                opts.verify_peer = true;
             }
             "-shim-writes-first" => {
                 opts.queue_data = true;
@@ -387,6 +417,8 @@ fn main() {
             "-expect-session-miss" |
             "-expect-extended-master-secret" |
             "-expect-ticket-renewal" |
+            "-enable-ocsp-stapling" |
+            "-enable-signed-cert-timestamps" |
             // internal openssl details:
             "-async" |
             "-implicit-handshake" |
@@ -395,7 +427,6 @@ fn main() {
 
             // Not implemented things
             "-dtls" |
-            "-enable-ocsp-stapling" |
             "-cipher" |
             "-psk" |
             "-renegotiate-freely" |
@@ -404,11 +435,8 @@ fn main() {
             "-fail-early-callback" |
             "-fail-cert-callback" |
             "-install-ddos-callback" |
-            "-enable-signed-cert-timestamps" |
-            "-ocsp-response" |
             "-advertise-npn" |
             "-verify-fail" |
-            "-verify-peer" |
             "-expect-channel-id" |
             "-shim-shuts-down" |
             "-check-close-notify" |
@@ -429,14 +457,12 @@ fn main() {
             "-use-ticket-callback" |
             "-enable-grease" |
             "-enable-channel-id" |
-            "-expect-resume-curve-id" |
             "-resumption-delay" |
             "-expect-early-data-info" |
             "-enable-early-data" |
             "-expect-cipher-aes" |
             "-retain-only-sha256-client-cert-initial" |
-            "-expect-peer-cert-file" |
-            "-signed-cert-timestamps" => {
+            "-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
             }

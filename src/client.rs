@@ -3,6 +3,7 @@ use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
 use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
+use msgs::handshake::SCTList;
 use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::message::Message;
@@ -20,6 +21,8 @@ use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
 use std::fmt;
+
+use sct;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -116,7 +119,7 @@ pub trait ResolvesClientCert : Send + Sync {
     fn resolve(&self,
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey>;
+               -> Option<sign::CertifiedKey>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -128,7 +131,7 @@ impl ResolvesClientCert for FailResolveClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey> {
+               -> Option<sign::CertifiedKey> {
         None
     }
 
@@ -137,20 +140,15 @@ impl ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-struct AlwaysResolvesClientCert {
-    chain: Vec<key::Certificate>,
-    key: Arc<Box<sign::SigningKey>>,
-}
+struct AlwaysResolvesClientCert(sign::CertifiedKey);
 
 impl AlwaysResolvesClientCert {
     fn new_rsa(chain: Vec<key::Certificate>,
                priv_key: &key::PrivateKey)
                -> AlwaysResolvesClientCert {
         let key = sign::RSASigningKey::new(priv_key).expect("Invalid RSA private key");
-        AlwaysResolvesClientCert {
-            chain: chain,
-            key: Arc::new(Box::new(key)),
-        }
+        let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
+        AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, key))
     }
 }
 
@@ -158,8 +156,8 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(&self,
                _acceptable_issuers: &[&[u8]],
                _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertChainAndSigningKey> {
-        Some((self.chain.clone(), self.key.clone()))
+               -> Option<sign::CertifiedKey> {
+        Some(self.0.clone())
     }
 
     fn has_certs(&self) -> bool {
@@ -204,6 +202,11 @@ pub struct ClientConfig {
     /// is all supported versions.
     pub versions: Vec<ProtocolVersion>,
 
+    /// Collection of certificate transparency logs.
+    /// If this collection is empty, then certificate transparency
+    /// checking is disabled.
+    pub ct_logs: Option<&'static [&'static sct::Log<'static>]>,
+
     /// How to verify the server certificate chain.
     verifier: Arc<verify::ServerCertVerifier>,
 }
@@ -222,6 +225,7 @@ impl ClientConfig {
             client_auth_cert_resolver: Arc::new(FailResolveClientCert {}),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
+            ct_logs: None,
             verifier: Arc::new(verify::WebPKIVerifier {})
         }
     }
@@ -307,6 +311,8 @@ pub mod danger {
 
 pub struct ClientHandshakeData {
     pub server_cert_chain: CertificatePayload,
+    pub server_cert_ocsp_response: Vec<u8>,
+    pub server_cert_scts: Option<SCTList>,
     pub dns_name: String,
     pub session_id: SessionID,
     pub sent_extensions: Vec<ExtensionType>,
@@ -316,6 +322,7 @@ pub struct ClientHandshakeData {
     pub resuming_session: Option<persist::ClientSessionValue>,
     pub randoms: SessionRandoms,
     pub must_issue_new_ticket: bool,
+    pub may_send_cert_status: bool,
     pub using_ems: bool,
     pub new_ticket: Vec<u8>,
     pub new_ticket_lifetime: u32,
@@ -330,6 +337,8 @@ impl ClientHandshakeData {
     fn new(host_name: &str) -> ClientHandshakeData {
         ClientHandshakeData {
             server_cert_chain: Vec::new(),
+            server_cert_ocsp_response: Vec::new(),
+            server_cert_scts: None,
             dns_name: host_name.to_string(),
             session_id: SessionID::empty(),
             sent_extensions: Vec::new(),
@@ -339,6 +348,7 @@ impl ClientHandshakeData {
             resuming_session: None,
             randoms: SessionRandoms::for_client(),
             must_issue_new_ticket: false,
+            may_send_cert_status: false,
             using_ems: false,
             new_ticket: Vec::new(),
             new_ticket_lifetime: 0,

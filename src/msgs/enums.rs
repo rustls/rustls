@@ -206,6 +206,7 @@ enum_builder! {@U16
         UseSRTP => 0x000e,
         Heartbeat => 0x000f,
         ALProtocolNegotiation => 0x0010,
+        SCT => 0x0012,
         Padding => 0x0015,
         ExtendedMasterSecret => 0x0017,
         SessionTicket => 0x0023,

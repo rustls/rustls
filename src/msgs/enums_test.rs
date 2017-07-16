@@ -75,4 +75,5 @@ fn test_enums() {
     test_enum8::<PSKKeyExchangeMode>(PSKKeyExchangeMode::PSK_KE, PSKKeyExchangeMode::PSK_DHE_KE);
     test_enum8::<KeyUpdateRequest>(KeyUpdateRequest::UpdateNotRequested,
                                    KeyUpdateRequest::UpdateRequested);
+    test_enum8::<CertificateStatusType>(CertificateStatusType::OCSP, CertificateStatusType::OCSP);
 }

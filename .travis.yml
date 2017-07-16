@@ -1,4 +1,5 @@
 language: rust
+group: deprecated-2017Q3
 matrix:
   include:
     - os: linux

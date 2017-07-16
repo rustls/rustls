@@ -2,6 +2,7 @@ use std::fmt;
 use std::error::Error;
 use msgs::enums::{ContentType, HandshakeType, AlertDescription};
 use webpki;
+use sct;
 
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
@@ -53,6 +54,9 @@ pub enum TLSError {
 
     /// The presented certificate chain is invalid.
     WebPKIError(webpki::Error),
+
+    /// The presented SCT(s) were invalid.
+    InvalidSCT(sct::Error),
 
     /// A catch-all error for unlikely errors.
     General(String),
@@ -112,6 +116,7 @@ impl Error for TLSError {
             TLSError::PeerMisbehavedError(_) => "peer misbehaved",
             TLSError::AlertReceived(_) => "received fatal alert",
             TLSError::WebPKIError(_) => "invalid certificate",
+            TLSError::InvalidSCT(_) => "invalid certificate timestamp",
             TLSError::General(_) => "unexpected error", // (please file a bug)
         }
     }
@@ -125,6 +130,7 @@ mod tests {
         use std::error::Error;
         use msgs::enums::{ContentType, HandshakeType, AlertDescription};
         use webpki;
+        use sct;
 
         let all = vec![TLSError::InappropriateMessage {
                            expect_types: vec![ContentType::Alert],
@@ -142,6 +148,7 @@ mod tests {
                        TLSError::PeerMisbehavedError("inconsistent something".to_string()),
                        TLSError::AlertReceived(AlertDescription::ExportRestriction),
                        TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
+                       TLSError::InvalidSCT(sct::Error::MalformedSCT),
                        TLSError::General("undocumented error".to_string())];
 
         for err in all {
