@@ -522,22 +522,22 @@ fn emit_certificate_tls13(sess: &mut ServerSessionImpl) {
         cert_body.list.push(entry);
     }
 
-    // Apply OCSP response to last certificate (we don't support OCSP
+    // Apply OCSP response to first certificate (we don't support OCSP
     // except for leaf certs).
     if sess.handshake_data.send_cert_status &&
        ocsp.is_some() &&
        !cert_body.list.is_empty() {
-        let last_entry = cert_body.list.last_mut().unwrap();
+        let first_entry = cert_body.list.first_mut().unwrap();
         let cst = CertificateStatus::new(ocsp.unwrap());
-        last_entry.exts.push(CertificateExtension::CertificateStatus(cst));
+        first_entry.exts.push(CertificateExtension::CertificateStatus(cst));
     }
 
     // Likewise, SCT
     if sess.handshake_data.send_sct &&
        sct_list.is_some() &&
        !cert_body.list.is_empty() {
-        let last_entry = cert_body.list.last_mut().unwrap();
-        last_entry.exts.push(CertificateExtension::make_sct(sct_list.unwrap()));
+        let first_entry = cert_body.list.first_mut().unwrap();
+        first_entry.exts.push(CertificateExtension::make_sct(sct_list.unwrap()));
     }
 
     let c = Message {
