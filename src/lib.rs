@@ -20,12 +20,15 @@
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //! * Extended master secret support (RFC7627).
+//! * OCSP stapling by servers.
+//! * SCT stapling by servers.
+//! * SCT verification by clients.
 //!
 //! ## Possible future features
 //!
 //! * ECDSA server authentication by servers.
 //! * PSK support.
-//! * OCSP stapling.
+//! * OCSP verification by clients.
 //! * Certificate pinning.
 //!
 //! ## Non-features
