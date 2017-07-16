@@ -498,7 +498,7 @@ impl Codec for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-type ResponderIDs = DistinguishedNames;
+type ResponderIDs = VecU16OfPayloadU16;
 
 #[derive(Debug)]
 pub struct OCSPCertificateStatusRequest {
