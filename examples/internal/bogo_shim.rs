@@ -359,6 +359,7 @@ fn main() {
             }
             "-max-cert-list" |
             "-expect-curve-id" |
+            "-expect-resume-curve-id" |
             "-expect-peer-signature-algorithm" |
             "-expect-advertised-alpn" |
             "-expect-alpn" |
@@ -456,7 +457,6 @@ fn main() {
             "-use-ticket-callback" |
             "-enable-grease" |
             "-enable-channel-id" |
-            "-expect-resume-curve-id" |
             "-resumption-delay" |
             "-expect-early-data-info" |
             "-enable-early-data" |
