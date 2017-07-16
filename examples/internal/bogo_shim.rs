@@ -102,7 +102,7 @@ fn load_key(filename: &str) -> rustls::PrivateKey {
 
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
-    let keys = rustls::internal::pemfile::rsa_private_keys(&mut reader).unwrap();
+    let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut reader).unwrap();
     assert!(keys.len() == 1);
     keys[0].clone()
 }
@@ -147,7 +147,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     cfg.set_persistence(persist);
 
     let cert = load_cert(&opts.cert_file);
-    let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
+    let key = load_key(&opts.key_file);
     cfg.set_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone());
 
     if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
@@ -189,7 +189,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
 
     if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
-        let key = load_key(&opts.key_file.replace(".pem", ".rsa"));
+        let key = load_key(&opts.key_file);
         cfg.set_single_client_cert(cert, key);
     }
 
