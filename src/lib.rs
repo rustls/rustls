@@ -240,8 +240,6 @@ mod verify;
 #[cfg(test)]
 mod verifybench;
 mod handshake;
-mod server_hs;
-mod client_hs;
 mod suites;
 mod ticketer;
 mod server;

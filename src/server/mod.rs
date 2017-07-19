@@ -6,7 +6,6 @@ use msgs::handshake::SessionID;
 use msgs::message::Message;
 use msgs::codec::Codec;
 use hash_hs;
-use server_hs;
 use error::TLSError;
 use rand;
 use sign;
@@ -18,6 +17,8 @@ use std::collections;
 use std::sync::{Arc, Mutex};
 use std::io;
 use std::fmt;
+
+mod hs;
 
 /// A trait for the ability to generate Session IDs, and store
 /// server session data. The keys and values are opaque.
@@ -440,7 +441,7 @@ pub struct ServerSessionImpl {
     pub common: SessionCommon,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
-    pub state: &'static server_hs::State,
+    pub state: &'static hs::State,
 }
 
 impl fmt::Debug for ServerSessionImpl {
@@ -458,7 +459,7 @@ impl ServerSessionImpl {
             common: SessionCommon::new(None, false),
             alpn_protocol: None,
             error: None,
-            state: &server_hs::EXPECT_CLIENT_HELLO,
+            state: &hs::EXPECT_CLIENT_HELLO,
         };
 
         if sess.config.client_auth_offer {

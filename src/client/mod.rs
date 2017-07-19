@@ -8,7 +8,6 @@ use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::message::Message;
 use msgs::persist;
-use client_hs;
 use hash_hs;
 use verify;
 use anchors;
@@ -23,6 +22,8 @@ use std::io;
 use std::fmt;
 
 use sct;
+
+mod hs;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -368,7 +369,7 @@ pub struct ClientSessionImpl {
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
-    pub state: &'static client_hs::State,
+    pub state: &'static hs::State,
 }
 
 impl fmt::Debug for ClientSessionImpl {
@@ -386,14 +387,14 @@ impl ClientSessionImpl {
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
-            state: &client_hs::EXPECT_SERVER_HELLO,
+            state: &hs::EXPECT_SERVER_HELLO,
         };
 
         if cs.config.client_auth_cert_resolver.has_certs() {
             cs.handshake_data.transcript.set_client_auth_enabled();
         }
 
-        cs.state = client_hs::emit_client_hello(&mut cs);
+        cs.state = hs::emit_client_hello(&mut cs);
         cs
     }
 
