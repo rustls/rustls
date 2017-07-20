@@ -1,18 +1,14 @@
 use msgs::enums::CipherSuite;
-use msgs::enums::{AlertDescription, HandshakeType, ExtensionType};
-use session::{Session, SessionSecrets, SessionRandoms, SessionCommon};
+use msgs::enums::{AlertDescription, HandshakeType};
+use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use msgs::handshake::{CertificatePayload, DigitallySignedStruct, SessionID};
-use msgs::handshake::SCTList;
+use msgs::handshake::CertificatePayload;
 use msgs::enums::SignatureScheme;
 use msgs::enums::{ContentType, ProtocolVersion};
 use msgs::message::Message;
-use msgs::persist;
-use hash_hs;
 use verify;
 use anchors;
 use sign;
-use suites;
 use error::TLSError;
 use key;
 
@@ -24,6 +20,7 @@ use std::fmt;
 use sct;
 
 mod hs;
+mod common;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -310,66 +307,14 @@ pub mod danger {
     }
 }
 
-pub struct ClientHandshakeData {
-    pub server_cert_chain: CertificatePayload,
-    pub server_cert_ocsp_response: Vec<u8>,
-    pub server_cert_scts: Option<SCTList>,
-    pub dns_name: String,
-    pub session_id: SessionID,
-    pub sent_extensions: Vec<ExtensionType>,
-    pub server_kx_params: Vec<u8>,
-    pub server_kx_sig: Option<DigitallySignedStruct>,
-    pub transcript: hash_hs::HandshakeHash,
-    pub resuming_session: Option<persist::ClientSessionValue>,
-    pub randoms: SessionRandoms,
-    pub must_issue_new_ticket: bool,
-    pub may_send_cert_status: bool,
-    pub using_ems: bool,
-    pub new_ticket: Vec<u8>,
-    pub new_ticket_lifetime: u32,
-    pub doing_client_auth: bool,
-    pub client_auth_cert: Option<CertificatePayload>,
-    pub client_auth_signer: Option<Box<sign::Signer>>,
-    pub client_auth_context: Option<Vec<u8>>,
-    pub offered_key_shares: Vec<suites::KeyExchange>,
-}
-
-impl ClientHandshakeData {
-    fn new(host_name: &str) -> ClientHandshakeData {
-        ClientHandshakeData {
-            server_cert_chain: Vec::new(),
-            server_cert_ocsp_response: Vec::new(),
-            server_cert_scts: None,
-            dns_name: host_name.to_string(),
-            session_id: SessionID::empty(),
-            sent_extensions: Vec::new(),
-            server_kx_params: Vec::new(),
-            server_kx_sig: None,
-            transcript: hash_hs::HandshakeHash::new(),
-            resuming_session: None,
-            randoms: SessionRandoms::for_client(),
-            must_issue_new_ticket: false,
-            may_send_cert_status: false,
-            using_ems: false,
-            new_ticket: Vec::new(),
-            new_ticket_lifetime: 0,
-            doing_client_auth: false,
-            client_auth_cert: None,
-            client_auth_signer: None,
-            client_auth_context: None,
-            offered_key_shares: Vec::new(),
-        }
-    }
-}
-
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
-    pub handshake_data: ClientHandshakeData,
     pub secrets: Option<SessionSecrets>,
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
-    pub state: &'static hs::State,
+    pub state: Option<Box<hs::State + Send>>,
+    pub server_cert_chain: CertificatePayload,
 }
 
 impl fmt::Debug for ClientSessionImpl {
@@ -382,19 +327,15 @@ impl ClientSessionImpl {
     pub fn new(config: &Arc<ClientConfig>, hostname: &str) -> ClientSessionImpl {
         let mut cs = ClientSessionImpl {
             config: config.clone(),
-            handshake_data: ClientHandshakeData::new(hostname),
             secrets: None,
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
-            state: &hs::EXPECT_SERVER_HELLO,
+            state: None,
+            server_cert_chain: Vec::new(),
         };
 
-        if cs.config.client_auth_cert_resolver.has_certs() {
-            cs.handshake_data.transcript.set_client_auth_enabled();
-        }
-
-        cs.state = hs::emit_client_hello(&mut cs);
+        cs.state = Some(hs::start_handshake(&mut cs, hostname));
         cs
     }
 
@@ -512,14 +453,14 @@ impl ClientSessionImpl {
             return Ok(());
         }
 
-        self.state.expect
+        let state = self.state.take().unwrap();
+        state
             .check_message(&msg)
             .map_err(|err| {
                 self.queue_unexpected_alert();
                 err
             })?;
-        let new_state = (self.state.handle)(self, msg)?;
-        self.state = new_state;
+        self.state = Some(state.handle(self, msg)?);
 
         Ok(())
     }
@@ -547,12 +488,12 @@ impl ClientSessionImpl {
     }
 
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        if self.handshake_data.server_cert_chain.is_empty() {
+        if self.server_cert_chain.is_empty() {
             return None;
         }
 
         let mut r = Vec::new();
-        for cert in &self.handshake_data.server_cert_chain {
+        for cert in &self.server_cert_chain {
             r.push(cert.clone());
         }
 
