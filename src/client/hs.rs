@@ -29,7 +29,7 @@ use verify;
 use rand;
 use time;
 use error::TLSError;
-use handshake::Expectation;
+use handshake::{check_message, check_handshake_message};
 
 use client::common::{ServerCertDetails, ServerKXDetails, HandshakeDetails};
 use client::common::{ClientHelloDetails, ReceivedTicketDetails, ClientAuthDetails};
@@ -413,11 +413,6 @@ fn process_alpn_protocol(sess: &mut ClientSessionImpl,
     Ok(())
 }
 
-pub static EXPECT_SERVER_HELLO: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ServerHello],
-};
-
 impl ExpectServerHello {
     fn start_handshake_traffic(&mut self,
                                sess: &mut ClientSessionImpl,
@@ -513,7 +508,7 @@ impl ExpectServerHello {
 
 impl State for ExpectServerHello {
     fn check_message(&self, m: &Message) -> CheckResult {
-        EXPECT_SERVER_HELLO.check_message(&m)
+        check_handshake_message(&m, &[HandshakeType::ServerHello])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -675,18 +670,13 @@ impl State for ExpectServerHello {
     }
 }
 
-pub static EXPECT_HELLO_RETRY_REQUEST: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::HelloRetryRequest],
-};
-
 impl ExpectServerHelloOrHelloRetryRequest {
     fn into_expect_server_hello(self) -> Box<State + Send> {
         Box::new(self.0)
     }
 
     fn handle_hello_retry_request(mut self, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
-        EXPECT_HELLO_RETRY_REQUEST.check_message(&m)?;
+        check_handshake_message(&m, &[HandshakeType::HelloRetryRequest])?;
 
         let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
         self.0.handshake.transcript.add_message(&m);
@@ -746,14 +736,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub static EXPECT_SERVER_HELLO_OR_HELLO_RETRY_REQUEST: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
-};
-
 impl State for ExpectServerHelloOrHelloRetryRequest {
     fn check_message(&self, m: &Message) -> CheckResult {
-        EXPECT_SERVER_HELLO_OR_HELLO_RETRY_REQUEST.check_message(m)
+        check_handshake_message(m,
+                                &[HandshakeType::ServerHello,
+                                  HandshakeType::HelloRetryRequest])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -814,14 +801,9 @@ impl ExpectTLS13EncryptedExtensions {
     }
 }
 
-static EXPECT_TLS13_ENCRYPTED_EXTENSIONS: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::EncryptedExtensions],
-};
-
 impl State for ExpectTLS13EncryptedExtensions {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS13_ENCRYPTED_EXTENSIONS.check_message(m)
+        check_handshake_message(m, &[HandshakeType::EncryptedExtensions])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -862,14 +844,9 @@ impl ExpectTLS13Certificate {
     }
 }
 
-static EXPECT_TLS13_CERTIFICATE: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Certificate],
-};
-
 impl State for ExpectTLS13Certificate {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS13_CERTIFICATE.check_message(m)
+        check_handshake_message(m, &[HandshakeType::Certificate])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -926,14 +903,9 @@ impl ExpectTLS12Certificate {
     }
 }
 
-static EXPECT_TLS12_CERTIFICATE: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Certificate],
-};
-
 impl State for ExpectTLS12Certificate {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_CERTIFICATE.check_message(m)
+        check_handshake_message(m, &[HandshakeType::Certificate])
     }
 
     fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -964,14 +936,9 @@ impl ExpectTLS12CertificateStatus {
     }
 }
 
-static EXPECT_TLS12_CERTIFICATE_STATUS: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::CertificateStatus],
-};
-
 impl State for ExpectTLS12CertificateStatus {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_CERTIFICATE_STATUS.check_message(m)
+        check_handshake_message(m, &[HandshakeType::CertificateStatus])
     }
 
     fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1005,15 +972,11 @@ impl ExpectTLS12CertificateStatusOrServerKX {
     }
 }
 
-static EXPECT_TLS12_CERTIFICATE_STATUS_OR_SERVER_KX: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ServerKeyExchange,
-                       HandshakeType::CertificateStatus],
-};
-
 impl State for ExpectTLS12CertificateStatusOrServerKX {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_CERTIFICATE_STATUS_OR_SERVER_KX.check_message(m)
+        check_handshake_message(m,
+                                &[HandshakeType::ServerKeyExchange,
+                                  HandshakeType::CertificateStatus])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1047,14 +1010,11 @@ impl ExpectTLS13CertificateOrCertReq {
     }
 }
 
-static EXPECT_TLS13_CERTIFICATE_OR_CERTREQ: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Certificate, HandshakeType::CertificateRequest],
-};
-
 impl State for ExpectTLS13CertificateOrCertReq {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS13_CERTIFICATE_OR_CERTREQ.check_message(m)
+        check_handshake_message(m,
+                                &[HandshakeType::Certificate,
+                                  HandshakeType::CertificateRequest])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1081,14 +1041,9 @@ impl ExpectTLS12ServerKX {
     }
 }
 
-static EXPECT_TLS12_SERVER_KX: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ServerKeyExchange],
-};
-
 impl State for ExpectTLS12ServerKX {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_SERVER_KX.check_message(m)
+        check_handshake_message(m, &[HandshakeType::ServerKeyExchange])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1134,7 +1089,7 @@ impl ExpectTLS13CertificateVerify {
 
 impl State for ExpectTLS13CertificateVerify {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS13_CERTIFICATE_VERIFY.check_message(m)
+        check_handshake_message(m, &[HandshakeType::CertificateVerify])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1175,12 +1130,6 @@ impl State for ExpectTLS13CertificateVerify {
         Ok(self.into_expect_tls13_finished())
     }
 }
-
-
-static EXPECT_TLS13_CERTIFICATE_VERIFY: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::CertificateVerify],
-};
 
 fn emit_certificate(handshake: &mut HandshakeDetails,
                     client_auth: &mut ClientAuthDetails,
@@ -1300,14 +1249,9 @@ impl ExpectTLS12CertificateRequest {
     }
 }
 
-static EXPECT_TLS12_CERTIFICATE_REQUEST: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::CertificateRequest],
-};
-
 impl State for ExpectTLS12CertificateRequest {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_CERTIFICATE_REQUEST.check_message(m)
+        check_handshake_message(m, &[HandshakeType::CertificateRequest])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1365,14 +1309,9 @@ impl ExpectTLS13CertificateRequest {
     }
 }
 
-static EXPECT_TLS13_CERTIFICATE_REQUEST: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::CertificateRequest],
-};
-
 impl State for ExpectTLS13CertificateRequest {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS13_CERTIFICATE_REQUEST.check_message(m)
+        check_handshake_message(m, &[HandshakeType::CertificateRequest])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1450,14 +1389,11 @@ impl ExpectTLS12ServerDoneOrCertReq {
     }
 }
 
-static EXPECT_TLS12_SERVER_DONE_OR_CERTREQ: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::CertificateRequest, HandshakeType::ServerHelloDone],
-};
-
 impl State for ExpectTLS12ServerDoneOrCertReq {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_SERVER_DONE_OR_CERTREQ.check_message(m)
+        check_handshake_message(m,
+                                &[HandshakeType::CertificateRequest,
+                                  HandshakeType::ServerHelloDone])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1497,7 +1433,7 @@ impl ExpectTLS12ServerDone {
 
 impl State for ExpectTLS12ServerDone {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_SERVER_DONE.check_message(m)
+        check_handshake_message(m, &[HandshakeType::ServerHelloDone])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1613,11 +1549,6 @@ impl State for ExpectTLS12ServerDone {
     }
 }
 
-static EXPECT_TLS12_SERVER_DONE: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::ServerHelloDone],
-};
-
 // -- Waiting for their CCS --
 struct ExpectTLS12CCS {
     handshake: HandshakeDetails,
@@ -1635,14 +1566,9 @@ impl ExpectTLS12CCS {
     }
 }
 
-static EXPECT_TLS12_CCS: Expectation = Expectation {
-    content_types: &[ContentType::ChangeCipherSpec],
-    handshake_types: &[],
-};
-
 impl State for ExpectTLS12CCS {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_CCS.check_message(m)
+        check_message(m, &[ContentType::ChangeCipherSpec], &[])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, _m: Message) -> StateResult {
@@ -1678,14 +1604,9 @@ impl ExpectTLS12NewTicket {
     }
 }
 
-static EXPECT_TLS12_NEW_TICKET: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::NewSessionTicket],
-};
-
 impl State for ExpectTLS12NewTicket {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_NEW_TICKET.check_message(m)
+        check_handshake_message(m, &[HandshakeType::NewSessionTicket])
     }
 
     fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1836,14 +1757,9 @@ impl ExpectTLS13Finished {
     }
 }
 
-static EXPECT_TLS13_FINISHED: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Finished],
-};
-
 impl State for ExpectTLS13Finished {
     fn check_message(&self, m: &Message) -> CheckResult {
-        EXPECT_TLS13_FINISHED.check_message(&m)
+        check_handshake_message(m, &[HandshakeType::Finished])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1921,7 +1837,7 @@ impl ExpectTLS12Finished {
 
 impl State for ExpectTLS12Finished {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_FINISHED.check_message(m)
+        check_handshake_message(m, &[HandshakeType::Finished])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -1961,17 +1877,12 @@ impl State for ExpectTLS12Finished {
     }
 }
 
-static EXPECT_TLS12_FINISHED: Expectation = Expectation {
-    content_types: &[ContentType::Handshake],
-    handshake_types: &[HandshakeType::Finished],
-};
-
 // -- Traffic transit state --
 struct ExpectTLS12Traffic {}
 
 impl State for ExpectTLS12Traffic {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS12_TRAFFIC.check_message(m)
+        check_message(m, &[ContentType::ApplicationData], &[])
     }
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> StateResult {
@@ -1979,11 +1890,6 @@ impl State for ExpectTLS12Traffic {
         Ok(self)
     }
 }
-
-static EXPECT_TLS12_TRAFFIC: Expectation = Expectation {
-    content_types: &[ContentType::ApplicationData],
-    handshake_types: &[],
-};
 
 // -- Traffic transit state (TLS1.3) --
 // In this state we can be sent tickets, keyupdates,
@@ -2028,7 +1934,9 @@ impl ExpectTLS13Traffic {
 
 impl State for ExpectTLS13Traffic {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        EXPECT_TLS13_TRAFFIC.check_message(m)
+        check_message(m,
+                      &[ContentType::ApplicationData, ContentType::Handshake],
+                      &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> StateResult {
@@ -2043,9 +1951,3 @@ impl State for ExpectTLS13Traffic {
         Ok(self)
     }
 }
-
-
-static EXPECT_TLS13_TRAFFIC: Expectation = Expectation {
-    content_types: &[ContentType::ApplicationData, ContentType::Handshake],
-    handshake_types: &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-};
