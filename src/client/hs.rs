@@ -64,13 +64,13 @@ macro_rules! extract_handshake_mut(
   )
 );
 
-pub trait State {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError>;
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> Result<Box<State + Send>, TLSError>;
-}
-
 type CheckResult = Result<(), TLSError>;
 type StateResult = Result<Box<State + Send>, TLSError>;
+
+pub trait State {
+    fn check_message(&self, m: &Message) -> CheckResult;
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult;
+}
 
 fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
     sess.common.send_fatal_alert(AlertDescription::IllegalParameter);

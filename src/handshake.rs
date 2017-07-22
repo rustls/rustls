@@ -36,16 +36,3 @@ pub fn check_message(m: &Message,
 
     Ok(())
 }
-
-/* DELETEME: */
-#[derive(Debug, Clone)]
-pub struct Expectation {
-    pub content_types: &'static [ContentType],
-    pub handshake_types: &'static [HandshakeType],
-}
-
-impl Expectation {
-    pub fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_message(m, self.content_types, self.handshake_types)
-    }
-}

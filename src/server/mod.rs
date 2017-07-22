@@ -1,11 +1,10 @@
-use session::{Session, SessionRandoms, SessionSecrets, SessionCommon};
-use suites::{SupportedCipherSuite, ALL_CIPHERSUITES, KeyExchange};
+use session::{Session, SessionSecrets, SessionCommon};
+use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use msgs::handshake::SessionID;
 use msgs::message::Message;
 use msgs::codec::Codec;
-use hash_hs;
 use error::TLSError;
 use rand;
 use sign;
@@ -19,6 +18,7 @@ use std::io;
 use std::fmt;
 
 mod hs;
+mod common;
 
 /// A trait for the ability to generate Session IDs, and store
 /// server session data. The keys and values are opaque.
@@ -396,52 +396,14 @@ pub mod danger {
     }
 }
 
-pub struct ServerHandshakeData {
-    pub server_certkey: Option<sign::CertifiedKey>,
-    pub session_id: SessionID,
-    pub randoms: SessionRandoms,
-    pub transcript: hash_hs::HandshakeHash,
-    pub hash_at_server_fin: Vec<u8>,
-    pub kx_data: Option<KeyExchange>,
-    pub doing_resume: bool,
-    pub send_ticket: bool,
-    pub send_cert_status: bool,
-    pub send_sct: bool,
-    pub using_ems: bool,
-    pub doing_client_auth: bool,
-    pub done_retry: bool,
-    pub valid_client_cert_chain: Option<Vec<key::Certificate>>,
-}
-
-impl ServerHandshakeData {
-    fn new() -> ServerHandshakeData {
-        ServerHandshakeData {
-            server_certkey: None,
-            session_id: SessionID::empty(),
-            randoms: SessionRandoms::for_server(),
-            transcript: hash_hs::HandshakeHash::new(),
-            hash_at_server_fin: vec![],
-            kx_data: None,
-            send_ticket: false,
-            send_cert_status: false,
-            send_sct: false,
-            using_ems: false,
-            doing_resume: false,
-            doing_client_auth: false,
-            done_retry: false,
-            valid_client_cert_chain: None,
-        }
-    }
-}
-
 pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
-    pub handshake_data: ServerHandshakeData,
     pub secrets: Option<SessionSecrets>,
     pub common: SessionCommon,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
-    pub state: &'static hs::State,
+    pub state: Option<Box<hs::State + Send>>,
+    pub client_cert_chain: Option<Vec<key::Certificate>>,
 }
 
 impl fmt::Debug for ServerSessionImpl {
@@ -452,21 +414,17 @@ impl fmt::Debug for ServerSessionImpl {
 
 impl ServerSessionImpl {
     pub fn new(server_config: &Arc<ServerConfig>) -> ServerSessionImpl {
-        let mut sess = ServerSessionImpl {
+        let perhaps_client_auth = server_config.client_auth_offer;
+
+        ServerSessionImpl {
             config: server_config.clone(),
-            handshake_data: ServerHandshakeData::new(),
             secrets: None,
             common: SessionCommon::new(None, false),
             alpn_protocol: None,
             error: None,
-            state: &hs::EXPECT_CLIENT_HELLO,
-        };
-
-        if sess.config.client_auth_offer {
-            sess.handshake_data.transcript.set_client_auth_enabled();
+            state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth))),
+            client_cert_chain: None,
         }
-
-        sess
     }
 
     pub fn wants_read(&self) -> bool {
@@ -538,10 +496,11 @@ impl ServerSessionImpl {
             return Ok(());
         }
 
-        self.state.expect.check_message(&msg)
+        let st = self.state.take().unwrap();
+        st.check_message(&msg)
             .map_err(|err| { self.queue_unexpected_alert(); err })?;
-        let new_state = (self.state.handle)(self, msg)?;
-        self.state = new_state;
+
+        self.state = Some(st.handle(self, msg)?);
 
         Ok(())
     }
@@ -574,13 +533,13 @@ impl ServerSessionImpl {
     }
 
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        if self.handshake_data.valid_client_cert_chain.is_none() {
+        if self.client_cert_chain.is_none() {
             return None;
         }
 
         let mut r = Vec::new();
 
-        for cert in self.handshake_data.valid_client_cert_chain.as_ref().unwrap() {
+        for cert in self.client_cert_chain.as_ref().unwrap() {
             r.push(cert.clone());
         }
 
