@@ -77,14 +77,14 @@ impl fmt::Display for TLSError {
                        "{}: got {:?} when expecting {}",
                        self.description(),
                        got_type,
-                       join::<ContentType>(&expect_types))
+                       join::<ContentType>(expect_types))
             }
             TLSError::InappropriateHandshakeMessage { ref expect_types, ref got_type } => {
                 write!(f,
                        "{}: got {:?} when expecting {}",
                        self.description(),
                        got_type,
-                       join::<HandshakeType>(&expect_types))
+                       join::<HandshakeType>(expect_types))
             }
             TLSError::CorruptMessagePayload(ref typ) => {
                 write!(f, "{} of type {:?}", self.description(), typ)

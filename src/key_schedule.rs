@@ -63,7 +63,7 @@ impl KeySchedule {
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
     pub fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
-        debug_assert!(hs_hash.len() == self.hash.output_len);
+        debug_assert_eq!(hs_hash.len(), self.hash.output_len);
 
         _hkdf_expand_label(&self.current,
                            kind.to_bytes(),
@@ -92,7 +92,7 @@ impl KeySchedule {
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
     pub fn sign_verify_data(&self, base_key: &[u8], hs_hash: &[u8]) -> Vec<u8> {
-        debug_assert!(hs_hash.len() == self.hash.output_len);
+        debug_assert_eq!(hs_hash.len(), self.hash.output_len);
 
         let hmac_key = hkdf_expand_label(self.hash,
                                          base_key,

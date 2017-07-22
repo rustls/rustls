@@ -508,7 +508,7 @@ impl ExpectServerHello {
 
 impl State for ExpectServerHello {
     fn check_message(&self, m: &Message) -> CheckResult {
-        check_handshake_message(&m, &[HandshakeType::ServerHello])
+        check_handshake_message(m, &[HandshakeType::ServerHello])
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
@@ -588,8 +588,8 @@ impl State for ExpectServerHello {
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         if sess.common.is_tls13() {
-            validate_server_hello_tls13(sess, &server_hello)?;
-            self.start_handshake_traffic(sess, &server_hello)?;
+            validate_server_hello_tls13(sess, server_hello)?;
+            self.start_handshake_traffic(sess, server_hello)?;
             return Ok(self.into_expect_tls13_encrypted_extensions());
         }
 
@@ -624,7 +624,7 @@ impl State for ExpectServerHello {
         if let Some(sct_list) = server_hello.get_sct_list() {
             info!("Server sent {:?} SCTs", sct_list.len());
 
-            if sct_list_is_invalid(&sct_list) {
+            if sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
             }
@@ -872,7 +872,7 @@ impl State for ExpectTLS13Certificate {
         self.server_cert.server_cert_chain = cert_chain.convert();
 
         if let Some(sct_list) = self.server_cert.server_cert_scts.as_ref() {
-            if sct_list_is_invalid(&sct_list) {
+            if sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
             }
@@ -1110,16 +1110,16 @@ impl State for ExpectTLS13CertificateVerify {
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.handshake.transcript.get_current_hash();
         verify::verify_tls13(&self.server_cert.server_cert_chain[0],
-                             &cert_verify,
+                             cert_verify,
                              &handshake_hash,
                              b"TLS 1.3, server CertificateVerify\x00")?;
 
         // 3. Verify any included SCTs.
         match (self.server_cert.server_cert_scts.as_ref(), sess.config.ct_logs) {
-            (Some(ref scts), Some(logs)) => {
+            (Some(scts), Some(logs)) => {
                 verify::verify_scts(&self.server_cert.server_cert_chain[0],
-                                    &scts,
-                                    &logs)?;
+                                    scts,
+                                    logs)?;
             }
             (_, _) => {}
         }
@@ -1467,10 +1467,10 @@ impl State for ExpectTLS12ServerDone {
 
         // 2. Verify any included SCTs.
         match (st.server_cert.server_cert_scts.as_ref(), sess.config.ct_logs) {
-            (Some(ref scts), Some(logs)) => {
+            (Some(scts), Some(logs)) => {
                 verify::verify_scts(&st.server_cert.server_cert_chain[0],
-                                    &scts,
-                                    &logs)?;
+                                    scts,
+                                    logs)?;
             }
             (_, _) => {}
         }

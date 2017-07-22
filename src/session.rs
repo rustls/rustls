@@ -573,7 +573,7 @@ impl SessionCommon {
 
         debug_assert!(self.we_encrypting);
 
-        if data.len() == 0 {
+        if data.is_empty() {
             // Don't send empty fragments.
             return Ok(0);
         }

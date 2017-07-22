@@ -23,7 +23,7 @@ pub fn check_message(m: &Message,
     }
 
     if let MessagePayload::Handshake(ref hsp) = m.payload {
-        if handshake_types.len() > 0 && !handshake_types.contains(&hsp.typ) {
+        if !handshake_types.is_empty() && !handshake_types.contains(&hsp.typ) {
             warn!("Received a {:?} handshake message while expecting {:?}",
                   hsp.typ,
                   handshake_types);

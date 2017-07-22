@@ -1080,7 +1080,7 @@ impl State for ExpectTLS12Certificate {
         debug!("certs {:?}", cert_chain);
 
         sess.config.get_verifier().verify_client_cert(&sess.config.client_auth_roots,
-                                                      &cert_chain)
+                                                      cert_chain)
             .or_else(|err| {
                      incompatible(sess, "certificate invalid");
                      Err(err)

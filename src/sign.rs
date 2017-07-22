@@ -14,9 +14,9 @@ use std::mem;
 
 /// An abstract signing key.
 pub trait SigningKey : Send + Sync {
-    /// Choose a SignatureScheme from those offered.
+    /// Choose a `SignatureScheme` from those offered.
     ///
-    /// Expresses the choice something that implements Signer,
+    /// Expresses the choice something that implements `Signer`,
     /// using the chosen scheme.
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<Signer>>;
 
@@ -33,7 +33,7 @@ pub trait Signer : Send + Sync {
     fn get_scheme(&self) -> SignatureScheme;
 }
 
-/// A packaged together certificate chain, matching SigningKey and
+/// A packaged together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response and/or SCT.
 #[derive(Clone)]
 pub struct CertifiedKey {
@@ -85,7 +85,7 @@ impl CertifiedKey {
     }
 }
 
-/// A SigningKey for RSA-PKCS1 or RSA-PSS
+/// A `SigningKey` for RSA-PKCS1 or RSA-PSS
 pub struct RSASigningKey {
     key: Arc<RSAKeyPair>,
 }
@@ -100,7 +100,7 @@ static ALL_RSA_SCHEMES: &'static [SignatureScheme] = &[
 ];
 
 impl RSASigningKey {
-    /// Make a new RSASigningKey from a DER encoding, in either
+    /// Make a new `RSASigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
     pub fn new(der: &key::PrivateKey) -> Result<RSASigningKey, ()> {
         RSAKeyPair::from_der(untrusted::Input::from(&der.0))
