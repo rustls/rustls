@@ -1,22 +1,25 @@
 language: rust
 group: deprecated-2017Q3
-rust:
-  - stable
-  - nightly
 matrix:
   include:
     - os: linux
       dist: trusty
       sudo: required
+      rust: stable
+    - os: linux
+      dist: trusty
+      sudo: required
+      rust: nightly
+      env: COVERAGE=1
     - os: osx
       rust: stable
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then pip install --upgrade pip ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "nightly" ]]; then admin/build-lcov ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "nightly" ]]; then gem install coveralls-lcov ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "nightly" ]]; then sudo apt-get install libclang-common-3.8-dev llvm-3.8-dev ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then admin/build-lcov ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then gem install coveralls-lcov ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then sudo apt-get install libclang-common-3.8-dev llvm-3.8-dev ; fi
 script:
   - cargo build
   - RUST_BACKTRACE=1 cargo test
@@ -27,5 +30,5 @@ script:
   - ( cd bogo && ./runme )
   - cargo build --no-default-features
   - cargo test --no-default-features --no-run
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "nightly" ]]; then ./admin/coverage          ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TRAVIS_RUST_VERSION" == "nightly" ]]; then coveralls-lcov final.info ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then ./admin/coverage          ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then coveralls-lcov final.info ; fi
