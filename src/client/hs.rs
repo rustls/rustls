@@ -628,7 +628,7 @@ impl State for ExpectServerHello {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
             }
-            self.server_cert.server_cert_scts = Some(sct_list.clone());
+            self.server_cert.scts = Some(sct_list.clone());
         }
 
         // See if we're successfully resuming.
@@ -867,11 +867,11 @@ impl State for ExpectTLS13Certificate {
             return Err(TLSError::PeerMisbehavedError("bad cert chain extensions".to_string()));
         }
 
-        self.server_cert.server_cert_ocsp_response = cert_chain.get_end_entity_ocsp();
-        self.server_cert.server_cert_scts = cert_chain.get_end_entity_scts();
-        self.server_cert.server_cert_chain = cert_chain.convert();
+        self.server_cert.ocsp_response = cert_chain.get_end_entity_ocsp();
+        self.server_cert.scts = cert_chain.get_end_entity_scts();
+        self.server_cert.cert_chain = cert_chain.convert();
 
-        if let Some(sct_list) = self.server_cert.server_cert_scts.as_ref() {
+        if let Some(sct_list) = self.server_cert.scts.as_ref() {
             if sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
@@ -912,7 +912,7 @@ impl State for ExpectTLS12Certificate {
         let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
         self.handshake.transcript.add_message(&m);
 
-        self.server_cert.server_cert_chain = cert_chain.clone();
+        self.server_cert.cert_chain = cert_chain.clone();
 
         if self.handshake.may_send_cert_status {
             Ok(self.into_expect_tls12_certificate_status_or_server_kx())
@@ -945,8 +945,8 @@ impl State for ExpectTLS12CertificateStatus {
         self.handshake.transcript.add_message(&m);
         let mut status = extract_handshake_mut!(m, HandshakePayload::CertificateStatus).unwrap();
 
-        self.server_cert.server_cert_ocsp_response = status.take_ocsp_response();
-        info!("Server stapled OCSP response is {:?}", self.server_cert.server_cert_ocsp_response);
+        self.server_cert.ocsp_response = status.take_ocsp_response();
+        info!("Server stapled OCSP response is {:?}", self.server_cert.ocsp_response);
         Ok(self.into_expect_tls12_server_kx())
     }
 }
@@ -1060,8 +1060,8 @@ impl State for ExpectTLS12ServerKX {
 
         // Save the signature and signed parameters for later verification.
         let mut skx = ServerKXDetails::new();
-        skx.server_kx_sig = decoded_kx.get_sig();
-        decoded_kx.encode_params(&mut skx.server_kx_params);
+        skx.kx_sig = decoded_kx.get_sig();
+        decoded_kx.encode_params(&mut skx.kx_params);
 
         if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
             info!("ECDHE curve is {:?}", ecdhe.params.curve_params);
@@ -1095,29 +1095,29 @@ impl State for ExpectTLS13CertificateVerify {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
 
-        info!("Server cert is {:?}", self.server_cert.server_cert_chain);
+        info!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
-        if self.server_cert.server_cert_chain.is_empty() {
+        if self.server_cert.cert_chain.is_empty() {
             return Err(TLSError::NoCertificatesPresented);
         }
 
         sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
-                                                      &self.server_cert.server_cert_chain,
+                                                      &self.server_cert.cert_chain,
                                                       &self.handshake.dns_name,
-                                                      &self.server_cert.server_cert_ocsp_response)?;
+                                                      &self.server_cert.ocsp_response)?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        verify::verify_tls13(&self.server_cert.server_cert_chain[0],
+        verify::verify_tls13(&self.server_cert.cert_chain[0],
                              cert_verify,
                              &handshake_hash,
                              b"TLS 1.3, server CertificateVerify\x00")?;
 
         // 3. Verify any included SCTs.
-        match (self.server_cert.server_cert_scts.as_ref(), sess.config.ct_logs) {
+        match (self.server_cert.scts.as_ref(), sess.config.ct_logs) {
             (Some(scts), Some(logs)) => {
-                verify::verify_scts(&self.server_cert.server_cert_chain[0],
+                verify::verify_scts(&self.server_cert.cert_chain[0],
                                     scts,
                                     logs)?;
             }
@@ -1134,7 +1134,7 @@ impl State for ExpectTLS13CertificateVerify {
 fn emit_certificate(handshake: &mut HandshakeDetails,
                     client_auth: &mut ClientAuthDetails,
                     sess: &mut ClientSessionImpl) {
-    let chosen_cert = client_auth.client_auth_cert.take();
+    let chosen_cert = client_auth.cert.take();
 
     let cert = Message {
         typ: ContentType::Handshake,
@@ -1173,14 +1173,14 @@ fn emit_clientkx(handshake: &mut HandshakeDetails,
 fn emit_certverify(handshake: &mut HandshakeDetails,
                    client_auth: &mut ClientAuthDetails,
                    sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
-    if client_auth.client_auth_signer.is_none() {
+    if client_auth.signer.is_none() {
         debug!("Not sending CertificateVerify, no key");
         handshake.transcript.abandon_client_auth();
         return Ok(());
     }
 
     let message = handshake.transcript.take_handshake_buf();
-    let signer = client_auth.client_auth_signer.take().unwrap();
+    let signer = client_auth.signer.take().unwrap();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let body = DigitallySignedStruct::new(scheme, sig);
@@ -1282,8 +1282,8 @@ impl State for ExpectTLS12CertificateRequest {
         if let Some(mut certkey) = maybe_certkey {
             info!("Attempting client auth");
             let maybe_signer = certkey.key.choose_scheme(&certreq.sigschemes);
-            client_auth.client_auth_cert = Some(certkey.take_cert());
-            client_auth.client_auth_signer = maybe_signer;
+            client_auth.cert = Some(certkey.take_cert());
+            client_auth.signer = maybe_signer;
         } else {
             info!("Client auth requested but no cert/sigscheme available");
         }
@@ -1353,9 +1353,9 @@ impl State for ExpectTLS13CertificateRequest {
         if let Some(mut certkey) = maybe_certkey {
             info!("Attempting client auth");
             let maybe_signer = certkey.key.choose_scheme(&compat_sigschemes);
-            client_auth.client_auth_cert = Some(certkey.take_cert());
-            client_auth.client_auth_signer = maybe_signer;
-            client_auth.client_auth_context = Some(certreq.context.0.clone());
+            client_auth.cert = Some(certkey.take_cert());
+            client_auth.signer = maybe_signer;
+            client_auth.auth_context = Some(certreq.context.0.clone());
         } else {
             info!("Client auth requested but no cert selected");
         }
@@ -1440,7 +1440,7 @@ impl State for ExpectTLS12ServerDone {
         let mut st = *self;
         st.handshake.transcript.add_message(&m);
 
-        info!("Server cert is {:?}", st.server_cert.server_cert_chain);
+        info!("Server cert is {:?}", st.server_cert.cert_chain);
         info!("Server DNS name is {:?}", st.handshake.dns_name);
 
         // 1. Verify the cert chain.
@@ -1456,19 +1456,19 @@ impl State for ExpectTLS12ServerDone {
         // 6. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        if st.server_cert.server_cert_chain.is_empty() {
+        if st.server_cert.cert_chain.is_empty() {
             return Err(TLSError::NoCertificatesPresented);
         }
 
         sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
-                                                      &st.server_cert.server_cert_chain,
+                                                      &st.server_cert.cert_chain,
                                                       &st.handshake.dns_name,
-                                                      &st.server_cert.server_cert_ocsp_response)?;
+                                                      &st.server_cert.ocsp_response)?;
 
         // 2. Verify any included SCTs.
-        match (st.server_cert.server_cert_scts.as_ref(), sess.config.ct_logs) {
+        match (st.server_cert.scts.as_ref(), sess.config.ct_logs) {
             (Some(scts), Some(logs)) => {
-                verify::verify_scts(&st.server_cert.server_cert_chain[0],
+                verify::verify_scts(&st.server_cert.chain[0],
                                     scts,
                                     logs)?;
             }
@@ -1482,10 +1482,10 @@ impl State for ExpectTLS12ServerDone {
             let mut message = Vec::new();
             message.extend_from_slice(&st.handshake.randoms.client);
             message.extend_from_slice(&st.handshake.randoms.server);
-            message.extend_from_slice(&st.server_kx.server_kx_params);
+            message.extend_from_slice(&st.server_kx.kx_params);
 
             // Check the signature is compatible with the ciphersuite.
-            let sig = st.server_kx.server_kx_sig.as_ref().unwrap();
+            let sig = st.server_kx.kx_sig.as_ref().unwrap();
             let scs = sess.common.get_suite();
             if scs.sign != sig.scheme.sign() {
                 let error_message =
@@ -1495,7 +1495,7 @@ impl State for ExpectTLS12ServerDone {
             }
 
             verify::verify_signed_struct(&message,
-                                         &st.server_cert.server_cert_chain[0],
+                                         &st.server_cert.cert_chain[0],
                                          sig)?;
         }
 
@@ -1506,7 +1506,7 @@ impl State for ExpectTLS12ServerDone {
 
         // 5a.
         let kxd = sess.common.get_suite()
-            .do_client_kx(&st.server_kx.server_kx_params)
+            .do_client_kx(&st.server_kx.kx_params)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
@@ -1664,7 +1664,7 @@ fn save_session(handshake: &mut HandshakeDetails,
 fn emit_certificate_tls13(handshake: &mut HandshakeDetails,
                           client_auth: &mut ClientAuthDetails,
                           sess: &mut ClientSessionImpl) {
-    let context = client_auth.client_auth_context
+    let context = client_auth.auth_context
         .take()
         .unwrap_or_else(Vec::new);
 
@@ -1673,7 +1673,7 @@ fn emit_certificate_tls13(handshake: &mut HandshakeDetails,
         list: Vec::new(),
     };
 
-    if let Some(cert_chain) = client_auth.client_auth_cert.take() {
+    if let Some(cert_chain) = client_auth.cert.take() {
         for cert in cert_chain {
             cert_payload.list.push(CertificateEntry::new(cert));
         }
@@ -1694,7 +1694,7 @@ fn emit_certificate_tls13(handshake: &mut HandshakeDetails,
 fn emit_certverify_tls13(handshake: &mut HandshakeDetails,
                          client_auth: &mut ClientAuthDetails,
                          sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
-    if client_auth.client_auth_signer.is_none() {
+    if client_auth.signer.is_none() {
         info!("Skipping certverify message (no client scheme/key)");
         return Ok(());
     }
@@ -1704,7 +1704,7 @@ fn emit_certverify_tls13(handshake: &mut HandshakeDetails,
     message.extend_from_slice(b"TLS 1.3, client CertificateVerify\x00");
     message.extend_from_slice(&handshake.transcript.get_current_hash());
 
-    let signer = client_auth.client_auth_signer.take().unwrap();
+    let signer = client_auth.signer.take().unwrap();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let dss = DigitallySignedStruct::new(scheme, sig);

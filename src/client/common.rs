@@ -14,35 +14,35 @@ use suites;
 use std::mem;
 
 pub struct ServerCertDetails {
-    pub server_cert_chain: CertificatePayload,
-    pub server_cert_ocsp_response: Vec<u8>,
-    pub server_cert_scts: Option<SCTList>,
+    pub cert_chain: CertificatePayload,
+    pub ocsp_response: Vec<u8>,
+    pub scts: Option<SCTList>,
 }
 
 impl ServerCertDetails {
     pub fn new() -> ServerCertDetails {
         ServerCertDetails {
-            server_cert_chain: Vec::new(),
-            server_cert_ocsp_response: Vec::new(),
-            server_cert_scts: None,
+            cert_chain: Vec::new(),
+            ocsp_response: Vec::new(),
+            scts: None,
         }
     }
 
     pub fn take_chain(&mut self) -> CertificatePayload {
-        mem::replace(&mut self.server_cert_chain, Vec::new())
+        mem::replace(&mut self.cert_chain, Vec::new())
     }
 }
 
 pub struct ServerKXDetails {
-    pub server_kx_params: Vec<u8>,
-    pub server_kx_sig: Option<DigitallySignedStruct>,
+    pub kx_params: Vec<u8>,
+    pub kx_sig: Option<DigitallySignedStruct>,
 }
 
 impl ServerKXDetails {
     pub fn new() -> ServerKXDetails {
         ServerKXDetails {
-            server_kx_params: Vec::new(),
-            server_kx_sig: None,
+            kx_params: Vec::new(),
+            kx_sig: None,
         }
     }
 }
@@ -147,17 +147,17 @@ impl ReceivedTicketDetails {
 }
 
 pub struct ClientAuthDetails {
-    pub client_auth_cert: Option<CertificatePayload>,
-    pub client_auth_signer: Option<Box<sign::Signer>>,
-    pub client_auth_context: Option<Vec<u8>>,
+    pub cert: Option<CertificatePayload>,
+    pub signer: Option<Box<sign::Signer>>,
+    pub auth_context: Option<Vec<u8>>,
 }
 
 impl ClientAuthDetails {
     pub fn new() -> ClientAuthDetails {
         ClientAuthDetails {
-            client_auth_cert: None,
-            client_auth_signer: None,
-            client_auth_context: None,
+            cert: None,
+            signer: None,
+            auth_context: None,
         }
     }
 }
