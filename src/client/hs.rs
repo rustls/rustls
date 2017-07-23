@@ -789,7 +789,7 @@ impl ExpectTLS13EncryptedExtensions {
     fn into_expect_tls13_finished(self) -> Box<State + Send> {
         Box::new(ExpectTLS13Finished { 
             handshake: self.handshake,
-            client_auth: ClientAuthDetails::new(),
+            client_auth: None,
         })
     }
 
@@ -831,7 +831,7 @@ fn sct_list_is_invalid(scts: &SCTList) -> bool {
 struct ExpectTLS13Certificate {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
-    client_auth: ClientAuthDetails,
+    client_auth: Option<ClientAuthDetails>,
 }
 
 impl ExpectTLS13Certificate {
@@ -998,7 +998,7 @@ impl ExpectTLS13CertificateOrCertReq {
         Box::new(ExpectTLS13Certificate {
             handshake: self.handshake,
             server_cert: self.server_cert,
-            client_auth: ClientAuthDetails::new(),
+            client_auth: None,
         })
     }
 
@@ -1075,7 +1075,7 @@ impl State for ExpectTLS12ServerKX {
 struct ExpectTLS13CertificateVerify {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
-    client_auth: ClientAuthDetails,
+    client_auth: Option<ClientAuthDetails>,
 }
 
 impl ExpectTLS13CertificateVerify {
@@ -1244,7 +1244,7 @@ impl ExpectTLS12CertificateRequest {
             handshake: self.handshake,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
-            client_auth: client_auth,
+            client_auth: Some(client_auth),
         })
     }
 }
@@ -1257,7 +1257,6 @@ impl State for ExpectTLS12CertificateRequest {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
         self.handshake.transcript.add_message(&m);
-        self.handshake.doing_client_auth = true;
         info!("Got CertificateRequest {:?}", certreq);
 
         let mut client_auth = ClientAuthDetails::new();
@@ -1304,7 +1303,7 @@ impl ExpectTLS13CertificateRequest {
         Box::new(ExpectTLS13Certificate {
             handshake: self.handshake,
             server_cert: self.server_cert,
-            client_auth: client_auth,
+            client_auth: Some(client_auth),
         })
     }
 }
@@ -1317,7 +1316,6 @@ impl State for ExpectTLS13CertificateRequest {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let certreq = &extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
         self.handshake.transcript.add_message(&m);
-        self.handshake.doing_client_auth = true;
         info!("Got CertificateRequest {:?}", certreq);
 
         // Fortunately the problems here in TLS1.2 and prior are corrected in
@@ -1384,7 +1382,7 @@ impl ExpectTLS12ServerDoneOrCertReq {
             handshake: self.handshake,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
-            client_auth: ClientAuthDetails::new(),
+            client_auth: None,
         })
     }
 }
@@ -1411,7 +1409,7 @@ struct ExpectTLS12ServerDone {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
-    client_auth: ClientAuthDetails,
+    client_auth: Option<ClientAuthDetails>,
 }
 
 impl ExpectTLS12ServerDone {
@@ -1500,8 +1498,10 @@ impl State for ExpectTLS12ServerDone {
         }
 
         // 4.
-        if st.handshake.doing_client_auth {
-            emit_certificate(&mut st.handshake, &mut st.client_auth, sess);
+        if st.client_auth.is_some() {
+            emit_certificate(&mut st.handshake,
+                             st.client_auth.as_mut().unwrap(),
+                             sess);
         }
 
         // 5a.
@@ -1515,9 +1515,9 @@ impl State for ExpectTLS12ServerDone {
         let handshake_hash = st.handshake.transcript.get_current_hash();
 
         // 5c.
-        if st.handshake.doing_client_auth {
+        if st.client_auth.is_some() {
             emit_certverify(&mut st.handshake,
-                            &mut st.client_auth,
+                            st.client_auth.as_mut().unwrap(),
                             sess)?;
         }
 
@@ -1746,7 +1746,7 @@ fn emit_finished_tls13(handshake: &mut HandshakeDetails,
 
 struct ExpectTLS13Finished {
     handshake: HandshakeDetails,
-    client_auth: ClientAuthDetails,
+    client_auth: Option<ClientAuthDetails>,
 }
 
 impl ExpectTLS13Finished {
@@ -1795,12 +1795,12 @@ impl State for ExpectTLS13Finished {
 
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
-        if st.handshake.doing_client_auth {
+        if st.client_auth.is_some() {
             emit_certificate_tls13(&mut st.handshake,
-                                   &mut st.client_auth,
+                                   st.client_auth.as_mut().unwrap(),
                                    sess);
             emit_certverify_tls13(&mut st.handshake,
-                                  &mut st.client_auth,
+                                  st.client_auth.as_mut().unwrap(),
                                   sess)?;
         }
 
