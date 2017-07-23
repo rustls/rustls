@@ -386,9 +386,9 @@ impl ExpectClientHello {
         Ok(())
     }
 
-    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSessionImpl) {
+    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSessionImpl) -> bool {
         if !sess.config.client_auth_offer {
-            return;
+            return false;
         }
 
         let names = sess.config.client_auth_roots.get_subjects();
@@ -412,7 +412,7 @@ impl ExpectClientHello {
         debug!("Sending CertificateRequest {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
-        self.handshake.doing_client_auth = true;
+        true
     }
 
     fn emit_certificate_tls13(&mut self,
@@ -653,9 +653,9 @@ impl ExpectClientHello {
         Ok(kx)
     }
 
-    fn emit_certificate_req(&mut self, sess: &mut ServerSessionImpl) {
+    fn emit_certificate_req(&mut self, sess: &mut ServerSessionImpl) -> bool {
         if !sess.config.client_auth_offer {
-            return;
+            return false;
         }
 
         let names = sess.config.client_auth_roots.get_subjects();
@@ -679,7 +679,7 @@ impl ExpectClientHello {
         debug!("Sending CertificateRequest {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, false);
-        self.handshake.doing_client_auth = true;
+        true
     }
 
     fn emit_server_hello_done(&mut self, sess: &mut ServerSessionImpl) {
@@ -833,16 +833,20 @@ impl ExpectClientHello {
         self.emit_server_hello_tls13(sess, chosen_share, chosen_psk_index, resuming_psk)?;
         self.emit_encrypted_extensions(sess, server_key.as_mut(), client_hello, !full_handshake)?;
 
-        if full_handshake {
+        let doing_client_auth = if full_handshake {
             let mut key = server_key.unwrap();
-            self.emit_certificate_req_tls13(sess);
+            let client_auth = self.emit_certificate_req_tls13(sess);
             self.emit_certificate_tls13(sess, &mut key);
             self.emit_certificate_verify_tls13(sess, &mut key, &sigschemes_ext)?;
-        }
+            client_auth
+        } else {
+            false
+        };
+
         check_aligned_handshake(sess)?;
         self.emit_finished_tls13(sess);
 
-        if self.handshake.doing_client_auth && full_handshake {
+        if doing_client_auth {
             Ok(self.into_expect_tls13_certificate())
         } else {
             Ok(self.into_expect_tls13_finished())
@@ -1038,10 +1042,10 @@ impl State for ExpectClientHello {
         self.emit_certificate(sess, &mut certkey);
         self.emit_cert_status(sess, &mut certkey);
         let kx = self.emit_server_kx(sess, sigscheme, &group, &mut certkey)?;
-        self.emit_certificate_req(sess);
+        let doing_client_auth = self.emit_certificate_req(sess);
         self.emit_server_hello_done(sess);
 
-        if self.handshake.doing_client_auth {
+        if doing_client_auth {
             Ok(self.into_expect_tls12_certificate(kx))
         } else {
             Ok(self.into_expect_tls12_client_kx(kx))
@@ -1076,7 +1080,6 @@ impl State for ExpectTLS12Certificate {
 
         if cert_chain.is_empty() && !sess.config.client_auth_mandatory {
             info!("client auth requested but no certificate supplied");
-            self.handshake.doing_client_auth = false;
             self.handshake.transcript.abandon_client_auth();
             return Ok(self.into_expect_tls12_client_kx(None));
         }
@@ -1136,7 +1139,6 @@ impl State for ExpectTLS13Certificate {
         if cert_chain.is_empty() {
             if !sess.config.client_auth_mandatory {
                 info!("client auth requested but no certificate supplied");
-                self.handshake.doing_client_auth = false;
                 self.handshake.transcript.abandon_client_auth();
                 return Ok(self.into_expect_tls13_finished());
             }
@@ -1210,7 +1212,7 @@ impl State for ExpectTLS12ClientKX {
         }
         sess.start_encryption_tls12();
 
-        if self.handshake.doing_client_auth {
+        if self.client_cert.is_some() {
             Ok(self.into_expect_tls12_certificate_verify())
         } else {
             Ok(self.into_expect_tls12_ccs())
