@@ -122,6 +122,7 @@ impl ExpectClientHello {
     fn into_expect_tls12_ccs(self) -> Box<State + Send> {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
+            resuming: true,
         })
     }
 
@@ -717,7 +718,6 @@ impl ExpectClientHello {
                                                        &resumedata.master_secret.0));
         sess.start_encryption_tls12();
         sess.client_cert_chain = resumedata.client_cert_chain;
-        self.handshake.doing_resume = true;
 
         emit_ticket(&mut self.handshake, sess);
         emit_ccs(sess);
@@ -1173,6 +1173,7 @@ impl ExpectTLS12ClientKX {
     fn into_expect_tls12_ccs(self) -> Box<State + Send> {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
+            resuming: false,
         })
     }
 }
@@ -1230,6 +1231,7 @@ impl ExpectTLS12CertificateVerify {
     fn into_expect_tls12_ccs(self) -> Box<State + Send> {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
+            resuming: false,
         })
     }
 }
@@ -1308,12 +1310,14 @@ impl State for ExpectTLS13CertificateVerify {
 // --- Process client's ChangeCipherSpec ---
 pub struct ExpectTLS12CCS {
     handshake: HandshakeDetails,
+    resuming: bool,
 }
 
 impl ExpectTLS12CCS {
     fn into_expect_tls12_finished(self) -> Box<State + Send> {
         Box::new(ExpectTLS12Finished {
             handshake: self.handshake,
+            resuming: self.resuming,
         })
     }
 }
@@ -1428,6 +1432,7 @@ fn emit_finished(handshake: &mut HandshakeDetails, sess: &mut ServerSessionImpl)
 
 pub struct ExpectTLS12Finished {
     handshake: HandshakeDetails,
+    resuming: bool,
 }
 
 impl ExpectTLS12Finished {
@@ -1455,7 +1460,7 @@ impl State for ExpectTLS12Finished {
                      })?;
 
         // Save session, perhaps
-        if !self.handshake.doing_resume && !self.handshake.session_id.is_empty() {
+        if !self.resuming && !self.handshake.session_id.is_empty() {
             let value = get_server_session_value(&self.handshake, sess);
 
             let worked = sess.config.session_storage
@@ -1469,7 +1474,7 @@ impl State for ExpectTLS12Finished {
 
         // Send our CCS and Finished.
         self.handshake.transcript.add_message(&m);
-        if !self.handshake.doing_resume {
+        if !self.resuming {
             emit_ticket(&mut self.handshake,
                         sess);
             emit_ccs(sess);

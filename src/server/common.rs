@@ -15,7 +15,6 @@ pub struct HandshakeDetails {
     pub send_cert_status: bool,
     pub send_sct: bool,
     pub using_ems: bool,
-    pub doing_resume: bool,
 }
 
 impl HandshakeDetails {
@@ -29,7 +28,6 @@ impl HandshakeDetails {
             send_cert_status: false,
             send_sct: false,
             using_ems: false,
-            doing_resume: false,
         }
     }
 }
