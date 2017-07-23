@@ -27,6 +27,25 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
                                                    &webpki::RSA_PKCS1_2048_8192_SHA512,
                                                    &webpki::RSA_PKCS1_3072_8192_SHA384];
 
+/// Marker types.  These are used to bind the fact some verification
+/// (certificate chain or handshake signature) has taken place into
+/// protocol states.  We use this to have the compiler check that there
+/// are no 'goto fail'-style elisions of important checks before we
+/// reach the traffic stage.
+///
+/// These types are public, but cannot be directly constructed.  This
+/// means their origins can be precisely determined by looking
+/// for their `assertion` constructors.
+pub struct HandshakeSignatureValid(());
+pub struct ServerCertVerified(());
+pub struct ClientCertVerified(());
+pub struct FinishedMessageVerified(());
+
+impl HandshakeSignatureValid { pub fn assertion() -> Self { Self { 0: () } } }
+impl ServerCertVerified { pub fn assertion() -> Self { Self { 0: () } } }
+impl ClientCertVerified { pub fn assertion() -> Self { Self { 0: () } } }
+impl FinishedMessageVerified { pub fn assertion() -> Self { Self { 0: () } } }
+
 /// Something that can verify a server certificate chain
 pub trait ServerCertVerifier : Send + Sync {
     /// Verify a the certificate chain `presented_certs` against the roots
@@ -36,7 +55,7 @@ pub trait ServerCertVerifier : Send + Sync {
                           roots: &RootCertStore,
                           presented_certs: &[Certificate],
                           dns_name: &str,
-                          ocsp_response: &[u8]) -> Result<(), TLSError>;
+                          ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError>;
 }
 
 /// Something that can verify a client certificate chain
@@ -45,7 +64,7 @@ pub trait ClientCertVerifier : Send + Sync {
     /// Does no further checking of the certificate.
     fn verify_client_cert(&self,
                           roots: &RootCertStore,
-                          presented_certs: &[Certificate]) -> Result<(), TLSError>;
+                          presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
 }
 
 pub struct WebPKIVerifier {}
@@ -55,7 +74,7 @@ impl ServerCertVerifier for WebPKIVerifier {
                           roots: &RootCertStore,
                           presented_certs: &[Certificate],
                           dns_name: &str,
-                          ocsp_response: &[u8]) -> Result<(), TLSError> {
+                          ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError> {
         let cert = self.verify_common_cert(roots, presented_certs)?;
 
         if !ocsp_response.is_empty() {
@@ -64,14 +83,16 @@ impl ServerCertVerifier for WebPKIVerifier {
 
         cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
             .map_err(TLSError::WebPKIError)
+            .map(|_| ServerCertVerified::assertion())
     }
 }
 
 impl ClientCertVerifier for WebPKIVerifier {
     fn verify_client_cert(&self,
                           roots: &RootCertStore,
-                          presented_certs: &[Certificate]) -> Result<(), TLSError> {
-        self.verify_common_cert(roots, presented_certs).map(|_| ())
+                          presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError> {
+        self.verify_common_cert(roots, presented_certs)
+            .map(|_| ClientCertVerified::assertion())
     }
 }
 
@@ -170,7 +191,7 @@ fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
 pub fn verify_signed_struct(message: &[u8],
                             cert: &Certificate,
                             dss: &DigitallySignedStruct)
-                            -> Result<(), TLSError> {
+                            -> Result<HandshakeSignatureValid, TLSError> {
 
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert_in = untrusted::Input::from(&cert.0);
@@ -179,6 +200,7 @@ pub fn verify_signed_struct(message: &[u8],
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
         .map_err(TLSError::WebPKIError)
+        .map(|_| HandshakeSignatureValid::assertion())
 }
 
 fn convert_alg_tls13(scheme: SignatureScheme)
@@ -202,7 +224,7 @@ pub fn verify_tls13(cert: &Certificate,
                     dss: &DigitallySignedStruct,
                     handshake_hash: &[u8],
                     context_string_with_0: &[u8])
-                    -> Result<(), TLSError> {
+                    -> Result<HandshakeSignatureValid, TLSError> {
     let alg = convert_alg_tls13(dss.scheme)?;
 
     let mut msg = Vec::new();
@@ -217,7 +239,8 @@ pub fn verify_tls13(cert: &Certificate,
     cert.verify_signature(alg,
                           untrusted::Input::from(&msg),
                           untrusted::Input::from(&dss.sig.0))
-    .map_err(TLSError::WebPKIError)
+        .map_err(TLSError::WebPKIError)
+        .map(|_| HandshakeSignatureValid::assertion())
 }
 
 pub fn verify_scts(cert: &Certificate,

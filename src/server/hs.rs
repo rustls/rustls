@@ -1250,9 +1250,9 @@ impl State for ExpectTLS12CertificateVerify {
             verify::verify_signed_struct(&handshake_msgs, &certs[0], sig)
         };
 
-        if rc.is_err() {
+        if let Err(e) = rc {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
-            return Err(rc.unwrap_err());
+            return Err(e);
         } else {
             debug!("client CertificateVerify OK");
             sess.client_cert_chain = Some(self.client_cert.take_chain());
@@ -1294,9 +1294,9 @@ impl State for ExpectTLS13CertificateVerify {
                                  b"TLS 1.3, client CertificateVerify\x00")
         };
 
-        if rc.is_err() {
+        if let Err(e) = rc {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
-            return Err(rc.unwrap_err());
+            return Err(e);
         } else {
             debug!("client CertificateVerify OK");
             sess.client_cert_chain = Some(self.client_cert.take_chain());

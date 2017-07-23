@@ -483,18 +483,26 @@ impl ExpectServerHello {
         })
     }
 
-    fn into_expect_tls12_new_ticket_resume(self) -> Box<State + Send> {
+    fn into_expect_tls12_new_ticket_resume(self,
+                                           certv: verify::ServerCertVerified,
+                                           sigv: verify::HandshakeSignatureValid) -> Box<State + Send> {
         Box::new(ExpectTLS12NewTicket {
             handshake: self.handshake,
             resuming: true,
+            cert_verified: certv,
+            sig_verified: sigv,
         })
     }
 
-    fn into_expect_tls12_ccs_resume(self) -> Box<State + Send> {
+    fn into_expect_tls12_ccs_resume(self,
+                                    certv: verify::ServerCertVerified,
+                                    sigv: verify::HandshakeSignatureValid) -> Box<State + Send> {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
             resuming: true,
+            cert_verified: certv,
+            sig_verified: sigv,
         })
     }
 
@@ -659,10 +667,15 @@ impl State for ExpectServerHello {
         if abbreviated_handshake {
             sess.start_encryption_tls12();
 
+            // Since we're resuming, we verified the certificate and
+            // proof of possession in the prior session.
+            let certv = verify::ServerCertVerified::assertion();
+            let sigv =  verify::HandshakeSignatureValid::assertion();
+
             if self.handshake.must_issue_new_ticket {
-                Ok(self.into_expect_tls12_new_ticket_resume())
+                Ok(self.into_expect_tls12_new_ticket_resume(certv, sigv))
             } else {
-                Ok(self.into_expect_tls12_ccs_resume())
+                Ok(self.into_expect_tls12_ccs_resume(certv, sigv))
             }
         } else {
             Ok(self.into_expect_tls12_certificate())
@@ -786,10 +799,14 @@ struct ExpectTLS13EncryptedExtensions {
 }
 
 impl ExpectTLS13EncryptedExtensions {
-    fn into_expect_tls13_finished(self) -> Box<State + Send> {
+    fn into_expect_tls13_finished_resume(self,
+                                         certv: verify::ServerCertVerified,
+                                         sigv: verify::HandshakeSignatureValid) -> Box<State + Send> {
         Box::new(ExpectTLS13Finished { 
             handshake: self.handshake,
             client_auth: None,
+            cert_verified: certv,
+            sig_verified: sigv,
         })
     }
 
@@ -815,7 +832,9 @@ impl State for ExpectTLS13EncryptedExtensions {
         process_alpn_protocol(sess, exts.get_alpn_protocol())?;
 
         if self.handshake.resuming_session.is_some() {
-            Ok(self.into_expect_tls13_finished())
+            let certv = verify::ServerCertVerified::assertion();
+            let sigv =  verify::HandshakeSignatureValid::assertion();
+            Ok(self.into_expect_tls13_finished_resume(certv, sigv))
         } else {
             Ok(self.into_expect_tls13_certificate_or_certreq())
         }
@@ -1079,10 +1098,14 @@ struct ExpectTLS13CertificateVerify {
 }
 
 impl ExpectTLS13CertificateVerify {
-    fn into_expect_tls13_finished(self) -> Box<State + Send> {
+    fn into_expect_tls13_finished(self,
+                                  certv: verify::ServerCertVerified,
+                                  sigv: verify::HandshakeSignatureValid) -> Box<State + Send> {
         Box::new(ExpectTLS13Finished {
             handshake: self.handshake,
             client_auth: self.client_auth,
+            cert_verified: certv,
+            sig_verified: sigv,
         })
     }
 }
@@ -1102,17 +1125,19 @@ impl State for ExpectTLS13CertificateVerify {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
-                                                      &self.server_cert.cert_chain,
-                                                      &self.handshake.dns_name,
-                                                      &self.server_cert.ocsp_response)?;
+        let certv = sess.config
+            .get_verifier()
+            .verify_server_cert(&sess.config.root_store,
+                                &self.server_cert.cert_chain,
+                                &self.handshake.dns_name,
+                                &self.server_cert.ocsp_response)?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        verify::verify_tls13(&self.server_cert.cert_chain[0],
-                             cert_verify,
-                             &handshake_hash,
-                             b"TLS 1.3, server CertificateVerify\x00")?;
+        let sigv = verify::verify_tls13(&self.server_cert.cert_chain[0],
+                                        cert_verify,
+                                        &handshake_hash,
+                                        b"TLS 1.3, server CertificateVerify\x00")?;
 
         // 3. Verify any included SCTs.
         match (self.server_cert.scts.as_ref(), sess.config.ct_logs) {
@@ -1127,7 +1152,7 @@ impl State for ExpectTLS13CertificateVerify {
         sess.server_cert_chain = self.server_cert.take_chain();
         self.handshake.transcript.add_message(&m);
 
-        Ok(self.into_expect_tls13_finished())
+        Ok(self.into_expect_tls13_finished(certv, sigv))
     }
 }
 
@@ -1413,18 +1438,26 @@ struct ExpectTLS12ServerDone {
 }
 
 impl ExpectTLS12ServerDone {
-    fn into_expect_tls12_new_ticket(self) -> Box<State + Send> {
+    fn into_expect_tls12_new_ticket(self,
+                                    certv: verify::ServerCertVerified,
+                                    sigv: verify::HandshakeSignatureValid) -> Box<State + Send> {
         Box::new(ExpectTLS12NewTicket {
             handshake: self.handshake,
             resuming: false,
+            cert_verified: certv,
+            sig_verified: sigv,
         })
     }
 
-    fn into_expect_tls12_ccs(self) -> Box<State + Send> {
+    fn into_expect_tls12_ccs(self,
+                             certv: verify::ServerCertVerified,
+                             sigv: verify::HandshakeSignatureValid) -> Box<State + Send> {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
             resuming: false,
+            cert_verified: certv,
+            sig_verified: sigv,
         })
     }
 }
@@ -1458,15 +1491,17 @@ impl State for ExpectTLS12ServerDone {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        sess.config.get_verifier().verify_server_cert(&sess.config.root_store,
-                                                      &st.server_cert.cert_chain,
-                                                      &st.handshake.dns_name,
-                                                      &st.server_cert.ocsp_response)?;
+        let certv = sess.config
+            .get_verifier()
+            .verify_server_cert(&sess.config.root_store,
+                                &st.server_cert.cert_chain,
+                                &st.handshake.dns_name,
+                                &st.server_cert.ocsp_response)?;
 
         // 2. Verify any included SCTs.
         match (st.server_cert.scts.as_ref(), sess.config.ct_logs) {
             (Some(scts), Some(logs)) => {
-                verify::verify_scts(&st.server_cert.chain[0],
+                verify::verify_scts(&st.server_cert.cert_chain[0],
                                     scts,
                                     logs)?;
             }
@@ -1476,7 +1511,7 @@ impl State for ExpectTLS12ServerDone {
         // 3.
         // Build up the contents of the signed message.
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
-        {
+        let sigv = {
             let mut message = Vec::new();
             message.extend_from_slice(&st.handshake.randoms.client);
             message.extend_from_slice(&st.handshake.randoms.server);
@@ -1494,8 +1529,8 @@ impl State for ExpectTLS12ServerDone {
 
             verify::verify_signed_struct(&message,
                                          &st.server_cert.cert_chain[0],
-                                         sig)?;
-        }
+                                         sig)?
+        };
 
         // 4.
         if st.client_auth.is_some() {
@@ -1542,9 +1577,9 @@ impl State for ExpectTLS12ServerDone {
         emit_finished(&mut st.handshake, sess);
 
         if st.handshake.must_issue_new_ticket {
-            Ok(st.into_expect_tls12_new_ticket())
+            Ok(st.into_expect_tls12_new_ticket(certv, sigv))
         } else {
-            Ok(st.into_expect_tls12_ccs())
+            Ok(st.into_expect_tls12_ccs(certv, sigv))
         }
     }
 }
@@ -1554,6 +1589,8 @@ struct ExpectTLS12CCS {
     handshake: HandshakeDetails,
     ticket: ReceivedTicketDetails,
     resuming: bool,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
 }
 
 impl ExpectTLS12CCS {
@@ -1562,6 +1599,8 @@ impl ExpectTLS12CCS {
             handshake: self.handshake,
             ticket: self.ticket,
             resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
         })
     }
 }
@@ -1592,6 +1631,8 @@ impl State for ExpectTLS12CCS {
 struct ExpectTLS12NewTicket {
     handshake: HandshakeDetails,
     resuming: bool,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
 }
 
 impl ExpectTLS12NewTicket {
@@ -1600,6 +1641,8 @@ impl ExpectTLS12NewTicket {
             handshake: self.handshake,
             ticket: ticket,
             resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
         })
     }
 }
@@ -1747,12 +1790,18 @@ fn emit_finished_tls13(handshake: &mut HandshakeDetails,
 struct ExpectTLS13Finished {
     handshake: HandshakeDetails,
     client_auth: Option<ClientAuthDetails>,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
 }
 
 impl ExpectTLS13Finished {
-    fn into_expect_tls13_traffic(self) -> Box<State + Send> {
+    fn into_expect_tls13_traffic(self,
+                                 fin: verify::FinishedMessageVerified) -> Box<State + Send> {
         Box::new(ExpectTLS13Traffic {
             handshake: self.handshake,
+            _cert_verified: self.cert_verified,
+            _sig_verified: self.sig_verified,
+            _fin_verified: fin,
         })
     }
 }
@@ -1771,11 +1820,12 @@ impl State for ExpectTLS13Finished {
             .get_key_schedule()
             .sign_finish(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
 
-        constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
             .map_err(|_| {
                          sess.common.send_fatal_alert(AlertDescription::DecryptError);
                          TLSError::DecryptError
-                    })?;
+                    })
+            .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         st.handshake.transcript.add_message(&m);
 
@@ -1819,7 +1869,7 @@ impl State for ExpectTLS13Finished {
 
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
-        Ok(st.into_expect_tls13_traffic())
+        Ok(st.into_expect_tls13_traffic(fin))
     }
 }
 
@@ -1827,11 +1877,18 @@ struct ExpectTLS12Finished {
     handshake: HandshakeDetails,
     ticket: ReceivedTicketDetails,
     resuming: bool,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
 }
 
 impl ExpectTLS12Finished {
-    fn into_expect_tls12_traffic(self) -> Box<State + Send> {
-        Box::new(ExpectTLS12Traffic {})
+    fn into_expect_tls12_traffic(self,
+                                 fin: verify::FinishedMessageVerified) -> Box<State + Send> {
+        Box::new(ExpectTLS12Traffic {
+            _cert_verified: self.cert_verified,
+            _sig_verified: self.sig_verified,
+            _fin_verified: fin,
+        })
     }
 }
 
@@ -1853,11 +1910,12 @@ impl State for ExpectTLS12Finished {
 
         // Constant-time verification of this is relatively unimportant: they only
         // get one chance.  But it can't hurt.
-        constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
             .map_err(|_| {
                      sess.common.send_fatal_alert(AlertDescription::DecryptError);
                      TLSError::DecryptError
-                     })?;
+                     })
+            .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Hash this message too.
         st.handshake.transcript.add_message(&m);
@@ -1873,12 +1931,16 @@ impl State for ExpectTLS12Finished {
 
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
-        Ok(st.into_expect_tls12_traffic())
+        Ok(st.into_expect_tls12_traffic(fin))
     }
 }
 
 // -- Traffic transit state --
-struct ExpectTLS12Traffic {}
+struct ExpectTLS12Traffic {
+    _cert_verified: verify::ServerCertVerified,
+    _sig_verified: verify::HandshakeSignatureValid,
+    _fin_verified: verify::FinishedMessageVerified,
+}
 
 impl State for ExpectTLS12Traffic {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
@@ -1896,6 +1958,9 @@ impl State for ExpectTLS12Traffic {
 // and application data.
 struct ExpectTLS13Traffic {
     handshake: HandshakeDetails,
+    _cert_verified: verify::ServerCertVerified,
+    _sig_verified: verify::HandshakeSignatureValid,
+    _fin_verified: verify::FinishedMessageVerified,
 }
 
 impl ExpectTLS13Traffic {
