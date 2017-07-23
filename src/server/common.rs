@@ -17,7 +17,6 @@ pub struct HandshakeDetails {
     pub using_ems: bool,
     pub doing_client_auth: bool,
     pub doing_resume: bool,
-    pub done_retry: bool,
 }
 
 impl HandshakeDetails {
@@ -33,7 +32,6 @@ impl HandshakeDetails {
             using_ems: false,
             doing_client_auth: false,
             doing_resume: false,
-            done_retry: false,
         }
     }
 }

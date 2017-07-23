@@ -102,12 +102,14 @@ fn check_aligned_handshake(sess: &mut ServerSessionImpl) -> Result<(), TLSError>
 
 pub struct ExpectClientHello {
     handshake: HandshakeDetails,
+    retry: bool,
 }
 
 impl ExpectClientHello {
     pub fn new(perhaps_client_auth: bool) -> ExpectClientHello {
         let mut ret = ExpectClientHello {
             handshake: HandshakeDetails::new(),
+            retry: false,
         };
 
         if perhaps_client_auth {
@@ -123,8 +125,11 @@ impl ExpectClientHello {
         })
     }
 
-    fn into_expect_client_hello(self) -> Box<State + Send> {
-        Box::new(self)
+    fn into_expect_retried_client_hello(self) -> Box<State + Send> {
+        Box::new(ExpectClientHello {
+            handshake: self.handshake,
+            retry: true,
+        })
     }
 
     fn into_expect_tls13_certificate(self) -> Box<State + Send> {
@@ -760,12 +765,11 @@ impl ExpectClientHello {
             self.handshake.transcript.add_message(chm);
 
             if let Some(group) = retry_group_maybe {
-                if self.handshake.done_retry {
+                if self.retry {
                     return Err(illegal_param(sess, "did not follow retry request"));
                 } else {
                     self.emit_hello_retry_request(sess, group);
-                    self.handshake.done_retry = true;
-                    return Ok(self.into_expect_client_hello());
+                    return Ok(self.into_expect_retried_client_hello());
                 }
             } else {
                 return Err(incompatible(sess, "no kx group overlap with client"));
