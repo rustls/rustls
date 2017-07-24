@@ -37,14 +37,24 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[&webpki::ECDSA_P256_SHA256,
 /// means their origins can be precisely determined by looking
 /// for their `assertion` constructors.
 pub struct HandshakeSignatureValid(());
-pub struct ServerCertVerified(());
-pub struct ClientCertVerified(());
-pub struct FinishedMessageVerified(());
-
 impl HandshakeSignatureValid { pub fn assertion() -> Self { Self { 0: () } } }
-impl ServerCertVerified { pub fn assertion() -> Self { Self { 0: () } } }
-impl ClientCertVerified { pub fn assertion() -> Self { Self { 0: () } } }
+
+pub struct FinishedMessageVerified(());
 impl FinishedMessageVerified { pub fn assertion() -> Self { Self { 0: () } } }
+
+/// Zero-sized marker type representing verification of a server cert chain.
+pub struct ServerCertVerified(());
+impl ServerCertVerified {
+    /// Make a `ServerCertVerified`
+    pub fn assertion() -> Self { Self { 0: () } }
+}
+
+/// Zero-sized marker type representing verification of a client cert chain.
+pub struct ClientCertVerified(());
+impl ClientCertVerified {
+    /// Make a `ClientCertVerified`
+    pub fn assertion() -> Self { Self { 0: () } }
+}
 
 /// Something that can verify a server certificate chain
 pub trait ServerCertVerifier : Send + Sync {

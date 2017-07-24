@@ -128,8 +128,8 @@ struct NoVerification {}
 impl rustls::ClientCertVerifier for NoVerification {
     fn verify_client_cert(&self,
                           _roots: &rustls::RootCertStore,
-                          _certs: &[rustls::Certificate]) -> Result<(), rustls::TLSError> {
-        Ok(())
+                          _certs: &[rustls::Certificate]) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
+        Ok(rustls::ClientCertVerified::assertion())
     }
 }
 
@@ -138,8 +138,8 @@ impl rustls::ServerCertVerifier for NoVerification {
                           _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate],
                           _hostname: &str,
-                          _ocsp: &[u8]) -> Result<(), rustls::TLSError> {
-        Ok(())
+                          _ocsp: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+        Ok(rustls::ServerCertVerified::assertion())
     }
 }
 

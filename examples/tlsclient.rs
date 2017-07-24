@@ -398,8 +398,8 @@ mod danger {
                               _roots: &rustls::RootCertStore,
                               _presented_certs: &[rustls::Certificate],
                               _dns_name: &str,
-                              _ocsp: &[u8]) -> Result<(), rustls::TLSError> {
-            Ok(())
+                              _ocsp: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+            Ok(rustls::ServerCertVerified::assertion())
         }
     }
 }

@@ -281,7 +281,8 @@ pub use key::{Certificate, PrivateKey};
 pub mod sign;
 
 #[cfg(feature = "dangerous_configuration")]
-pub use verify::{ServerCertVerifier, ClientCertVerifier};
+pub use verify::{ServerCertVerifier, ServerCertVerified,
+    ClientCertVerifier, ClientCertVerified};
 #[cfg(feature = "dangerous_configuration")]
 pub use client::danger::DangerousClientConfig;
 #[cfg(feature = "dangerous_configuration")]
