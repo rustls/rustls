@@ -1436,8 +1436,10 @@ pub struct ExpectTLS12Finished {
 }
 
 impl ExpectTLS12Finished {
-    fn into_expect_tls12_traffic(self) -> Box<State + Send> {
-        Box::new(ExpectTLS12Traffic {})
+    fn into_expect_tls12_traffic(self, fin: verify::FinishedMessageVerified) -> Box<State + Send> {
+        Box::new(ExpectTLS12Traffic {
+            _fin_verified: fin,
+        })
     }
 }
 
@@ -1452,12 +1454,12 @@ impl State for ExpectTLS12Finished {
         let vh = self.handshake.transcript.get_current_hash();
         let expect_verify_data = sess.secrets.as_ref().unwrap().client_verify_data(&vh);
 
-        constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
             .map_err(|_| {
                      sess.common.send_fatal_alert(AlertDescription::DecryptError);
-                     warn!("Finished wrong");
                      TLSError::DecryptError
-                     })?;
+                     })
+            .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Save session, perhaps
         if !self.resuming && !self.handshake.session_id.is_empty() {
@@ -1484,7 +1486,7 @@ impl State for ExpectTLS12Finished {
 
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
-        Ok(self.into_expect_tls12_traffic())
+        Ok(self.into_expect_tls12_traffic(fin))
     }
 }
 
@@ -1493,8 +1495,10 @@ pub struct ExpectTLS13Finished {
 }
 
 impl ExpectTLS13Finished {
-    fn into_expect_tls13_traffic(self) -> Box<State + Send> {
-        Box::new(ExpectTLS13Traffic {})
+    fn into_expect_tls13_traffic(self, fin: verify::FinishedMessageVerified) -> Box<State + Send> {
+        Box::new(ExpectTLS13Traffic {
+            _fin_verified: fin,
+        })
     }
 
     fn emit_ticket_tls13(&mut self, sess: &mut ServerSessionImpl) {
@@ -1544,12 +1548,13 @@ impl State for ExpectTLS13Finished {
             .get_key_schedule()
             .sign_finish(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
 
-        constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
             .map_err(|_| {
                      sess.common.send_fatal_alert(AlertDescription::DecryptError);
                      warn!("Finished wrong");
                      TLSError::DecryptError
-                     })?;
+                     })
+            .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // nb. future derivations include Client Finished, but not the
         // main application data keying.
@@ -1575,12 +1580,13 @@ impl State for ExpectTLS13Finished {
 
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
-        Ok(self.into_expect_tls13_traffic())
+        Ok(self.into_expect_tls13_traffic(fin))
     }
 }
 
 // --- Process traffic ---
 pub struct ExpectTLS12Traffic {
+    _fin_verified: verify::FinishedMessageVerified,
 }
 
 impl ExpectTLS12Traffic {
@@ -1598,6 +1604,7 @@ impl State for ExpectTLS12Traffic {
 }
 
 pub struct ExpectTLS13Traffic {
+    _fin_verified: verify::FinishedMessageVerified,
 }
 
 impl ExpectTLS13Traffic {
