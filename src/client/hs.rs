@@ -1078,9 +1078,9 @@ impl State for ExpectTLS12ServerKX {
         let decoded_kx = maybe_decoded_kx.unwrap();
 
         // Save the signature and signed parameters for later verification.
-        let mut skx = ServerKXDetails::new();
-        skx.kx_sig = decoded_kx.get_sig();
-        decoded_kx.encode_params(&mut skx.kx_params);
+        let mut kx_params = Vec::new();
+        decoded_kx.encode_params(&mut kx_params);
+        let skx = ServerKXDetails::new(kx_params, decoded_kx.get_sig().unwrap());
 
         if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
             info!("ECDHE curve is {:?}", ecdhe.params.curve_params);
@@ -1518,7 +1518,7 @@ impl State for ExpectTLS12ServerDone {
             message.extend_from_slice(&st.server_kx.kx_params);
 
             // Check the signature is compatible with the ciphersuite.
-            let sig = st.server_kx.kx_sig.as_ref().unwrap();
+            let sig = &st.server_kx.kx_sig;
             let scs = sess.common.get_suite();
             if scs.sign != sig.scheme.sign() {
                 let error_message =

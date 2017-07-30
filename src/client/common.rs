@@ -35,14 +35,14 @@ impl ServerCertDetails {
 
 pub struct ServerKXDetails {
     pub kx_params: Vec<u8>,
-    pub kx_sig: Option<DigitallySignedStruct>,
+    pub kx_sig: DigitallySignedStruct,
 }
 
 impl ServerKXDetails {
-    pub fn new() -> ServerKXDetails {
+    pub fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKXDetails {
         ServerKXDetails {
-            kx_params: Vec::new(),
-            kx_sig: None,
+            kx_params: params,
+            kx_sig: sig,
         }
     }
 }
