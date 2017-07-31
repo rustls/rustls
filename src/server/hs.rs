@@ -102,14 +102,20 @@ fn check_aligned_handshake(sess: &mut ServerSessionImpl) -> Result<(), TLSError>
 
 pub struct ExpectClientHello {
     handshake: HandshakeDetails,
-    retry: bool,
+    done_retry: bool,
+    send_cert_status: bool,
+    send_sct: bool,
+    send_ticket: bool,
 }
 
 impl ExpectClientHello {
     pub fn new(perhaps_client_auth: bool) -> ExpectClientHello {
         let mut ret = ExpectClientHello {
             handshake: HandshakeDetails::new(),
-            retry: false,
+            done_retry: false,
+            send_cert_status: false,
+            send_sct: false,
+            send_ticket: false,
         };
 
         if perhaps_client_auth {
@@ -123,25 +129,31 @@ impl ExpectClientHello {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             resuming: true,
+            send_ticket: self.send_ticket,
         })
     }
 
     fn into_expect_retried_client_hello(self) -> Box<State + Send> {
         Box::new(ExpectClientHello {
             handshake: self.handshake,
-            retry: true,
+            done_retry: true,
+            send_cert_status: self.send_cert_status,
+            send_sct: self.send_sct,
+            send_ticket: self.send_ticket,
         })
     }
 
     fn into_expect_tls13_certificate(self) -> Box<State + Send> {
         Box::new(ExpectTLS13Certificate {
             handshake: self.handshake,
+            send_ticket: self.send_ticket,
         })
     }
 
     fn into_expect_tls13_finished(self) -> Box<State + Send> {
         Box::new(ExpectTLS13Finished {
             handshake: self.handshake,
+            send_ticket: self.send_ticket,
         })
     }
 
@@ -149,6 +161,7 @@ impl ExpectClientHello {
         Box::new(ExpectTLS12Certificate {
             handshake: self.handshake,
             server_kx: ServerKXDetails::new(kx),
+            send_ticket: self.send_ticket,
         })
     }
 
@@ -157,6 +170,7 @@ impl ExpectClientHello {
             handshake: self.handshake,
             server_kx: ServerKXDetails::new(kx),
             client_cert: None,
+            send_ticket: self.send_ticket,
         })
     }
 
@@ -198,7 +212,7 @@ impl ExpectClientHello {
            hello.find_extension(ExtensionType::StatusRequest).is_some() &&
            server_key.is_some() &&
            server_key.as_ref().unwrap().has_ocsp() {
-            self.handshake.send_cert_status = true;
+            self.send_cert_status = true;
 
             if !sess.common.is_tls13() {
                 // Only TLS1.2 sends confirmation in ServerHello
@@ -210,7 +224,7 @@ impl ExpectClientHello {
            hello.find_extension(ExtensionType::SCT).is_some() &&
            server_key.is_some() &&
            server_key.as_ref().unwrap().has_sct_list() {
-            self.handshake.send_sct = true;
+            self.send_sct = true;
 
             if !sess.common.is_tls13() {
                 let sct_list = server_key
@@ -237,7 +251,7 @@ impl ExpectClientHello {
             // we send an ack.
             if hello.find_extension(ExtensionType::SessionTicket).is_some() &&
                sess.config.ticketer.enabled() {
-                self.handshake.send_ticket = true;
+                self.send_ticket = true;
                 ret.push(ServerExtension::SessionTicketAck);
             }
 
@@ -437,7 +451,7 @@ impl ExpectClientHello {
 
         // Apply OCSP response to first certificate (we don't support OCSP
         // except for leaf certs).
-        if self.handshake.send_cert_status &&
+        if self.send_cert_status &&
            ocsp.is_some() &&
            !cert_body.list.is_empty() {
             let first_entry = cert_body.list.first_mut().unwrap();
@@ -446,7 +460,7 @@ impl ExpectClientHello {
         }
 
         // Likewise, SCT
-        if self.handshake.send_sct &&
+        if self.send_sct &&
            sct_list.is_some() &&
            !cert_body.list.is_empty() {
             let first_entry = cert_body.list.first_mut().unwrap();
@@ -593,7 +607,7 @@ impl ExpectClientHello {
     fn emit_cert_status(&mut self,
                         sess: &mut ServerSessionImpl,
                         server_certkey: &mut sign::CertifiedKey) {
-        if !self.handshake.send_cert_status ||
+        if !self.send_cert_status ||
            !server_certkey.has_ocsp() {
             return;
         }
@@ -719,7 +733,9 @@ impl ExpectClientHello {
         sess.start_encryption_tls12();
         sess.client_cert_chain = resumedata.client_cert_chain;
 
-        emit_ticket(&mut self.handshake, sess);
+        if self.send_ticket {
+            emit_ticket(&mut self.handshake, sess);
+        }
         emit_ccs(sess);
         emit_finished(&mut self.handshake, sess);
         Ok(self.into_expect_tls12_ccs())
@@ -765,7 +781,7 @@ impl ExpectClientHello {
             self.handshake.transcript.add_message(chm);
 
             if let Some(group) = retry_group_maybe {
-                if self.retry {
+                if self.done_retry {
                     return Err(illegal_param(sess, "did not follow retry request"));
                 } else {
                     self.emit_hello_retry_request(sess, group);
@@ -821,11 +837,11 @@ impl ExpectClientHello {
 
         if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
             warn!("Resumption ignored, DHE_KE not offered");
-            self.handshake.send_ticket = false;
+            self.send_ticket = false;
             chosen_psk_index = None;
             resuming_psk = None;
         } else {
-            self.handshake.send_ticket = true;
+            self.send_ticket = true;
         }
 
         let full_handshake = resuming_psk.is_none();
@@ -1057,6 +1073,7 @@ impl State for ExpectClientHello {
 pub struct ExpectTLS12Certificate {
     handshake: HandshakeDetails,
     server_kx: ServerKXDetails,
+    send_ticket: bool,
 }
 
 impl ExpectTLS12Certificate {
@@ -1065,6 +1082,7 @@ impl ExpectTLS12Certificate {
             handshake: self.handshake,
             server_kx: self.server_kx,
             client_cert: cert,
+            send_ticket: self.send_ticket,
         })
     }
 }
@@ -1100,12 +1118,14 @@ impl State for ExpectTLS12Certificate {
 
 pub struct ExpectTLS13Certificate {
     handshake: HandshakeDetails,
+    send_ticket: bool,
 }
 
 impl ExpectTLS13Certificate {
     fn into_expect_tls13_finished(self) -> Box<State + Send> {
         Box::new(ExpectTLS13Finished {
             handshake: self.handshake,
+            send_ticket: self.send_ticket,
         })
     }
 
@@ -1114,6 +1134,7 @@ impl ExpectTLS13Certificate {
         Box::new(ExpectTLS13CertificateVerify {
             handshake: self.handshake,
             client_cert: cert,
+            send_ticket: self.send_ticket,
         })
     }
 }
@@ -1160,6 +1181,7 @@ pub struct ExpectTLS12ClientKX {
     handshake: HandshakeDetails,
     server_kx: ServerKXDetails,
     client_cert: Option<ClientCertDetails>,
+    send_ticket: bool,
 }
 
 impl ExpectTLS12ClientKX {
@@ -1167,6 +1189,7 @@ impl ExpectTLS12ClientKX {
         Box::new(ExpectTLS12CertificateVerify {
             handshake: self.handshake,
             client_cert: self.client_cert.unwrap(),
+            send_ticket: self.send_ticket,
         })
     }
 
@@ -1174,6 +1197,7 @@ impl ExpectTLS12ClientKX {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             resuming: false,
+            send_ticket: self.send_ticket,
         })
     }
 }
@@ -1225,6 +1249,7 @@ impl State for ExpectTLS12ClientKX {
 pub struct ExpectTLS12CertificateVerify {
     handshake: HandshakeDetails,
     client_cert: ClientCertDetails,
+    send_ticket: bool,
 }
 
 impl ExpectTLS12CertificateVerify {
@@ -1232,6 +1257,7 @@ impl ExpectTLS12CertificateVerify {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             resuming: false,
+            send_ticket: self.send_ticket,
         })
     }
 }
@@ -1266,12 +1292,14 @@ impl State for ExpectTLS12CertificateVerify {
 pub struct ExpectTLS13CertificateVerify {
     handshake: HandshakeDetails,
     client_cert: ClientCertDetails,
+    send_ticket: bool,
 }
 
 impl ExpectTLS13CertificateVerify {
     fn into_expect_tls13_finished(self) -> Box<State + Send> {
         Box::new(ExpectTLS13Finished {
             handshake: self.handshake,
+            send_ticket: self.send_ticket,
         })
     }
 }
@@ -1311,6 +1339,7 @@ impl State for ExpectTLS13CertificateVerify {
 pub struct ExpectTLS12CCS {
     handshake: HandshakeDetails,
     resuming: bool,
+    send_ticket: bool,
 }
 
 impl ExpectTLS12CCS {
@@ -1318,6 +1347,7 @@ impl ExpectTLS12CCS {
         Box::new(ExpectTLS12Finished {
             handshake: self.handshake,
             resuming: self.resuming,
+            send_ticket: self.send_ticket,
         })
     }
 }
@@ -1372,10 +1402,6 @@ fn get_server_session_value(handshake: &HandshakeDetails,
 
 fn emit_ticket(handshake: &mut HandshakeDetails,
                sess: &mut ServerSessionImpl) {
-    if !handshake.send_ticket {
-        return;
-    }
-
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
     let plain = get_server_session_value(handshake, sess)
@@ -1433,6 +1459,7 @@ fn emit_finished(handshake: &mut HandshakeDetails, sess: &mut ServerSessionImpl)
 pub struct ExpectTLS12Finished {
     handshake: HandshakeDetails,
     resuming: bool,
+    send_ticket: bool,
 }
 
 impl ExpectTLS12Finished {
@@ -1477,8 +1504,10 @@ impl State for ExpectTLS12Finished {
         // Send our CCS and Finished.
         self.handshake.transcript.add_message(&m);
         if !self.resuming {
-            emit_ticket(&mut self.handshake,
-                        sess);
+            if self.send_ticket {
+                emit_ticket(&mut self.handshake,
+                            sess);
+            }
             emit_ccs(sess);
             emit_finished(&mut self.handshake,
                           sess);
@@ -1492,6 +1521,7 @@ impl State for ExpectTLS12Finished {
 
 pub struct ExpectTLS13Finished {
     handshake: HandshakeDetails,
+    send_ticket: bool,
 }
 
 impl ExpectTLS13Finished {
@@ -1502,7 +1532,7 @@ impl ExpectTLS13Finished {
     }
 
     fn emit_ticket_tls13(&mut self, sess: &mut ServerSessionImpl) {
-        if !self.handshake.send_ticket {
+        if !self.send_ticket {
             return;
         }
 

@@ -11,9 +11,6 @@ pub struct HandshakeDetails {
     pub hash_at_server_fin: Vec<u8>,
     pub session_id: SessionID,
     pub randoms: SessionRandoms,
-    pub send_ticket: bool,
-    pub send_cert_status: bool,
-    pub send_sct: bool,
     pub using_ems: bool,
 }
 
@@ -24,9 +21,6 @@ impl HandshakeDetails {
             hash_at_server_fin: Vec::new(),
             session_id: SessionID::empty(),
             randoms: SessionRandoms::for_server(),
-            send_ticket: false,
-            send_cert_status: false,
-            send_sct: false,
             using_ems: false,
         }
     }
