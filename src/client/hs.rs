@@ -197,6 +197,8 @@ struct ExpectServerHello {
     handshake: HandshakeDetails,
     hello: ClientHelloDetails,
     server_cert: ServerCertDetails,
+    may_send_cert_status: bool,
+    must_issue_new_ticket: bool,
 }
 
 struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
@@ -363,6 +365,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     let next = ExpectServerHello {
         handshake, hello,
         server_cert: ServerCertDetails::new(),
+        may_send_cert_status: false,
+        must_issue_new_ticket: false,
     };
 
     if support_tls13 && retryreq.is_none() {
@@ -510,6 +514,8 @@ impl ExpectServerHello {
         Box::new(ExpectTLS12Certificate {
             handshake: self.handshake,
             server_cert: self.server_cert,
+            may_send_cert_status: self.may_send_cert_status,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -619,13 +625,13 @@ impl State for ExpectServerHello {
         } else {
             false
         };
-        self.handshake.must_issue_new_ticket = with_tickets;
+        self.must_issue_new_ticket = with_tickets;
 
         // Might the server send a CertificateStatus between Certificate and
         // ServerKeyExchange?
         if server_hello.find_extension(ExtensionType::StatusRequest).is_some() {
             info!("Server may staple OCSP response");
-            self.handshake.may_send_cert_status = true;
+            self.may_send_cert_status = true;
         }
 
         // Save any sent SCTs for verification against the certificate.
@@ -672,7 +678,7 @@ impl State for ExpectServerHello {
             let certv = verify::ServerCertVerified::assertion();
             let sigv =  verify::HandshakeSignatureValid::assertion();
 
-            if self.handshake.must_issue_new_ticket {
+            if self.must_issue_new_ticket {
                 Ok(self.into_expect_tls12_new_ticket_resume(certv, sigv))
             } else {
                 Ok(self.into_expect_tls12_ccs_resume(certv, sigv))
@@ -904,6 +910,8 @@ impl State for ExpectTLS13Certificate {
 struct ExpectTLS12Certificate {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
+    may_send_cert_status: bool,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12Certificate {
@@ -911,6 +919,7 @@ impl ExpectTLS12Certificate {
         Box::new(ExpectTLS12CertificateStatusOrServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 
@@ -918,6 +927,7 @@ impl ExpectTLS12Certificate {
         Box::new(ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -933,7 +943,7 @@ impl State for ExpectTLS12Certificate {
 
         self.server_cert.cert_chain = cert_chain.clone();
 
-        if self.handshake.may_send_cert_status {
+        if self.may_send_cert_status {
             Ok(self.into_expect_tls12_certificate_status_or_server_kx())
         } else {
             Ok(self.into_expect_tls12_server_kx())
@@ -944,6 +954,7 @@ impl State for ExpectTLS12Certificate {
 struct ExpectTLS12CertificateStatus {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12CertificateStatus {
@@ -951,6 +962,7 @@ impl ExpectTLS12CertificateStatus {
         Box::new(ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -973,6 +985,7 @@ impl State for ExpectTLS12CertificateStatus {
 struct ExpectTLS12CertificateStatusOrServerKX {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12CertificateStatusOrServerKX {
@@ -980,6 +993,7 @@ impl ExpectTLS12CertificateStatusOrServerKX {
         Box::new(ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 
@@ -987,6 +1001,7 @@ impl ExpectTLS12CertificateStatusOrServerKX {
         Box::new(ExpectTLS12CertificateStatus {
             handshake: self.handshake,
             server_cert: self.server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -1048,6 +1063,7 @@ impl State for ExpectTLS13CertificateOrCertReq {
 struct ExpectTLS12ServerKX {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12ServerKX {
@@ -1056,6 +1072,7 @@ impl ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
             server_kx: skx,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -1261,6 +1278,7 @@ struct ExpectTLS12CertificateRequest {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12CertificateRequest {
@@ -1270,6 +1288,7 @@ impl ExpectTLS12CertificateRequest {
             server_cert: self.server_cert,
             server_kx: self.server_kx,
             client_auth: Some(client_auth),
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -1391,6 +1410,7 @@ struct ExpectTLS12ServerDoneOrCertReq {
     handshake: HandshakeDetails,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12ServerDoneOrCertReq {
@@ -1399,6 +1419,7 @@ impl ExpectTLS12ServerDoneOrCertReq {
             handshake: self.handshake,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 
@@ -1408,6 +1429,7 @@ impl ExpectTLS12ServerDoneOrCertReq {
             server_cert: self.server_cert,
             server_kx: self.server_kx,
             client_auth: None,
+            must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
@@ -1435,6 +1457,7 @@ struct ExpectTLS12ServerDone {
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
     client_auth: Option<ClientAuthDetails>,
+    must_issue_new_ticket: bool,
 }
 
 impl ExpectTLS12ServerDone {
@@ -1576,7 +1599,7 @@ impl State for ExpectTLS12ServerDone {
         // 6.
         emit_finished(&mut st.handshake, sess);
 
-        if st.handshake.must_issue_new_ticket {
+        if st.must_issue_new_ticket {
             Ok(st.into_expect_tls12_new_ticket(certv, sigv))
         } else {
             Ok(st.into_expect_tls12_ccs(certv, sigv))
