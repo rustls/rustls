@@ -128,8 +128,8 @@ mod tests {
     use std::io;
     use msgs;
 
-    const FIRST_MESSAGE: &'static [u8] = include_bytes!("deframer-test.1.bin");
-    const SECOND_MESSAGE: &'static [u8] = include_bytes!("deframer-test.2.bin");
+    const FIRST_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.1.bin");
+    const SECOND_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.2.bin");
 
     struct ByteRead<'a> {
         buf: &'a [u8],
