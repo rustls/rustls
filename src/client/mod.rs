@@ -224,7 +224,7 @@ impl ClientConfig {
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
-            verifier: Arc::new(verify::WebPKIVerifier {})
+            verifier: Arc::new(verify::WebPKIVerifier::new())
         }
     }
 

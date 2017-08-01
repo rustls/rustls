@@ -10,6 +10,7 @@ use anchors;
 use verify;
 use verify::ServerCertVerifier;
 use key;
+use time;
 
 extern crate webpki_roots;
 
@@ -35,7 +36,16 @@ fn bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_
              times.iter().min().unwrap() / 1000);
 }
 
-static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier {};
+fn fixed_time() -> time::Timespec {
+    time::Timespec {
+        sec: 1500000000,
+        nsec: 0,
+    }
+}
+
+static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier {
+    time: fixed_time,
+};
 
 #[test]
 fn test_reddit_cert() {

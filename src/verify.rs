@@ -77,7 +77,9 @@ pub trait ClientCertVerifier : Send + Sync {
                           presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
 }
 
-pub struct WebPKIVerifier {}
+pub struct WebPKIVerifier {
+    pub time: fn() -> time::Timespec,
+}
 
 impl ServerCertVerifier for WebPKIVerifier {
     fn verify_server_cert(&self,
@@ -107,6 +109,12 @@ impl ClientCertVerifier for WebPKIVerifier {
 }
 
 impl WebPKIVerifier {
+    pub fn new() -> WebPKIVerifier {
+        WebPKIVerifier {
+            time: time::get_time
+        }
+    }
+
     /// Check `presented_certs` is non-empty and rooted in `roots`.
     /// Return the `webpki::EndEntityCert` for the top certificate
     /// in `presented_certs`.
@@ -133,7 +141,7 @@ impl WebPKIVerifier {
             .map(|x| x.to_trust_anchor())
             .collect();
 
-        cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, time::get_time())
+        cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, (self.time)())
             .map_err(TLSError::WebPKIError)
             .map(|_| cert)
     }

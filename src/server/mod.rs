@@ -296,7 +296,7 @@ impl ServerConfig {
             client_auth_offer: false,
             client_auth_mandatory: false,
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
-            verifier: Arc::new(verify::WebPKIVerifier {}),
+            verifier: Arc::new(verify::WebPKIVerifier::new()),
         }
     }
 
