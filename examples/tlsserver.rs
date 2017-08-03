@@ -12,7 +12,8 @@ use std::net;
 use std::io::{Write, Read, BufReader};
 use std::collections::HashMap;
 
-extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
 extern crate docopt;
 use docopt::Docopt;
 
@@ -406,7 +407,7 @@ Options:
     --help, -h          Show this screen.
 ";
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Args {
     cmd_echo: bool,
     cmd_http: bool,
@@ -532,7 +533,7 @@ fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| Ok(d.help(true)))
         .and_then(|d| Ok(d.version(Some(version))))
-        .and_then(|d| d.decode())
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_verbose {
