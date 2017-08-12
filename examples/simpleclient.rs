@@ -10,8 +10,8 @@ fn main() {
     let mut config = rustls::ClientConfig::new();
     config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
 
-    let mut sess = rustls::ClientSession::new(&Arc::new(config), "localhost");
-    let mut sock = TcpStream::connect("localhost:8443").unwrap();
+    let mut sess = rustls::ClientSession::new(&Arc::new(config), "google.com");
+    let mut sock = TcpStream::connect("google.com:443").unwrap();
     let mut tls = rustls::Stream::new(&mut sess, &mut sock);
     tls.write(concat!("GET / HTTP/1.1\r\n",
                       "Host: google.com\r\n",
