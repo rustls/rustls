@@ -143,8 +143,17 @@ pub trait Session: Read + Write + Send {
                 }
             }
 
-            self.process_new_packets()
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            match self.process_new_packets() {
+                Ok(_) => {},
+                Err(e) => {
+                    // In case we have an alert to send describing this error,
+                    // try a last-gasp write -- but don't predate the primary
+                    // error.
+                    let _ignored = self.write_tls(io);
+
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, e));
+                },
+            };
 
             match (eof, until_handshaked, self.is_handshaking()) {
                 (_, true, false) => return Ok((rdlen, wrlen)),

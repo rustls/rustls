@@ -564,11 +564,17 @@ struct OtherSession<'a> {
     sess: &'a mut Session,
     pub reads: usize,
     pub writes: usize,
+    fail_ok: bool,
+    pub last_error: Option<rustls::TLSError>,
 }
 
 impl<'a> OtherSession<'a> {
     fn new(sess: &'a mut Session) -> OtherSession<'a> {
-        OtherSession { sess, reads: 0, writes: 0 }
+        OtherSession { sess, reads: 0, writes: 0, fail_ok: false, last_error: None, }
+    }
+
+    fn new_fails(sess: &'a mut Session) -> OtherSession<'a> {
+        OtherSession { sess, reads: 0, writes: 0, fail_ok: true, last_error: None, }
     }
 }
 
@@ -583,7 +589,14 @@ impl<'a> io::Write for OtherSession<'a> {
     fn write(&mut self, mut b: &[u8]) -> io::Result<usize> {
         self.writes += 1;
         let l = self.sess.read_tls(b.by_ref())?;
-        self.sess.process_new_packets().unwrap();
+        let rc = self.sess.process_new_packets();
+
+        if !self.fail_ok {
+            rc.unwrap();
+        } else if rc.is_err() {
+            self.last_error = rc.err();
+        }
+
         Ok(l)
     }
 
@@ -778,4 +791,24 @@ fn client_session_is_debug() {
 fn server_session_is_debug() {
     let server = ServerSession::new(&Arc::new(make_server_config()));
     println!("{:?}", server);
+}
+
+#[test]
+fn server_complete_io_for_handshake_ending_with_alert() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "localhost");
+    let mut server_config = make_server_config();
+    server_config.ciphersuites = vec![];
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    assert_eq!(true, server.is_handshaking());
+
+    let mut pipe = OtherSession::new_fails(&mut client);
+    let rc = server.complete_io(&mut pipe);
+    assert!(rc.is_err(),
+            "server io failed due to handshake failure");
+    assert!(!server.wants_write(),
+            "but server did send its alert");
+    assert_eq!(format!("{:?}", pipe.last_error),
+               "Some(AlertReceived(HandshakeFailure))",
+               "which was received by client");
 }
