@@ -13,6 +13,17 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.10.0 (2017-08-12):
+  - Request and verify SCTs using sct crate.  This doesn't happen
+    unless you pass in some certificate transparency logs -- example code
+    does this.
+  - Request OCSP stapled response and pass to cert verifier.
+    Note that OCSP verification is not implemented, but this is the public
+    API public change required to support this.
+  - Allow OCSP and SCT stapling for servers.
+  - Refactor handshake state machines.
+  - Bind verifications to final state -- note API change for custom cert
+    verification.
 * 0.9.0 (2017-06-16):
   - Update dependencies.
   - Add IO helper function (`complete_io`) to `rustls::Session`.
@@ -142,6 +153,7 @@ Options:
                         May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
+    --insecure          Disable certificate verification.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
     --version, -v       Show tool version.
@@ -176,13 +188,14 @@ Runs a TLS server on :PORT.  The default PORT is 443.
 
 `echo' mode means the server echoes received data on each connection.
 
-`http' mode means the server blindly sends a HTTP response on each connection.
+`http' mode means the server blindly sends a HTTP response on each
+connection.
 
 `forward' means the server forwards plaintext to a connection made to
 localhost:fport.
 
-`--certs' names the full certificate chain, `--key' provides the RSA private
-key.
+`--certs' names the full certificate chain, `--key' provides the
+RSA private key.
 
 Usage:
   tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] echo
@@ -198,7 +211,9 @@ Options:
                         in the right order (the first certificate should
                         certify KEYFILE, the last should be a root CA).
     --key KEYFILE       Read private key from KEYFILE.  This should be a RSA
-                        private key, in PEM format.
+                        private key or PKCS8-encoded private key, in PEM format.
+    --ocsp OCSPFILE     Read DER-encoded OCSP response from OCSPFILE and staple
+                        to certificate.  Optional.
     --auth CERTFILE     Enable client authentication, and accept certificates
                         signed by those roots provided in CERTFILE.
     --require-auth      Send a fatal alert if the client does not complete client
