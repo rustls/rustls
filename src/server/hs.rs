@@ -926,12 +926,11 @@ impl State for ExpectClientHello {
         debug!("sig schemes {:?}", sigschemes_ext);
 
         // Choose a certificate.
-        let maybe_certkey = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
-        if maybe_certkey.is_none() {
+        let certkey = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
+        let mut certkey = certkey.ok_or_else(|| {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
-            return Err(TLSError::General("no server certificate chain resolved".to_string()));
-        }
-        let mut certkey = maybe_certkey.unwrap();
+            TLSError::General("no server certificate chain resolved".to_string())
+        })?;
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
