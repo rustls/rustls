@@ -583,6 +583,26 @@ impl ServerSession {
     pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
         ServerSession { imp: ServerSessionImpl::new(config) }
     }
+
+    /// Retrieves the SNI hostname, if any, used to select the certificate and
+    /// private key.
+    ///
+    /// This returns `None` until some time after the client's SNI extension
+    /// value is processed during the handshake. It will never be `None` when
+    /// the connection is ready to send or process application data, unless the
+    /// client does not support SNI.
+    ///
+    /// This is useful for application protocols that need to enforce that the
+    /// SNI hostname matches an application layer protocol hostname. For
+    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
+    /// every request on a connection to match the hostname in the SNI extension
+    /// when the client provides the SNI extension.
+    ///
+    /// The SNI hostname is also used to match sessions during session
+    /// resumption.
+    pub fn get_sni_hostname(&self)-> Option<&str> {
+        self.imp.get_sni().and_then(|s| s.get_hostname_str())
+    }
 }
 
 impl Session for ServerSession {
