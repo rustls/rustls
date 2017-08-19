@@ -931,6 +931,10 @@ impl State for ExpectClientHello {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             TLSError::General("no server certificate chain resolved".to_string())
         })?;
+        if certkey.end_entity_cert().is_err() {
+            sess.common.send_fatal_alert(AlertDescription::InternalError);
+            return Err(TLSError::General("no end-entity certificate in certificate chain".to_string()));
+        }
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
