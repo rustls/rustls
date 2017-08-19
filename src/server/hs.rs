@@ -941,11 +941,27 @@ impl State for ExpectClientHello {
             })?;
 
             // Reject syntactically-invalid end-entity certificates.
-            if webpki::EndEntityCert::from(
-                  untrusted::Input::from(end_entity_cert.as_ref())).is_err() {
+            let end_entity_cert = webpki::EndEntityCert::from(
+                  untrusted::Input::from(end_entity_cert.as_ref())).map_err(|_| {
                 sess.common.send_fatal_alert(AlertDescription::InternalError);
-                return Err(TLSError::General(
-                    "end-entity certificate in certificate chain is syntactically invalid".to_string()));
+                TLSError::General(
+                    "end-entity certificate in certificate chain is syntactically invalid".to_string())
+            })?;
+
+            if let Some(sni_ext) = sni_ext {
+                // If SNI was offered then the certificate must be valid for
+                // that hostname. Note that this doesn't fully validate that the
+                // certificate is valid; it only validates that the name is one
+                // that the certificate is valid for, if the certificate is
+                // valid. Indirectly, this also verifies that the SNI is a
+                // syntactically-valid hostname, according to Web PKI rules,
+                // which may differ from DNS and/or URL rules.
+                if !end_entity_cert.verify_is_valid_for_dns_name(
+                    untrusted::Input::from(sni_ext.as_bytes())).is_ok() {
+                    sess.common.send_fatal_alert(AlertDescription::InternalError);
+                    return Err(TLSError::General(
+                        "The server certificate is not valid for the given SNI name".to_string()));
+                }
             }
         }
 
