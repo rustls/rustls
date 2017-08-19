@@ -15,3 +15,9 @@ pub struct PrivateKey(pub Vec<u8>);
 /// `rustls::pemfile::certs` function can be used to parse a PEM file.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Certificate(pub Vec<u8>);
+
+impl AsRef<[u8]> for Certificate {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}

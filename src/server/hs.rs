@@ -33,6 +33,8 @@ use rand;
 use sign;
 use error::TLSError;
 use handshake::{check_handshake_message, check_message};
+use untrusted;
+use webpki;
 
 use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
@@ -931,9 +933,20 @@ impl State for ExpectClientHello {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             TLSError::General("no server certificate chain resolved".to_string())
         })?;
-        if certkey.end_entity_cert().is_err() {
-            sess.common.send_fatal_alert(AlertDescription::InternalError);
-            return Err(TLSError::General("no end-entity certificate in certificate chain".to_string()));
+        { // Borrow end-entity certificate.
+            // Always reject an empty certificate chain.
+            let end_entity_cert = certkey.end_entity_cert().map_err(|()| {
+                sess.common.send_fatal_alert(AlertDescription::InternalError);
+                TLSError::General("no end-entity certificate in certificate chain".to_string())
+            })?;
+
+            // Reject syntactically-invalid end-entity certificates.
+            if webpki::EndEntityCert::from(
+                  untrusted::Input::from(end_entity_cert.as_ref())).is_err() {
+                sess.common.send_fatal_alert(AlertDescription::InternalError);
+                return Err(TLSError::General(
+                    "end-entity certificate in certificate chain is syntactically invalid".to_string()));
+            }
         }
 
         // Reduce our supported ciphersuites by the certificate.
