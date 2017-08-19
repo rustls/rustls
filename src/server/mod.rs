@@ -2,7 +2,7 @@ use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::SessionID;
+use msgs::handshake::{SessionID, ServerName};
 use msgs::message::Message;
 use msgs::codec::Codec;
 use error::TLSError;
@@ -400,6 +400,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub secrets: Option<SessionSecrets>,
     pub common: SessionCommon,
+    sni: Option<ServerName>,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send>>,
@@ -420,6 +421,7 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             secrets: None,
             common: SessionCommon::new(None, false),
+            sni: None,
             alpn_protocol: None,
             error: None,
             state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth))),
@@ -552,6 +554,16 @@ impl ServerSessionImpl {
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
+    }
+
+    pub fn get_sni(&self)-> Option<&ServerName> {
+        self.sni.as_ref()
+    }
+
+    pub fn set_sni(&mut self, value: &ServerName) {
+        // The SNI hostname is immutable once set.
+        assert!(self.sni.is_none());
+        self.sni = Some(value.clone())
     }
 }
 

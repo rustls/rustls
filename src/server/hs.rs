@@ -7,7 +7,8 @@ use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
-use msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
+use msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList,
+                      same_hostname_or_both_none, ServerName};
 use msgs::handshake::{NamedGroups, SupportedGroups, ClientExtension};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
@@ -80,10 +81,17 @@ fn can_resume(sess: &ServerSessionImpl,
               resumedata: &Option<persist::ServerSessionValue>) -> bool {
     // The RFCs underspecify what happens if we try to resume to
     // an unoffered/varying suite.  We merely don't resume in weird cases.
+    //
+    // RFC 6066 says "A server that implements this extension MUST NOT accept
+    // the request to resume the session if the server_name extension contains
+    // a different name. Instead, it proceeds with a full handshake to
+    // establish a new session."
+
     if let Some(ref resume) = *resumedata {
         resume.cipher_suite == sess.common.get_suite().suite &&
             (resume.extended_ms == handshake.using_ems ||
-             (resume.extended_ms && !handshake.using_ems))
+             (resume.extended_ms && !handshake.using_ems)) &&
+            same_hostname_or_both_none(resume.sni.as_ref(), sess.sni.as_ref())
     } else {
         false
     }
@@ -716,6 +724,7 @@ impl ExpectClientHello {
     fn start_resumption(mut self,
                         sess: &mut ServerSessionImpl,
                         client_hello: &ClientHelloPayload,
+                        sni: Option<&ServerName>,
                         id: &SessionID,
                         resumedata: persist::ServerSessionValue)
                         -> StateResult {
@@ -740,6 +749,9 @@ impl ExpectClientHello {
         }
         emit_ccs(sess);
         emit_finished(&mut self.handshake, sess);
+
+        assert!(same_hostname_or_both_none(sni, sess.get_sni()));
+
         Ok(self.into_expect_tls12_ccs())
     }
 
@@ -919,16 +931,18 @@ impl State for ExpectClientHello {
         // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
         let default_sigschemes_ext = SupportedSignatureSchemes::default();
 
-        let sni_ext = client_hello.get_sni_extension()
+        let sni = client_hello.get_sni_extension()
             .and_then(|sni| sni.get_hostname());
-        let sigschemes_ext = client_hello.get_sigalgs_extension()
-            .unwrap_or(&default_sigschemes_ext);
-
-        debug!("sni {:?}", sni_ext);
-        debug!("sig schemes {:?}", sigschemes_ext);
 
         // Choose a certificate.
-        let certkey = sess.config.cert_resolver.resolve(sni_ext, sigschemes_ext);
+        let sni_str = sni.and_then(|sni| sni.get_hostname_str());
+        // XXX: Ideally we'd verify that the SNI hostname is syntactically valid
+        // before logging it and before giving it to the cert_resolver.
+        debug!("sni {:?}", sni_str);
+        let sigschemes_ext = client_hello.get_sigalgs_extension()
+            .unwrap_or(&default_sigschemes_ext);
+        debug!("sig schemes {:?}", sigschemes_ext);
+        let certkey = sess.config.cert_resolver.resolve(sni_str, sigschemes_ext);
         let mut certkey = certkey.ok_or_else(|| {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             TLSError::General("no server certificate chain resolved".to_string())
@@ -948,7 +962,7 @@ impl State for ExpectClientHello {
                     "end-entity certificate in certificate chain is syntactically invalid".to_string())
             })?;
 
-            if let Some(sni_ext) = sni_ext {
+            if let Some(sni) = sni {
                 // If SNI was offered then the certificate must be valid for
                 // that hostname. Note that this doesn't fully validate that the
                 // certificate is valid; it only validates that the name is one
@@ -957,13 +971,18 @@ impl State for ExpectClientHello {
                 // syntactically-valid hostname, according to Web PKI rules,
                 // which may differ from DNS and/or URL rules.
                 if !end_entity_cert.verify_is_valid_for_dns_name(
-                    untrusted::Input::from(sni_ext.as_bytes())).is_ok() {
+                        untrusted::Input::from(sni_str.unwrap().as_bytes())).is_ok() {
                     sess.common.send_fatal_alert(AlertDescription::InternalError);
                     return Err(TLSError::General(
                         "The server certificate is not valid for the given SNI name".to_string()));
                 }
+
+                // Save the SNI into the session after it's been validated.
+                sess.set_sni(sni);
             }
         }
+
+        assert!(same_hostname_or_both_none(sni, sess.get_sni()));
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
@@ -1047,7 +1066,7 @@ impl State for ExpectClientHello {
 
                 if can_resume(sess, &self.handshake, &maybe_resume) {
                     return self.start_resumption(sess,
-                                                 client_hello,
+                                                 client_hello, sni,
                                                  &client_hello.session_id,
                                                  maybe_resume.unwrap());
                 } else {
@@ -1065,7 +1084,7 @@ impl State for ExpectClientHello {
 
             if can_resume(sess, &self.handshake, &maybe_resume) {
                 return self.start_resumption(sess,
-                                             client_hello,
+                                             client_hello, sni,
                                              &client_hello.session_id,
                                              maybe_resume.unwrap());
             }
@@ -1422,7 +1441,8 @@ fn get_server_session_value(handshake: &HandshakeDetails,
         (ProtocolVersion::TLSv1_2, sess.secrets.as_ref().unwrap().get_master_secret())
     };
 
-    let mut v = persist::ServerSessionValue::new(version, scs.suite, secret,
+    let mut v = persist::ServerSessionValue::new(sess.get_sni(), version,
+                                                 scs.suite, secret,
                                                  &sess.client_cert_chain);
 
     if handshake.using_ems {
