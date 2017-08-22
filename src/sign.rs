@@ -55,8 +55,16 @@ pub struct CertifiedKey {
 
 impl CertifiedKey {
     /// Make a new CertifiedKey, with the given chain and key.
+    ///
+    /// The cert chain must not be empty. The first certificate in the chain
+    /// must be the end-entity certificate.
     pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<SigningKey>>) -> CertifiedKey {
         CertifiedKey { cert: cert, key: key, ocsp: None, sct_list: None }
+    }
+
+    /// The end-entity certificate.
+    pub fn end_entity_cert(&self) -> Result<&key::Certificate, ()> {
+        self.cert.get(0).ok_or(())
     }
 
     /// Steal ownership of the certificate chain.

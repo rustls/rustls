@@ -1,7 +1,7 @@
 use msgs::handshake::SessionID;
 use msgs::enums::{CipherSuite, ProtocolVersion};
 use msgs::codec::{Reader, Codec};
-use msgs::handshake::CertificatePayload;
+use msgs::handshake::{CertificatePayload, ServerName};
 use msgs::base::{PayloadU8, PayloadU16};
 use msgs::codec;
 
@@ -153,6 +153,7 @@ pub type ServerSessionKey = SessionID;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
+    pub sni: Option<ServerName>,
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
@@ -162,6 +163,12 @@ pub struct ServerSessionValue {
 
 impl Codec for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        if let &Some(ref sni) = &self.sni {
+            codec::encode_u8(1, bytes);
+            sni.encode(bytes);
+        } else {
+            codec::encode_u8(0, bytes);
+        }
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
@@ -172,6 +179,12 @@ impl Codec for ServerSessionValue {
     }
 
     fn read(r: &mut Reader) -> Option<ServerSessionValue> {
+        let has_sni = try_ret!(codec::read_u8(r));
+        let sni = if has_sni == 1 {
+            Some(try_ret!(ServerName::read(r)))
+        } else {
+            None
+        };
         let v = try_ret!(ProtocolVersion::read(r));
         let cs = try_ret!(CipherSuite::read(r));
         let ms = try_ret!(PayloadU8::read(r));
@@ -183,6 +196,7 @@ impl Codec for ServerSessionValue {
         };
 
         Some(ServerSessionValue {
+            sni: sni,
             version: v,
             cipher_suite: cs,
             master_secret: ms,
@@ -193,12 +207,14 @@ impl Codec for ServerSessionValue {
 }
 
 impl ServerSessionValue {
-    pub fn new(v: ProtocolVersion,
+    pub fn new(sni: Option<&ServerName>,
+               v: ProtocolVersion,
                cs: CipherSuite,
                ms: Vec<u8>,
                cert_chain: &Option<CertificatePayload>)
                -> ServerSessionValue {
         ServerSessionValue {
+            sni: sni.map(|sni| sni.clone()),
             version: v,
             cipher_suite: cs,
             master_secret: PayloadU8::new(ms),

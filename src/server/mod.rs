@@ -2,7 +2,7 @@ use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::SessionID;
+use msgs::handshake::{SessionID, ServerName};
 use msgs::message::Message;
 use msgs::codec::Codec;
 use error::TLSError;
@@ -400,6 +400,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub secrets: Option<SessionSecrets>,
     pub common: SessionCommon,
+    sni: Option<ServerName>,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send>>,
@@ -420,6 +421,7 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             secrets: None,
             common: SessionCommon::new(None, false),
+            sni: None,
             alpn_protocol: None,
             error: None,
             state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth))),
@@ -553,6 +555,16 @@ impl ServerSessionImpl {
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
     }
+
+    pub fn get_sni(&self)-> Option<&ServerName> {
+        self.sni.as_ref()
+    }
+
+    pub fn set_sni(&mut self, value: &ServerName) {
+        // The SNI hostname is immutable once set.
+        assert!(self.sni.is_none());
+        self.sni = Some(value.clone())
+    }
 }
 
 /// This represents a single TLS server session.
@@ -570,6 +582,26 @@ impl ServerSession {
     /// we behave in the TLS protocol.
     pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
         ServerSession { imp: ServerSessionImpl::new(config) }
+    }
+
+    /// Retrieves the SNI hostname, if any, used to select the certificate and
+    /// private key.
+    ///
+    /// This returns `None` until some time after the client's SNI extension
+    /// value is processed during the handshake. It will never be `None` when
+    /// the connection is ready to send or process application data, unless the
+    /// client does not support SNI.
+    ///
+    /// This is useful for application protocols that need to enforce that the
+    /// SNI hostname matches an application layer protocol hostname. For
+    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
+    /// every request on a connection to match the hostname in the SNI extension
+    /// when the client provides the SNI extension.
+    ///
+    /// The SNI hostname is also used to match sessions during session
+    /// resumption.
+    pub fn get_sni_hostname(&self)-> Option<&str> {
+        self.imp.get_sni().and_then(|s| s.get_hostname_str())
     }
 }
 
