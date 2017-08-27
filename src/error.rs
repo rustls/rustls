@@ -60,6 +60,9 @@ pub enum TLSError {
 
     /// A catch-all error for unlikely errors.
     General(String),
+
+    /// We failed to figure out what time it currently is.
+    FailedToGetCurrentTime,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -117,7 +120,8 @@ impl Error for TLSError {
             TLSError::AlertReceived(_) => "received fatal alert",
             TLSError::WebPKIError(_) => "invalid certificate",
             TLSError::InvalidSCT(_) => "invalid certificate timestamp",
-            TLSError::General(_) => "unexpected error", // (please file a bug)
+            TLSError::General(_) => "unexpected error", // (please file a bug),
+            TLSError::FailedToGetCurrentTime => "failed to get current time",
         }
     }
 }
