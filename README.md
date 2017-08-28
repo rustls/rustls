@@ -13,6 +13,12 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.11.0 (2017-08-28):
+  - New server API for learning requested SNI name.
+  - Server now checks selected certificate for validity.
+  - Remove time crate dependency.
+  - Follow webpki interface changes.
+  - Update dependencies.
 * 0.10.0 (2017-08-12):
   - Request and verify SCTs using sct crate.  This doesn't happen
     unless you pass in some certificate transparency logs -- example code
