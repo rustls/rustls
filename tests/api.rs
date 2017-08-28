@@ -396,6 +396,68 @@ fn server_cert_resolve_with_sni() {
     assert_eq!(err.is_err(), true);
 }
 
+#[test]
+fn server_checks_own_certificate_against_sni() {
+    let client_config = make_client_config();
+    let server_config = make_server_config();
+
+    let mut client = ClientSession::new(&Arc::new(client_config), "not-the-right-hostname.com");
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
+}
+
+enum CertInvalid { EmptyChain, BadDER }
+struct ServerBadCertResolver(Arc<ResolvesServerCert>, CertInvalid);
+
+impl ResolvesServerCert for ServerBadCertResolver {
+    fn resolve(&self,
+               server_name: Option<&str>,
+               sigschemes: &[SignatureScheme])
+        -> Option<sign::CertifiedKey> {
+        let mut ck = self.0.resolve(server_name, sigschemes)
+            .unwrap();
+        ck.cert = match self.1 {
+            CertInvalid::EmptyChain => vec![],
+            CertInvalid::BadDER => vec![rustls::Certificate(vec![0xab])],
+        };
+        Some(ck)
+    }
+}
+
+#[test]
+fn server_checks_own_certificate_chain_for_emptiness() {
+    let client_config = make_client_config();
+    let mut server_config = make_server_config();
+
+    let real_resolver = server_config.cert_resolver;
+    let badcert_resolver = Arc::new(ServerBadCertResolver(real_resolver, CertInvalid::EmptyChain));
+    server_config.cert_resolver = badcert_resolver;
+
+    let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
+}
+
+#[test]
+fn server_checks_own_certificate_for_validity() {
+    let client_config = make_client_config();
+    let mut server_config = make_server_config();
+
+    let real_resolver = server_config.cert_resolver;
+    let badcert_resolver = Arc::new(ServerBadCertResolver(real_resolver, CertInvalid::BadDER));
+    server_config.cert_resolver = badcert_resolver;
+
+    let mut client = ClientSession::new(&Arc::new(client_config), "localhost");
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
+}
+
 struct ClientCheckCertResolve {
     query_count: atomic::AtomicUsize,
     expect_queries: usize
@@ -811,4 +873,14 @@ fn server_complete_io_for_handshake_ending_with_alert() {
     assert_eq!(format!("{:?}", pipe.last_error),
                "Some(AlertReceived(HandshakeFailure))",
                "which was received by client");
+}
+
+#[test]
+fn server_exposes_offered_sni() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), "second.testserver.com");
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    assert_eq!(None, server.get_sni_hostname());
+    do_handshake(&mut client, &mut server);
+    assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
 }
