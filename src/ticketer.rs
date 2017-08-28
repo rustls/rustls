@@ -2,10 +2,19 @@
 use server::ProducesTickets;
 use rand;
 
-use time;
 use std::mem;
 use std::sync::{Mutex, Arc};
+use std::time;
 use ring::aead;
+
+/// The timebase for expiring and rolling tickets and ticketing
+/// keys.  This is UNIX wall time in seconds.
+pub fn timebase() -> u64 {
+    time::SystemTime::now()
+        .duration_since(time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
 
 /// This is a `ProducesTickets` implementation which uses
 /// any *ring* `aead::Algorithm` to encrypt and authentication
@@ -96,7 +105,7 @@ impl ProducesTickets for AEADTicketer {
 struct TicketSwitcherState {
     current: Box<ProducesTickets>,
     previous: Option<Box<ProducesTickets>>,
-    next_switch_time: i64,
+    next_switch_time: u64,
 }
 
 /// A ticketer that has a 'current' sub-ticketer and a single
@@ -122,7 +131,7 @@ impl TicketSwitcher {
             state: Mutex::new(TicketSwitcherState {
                 current: generator(),
                 previous: None,
-                next_switch_time: time::get_time().sec + lifetime as i64,
+                next_switch_time: timebase() + lifetime as u64,
             }),
         }
     }
@@ -135,11 +144,11 @@ impl TicketSwitcher {
     /// key erasure will be delayed until the next encrypt/decrypt call.
     pub fn maybe_roll(&self) {
         let mut state = self.state.lock().unwrap();
-        let now = time::get_time().sec;
+        let now = timebase();
 
         if now > state.next_switch_time {
             state.previous = Some(mem::replace(&mut state.current, (self.generator)()));
-            state.next_switch_time = now + self.lifetime as i64;
+            state.next_switch_time = now + self.lifetime as u64;
         }
     }
 }

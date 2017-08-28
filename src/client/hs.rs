@@ -27,7 +27,7 @@ use suites;
 use hash_hs;
 use verify;
 use rand;
-use time;
+use ticketer;
 use error::TLSError;
 use handshake::{check_message, check_handshake_message};
 
@@ -77,10 +77,6 @@ fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
     TLSError::PeerMisbehavedError(why.to_string())
 }
 
-fn ticket_timebase() -> u64 {
-    time::get_time().sec as u64
-}
-
 fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     if !sess.common.handshake_joiner.is_empty() {
         Err(illegal_param(sess, "keys changed with pending hs fragment"))
@@ -102,7 +98,7 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: &str) -> Option<persist:
 
     let value = maybe_value.unwrap();
     if let Some(result) = persist::ClientSessionValue::read_bytes(&value) {
-        if result.has_expired(ticket_timebase()) {
+        if result.has_expired(ticketer::timebase()) {
             None
         } else {
             Some(result)
@@ -308,7 +304,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             let resuming = handshake.resuming_session
                 .as_ref()
                 .unwrap();
-            (resuming.get_obfuscated_ticket_age(ticket_timebase()), resuming.cipher_suite)
+            (resuming.get_obfuscated_ticket_age(ticketer::timebase()), resuming.cipher_suite)
         };
 
         let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
@@ -1710,7 +1706,7 @@ fn save_session(handshake: &mut HandshakeDetails,
                                                      &handshake.session_id,
                                                      ticket,
                                                      master_secret);
-    value.set_times(ticket_timebase(),
+    value.set_times(ticketer::timebase(),
                     recvd_ticket.new_ticket_lifetime,
                     0);
     if handshake.using_ems {
@@ -1997,7 +1993,7 @@ impl ExpectTLS13Traffic {
                                                          &SessionID::empty(),
                                                          nst.ticket.0.clone(),
                                                          secret);
-        value.set_times(ticket_timebase(),
+        value.set_times(ticketer::timebase(),
                         nst.lifetime,
                         nst.age_add);
 

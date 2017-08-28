@@ -1,5 +1,4 @@
 use webpki;
-use time;
 use untrusted;
 use sct;
 use std;
@@ -267,11 +266,20 @@ pub fn verify_tls13(cert: &Certificate,
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
+fn unix_time_millis() -> Result<u64, TLSError> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|dur| dur.as_secs())
+        .map_err(|_| TLSError::FailedToGetCurrentTime)
+        .and_then(|secs| secs.checked_mul(1000)
+                  .ok_or(TLSError::FailedToGetCurrentTime))
+}
+
 pub fn verify_scts(cert: &Certificate,
                    scts: &SCTList,
                    logs: &[&sct::Log]) -> Result<(), TLSError> {
     let mut valid_scts = 0;
-    let now = (time::get_time().sec * 1000) as u64;
+    let now = unix_time_millis()?;
     let mut last_sct_error = None;
 
     for sct in scts {

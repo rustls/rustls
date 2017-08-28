@@ -194,9 +194,6 @@ extern crate webpki;
 // *ring* for cryptography.
 extern crate ring;
 
-// TODO: Remove this dependency.
-extern crate time;
-
 // untrusted for feeding ring and webpki.
 extern crate untrusted;
 
