@@ -1,0 +1,120 @@
+#!/bin/bash
+
+set -e
+
+# cert.pem/key.pem: rsa2048/sha256 self signed
+openssl req -batch -x509 \
+          -utf8 \
+          -newkey rsa:2048 \
+          -sha256 \
+          -days 3650 \
+          -nodes -keyout bogo/key.pem \
+          -out bogo/cert.pem \
+          -reqexts SAN \
+          -extensions SAN \
+          -config <(cat <<EOF
+[req]
+prompt=no
+distinguished_name=req_distinguished_name
+[req_distinguished_name]
+O=bogo
+[SAN]
+subjectAltName=DNS:test,DNS:example.com
+EOF
+)
+
+# rsa_1024_cert.pem/rsa_1024_key.pem: rsa1024/sha1 self signed
+openssl req -batch -x509 \
+          -utf8 \
+          -newkey rsa:1024 \
+          -sha1 \
+          -days 3650 \
+          -nodes -keyout bogo/rsa_1024_key.pem \
+          -out bogo/rsa_1024_cert.pem \
+          -reqexts SAN \
+          -extensions SAN \
+          -config <(cat <<EOF
+[req]
+prompt=no
+distinguished_name=req_distinguished_name
+[req_distinguished_name]
+O=bogo-rsa1024
+[SAN]
+subjectAltName=DNS:test
+EOF
+)
+
+# rsa_chain_cert.pem/rsa_chain_key.pem: rsa2048/sha256 with chain rsa2048/sha256
+# nb. chain is not validated
+openssl req -batch -x509 \
+          -utf8 \
+          -newkey rsa:2048 \
+          -sha256 \
+          -days 3650 \
+          -nodes -keyout cakey.pem \
+          -out cacert.pem
+openssl req -batch -x509 \
+          -utf8 \
+          -newkey rsa:2048 \
+          -sha256 \
+          -days 3650 \
+          -nodes -keyout bogo/rsa_chain_key.pem \
+          -out bogo/rsa_chain_cert.pem \
+          -reqexts SAN \
+          -extensions SAN \
+          -config <(cat <<EOF
+[req]
+prompt=no
+distinguished_name=req_distinguished_name
+[req_distinguished_name]
+O=bogo-chain
+[SAN]
+subjectAltName=DNS:test
+EOF
+)
+cat cacert.pem >> bogo/rsa_chain_cert.pem
+
+# ecdsa_p256_cert.pem/ecdsa_p256_key.pem: ecdsap256/sha1(?)
+openssl req -batch -x509 \
+          -utf8 \
+          -newkey ec \
+          -pkeyopt ec_paramgen_curve:prime256v1 \
+          -sha1 \
+          -days 3650 \
+          -nodes -keyout bogo/ecdsa_p256_key.pem \
+          -out bogo/ecdsa_p256_cert.pem \
+          -reqexts SAN \
+          -extensions SAN \
+          -config <(cat <<EOF
+[req]
+prompt=no
+distinguished_name=req_distinguished_name
+[req_distinguished_name]
+O=bogo-p256
+[SAN]
+subjectAltName=DNS:test
+EOF
+)
+
+# ecdsa_p384_cert.pem/ecdsa_p384_key.pem: ecdsap384/sha1
+openssl req -batch -x509 \
+          -utf8 \
+          -newkey ec \
+          -pkeyopt ec_paramgen_curve:secp384r1 \
+          -sha1 \
+          -days 3650 \
+          -nodes -keyout bogo/ecdsa_p384_key.pem \
+          -out bogo/ecdsa_p384_cert.pem \
+          -reqexts SAN \
+          -extensions SAN \
+          -config <(cat <<EOF
+[req]
+prompt=no
+distinguished_name=req_distinguished_name
+[req_distinguished_name]
+O=bogo-p384
+[SAN]
+subjectAltName=DNS:test
+EOF
+)
+
