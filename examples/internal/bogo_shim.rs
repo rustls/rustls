@@ -37,6 +37,8 @@ struct Options {
     offer_no_client_cas: bool,
     tickets: bool,
     queue_data: bool,
+    shut_down_after_handshake: bool,
+    check_close_notify: bool,
     host_name: String,
     key_file: String,
     cert_file: String,
@@ -60,6 +62,8 @@ impl Options {
             tickets: true,
             host_name: "example.com".to_string(),
             queue_data: false,
+            shut_down_after_handshake: false,
+            check_close_notify: false,
             require_any_client_cert: false,
             offer_no_client_cas: false,
             key_file: "".to_string(),
@@ -222,6 +226,11 @@ fn quit(why: &str) -> ! {
     process::exit(0)
 }
 
+fn quit_err(why: &str) -> ! {
+    println_err!("{}", why);
+    process::exit(1)
+}
+
 fn handle_err(err: rustls::TLSError) -> ! {
     use rustls::TLSError;
     use rustls::internal::msgs::enums::{AlertDescription, ContentType};
@@ -251,6 +260,9 @@ fn handle_err(err: rustls::TLSError) -> ! {
         TLSError::AlertReceived(AlertDescription::UnexpectedMessage) => {
             quit(":BAD_ALERT:")
         }
+        TLSError::AlertReceived(AlertDescription::DecompressionFailure) => {
+            quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
+        }
         TLSError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey) => {
             quit(":BAD_SIGNATURE:")
         }
@@ -266,8 +278,13 @@ fn handle_err(err: rustls::TLSError) -> ! {
 
 fn flush(sess: &mut Box<rustls::Session>, conn: &mut net::TcpStream) {
     while sess.wants_write() {
-        sess.write_tls(conn)
-            .expect("write failed");
+        match sess.write_tls(conn) {
+            Err(err) => {
+                println!("IO error: {:?}", err);
+                process::exit(0);
+            }
+            Ok(_) => {}
+        }
     }
     conn.flush().unwrap();
 }
@@ -279,6 +296,8 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
     }
 
     let mut conn = net::TcpStream::connect(("127.0.0.1", opts.port)).expect("cannot connect");
+    let mut sent_shutdown = false;
+    let mut seen_eof = false;
 
     loop {
         flush(sess, &mut conn);
@@ -288,8 +307,16 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
                 .expect("read failed");
 
             if len == 0 {
-                println!("EOF (plain)");
-                return;
+                if opts.check_close_notify {
+                    if !seen_eof {
+                        seen_eof = true;
+                    } else {
+                        quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
+                    }
+                } else {
+                    println!("EOF (plain)");
+                    return;
+                }
             }
 
             if let Err(err) = sess.process_new_packets() {
@@ -302,11 +329,22 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
         let len = match sess.read(&mut buf) {
             Ok(len) => len,
             Err(ref err) if err.kind() == io::ErrorKind::ConnectionAborted => {
+                if opts.check_close_notify {
+                    println!("close notify ok");
+                }
                 println!("EOF (tls)");
                 return;
             }
             Err(err) => panic!("unhandled read error {:?}", err),
         };
+
+        if len > 0 &&
+            opts.shut_down_after_handshake &&
+            !sent_shutdown &&
+            !sess.is_handshaking() {
+            sess.send_close_notify();
+            sent_shutdown = true;
+        }
 
         for b in buf.iter_mut() {
             *b ^= 0xff;
@@ -396,6 +434,12 @@ fn main() {
             "-shim-writes-first" => {
                 opts.queue_data = true;
             }
+            "-shim-shuts-down" => {
+                opts.shut_down_after_handshake = true;
+            }
+            "-check-close-notify" => {
+                opts.check_close_notify = true;
+            }
             "-host-name" => {
                 opts.host_name = args.remove(0);
             }
@@ -438,8 +482,6 @@ fn main() {
             "-advertise-npn" |
             "-verify-fail" |
             "-expect-channel-id" |
-            "-shim-shuts-down" |
-            "-check-close-notify" |
             "-send-channel-id" |
             "-select-next-proto" |
             "-p384-only" |

@@ -242,6 +242,7 @@
     "SignedCertificateTimestampListEmptySCT-Client-TLS12": ":PEER_MISBEHAVIOUR:",
     "SignedCertificateTimestampListEmptySCT-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EMS-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
+    "Unclean-Shutdown": ":CLOSE_WITHOUT_CLOSE_NOTIFY:",
     "SendExtensionOnClientCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-NoToYes-Client": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-YesToNo-Server": ":PEER_MISBEHAVIOUR:",
