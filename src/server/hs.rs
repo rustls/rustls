@@ -391,11 +391,11 @@ impl ExpectClientHello {
 
     fn emit_encrypted_extensions(&mut self,
                                  sess: &mut ServerSessionImpl,
-                                 server_key: Option<&mut sign::CertifiedKey>,
+                                 server_key: &mut sign::CertifiedKey,
                                  hello: &ClientHelloPayload,
                                  for_resume: bool)
                                  -> Result<(), TLSError> {
-        let encrypted_exts = self.process_extensions(sess, server_key, hello, for_resume)?;
+        let encrypted_exts = self.process_extensions(sess, Some(server_key), hello, for_resume)?;
         let ee = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
@@ -757,7 +757,7 @@ impl ExpectClientHello {
 
     fn handle_client_hello_tls13(mut self,
                                  sess: &mut ServerSessionImpl,
-                                 mut server_key: Option<sign::CertifiedKey>,
+                                 mut server_key: sign::CertifiedKey,
                                  chm: &Message)
                                  -> StateResult {
         let client_hello = extract_handshake!(chm, HandshakePayload::ClientHello).unwrap();
@@ -805,6 +805,11 @@ impl ExpectClientHello {
                 return Err(incompatible(sess, "no kx group overlap with client"));
             }
         }
+
+        self.cross_check_certificate_and_save_sni(sess,
+                                                  client_hello.get_sni_extension()
+                                                      .and_then(|sni| sni.get_hostname()),
+                                                  &server_key)?;
 
         let chosen_group = chosen_group.unwrap();
         let chosen_share = shares_ext.iter()
@@ -861,13 +866,12 @@ impl ExpectClientHello {
         let full_handshake = resuming_psk.is_none();
         self.handshake.transcript.add_message(chm);
         self.emit_server_hello_tls13(sess, chosen_share, chosen_psk_index, resuming_psk)?;
-        self.emit_encrypted_extensions(sess, server_key.as_mut(), client_hello, !full_handshake)?;
+        self.emit_encrypted_extensions(sess, &mut server_key, client_hello, !full_handshake)?;
 
         let doing_client_auth = if full_handshake {
-            let mut key = server_key.unwrap();
             let client_auth = self.emit_certificate_req_tls13(sess);
-            self.emit_certificate_tls13(sess, &mut key);
-            self.emit_certificate_verify_tls13(sess, &mut key, &sigschemes_ext)?;
+            self.emit_certificate_tls13(sess, &mut server_key);
+            self.emit_certificate_verify_tls13(sess, &mut server_key, &sigschemes_ext)?;
             client_auth
         } else {
             false
@@ -881,6 +885,50 @@ impl ExpectClientHello {
         } else {
             Ok(self.into_expect_tls13_finished())
         }
+    }
+
+    fn cross_check_certificate_and_save_sni(&self,
+                                            sess: &mut ServerSessionImpl,
+                                            sni: Option<&ServerName>,
+                                            certkey: &sign::CertifiedKey) -> Result<(), TLSError> {
+        // Always reject an empty certificate chain.
+        let end_entity_cert = certkey.end_entity_cert().map_err(|()| {
+            sess.common.send_fatal_alert(AlertDescription::InternalError);
+            TLSError::General("no end-entity certificate in certificate chain".to_string())
+        })?;
+
+        // Reject syntactically-invalid end-entity certificates.
+        let end_entity_cert = webpki::EndEntityCert::from(
+              untrusted::Input::from(end_entity_cert.as_ref())).map_err(|_| {
+            sess.common.send_fatal_alert(AlertDescription::InternalError);
+            TLSError::General(
+                "end-entity certificate in certificate chain is syntactically invalid".to_string())
+        })?;
+
+        if let Some(sni) = sni {
+            let sni_str = sni.get_hostname_str()
+                .unwrap();
+
+            // If SNI was offered then the certificate must be valid for
+            // that hostname. Note that this doesn't fully validate that the
+            // certificate is valid; it only validates that the name is one
+            // that the certificate is valid for, if the certificate is
+            // valid. Indirectly, this also verifies that the SNI is a
+            // syntactically-valid hostname, according to Web PKI rules,
+            // which may differ from DNS and/or URL rules.
+            if !end_entity_cert.verify_is_valid_for_dns_name(
+                    untrusted::Input::from(sni_str.as_bytes())).is_ok() {
+                sess.common.send_fatal_alert(AlertDescription::InternalError);
+                return Err(TLSError::General(
+                    "The server certificate is not valid for the given SNI name".to_string()));
+            }
+
+            // Save the SNI into the session after it's been validated.
+            sess.set_sni(sni);
+        }
+
+        assert!(same_hostname_or_both_none(sni, sess.get_sni()));
+        Ok(())
     }
 }
 
@@ -947,42 +995,6 @@ impl State for ExpectClientHello {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             TLSError::General("no server certificate chain resolved".to_string())
         })?;
-        { // Borrow end-entity certificate.
-            // Always reject an empty certificate chain.
-            let end_entity_cert = certkey.end_entity_cert().map_err(|()| {
-                sess.common.send_fatal_alert(AlertDescription::InternalError);
-                TLSError::General("no end-entity certificate in certificate chain".to_string())
-            })?;
-
-            // Reject syntactically-invalid end-entity certificates.
-            let end_entity_cert = webpki::EndEntityCert::from(
-                  untrusted::Input::from(end_entity_cert.as_ref())).map_err(|_| {
-                sess.common.send_fatal_alert(AlertDescription::InternalError);
-                TLSError::General(
-                    "end-entity certificate in certificate chain is syntactically invalid".to_string())
-            })?;
-
-            if let Some(sni) = sni {
-                // If SNI was offered then the certificate must be valid for
-                // that hostname. Note that this doesn't fully validate that the
-                // certificate is valid; it only validates that the name is one
-                // that the certificate is valid for, if the certificate is
-                // valid. Indirectly, this also verifies that the SNI is a
-                // syntactically-valid hostname, according to Web PKI rules,
-                // which may differ from DNS and/or URL rules.
-                if !end_entity_cert.verify_is_valid_for_dns_name(
-                        untrusted::Input::from(sni_str.unwrap().as_bytes())).is_ok() {
-                    sess.common.send_fatal_alert(AlertDescription::InternalError);
-                    return Err(TLSError::General(
-                        "The server certificate is not valid for the given SNI name".to_string()));
-                }
-
-                // Save the SNI into the session after it's been validated.
-                sess.set_sni(sni);
-            }
-        }
-
-        assert!(same_hostname_or_both_none(sni, sess.get_sni()));
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
@@ -1014,11 +1026,13 @@ impl State for ExpectClientHello {
         }
 
         if sess.common.is_tls13() {
-            return self.handle_client_hello_tls13(sess, Some(certkey), &m);
+            return self.handle_client_hello_tls13(sess, certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
+        self.cross_check_certificate_and_save_sni(sess, sni, &certkey)?;
         self.handshake.transcript.add_message(&m);
+
         // Save their Random.
         client_hello.random.write_slice(&mut self.handshake.randoms.client);
 

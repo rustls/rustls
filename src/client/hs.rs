@@ -210,7 +210,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     // Do we have a SessionID or ticket cached for this host?
     handshake.resuming_session = find_session(sess, &handshake.dns_name);
     let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
-        let mut resuming = handshake.resuming_session.as_mut().unwrap();
+        let resuming = handshake.resuming_session.as_mut().unwrap();
         if resuming.version == ProtocolVersion::TLSv1_2 {
             randomise_sessionid_for_ticket(resuming);
         }
