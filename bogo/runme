@@ -11,7 +11,7 @@ fi
 
 if [ ! -e bogo/ ] ; then
   ./fetch-and-build
-  ./regen-certs
+  cp -v keys/* bogo/
 fi
 
 ( cd bogo && ./bogo.test -shim-path ../../target/debug/examples/bogo_shim \

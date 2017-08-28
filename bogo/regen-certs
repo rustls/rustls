@@ -2,14 +2,16 @@
 
 set -e
 
+rm -rf keys/ && mkdir -p keys/
+
 # cert.pem/key.pem: rsa2048/sha256 self signed
 openssl req -batch -x509 \
           -utf8 \
           -newkey rsa:2048 \
           -sha256 \
           -days 3650 \
-          -nodes -keyout bogo/key.pem \
-          -out bogo/cert.pem \
+          -nodes -keyout keys/key.pem \
+          -out keys/cert.pem \
           -reqexts SAN \
           -extensions SAN \
           -config <(cat <<EOF
@@ -29,8 +31,8 @@ openssl req -batch -x509 \
           -newkey rsa:1024 \
           -sha1 \
           -days 3650 \
-          -nodes -keyout bogo/rsa_1024_key.pem \
-          -out bogo/rsa_1024_cert.pem \
+          -nodes -keyout keys/rsa_1024_key.pem \
+          -out keys/rsa_1024_cert.pem \
           -reqexts SAN \
           -extensions SAN \
           -config <(cat <<EOF
@@ -58,8 +60,8 @@ openssl req -batch -x509 \
           -newkey rsa:2048 \
           -sha256 \
           -days 3650 \
-          -nodes -keyout bogo/rsa_chain_key.pem \
-          -out bogo/rsa_chain_cert.pem \
+          -nodes -keyout keys/rsa_chain_key.pem \
+          -out keys/rsa_chain_cert.pem \
           -reqexts SAN \
           -extensions SAN \
           -config <(cat <<EOF
@@ -72,7 +74,7 @@ O=bogo-chain
 subjectAltName=DNS:test
 EOF
 )
-cat cacert.pem >> bogo/rsa_chain_cert.pem
+cat cacert.pem >> keys/rsa_chain_cert.pem
 
 # ecdsa_p256_cert.pem/ecdsa_p256_key.pem: ecdsap256/sha1(?)
 openssl req -batch -x509 \
@@ -81,8 +83,8 @@ openssl req -batch -x509 \
           -pkeyopt ec_paramgen_curve:prime256v1 \
           -sha1 \
           -days 3650 \
-          -nodes -keyout bogo/ecdsa_p256_key.pem \
-          -out bogo/ecdsa_p256_cert.pem \
+          -nodes -keyout keys/ecdsa_p256_key.pem \
+          -out keys/ecdsa_p256_cert.pem \
           -reqexts SAN \
           -extensions SAN \
           -config <(cat <<EOF
@@ -103,8 +105,8 @@ openssl req -batch -x509 \
           -pkeyopt ec_paramgen_curve:secp384r1 \
           -sha1 \
           -days 3650 \
-          -nodes -keyout bogo/ecdsa_p384_key.pem \
-          -out bogo/ecdsa_p384_cert.pem \
+          -nodes -keyout keys/ecdsa_p384_key.pem \
+          -out keys/ecdsa_p384_cert.pem \
           -reqexts SAN \
           -extensions SAN \
           -config <(cat <<EOF
