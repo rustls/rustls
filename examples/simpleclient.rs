@@ -8,7 +8,7 @@ extern crate webpki_roots;
 
 fn main() {
     let mut config = rustls::ClientConfig::new();
-    config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+    config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
     let mut sess = rustls::ClientSession::new(&Arc::new(config), "google.com");
     let mut sock = TcpStream::connect("google.com:443").unwrap();

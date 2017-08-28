@@ -1,6 +1,6 @@
 [package]
 name = "rustls"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
 readme = "README.md"
@@ -10,13 +10,13 @@ repository = "https://github.com/ctz/rustls"
 categories = ["network-programming", "cryptography"]
 
 [dependencies]
-untrusted = "0.5"
+untrusted = "0.5.1"
 time = "0.1.37"
 base64 = "0.6"
 log = { version = "0.3.6", optional = true }
-ring = { version = "0.11", features = ["rsa_signing"] }
-webpki = "0.14"
-sct = "0.1.2"
+ring = { version = "0.12", features = ["rsa_signing"] }
+webpki = "0.17"
+sct = "0.2"
 
 [features]
 default = ["logging"]
@@ -30,8 +30,8 @@ mio = "0.6"
 docopt = "0.8"
 serde = "1.0"
 serde_derive = "1.0"
-webpki-roots = "0.11"
-ct-logs = "0.1"
+webpki-roots = "0.13"
+ct-logs = "0.2"
 regex = "0.2"
 
 [[example]]

@@ -438,7 +438,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             .add_pem_file(&mut reader)
             .unwrap();
     } else {
-        config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+        config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
         config.ct_logs = Some(&ct_logs::LOGS);
     }
 

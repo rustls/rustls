@@ -87,7 +87,9 @@ impl RootCertStore {
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
     /// fail.
-    pub fn add_trust_anchors(&mut self, anchors: &[webpki::TrustAnchor]) {
+    pub fn add_server_trust_anchors(&mut self,
+                                    &webpki::TLSServerTrustAnchors(anchors):
+                                        &webpki::TLSServerTrustAnchors) {
         for ta in anchors {
             self.roots.push(OwnedTrustAnchor::from_trust_anchor(ta));
         }

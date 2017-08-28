@@ -98,7 +98,7 @@
 //! the Mozilla set of root certificates.
 //!
 //! ```rust,ignore
-//! config.root_store.add_trust_anchors(&webpki_roots::ROOTS);
+//! config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 //! ```
 //!
 //! Now we can make a session.  You need to provide the server's hostname so we
@@ -194,7 +194,7 @@ extern crate webpki;
 // *ring* for cryptography.
 extern crate ring;
 
-// time for feeding webpki the time.
+// TODO: Remove this dependency.
 extern crate time;
 
 // untrusted for feeding ring and webpki.

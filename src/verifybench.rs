@@ -7,10 +7,11 @@
 use std::time::{Duration, Instant};
 
 use anchors;
+use error::TLSError;
 use verify;
 use verify::ServerCertVerifier;
 use key;
-use time;
+use webpki;
 
 extern crate webpki_roots;
 
@@ -36,11 +37,8 @@ fn bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_
              times.iter().min().unwrap() / 1000);
 }
 
-fn fixed_time() -> time::Timespec {
-    time::Timespec {
-        sec: 1500000000,
-        nsec: 0,
-    }
+fn fixed_time() -> Result<webpki::Time, TLSError> {
+    Ok(webpki::Time::from_seconds_since_unix_epoch(1500000000))
 }
 
 static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier {
@@ -53,7 +51,7 @@ fn test_reddit_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-reddit.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(reddit)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "reddit.com", &[]).unwrap(); });
@@ -65,7 +63,7 @@ fn test_github_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-github.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(github)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "github.com", &[]).unwrap(); });
@@ -78,7 +76,7 @@ fn test_arstechnica_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-arstechnica.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(arstechnica)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "arstechnica.com", &[]).unwrap(); });
@@ -91,7 +89,7 @@ fn test_servo_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-servo.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(servo)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "servo.org", &[]).unwrap(); });
@@ -103,7 +101,7 @@ fn test_twitter_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-twitter.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(twitter)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "twitter.com", &[]).unwrap(); });
@@ -115,7 +113,7 @@ fn test_wikipedia_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-wikipedia.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(wikipedia)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "wikipedia.org", &[]).unwrap(); });
@@ -128,7 +126,7 @@ fn test_google_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-google.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(google)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "www.google.com", &[]).unwrap(); });
@@ -141,7 +139,7 @@ fn test_hn_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-hn.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(hn)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "news.ycombinator.com", &[]).unwrap(); });
@@ -153,7 +151,7 @@ fn test_stackoverflow_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-stackoverflow.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(stackoverflow)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "stackoverflow.com", &[]).unwrap(); });
@@ -165,7 +163,7 @@ fn test_duckduckgo_cert() {
     let cert1 = key::Certificate(include_bytes!("testdata/cert-duckduckgo.1.der").to_vec());
     let chain = [ cert0, cert1 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(duckduckgo)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "duckduckgo.com", &[]).unwrap(); });
@@ -178,7 +176,7 @@ fn test_rustlang_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-rustlang.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(rustlang)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "www.rust-lang.org", &[]).unwrap(); });
@@ -191,7 +189,7 @@ fn test_wapo_cert() {
     let cert2 = key::Certificate(include_bytes!("testdata/cert-wapo.2.der").to_vec());
     let chain = [ cert0, cert1, cert2 ];
     let mut anchors = anchors::RootCertStore::empty();
-    anchors.add_trust_anchors(&webpki_roots::ROOTS);
+    anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(wapo)", 
           || (),
           |_| { V.verify_server_cert(&anchors, &chain[..], "www.washingtonpost.com", &[]).unwrap(); });
