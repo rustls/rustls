@@ -222,7 +222,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
                  "server-auth"
              },
              resume.label(),
-             rounds as f64 / client_time);
+             f64::from(rounds) / client_time);
     println!("handshakes\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
              version,
              suite.suite,
@@ -232,7 +232,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
                  "server-auth"
              },
              resume.label(),
-             rounds as f64 / server_time);
+             f64::from(rounds) / server_time);
 }
 
 fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
@@ -281,11 +281,11 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
     println!("bulk\t{:?}\t{:?}\tsend\t{:.2}\tMB/s",
              version,
              suite.suite,
-             total_mb as f64 / time_send);
+             f64::from(total_mb) / time_send);
     println!("bulk\t{:?}\t{:?}\trecv\t{:.2}\tMB/s",
              version,
              suite.suite,
-             total_mb as f64 / time_recv);
+             f64::from(total_mb) / time_recv);
 }
 
 fn main() {
