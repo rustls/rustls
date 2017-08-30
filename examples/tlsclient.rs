@@ -19,6 +19,7 @@ extern crate docopt;
 use docopt::Docopt;
 
 extern crate rustls;
+extern crate webpki;
 extern crate webpki_roots;
 extern crate ct_logs;
 
@@ -76,7 +77,7 @@ impl io::Read for TlsClient {
 }
 
 impl TlsClient {
-    fn new(sock: TcpStream, hostname: &str, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
+    fn new(sock: TcpStream, hostname: webpki::DNSNameRef, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
         TlsClient {
             socket: sock,
             closing: false,
@@ -391,6 +392,7 @@ fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
     use super::rustls;
+    use webpki;
 
     pub struct NoCertificateVerification {}
 
@@ -398,7 +400,7 @@ mod danger {
         fn verify_server_cert(&self,
                               _roots: &rustls::RootCertStore,
                               _presented_certs: &[rustls::Certificate],
-                              _dns_name: &str,
+                              _dns_name: webpki::DNSNameRef,
                               _ocsp: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
             Ok(rustls::ServerCertVerified::assertion())
         }
@@ -490,7 +492,8 @@ fn main() {
     let config = make_config(&args);
 
     let sock = TcpStream::connect(&addr).unwrap();
-    let mut tlsclient = TlsClient::new(sock, &args.arg_hostname, config);
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str(&args.arg_hostname).unwrap();
+    let mut tlsclient = TlsClient::new(sock, dns_name, config);
 
     if args.flag_http {
         let httpreq = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: \

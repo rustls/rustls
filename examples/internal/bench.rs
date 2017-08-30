@@ -18,6 +18,8 @@ use rustls::Ticketer;
 use rustls::internal::pemfile;
 use rustls::internal::msgs::enums::SignatureAlgorithm;
 
+extern crate webpki;
+
 fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + (d.subsec_nanos() as f64) / 1e9
 }
@@ -179,7 +181,8 @@ fn bench_handshake(version: rustls::ProtocolVersion,
     let mut server_time = 0f64;
 
     for _ in 0..rounds {
-        let mut client = ClientSession::new(&client_config, "localhost");
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
+        let mut client = ClientSession::new(&client_config, dns_name);
         let mut server = ServerSession::new(&server_config);
 
         server_time += time(|| {
@@ -240,7 +243,8 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
         return;
     }
 
-    let mut client = ClientSession::new(&client_config, "localhost");
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
+    let mut client = ClientSession::new(&client_config, dns_name);
     let mut server = ServerSession::new(&server_config);
 
     do_handshake(&mut client, &mut server);

@@ -105,10 +105,13 @@
 //! know what to expect to find in the server's certificate.
 //!
 //! ```no_run
+//! # extern crate rustls;
+//! # extern crate webpki;
 //! # use std::sync::Arc;
 //! # let mut config = rustls::ClientConfig::new();
 //! let rc_config = Arc::new(config);
-//! let mut client = rustls::ClientSession::new(&rc_config, "example.com");
+//! let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
+//! let mut client = rustls::ClientSession::new(&rc_config, example_com);
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields

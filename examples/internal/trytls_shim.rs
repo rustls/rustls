@@ -5,6 +5,7 @@
 //
 
 extern crate rustls;
+extern crate webpki;
 extern crate webpki_roots;
 
 use std::io::{Read, Write, BufReader};
@@ -43,8 +44,9 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<Error>
 }
 
 fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict, Box<Error>> {
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str(&host).unwrap();
     let rc_config = Arc::new(config);
-    let mut client = ClientSession::new(&rc_config, &host);
+    let mut client = ClientSession::new(&rc_config, dns_name);
     let mut stream = TcpStream::connect((&*host, port))?;
 
     client.write_all(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")?;

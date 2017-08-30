@@ -13,6 +13,7 @@ use std::io::Write;
 use std::collections;
 use std::mem;
 use key;
+use webpki;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -720,10 +721,11 @@ impl Codec for ClientExtension {
 
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub fn make_sni(hostname: &str) -> ClientExtension {
+    pub fn make_sni(dns_name: webpki::DNSNameRef) -> ClientExtension {
+        let dns_name_str: &str = dns_name.into();
         let name = ServerName {
             typ: ServerNameType::HostName,
-            payload: ServerNamePayload::HostName(hostname.to_string()),
+            payload: ServerNamePayload::HostName(dns_name_str.to_string()),
         };
 
         ClientExtension::ServerName(vec![ name ])

@@ -10,6 +10,7 @@ use session::SessionRandoms;
 use hash_hs;
 use sign;
 use suites;
+use webpki;
 
 use std::mem;
 
@@ -53,18 +54,18 @@ pub struct HandshakeDetails {
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
-    pub dns_name: String,
+    pub dns_name: webpki::DNSName,
 }
 
 impl HandshakeDetails {
-    pub fn new(host_name: &str) -> HandshakeDetails {
+    pub fn new(host_name: webpki::DNSName) -> HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
             resuming_session: None,
             randoms: SessionRandoms::for_client(),
             using_ems: false,
             session_id: SessionID::empty(),
-            dns_name: host_name.to_string(),
+            dns_name: host_name,
         }
     }
 }

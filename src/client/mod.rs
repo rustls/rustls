@@ -18,6 +18,7 @@ use std::io;
 use std::fmt;
 
 use sct;
+use webpki;
 
 mod hs;
 mod common;
@@ -324,7 +325,8 @@ impl fmt::Debug for ClientSessionImpl {
 }
 
 impl ClientSessionImpl {
-    pub fn new(config: &Arc<ClientConfig>, hostname: &str) -> ClientSessionImpl {
+    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSName)
+               -> ClientSessionImpl {
         let mut cs = ClientSessionImpl {
             config: config.clone(),
             secrets: None,
@@ -520,8 +522,8 @@ impl ClientSession {
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
-    pub fn new(config: &Arc<ClientConfig>, hostname: &str) -> ClientSession {
-        ClientSession { imp: ClientSessionImpl::new(config, hostname) }
+    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
+        ClientSession { imp: ClientSessionImpl::new(config, hostname.into()) }
     }
 }
 

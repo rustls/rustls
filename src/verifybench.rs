@@ -54,7 +54,11 @@ fn test_reddit_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(reddit)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "reddit.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("reddit.com")
+          .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -66,7 +70,11 @@ fn test_github_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(github)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "github.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("github.com")
+          .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -79,7 +87,11 @@ fn test_arstechnica_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(arstechnica)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "arstechnica.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("arstechnica.com")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -92,7 +104,11 @@ fn test_servo_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(servo)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "servo.org", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("servo.org")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -104,7 +120,10 @@ fn test_twitter_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(twitter)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "twitter.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("twitter.com")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap(); });
 }
 
 #[test]
@@ -116,7 +135,11 @@ fn test_wikipedia_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(wikipedia)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "wikipedia.org", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("wikipedia.org")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -129,7 +152,11 @@ fn test_google_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(google)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "www.google.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.google.com")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -142,7 +169,11 @@ fn test_hn_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(hn)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "news.ycombinator.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("news.ycombinator.com")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -154,7 +185,11 @@ fn test_stackoverflow_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(stackoverflow)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "stackoverflow.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("stackoverflow.com")
+          .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -166,7 +201,11 @@ fn test_duckduckgo_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(duckduckgo)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "duckduckgo.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("duckduckgo.com")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -179,7 +218,11 @@ fn test_rustlang_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(rustlang)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "www.rust-lang.org", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.rust-lang.org")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 
 #[test]
@@ -192,6 +235,10 @@ fn test_wapo_cert() {
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     bench(100, "verify_server_cert(wapo)", 
           || (),
-          |_| { V.verify_server_cert(&anchors, &chain[..], "www.washingtonpost.com", &[]).unwrap(); });
+          |_| {
+        let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.washingtonpost.com")
+            .unwrap();
+        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+    });
 }
 

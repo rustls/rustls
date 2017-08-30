@@ -36,6 +36,7 @@ use client::common::{ClientHelloDetails, ReceivedTicketDetails, ClientAuthDetail
 
 use std::mem;
 use ring::constant_time;
+use webpki;
 
 // draft-ietf-tls-tls13-18
 const TLS13_DRAFT: u16 = 0x7f12;
@@ -85,7 +86,8 @@ fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TLSError>
     }
 }
 
-fn find_session(sess: &mut ClientSessionImpl, dns_name: &str) -> Option<persist::ClientSessionValue> {
+fn find_session(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef)
+                -> Option<persist::ClientSessionValue> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
@@ -108,7 +110,7 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: &str) -> Option<persist:
     }
 }
 
-fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: &str) -> Option<NamedGroup> {
+fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
@@ -116,7 +118,7 @@ fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: &str) -> Option<NamedGro
     maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
-fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: &str, group: NamedGroup) {
+fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, group: NamedGroup) {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
 
     sess.config.session_persistence.put(key.get_encoding(), group.get_encoding());
@@ -168,7 +170,7 @@ struct InitialState {
 }
 
 impl InitialState {
-    fn new(host_name: &str) -> InitialState {
+    fn new(host_name: webpki::DNSName) -> InitialState {
         InitialState {
             handshake: HandshakeDetails::new(host_name),
         }
@@ -184,7 +186,7 @@ impl InitialState {
 }
 
 
-pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: &str) -> Box<State + Send> {
+pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName) -> Box<State + Send> {
     InitialState::new(host_name)
         .emit_initial_client_hello(sess)
 }
@@ -204,7 +206,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                                mut hello: ClientHelloDetails,
                                retryreq: Option<&HelloRetryRequest>) -> Box<State + Send> {
     // Do we have a SessionID or ticket cached for this host?
-    handshake.resuming_session = find_session(sess, &handshake.dns_name);
+    handshake.resuming_session = find_session(sess, handshake.dns_name.as_ref());
     let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
         let resuming = handshake.resuming_session.as_mut().unwrap();
         if resuming.version == ProtocolVersion::TLSv1_2 {
@@ -239,7 +241,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         // - if not, send just X25519.
         //
         let groups = retryreq.and_then(|req| req.get_requested_key_share_group())
-            .or_else(|| find_kx_hint(sess, &handshake.dns_name))
+            .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
             .or_else(|| Some(NamedGroup::X25519))
             .map(|grp| vec![ grp ])
             .unwrap();
@@ -264,7 +266,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
-    exts.push(ClientExtension::make_sni(&handshake.dns_name));
+    exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
     exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
@@ -458,7 +460,7 @@ impl ExpectServerHello {
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed"
                                                          .to_string()))?;
 
-        save_kx_hint(sess, &self.handshake.dns_name, their_key_share.group);
+        save_kx_hint(sess, self.handshake.dns_name.as_ref(), their_key_share.group);
         key_schedule.input_secret(&shared.premaster_secret);
 
         check_aligned_handshake(sess)?;
@@ -1142,7 +1144,7 @@ impl State for ExpectTLS13CertificateVerify {
             .get_verifier()
             .verify_server_cert(&sess.config.root_store,
                                 &self.server_cert.cert_chain,
-                                &self.handshake.dns_name,
+                                self.handshake.dns_name.as_ref(),
                                 &self.server_cert.ocsp_response)?;
 
         // 2. Verify their signature on the handshake.
@@ -1514,7 +1516,7 @@ impl State for ExpectTLS12ServerDone {
             .get_verifier()
             .verify_server_cert(&sess.config.root_store,
                                 &st.server_cert.cert_chain,
-                                &st.handshake.dns_name,
+                                st.handshake.dns_name.as_ref(),
                                 &st.server_cert.ocsp_response)?;
 
         // 2. Verify any included SCTs.
@@ -1696,7 +1698,7 @@ fn save_session(handshake: &mut HandshakeDetails,
         return;
     }
 
-    let key = persist::ClientSessionKey::session_for_dns_name(&handshake.dns_name);
+    let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
     let scs = sess.common.get_suite();
     let master_secret = sess.secrets.as_ref().unwrap().get_master_secret();
@@ -1997,7 +1999,7 @@ impl ExpectTLS13Traffic {
                         nst.lifetime,
                         nst.age_add);
 
-        let key = persist::ClientSessionKey::session_for_dns_name(&self.handshake.dns_name);
+        let key = persist::ClientSessionKey::session_for_dns_name(self.handshake.dns_name.as_ref());
 
         let worked = sess.config.session_persistence.put(key.get_encoding(),
                                                          value.get_encoding());

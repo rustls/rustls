@@ -141,7 +141,7 @@ impl rustls::ServerCertVerifier for NoVerification {
     fn verify_server_cert(&self,
                           _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate],
-                          _hostname: &str,
+                          _hostname: webpki::DNSNameRef,
                           _ocsp: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         Ok(rustls::ServerCertVerified::assertion())
     }
@@ -534,8 +534,10 @@ fn main() {
             let s = Box::new(rustls::ServerSession::new(server_cfg.as_ref().unwrap()));
             s as Box<rustls::Session>
         } else {
+            let dns_name =
+                webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
             let s = Box::new(rustls::ClientSession::new(client_cfg.as_ref().unwrap(),
-                                                        &opts.host_name));
+                                                        dns_name));
             s as Box<rustls::Session>
         }
     };
