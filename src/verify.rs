@@ -93,7 +93,11 @@ impl ServerCertVerifier for WebPKIVerifier {
             info!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        cert.verify_is_valid_for_dns_name(untrusted::Input::from(dns_name.as_bytes()))
+        let dns_name = webpki::DNSNameRef::try_from_ascii(
+                untrusted::Input::from(dns_name.as_bytes()))
+            .map_err(|()| TLSError::InvalidDNSName(dns_name.into()))?;
+
+        cert.verify_is_valid_for_dns_name(dns_name)
             .map_err(TLSError::WebPKIError)
             .map(|_| ServerCertVerified::assertion())
     }

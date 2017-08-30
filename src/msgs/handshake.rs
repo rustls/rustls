@@ -371,21 +371,6 @@ impl ConvertServerNameList for ServerNameRequest {
     }
 }
 
-pub fn same_hostname_or_both_none(a: Option<&ServerName>,
-                                  b: Option<&ServerName>) -> bool {
-    match (a, b) {
-        (Some(a), Some(b)) => {
-            match (&a.payload, &b.payload) {
-                (&ServerNamePayload::HostName(ref a_str),
-                 &ServerNamePayload::HostName(ref b_str)) => a_str == b_str,
-                (_, _) => false,
-            }
-        },
-        (None, None) => true,
-        _ => false,
-    }
-}
-
 pub type ProtocolNameList = VecU16OfPayloadU8;
 
 pub trait ConvertProtocolNameList {

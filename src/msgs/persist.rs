@@ -1,9 +1,12 @@
 use msgs::handshake::SessionID;
 use msgs::enums::{CipherSuite, ProtocolVersion};
 use msgs::codec::{Reader, Codec};
-use msgs::handshake::{CertificatePayload, ServerName};
+use msgs::handshake::CertificatePayload;
 use msgs::base::{PayloadU8, PayloadU16};
 use msgs::codec;
+
+use webpki;
+use untrusted;
 
 use std::mem;
 use std::cmp;
@@ -153,7 +156,7 @@ pub type ServerSessionKey = SessionID;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
-    pub sni: Option<ServerName>,
+    pub sni: Option<webpki::DNSName>,
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
@@ -165,7 +168,8 @@ impl Codec for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let &Some(ref sni) = &self.sni {
             codec::encode_u8(1, bytes);
-            sni.encode(bytes);
+            let sni_bytes: &str = sni.as_ref().into();
+            PayloadU8::new(Vec::from(sni_bytes)).encode(bytes);
         } else {
             codec::encode_u8(0, bytes);
         }
@@ -181,7 +185,10 @@ impl Codec for ServerSessionValue {
     fn read(r: &mut Reader) -> Option<ServerSessionValue> {
         let has_sni = try_ret!(codec::read_u8(r));
         let sni = if has_sni == 1 {
-            Some(try_ret!(ServerName::read(r)))
+            let dns_name = try_ret!(PayloadU8::read(r));
+            let dns_name = try_ret!(webpki::DNSNameRef::try_from_ascii(
+                untrusted::Input::from(&dns_name.0)).ok());
+            Some(dns_name.into())
         } else {
             None
         };
@@ -207,7 +214,7 @@ impl Codec for ServerSessionValue {
 }
 
 impl ServerSessionValue {
-    pub fn new(sni: Option<&ServerName>,
+    pub fn new(sni: Option<&webpki::DNSName>,
                v: ProtocolVersion,
                cs: CipherSuite,
                ms: Vec<u8>,

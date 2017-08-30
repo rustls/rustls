@@ -2,7 +2,7 @@ use session::{Session, SessionSecrets, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::{SessionID, ServerName};
+use msgs::handshake::SessionID;
 use msgs::message::Message;
 use msgs::codec::Codec;
 use error::TLSError;
@@ -11,6 +11,7 @@ use sign;
 use verify;
 use anchors;
 use key;
+use webpki;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -400,7 +401,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub secrets: Option<SessionSecrets>,
     pub common: SessionCommon,
-    sni: Option<ServerName>,
+    sni: Option<webpki::DNSName>,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send>>,
@@ -556,14 +557,14 @@ impl ServerSessionImpl {
         self.common.negotiated_version
     }
 
-    pub fn get_sni(&self)-> Option<&ServerName> {
+    pub fn get_sni(&self)-> Option<&webpki::DNSName> {
         self.sni.as_ref()
     }
 
-    pub fn set_sni(&mut self, value: &ServerName) {
+    pub fn set_sni(&mut self, value: webpki::DNSName) {
         // The SNI hostname is immutable once set.
         assert!(self.sni.is_none());
-        self.sni = Some(value.clone())
+        self.sni = Some(value)
     }
 }
 
@@ -601,7 +602,7 @@ impl ServerSession {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn get_sni_hostname(&self)-> Option<&str> {
-        self.imp.get_sni().and_then(|s| s.get_hostname_str())
+        self.imp.get_sni().map(|s| s.as_ref().into())
     }
 }
 

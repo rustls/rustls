@@ -63,6 +63,9 @@ pub enum TLSError {
 
     /// We failed to figure out what time it currently is.
     FailedToGetCurrentTime,
+
+    /// A syntactically-invalid DNS hostname was given.
+    InvalidDNSName(String),
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -122,6 +125,7 @@ impl Error for TLSError {
             TLSError::InvalidSCT(_) => "invalid certificate timestamp",
             TLSError::General(_) => "unexpected error", // (please file a bug),
             TLSError::FailedToGetCurrentTime => "failed to get current time",
+            TLSError::InvalidDNSName(_) => "Invalid DNS name",
         }
     }
 }

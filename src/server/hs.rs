@@ -7,8 +7,7 @@ use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
-use msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList,
-                      same_hostname_or_both_none, ServerName};
+use msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use msgs::handshake::{NamedGroups, SupportedGroups, ClientExtension};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
@@ -91,12 +90,26 @@ fn can_resume(sess: &ServerSessionImpl,
         resume.cipher_suite == sess.common.get_suite().suite &&
             (resume.extended_ms == handshake.using_ems ||
              (resume.extended_ms && !handshake.using_ems)) &&
-            same_hostname_or_both_none(resume.sni.as_ref(), sess.sni.as_ref())
+            same_dns_name_or_both_none(resume.sni.as_ref(), sess.sni.as_ref())
     } else {
         false
     }
 }
 
+// Require an exact match for the purpose of comparing SNI DNS Names from two
+// client hellos, even though a case-insensitive comparison might also be OK.
+fn same_dns_name_or_both_none(a: Option<&webpki::DNSName>,
+                              b: Option<&webpki::DNSName>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => {
+            let a: &str = a.as_ref().into();
+            let b: &str = b.as_ref().into();
+            a == b
+        },
+        (None, None) => true,
+        _ => false,
+    }
+}
 
 // Changing the keys must not span any fragmented handshake
 // messages.  Otherwise the defragmented messages will have
@@ -724,7 +737,7 @@ impl ExpectClientHello {
     fn start_resumption(mut self,
                         sess: &mut ServerSessionImpl,
                         client_hello: &ClientHelloPayload,
-                        sni: Option<&ServerName>,
+                        sni: Option<&webpki::DNSName>,
                         id: &SessionID,
                         resumedata: persist::ServerSessionValue)
                         -> StateResult {
@@ -750,7 +763,7 @@ impl ExpectClientHello {
         emit_ccs(sess);
         emit_finished(&mut self.handshake, sess);
 
-        assert!(same_hostname_or_both_none(sni, sess.get_sni()));
+        assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
         Ok(self.into_expect_tls12_ccs())
     }
@@ -806,10 +819,8 @@ impl ExpectClientHello {
             }
         }
 
-        self.cross_check_certificate_and_save_sni(sess,
-                                                  client_hello.get_sni_extension()
-                                                      .and_then(|sni| sni.get_hostname()),
-                                                  &server_key)?;
+        let sni = self.get_sni_dns_name(sess, client_hello)?;
+        self.cross_check_certificate_and_save_sni(sess, sni, &server_key)?;
 
         let chosen_group = chosen_group.unwrap();
         let chosen_share = shares_ext.iter()
@@ -887,9 +898,23 @@ impl ExpectClientHello {
         }
     }
 
+    fn get_sni_dns_name(&self, sess: &mut ServerSessionImpl,
+                        client_hello: &ClientHelloPayload)
+                        -> Result<Option<webpki::DNSName>, TLSError> {
+        match client_hello.get_sni_extension()
+                          .and_then(|sni| sni.get_hostname())
+                          .and_then(|sni| sni.get_hostname_str()) {
+            Some(sni) =>
+                webpki::DNSNameRef::try_from_ascii_str(sni)
+                    .map(|dns_name_ref| Some(webpki::DNSName::from(dns_name_ref)))
+                    .map_err(|()| illegal_param(sess, "ClientHello SNI DNS name is invalid.")),
+            None => Ok(None),
+        }
+    }
+
     fn cross_check_certificate_and_save_sni(&self,
                                             sess: &mut ServerSessionImpl,
-                                            sni: Option<&ServerName>,
+                                            sni: Option<webpki::DNSName>,
                                             certkey: &sign::CertifiedKey) -> Result<(), TLSError> {
         // Always reject an empty certificate chain.
         let end_entity_cert = certkey.end_entity_cert().map_err(|()| {
@@ -905,10 +930,7 @@ impl ExpectClientHello {
                 "end-entity certificate in certificate chain is syntactically invalid".to_string())
         })?;
 
-        if let Some(sni) = sni {
-            let sni_str = sni.get_hostname_str()
-                .unwrap();
-
+        if let Some(ref sni) = sni {
             // If SNI was offered then the certificate must be valid for
             // that hostname. Note that this doesn't fully validate that the
             // certificate is valid; it only validates that the name is one
@@ -916,18 +938,17 @@ impl ExpectClientHello {
             // valid. Indirectly, this also verifies that the SNI is a
             // syntactically-valid hostname, according to Web PKI rules,
             // which may differ from DNS and/or URL rules.
-            if !end_entity_cert.verify_is_valid_for_dns_name(
-                    untrusted::Input::from(sni_str.as_bytes())).is_ok() {
+            if !end_entity_cert.verify_is_valid_for_dns_name(sni.as_ref()).is_ok() {
                 sess.common.send_fatal_alert(AlertDescription::InternalError);
                 return Err(TLSError::General(
                     "The server certificate is not valid for the given SNI name".to_string()));
             }
 
             // Save the SNI into the session after it's been validated.
-            sess.set_sni(sni);
+            sess.set_sni(sni.clone());
         }
 
-        assert!(same_hostname_or_both_none(sni, sess.get_sni()));
+        assert!(same_dns_name_or_both_none(sni.as_ref(), sess.get_sni()));
         Ok(())
     }
 }
@@ -979,22 +1000,28 @@ impl State for ExpectClientHello {
         // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
         let default_sigschemes_ext = SupportedSignatureSchemes::default();
 
-        let sni = client_hello.get_sni_extension()
-            .and_then(|sni| sni.get_hostname());
+        // Extract and validate the SNI DNS name, if any, before giving it to
+        // the cert resolver. In particular, if it is invalid then we should
+        // send an Illegal Parameter alert instead of the Internal Error alert
+        // (or whatever) that we'd send if this were checked later or in a
+        // different way.
+        let sni = self.get_sni_dns_name(sess, client_hello)?;
+
+        let sigschemes_ext = client_hello.get_sigalgs_extension()
+          .unwrap_or(&default_sigschemes_ext);
 
         // Choose a certificate.
-        let sni_str = sni.and_then(|sni| sni.get_hostname_str());
-        // XXX: Ideally we'd verify that the SNI hostname is syntactically valid
-        // before logging it and before giving it to the cert_resolver.
-        debug!("sni {:?}", sni_str);
-        let sigschemes_ext = client_hello.get_sigalgs_extension()
-            .unwrap_or(&default_sigschemes_ext);
-        debug!("sig schemes {:?}", sigschemes_ext);
-        let certkey = sess.config.cert_resolver.resolve(sni_str, sigschemes_ext);
-        let mut certkey = certkey.ok_or_else(|| {
-            sess.common.send_fatal_alert(AlertDescription::AccessDenied);
-            TLSError::General("no server certificate chain resolved".to_string())
-        })?;
+        let mut certkey = {
+            let sni_str: Option<&str> =
+                sni.as_ref().map(|dns_name| dns_name.as_ref().into());
+            debug!("sni {:?}", sni_str);
+            debug!("sig schemes {:?}", sigschemes_ext);
+            let certkey = sess.config.cert_resolver.resolve(sni_str, sigschemes_ext);
+            certkey.ok_or_else(|| {
+                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
+                TLSError::General("no server certificate chain resolved".to_string())
+            })?
+        };
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
@@ -1030,7 +1057,7 @@ impl State for ExpectClientHello {
         }
 
         // -- TLS1.2 only from hereon in --
-        self.cross_check_certificate_and_save_sni(sess, sni, &certkey)?;
+        self.cross_check_certificate_and_save_sni(sess, sni.clone(), &certkey)?;
         self.handshake.transcript.add_message(&m);
 
         // Save their Random.
@@ -1080,7 +1107,7 @@ impl State for ExpectClientHello {
 
                 if can_resume(sess, &self.handshake, &maybe_resume) {
                     return self.start_resumption(sess,
-                                                 client_hello, sni,
+                                                 client_hello, sni.as_ref(),
                                                  &client_hello.session_id,
                                                  maybe_resume.unwrap());
                 } else {
@@ -1098,7 +1125,7 @@ impl State for ExpectClientHello {
 
             if can_resume(sess, &self.handshake, &maybe_resume) {
                 return self.start_resumption(sess,
-                                             client_hello, sni,
+                                             client_hello, sni.as_ref(),
                                              &client_hello.session_id,
                                              maybe_resume.unwrap());
             }
