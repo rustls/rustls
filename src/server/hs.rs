@@ -770,6 +770,7 @@ impl ExpectClientHello {
 
     fn handle_client_hello_tls13(mut self,
                                  sess: &mut ServerSessionImpl,
+                                 sni: Option<webpki::DNSName>,
                                  mut server_key: sign::CertifiedKey,
                                  chm: &Message)
                                  -> StateResult {
@@ -819,7 +820,6 @@ impl ExpectClientHello {
             }
         }
 
-        let sni = self.get_sni_dns_name(sess, client_hello)?;
         self.cross_check_certificate_and_save_sni(sess, sni, &server_key)?;
 
         let chosen_group = chosen_group.unwrap();
@@ -895,20 +895,6 @@ impl ExpectClientHello {
             Ok(self.into_expect_tls13_certificate())
         } else {
             Ok(self.into_expect_tls13_finished())
-        }
-    }
-
-    fn get_sni_dns_name(&self, sess: &mut ServerSessionImpl,
-                        client_hello: &ClientHelloPayload)
-                        -> Result<Option<webpki::DNSName>, TLSError> {
-        match client_hello.get_sni_extension()
-                          .and_then(|sni| sni.get_hostname())
-                          .and_then(|sni| sni.get_hostname_str()) {
-            Some(sni) =>
-                webpki::DNSNameRef::try_from_ascii_str(sni)
-                    .map(|dns_name_ref| Some(webpki::DNSName::from(dns_name_ref)))
-                    .map_err(|()| illegal_param(sess, "ClientHello SNI DNS name is invalid.")),
-            None => Ok(None),
         }
     }
 
@@ -1005,7 +991,14 @@ impl State for ExpectClientHello {
         // send an Illegal Parameter alert instead of the Internal Error alert
         // (or whatever) that we'd send if this were checked later or in a
         // different way.
-        let sni = self.get_sni_dns_name(sess, client_hello)?;
+        let sni = match client_hello.get_sni_extension()
+                .and_then(|sni| sni.get_hostname())
+                .and_then(|sni| sni.get_hostname_str()) {
+            Some(sni) => webpki::DNSNameRef::try_from_ascii_str(sni)
+                .map(|dns_name_ref| Some(webpki::DNSName::from(dns_name_ref)))
+                .map_err(|()| illegal_param(sess, "ClientHello SNI DNS name is invalid."))?,
+            None => None,
+        };
 
         let sigschemes_ext = client_hello.get_sigalgs_extension()
           .unwrap_or(&default_sigschemes_ext);
@@ -1053,7 +1046,7 @@ impl State for ExpectClientHello {
         }
 
         if sess.common.is_tls13() {
-            return self.handle_client_hello_tls13(sess, certkey, &m);
+            return self.handle_client_hello_tls13(sess, sni, certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
