@@ -1005,11 +1005,10 @@ impl State for ExpectClientHello {
 
         // Choose a certificate.
         let mut certkey = {
-            let sni_str: Option<&str> =
-                sni.as_ref().map(|dns_name| dns_name.as_ref().into());
-            debug!("sni {:?}", sni_str);
+            let sni_ref = sni.as_ref().map(|dns_name| dns_name.as_ref());
+            debug!("sni {:?}", sni_ref);
             debug!("sig schemes {:?}", sigschemes_ext);
-            let certkey = sess.config.cert_resolver.resolve(sni_str, sigschemes_ext);
+            let certkey = sess.config.cert_resolver.resolve(sni_ref, sigschemes_ext);
             certkey.ok_or_else(|| {
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no server certificate chain resolved".to_string())

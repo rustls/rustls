@@ -5,6 +5,7 @@ use std::fs;
 use std::io::{self, Write, Read};
 
 extern crate rustls;
+
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ServerConfig, ServerSession, ResolvesServerCert};
 use rustls::Session;
@@ -14,6 +15,8 @@ use rustls::TLSError;
 use rustls::sign;
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
+
+extern crate webpki;
 
 fn transfer(left: &mut Session, right: &mut Session) {
     let mut buf = [0u8; 262144];
@@ -363,12 +366,13 @@ impl ServerCheckCertResolve {
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
-               server_name: Option<&str>,
+               server_name: Option<webpki::DNSNameRef>,
                sigschemes: &[SignatureScheme])
         -> Option<sign::CertifiedKey> {
         if let Some(got_dns_name) = server_name {
-            if got_dns_name != self.expected {
-                panic!("unexpected dns name (wanted '{}' got '{}')", &self.expected, got_dns_name);
+            let got: &str = got_dns_name.into();
+            if got != self.expected {
+                panic!("unexpected dns name (wanted '{}' got '{:?}')", &self.expected, got_dns_name);
             }
         } else {
             panic!("dns name not provided (wanted '{}')", &self.expected);
@@ -413,7 +417,7 @@ struct ServerBadCertResolver(Arc<ResolvesServerCert>, CertInvalid);
 
 impl ResolvesServerCert for ServerBadCertResolver {
     fn resolve(&self,
-               server_name: Option<&str>,
+               server_name: Option<webpki::DNSNameRef>,
                sigschemes: &[SignatureScheme])
         -> Option<sign::CertifiedKey> {
         let mut ck = self.0.resolve(server_name, sigschemes)

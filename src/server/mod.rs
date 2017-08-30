@@ -92,7 +92,7 @@ pub trait ResolvesServerCert : Send + Sync {
     /// The certificate chain is returned as a vec of `Certificate`s,
     /// the key is inside a `SigningKey`.
     fn resolve(&self,
-               server_name: Option<&str>,
+               server_name: Option<webpki::DNSNameRef>,
                sigschemes: &[SignatureScheme])
                -> Option<sign::CertifiedKey>;
 }
@@ -239,7 +239,7 @@ struct FailResolveChain {}
 
 impl ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
-               _server_name: Option<&str>,
+               _server_name: Option<webpki::DNSNameRef>,
                _sigschemes: &[SignatureScheme])
                -> Option<sign::CertifiedKey> {
         None
@@ -274,7 +274,7 @@ impl AlwaysResolvesChain {
 
 impl ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
-               _server_name: Option<&str>,
+               _server_name: Option<webpki::DNSNameRef>,
                _sigschemes: &[SignatureScheme])
                -> Option<sign::CertifiedKey> {
         Some(self.0.clone())
