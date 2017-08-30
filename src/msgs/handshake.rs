@@ -13,6 +13,7 @@ use std::io::Write;
 use std::collections;
 use std::mem;
 use key;
+use untrusted;
 use webpki;
 
 macro_rules! declare_u8_vec(
@@ -289,7 +290,7 @@ impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
 
 #[derive(Clone, Debug)]
 pub enum ServerNamePayload {
-    HostName(String),
+    HostName(webpki::DNSName),
     Unknown(Payload),
 }
 
@@ -297,22 +298,20 @@ impl ServerNamePayload {
     fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
         let len = try_ret!(codec::read_u16(r)) as usize;
         let name = try_ret!(r.take(len));
-        let hostname = String::from_utf8(name.to_vec());
-
-        match hostname {
-            Ok(n) => Some(ServerNamePayload::HostName(n)),
-            _ => None,
-        }
+        let dns_name = try_ret!(webpki::DNSNameRef::try_from_ascii(
+                untrusted::Input::from(name)).ok());
+        Some(ServerNamePayload::HostName(dns_name.into()))
     }
 
-    fn encode_hostname(name: &str, bytes: &mut Vec<u8>) {
-        codec::encode_u16(name.len() as u16, bytes);
-        bytes.extend_from_slice(name.as_bytes());
+    fn encode_hostname(name: webpki::DNSNameRef, bytes: &mut Vec<u8>) {
+        let dns_name_str: &str = name.into();
+        codec::encode_u16(dns_name_str.len() as u16, bytes);
+        bytes.extend_from_slice(dns_name_str.as_bytes());
     }
 
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            ServerNamePayload::HostName(ref r) => ServerNamePayload::encode_hostname(r, bytes),
+            ServerNamePayload::HostName(ref r) => ServerNamePayload::encode_hostname(r.as_ref(), bytes),
             ServerNamePayload::Unknown(ref r) => r.encode(bytes),
         }
     }
@@ -322,15 +321,6 @@ impl ServerNamePayload {
 pub struct ServerName {
     pub typ: ServerNameType,
     pub payload: ServerNamePayload,
-}
-
-impl ServerName {
-    pub fn get_hostname_str(&self) -> Option<&str> {
-        match &self.payload {
-            &ServerNamePayload::HostName(ref s) => Some(s),
-            _ => None,
-        }
-    }
 }
 
 impl Codec for ServerName {
@@ -357,14 +347,14 @@ impl Codec for ServerName {
 declare_u16_vec!(ServerNameRequest, ServerName);
 
 pub trait ConvertServerNameList {
-    fn get_hostname(&self) -> Option<&ServerName>;
+    fn get_hostname(&self) -> Option<webpki::DNSNameRef>;
 }
 
 impl ConvertServerNameList for ServerNameRequest {
-    fn get_hostname(&self) -> Option<&ServerName> {
+    fn get_hostname(&self) -> Option<webpki::DNSNameRef> {
         for name in self {
-            if let ServerNamePayload::HostName(_) = name.payload {
-                return Some(name);
+            if let ServerNamePayload::HostName(ref dns_name) = name.payload {
+                return Some(dns_name.as_ref());
             }
         }
 
@@ -722,10 +712,9 @@ impl Codec for ClientExtension {
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
     pub fn make_sni(dns_name: webpki::DNSNameRef) -> ClientExtension {
-        let dns_name_str: &str = dns_name.into();
         let name = ServerName {
             typ: ServerNameType::HostName,
-            payload: ServerNamePayload::HostName(dns_name_str.to_string()),
+            payload: ServerNamePayload::HostName(dns_name.into()),
         };
 
         ClientExtension::ServerName(vec![ name ])
@@ -780,7 +769,10 @@ fn can_roundtrip_multiname_sni() {
     match ext {
         ClientExtension::ServerName(req) => {
             assert_eq!(2, req.len());
-            assert_eq!(req.get_hostname().and_then(|n| n.get_hostname_str()), Some("hi"));
+
+            let dns_name_str: &str = req.get_hostname().unwrap().into();
+            assert_eq!(dns_name_str, "hi");
+
             assert_eq!(req[0].typ, ServerNameType::HostName);
             assert_eq!(req[1].typ, ServerNameType::HostName);
         }

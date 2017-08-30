@@ -991,12 +991,16 @@ impl State for ExpectClientHello {
         // send an Illegal Parameter alert instead of the Internal Error alert
         // (or whatever) that we'd send if this were checked later or in a
         // different way.
-        let sni = match client_hello.get_sni_extension()
-                .and_then(|sni| sni.get_hostname())
-                .and_then(|sni| sni.get_hostname_str()) {
-            Some(sni) => webpki::DNSNameRef::try_from_ascii_str(sni)
-                .map(|dns_name_ref| Some(webpki::DNSName::from(dns_name_ref)))
-                .map_err(|()| illegal_param(sess, "ClientHello SNI DNS name is invalid."))?,
+        let sni: Option<webpki::DNSName> = match client_hello.get_sni_extension() {
+            Some(sni) => {
+                match sni.get_hostname() {
+                    Some(sni) => Some(sni.into()),
+                    None => {
+                        return Err(illegal_param(sess,
+                            "ClientHello SNI did not contain a hostname."));
+                    },
+                }
+            },
             None => None,
         };
 
