@@ -265,7 +265,7 @@ pub use msgs::enums::SignatureScheme;
 pub use error::TLSError;
 pub use session::Session;
 pub use stream::Stream;
-pub use anchors::RootCertStore;
+pub use anchors::{DistinguishedNames, RootCertStore};
 pub use client::{StoresClientSessions, ClientSessionMemoryCache};
 pub use client::{ClientConfig, ClientSession};
 pub use client::ResolvesClientCert;
@@ -274,6 +274,7 @@ pub use server::{ServerConfig, ServerSession};
 pub use server::ResolvesServerCert;
 pub use server::ProducesTickets;
 pub use ticketer::Ticketer;
+pub use verify::{NoClientAuth, WebPKIClientAuth};
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
 
@@ -285,5 +286,4 @@ pub use verify::{ServerCertVerifier, ServerCertVerified,
     ClientCertVerifier, ClientCertVerified};
 #[cfg(feature = "dangerous_configuration")]
 pub use client::danger::DangerousClientConfig;
-#[cfg(feature = "dangerous_configuration")]
-pub use server::danger::DangerousServerConfig;
+

@@ -9,7 +9,6 @@ use error::TLSError;
 use rand;
 use sign;
 use verify;
-use anchors;
 use key;
 use webpki;
 
@@ -123,16 +122,6 @@ pub struct ServerConfig {
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
     pub alpn_protocols: Vec<String>,
-
-    /// List of client authentication root certificates.
-    pub client_auth_roots: anchors::RootCertStore,
-
-    /// Whether to attempt client auth.
-    pub client_auth_offer: bool,
-
-    /// Whether to complete handshakes with clients which
-    /// don't do client auth.
-    pub client_auth_mandatory: bool,
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
@@ -283,9 +272,17 @@ impl ResolvesServerCert for AlwaysResolvesChain {
 
 impl ServerConfig {
     /// Make a `ServerConfig` with a default set of ciphersuites,
-    /// no keys/certificates, no ALPN protocols, no client auth, and
-    /// no session persistence.
-    pub fn new() -> ServerConfig {
+    /// no keys/certificates, no ALPN protocols, and no session persistence.
+    ///
+    /// Publicly-available web servers on the internet generally don't do client
+    /// authentication; for this use case, `client_cert_verifier` should be a
+    /// `NoClientAuth`. Otherwise, use `WebPKIClientAuth` or another
+    /// implementation to enforce client authentication.
+    //
+    // We don't provide a default for `client_cert_verifier` because the safest
+    // default, requiring client authentication, requires additional
+    // configuration that we cannot provide reasonable defaults for.
+    pub fn new(client_cert_verifier: Arc<verify::ClientCertVerifier>) -> ServerConfig {
         ServerConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             ignore_client_order: false,
@@ -293,11 +290,8 @@ impl ServerConfig {
             ticketer: Arc::new(NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
             cert_resolver: Arc::new(FailResolveChain {}),
-            client_auth_roots: anchors::RootCertStore::empty(),
-            client_auth_offer: false,
-            client_auth_mandatory: false,
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
-            verifier: Arc::new(verify::WebPKIVerifier::new()),
+            verifier: client_cert_verifier,
         }
     }
 
@@ -352,49 +346,6 @@ impl ServerConfig {
         self.alpn_protocols.clear();
         self.alpn_protocols.extend_from_slice(protocols);
     }
-
-    /// Enables client authentication.  The server will ask for
-    /// and validate certificates to the given list of root
-    /// `certs`.  If `mandatory` is true, the server will fail
-    /// to handshake with a client if it does not do client auth.
-    pub fn set_client_auth_roots(&mut self, certs: Vec<key::Certificate>, mandatory: bool) {
-        for cert in certs {
-            self.client_auth_roots
-                .add(&cert)
-                .unwrap()
-        }
-        self.client_auth_offer = true;
-        self.client_auth_mandatory = mandatory;
-    }
-
-    /// Access configuration options whose use is dangerous and requires
-    /// extra care.
-    #[cfg(feature = "dangerous_configuration")]
-    pub fn dangerous(&mut self) -> danger::DangerousServerConfig {
-        danger::DangerousServerConfig { cfg: self }
-    }
-}
-
-/// Container for unsafe APIs
-#[cfg(feature = "dangerous_configuration")]
-pub mod danger {
-    use super::ServerConfig;
-    use super::verify::ClientCertVerifier;
-    use super::Arc;
-
-    /// Accessor for dangerous configuration options.
-    pub struct DangerousServerConfig<'a> {
-        /// The underlying ServerConfig
-        pub cfg: &'a mut ServerConfig
-    }
-
-    impl<'a> DangerousServerConfig<'a> {
-        /// Overrides the default `ClientCertVerifier` with something else.
-        pub fn set_certificate_verifier(&mut self,
-                                        verifier: Arc<ClientCertVerifier>) {
-            self.cfg.verifier = verifier;
-        }
-    }
 }
 
 pub struct ServerSessionImpl {
@@ -416,7 +367,7 @@ impl fmt::Debug for ServerSessionImpl {
 
 impl ServerSessionImpl {
     pub fn new(server_config: &Arc<ServerConfig>) -> ServerSessionImpl {
-        let perhaps_client_auth = server_config.client_auth_offer;
+        let perhaps_client_auth = server_config.verifier.offer_client_auth();
 
         ServerSessionImpl {
             config: server_config.clone(),

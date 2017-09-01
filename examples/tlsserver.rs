@@ -21,7 +21,7 @@ extern crate env_logger;
 
 extern crate rustls;
 
-use rustls::Session;
+use rustls::{RootCertStore, Session, NoClientAuth, WebPKIClientAuth};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -498,17 +498,27 @@ fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
 }
 
 fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
-    let mut config = rustls::ServerConfig::new();
+    let client_auth = if args.flag_auth.is_some() {
+        let roots = load_certs(args.flag_auth.as_ref().unwrap());
+        let mut client_auth_roots = RootCertStore::empty();
+        for root in roots {
+            client_auth_roots.add(&root).unwrap();
+        }
+        if args.flag_require_auth {
+            WebPKIClientAuth::mandatory(client_auth_roots)
+        } else {
+            WebPKIClientAuth::optional(client_auth_roots)
+        }
+    } else {
+        NoClientAuth::new()
+    };
+
+    let mut config = rustls::ServerConfig::new(client_auth);
 
     let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
     let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
     let ocsp = load_ocsp(&args.flag_ocsp);
     config.set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![]);
-
-    if args.flag_auth.is_some() {
-        let client_auth_roots = load_certs(args.flag_auth.as_ref().unwrap());
-        config.set_client_auth_roots(client_auth_roots, args.flag_require_auth);
-    }
 
     if !args.flag_suite.is_empty() {
         config.ciphersuites = lookup_suites(&args.flag_suite);

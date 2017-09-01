@@ -13,6 +13,7 @@ use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
 use rustls::ServerSessionMemoryCache;
 use rustls::ClientSessionMemoryCache;
+use rustls::{NoClientAuth, RootCertStore, WebPKIClientAuth};
 use rustls::Session;
 use rustls::Ticketer;
 use rustls::internal::pemfile;
@@ -118,16 +119,25 @@ impl Resumption {
 }
 
 fn make_server_config(version: rustls::ProtocolVersion,
-                      clientauth: &ClientAuth,
+                      client_auth: &ClientAuth,
                       resume: &Resumption)
                       -> ServerConfig {
-    let mut cfg = ServerConfig::new();
+    let client_auth = match client_auth {
+        &ClientAuth::Yes => {
+            let roots = get_chain();
+            let mut client_auth_roots = RootCertStore::empty();
+            for root in roots {
+                client_auth_roots.add(&root).unwrap();
+            }
+            WebPKIClientAuth::mandatory(client_auth_roots)
+        },
+        &ClientAuth::No => {
+            NoClientAuth::new()
+        }
+    };
 
+    let mut cfg = ServerConfig::new(client_auth);
     cfg.set_single_cert(get_chain(), get_key());
-
-    if clientauth == &ClientAuth::Yes {
-        cfg.set_client_auth_roots(get_chain(), true);
-    }
 
     if resume == &Resumption::SessionID {
         cfg.set_persistence(ServerSessionMemoryCache::new(128));

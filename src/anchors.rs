@@ -1,7 +1,7 @@
 use webpki;
 use untrusted;
 
-use msgs::handshake::{DistinguishedName, DistinguishedNames};
+pub use msgs::handshake::{DistinguishedName, DistinguishedNames};
 use pemfile;
 use x509;
 use key;

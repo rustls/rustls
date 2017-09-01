@@ -2,13 +2,14 @@ use webpki;
 use untrusted;
 use sct;
 use std;
+use std::sync::Arc;
 
 use key::Certificate;
 use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::SCTList;
 use msgs::enums::SignatureScheme;
 use error::TLSError;
-use anchors::RootCertStore;
+use anchors::{DistinguishedNames, RootCertStore};
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
@@ -70,10 +71,21 @@ pub trait ServerCertVerifier : Send + Sync {
 
 /// Something that can verify a client certificate chain
 pub trait ClientCertVerifier : Send + Sync {
+    /// Returns `true` to enable the server to request a client certificate and
+    /// `false` to skip requesting a client certificate. Defaults to `true`.
+    fn offer_client_auth(&self) -> bool { true }
+
+    /// Returns `true` to require a client certificate and `false` to make client
+    /// authentication optional. Defaults to `self.offer_client_auth()`.
+    fn client_auth_mandatory(&self) -> bool { self.offer_client_auth() }
+
+    /// Returns the subject names of the client authentication trust anchors to
+    /// share with the client when requesting client authentication.
+    fn client_auth_root_subjects<'a>(&'a self) -> DistinguishedNames;
+
     /// Verify a certificate chain `presented_certs` is rooted in `roots`.
     /// Does no further checking of the certificate.
     fn verify_client_cert(&self,
-                          roots: &RootCertStore,
                           presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
 }
 
@@ -96,15 +108,6 @@ impl ServerCertVerifier for WebPKIVerifier {
         cert.verify_is_valid_for_dns_name(dns_name)
             .map_err(TLSError::WebPKIError)
             .map(|_| ServerCertVerified::assertion())
-    }
-}
-
-impl ClientCertVerifier for WebPKIVerifier {
-    fn verify_client_cert(&self,
-                          roots: &RootCertStore,
-                          presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError> {
-        self.verify_common_cert(roots, presented_certs)
-            .map(|_| ClientCertVerified::assertion())
     }
 }
 
@@ -149,6 +152,76 @@ impl WebPKIVerifier {
         cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS, &trustroots, &chain, now)
             .map_err(TLSError::WebPKIError)
             .map(|_| cert)
+    }
+}
+
+
+/// Client certificate verification using the webpki crate.
+pub struct WebPKIClientAuth {
+    roots: RootCertStore,
+    mandatory: bool,
+}
+
+impl WebPKIClientAuth {
+    /// Construct a new `WebPKIClientAuth` that will ensure that every client
+    /// provides a trusted certificate.
+    ///
+    /// `roots` is the list of trust anchors to use for certificate validation.
+    pub fn mandatory(roots: RootCertStore) -> Arc<ClientCertVerifier> {
+        Arc::new(WebPKIClientAuth {
+            roots: roots,
+            mandatory: true,
+        })
+    }
+
+    /// Construct a new `WebPKIClientAuth` that will allow both anonymous and
+    /// authenticated clients.
+    ///
+    /// If the client presents a certificate then it must be valid.
+    ///
+    /// `roots` is the list of trust anchors to use for certificate validation.
+    pub fn optional(roots: RootCertStore) -> Arc<ClientCertVerifier>  {
+        Arc::new(WebPKIClientAuth {
+            roots: roots,
+            mandatory: false,
+        })
+    }
+}
+
+impl ClientCertVerifier for WebPKIClientAuth {
+    fn offer_client_auth(&self) -> bool { true }
+
+    fn client_auth_mandatory(&self) -> bool { self.mandatory }
+
+    fn client_auth_root_subjects<'a>(&'a self) -> DistinguishedNames {
+        self.roots.get_subjects()
+    }
+
+    fn verify_client_cert(&self, presented_certs: &[Certificate])
+                          -> Result<ClientCertVerified, TLSError> {
+        WebPKIVerifier::new().verify_common_cert(&self.roots, presented_certs)
+            .map(|_| ClientCertVerified::assertion())
+    }
+}
+
+/// Turns off client authentication.
+pub struct NoClientAuth;
+
+impl NoClientAuth {
+    /// Constructs a `NoClientAuth` and wraps it in an `Arc`.
+    pub fn new() -> Arc<ClientCertVerifier> { Arc::new(NoClientAuth) }
+}
+
+impl ClientCertVerifier for NoClientAuth {
+    fn offer_client_auth(&self) -> bool { false }
+
+    fn client_auth_root_subjects<'a>(&'a self) -> DistinguishedNames {
+        unimplemented!();
+    }
+
+    fn verify_client_cert(&self, _presented_certs: &[Certificate])
+                          -> Result<ClientCertVerified, TLSError> {
+        unimplemented!();
     }
 }
 

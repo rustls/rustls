@@ -127,17 +127,28 @@ fn split_protocols(protos: &str) -> Vec<String> {
     ret
 }
 
-struct NoVerification {}
+struct DummyClientAuth {
+    mandatory: bool,
+}
 
-impl rustls::ClientCertVerifier for NoVerification {
+impl rustls::ClientCertVerifier for DummyClientAuth {
+    fn offer_client_auth(&self) -> bool { true }
+
+    fn client_auth_mandatory(&self) -> bool { self.mandatory }
+
+    fn client_auth_root_subjects<'a>(&'a self) -> rustls::DistinguishedNames {
+        rustls::DistinguishedNames::new()
+    }
+
     fn verify_client_cert(&self,
-                          _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate]) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
         Ok(rustls::ClientCertVerified::assertion())
     }
 }
 
-impl rustls::ServerCertVerifier for NoVerification {
+struct DummyServerAuth {}
+
+impl rustls::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(&self,
                           _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate],
@@ -148,7 +159,14 @@ impl rustls::ServerCertVerifier for NoVerification {
 }
 
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
-    let mut cfg = rustls::ServerConfig::new();
+    let client_auth =
+        if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
+            Arc::new(DummyClientAuth { mandatory: opts.require_any_client_cert })
+        } else {
+            rustls::NoClientAuth::new()
+        };
+
+    let mut cfg = rustls::ServerConfig::new(client_auth);
     let persist = rustls::ServerSessionMemoryCache::new(32);
     cfg.set_persistence(persist);
 
@@ -157,16 +175,6 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     cfg.set_single_cert_with_ocsp_and_sct(cert.clone(), key,
                                           opts.server_ocsp_response.clone(),
                                           opts.server_sct_list.clone());
-
-    if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
-        cfg.client_auth_offer = true;
-        cfg.dangerous()
-            .set_certificate_verifier(Arc::new(NoVerification {}));
-    }
-
-    if opts.require_any_client_cert {
-        cfg.client_auth_mandatory = true;
-    }
 
     if opts.tickets {
         cfg.ticketer = rustls::Ticketer::new();
@@ -202,7 +210,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     }
 
     cfg.dangerous()
-        .set_certificate_verifier(Arc::new(NoVerification {}));
+        .set_certificate_verifier(Arc::new(DummyServerAuth {}));
 
     if !opts.protocols.is_empty() {
         cfg.set_protocols(&opts.protocols);

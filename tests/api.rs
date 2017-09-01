@@ -15,6 +15,7 @@ use rustls::TLSError;
 use rustls::sign;
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
+use rustls::{RootCertStore, NoClientAuth, WebPKIClientAuth};
 
 extern crate webpki;
 
@@ -50,7 +51,20 @@ fn get_key() -> PrivateKey {
 }
 
 fn make_server_config() -> ServerConfig {
-    let mut cfg = ServerConfig::new();
+    let mut cfg = ServerConfig::new(NoClientAuth::new());
+    cfg.set_single_cert(get_chain(), get_key());
+
+    cfg
+}
+
+fn make_server_config_with_mandatory_client_auth() -> ServerConfig {
+    let roots = get_chain();
+    let mut client_auth_roots = RootCertStore::empty();
+    for root in roots {
+        client_auth_roots.add(&root).unwrap();
+    }
+
+    let mut cfg = ServerConfig::new(WebPKIClientAuth::mandatory(client_auth_roots));
     cfg.set_single_cert(get_chain(), get_key());
 
     cfg
@@ -279,9 +293,7 @@ fn client_can_get_server_cert() {
 #[test]
 fn server_can_get_client_cert() {
     let mut client_config = make_client_config();
-    let mut server_config = make_server_config();
-
-    server_config.set_client_auth_roots(get_chain(), true);
+    let server_config = make_server_config_with_mandatory_client_auth();
     client_config.set_single_client_cert(get_chain(), get_key());
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
@@ -308,9 +320,8 @@ fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
 #[test]
 fn server_close_notify() {
     let mut client_config = make_client_config();
-    let mut server_config = make_server_config();
+    let server_config = make_server_config_with_mandatory_client_auth();
 
-    server_config.set_client_auth_roots(get_chain(), true);
     client_config.set_single_client_cert(get_chain(), get_key());
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
@@ -336,9 +347,8 @@ fn server_close_notify() {
 #[test]
 fn client_close_notify() {
     let mut client_config = make_client_config();
-    let mut server_config = make_server_config();
+    let server_config = make_server_config_with_mandatory_client_auth();
 
-    server_config.set_client_auth_roots(get_chain(), true);
     client_config.set_single_client_cert(get_chain(), get_key());
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
@@ -522,10 +532,9 @@ impl ResolvesClientCert for ClientCheckCertResolve {
 #[test]
 fn client_cert_resolve() {
     let mut client_config = make_client_config();
-    let mut server_config = make_server_config();
+    let server_config = make_server_config_with_mandatory_client_auth();
 
     client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(1));
-    server_config.set_client_auth_roots(get_chain(), true);
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
     let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
