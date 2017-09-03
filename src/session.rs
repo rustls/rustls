@@ -83,7 +83,7 @@ pub trait Session: Read + Write + Send {
     /// if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>>;
+    fn get_peer_certificates(&self) -> Option<&[key::Certificate]>;
 
     /// Retrieves the protocol agreed with the peer via ALPN.
     ///

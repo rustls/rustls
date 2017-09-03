@@ -489,7 +489,7 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    pub fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>> {
+    pub fn get_peer_certificates(&self) -> Option<&[key::Certificate]> {
         Some(&self.server_cert_chain)
     }
 
@@ -552,7 +552,7 @@ impl Session for ClientSession {
         self.imp.common.send_close_notify()
     }
 
-    fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>> {
+    fn get_peer_certificates(&self) -> Option<&[key::Certificate]> {
         self.imp.get_peer_certificates()
     }
 
