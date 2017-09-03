@@ -500,8 +500,8 @@ impl ServerSessionImpl {
         Some(r)
     }
 
-    pub fn get_alpn_protocol(&self) -> Option<String> {
-        self.alpn_protocol.clone()
+    pub fn get_alpn_protocol(&self) -> Option<&str> {
+        self.alpn_protocol.as_ref().map(|s| s.as_ref())
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
@@ -595,7 +595,7 @@ impl Session for ServerSession {
         self.imp.get_peer_certificates()
     }
 
-    fn get_alpn_protocol(&self) -> Option<String> {
+    fn get_alpn_protocol(&self) -> Option<&str> {
         self.imp.get_alpn_protocol()
     }
 

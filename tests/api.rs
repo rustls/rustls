@@ -100,7 +100,7 @@ fn do_handshake_until_error(client: &mut ClientSession,
     Ok(())
 }
 
-fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<String>) {
+fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<&str>) {
     let mut client_config = make_client_config();
     let mut server_config = make_server_config();
 
@@ -137,7 +137,7 @@ fn alpn() {
     // server chooses preference
     alpn_test(vec!["server-proto".to_string(), "client-proto".to_string()],
               vec!["client-proto".to_string(), "server-proto".to_string()],
-              Some("server-proto".to_string()));
+              Some("server-proto"));
 
     // case sensitive
     alpn_test(vec!["PROTO".to_string()], vec!["proto".to_string()], None);

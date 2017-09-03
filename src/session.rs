@@ -90,7 +90,7 @@ pub trait Session: Read + Write + Send {
     /// A return value of None after handshake completion
     /// means no protocol was agreed (because no protocols
     /// were offered or accepted by the peer).
-    fn get_alpn_protocol(&self) -> Option<String>;
+    fn get_alpn_protocol(&self) -> Option<&str>;
 
     /// Retrieves the protocol version agreed with the peer.
     ///

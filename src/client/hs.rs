@@ -404,9 +404,9 @@ fn validate_server_hello_tls13(sess: &mut ClientSessionImpl,
 }
 
 fn process_alpn_protocol(sess: &mut ClientSessionImpl,
-                         proto: Option<String>)
+                         proto: Option<&str>)
                          -> Result<(), TLSError> {
-    sess.alpn_protocol = proto;
+    sess.alpn_protocol = proto.map(|s| s.to_owned());
     if sess.alpn_protocol.is_some() &&
         !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
         return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
