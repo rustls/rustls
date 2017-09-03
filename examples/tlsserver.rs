@@ -21,7 +21,8 @@ extern crate env_logger;
 
 extern crate rustls;
 
-use rustls::{RootCertStore, Session, NoClientAuth, WebPKIClientAuth};
+use rustls::{RootCertStore, Session, NoClientAuth, AllowAnyAuthenticatedClient,
+             AllowAnyAnonymousOrAuthenticatedClient};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -505,9 +506,9 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
             client_auth_roots.add(&root).unwrap();
         }
         if args.flag_require_auth {
-            WebPKIClientAuth::mandatory(client_auth_roots)
+            AllowAnyAuthenticatedClient::new(client_auth_roots)
         } else {
-            WebPKIClientAuth::optional(client_auth_roots)
+            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
         }
     } else {
         NoClientAuth::new()

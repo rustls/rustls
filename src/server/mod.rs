@@ -276,7 +276,7 @@ impl ServerConfig {
     ///
     /// Publicly-available web servers on the internet generally don't do client
     /// authentication; for this use case, `client_cert_verifier` should be a
-    /// `NoClientAuth`. Otherwise, use `WebPKIClientAuth` or another
+    /// `NoClientAuth`. Otherwise, use `AllowAnyAuthenticatedClient` or another
     /// implementation to enforce client authentication.
     //
     // We don't provide a default for `client_cert_verifier` because the safest
