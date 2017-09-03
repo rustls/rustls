@@ -489,17 +489,8 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        if self.server_cert_chain.is_empty() {
-            return None;
-        }
-
-        let mut r = Vec::new();
-        for cert in &self.server_cert_chain {
-            r.push(cert.clone());
-        }
-
-        Some(r)
+    pub fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>> {
+        Some(&self.server_cert_chain)
     }
 
     pub fn get_alpn_protocol(&self) -> Option<String> {
@@ -561,7 +552,7 @@ impl Session for ClientSession {
         self.imp.common.send_close_notify()
     }
 
-    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>> {
         self.imp.get_peer_certificates()
     }
 

@@ -486,18 +486,8 @@ impl ServerSessionImpl {
         self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
     }
 
-    pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        if self.client_cert_chain.is_none() {
-            return None;
-        }
-
-        let mut r = Vec::new();
-
-        for cert in self.client_cert_chain.as_ref().unwrap() {
-            r.push(cert.clone());
-        }
-
-        Some(r)
+    pub fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>> {
+        self.client_cert_chain.as_ref()
     }
 
     pub fn get_alpn_protocol(&self) -> Option<String> {
@@ -591,7 +581,7 @@ impl Session for ServerSession {
         self.imp.common.send_close_notify()
     }
 
-    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn get_peer_certificates(&self) -> Option<&Vec<key::Certificate>> {
         self.imp.get_peer_certificates()
     }
 
