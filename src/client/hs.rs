@@ -890,7 +890,7 @@ impl State for ExpectTLS13Certificate {
             return Err(TLSError::PeerMisbehavedError("bad cert chain extensions".to_string()));
         }
 
-        self.server_cert.ocsp_response = cert_chain.get_end_entity_ocsp();
+        self.server_cert.ocsp_response = Vec::from(cert_chain.get_end_entity_ocsp());
         self.server_cert.scts = cert_chain.get_end_entity_scts();
         self.server_cert.cert_chain = cert_chain.convert();
 
