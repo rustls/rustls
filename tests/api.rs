@@ -287,7 +287,7 @@ fn client_can_get_server_cert() {
     do_handshake(&mut client, &mut server);
 
     let certs = client.get_peer_certificates();
-    assert_eq!(certs, Some(get_chain()));
+    assert_eq!(certs, Some(get_chain().as_ref()));
 }
 
 #[test]
@@ -303,7 +303,7 @@ fn server_can_get_client_cert() {
     do_handshake(&mut client, &mut server);
 
     let certs = server.get_peer_certificates();
-    assert_eq!(certs, Some(get_chain()));
+    assert_eq!(certs, Some(get_chain().as_ref()));
 }
 
 fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
