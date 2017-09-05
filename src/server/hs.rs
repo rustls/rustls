@@ -923,9 +923,7 @@ impl ExpectClientHello {
             // that hostname. Note that this doesn't fully validate that the
             // certificate is valid; it only validates that the name is one
             // that the certificate is valid for, if the certificate is
-            // valid. Indirectly, this also verifies that the SNI is a
-            // syntactically-valid hostname, according to Web PKI rules,
-            // which may differ from DNS and/or URL rules.
+            // valid.
             if !end_entity_cert.verify_is_valid_for_dns_name(sni.as_ref()).is_ok() {
                 sess.common.send_fatal_alert(AlertDescription::InternalError);
                 return Err(TLSError::General(
