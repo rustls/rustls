@@ -1368,10 +1368,10 @@ impl State for ExpectTLS12CertificateVerify {
         if let Err(e) = rc {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             return Err(e);
-        } else {
-            debug!("client CertificateVerify OK");
-            sess.client_cert_chain = Some(self.client_cert.take_chain());
         }
+
+        debug!("client CertificateVerify OK");
+        sess.client_cert_chain = Some(self.client_cert.take_chain());
 
         self.handshake.transcript.add_message(&m);
         Ok(self.into_expect_tls12_ccs())
@@ -1414,10 +1414,10 @@ impl State for ExpectTLS13CertificateVerify {
         if let Err(e) = rc {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             return Err(e);
-        } else {
-            debug!("client CertificateVerify OK");
-            sess.client_cert_chain = Some(self.client_cert.take_chain());
         }
+
+        debug!("client CertificateVerify OK");
+        sess.client_cert_chain = Some(self.client_cert.take_chain());
 
         self.handshake.transcript.add_message(&m);
         Ok(self.into_expect_tls13_finished())
