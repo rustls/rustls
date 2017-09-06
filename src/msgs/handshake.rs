@@ -1774,9 +1774,7 @@ impl ServerKeyExchangePayload {
                 _ => None,
             };
 
-            if rd.any_left() {
-                return None;
-            } else {
+            if !rd.any_left() {
                 return result;
             };
         }

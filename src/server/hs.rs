@@ -813,13 +813,13 @@ impl ExpectClientHello {
             if let Some(group) = retry_group_maybe {
                 if self.done_retry {
                     return Err(illegal_param(sess, "did not follow retry request"));
-                } else {
-                    self.emit_hello_retry_request(sess, group);
-                    return Ok(self.into_expect_retried_client_hello());
                 }
-            } else {
-                return Err(incompatible(sess, "no kx group overlap with client"));
+
+                self.emit_hello_retry_request(sess, group);
+                return Ok(self.into_expect_retried_client_hello());
             }
+
+            return Err(incompatible(sess, "no kx group overlap with client"));
         }
 
         self.cross_check_certificate_and_save_sni(sess, sni, &server_key)?;
