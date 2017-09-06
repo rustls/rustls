@@ -22,7 +22,7 @@ use rustls::internal::msgs::enums::SignatureAlgorithm;
 extern crate webpki;
 
 fn duration_nanos(d: Duration) -> f64 {
-    (d.as_secs() as f64) + (d.subsec_nanos() as f64) / 1e9
+    (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
 }
 
 fn _bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_test: Ftest)
@@ -49,7 +49,7 @@ fn time<F>(mut f: F) -> f64
     f();
     let end = Instant::now();
     let dur = duration_nanos(end.duration_since(start));
-    dur as f64
+    f64::from(dur)
 }
 
 fn transfer(left: &mut Session, right: &mut Session) {
