@@ -114,14 +114,14 @@ impl RootCertStore {
             match self.add(&der) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
-                    debug!("invalid cert der {:?}", der);
-                    info!("certificate parsing failed: {:?}", err);
+                    trace!("invalid cert der {:?}", der);
+                    debug!("certificate parsing failed: {:?}", err);
                     invalid_count += 1
                 }
             }
         }
 
-        info!("add_pem_file processed {} valid and {} invalid certs",
+        debug!("add_pem_file processed {} valid and {} invalid certs",
               valid_count,
               invalid_count);
 

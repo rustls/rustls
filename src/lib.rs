@@ -168,7 +168,7 @@
 //! they mean.
 //!
 //! - `logging`: this makes the rustls crate depend on the `log` crate.
-//!   rustls outputs interesting protocol-level messages at `debug!` and `info!`
+//!   rustls outputs interesting protocol-level messages at `trace!` and `debug!`
 //!   level, and protocol-level errors at `warn!` and `error!` level.  The log
 //!   messages do not contain secret key data, and so are safe to archive without
 //!   affecting session security.  This feature is in the default set.

@@ -64,7 +64,7 @@ impl TlsServer {
     fn accept(&mut self, poll: &mut mio::Poll) -> bool {
         match self.server.accept() {
             Ok((socket, addr)) => {
-                info!("Accepting new connection from {:?}", addr);
+                debug!("Accepting new connection from {:?}", addr);
 
                 let tls_session = rustls::ServerSession::new(&self.tls_config);
                 let mode = self.mode.clone();
@@ -207,7 +207,7 @@ impl Connection {
         }
 
         if rc.unwrap() == 0 {
-            info!("eof");
+            debug!("eof");
             self.closing = true;
             return;
         }
@@ -233,7 +233,7 @@ impl Connection {
         }
 
         if !buf.is_empty() {
-            info!("plaintext read {:?}", buf.len());
+            debug!("plaintext read {:?}", buf.len());
             self.incoming_plaintext(&buf);
         }
     }
@@ -260,7 +260,7 @@ impl Connection {
         // Otherwise, we shove the data into the TLS session.
         match maybe_len {
             Some(len) if len == 0 => {
-                info!("back eof");
+                debug!("back eof");
                 self.closing = true;
             }
             Some(len) => {

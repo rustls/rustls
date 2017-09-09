@@ -218,7 +218,7 @@ impl ExpectClientHello {
 
             sess.alpn_protocol = util::first_in_both(our_protocols, &their_proto_strings);
             if let Some(ref selected_protocol) = sess.alpn_protocol {
-                info!("Chosen ALPN protocol {:?}", selected_protocol);
+                debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 ret.push(ServerExtension::make_alpn(selected_protocol.clone()));
             }
         }
@@ -352,7 +352,7 @@ impl ExpectClientHello {
 
         check_aligned_handshake(sess)?;
 
-        debug!("sending server hello {:?}", sh);
+        trace!("sending server hello {:?}", sh);
         self.handshake.transcript.add_message(&sh);
         sess.common.send_msg(sh, false);
 
@@ -397,7 +397,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("Requesting retry {:?}", m);
+        trace!("Requesting retry {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, false);
     }
@@ -418,7 +418,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("sending encrypted extensions {:?}", ee);
+        trace!("sending encrypted extensions {:?}", ee);
         self.handshake.transcript.add_message(&ee);
         sess.common.send_msg(ee, true);
         Ok(())
@@ -447,7 +447,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("Sending CertificateRequest {:?}", m);
+        trace!("Sending CertificateRequest {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
         true
@@ -499,7 +499,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("sending certificate {:?}", c);
+        trace!("sending certificate {:?}", c);
         self.handshake.transcript.add_message(&c);
         sess.common.send_msg(c, true);
     }
@@ -532,7 +532,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("sending certificate-verify {:?}", m);
+        trace!("sending certificate-verify {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
         Ok(())
@@ -554,7 +554,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("sending finished {:?}", m);
+        trace!("sending finished {:?}", m);
         self.handshake.transcript.add_message(&m);
         self.handshake.hash_at_server_fin = self.handshake.transcript.get_current_hash();
         sess.common.send_msg(m, true);
@@ -603,7 +603,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("sending server hello {:?}", sh);
+        trace!("sending server hello {:?}", sh);
         self.handshake.transcript.add_message(&sh);
         sess.common.send_msg(sh, false);
         Ok(())
@@ -716,7 +716,7 @@ impl ExpectClientHello {
             }),
         };
 
-        debug!("Sending CertificateRequest {:?}", m);
+        trace!("Sending CertificateRequest {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, false);
         true
@@ -743,7 +743,7 @@ impl ExpectClientHello {
                         id: &SessionID,
                         resumedata: persist::ServerSessionValue)
                         -> StateResult {
-        info!("Resuming session");
+        debug!("Resuming session");
 
         if resumedata.extended_ms && !self.handshake.using_ems {
             return Err(illegal_param(sess, "refusing to resume without ems"));
@@ -950,7 +950,7 @@ impl State for ExpectClientHello {
         let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
         let tls13_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
         let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
-        debug!("we got a clienthello {:?}", client_hello);
+        trace!("we got a clienthello {:?}", client_hello);
 
         if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
@@ -1012,8 +1012,8 @@ impl State for ExpectClientHello {
         // Choose a certificate.
         let mut certkey = {
             let sni_ref = sni.as_ref().map(|dns_name| dns_name.as_ref());
-            debug!("sni {:?}", sni_ref);
-            debug!("sig schemes {:?}", sigschemes_ext);
+            trace!("sni {:?}", sni_ref);
+            trace!("sig schemes {:?}", sigschemes_ext);
             let certkey = sess.config.cert_resolver.resolve(sni_ref, sigschemes_ext);
             certkey.ok_or_else(|| {
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
@@ -1040,7 +1040,7 @@ impl State for ExpectClientHello {
             return Err(incompatible(sess, "no ciphersuites in common"));
         }
 
-        info!("decided upon suite {:?}", maybe_ciphersuite.as_ref().unwrap());
+        debug!("decided upon suite {:?}", maybe_ciphersuite.as_ref().unwrap());
         sess.common.set_suite(maybe_ciphersuite.unwrap());
 
         // Start handshake hash.
@@ -1070,8 +1070,8 @@ impl State for ExpectClientHello {
         let ecpoints_ext = client_hello.get_ecpoints_extension()
             .ok_or_else(|| incompatible(sess, "client didn't describe ec points"))?;
 
-        debug!("namedgroups {:?}", groups_ext);
-        debug!("ecpoints {:?}", ecpoints_ext);
+        trace!("namedgroups {:?}", groups_ext);
+        trace!("ecpoints {:?}", ecpoints_ext);
 
         if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
             sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
@@ -1096,7 +1096,7 @@ impl State for ExpectClientHello {
         if let Some(ticket_ext) = client_hello.get_ticket_extension() {
             if let ClientExtension::SessionTicketOffer(ref ticket) = *ticket_ext {
                 ticket_received = true;
-                info!("Ticket received");
+                debug!("Ticket received");
 
                 let maybe_resume = sess.config
                     .ticketer
@@ -1109,7 +1109,7 @@ impl State for ExpectClientHello {
                                                  &client_hello.session_id,
                                                  maybe_resume.unwrap());
                 } else {
-                    info!("Ticket didn't decrypt");
+                    debug!("Ticket didn't decrypt");
                 }
             }
         }
@@ -1188,12 +1188,12 @@ impl State for ExpectTLS12Certificate {
 
         if cert_chain.is_empty() &&
            !sess.config.verifier.client_auth_mandatory() {
-            info!("client auth requested but no certificate supplied");
+            debug!("client auth requested but no certificate supplied");
             self.handshake.transcript.abandon_client_auth();
             return Ok(self.into_expect_tls12_client_kx(None));
         }
 
-        debug!("certs {:?}", cert_chain);
+        trace!("certs {:?}", cert_chain);
 
         sess.config.verifier.verify_client_cert(cert_chain)
             .or_else(|err| {
@@ -1249,7 +1249,7 @@ impl State for ExpectTLS13Certificate {
 
         if cert_chain.is_empty() {
             if !sess.config.verifier.client_auth_mandatory() {
-                info!("client auth requested but no certificate supplied");
+                debug!("client auth requested but no certificate supplied");
                 self.handshake.transcript.abandon_client_auth();
                 return Ok(self.into_expect_tls13_finished());
             }
@@ -1369,7 +1369,7 @@ impl State for ExpectTLS12CertificateVerify {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             return Err(e);
         } else {
-            debug!("client CertificateVerify OK");
+            trace!("client CertificateVerify OK");
             sess.client_cert_chain = Some(self.client_cert.take_chain());
         }
 
@@ -1415,7 +1415,7 @@ impl State for ExpectTLS13CertificateVerify {
             sess.common.send_fatal_alert(AlertDescription::AccessDenied);
             return Err(e);
         } else {
-            debug!("client CertificateVerify OK");
+            trace!("client CertificateVerify OK");
             sess.client_cert_chain = Some(self.client_cert.take_chain());
         }
 
@@ -1585,9 +1585,9 @@ impl State for ExpectTLS12Finished {
             let worked = sess.config.session_storage
                 .put(&self.handshake.session_id, value.get_encoding());
             if worked {
-                info!("Session saved");
+                debug!("Session saved");
             } else {
-                info!("Session not saved");
+                debug!("Session not saved");
             }
         }
 
@@ -1649,7 +1649,7 @@ impl ExpectTLS13Finished {
             }),
         };
 
-        debug!("sending new ticket {:?}", m);
+        trace!("sending new ticket {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
     }

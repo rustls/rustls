@@ -94,7 +94,7 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef)
     let maybe_value = sess.config.session_persistence.get(&key_buf);
 
     if maybe_value.is_none() {
-        info!("No cached session for {:?}", dns_name);
+        debug!("No cached session for {:?}", dns_name);
         return None;
     }
 
@@ -212,10 +212,10 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         if resuming.version == ProtocolVersion::TLSv1_2 {
             randomise_sessionid_for_ticket(resuming);
         }
-        info!("Resuming session");
+        debug!("Resuming session");
         (resuming.session_id, resuming.ticket.0.clone(), resuming.version)
     } else {
-        info!("Not resuming any session");
+        debug!("Not resuming any session");
         (SessionID::empty(), Vec::new(), ProtocolVersion::Unknown(0))
     };
 
@@ -355,7 +355,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         payload: MessagePayload::Handshake(chp),
     };
 
-    debug!("Sending ClientHello {:#?}", ch);
+    trace!("Sending ClientHello {:#?}", ch);
 
     handshake.transcript.add_message(&ch);
     sess.common.send_msg(ch, false);
@@ -411,7 +411,7 @@ fn process_alpn_protocol(sess: &mut ClientSessionImpl,
         !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
         return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
     }
-    info!("ALPN protocol is {:?}", sess.alpn_protocol);
+    debug!("ALPN protocol is {:?}", sess.alpn_protocol);
     Ok(())
 }
 
@@ -437,13 +437,13 @@ impl ExpectServerHello {
                         .to_string()));
                 }
 
-                info!("Resuming using PSK");
+                debug!("Resuming using PSK");
                 key_schedule.input_secret(&resuming.master_secret.0);
             } else {
                 return Err(TLSError::PeerMisbehavedError("server selected unoffered psk".to_string()));
             }
         } else {
-            info!("Not resuming");
+            debug!("Not resuming");
             key_schedule.input_empty();
             self.handshake.resuming_session.take();
         }
@@ -526,7 +526,7 @@ impl State for ExpectServerHello {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
 
         let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
-        debug!("We got ServerHello {:#?}", server_hello);
+        trace!("We got ServerHello {:#?}", server_hello);
 
         match server_hello.server_version {
             ProtocolVersion::TLSv1_2 if sess.config.versions.contains(&ProtocolVersion::TLSv1_2) => {
@@ -585,7 +585,7 @@ impl State for ExpectServerHello {
                 .to_string()));
         }
 
-        info!("Using ciphersuite {:?}", server_hello.cipher_suite);
+        debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
         sess.common.set_suite(scs.unwrap());
 
         let version = sess.common.negotiated_version.unwrap();
@@ -618,7 +618,7 @@ impl State for ExpectServerHello {
 
         // Might the server send a ticket?
         let with_tickets = if server_hello.find_extension(ExtensionType::SessionTicket).is_some() {
-            info!("Server supports tickets");
+            debug!("Server supports tickets");
             true
         } else {
             false
@@ -628,13 +628,13 @@ impl State for ExpectServerHello {
         // Might the server send a CertificateStatus between Certificate and
         // ServerKeyExchange?
         if server_hello.find_extension(ExtensionType::StatusRequest).is_some() {
-            info!("Server may staple OCSP response");
+            debug!("Server may staple OCSP response");
             self.may_send_cert_status = true;
         }
 
         // Save any sent SCTs for verification against the certificate.
         if let Some(sct_list) = server_hello.get_sct_list() {
-            info!("Server sent {:?} SCTs", sct_list.len());
+            debug!("Server sent {:?} SCTs", sct_list.len());
 
             if sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
@@ -647,7 +647,7 @@ impl State for ExpectServerHello {
         let mut abbreviated_handshake = false;
         if let Some(ref resuming) = self.handshake.resuming_session {
             if resuming.session_id == self.handshake.session_id {
-                info!("Server agreed to resume");
+                debug!("Server agreed to resume");
                 abbreviated_handshake = true;
 
                 // Is the server telling lies about the ciphersuite?
@@ -697,7 +697,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
         self.0.handshake.transcript.add_message(&m);
-        debug!("Got HRR {:?}", hrr);
+        trace!("Got HRR {:?}", hrr);
 
         let has_cookie = hrr.get_cookie().is_some();
         let req_group = hrr.get_requested_key_share_group();
@@ -829,7 +829,7 @@ impl State for ExpectTLS13EncryptedExtensions {
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
-        info!("TLS1.3 encrypted extensions: {:?}", exts);
+        debug!("TLS1.3 encrypted extensions: {:?}", exts);
         self.handshake.transcript.add_message(&m);
 
         validate_encrypted_extensions(sess, &self.hello, exts)?;
@@ -975,7 +975,7 @@ impl State for ExpectTLS12CertificateStatus {
         let mut status = extract_handshake_mut!(m, HandshakePayload::CertificateStatus).unwrap();
 
         self.server_cert.ocsp_response = status.take_ocsp_response();
-        info!("Server stapled OCSP response is {:?}", self.server_cert.ocsp_response);
+        debug!("Server stapled OCSP response is {:?}", self.server_cert.ocsp_response);
         Ok(self.into_expect_tls12_server_kx())
     }
 }
@@ -1098,7 +1098,7 @@ impl State for ExpectTLS12ServerKX {
         let skx = ServerKXDetails::new(kx_params, decoded_kx.get_sig().unwrap());
 
         if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
-            info!("ECDHE curve is {:?}", ecdhe.params.curve_params);
+            debug!("ECDHE curve is {:?}", ecdhe.params.curve_params);
         }
 
         Ok(self.into_expect_tls12_server_done_or_certreq(skx))
@@ -1133,7 +1133,7 @@ impl State for ExpectTLS13CertificateVerify {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
 
-        info!("Server cert is {:?}", self.server_cert.cert_chain);
+        debug!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
         if self.server_cert.cert_chain.is_empty() {
@@ -1214,7 +1214,7 @@ fn emit_certverify(handshake: &mut HandshakeDetails,
                    client_auth: &mut ClientAuthDetails,
                    sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     if client_auth.signer.is_none() {
-        debug!("Not sending CertificateVerify, no key");
+        trace!("Not sending CertificateVerify, no key");
         handshake.transcript.abandon_client_auth();
         return Ok(());
     }
@@ -1299,7 +1299,7 @@ impl State for ExpectTLS12CertificateRequest {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
         self.handshake.transcript.add_message(&m);
-        info!("Got CertificateRequest {:?}", certreq);
+        debug!("Got CertificateRequest {:?}", certreq);
 
         let mut client_auth = ClientAuthDetails::new();
 
@@ -1321,12 +1321,12 @@ impl State for ExpectTLS12CertificateRequest {
             sess.config.client_auth_cert_resolver.resolve(&canames, &certreq.sigschemes);
 
         if let Some(mut certkey) = maybe_certkey {
-            info!("Attempting client auth");
+            debug!("Attempting client auth");
             let maybe_signer = certkey.key.choose_scheme(&certreq.sigschemes);
             client_auth.cert = Some(certkey.take_cert());
             client_auth.signer = maybe_signer;
         } else {
-            info!("Client auth requested but no cert/sigscheme available");
+            debug!("Client auth requested but no cert/sigscheme available");
         }
 
         Ok(self.into_expect_tls12_server_done(client_auth))
@@ -1358,7 +1358,7 @@ impl State for ExpectTLS13CertificateRequest {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
         let certreq = &extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
         self.handshake.transcript.add_message(&m);
-        info!("Got CertificateRequest {:?}", certreq);
+        debug!("Got CertificateRequest {:?}", certreq);
 
         // Fortunately the problems here in TLS1.2 and prior are corrected in
         // TLS1.3.
@@ -1391,13 +1391,13 @@ impl State for ExpectTLS13CertificateRequest {
 
         let mut client_auth = ClientAuthDetails::new();
         if let Some(mut certkey) = maybe_certkey {
-            info!("Attempting client auth");
+            debug!("Attempting client auth");
             let maybe_signer = certkey.key.choose_scheme(&compat_sigschemes);
             client_auth.cert = Some(certkey.take_cert());
             client_auth.signer = maybe_signer;
             client_auth.auth_context = Some(certreq.context.0.clone());
         } else {
-            info!("Client auth requested but no cert selected");
+            debug!("Client auth requested but no cert selected");
         }
 
         Ok(self.into_expect_tls13_certificate(client_auth))
@@ -1492,8 +1492,8 @@ impl State for ExpectTLS12ServerDone {
         let mut st = *self;
         st.handshake.transcript.add_message(&m);
 
-        info!("Server cert is {:?}", st.server_cert.cert_chain);
-        info!("Server DNS name is {:?}", st.handshake.dns_name);
+        debug!("Server cert is {:?}", st.server_cert.cert_chain);
+        debug!("Server DNS name is {:?}", st.handshake.dns_name);
 
         // 1. Verify the cert chain.
         // 2. Verify any SCTs provided with the certificate.
@@ -1694,7 +1694,7 @@ fn save_session(handshake: &mut HandshakeDetails,
     }
 
     if handshake.session_id.is_empty() && ticket.is_empty() {
-        info!("Session not saved: server didn't allocate id or ticket");
+        debug!("Session not saved: server didn't allocate id or ticket");
         return;
     }
 
@@ -1719,9 +1719,9 @@ fn save_session(handshake: &mut HandshakeDetails,
                                                      value.get_encoding());
 
     if worked {
-        info!("Session saved");
+        debug!("Session saved");
     } else {
-        info!("Session not saved");
+        debug!("Session not saved");
     }
 }
 
@@ -1759,7 +1759,7 @@ fn emit_certverify_tls13(handshake: &mut HandshakeDetails,
                          client_auth: &mut ClientAuthDetails,
                          sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     if client_auth.signer.is_none() {
-        info!("Skipping certverify message (no client scheme/key)");
+        debug!("Skipping certverify message (no client scheme/key)");
         return Ok(());
     }
 
@@ -2005,9 +2005,9 @@ impl ExpectTLS13Traffic {
                                                          value.get_encoding());
 
         if worked {
-            info!("Ticket saved");
+            debug!("Ticket saved");
         } else {
-            info!("Ticket not saved");
+            debug!("Ticket not saved");
         }
         Ok(())
     }
