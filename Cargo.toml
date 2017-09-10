@@ -13,7 +13,7 @@ categories = ["network-programming", "cryptography"]
 untrusted = "0.5.1"
 base64 = "0.6"
 log = { version = "0.3.6", optional = true }
-ring = { version = "0.12", features = ["rsa_signing"] }
+ring = { version = "0.12.1", features = ["rsa_signing"] }
 webpki = { git = "https://github.com/briansmith/webpki" }
 sct = "0.2"
 

@@ -24,15 +24,6 @@ pub struct HandshakeHash {
     buffer: Vec<u8>,
 }
 
-// This hack is needed because rust doesn't provide reference
-// equality: in other words given a and b of type &T, are
-// the references for the same object?
-fn hash_eq(ha: &'static digest::Algorithm, hb: &'static digest::Algorithm) -> bool {
-    let a = digest::digest(ha, &[]);
-    let b = digest::digest(hb, &[]);
-    a.as_ref() == b.as_ref()
-}
-
 impl HandshakeHash {
     pub fn new() -> HandshakeHash {
         HandshakeHash {
@@ -62,7 +53,7 @@ impl HandshakeHash {
         match self.alg {
             None => {},
             Some(started) => {
-                if !hash_eq(started, alg) {
+                if started != alg {
                     // hash type is changing
                     warn!("altered hash to HandshakeHash::start_hash");
                     return false;
