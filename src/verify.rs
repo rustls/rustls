@@ -155,42 +155,25 @@ fn try_now() -> Result<webpki::Time, TLSError> {
         .map_err( |_ | TLSError::FailedToGetCurrentTime)
 }
 
-/// Client certificate verification using the webpki crate.
-pub struct WebPKIClientAuth {
+/// A `ClientCertVerifier` that will ensure that every client provides a trusted
+/// certificate, without any name checking.
+pub struct AllowAnyAuthenticatedClient {
     roots: RootCertStore,
-    mandatory: bool,
 }
 
-impl WebPKIClientAuth {
-    /// Construct a new `WebPKIClientAuth` that will ensure that every client
-    /// provides a trusted certificate.
+impl AllowAnyAuthenticatedClient {
+    /// Construct a new `AllowAnyAuthenticatedClient`.
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn mandatory(roots: RootCertStore) -> Arc<ClientCertVerifier> {
-        Arc::new(WebPKIClientAuth {
-            roots: roots,
-            mandatory: true,
-        })
-    }
-
-    /// Construct a new `WebPKIClientAuth` that will allow both anonymous and
-    /// authenticated clients.
-    ///
-    /// If the client presents a certificate then it must be valid.
-    ///
-    /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn optional(roots: RootCertStore) -> Arc<ClientCertVerifier>  {
-        Arc::new(WebPKIClientAuth {
-            roots: roots,
-            mandatory: false,
-        })
+    pub fn new(roots: RootCertStore) -> Arc< ClientCertVerifier > {
+        Arc::new(AllowAnyAuthenticatedClient { roots })
     }
 }
 
-impl ClientCertVerifier for WebPKIClientAuth {
+impl ClientCertVerifier for AllowAnyAuthenticatedClient {
     fn offer_client_auth(&self) -> bool { true }
 
-    fn client_auth_mandatory(&self) -> bool { self.mandatory }
+    fn client_auth_mandatory(&self) -> bool { true }
 
     fn client_auth_root_subjects<'a>(&'a self) -> DistinguishedNames {
         self.roots.get_subjects()
@@ -205,6 +188,42 @@ impl ClientCertVerifier for WebPKIClientAuth {
                 &chain, now)
             .map_err(TLSError::WebPKIError)
             .map(|_| ClientCertVerified::assertion())
+    }
+}
+
+/// A `ClientCertVerifier` that will allow both anonymous and authenticated
+/// clients, without any name checking.
+///
+/// Client authentication will be requested during the TLS handshake. If the
+/// client offers a certificate then this acts like
+/// `AllowAnyAuthenticatedClient`, otherwise this acts like `NoClientAuth`.
+pub struct AllowAnyAnonymousOrAuthenticatedClient {
+    inner: AllowAnyAuthenticatedClient,
+}
+
+impl AllowAnyAnonymousOrAuthenticatedClient {
+    /// Construct a new `AllowAnyAnonymousOrAuthenticatedClient`.
+    ///
+    /// `roots` is the list of trust anchors to use for certificate validation.
+    pub fn new(roots: RootCertStore) -> Arc<ClientCertVerifier> {
+        Arc::new(AllowAnyAnonymousOrAuthenticatedClient {
+            inner: AllowAnyAuthenticatedClient { roots }
+        })
+    }
+}
+
+impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
+    fn offer_client_auth(&self) -> bool { self.inner.offer_client_auth() }
+
+    fn client_auth_mandatory(&self) -> bool { false }
+
+    fn client_auth_root_subjects<'a>(&'a self) -> DistinguishedNames {
+        self.inner.client_auth_root_subjects()
+    }
+
+    fn verify_client_cert(&self, presented_certs: &[Certificate])
+            -> Result<ClientCertVerified, TLSError> {
+        self.inner.verify_client_cert(presented_certs)
     }
 }
 

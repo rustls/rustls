@@ -13,7 +13,7 @@ use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
 use rustls::ServerSessionMemoryCache;
 use rustls::ClientSessionMemoryCache;
-use rustls::{NoClientAuth, RootCertStore, WebPKIClientAuth};
+use rustls::{NoClientAuth, RootCertStore, AllowAnyAuthenticatedClient};
 use rustls::Session;
 use rustls::Ticketer;
 use rustls::internal::pemfile;
@@ -129,7 +129,7 @@ fn make_server_config(version: rustls::ProtocolVersion,
             for root in roots {
                 client_auth_roots.add(&root).unwrap();
             }
-            WebPKIClientAuth::mandatory(client_auth_roots)
+            AllowAnyAuthenticatedClient::new(client_auth_roots)
         },
         &ClientAuth::No => {
             NoClientAuth::new()

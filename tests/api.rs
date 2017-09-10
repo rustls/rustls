@@ -15,7 +15,7 @@ use rustls::TLSError;
 use rustls::sign;
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
-use rustls::{RootCertStore, NoClientAuth, WebPKIClientAuth};
+use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
 
 extern crate webpki;
 
@@ -64,7 +64,8 @@ fn make_server_config_with_mandatory_client_auth() -> ServerConfig {
         client_auth_roots.add(&root).unwrap();
     }
 
-    let mut cfg = ServerConfig::new(WebPKIClientAuth::mandatory(client_auth_roots));
+    let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
+    let mut cfg = ServerConfig::new(client_auth);
     cfg.set_single_cert(get_chain(), get_key());
 
     cfg
