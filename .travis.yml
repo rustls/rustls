@@ -1,4 +1,5 @@
 language: rust
+group: edge
 matrix:
   include:
     - os: linux
