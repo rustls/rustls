@@ -1,5 +1,4 @@
 language: rust
-group: deprecated-2017Q3
 matrix:
   include:
     - os: linux
@@ -26,7 +25,7 @@ script:
   - RUST_BACKTRACE=1 cargo test --features dangerous_configuration danger
   - cargo test --release --no-run
   - ./target/release/examples/bench
-  - ( cd trytls && ./runme )
+#  - ( cd trytls && ./runme )
   - ( cd bogo && ./runme )
   - cargo build --no-default-features
   - cargo test --no-default-features --no-run
