@@ -214,6 +214,7 @@ extern crate log;
 #[cfg(not(feature = "logging"))]
 #[macro_use]
 mod compile_out_log {
+    macro_rules! trace    ( ($($tt:tt)*) => {{}} );
     macro_rules! debug    ( ($($tt:tt)*) => {{}} );
     macro_rules! info     ( ($($tt:tt)*) => {{}} );
     macro_rules! warn     ( ($($tt:tt)*) => {{}} );
