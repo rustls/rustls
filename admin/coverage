@@ -67,8 +67,8 @@ for test in 'api badssl bugs client_suites curves errors features server_suites 
     rustc('--profile', 'dev', '--test', test)
     run(test)
 
-# trytls
-sh('cd trytls && ./runme')
+# trytls/bogo
+#sh('cd trytls && ./runme')
 sh('cd bogo && ./runme')
 all_infos.append(lcov('tests.info'))
 
