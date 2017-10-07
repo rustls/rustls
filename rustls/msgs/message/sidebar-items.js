@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["MessagePayload",""]],"struct":[["Message","A TLS frame, named TLSPlaintext in the standard"]]});

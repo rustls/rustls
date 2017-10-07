@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["TLSError","rustls reports protocol errors using this type."]]});
