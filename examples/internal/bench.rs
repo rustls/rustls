@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use std::sync::Arc;
 use std::fs;
 use std::io::{self, Write};
+use std::env;
 
 extern crate rustls;
 use rustls::{ClientConfig, ClientSession};
@@ -95,13 +96,13 @@ fn get_key() -> rustls::PrivateKey {
         .clone()
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy)]
 enum ClientAuth {
     No,
     Yes,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy)]
 enum Resumption {
     No,
     SessionID,
@@ -186,7 +187,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
         return;
     }
 
-    let rounds = 512;
+    let rounds = if resume == Resumption::No { 512 } else { 4096 };
     let mut client_time = 0f64;
     let mut server_time = 0f64;
 
@@ -262,7 +263,7 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
     let mut buf = Vec::new();
     buf.resize(1024 * 1024, 0u8);
 
-    let total_mb = 512;
+    let total_mb = 1024;
     let mut time_send = 0f64;
     let mut time_recv = 0f64;
 
@@ -288,7 +289,62 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
              f64::from(total_mb) / time_recv);
 }
 
-fn main() {
+fn lookup_suite(name: &str) -> &'static rustls::SupportedCipherSuite {
+    for suite in &rustls::ALL_CIPHERSUITES {
+        if format!("{:?}", suite.suite).to_lowercase() == name.to_lowercase() {
+            return suite;
+        }
+    }
+
+    panic!("unknown suite {:?}", name);
+}
+
+fn selected_tests(mut args: env::Args) {
+    let mode = args.next()
+        .expect("first argument must be mode");
+
+    match mode.as_ref() {
+        "bulk" => {
+            match args.next() {
+                Some(suite) => {
+                    let suite = lookup_suite(&suite);
+                    bench_bulk(rustls::ProtocolVersion::TLSv1_3, suite);
+                    bench_bulk(rustls::ProtocolVersion::TLSv1_2, suite);
+                }
+                None => {
+                    panic!("bulk needs ciphersuite argument");
+                }
+            }
+        }
+
+        "handshake" | "handshake-resume" | "handshake-ticket" => {
+            match args.next() {
+                Some(suite) => {
+                    let suite = lookup_suite(&suite);
+                    let resume = if mode == "handshake" {
+                        Resumption::No
+                    } else if mode == "handshake-resume" {
+                        Resumption::SessionID
+                    } else {
+                        Resumption::Tickets
+                    };
+
+                    bench_handshake(rustls::ProtocolVersion::TLSv1_3, suite, ClientAuth::No, resume);
+                    bench_handshake(rustls::ProtocolVersion::TLSv1_2, suite, ClientAuth::No, resume);
+                }
+                None => {
+                    panic!("handshake* needs ciphersuite argument");
+                }
+            }
+        }
+
+        _ => {
+            panic!("unsupported mode {:?}", mode);
+        }
+    }
+}
+
+fn all_tests() {
     for version in &[rustls::ProtocolVersion::TLSv1_3, rustls::ProtocolVersion::TLSv1_2] {
         for suite in &rustls::ALL_CIPHERSUITES {
             if suite.sign == SignatureAlgorithm::ECDSA {
@@ -304,5 +360,15 @@ fn main() {
             bench_handshake(*version, suite, ClientAuth::No, Resumption::Tickets);
             bench_handshake(*version, suite, ClientAuth::Yes, Resumption::Tickets);
         }
+    }
+}
+
+fn main() {
+    let mut args = env::args();
+    if args.len() > 1 {
+        args.next();
+        selected_tests(args);
+    } else {
+        all_tests();
     }
 }
