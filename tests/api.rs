@@ -569,18 +569,20 @@ fn server_error_is_sticky() {
 }
 
 #[test]
-fn server_is_send() {
+fn server_is_send_and_sync() {
     let server_config = make_server_config();
     let server = ServerSession::new(&Arc::new(server_config));
     &server as &Send;
+    &server as &Sync;
 }
 
 #[test]
-fn client_is_send() {
+fn client_is_send_and_sync() {
     let client_config = make_client_config();
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
     let client = ClientSession::new(&Arc::new(client_config), dns_name);
     &client as &Send;
+    &client as &Sync;
 }
 
 #[test]
