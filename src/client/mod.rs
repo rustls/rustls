@@ -314,7 +314,7 @@ pub struct ClientSessionImpl {
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
-    pub state: Option<Box<hs::State + Send>>,
+    pub state: Option<Box<hs::State + Send + Sync>>,
     pub server_cert_chain: CertificatePayload,
 }
 
