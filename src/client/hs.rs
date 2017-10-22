@@ -66,11 +66,12 @@ macro_rules! extract_handshake_mut(
 );
 
 type CheckResult = Result<(), TLSError>;
-type StateResult = Result<Box<State + Send + Sync>, TLSError>;
+type NextState = Box<State + Send + Sync>;
+type NextStateOrError = Result<NextState, TLSError>;
 
 pub trait State {
     fn check_message(&self, m: &Message) -> CheckResult;
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult;
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError;
 }
 
 fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
@@ -176,7 +177,7 @@ impl InitialState {
         }
     }
 
-    fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> Box<State + Send + Sync> {
+    fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> NextState {
         if sess.config.client_auth_cert_resolver.has_certs() {
             self.handshake.transcript.set_client_auth_enabled();
         }
@@ -186,7 +187,7 @@ impl InitialState {
 }
 
 
-pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName) -> Box<State + Send + Sync> {
+pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName) -> NextState {
     InitialState::new(host_name)
         .emit_initial_client_hello(sess)
 }
@@ -204,7 +205,7 @@ struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
 fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                                mut handshake: HandshakeDetails,
                                mut hello: ClientHelloDetails,
-                               retryreq: Option<&HelloRetryRequest>) -> Box<State + Send + Sync> {
+                               retryreq: Option<&HelloRetryRequest>) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     handshake.resuming_session = find_session(sess, handshake.dns_name.as_ref());
     let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
@@ -477,7 +478,7 @@ impl ExpectServerHello {
         Ok(())
     }
 
-    fn into_expect_tls13_encrypted_extensions(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls13_encrypted_extensions(self) -> NextState {
         Box::new(ExpectTLS13EncryptedExtensions {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -487,7 +488,7 @@ impl ExpectServerHello {
 
     fn into_expect_tls12_new_ticket_resume(self,
                                            certv: verify::ServerCertVerified,
-                                           sigv: verify::HandshakeSignatureValid) -> Box<State + Send + Sync> {
+                                           sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(ExpectTLS12NewTicket {
             handshake: self.handshake,
             resuming: true,
@@ -498,7 +499,7 @@ impl ExpectServerHello {
 
     fn into_expect_tls12_ccs_resume(self,
                                     certv: verify::ServerCertVerified,
-                                    sigv: verify::HandshakeSignatureValid) -> Box<State + Send + Sync> {
+                                    sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
@@ -508,7 +509,7 @@ impl ExpectServerHello {
         })
     }
 
-    fn into_expect_tls12_certificate(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_certificate(self) -> NextState {
         Box::new(ExpectTLS12Certificate {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -523,7 +524,7 @@ impl State for ExpectServerHello {
         check_handshake_message(m, &[HandshakeType::ServerHello])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
 
         let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
         trace!("We got ServerHello {:#?}", server_hello);
@@ -688,11 +689,11 @@ impl State for ExpectServerHello {
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
-    fn into_expect_server_hello(self) -> Box<State + Send + Sync> {
+    fn into_expect_server_hello(self) -> NextState {
         Box::new(self.0)
     }
 
-    fn handle_hello_retry_request(mut self, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle_hello_retry_request(mut self, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         check_handshake_message(&m, &[HandshakeType::HelloRetryRequest])?;
 
         let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
@@ -760,7 +761,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
                                   HandshakeType::HelloRetryRequest])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         if m.is_handshake_type(HandshakeType::ServerHello) {
             self.into_expect_server_hello().handle(sess, m)
         } else {
@@ -805,7 +806,7 @@ struct ExpectTLS13EncryptedExtensions {
 impl ExpectTLS13EncryptedExtensions {
     fn into_expect_tls13_finished_resume(self,
                                          certv: verify::ServerCertVerified,
-                                         sigv: verify::HandshakeSignatureValid) -> Box<State + Send + Sync> {
+                                         sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(ExpectTLS13Finished { 
             handshake: self.handshake,
             client_auth: None,
@@ -814,7 +815,7 @@ impl ExpectTLS13EncryptedExtensions {
         })
     }
 
-    fn into_expect_tls13_certificate_or_certreq(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls13_certificate_or_certreq(self) -> NextState {
         Box::new(ExpectTLS13CertificateOrCertReq {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -827,7 +828,7 @@ impl State for ExpectTLS13EncryptedExtensions {
         check_handshake_message(m, &[HandshakeType::EncryptedExtensions])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
         self.handshake.transcript.add_message(&m);
@@ -858,7 +859,7 @@ struct ExpectTLS13Certificate {
 }
 
 impl ExpectTLS13Certificate {
-    fn into_expect_tls13_certificate_verify(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls13_certificate_verify(self) -> NextState {
         Box::new(ExpectTLS13CertificateVerify {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -872,7 +873,7 @@ impl State for ExpectTLS13Certificate {
         check_handshake_message(m, &[HandshakeType::Certificate])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let cert_chain = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
         self.handshake.transcript.add_message(&m);
 
@@ -913,7 +914,7 @@ struct ExpectTLS12Certificate {
 }
 
 impl ExpectTLS12Certificate {
-    fn into_expect_tls12_certificate_status_or_server_kx(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_certificate_status_or_server_kx(self) -> NextState {
         Box::new(ExpectTLS12CertificateStatusOrServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -921,7 +922,7 @@ impl ExpectTLS12Certificate {
         })
     }
 
-    fn into_expect_tls12_server_kx(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_server_kx(self) -> NextState {
         Box::new(ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -935,7 +936,7 @@ impl State for ExpectTLS12Certificate {
         check_handshake_message(m, &[HandshakeType::Certificate])
     }
 
-    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
         self.handshake.transcript.add_message(&m);
 
@@ -956,7 +957,7 @@ struct ExpectTLS12CertificateStatus {
 }
 
 impl ExpectTLS12CertificateStatus {
-    fn into_expect_tls12_server_kx(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_server_kx(self) -> NextState {
         Box::new(ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -970,7 +971,7 @@ impl State for ExpectTLS12CertificateStatus {
         check_handshake_message(m, &[HandshakeType::CertificateStatus])
     }
 
-    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         self.handshake.transcript.add_message(&m);
         let mut status = extract_handshake_mut!(m, HandshakePayload::CertificateStatus).unwrap();
 
@@ -987,7 +988,7 @@ struct ExpectTLS12CertificateStatusOrServerKX {
 }
 
 impl ExpectTLS12CertificateStatusOrServerKX {
-    fn into_expect_tls12_server_kx(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_server_kx(self) -> NextState {
         Box::new(ExpectTLS12ServerKX {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -995,7 +996,7 @@ impl ExpectTLS12CertificateStatusOrServerKX {
         })
     }
 
-    fn into_expect_tls12_certificate_status(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_certificate_status(self) -> NextState {
         Box::new(ExpectTLS12CertificateStatus {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1011,7 +1012,7 @@ impl State for ExpectTLS12CertificateStatusOrServerKX {
                                   HandshakeType::CertificateStatus])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
             self.into_expect_tls12_server_kx().handle(sess, m)
         } else {
@@ -1026,7 +1027,7 @@ struct ExpectTLS13CertificateOrCertReq {
 }
 
 impl ExpectTLS13CertificateOrCertReq {
-    fn into_expect_tls13_certificate(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls13_certificate(self) -> NextState {
         Box::new(ExpectTLS13Certificate {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1034,7 +1035,7 @@ impl ExpectTLS13CertificateOrCertReq {
         })
     }
 
-    fn into_expect_tls13_certificate_req(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls13_certificate_req(self) -> NextState {
         Box::new(ExpectTLS13CertificateRequest {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1049,7 +1050,7 @@ impl State for ExpectTLS13CertificateOrCertReq {
                                   HandshakeType::CertificateRequest])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         if m.is_handshake_type(HandshakeType::Certificate) {
             self.into_expect_tls13_certificate().handle(sess, m)
         } else {
@@ -1065,7 +1066,7 @@ struct ExpectTLS12ServerKX {
 }
 
 impl ExpectTLS12ServerKX {
-    fn into_expect_tls12_server_done_or_certreq(self, skx: ServerKXDetails) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_server_done_or_certreq(self, skx: ServerKXDetails) -> NextState {
         Box::new(ExpectTLS12ServerDoneOrCertReq {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1080,7 +1081,7 @@ impl State for ExpectTLS12ServerKX {
         check_handshake_message(m, &[HandshakeType::ServerKeyExchange])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
         let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite().kx);
         self.handshake.transcript.add_message(&m);
@@ -1115,7 +1116,7 @@ struct ExpectTLS13CertificateVerify {
 impl ExpectTLS13CertificateVerify {
     fn into_expect_tls13_finished(self,
                                   certv: verify::ServerCertVerified,
-                                  sigv: verify::HandshakeSignatureValid) -> Box<State + Send + Sync> {
+                                  sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(ExpectTLS13Finished {
             handshake: self.handshake,
             client_auth: self.client_auth,
@@ -1130,7 +1131,7 @@ impl State for ExpectTLS13CertificateVerify {
         check_handshake_message(m, &[HandshakeType::CertificateVerify])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
 
         debug!("Server cert is {:?}", self.server_cert.cert_chain);
@@ -1280,7 +1281,7 @@ struct ExpectTLS12CertificateRequest {
 }
 
 impl ExpectTLS12CertificateRequest {
-    fn into_expect_tls12_server_done(self, client_auth: ClientAuthDetails) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_server_done(self, client_auth: ClientAuthDetails) -> NextState {
         Box::new(ExpectTLS12ServerDone {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1296,7 +1297,7 @@ impl State for ExpectTLS12CertificateRequest {
         check_handshake_message(m, &[HandshakeType::CertificateRequest])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
         self.handshake.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
@@ -1341,7 +1342,7 @@ struct ExpectTLS13CertificateRequest {
 }
 
 impl ExpectTLS13CertificateRequest {
-    fn into_expect_tls13_certificate(self, client_auth: ClientAuthDetails) -> Box<State + Send + Sync> {
+    fn into_expect_tls13_certificate(self, client_auth: ClientAuthDetails) -> NextState {
         Box::new(ExpectTLS13Certificate {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1355,7 +1356,7 @@ impl State for ExpectTLS13CertificateRequest {
         check_handshake_message(m, &[HandshakeType::CertificateRequest])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let certreq = &extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
         self.handshake.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
@@ -1412,7 +1413,7 @@ struct ExpectTLS12ServerDoneOrCertReq {
 }
 
 impl ExpectTLS12ServerDoneOrCertReq {
-    fn into_expect_tls12_certificate_req(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_certificate_req(self) -> NextState {
         Box::new(ExpectTLS12CertificateRequest {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1421,7 +1422,7 @@ impl ExpectTLS12ServerDoneOrCertReq {
         })
     }
 
-    fn into_expect_tls12_server_done(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_server_done(self) -> NextState {
         Box::new(ExpectTLS12ServerDone {
             handshake: self.handshake,
             server_cert: self.server_cert,
@@ -1439,7 +1440,7 @@ impl State for ExpectTLS12ServerDoneOrCertReq {
                                   HandshakeType::ServerHelloDone])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         if extract_handshake!(m, HandshakePayload::CertificateRequest).is_some() {
             self.into_expect_tls12_certificate_req().handle(sess, m)
         } else {
@@ -1461,7 +1462,7 @@ struct ExpectTLS12ServerDone {
 impl ExpectTLS12ServerDone {
     fn into_expect_tls12_new_ticket(self,
                                     certv: verify::ServerCertVerified,
-                                    sigv: verify::HandshakeSignatureValid) -> Box<State + Send + Sync> {
+                                    sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(ExpectTLS12NewTicket {
             handshake: self.handshake,
             resuming: false,
@@ -1472,7 +1473,7 @@ impl ExpectTLS12ServerDone {
 
     fn into_expect_tls12_ccs(self,
                              certv: verify::ServerCertVerified,
-                             sigv: verify::HandshakeSignatureValid) -> Box<State + Send + Sync> {
+                             sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
@@ -1488,7 +1489,7 @@ impl State for ExpectTLS12ServerDone {
         check_handshake_message(m, &[HandshakeType::ServerHelloDone])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let mut st = *self;
         st.handshake.transcript.add_message(&m);
 
@@ -1615,7 +1616,7 @@ struct ExpectTLS12CCS {
 }
 
 impl ExpectTLS12CCS {
-    fn into_expect_tls12_finished(self) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_finished(self) -> NextState {
         Box::new(ExpectTLS12Finished {
             handshake: self.handshake,
             ticket: self.ticket,
@@ -1631,7 +1632,7 @@ impl State for ExpectTLS12CCS {
         check_message(m, &[ContentType::ChangeCipherSpec], &[])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, _m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, _m: Message) -> NextStateOrError {
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
         if !sess.common.handshake_joiner.is_empty() {
@@ -1657,7 +1658,7 @@ struct ExpectTLS12NewTicket {
 }
 
 impl ExpectTLS12NewTicket {
-    fn into_expect_tls12_ccs(self, ticket: ReceivedTicketDetails) -> Box<State + Send + Sync> {
+    fn into_expect_tls12_ccs(self, ticket: ReceivedTicketDetails) -> NextState {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
             ticket: ticket,
@@ -1673,7 +1674,7 @@ impl State for ExpectTLS12NewTicket {
         check_handshake_message(m, &[HandshakeType::NewSessionTicket])
     }
 
-    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         self.handshake.transcript.add_message(&m);
 
         let nst = extract_handshake_mut!(m, HandshakePayload::NewSessionTicket).unwrap();
@@ -1817,7 +1818,7 @@ struct ExpectTLS13Finished {
 
 impl ExpectTLS13Finished {
     fn into_expect_tls13_traffic(self,
-                                 fin: verify::FinishedMessageVerified) -> Box<State + Send + Sync> {
+                                 fin: verify::FinishedMessageVerified) -> NextState {
         Box::new(ExpectTLS13Traffic {
             handshake: self.handshake,
             _cert_verified: self.cert_verified,
@@ -1832,7 +1833,7 @@ impl State for ExpectTLS13Finished {
         check_handshake_message(m, &[HandshakeType::Finished])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let mut st = *self;
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
@@ -1904,7 +1905,7 @@ struct ExpectTLS12Finished {
 
 impl ExpectTLS12Finished {
     fn into_expect_tls12_traffic(self,
-                                 fin: verify::FinishedMessageVerified) -> Box<State + Send + Sync> {
+                                 fin: verify::FinishedMessageVerified) -> NextState {
         Box::new(ExpectTLS12Traffic {
             _cert_verified: self.cert_verified,
             _sig_verified: self.sig_verified,
@@ -1918,7 +1919,7 @@ impl State for ExpectTLS12Finished {
         check_handshake_message(m, &[HandshakeType::Finished])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let mut st = *self;
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
@@ -1968,7 +1969,7 @@ impl State for ExpectTLS12Traffic {
         check_message(m, &[ContentType::ApplicationData], &[])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> StateResult {
+    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> NextStateOrError {
         sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
         Ok(self)
     }
@@ -2025,7 +2026,7 @@ impl State for ExpectTLS13Traffic {
                       &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> StateResult {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
             sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
         } else if m.is_handshake_type(HandshakeType::NewSessionTicket) {

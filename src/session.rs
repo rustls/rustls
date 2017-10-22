@@ -21,7 +21,7 @@ use std::io;
 use std::collections::VecDeque;
 
 /// Generalises `ClientSession` and `ServerSession`
-pub trait Session: Read + Write + Send {
+pub trait Session: Read + Write + Send + Sync {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).

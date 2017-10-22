@@ -111,7 +111,7 @@ pub struct ServerConfig {
     pub ignore_client_order: bool,
 
     /// How to store client sessions.
-    pub session_storage: Arc<StoresServerSessions + Send>,
+    pub session_storage: Arc<StoresServerSessions + Send + Sync>,
 
     /// How to produce tickets.
     pub ticketer: Arc<ProducesTickets>,
@@ -301,7 +301,7 @@ impl ServerConfig {
     }
 
     /// Sets the session persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Arc<StoresServerSessions + Send>) {
+    pub fn set_persistence(&mut self, persist: Arc<StoresServerSessions + Send + Sync>) {
         self.session_storage = persist;
     }
 
@@ -355,7 +355,7 @@ pub struct ServerSessionImpl {
     sni: Option<webpki::DNSName>,
     pub alpn_protocol: Option<String>,
     pub error: Option<TLSError>,
-    pub state: Option<Box<hs::State + Send>>,
+    pub state: Option<Box<hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
 }
 
