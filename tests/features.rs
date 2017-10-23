@@ -318,3 +318,33 @@ fn send_low_mtu() {
         .expect("Ciphers common between both SSL end points")
         .go();
 }
+
+#[test]
+fn send_sni() {
+    let mut server = OpenSSLServer::new_rsa(9115);
+    server
+        .arg("-servername_fatal")
+        .arg("-servername")
+        .arg("not-localhost");
+    server.run();
+
+    server.client()
+        .fails()
+        .expect(r"TLS error: AlertReceived\(UnrecognisedName\)")
+        .go();
+}
+
+#[test]
+fn do_not_send_sni() {
+    let mut server = OpenSSLServer::new_rsa(9116);
+    server
+        .arg("-servername_fatal")
+        .arg("-servername")
+        .arg("not-localhost");
+    server.run();
+
+    server.client()
+        .no_sni()
+        .expect("Ciphers common between both SSL end points")
+        .go();
+}

@@ -421,6 +421,35 @@ fn server_cert_resolve_with_sni() {
     assert_eq!(err.is_err(), true);
 }
 
+struct ServerCheckNoSNI {}
+
+impl ResolvesServerCert for ServerCheckNoSNI {
+    fn resolve(&self,
+               server_name: Option<webpki::DNSNameRef>,
+               _sigschemes: &[SignatureScheme])
+        -> Option<sign::CertifiedKey> {
+        assert!(server_name.is_none());
+
+        None
+    }
+}
+
+#[test]
+fn client_with_sni_disabled_does_not_send_sni() {
+    let mut client_config = make_client_config();
+    client_config.enable_sni = false;
+
+    let mut server_config = make_server_config();
+    server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
+
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str("value-not-sent").unwrap();
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
+}
+
 #[test]
 fn server_checks_own_certificate_against_sni() {
     let client_config = make_client_config();

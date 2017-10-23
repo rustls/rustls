@@ -104,6 +104,7 @@ pub struct TlsClient {
     pub suites: Vec<String>,
     pub protos: Vec<String>,
     pub no_tickets: bool,
+    pub no_sni: bool,
     pub insecure: bool,
     pub verbose: bool,
     pub mtu: Option<usize>,
@@ -123,6 +124,7 @@ impl TlsClient {
             client_auth_certs: None,
             cache: None,
             no_tickets: false,
+            no_sni: false,
             insecure: false,
             verbose: false,
             mtu: None,
@@ -152,6 +154,11 @@ impl TlsClient {
 
     pub fn no_tickets(&mut self) -> &mut TlsClient {
         self.no_tickets = true;
+        self
+    }
+
+    pub fn no_sni(&mut self) -> &mut TlsClient {
+        self.no_sni = true;
         self
     }
 
@@ -221,6 +228,10 @@ impl TlsClient {
 
         if self.no_tickets {
             args.push("--no-tickets");
+        }
+
+        if self.no_sni {
+            args.push("--no-sni");
         }
 
         if self.insecure {
@@ -359,6 +370,10 @@ impl OpenSSLServer {
             .arg("-key")
             .arg(&self.key)
             .arg("-cert")
+            .arg(&self.cert)
+            .arg("-key2")
+            .arg(&self.key)
+            .arg("-cert2")
             .arg(&self.cert)
             .arg("-CAfile")
             .arg(&self.chain)
