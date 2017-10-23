@@ -300,6 +300,7 @@ Options:
                         May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
+    --no-sni            Disable server name indication support.
     --insecure          Disable certificate verification.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
@@ -318,6 +319,7 @@ struct Args {
     flag_cafile: Option<String>,
     flag_cache: Option<String>,
     flag_no_tickets: bool,
+    flag_no_sni: bool,
     flag_insecure: bool,
     flag_auth_key: Option<String>,
     flag_auth_certs: Option<String>,
@@ -446,6 +448,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
 
     if args.flag_no_tickets {
         config.enable_tickets = false;
+    }
+
+    if args.flag_no_sni {
+        config.enable_sni = false;
     }
 
     let persist = Arc::new(PersistCache::new(&args.flag_cache));

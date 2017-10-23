@@ -267,7 +267,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
-    exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
+    if sess.config.enable_sni {
+        exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
+    }
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
     exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
