@@ -206,6 +206,12 @@ pub struct ClientConfig {
     /// checking is disabled.
     pub ct_logs: Option<&'static [&'static sct::Log<'static>]>,
 
+    /// Whether to send the Server Name Indication (SNI) extension
+    /// during the client handshake.
+    ///
+    /// The default is true.
+    pub enable_sni: bool,
+
     /// How to verify the server certificate chain.
     verifier: Arc<verify::ServerCertVerifier>,
 }
@@ -225,6 +231,7 @@ impl ClientConfig {
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
+            enable_sni: true,
             verifier: Arc::new(verify::WebPKIVerifier::new())
         }
     }
