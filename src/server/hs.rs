@@ -33,7 +33,6 @@ use rand;
 use sign;
 use error::TLSError;
 use handshake::{check_handshake_message, check_message};
-use untrusted;
 use webpki;
 
 use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
@@ -905,24 +904,18 @@ impl ExpectClientHello {
                                             sess: &mut ServerSessionImpl,
                                             sni: Option<webpki::DNSName>,
                                             certkey: &sign::CertifiedKey) -> Result<(), TLSError> {
-        // Always reject an empty certificate chain.
-        let end_entity_cert = certkey.end_entity_cert().map_err(|()| {
-            sess.common.send_fatal_alert(AlertDescription::InternalError);
-            TLSError::General("no end-entity certificate in certificate chain".to_string())
-        })?;
-
-        // Reject syntactically-invalid end-entity certificates.
-        webpki::EndEntityCert::from(untrusted::Input::from(end_entity_cert.as_ref())).map_err(|_| {
-            sess.common.send_fatal_alert(AlertDescription::InternalError);
-            TLSError::General(
-                "end-entity certificate in certificate chain is syntactically invalid".to_string())
-        })?;
-
-        if let Some(ref sni) = sni {
-            // Save the SNI into the session
-            sess.set_sni(sni.clone());
+        match certkey.cross_check_end_entity_cert(&sni) {
+            Ok(_) => {
+                if let Some(ref sni) = sni {
+                    // Save the SNI into the session.
+                    sess.set_sni(sni.clone());
+                }
+            }
+            Err(err) => {
+                sess.common.send_fatal_alert(AlertDescription::InternalError);
+                return Err(err);
+            }
         }
-
         assert!(same_dns_name_or_both_none(sni.as_ref(), sess.get_sni()));
         Ok(())
     }

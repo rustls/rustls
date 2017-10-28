@@ -88,14 +88,19 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
     }
 }
 
+#[derive(PartialEq, Debug)]
+enum TLSErrorFromPeer { Client(TLSError), Server(TLSError) }
+
 fn do_handshake_until_error(client: &mut ClientSession,
                             server: &mut ServerSession)
-                            -> Result<(), TLSError> {
+                            -> Result<(), TLSErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
-        server.process_new_packets()?;
+        server.process_new_packets()
+            .map_err(|err| TLSErrorFromPeer::Server(err))?;
         transfer(server, client);
-        client.process_new_packets()?;
+        client.process_new_packets()
+            .map_err(|err| TLSErrorFromPeer::Client(err))?;
     }
 
     Ok(())
@@ -463,7 +468,8 @@ fn server_checks_own_certificate_against_sni() {
     assert_eq!(err.is_err(), true);
 }
 
-enum CertInvalid { EmptyChain, BadDER }
+#[derive(PartialEq, Debug)]
+enum CertInvalid { EmptyChain, BadDER, EmptyChainOpaque }
 struct ServerBadCertResolver(Arc<ResolvesServerCert>, CertInvalid);
 
 impl ResolvesServerCert for ServerBadCertResolver {
@@ -474,9 +480,13 @@ impl ResolvesServerCert for ServerBadCertResolver {
         let mut ck = self.0.resolve(server_name, sigschemes)
             .unwrap();
         ck.cert = match self.1 {
-            CertInvalid::EmptyChain => vec![],
+            CertInvalid::EmptyChain | CertInvalid::EmptyChainOpaque => vec![],
             CertInvalid::BadDER => vec![rustls::Certificate(vec![0xab])],
         };
+
+        if self.1 == CertInvalid::EmptyChainOpaque {
+            ck.opaque_certificate = true;
+        }
         Some(ck)
     }
 }
@@ -494,8 +504,11 @@ fn server_checks_own_certificate_chain_for_emptiness() {
     let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
     let mut server = ServerSession::new(&Arc::new(server_config));
 
-    let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err.is_err(), true);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(TLSErrorFromPeer::Server(
+            TLSError::General("no end-entity certificate in \
+                              certificate chain".into()))));
 }
 
 #[test]
@@ -511,8 +524,29 @@ fn server_checks_own_certificate_for_validity() {
     let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
     let mut server = ServerSession::new(&Arc::new(server_config));
 
-    let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err.is_err(), true);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(TLSErrorFromPeer::Server(
+            TLSError::General("end-entity certificate in \
+                              certificate chain is syntactically invalid".into()))));
+}
+
+#[test]
+fn server_does_not_check_certificate_when_opaque() {
+    let client_config = make_client_config();
+    let mut server_config = make_server_config();
+
+    let real_resolver = server_config.cert_resolver;
+    let badcert_resolver = Arc::new(ServerBadCertResolver(real_resolver, CertInvalid::EmptyChainOpaque));
+    server_config.cert_resolver = badcert_resolver;
+
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(TLSErrorFromPeer::Client(TLSError::NoCertificatesPresented)));
 }
 
 struct ClientCheckCertResolve {
@@ -570,8 +604,9 @@ fn client_cert_resolve() {
     let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
     let mut server = ServerSession::new(&Arc::new(server_config));
 
-    let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err.is_err(), true);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
 }
 
 #[test]
