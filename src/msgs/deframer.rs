@@ -14,7 +14,7 @@ const HEADER_SIZE: usize = 1 + 2 + 2;
 const MAX_MESSAGE: usize = 16384 + 2048 + HEADER_SIZE;
 
 /// This deframer works to reconstruct TLS messages
-/// from arbitrary-sized reads, buffering as neccessary.
+/// from arbitrary-sized reads, buffering as necessary.
 /// The input is `read()`, the output is the `frames` deque.
 pub struct MessageDeframer {
     /// Completed frames for output.
