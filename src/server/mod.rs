@@ -308,6 +308,10 @@ impl ServerConfig {
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
+    /// ***Note that the end-entity certificate must have the 
+    /// [Subject Alternative Name](https://en.wikipedia.org/wiki/Subject_Alternative_Name) 
+    /// extension to describe, e.g., the valid DNS name. The `commonName` field is 
+    /// disregarded.***
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
     /// `key_der` is a DER-encoded RSA private key.
