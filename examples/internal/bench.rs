@@ -245,7 +245,8 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
     }
 }
 
-fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::SupportedCipherSuite) {
+fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::SupportedCipherSuite,
+              plaintext_size: u32) {
     let client_config =
         Arc::new(make_client_config(version, suite, &ClientAuth::No, &Resumption::No));
     let server_config = Arc::new(make_server_config(version, &ClientAuth::No, &Resumption::No));
@@ -261,13 +262,18 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
     do_handshake(&mut client, &mut server);
 
     let mut buf = Vec::new();
-    buf.resize(1024 * 1024, 0u8);
+    buf.resize(plaintext_size as usize, 0u8);
 
-    let total_mb = 1024;
+    let total_data = if plaintext_size < 8192 {
+        64 * 1024 * 1024
+    } else {
+        1024 * 1024 * 1024
+    };
+    let rounds = total_data / plaintext_size;
     let mut time_send = 0f64;
     let mut time_recv = 0f64;
 
-    for _ in 0..total_mb {
+    for _ in 0..rounds {
         time_send += time(|| {
             server.write_all(&buf).unwrap();
             ()
@@ -279,14 +285,15 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
         drain(&mut client, buf.len());
     }
 
+    let total_mbs = f64::from(plaintext_size * rounds) / (1024. * 1024.);
     println!("bulk\t{:?}\t{:?}\tsend\t{:.2}\tMB/s",
              version,
              suite.suite,
-             f64::from(total_mb) / time_send);
+             total_mbs / time_send);
     println!("bulk\t{:?}\t{:?}\trecv\t{:.2}\tMB/s",
              version,
              suite.suite,
-             f64::from(total_mb) / time_recv);
+             total_mbs / time_recv);
 }
 
 fn lookup_suite(name: &str) -> &'static rustls::SupportedCipherSuite {
@@ -307,9 +314,13 @@ fn selected_tests(mut args: env::Args) {
         "bulk" => {
             match args.next() {
                 Some(suite) => {
+                    let len = args.next()
+                        .map(|arg| arg.parse::<u32>()
+                             .expect("3rd arg must be integer"))
+                        .unwrap_or(1048576);
                     let suite = lookup_suite(&suite);
-                    bench_bulk(rustls::ProtocolVersion::TLSv1_3, suite);
-                    bench_bulk(rustls::ProtocolVersion::TLSv1_2, suite);
+                    bench_bulk(rustls::ProtocolVersion::TLSv1_3, suite, len);
+                    bench_bulk(rustls::ProtocolVersion::TLSv1_2, suite, len);
                 }
                 None => {
                     panic!("bulk needs ciphersuite argument");
@@ -352,7 +363,7 @@ fn all_tests() {
                 continue;
             }
 
-            bench_bulk(*version, suite);
+            bench_bulk(*version, suite, 1024 * 1024);
             bench_handshake(*version, suite, ClientAuth::No, Resumption::No);
             bench_handshake(*version, suite, ClientAuth::Yes, Resumption::No);
             bench_handshake(*version, suite, ClientAuth::No, Resumption::SessionID);
