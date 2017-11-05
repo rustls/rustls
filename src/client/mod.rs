@@ -12,8 +12,7 @@ use sign;
 use error::TLSError;
 use key;
 
-use std::collections;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::io;
 use std::fmt;
 
@@ -22,6 +21,7 @@ use webpki;
 
 mod hs;
 mod common;
+pub mod handy;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -42,63 +42,6 @@ pub trait StoresClientSessions : Send + Sync {
     /// Returns the latest value for `key`.  Returns `None`
     /// if there's no such value.
     fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
-}
-
-/// An implementor of `StoresClientSessions` which does nothing.
-struct NoSessionStorage {}
-
-impl StoresClientSessions for NoSessionStorage {
-    fn put(&self, _key: Vec<u8>, _value: Vec<u8>) -> bool {
-        false
-    }
-
-    fn get(&self, _key: &[u8]) -> Option<Vec<u8>> {
-        None
-    }
-}
-
-/// An implementor of `StoresClientSessions` that stores everything
-/// in memory.  It enforces a limit on the number of sessions
-/// to bound memory usage.
-pub struct ClientSessionMemoryCache {
-    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
-    max_entries: usize,
-}
-
-impl ClientSessionMemoryCache {
-    /// Make a new ClientSessionMemoryCache.  `size` is the
-    /// maximum number of stored sessions.
-    pub fn new(size: usize) -> Arc<ClientSessionMemoryCache> {
-        debug_assert!(size > 0);
-        Arc::new(ClientSessionMemoryCache {
-            cache: Mutex::new(collections::HashMap::new()),
-            max_entries: size,
-        })
-    }
-
-    fn limit_size(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        while cache.len() > self.max_entries {
-            let k = cache.keys().next().unwrap().clone();
-            cache.remove(&k);
-        }
-    }
-}
-
-impl StoresClientSessions for ClientSessionMemoryCache {
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache.lock()
-            .unwrap()
-            .insert(key, value);
-        self.limit_size();
-        true
-    }
-
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.lock()
-            .unwrap()
-            .get(key).cloned()
-    }
 }
 
 /// A trait for the ability to choose a certificate chain and
@@ -122,46 +65,6 @@ pub trait ResolvesClientCert : Send + Sync {
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
-}
-
-struct FailResolveClientCert {}
-
-impl ResolvesClientCert for FailResolveClientCert {
-    fn resolve(&self,
-               _acceptable_issuers: &[&[u8]],
-               _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertifiedKey> {
-        None
-    }
-
-    fn has_certs(&self) -> bool {
-        false
-    }
-}
-
-struct AlwaysResolvesClientCert(sign::CertifiedKey);
-
-impl AlwaysResolvesClientCert {
-    fn new_rsa(chain: Vec<key::Certificate>,
-               priv_key: &key::PrivateKey)
-               -> AlwaysResolvesClientCert {
-        let key = sign::RSASigningKey::new(priv_key).expect("Invalid RSA private key");
-        let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
-        AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, key))
-    }
-}
-
-impl ResolvesClientCert for AlwaysResolvesClientCert {
-    fn resolve(&self,
-               _acceptable_issuers: &[&[u8]],
-               _sigschemes: &[SignatureScheme])
-               -> Option<sign::CertifiedKey> {
-        Some(self.0.clone())
-    }
-
-    fn has_certs(&self) -> bool {
-        true
-    }
 }
 
 /// Common configuration for (typically) all connections made by
@@ -225,9 +128,9 @@ impl ClientConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
-            session_persistence: Arc::new(NoSessionStorage {}),
+            session_persistence: Arc::new(handy::NoSessionStorage {}),
             mtu: None,
-            client_auth_cert_resolver: Arc::new(FailResolveClientCert {}),
+            client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
@@ -280,8 +183,8 @@ impl ClientConfig {
     pub fn set_single_client_cert(&mut self,
                                   cert_chain: Vec<key::Certificate>,
                                   key_der: key::PrivateKey) {
-        self.client_auth_cert_resolver = Arc::new(AlwaysResolvesClientCert::new_rsa(cert_chain,
-                                                                                    &key_der));
+        let resolver = handy::AlwaysResolvesClientCert::new_rsa(cert_chain, &key_der);
+        self.client_auth_cert_resolver = Arc::new(resolver);
     }
 
     /// Access configuration options whose use is dangerous and requires
