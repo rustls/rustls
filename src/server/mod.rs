@@ -168,6 +168,11 @@ impl ServerConfig {
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
     ///
+    /// Note that the end-entity certificate must have the 
+    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1) 
+    /// extension to describe, e.g., the valid DNS name. The `commonName` field is 
+    /// disregarded.
+    ///
     /// `cert_chain` is a vector of DER-encoded certificates.
     /// `key_der` is a DER-encoded RSA private key.
     pub fn set_single_cert(&mut self,
