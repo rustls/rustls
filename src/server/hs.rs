@@ -822,7 +822,7 @@ impl ExpectClientHello {
             return Err(incompatible(sess, "no kx group overlap with client"));
         }
 
-        self.cross_check_certificate_and_save_sni(sess, sni, &server_key)?;
+        self.save_sni(sess, sni);
 
         let chosen_group = chosen_group.unwrap();
         let chosen_share = shares_ext.iter()
@@ -900,27 +900,13 @@ impl ExpectClientHello {
         }
     }
 
-    fn cross_check_certificate_and_save_sni(&self,
-                                            sess: &mut ServerSessionImpl,
-                                            sni: Option<webpki::DNSName>,
-                                            certkey: &sign::CertifiedKey) -> Result<(), TLSError> {
-        match certkey.cross_check_end_entity_cert(&sni) {
-            Ok(_) => {
-                if let Some(ref sni) = sni {
-                    // Save the SNI into the session.
-                    sess.set_sni(sni.clone());
-                }
-            }
-            Err(err) => {
-                if let Some(ref sni) = sni {
-                    debug!("Certificate does not match SNI {:?}", sni.as_ref());
-                }
-                sess.common.send_fatal_alert(AlertDescription::InternalError);
-                return Err(err);
-            }
+    fn save_sni(&self,
+                sess: &mut ServerSessionImpl,
+                sni: Option<webpki::DNSName>) {
+        if let Some(sni) = sni {
+            // Save the SNI into the session.
+            sess.set_sni(sni);
         }
-        assert!(same_dns_name_or_both_none(sni.as_ref(), sess.get_sni()));
-        Ok(())
     }
 }
 
@@ -1038,7 +1024,7 @@ impl State for ExpectClientHello {
         }
 
         // -- TLS1.2 only from hereon in --
-        self.cross_check_certificate_and_save_sni(sess, sni.clone(), &certkey)?;
+        self.save_sni(sess, sni.clone());
         self.handshake.transcript.add_message(&m);
 
         // Save their Random.

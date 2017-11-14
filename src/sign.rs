@@ -52,10 +52,6 @@ pub struct CertifiedKey {
     /// certificate is included on those logs.  This must be
     /// a `SignedCertificateTimestampList` encoding; see RFC6962.
     pub sct_list: Option<Vec<u8>>,
-
-    /// If this flag is set, cross_check_end_entity_cert() will
-    /// perform no validity/sanity checks on the certificate.
-    pub opaque_certificate: bool,
 }
 
 impl CertifiedKey {
@@ -69,7 +65,6 @@ impl CertifiedKey {
             key: key,
             ocsp: None,
             sct_list: None,
-            opaque_certificate: false,
         }
     }
 
@@ -109,37 +104,30 @@ impl CertifiedKey {
     /// - the first certificate should quote the given server name
     ///   (if provided)
     ///
-    /// Setting opaque_certificate to true makes this function
-    /// perform no such checks.
-    ///
     /// These checks are not security-sensitive.  They are the
     /// *server* attempting to detect accidental misconfiguration.
-    pub fn cross_check_end_entity_cert(&self, sni: &Option<webpki::DNSName>) -> Result<(), TLSError> {
-        if self.opaque_certificate {
-            return Ok(());
-        }
-
+    pub fn cross_check_end_entity_cert(&self, name: Option<webpki::DNSNameRef>) -> Result<(), TLSError> {
         // Always reject an empty certificate chain.
         let end_entity_cert = self.end_entity_cert().map_err(|()| {
-            TLSError::General("no end-entity certificate in certificate chain".to_string())
+            TLSError::General("No end-entity certificate in certificate chain".to_string())
         })?;
 
         // Reject syntactically-invalid end-entity certificates.
         let end_entity_cert = webpki::EndEntityCert::from(
             untrusted::Input::from(end_entity_cert.as_ref())).map_err(|_| {
-                TLSError::General("end-entity certificate in certificate \
+                TLSError::General("End-entity certificate in certificate \
                                   chain is syntactically invalid".to_string())
         })?;
 
-        if let Some(ref sni) = *sni {
+        if let Some(name) = name {
             // If SNI was offered then the certificate must be valid for
             // that hostname. Note that this doesn't fully validate that the
             // certificate is valid; it only validates that the name is one
             // that the certificate is valid for, if the certificate is
             // valid.
-            if !end_entity_cert.verify_is_valid_for_dns_name(sni.as_ref()).is_ok() {
+            if !end_entity_cert.verify_is_valid_for_dns_name(name).is_ok() {
                 return Err(TLSError::General("The server certificate is not \
-                                             valid for the given SNI name".to_string()));
+                                             valid for the given name".to_string()));
             }
         }
 

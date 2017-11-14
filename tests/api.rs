@@ -106,6 +106,10 @@ fn do_handshake_until_error(client: &mut ClientSession,
     Ok(())
 }
 
+fn dns_name(name: &'static str) -> webpki::DNSNameRef {
+    webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
+}
+
 fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<&str>) {
     let mut client_config = make_client_config();
     let mut server_config = make_server_config();
@@ -113,8 +117,7 @@ fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Opt
     client_config.alpn_protocols = client_protos;
     server_config.alpn_protocols = server_protos;
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(client.get_alpn_protocol(), None);
@@ -168,8 +171,7 @@ fn version_test(client_versions: Vec<ProtocolVersion>,
         server_config.versions = server_versions;
     }
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(client.get_protocol_version(), None);
@@ -230,8 +232,7 @@ fn check_read(reader: &mut io::Read, bytes: &[u8]) {
 fn buffered_client_data_sent() {
     let client_config = make_client_config();
     let server_config = make_server_config();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(5, client.write(b"hello").unwrap());
@@ -247,8 +248,7 @@ fn buffered_client_data_sent() {
 fn buffered_server_data_sent() {
     let client_config = make_client_config();
     let server_config = make_server_config();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(5, server.write(b"hello").unwrap());
@@ -264,8 +264,7 @@ fn buffered_server_data_sent() {
 fn buffered_both_data_sent() {
     let client_config = make_client_config();
     let server_config = make_server_config();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(12, server.write(b"from-server!").unwrap());
@@ -286,8 +285,7 @@ fn buffered_both_data_sent() {
 fn client_can_get_server_cert() {
     let client_config = make_client_config();
     let server_config = make_server_config();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     do_handshake(&mut client, &mut server);
@@ -302,8 +300,7 @@ fn server_can_get_client_cert() {
     let server_config = make_server_config_with_mandatory_client_auth();
     client_config.set_single_client_cert(get_chain(), get_key());
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     do_handshake(&mut client, &mut server);
@@ -330,8 +327,7 @@ fn server_close_notify() {
 
     client_config.set_single_client_cert(get_chain(), get_key());
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     do_handshake(&mut client, &mut server);
@@ -357,8 +353,7 @@ fn client_close_notify() {
 
     client_config.set_single_client_cert(get_chain(), get_key());
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     do_handshake(&mut client, &mut server);
@@ -418,8 +413,7 @@ fn server_cert_resolve_with_sni() {
 
     server_config.cert_resolver = Arc::new(ServerCheckCertResolve::new("the-value-from-sni"));
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("the-value-from-sni").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("the-value-from-sni"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     let err = do_handshake_until_error(&mut client, &mut server);
@@ -447,8 +441,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
     let mut server_config = make_server_config();
     server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("value-not-sent").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("value-not-sent"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     let err = do_handshake_until_error(&mut client, &mut server);
@@ -456,97 +449,19 @@ fn client_with_sni_disabled_does_not_send_sni() {
 }
 
 #[test]
-fn server_checks_own_certificate_against_sni() {
+fn client_checks_server_certificate_with_given_name() {
     let client_config = make_client_config();
     let server_config = make_server_config();
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("not-the-right-hostname.com").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("not-the-right-hostname.com"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err.is_err(), true);
-}
-
-#[derive(PartialEq, Debug)]
-enum CertInvalid { EmptyChain, BadDER, EmptyChainOpaque }
-struct ServerBadCertResolver(Arc<ResolvesServerCert>, CertInvalid);
-
-impl ResolvesServerCert for ServerBadCertResolver {
-    fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef>,
-               sigschemes: &[SignatureScheme])
-        -> Option<sign::CertifiedKey> {
-        let mut ck = self.0.resolve(server_name, sigschemes)
-            .unwrap();
-        ck.cert = match self.1 {
-            CertInvalid::EmptyChain | CertInvalid::EmptyChainOpaque => vec![],
-            CertInvalid::BadDER => vec![rustls::Certificate(vec![0xab])],
-        };
-
-        if self.1 == CertInvalid::EmptyChainOpaque {
-            ck.opaque_certificate = true;
-        }
-        Some(ck)
-    }
-}
-
-#[test]
-fn server_checks_own_certificate_chain_for_emptiness() {
-    let client_config = make_client_config();
-    let mut server_config = make_server_config();
-
-    let real_resolver = server_config.cert_resolver;
-    let badcert_resolver = Arc::new(ServerBadCertResolver(real_resolver, CertInvalid::EmptyChain));
-    server_config.cert_resolver = badcert_resolver;
-
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
-    let mut server = ServerSession::new(&Arc::new(server_config));
-
-    assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
-        Err(TLSErrorFromPeer::Server(
-            TLSError::General("no end-entity certificate in \
-                              certificate chain".into()))));
-}
-
-#[test]
-fn server_checks_own_certificate_for_validity() {
-    let client_config = make_client_config();
-    let mut server_config = make_server_config();
-
-    let real_resolver = server_config.cert_resolver;
-    let badcert_resolver = Arc::new(ServerBadCertResolver(real_resolver, CertInvalid::BadDER));
-    server_config.cert_resolver = badcert_resolver;
-
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
-    let mut server = ServerSession::new(&Arc::new(server_config));
-
-    assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
-        Err(TLSErrorFromPeer::Server(
-            TLSError::General("end-entity certificate in \
-                              certificate chain is syntactically invalid".into()))));
-}
-
-#[test]
-fn server_does_not_check_certificate_when_opaque() {
-    let client_config = make_client_config();
-    let mut server_config = make_server_config();
-
-    let real_resolver = server_config.cert_resolver;
-    let badcert_resolver = Arc::new(ServerBadCertResolver(real_resolver, CertInvalid::EmptyChainOpaque));
-    server_config.cert_resolver = badcert_resolver;
-
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
-    let mut server = ServerSession::new(&Arc::new(server_config));
-
-    assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
-        Err(TLSErrorFromPeer::Client(TLSError::NoCertificatesPresented)));
+    assert_eq!(err,
+               Err(TLSErrorFromPeer::Client(
+                       TLSError::WebPKIError(webpki::Error::CertNotValidForName))
+                   )
+               );
 }
 
 struct ClientCheckCertResolve {
@@ -600,8 +515,7 @@ fn client_cert_resolve() {
 
     client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(1));
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(
@@ -612,8 +526,7 @@ fn client_cert_resolve() {
 #[test]
 fn client_error_is_sticky() {
     let client_config = make_client_config();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     client.read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref()).unwrap();
     let mut err = client.process_new_packets();
     assert_eq!(err.is_err(), true);
@@ -643,16 +556,14 @@ fn server_is_send_and_sync() {
 #[test]
 fn client_is_send_and_sync() {
     let client_config = make_client_config();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let client = ClientSession::new(&Arc::new(client_config), dns_name);
+    let client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     &client as &Send;
     &client as &Sync;
 }
 
 #[test]
 fn server_respects_buffer_limit_pre_handshake() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     server.set_buffer_limit(32);
@@ -669,8 +580,7 @@ fn server_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn server_respects_buffer_limit_post_handshake() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     // this test will vary in behaviour depending on the default suites
@@ -688,8 +598,7 @@ fn server_respects_buffer_limit_post_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_pre_handshake() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     client.set_buffer_limit(32);
@@ -706,8 +615,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_post_handshake() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     do_handshake(&mut client, &mut server);
@@ -769,8 +677,7 @@ impl<'a> io::Write for OtherSession<'a> {
 
 #[test]
 fn client_complete_io_for_handshake() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     assert_eq!(true, client.is_handshaking());
@@ -781,8 +688,7 @@ fn client_complete_io_for_handshake() {
 
 #[test]
 fn client_complete_io_for_handshake_eof() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut input = io::Cursor::new(Vec::new());
 
     assert_eq!(true, client.is_handshaking());
@@ -792,8 +698,7 @@ fn client_complete_io_for_handshake_eof() {
 
 #[test]
 fn client_complete_io_for_write() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     do_handshake(&mut client, &mut server);
@@ -811,8 +716,7 @@ fn client_complete_io_for_write() {
 
 #[test]
 fn client_complete_io_for_read() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     do_handshake(&mut client, &mut server);
@@ -829,8 +733,7 @@ fn client_complete_io_for_read() {
 
 #[test]
 fn server_complete_io_for_handshake() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     assert_eq!(true, server.is_handshaking());
@@ -851,8 +754,7 @@ fn server_complete_io_for_handshake_eof() {
 
 #[test]
 fn server_complete_io_for_write() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     do_handshake(&mut client, &mut server);
@@ -870,8 +772,7 @@ fn server_complete_io_for_write() {
 
 #[test]
 fn server_complete_io_for_read() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     do_handshake(&mut client, &mut server);
@@ -888,8 +789,7 @@ fn server_complete_io_for_read() {
 
 #[test]
 fn client_stream_write() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     {
@@ -902,8 +802,7 @@ fn client_stream_write() {
 
 #[test]
 fn client_stream_read() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     server.write(b"world").unwrap();
@@ -917,8 +816,7 @@ fn client_stream_read() {
 
 #[test]
 fn server_stream_write() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     {
@@ -931,8 +829,7 @@ fn server_stream_write() {
 
 #[test]
 fn server_stream_read() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     client.write(b"world").unwrap();
@@ -956,8 +853,7 @@ fn client_config_is_clone() {
 
 #[test]
 fn client_session_is_debug() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     println!("{:?}", client);
 }
 
@@ -969,8 +865,7 @@ fn server_session_is_debug() {
 
 #[test]
 fn server_complete_io_for_handshake_ending_with_alert() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
     let mut server_config = make_server_config();
     server_config.ciphersuites = vec![];
     let mut server = ServerSession::new(&Arc::new(server_config));
@@ -990,12 +885,73 @@ fn server_complete_io_for_handshake_ending_with_alert() {
 
 #[test]
 fn server_exposes_offered_sni() {
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("second.testserver.com")
-        .unwrap();
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name);
+    let mut client = ClientSession::new(&Arc::new(make_client_config()),
+                                        dns_name("second.testserver.com"));
     let mut server = ServerSession::new(&Arc::new(make_server_config()));
 
     assert_eq!(None, server.get_sni_hostname());
     do_handshake(&mut client, &mut server);
     assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+}
+
+#[test]
+fn sni_resolver_works() {
+    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
+    let signing_key = sign::RSASigningKey::new(&get_key())
+        .unwrap();
+    let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
+    resolver.add("localhost",
+                 sign::CertifiedKey::new(get_chain(), signing_key.clone()))
+        .unwrap();
+
+    let mut server_config = make_server_config();
+    server_config.cert_resolver = Arc::new(resolver);
+    let server_config = Arc::new(server_config);
+
+    let mut server1 = ServerSession::new(&server_config);
+    let mut client1 = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let err = do_handshake_until_error(&mut client1, &mut server1);
+    assert_eq!(err, Ok(()));
+
+    let mut server2 = ServerSession::new(&server_config);
+    let mut client2 = ClientSession::new(&Arc::new(make_client_config()), dns_name("notlocalhost"));
+    let err = do_handshake_until_error(&mut client2, &mut server2);
+    assert_eq!(err,
+               Err(TLSErrorFromPeer::Server(
+                       TLSError::General("no server certificate chain resolved".into()))));
+}
+
+#[test]
+fn sni_resolver_rejects_wrong_names() {
+    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
+    let signing_key = sign::RSASigningKey::new(&get_key())
+        .unwrap();
+    let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
+
+    assert_eq!(Ok(()),
+               resolver.add("localhost",
+                            sign::CertifiedKey::new(get_chain(), signing_key.clone())));
+    assert_eq!(Err(TLSError::General("The server certificate is not valid for the given name".into())),
+               resolver.add("not-localhost",
+                            sign::CertifiedKey::new(get_chain(), signing_key.clone())));
+    assert_eq!(Err(TLSError::General("Bad DNS name".into())),
+               resolver.add("not ascii 🦀",
+                            sign::CertifiedKey::new(get_chain(), signing_key.clone())));
+}
+
+#[test]
+fn sni_resolver_rejects_bad_certs() {
+    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
+    let signing_key = sign::RSASigningKey::new(&get_key())
+        .unwrap();
+    let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
+
+    assert_eq!(Err(TLSError::General("No end-entity certificate in certificate chain".into())),
+               resolver.add("localhost",
+                            sign::CertifiedKey::new(vec![], signing_key.clone())));
+
+    let bad_chain = vec![ rustls::Certificate(vec![ 0xa0 ]) ];
+    assert_eq!(Err(TLSError::General("End-entity certificate in certificate chain is syntactically invalid".into())),
+               resolver.add("localhost",
+                            sign::CertifiedKey::new(bad_chain, signing_key.clone())));
 }

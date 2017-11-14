@@ -274,6 +274,7 @@ pub use client::ResolvesClientCert;
 pub use server::StoresServerSessions;
 pub use server::handy::ServerSessionMemoryCache;
 pub use server::{ServerConfig, ServerSession};
+pub use server::handy::ResolvesServerCertUsingSNI;
 pub use server::ResolvesServerCert;
 pub use server::ProducesTickets;
 pub use ticketer::Ticketer;

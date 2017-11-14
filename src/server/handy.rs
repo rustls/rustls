@@ -6,6 +6,7 @@ use sign;
 use key;
 use webpki;
 use server;
+use error::TLSError;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -147,5 +148,47 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
                _sigschemes: &[SignatureScheme])
                -> Option<sign::CertifiedKey> {
         Some(self.0.clone())
+    }
+}
+
+/// Something that resolves do different cert chains/keys based
+/// on client-supplied server name (via SNI).
+pub struct ResolvesServerCertUsingSNI {
+    by_name: collections::HashMap<String, sign::CertifiedKey>,
+}
+
+impl ResolvesServerCertUsingSNI {
+    /// Create a new and empty (ie, knows no certificates) resolver.
+    pub fn new() -> ResolvesServerCertUsingSNI {
+        ResolvesServerCertUsingSNI { by_name: collections::HashMap::new() }
+    }
+
+    /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
+    ///
+    /// This function fails if `name` is not a valid DNS name, or if
+    /// it's not valid for the supplied certificate, or if the certificate
+    /// chain is syntactically faulty.
+    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), TLSError> {
+        let checked_name = webpki::DNSNameRef::try_from_ascii_str(name)
+            .map_err(|_| TLSError::General("Bad DNS name".into()))?;
+
+        ck.cross_check_end_entity_cert(Some(checked_name))?;
+        self.by_name.insert(name.into(), ck);
+        Ok(())
+    }
+}
+
+impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
+    fn resolve(&self,
+               server_name: Option<webpki::DNSNameRef>,
+               _sigschemes: &[SignatureScheme])
+               -> Option<sign::CertifiedKey> {
+        if let Some(name) = server_name {
+            self.by_name.get(name.into())
+                .map(|ck| ck.clone())
+        } else {
+            // This kind of resolver requires SNI
+            None
+        }
     }
 }
