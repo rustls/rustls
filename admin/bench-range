@@ -1,0 +1,18 @@
+import subprocess
+
+suite = 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256'
+
+print 'len,send,recv'
+
+for len in [16, 32, 64, 128, 512, 1024, 4096, 8192, 32768, 65536, 131072, 262144, 1048576]:
+    out = subprocess.check_output(['./target/release/examples/bench', 'bulk', suite, str(len)])
+    lines = out.splitlines()
+
+    for l in out.splitlines():
+        items = l.split()
+        if items[3] == 'send':
+            send = float(items[4])
+        if items[3] == 'recv':
+            recv = float(items[4])
+
+    print '%d,%g,%g' % (len, send, recv)
