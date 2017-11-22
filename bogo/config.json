@@ -75,6 +75,7 @@
     "Renegotiate-Server-*": "",
     "SendHalfHelloRequest-*": "",
     "RetainOnlySHA256-*": "",
+    "Unclean-Shutdown-Ignored": "broken on macos -- FIXME",
     "ExtendedMasterSecret-Renego-*": ""
   },
   "ErrorMap": {
