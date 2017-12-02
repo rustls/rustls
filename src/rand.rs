@@ -13,6 +13,15 @@ pub fn fill_random(bytes: &mut [u8]) {
         .unwrap();
 }
 
+/// Make a Vec<u8> of the given size
+/// containing random material.
+pub fn random_vec(len: usize) -> Vec<u8> {
+    let mut v = Vec::with_capacity(len);
+    v.resize(len, 0u8);
+    fill_random(&mut v);
+    v
+}
+
 /// Return a uniformly random u32.
 pub fn random_u32() -> u32 {
     let mut buf = [0u8; 4];

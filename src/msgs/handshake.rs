@@ -2054,15 +2054,20 @@ declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
 pub struct NewSessionTicketPayloadTLS13 {
     pub lifetime: u32,
     pub age_add: u32,
+    pub nonce: PayloadU8,
     pub ticket: PayloadU16,
     pub exts: NewSessionTicketExtensions,
 }
 
 impl NewSessionTicketPayloadTLS13 {
-    pub fn new(lifetime: u32, age_add: u32, ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
+    pub fn new(lifetime: u32,
+               age_add: u32,
+               nonce: Vec<u8>,
+               ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
         NewSessionTicketPayloadTLS13 {
             lifetime: lifetime,
             age_add: age_add,
+            nonce: PayloadU8::new(nonce),
             ticket: PayloadU16::new(ticket),
             exts: vec![],
         }
@@ -2073,6 +2078,7 @@ impl Codec for NewSessionTicketPayloadTLS13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::encode_u32(self.lifetime, bytes);
         codec::encode_u32(self.age_add, bytes);
+        self.nonce.encode(bytes);
         self.ticket.encode(bytes);
         self.exts.encode(bytes);
     }
@@ -2080,12 +2086,14 @@ impl Codec for NewSessionTicketPayloadTLS13 {
     fn read(r: &mut Reader) -> Option<NewSessionTicketPayloadTLS13> {
         let lifetime = try_ret!(codec::read_u32(r));
         let age_add = try_ret!(codec::read_u32(r));
+        let nonce = try_ret!(PayloadU8::read(r));
         let ticket = try_ret!(PayloadU16::read(r));
         let exts = try_ret!(NewSessionTicketExtensions::read(r));
 
         Some(NewSessionTicketPayloadTLS13 {
             lifetime: lifetime,
             age_add: age_add,
+            nonce: nonce,
             ticket: ticket,
             exts: exts,
         })

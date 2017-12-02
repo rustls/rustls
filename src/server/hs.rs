@@ -1436,21 +1436,11 @@ impl State for ExpectTLS12CCS {
 }
 
 // --- Process client's Finished ---
-fn get_server_session_value(handshake: &HandshakeDetails,
-                            sess: &ServerSessionImpl) -> persist::ServerSessionValue {
+fn get_server_session_value_tls12(handshake: &HandshakeDetails,
+                                  sess: &ServerSessionImpl) -> persist::ServerSessionValue {
     let scs = sess.common.get_suite();
-
-    let (version, secret) = if sess.common.is_tls13() {
-        let handshake_hash = handshake
-            .transcript
-            .get_current_hash();
-        let resume_secret = sess.common
-            .get_key_schedule()
-            .derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
-        (ProtocolVersion::TLSv1_3, resume_secret)
-    } else {
-        (ProtocolVersion::TLSv1_2, sess.secrets.as_ref().unwrap().get_master_secret())
-    };
+    let version = ProtocolVersion::TLSv1_2;
+    let secret = sess.secrets.as_ref().unwrap().get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(sess.get_sni(), version,
                                                  scs.suite, secret,
@@ -1463,11 +1453,32 @@ fn get_server_session_value(handshake: &HandshakeDetails,
     v
 }
 
+fn get_server_session_value_tls13(handshake: &HandshakeDetails,
+                                  sess: &ServerSessionImpl,
+                                  nonce: &[u8]) -> persist::ServerSessionValue {
+    let scs = sess.common.get_suite();
+    let version = ProtocolVersion::TLSv1_3;
+
+    let handshake_hash = handshake
+        .transcript
+        .get_current_hash();
+    let resumption_master_secret = sess.common
+        .get_key_schedule()
+        .derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
+    let secret = sess.common
+        .get_key_schedule()
+        .derive_ticket_psk(&resumption_master_secret, nonce);
+
+    persist::ServerSessionValue::new(sess.get_sni(), version,
+                                     scs.suite, secret,
+                                     &sess.client_cert_chain)
+}
+
 fn emit_ticket(handshake: &mut HandshakeDetails,
                sess: &mut ServerSessionImpl) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
-    let plain = get_server_session_value(handshake, sess)
+    let plain = get_server_session_value_tls12(handshake, sess)
         .get_encoding();
     let ticket = sess.config
         .ticketer
@@ -1553,7 +1564,7 @@ impl State for ExpectTLS12Finished {
 
         // Save session, perhaps
         if !self.resuming && !self.handshake.session_id.is_empty() {
-            let value = get_server_session_value(&self.handshake, sess);
+            let value = get_server_session_value_tls12(&self.handshake, sess);
 
             let worked = sess.config.session_storage
                 .put(&self.handshake.session_id, value.get_encoding());
@@ -1599,7 +1610,8 @@ impl ExpectTLS13Finished {
             return;
         }
 
-        let plain = get_server_session_value(&self.handshake, sess)
+        let nonce = rand::random_vec(32);
+        let plain = get_server_session_value_tls13(&self.handshake, sess, &nonce)
             .get_encoding();
         let maybe_ticket = sess.config
             .ticketer
@@ -1612,7 +1624,7 @@ impl ExpectTLS13Finished {
 
         let ticket = maybe_ticket.unwrap();
         let age_add = rand::random_u32(); // nb, we don't do 0-RTT data, so whatever
-        let payload = NewSessionTicketPayloadTLS13::new(ticket_lifetime, age_add, ticket);
+        let payload = NewSessionTicketPayloadTLS13::new(ticket_lifetime, age_add, nonce, ticket);
         let m = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,

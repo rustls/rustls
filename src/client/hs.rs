@@ -2008,8 +2008,13 @@ impl ExpectTLS13Traffic {
     fn handle_new_ticket_tls13(&mut self, sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
         let nst = extract_handshake!(m, HandshakePayload::NewSessionTicketTLS13).unwrap();
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        let secret =
-            sess.common.get_key_schedule().derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
+        let resumption_master_secret = sess.common
+            .get_key_schedule()
+            .derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
+        let secret = sess.common
+            .get_key_schedule()
+            .derive_ticket_psk(&resumption_master_secret, &nst.nonce.0);
+
         let mut value = persist::ClientSessionValue::new(ProtocolVersion::TLSv1_3,
                                                          sess.common.get_suite().suite,
                                                          &SessionID::empty(),

@@ -134,6 +134,15 @@ impl KeySchedule {
                            &[],
                            self.hash.output_len as u16)
     }
+
+    /// Derive the PSK to use given a resumption_master_secret and
+    /// ticket_nonce.
+    pub fn derive_ticket_psk(&self, rms: &[u8], nonce: &[u8]) -> Vec<u8> {
+        _hkdf_expand_label(&hmac::SigningKey::new(self.hash, rms),
+                           b"resumption",
+                           nonce,
+                           self.hash.output_len as u16)
+    }
 }
 
 fn _hkdf_expand_label(secret: &hmac::SigningKey,
