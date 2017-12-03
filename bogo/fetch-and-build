@@ -3,7 +3,7 @@
 set -e
 
 # a known-good commit
-COMMIT=9c33ae85621ef8e00a42309b5101e0bedd02b816
+COMMIT=9986f6b0459f0c8c07859bc0cd749e0ca460a2b2
 
 rm -f runner.tar.gz
 wget https://boringssl.googlesource.com/boringssl/+archive/$COMMIT/ssl/test/runner.tar.gz

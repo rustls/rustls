@@ -303,7 +303,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             .unwrap();
     }
 
-    let mut conn = net::TcpStream::connect(("127.0.0.1", opts.port)).expect("cannot connect");
+    let mut conn = net::TcpStream::connect(("localhost", opts.port)).expect("cannot connect");
     let mut sent_shutdown = false;
     let mut seen_eof = false;
 

@@ -1,20 +1,18 @@
-Support a map of test names to expected errors.
-
-diff -ru vanilla/runner.go bogo/runner.go
---- vanilla/runner.go	2016-08-17 23:45:12.000000000 +0100
-+++ bogo/runner.go	2016-08-22 23:25:37.911319366 +0100
-@@ -78,6 +78,10 @@
- 	// “:NO_SHARED_CIPHER:” (a BoringSSL error string) to something
+diff -u original/runner.go bogo/runner.go
+--- original/runner.go	2017-12-03 20:41:17.000000000 +0000
++++ bogo/runner.go	2017-12-03 20:42:50.922649846 +0000
+@@ -83,6 +83,10 @@
  	// like “SSL_ERROR_NO_CYPHER_OVERLAP”.
  	ErrorMap map[string]string
-+
+ 
 +	// TestErrorMap maps from full test names to the correct error
 +	// string for the shim in question.
 +	TestErrorMap map[string]string
- }
- 
- var shimConfig ShimConfiguration
-@@ -766,7 +770,11 @@
++
+ 	// HalfRTTTickets is the number of half-RTT tickets the client should
+ 	// expect before half-RTT data when testing 0-RTT.
+ 	HalfRTTTickets int
+@@ -922,7 +926,11 @@
  	}
  }
  
@@ -27,7 +25,7 @@ diff -ru vanilla/runner.go bogo/runner.go
  	if translated, ok := shimConfig.ErrorMap[errorStr]; ok {
  		return translated
  	}
-@@ -936,7 +944,7 @@
+@@ -1192,7 +1200,7 @@
  	}
  
  	failed := err != nil || childErr != nil
