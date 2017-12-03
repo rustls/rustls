@@ -38,7 +38,7 @@ use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
 use ring::constant_time;
 
-const TLS13_DRAFT: u16 = 0x7f14;
+const TLS13_DRAFT: u16 = 0x7f16;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -327,6 +327,7 @@ impl ExpectClientHello {
 
         let kse = KeyShareEntry::new(share.group, &kxr.pubkey);
         extensions.push(ServerExtension::KeyShare(kse));
+        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::Unknown(TLS13_DRAFT)));
 
         if let Some(psk_idx) = chosen_psk_idx {
             extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
@@ -338,7 +339,7 @@ impl ExpectClientHello {
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    server_version: ProtocolVersion::Unknown(TLS13_DRAFT),
+                    legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.handshake.randoms.server),
                     session_id: SessionID::empty(),
                     cipher_suite: sess.common.get_suite().suite,
@@ -597,7 +598,7 @@ impl ExpectClientHello {
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    server_version: ProtocolVersion::TLSv1_2,
+                    legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.handshake.randoms.server),
                     session_id: self.handshake.session_id,
                     cipher_suite: sess.common.get_suite().suite,

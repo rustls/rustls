@@ -38,8 +38,8 @@ use std::mem;
 use ring::constant_time;
 use webpki;
 
-// draft-ietf-tls-tls13-20
-const TLS13_DRAFT: u16 = 0x7f14;
+// draft-ietf-tls-tls13-22
+const TLS13_DRAFT: u16 = 0x7f16;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -380,7 +380,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
     ExtensionType::KeyShare,
-    ExtensionType::PreSharedKey
+    ExtensionType::PreSharedKey,
+    ExtensionType::SupportedVersions,
 ];
 
 // Only the intersection of things we offer, and those disallowed
@@ -531,7 +532,10 @@ impl State for ExpectServerHello {
         let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
         trace!("We got ServerHello {:#?}", server_hello);
 
-        match server_hello.server_version {
+        let server_version = server_hello.get_supported_versions()
+            .unwrap_or(server_hello.legacy_version);
+
+        match server_version {
             ProtocolVersion::TLSv1_2 if sess.config.versions.contains(&ProtocolVersion::TLSv1_2) => {
                 sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_2);
             }

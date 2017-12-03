@@ -846,6 +846,7 @@ pub enum ServerExtension {
     ExtendedMasterSecretAck,
     CertificateStatusAck,
     SignedCertificateTimestamp(SCTList),
+    SupportedVersions(ProtocolVersion),
     Unknown(UnknownExtension),
 }
 
@@ -863,6 +864,7 @@ impl ServerExtension {
             ServerExtension::ExtendedMasterSecretAck => ExtensionType::ExtendedMasterSecret,
             ServerExtension::CertificateStatusAck => ExtensionType::StatusRequest,
             ServerExtension::SignedCertificateTimestamp(_) => ExtensionType::SCT,
+            ServerExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -885,6 +887,7 @@ impl Codec for ServerExtension {
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
             ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
             ServerExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
+            ServerExtension::SupportedVersions(ref r) => r.encode(&mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -923,6 +926,9 @@ impl Codec for ServerExtension {
             ExtensionType::SCT => {
                 let scts = try_ret!(SCTList::read(&mut sub));
                 ServerExtension::SignedCertificateTimestamp(scts)
+            }
+            ExtensionType::SupportedVersions => {
+                ServerExtension::SupportedVersions(try_ret!(ProtocolVersion::read(&mut sub)))
             }
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
@@ -1256,7 +1262,7 @@ impl HelloRetryRequest {
 
 #[derive(Debug)]
 pub struct ServerHelloPayload {
-    pub server_version: ProtocolVersion,
+    pub legacy_version: ProtocolVersion,
     pub random: Random,
     pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
@@ -1264,22 +1270,14 @@ pub struct ServerHelloPayload {
     pub extensions: Vec<ServerExtension>,
 }
 
-fn is_tls13(vers: ProtocolVersion) -> bool {
-    vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::Unknown(0x7f14)
-}
-
 impl Codec for ServerHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.server_version.encode(bytes);
+        self.legacy_version.encode(bytes);
         self.random.encode(bytes);
 
-        if is_tls13(self.server_version) {
-            self.cipher_suite.encode(bytes);
-        } else {
-            self.session_id.encode(bytes);
-            self.cipher_suite.encode(bytes);
-            self.compression_method.encode(bytes);
-        }
+        self.session_id.encode(bytes);
+        self.cipher_suite.encode(bytes);
+        self.compression_method.encode(bytes);
 
         if !self.extensions.is_empty() {
             codec::encode_vec_u16(bytes, &self.extensions);
@@ -1289,17 +1287,12 @@ impl Codec for ServerHelloPayload {
     fn read(r: &mut Reader) -> Option<ServerHelloPayload> {
         let version = try_ret!(ProtocolVersion::read(r));
         let random = try_ret!(Random::read(r));
-
-        let (session_id, suite, compression) = if is_tls13(version) {
-            (SessionID::empty(), try_ret!(CipherSuite::read(r)), Compression::Null)
-        } else {
-            (try_ret!(SessionID::read(r)),
-             try_ret!(CipherSuite::read(r)),
-             try_ret!(Compression::read(r)))
-        };
+        let session_id = try_ret!(SessionID::read(r));
+        let suite = try_ret!(CipherSuite::read(r));
+        let compression = try_ret!(Compression::read(r));
 
         let mut ret = ServerHelloPayload {
-            server_version: version,
+            legacy_version: version,
             random: random,
             session_id: session_id,
             cipher_suite: suite,
@@ -1355,6 +1348,14 @@ impl ServerHelloPayload {
         let ext = try_ret!(self.find_extension(ExtensionType::SCT));
         match *ext {
             ServerExtension::SignedCertificateTimestamp(ref sctl) => Some(sctl),
+            _ => None,
+        }
+    }
+
+    pub fn get_supported_versions(&self) -> Option<ProtocolVersion> {
+        let ext = try_ret!(self.find_extension(ExtensionType::SupportedVersions));
+        match *ext {
+            ServerExtension::SupportedVersions(vers) => Some(vers),
             _ => None,
         }
     }
