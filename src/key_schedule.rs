@@ -1,4 +1,4 @@
-/// Key schedule mainteance for TLS1.3
+/// Key schedule maintenance for TLS1.3
 
 use ring::{hmac, digest, hkdf};
 use msgs::codec;

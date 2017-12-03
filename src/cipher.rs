@@ -304,7 +304,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
 
         Ok(Message {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_0,
+            version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::new_opaque(buf),
         })
     }

@@ -301,6 +301,14 @@ impl ClientSessionImpl {
     }
 
     pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
+        // TLS1.3: drop CCS at any time during handshaking
+        if self.common.is_tls13()
+            && msg.is_content_type(ContentType::ChangeCipherSpec)
+            && self.is_handshaking() {
+            trace!("Dropping CCS");
+            return Ok(());
+        }
+
         // Decrypt if demanded by current state.
         if self.common.peer_encrypting {
             let dm = self.common.decrypt_incoming(msg)?;
