@@ -314,6 +314,7 @@ impl ExpectClientHello {
 
     fn emit_server_hello_tls13(&mut self,
                                sess: &mut ServerSessionImpl,
+                               session_id: &SessionID,
                                share: &KeyShareEntry,
                                chosen_psk_idx: Option<usize>,
                                resuming_psk: Option<Vec<u8>>)
@@ -341,7 +342,7 @@ impl ExpectClientHello {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.handshake.randoms.server),
-                    session_id: SessionID::empty(),
+                    session_id: session_id.clone(),
                     cipher_suite: sess.common.get_suite().suite,
                     compression_method: Compression::Null,
                     extensions: extensions,
@@ -381,7 +382,8 @@ impl ExpectClientHello {
                                 sess: &mut ServerSessionImpl,
                                 group: NamedGroup) {
         let mut req = HelloRetryRequest {
-            server_version: ProtocolVersion::Unknown(TLS13_DRAFT),
+            legacy_version: ProtocolVersion::TLSv1_2,
+            session_id: SessionID::empty(),
             cipher_suite: sess.common.get_suite().suite,
             extensions: Vec::new(),
         };
@@ -883,7 +885,8 @@ impl ExpectClientHello {
 
         let full_handshake = resuming_psk.is_none();
         self.handshake.transcript.add_message(chm);
-        self.emit_server_hello_tls13(sess, chosen_share, chosen_psk_index, resuming_psk)?;
+        self.emit_server_hello_tls13(sess, &client_hello.session_id,
+                                     chosen_share, chosen_psk_index, resuming_psk)?;
         self.emit_encrypted_extensions(sess, &mut server_key, client_hello, !full_handshake)?;
 
         let doing_client_auth = if full_handshake {

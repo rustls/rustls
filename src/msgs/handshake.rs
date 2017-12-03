@@ -52,8 +52,17 @@ macro_rules! declare_u16_vec(
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Random([u8; 32]);
+
+static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
+    0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11,
+    0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
+    0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e,
+    0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c,
+]);
+
+static ZERO_RANDOM: Random = Random([0u8; 32]);
 
 impl Codec for Random {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -1144,6 +1153,7 @@ impl ClientHelloPayload {
 pub enum HelloRetryExtension {
     KeyShare(NamedGroup),
     Cookie(PayloadU16),
+    SupportedVersions(ProtocolVersion),
     Unknown(UnknownExtension),
 }
 
@@ -1152,6 +1162,7 @@ impl HelloRetryExtension {
         match *self {
             HelloRetryExtension::KeyShare(_) => ExtensionType::KeyShare,
             HelloRetryExtension::Cookie(_) => ExtensionType::Cookie,
+            HelloRetryExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             HelloRetryExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -1165,6 +1176,7 @@ impl Codec for HelloRetryExtension {
         match *self {
             HelloRetryExtension::KeyShare(ref r) => r.encode(&mut sub),
             HelloRetryExtension::Cookie(ref r) => r.encode(&mut sub),
+            HelloRetryExtension::SupportedVersions(ref r) => r.encode(&mut sub),
             HelloRetryExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -1184,6 +1196,9 @@ impl Codec for HelloRetryExtension {
             ExtensionType::Cookie => {
                 HelloRetryExtension::Cookie(try_ret!(PayloadU16::read(&mut sub)))
             }
+            ExtensionType::SupportedVersions => {
+                HelloRetryExtension::SupportedVersions(try_ret!(ProtocolVersion::read(&mut sub)))
+            }
             _ => HelloRetryExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -1191,22 +1206,35 @@ impl Codec for HelloRetryExtension {
 
 #[derive(Debug)]
 pub struct HelloRetryRequest {
-    pub server_version: ProtocolVersion,
+    pub legacy_version: ProtocolVersion,
+    pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
     pub extensions: Vec<HelloRetryExtension>,
 }
 
 impl Codec for HelloRetryRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.server_version.encode(bytes);
+        self.legacy_version.encode(bytes);
+        HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
+        self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
+        Compression::Null.encode(bytes);
         codec::encode_vec_u16(bytes, &self.extensions);
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
+        let session_id = try_ret!(SessionID::read(r));
+        let cipher_suite = try_ret!(CipherSuite::read(r));
+        let compression = try_ret!(Compression::read(r));
+
+        if compression != Compression::Null {
+            return None;
+        }
+
         Some(HelloRetryRequest {
-            server_version: try_ret!(ProtocolVersion::read(r)),
-            cipher_suite: try_ret!(CipherSuite::read(r)),
+            legacy_version: ProtocolVersion::Unknown(0),
+            session_id: session_id,
+            cipher_suite: cipher_suite,
             extensions: try_ret!(codec::read_vec_u16::<HelloRetryExtension>(r)),
         })
     }
@@ -1235,6 +1263,7 @@ impl HelloRetryRequest {
             .iter()
             .any(|ext| {
                  ext.get_type() != ExtensionType::KeyShare &&
+                 ext.get_type() != ExtensionType::SupportedVersions &&
                  ext.get_type() != ExtensionType::Cookie
                  })
     }
@@ -1255,6 +1284,14 @@ impl HelloRetryRequest {
         let ext = try_ret!(self.find_extension(ExtensionType::Cookie));
         match *ext {
             HelloRetryExtension::Cookie(ref ck) => Some(ck),
+            _ => None,
+        }
+    }
+
+    pub fn get_supported_versions(&self) -> Option<ProtocolVersion> {
+        let ext = try_ret!(self.find_extension(ExtensionType::SupportedVersions));
+        match *ext {
+            HelloRetryExtension::SupportedVersions(ver) => Some(ver),
             _ => None,
         }
     }
@@ -1284,16 +1321,15 @@ impl Codec for ServerHelloPayload {
         }
     }
 
+    // minus version and random, which have already been read.
     fn read(r: &mut Reader) -> Option<ServerHelloPayload> {
-        let version = try_ret!(ProtocolVersion::read(r));
-        let random = try_ret!(Random::read(r));
         let session_id = try_ret!(SessionID::read(r));
         let suite = try_ret!(CipherSuite::read(r));
         let compression = try_ret!(Compression::read(r));
 
         let mut ret = ServerHelloPayload {
-            legacy_version: version,
-            random: random,
+            legacy_version: ProtocolVersion::Unknown(0),
+            random: ZERO_RANDOM.clone(),
             session_id: session_id,
             cipher_suite: suite,
             compression_method: compression,
@@ -2222,7 +2258,7 @@ impl HandshakeMessagePayload {
     }
 
     pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<HandshakeMessagePayload> {
-        let typ = try_ret!(HandshakeType::read(r));
+        let mut typ = try_ret!(HandshakeType::read(r));
         let len = try_ret!(codec::read_u24(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
@@ -2232,10 +2268,20 @@ impl HandshakeMessagePayload {
                 HandshakePayload::ClientHello(try_ret!(ClientHelloPayload::read(&mut sub)))
             }
             HandshakeType::ServerHello => {
-                HandshakePayload::ServerHello(try_ret!(ServerHelloPayload::read(&mut sub)))
-            }
-            HandshakeType::HelloRetryRequest => {
-                HandshakePayload::HelloRetryRequest(try_ret!(HelloRetryRequest::read(&mut sub)))
+                let version = try_ret!(ProtocolVersion::read(&mut sub));
+                let random = try_ret!(Random::read(&mut sub));
+
+                if random == HELLO_RETRY_REQUEST_RANDOM {
+                    let mut hrr = try_ret!(HelloRetryRequest::read(&mut sub));
+                    hrr.legacy_version = version;
+                    typ = HandshakeType::HelloRetryRequest;
+                    HandshakePayload::HelloRetryRequest(hrr)
+                } else {
+                    let mut shp = try_ret!(ServerHelloPayload::read(&mut sub));
+                    shp.legacy_version = version;
+                    shp.random = random;
+                    HandshakePayload::ServerHello(shp)
+                }
             }
             HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
                 let p = try_ret!(CertificatePayloadTLS13::read(&mut sub));

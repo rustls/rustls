@@ -528,7 +528,6 @@ impl State for ExpectServerHello {
     }
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
-
         let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
         trace!("We got ServerHello {:#?}", server_hello);
 
@@ -744,8 +743,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
-        match hrr.server_version {
-            ProtocolVersion::TLSv1_3 | ProtocolVersion::Unknown(TLS13_DRAFT) => {
+        match hrr.get_supported_versions() {
+            Some(ProtocolVersion::TLSv1_3) |
+                Some(ProtocolVersion::Unknown(TLS13_DRAFT)) => {
+                sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
             _ => {
                 return Err(illegal_param(sess, "server requested unsupported version in hrr"));
