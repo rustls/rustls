@@ -549,7 +549,7 @@ fn main() {
 
     if args.flag_verbose {
         let mut logger = env_logger::LogBuilder::new();
-        logger.parse("debug");
+        logger.parse("trace");
         logger.init().unwrap();
     }
 
