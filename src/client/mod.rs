@@ -419,6 +419,10 @@ impl ClientSessionImpl {
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
     }
+
+    pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+        Some(self.common.get_suite())
+    }
 }
 
 /// This represents a single TLS client session.
@@ -481,6 +485,10 @@ impl Session for ClientSession {
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.imp.get_protocol_version()
+    }
+
+    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+        self.imp.get_negotiated_ciphersuite()
     }
 }
 

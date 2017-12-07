@@ -97,6 +97,11 @@ pub trait Session: Read + Write + Send + Sync {
     /// This returns None until the version is agreed.
     fn get_protocol_version(&self) -> Option<ProtocolVersion>;
 
+    /// Retrives the ciphersuite agreed with the peer.
+    ///
+    /// This returns None until the ciphersuite is agreed.
+    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite>;
+
     /// This function uses `io` to complete any outstanding IO for
     /// this session.
     ///

@@ -373,6 +373,10 @@ impl ServerSessionImpl {
         self.common.negotiated_version
     }
 
+    pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+        Some(self.common.get_suite())
+    }
+
     pub fn get_sni(&self)-> Option<&webpki::DNSName> {
         self.sni.as_ref()
     }
@@ -466,6 +470,10 @@ impl Session for ServerSession {
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.imp.get_protocol_version()
+    }
+
+    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+        self.imp.get_negotiated_ciphersuite()
     }
 }
 
