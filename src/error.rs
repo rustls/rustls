@@ -66,6 +66,10 @@ pub enum TLSError {
 
     /// A syntactically-invalid DNS hostname was given.
     InvalidDNSName(String),
+
+    /// This function doesn't work until the TLS handshake
+    /// is complete.
+    HandshakeNotComplete,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -101,7 +105,8 @@ impl fmt::Display for TLSError {
             TLSError::WebPKIError(ref err) => write!(f, "{}: {:?}", self.description(), err),
             TLSError::CorruptMessage |
             TLSError::NoCertificatesPresented |
-            TLSError::DecryptError => write!(f, "{}", self.description()),
+            TLSError::DecryptError |
+            TLSError::HandshakeNotComplete => write!(f, "{}", self.description()),
             _ => write!(f, "{}: {:?}", self.description(), self),
         }
     }
@@ -125,7 +130,8 @@ impl Error for TLSError {
             TLSError::InvalidSCT(_) => "invalid certificate timestamp",
             TLSError::General(_) => "unexpected error", // (please file a bug),
             TLSError::FailedToGetCurrentTime => "failed to get current time",
-            TLSError::InvalidDNSName(_) => "Invalid DNS name",
+            TLSError::InvalidDNSName(_) => "invalid DNS name",
+            TLSError::HandshakeNotComplete => "handshake not complete",
         }
     }
 }

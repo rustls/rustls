@@ -20,6 +20,7 @@
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //! * Extended master secret support (RFC7627).
+//! * Exporters (RFC5705).
 //! * OCSP stapling by servers.
 //! * SCT stapling by servers.
 //! * SCT verification by clients.

@@ -2,6 +2,7 @@
 
 use ring::{hmac, digest, hkdf};
 use msgs::codec;
+use error::TLSError;
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -11,6 +12,7 @@ pub enum SecretKind {
     ServerHandshakeTrafficSecret,
     ClientApplicationTrafficSecret,
     ServerApplicationTrafficSecret,
+    ExporterMasterSecret,
     ResumptionMasterSecret,
     DerivedSecret,
 }
@@ -23,6 +25,7 @@ impl SecretKind {
             SecretKind::ServerHandshakeTrafficSecret => b"s hs traffic",
             SecretKind::ClientApplicationTrafficSecret => b"c ap traffic",
             SecretKind::ServerApplicationTrafficSecret => b"s ap traffic",
+            SecretKind::ExporterMasterSecret => b"exp master",
             SecretKind::ResumptionMasterSecret => b"res master",
             SecretKind::DerivedSecret => b"derived",
         }
@@ -39,6 +42,7 @@ pub struct KeySchedule {
     hash_of_empty_message: [u8; digest::MAX_OUTPUT_LEN],
     pub current_client_traffic_secret: Vec<u8>,
     pub current_server_traffic_secret: Vec<u8>,
+    pub current_exporter_secret: Vec<u8>,
 }
 
 impl KeySchedule {
@@ -56,6 +60,7 @@ impl KeySchedule {
             hash_of_empty_message: empty_hash,
             current_server_traffic_secret: Vec::new(),
             current_client_traffic_secret: Vec::new(),
+            current_exporter_secret: Vec::new(),
         }
     }
 
@@ -86,10 +91,10 @@ impl KeySchedule {
     pub fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         debug_assert_eq!(hs_hash.len(), self.hash.output_len);
 
-        _hkdf_expand_label(&self.current,
-                           kind.to_bytes(),
-                           hs_hash,
-                           self.hash.output_len as u16)
+        _hkdf_expand_label_vec(&self.current,
+                               kind.to_bytes(),
+                               hs_hash,
+                               self.hash.output_len)
     }
 
     /// Return the current traffic secret, of given `kind`.
@@ -115,10 +120,10 @@ impl KeySchedule {
     pub fn sign_verify_data(&self, base_key: &[u8], hs_hash: &[u8]) -> Vec<u8> {
         debug_assert_eq!(hs_hash.len(), self.hash.output_len);
 
-        let hmac_key = _hkdf_expand_label(&hmac::SigningKey::new(self.hash, base_key),
-                                          b"finished",
-                                          &[],
-                                          self.hash.output_len as u16);
+        let hmac_key = _hkdf_expand_label_vec(&hmac::SigningKey::new(self.hash, base_key),
+                                              b"finished",
+                                              &[],
+                                              self.hash.output_len);
 
         hmac::sign(&hmac::SigningKey::new(self.hash, &hmac_key), hs_hash)
             .as_ref()
@@ -129,50 +134,86 @@ impl KeySchedule {
     /// it.
     pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
-        _hkdf_expand_label(&hmac::SigningKey::new(self.hash, base_key),
-                           b"traffic upd",
-                           &[],
-                           self.hash.output_len as u16)
+        _hkdf_expand_label_vec(&hmac::SigningKey::new(self.hash, base_key),
+                               b"traffic upd",
+                               &[],
+                               self.hash.output_len)
     }
 
     /// Derive the PSK to use given a resumption_master_secret and
     /// ticket_nonce.
     pub fn derive_ticket_psk(&self, rms: &[u8], nonce: &[u8]) -> Vec<u8> {
-        _hkdf_expand_label(&hmac::SigningKey::new(self.hash, rms),
-                           b"resumption",
-                           nonce,
-                           self.hash.output_len as u16)
+        _hkdf_expand_label_vec(&hmac::SigningKey::new(self.hash, rms),
+                               b"resumption",
+                               nonce,
+                               self.hash.output_len)
+    }
+
+    pub fn export_keying_material(&self, out: &mut [u8],
+                                  label: &[u8],
+                                  context: Option<&[u8]>) -> Result<(), TLSError> {
+        if self.current_exporter_secret.is_empty() {
+            return Err(TLSError::HandshakeNotComplete);
+        }
+
+        let h_empty = digest::digest(self.hash, &[]);
+        let mut secret = [0u8; digest::MAX_OUTPUT_LEN];
+        _hkdf_expand_label(&mut secret[..self.hash.output_len],
+                           &hmac::SigningKey::new(self.hash,
+                                                  &self.current_exporter_secret),
+                           label,
+                           h_empty.as_ref());
+
+        let mut h_context = [0u8; digest::MAX_OUTPUT_LEN];
+        h_context[..self.hash.output_len]
+            .clone_from_slice(digest::digest(self.hash,
+                                             context.unwrap_or(&[]))
+                              .as_ref());
+
+        _hkdf_expand_label(out,
+                           &hmac::SigningKey::new(self.hash, &secret[..self.hash.output_len]),
+                           b"exporter",
+                           &h_context[..self.hash.output_len]);
+        Ok(())
     }
 }
 
-fn _hkdf_expand_label(secret: &hmac::SigningKey,
-                      label: &[u8],
-                      context: &[u8],
-                      len: u16)
-                      -> Vec<u8> {
-    let mut out = Vec::new();
-    out.resize(len as usize, 0u8);
+fn _hkdf_expand_label_vec(secret: &hmac::SigningKey,
+                          label: &[u8],
+                          context: &[u8],
+                          len: usize) -> Vec<u8> {
+    let mut v = Vec::new();
+    v.resize(len, 0u8);
+    _hkdf_expand_label(&mut v,
+                       secret,
+                       label,
+                       context);
+    v
+}
 
+fn _hkdf_expand_label(output: &mut [u8],
+                      secret: &hmac::SigningKey,
+                      label: &[u8],
+                      context: &[u8]) {
     let label_prefix = b"tls13 ";
 
     let mut hkdflabel = Vec::new();
-    codec::encode_u16(out.len() as u16, &mut hkdflabel);
+    codec::encode_u16(output.len() as u16, &mut hkdflabel);
     codec::encode_u8((label.len() + label_prefix.len()) as u8, &mut hkdflabel);
     hkdflabel.extend_from_slice(label_prefix);
     hkdflabel.extend_from_slice(label);
     codec::encode_u8(context.len() as u8, &mut hkdflabel);
     hkdflabel.extend_from_slice(context);
 
-    hkdf::expand(secret, &hkdflabel, &mut out);
-    out
+    hkdf::expand(secret, &hkdflabel, output)
 }
 
 pub fn derive_traffic_key(hash: &'static digest::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
-    _hkdf_expand_label(&hmac::SigningKey::new(hash, secret), b"key", &[], len as u16)
+    _hkdf_expand_label_vec(&hmac::SigningKey::new(hash, secret), b"key", &[], len)
 }
 
 pub fn derive_traffic_iv(hash: &'static digest::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
-    _hkdf_expand_label(&hmac::SigningKey::new(hash, secret), b"iv", &[], len as u16)
+    _hkdf_expand_label_vec(&hmac::SigningKey::new(hash, secret), b"iv", &[], len)
 }
 
 #[cfg(test)]

@@ -955,3 +955,48 @@ fn sni_resolver_rejects_bad_certs() {
                resolver.add("localhost",
                             sign::CertifiedKey::new(bad_chain, signing_key.clone())));
 }
+
+fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
+    let mut client_secret = [0u8; 64];
+    let mut server_secret = [0u8; 64];
+
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    assert_eq!(Err(TLSError::HandshakeNotComplete),
+               client.export_keying_material(&mut client_secret, b"label", Some(b"context")));
+    assert_eq!(Err(TLSError::HandshakeNotComplete),
+               server.export_keying_material(&mut server_secret, b"label", Some(b"context")));
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(Ok(()),
+               client.export_keying_material(&mut client_secret, b"label", Some(b"context")));
+    assert_eq!(Ok(()),
+               server.export_keying_material(&mut server_secret, b"label", Some(b"context")));
+    assert_eq!(client_secret.to_vec(), server_secret.to_vec());
+
+    assert_eq!(Ok(()),
+               client.export_keying_material(&mut client_secret, b"label", None));
+    assert_ne!(client_secret.to_vec(), server_secret.to_vec());
+    assert_eq!(Ok(()),
+               server.export_keying_material(&mut server_secret, b"label", None));
+    assert_eq!(client_secret.to_vec(), server_secret.to_vec());
+}
+
+#[test]
+fn test_tls12_exporter() {
+    let mut client_config = make_client_config();
+    let server_config = make_server_config();
+    client_config.versions = vec![ ProtocolVersion::TLSv1_2 ];
+
+    do_exporter_test(client_config, server_config);
+}
+
+#[test]
+fn test_tls13_exporter() {
+    let mut client_config = make_client_config();
+    let server_config = make_server_config();
+    client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
+
+    do_exporter_test(client_config, server_config);
+}

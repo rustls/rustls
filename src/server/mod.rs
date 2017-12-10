@@ -1,4 +1,4 @@
-use session::{Session, SessionSecrets, SessionCommon};
+use session::{Session, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
@@ -215,7 +215,6 @@ impl ServerConfig {
 
 pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
-    pub secrets: Option<SessionSecrets>,
     pub common: SessionCommon,
     sni: Option<webpki::DNSName>,
     pub alpn_protocol: Option<String>,
@@ -236,7 +235,6 @@ impl ServerSessionImpl {
 
         ServerSessionImpl {
             config: server_config.clone(),
-            secrets: None,
             common: SessionCommon::new(None, false),
             sni: None,
             alpn_protocol: None,
@@ -355,10 +353,6 @@ impl ServerSessionImpl {
         Ok(())
     }
 
-    pub fn start_encryption_tls12(&mut self) {
-        self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
-    }
-
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         if self.client_cert_chain.is_none() {
             return None;
@@ -474,6 +468,13 @@ impl Session for ServerSession {
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.imp.get_protocol_version()
+    }
+
+    fn export_keying_material(&self,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        self.imp.common.export_keying_material(output, label, context)
     }
 }
 

@@ -1,6 +1,6 @@
 use msgs::enums::CipherSuite;
 use msgs::enums::{AlertDescription, HandshakeType};
-use session::{Session, SessionSecrets, SessionCommon};
+use session::{Session, SessionCommon};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::CertificatePayload;
 use msgs::enums::SignatureScheme;
@@ -220,7 +220,6 @@ pub mod danger {
 
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
-    pub secrets: Option<SessionSecrets>,
     pub alpn_protocol: Option<String>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
@@ -239,7 +238,6 @@ impl ClientSessionImpl {
                -> ClientSessionImpl {
         let mut cs = ClientSessionImpl {
             config: config.clone(),
-            secrets: None,
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
@@ -262,10 +260,6 @@ impl ClientSessionImpl {
         ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         ret
-    }
-
-    pub fn start_encryption_tls12(&mut self) {
-        self.common.start_encryption_tls12(self.secrets.as_ref().unwrap());
     }
 
     pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
@@ -489,6 +483,13 @@ impl Session for ClientSession {
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.imp.get_protocol_version()
+    }
+
+    fn export_keying_material(&self,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        self.imp.common.export_keying_material(output, label, context)
     }
 }
 

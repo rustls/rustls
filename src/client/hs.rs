@@ -668,15 +668,15 @@ impl State for ExpectServerHello {
                     return Err(TLSError::PeerMisbehavedError(error_msg));
                 }
 
-                sess.secrets = Some(SessionSecrets::new_resume(&self.handshake.randoms,
-                                                               scs.unwrap().get_hash(),
-                                                               &resuming.master_secret.0));
+                sess.common.start_encryption_tls12(
+                    SessionSecrets::new_resume(&self.handshake.randoms,
+                                               scs.unwrap().get_hash(),
+                                               &resuming.master_secret.0)
+                );
             }
         }
 
         if abbreviated_handshake {
-            sess.start_encryption_tls12();
-
             // Since we're resuming, we verified the certificate and
             // proof of possession in the prior session.
             let certv = verify::ServerCertVerified::assertion();
@@ -827,7 +827,7 @@ impl ExpectTLS13EncryptedExtensions {
     fn into_expect_tls13_finished_resume(self,
                                          certv: verify::ServerCertVerified,
                                          sigv: verify::HandshakeSignatureValid) -> NextState {
-        Box::new(ExpectTLS13Finished { 
+        Box::new(ExpectTLS13Finished {
             handshake: self.handshake,
             client_auth: None,
             cert_verified: certv,
@@ -1274,7 +1274,10 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
 fn emit_finished(handshake: &mut HandshakeDetails,
                  sess: &mut ClientSessionImpl) {
     let vh = handshake.transcript.get_current_hash();
-    let verify_data = sess.secrets.as_ref().unwrap().client_verify_data(&vh);
+    let verify_data = sess.common.secrets
+        .as_ref()
+        .unwrap()
+        .client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
     let f = Message {
@@ -1607,17 +1610,17 @@ impl State for ExpectTLS12ServerDone {
 
         // 5e. Now commit secrets.
         let hashalg = sess.common.get_suite().get_hash();
-        if st.handshake.using_ems {
-            sess.secrets = Some(SessionSecrets::new_ems(&st.handshake.randoms,
-                                                        &handshake_hash,
-                                                        hashalg,
-                                                        &kxd.premaster_secret));
+        let secrets = if st.handshake.using_ems {
+            SessionSecrets::new_ems(&st.handshake.randoms,
+                                    &handshake_hash,
+                                    hashalg,
+                                    &kxd.premaster_secret)
         } else {
-            sess.secrets = Some(SessionSecrets::new(&st.handshake.randoms,
-                                                    hashalg,
-                                                    &kxd.premaster_secret));
-        }
-        sess.start_encryption_tls12();
+            SessionSecrets::new(&st.handshake.randoms,
+                                hashalg,
+                                &kxd.premaster_secret)
+        };
+        sess.common.start_encryption_tls12(secrets);
 
         // 6.
         emit_finished(&mut st.handshake, sess);
@@ -1726,7 +1729,7 @@ fn save_session(handshake: &mut HandshakeDetails,
     let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
     let scs = sess.common.get_suite();
-    let master_secret = sess.secrets.as_ref().unwrap().get_master_secret();
+    let master_secret = sess.common.secrets.as_ref().unwrap().get_master_secret();
     let version = sess.get_protocol_version().unwrap();
     let mut value = persist::ClientSessionValue::new(version,
                                                      scs.suite,
@@ -1889,6 +1892,13 @@ impl State for ExpectTLS13Finished {
             .get_mut_key_schedule()
             .current_server_traffic_secret = read_key;
 
+        let exporter_secret = sess.common
+            .get_key_schedule()
+            .derive(SecretKind::ExporterMasterSecret, &handshake_hash);
+        sess.common
+            .get_mut_key_schedule()
+            .current_exporter_secret = exporter_secret;
+
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
         if st.client_auth.is_some() {
@@ -1949,7 +1959,7 @@ impl State for ExpectTLS12Finished {
 
         // Work out what verify_data we expect.
         let vh = st.handshake.transcript.get_current_hash();
-        let expect_verify_data = sess.secrets
+        let expect_verify_data = sess.common.secrets
             .as_ref()
             .unwrap()
             .server_verify_data(&vh);

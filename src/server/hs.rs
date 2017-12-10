@@ -577,6 +577,14 @@ impl ExpectClientHello {
         sess.common
             .get_mut_key_schedule()
             .current_server_traffic_secret = write_key;
+
+        let exporter_secret = sess.common
+            .get_key_schedule()
+            .derive(SecretKind::ExporterMasterSecret,
+                    &self.handshake.hash_at_server_fin);
+        sess.common
+            .get_mut_key_schedule()
+            .current_exporter_secret = exporter_secret;
     }
 
     fn emit_server_hello(&mut self,
@@ -760,10 +768,11 @@ impl ExpectClientHello {
         self.emit_server_hello(sess, None, client_hello, true)?;
 
         let hashalg = sess.common.get_suite().get_hash();
-        sess.secrets = Some(SessionSecrets::new_resume(&self.handshake.randoms,
-                                                       hashalg,
-                                                       &resumedata.master_secret.0));
-        sess.start_encryption_tls12();
+        sess.common.start_encryption_tls12(
+            SessionSecrets::new_resume(&self.handshake.randoms,
+                                       hashalg,
+                                       &resumedata.master_secret.0)
+        );
         sess.client_cert_chain = resumedata.client_cert_chain;
 
         if self.send_ticket {
@@ -1290,18 +1299,18 @@ impl State for ExpectTLS12ClientKX {
                                                          .to_string()))?;
 
         let hashalg = sess.common.get_suite().get_hash();
-        if self.handshake.using_ems {
+        let secrets = if self.handshake.using_ems {
             let handshake_hash = self.handshake.transcript.get_current_hash();
-            sess.secrets = Some(SessionSecrets::new_ems(&self.handshake.randoms,
-                                                        &handshake_hash,
-                                                        hashalg,
-                                                        &kxd.premaster_secret));
+            SessionSecrets::new_ems(&self.handshake.randoms,
+                                    &handshake_hash,
+                                    hashalg,
+                                    &kxd.premaster_secret)
         } else {
-            sess.secrets = Some(SessionSecrets::new(&self.handshake.randoms,
-                                                    hashalg,
-                                                    &kxd.premaster_secret));
-        }
-        sess.start_encryption_tls12();
+            SessionSecrets::new(&self.handshake.randoms,
+                                hashalg,
+                                &kxd.premaster_secret)
+        };
+        sess.common.start_encryption_tls12(secrets);
 
         if self.client_cert.is_some() {
             Ok(self.into_expect_tls12_certificate_verify())
@@ -1444,7 +1453,10 @@ fn get_server_session_value_tls12(handshake: &HandshakeDetails,
                                   sess: &ServerSessionImpl) -> persist::ServerSessionValue {
     let scs = sess.common.get_suite();
     let version = ProtocolVersion::TLSv1_2;
-    let secret = sess.secrets.as_ref().unwrap().get_master_secret();
+    let secret = sess.common.secrets
+        .as_ref()
+        .unwrap()
+        .get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(sess.get_sni(), version,
                                                  scs.suite, secret,
@@ -1518,7 +1530,10 @@ fn emit_ccs(sess: &mut ServerSessionImpl) {
 
 fn emit_finished(handshake: &mut HandshakeDetails, sess: &mut ServerSessionImpl) {
     let vh = handshake.transcript.get_current_hash();
-    let verify_data = sess.secrets.as_ref().unwrap().server_verify_data(&vh);
+    let verify_data = sess.common.secrets
+        .as_ref()
+        .unwrap()
+        .server_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
     let f = Message {
@@ -1557,7 +1572,10 @@ impl State for ExpectTLS12Finished {
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
         let vh = self.handshake.transcript.get_current_hash();
-        let expect_verify_data = sess.secrets.as_ref().unwrap().client_verify_data(&vh);
+        let expect_verify_data = sess.common.secrets
+            .as_ref()
+            .unwrap()
+            .client_verify_data(&vh);
 
         let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
             .map_err(|_| {

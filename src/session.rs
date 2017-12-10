@@ -5,7 +5,7 @@ use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::base::Payload;
-use msgs::codec::Codec;
+use msgs::codec::{Codec, encode_u16};
 use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use msgs::enums::KeyUpdateRequest;
 use error::TLSError;
@@ -96,6 +96,24 @@ pub trait Session: Read + Write + Send + Sync {
     ///
     /// This returns None until the version is agreed.
     fn get_protocol_version(&self) -> Option<ProtocolVersion>;
+
+    /// Derives key material from the agreed session secrets.
+    ///
+    /// This function fills in `output` with `output.len()` bytes of key
+    /// material derived from the master session secret using `label`
+    /// and `context` for diversification.
+    ///
+    /// See RFC5705 for more details on what this does and is for.
+    ///
+    /// For TLS1.3 connections, this function does not use the
+    /// "early" exporter at any point.
+    ///
+    /// This function fails if called prior to the handshake completing;
+    /// check with `is_handshaking()` first.
+    fn export_keying_material(&self,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError>;
 
     /// This function uses `io` to complete any outstanding IO for
     /// this session.
@@ -301,6 +319,26 @@ impl SessionSecrets {
     pub fn server_verify_data(&self, handshake_hash: &[u8]) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"server finished")
     }
+
+    pub fn export_keying_material(&self,
+                                  output: &mut [u8],
+                                  label: &[u8],
+                                  context: Option<&[u8]>) {
+        let mut randoms = Vec::new();
+        randoms.extend_from_slice(&self.randoms.client);
+        randoms.extend_from_slice(&self.randoms.server);
+        if let Some(context) = context {
+            assert!(context.len() <= 0xffff);
+            encode_u16(context.len() as u16, &mut randoms);
+            randoms.extend_from_slice(context);
+        }
+
+        prf::prf(output,
+                 self.hash,
+                 &self.master_secret,
+                 label,
+                 &randoms)
+    }
 }
 
 // --- Common (to client and server) session functions ---
@@ -317,6 +355,7 @@ pub struct SessionCommon {
     pub is_client: bool,
     message_encrypter: Box<MessageEncrypter>,
     message_decrypter: Box<MessageDecrypter>,
+    pub secrets: Option<SessionSecrets>,
     key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
     write_seq: u64,
@@ -342,6 +381,7 @@ impl SessionCommon {
             suite: None,
             message_encrypter: MessageEncrypter::invalid(),
             message_decrypter: MessageDecrypter::invalid(),
+            secrets: None,
             key_schedule: None,
             write_seq: 0,
             read_seq: 0,
@@ -642,10 +682,11 @@ impl SessionCommon {
         Ok(len)
     }
 
-    pub fn start_encryption_tls12(&mut self, secrets: &SessionSecrets) {
-        let (dec, enc) = cipher::new_tls12(self.get_suite(), secrets);
+    pub fn start_encryption_tls12(&mut self, secrets: SessionSecrets) {
+        let (dec, enc) = cipher::new_tls12(self.get_suite(), &secrets);
         self.message_encrypter = enc;
         self.message_decrypter = dec;
+        self.secrets = Some(secrets);
     }
 
     pub fn peer_now_encrypting(&mut self) {
@@ -709,5 +750,26 @@ impl SessionCommon {
         }
 
         Ok(())
+    }
+
+    pub fn export_keying_material(&self,
+                                  output: &mut [u8],
+                                  label: &[u8],
+                                  context: Option<&[u8]>) -> Result<(), TLSError> {
+        if !self.traffic {
+            Err(TLSError::HandshakeNotComplete)
+        } else if self.is_tls13() {
+            self.key_schedule
+                .as_ref()
+                .unwrap()
+                .export_keying_material(output, label, context)
+        } else {
+            self.secrets
+                .as_ref()
+                .map(|sec| {
+                    sec.export_keying_material(output, label, context)
+                })
+                .ok_or_else(|| TLSError::HandshakeNotComplete)
+        }
     }
 }
