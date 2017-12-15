@@ -378,6 +378,16 @@ impl ExpectClientHello {
         Ok(())
     }
 
+    fn emit_fake_ccs(&mut self,
+                     sess: &mut ServerSessionImpl) {
+        let m = Message {
+            typ: ContentType::ChangeCipherSpec,
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
+        };
+        sess.common.send_msg(m, false);
+    }
+
     fn emit_hello_retry_request(&mut self,
                                 sess: &mut ServerSessionImpl,
                                 group: NamedGroup) {
@@ -832,6 +842,7 @@ impl ExpectClientHello {
                 }
 
                 self.emit_hello_retry_request(sess, group);
+                self.emit_fake_ccs(sess);
                 return Ok(self.into_expect_retried_client_hello());
             }
 
@@ -896,6 +907,7 @@ impl ExpectClientHello {
         self.handshake.transcript.add_message(chm);
         self.emit_server_hello_tls13(sess, &client_hello.session_id,
                                      chosen_share, chosen_psk_index, resuming_psk)?;
+        self.emit_fake_ccs(sess);
         self.emit_encrypted_extensions(sess, &mut server_key, client_hello, !full_handshake)?;
 
         let doing_client_auth = if full_handshake {
