@@ -336,7 +336,7 @@ impl ExpectClientHello {
 
         let sh = Message {
             typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_0,
+            version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
