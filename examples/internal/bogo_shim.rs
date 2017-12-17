@@ -50,6 +50,10 @@ struct Options {
     server_ocsp_response: Vec<u8>,
     server_sct_list: Vec<u8>,
     expect_curve: u16,
+    export_keying_material: usize,
+    export_keying_material_label: String,
+    export_keying_material_context: String,
+    export_keying_material_context_used: bool,
 }
 
 impl Options {
@@ -76,6 +80,10 @@ impl Options {
             server_ocsp_response: vec![],
             server_sct_list: vec![],
             expect_curve: 0,
+            export_keying_material: 0,
+            export_keying_material_label: "".to_string(),
+            export_keying_material_context: "".to_string(),
+            export_keying_material_context_used: false,
         }
     }
 
@@ -306,6 +314,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
     let mut conn = net::TcpStream::connect(("localhost", opts.port)).expect("cannot connect");
     let mut sent_shutdown = false;
     let mut seen_eof = false;
+    let mut sent_exporter = false;
 
     loop {
         flush(sess, &mut conn);
@@ -331,6 +340,22 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
                 flush(sess, &mut conn); /* send any alerts before exiting */
                 handle_err(err);
             }
+        }
+
+        if !sess.is_handshaking() &&
+            opts.export_keying_material > 0 &&
+            !sent_exporter {
+            let mut export = Vec::new();
+            export.resize(opts.export_keying_material, 0u8);
+            sess.export_keying_material(&mut export,
+                                        opts.export_keying_material_label.as_bytes(),
+                                        if opts.export_keying_material_context_used {
+                                            Some(opts.export_keying_material_context.as_bytes())
+                                        } else { None })
+                .unwrap();
+            sess.write_all(&export)
+                .unwrap();
+            sent_exporter = true;
         }
 
         let mut buf = [0u8; 128];
@@ -412,8 +437,22 @@ fn main() {
             "-expect-server-name" |
             "-expect-ocsp-response" |
             "-expect-signed-cert-timestamps" |
-            "-expect-certificate-types" => {
+            "-expect-certificate-types" |
+            "-expect-msg-callback" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
+            }
+
+            "-export-keying-material" => {
+                opts.export_keying_material = args.remove(0).parse::<usize>().unwrap();
+            }
+            "-export-label" => {
+                opts.export_keying_material_label = args.remove(0);
+            }
+            "-export-context" => {
+                opts.export_keying_material_context = args.remove(0);
+            }
+            "-use-export-context" => {
+                opts.export_keying_material_context_used = true;
             }
 
             "-ocsp-response" => {
@@ -497,7 +536,6 @@ fn main() {
             "-send-alert" |
             "-signing-prefs" |
             "-digest-prefs" |
-            "-export-keying-material" |
             "-use-exporter-between-reads" |
             "-ticket-key" |
             "-tls-unique" |
