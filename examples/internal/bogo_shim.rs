@@ -279,6 +279,9 @@ fn handle_err(err: rustls::TLSError) -> ! {
         TLSError::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
+        TLSError::WebPKIError(webpki::Error::BadDER) => {
+            quit(":CANNOT_PARSE_LEAF_CERT:")
+        }
         TLSError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey) => {
             quit(":BAD_SIGNATURE:")
         }
@@ -427,6 +430,13 @@ fn main() {
             "-max-version" => {
                 let max = args.remove(0).parse::<u16>().unwrap();
                 opts.max_version = Some(ProtocolVersion::Unknown(max));
+            }
+            "-tls13-variant" => {
+                let variant = args.remove(0).parse::<u16>().unwrap();
+                if variant != 5 {
+                    println!("NYI TLS1.3 variant selection: {:?} {:?}", arg, variant);
+                    process::exit(BOGO_NACK);
+                }
             }
             "-max-cert-list" |
             "-expect-curve-id" |
