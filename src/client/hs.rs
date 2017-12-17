@@ -1165,6 +1165,19 @@ impl ExpectTLS13CertificateVerify {
     }
 }
 
+fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSError {
+    match err {
+        TLSError::WebPKIError(webpki::Error::BadDER) => {
+            sess.common.send_fatal_alert(AlertDescription::DecodeError);
+        }
+        _ => {
+            sess.common.send_fatal_alert(AlertDescription::BadCertificate);
+        }
+    };
+
+    err
+}
+
 impl State for ExpectTLS13CertificateVerify {
     fn check_message(&self, m: &Message) -> Result<(), TLSError> {
         check_handshake_message(m, &[HandshakeType::CertificateVerify])
@@ -1185,14 +1198,16 @@ impl State for ExpectTLS13CertificateVerify {
             .verify_server_cert(&sess.config.root_store,
                                 &self.server_cert.cert_chain,
                                 self.handshake.dns_name.as_ref(),
-                                &self.server_cert.ocsp_response)?;
+                                &self.server_cert.ocsp_response)
+            .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.handshake.transcript.get_current_hash();
         let sigv = verify::verify_tls13(&self.server_cert.cert_chain[0],
                                         cert_verify,
                                         &handshake_hash,
-                                        b"TLS 1.3, server CertificateVerify\x00")?;
+                                        b"TLS 1.3, server CertificateVerify\x00")
+            .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 3. Verify any included SCTs.
         match (self.server_cert.scts.as_ref(), sess.config.ct_logs) {
@@ -1564,7 +1579,8 @@ impl State for ExpectTLS12ServerDone {
             .verify_server_cert(&sess.config.root_store,
                                 &st.server_cert.cert_chain,
                                 st.handshake.dns_name.as_ref(),
-                                &st.server_cert.ocsp_response)?;
+                                &st.server_cert.ocsp_response)
+            .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 2. Verify any included SCTs.
         match (st.server_cert.scts.as_ref(), sess.config.ct_logs) {
@@ -1597,7 +1613,8 @@ impl State for ExpectTLS12ServerDone {
 
             verify::verify_signed_struct(&message,
                                          &st.server_cert.cert_chain[0],
-                                         sig)?
+                                         sig)
+                .map_err(|err| send_cert_error_alert(sess, err))?
         };
 
         // 4.

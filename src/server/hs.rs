@@ -1256,7 +1256,11 @@ impl State for ExpectTLS13Certificate {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        sess.config.get_verifier().verify_client_cert(&cert_chain)?;
+        sess.config.get_verifier().verify_client_cert(&cert_chain)
+            .or_else(|err| {
+                     incompatible(sess, "certificate invalid");
+                     Err(err)
+                     })?;
 
         let cert = ClientCertDetails::new(cert_chain);
         Ok(self.into_expect_tls13_certificate_verify(cert))
