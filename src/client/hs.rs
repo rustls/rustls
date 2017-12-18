@@ -366,7 +366,11 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     let ch = Message {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_0,
+        version: if retryreq.is_some() {
+            ProtocolVersion::TLSv1_2
+        } else {
+            ProtocolVersion::TLSv1_0
+        },
         payload: MessagePayload::Handshake(chp),
     };
 
