@@ -11,7 +11,7 @@ categories = ["network-programming", "cryptography"]
 
 [dependencies]
 untrusted = "0.5.1"
-base64 = "0.8"
+base64 = "0.9"
 log = { version = "0.3.6", optional = true }
 ring = { version = "0.12.1", features = ["rsa_signing"] }
 webpki = { git = "https://github.com/briansmith/webpki" }
