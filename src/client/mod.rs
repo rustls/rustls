@@ -235,7 +235,7 @@ impl fmt::Debug for ClientSessionImpl {
 }
 
 impl ClientSessionImpl {
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSName)
+    pub fn new(config: &Arc<ClientConfig>, hostname: Option<webpki::DNSName>)
                -> ClientSessionImpl {
         let mut cs = ClientSessionImpl {
             config: config.clone(),
@@ -433,7 +433,14 @@ impl ClientSession {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
-        ClientSession { imp: ClientSessionImpl::new(config, hostname.into()) }
+        ClientSession { imp: ClientSessionImpl::new(config, Some(hostname.into())) }
+    }
+
+    /// Make a new ClientSession. Like `new`, but no hostname
+    /// is required, no SNI extension will be sent, and no
+    /// certificate name validation will be performed.
+    pub fn new_without_hostname(config: &Arc<ClientConfig>) -> ClientSession {
+        ClientSession { imp: ClientSessionImpl::new(config, None) }
     }
 }
 

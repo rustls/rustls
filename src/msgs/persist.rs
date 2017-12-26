@@ -35,16 +35,16 @@ impl Codec for ClientSessionKey {
 }
 
 impl ClientSessionKey {
-    pub fn session_for_dns_name(dns_name: webpki::DNSNameRef) -> ClientSessionKey {
-        let dns_name_str: &str = dns_name.into();
+    pub fn session_for_dns_name(dns_name: Option<webpki::DNSNameRef>) -> ClientSessionKey {
+        let dns_name_str: &str = dns_name.map_or("", |n| n.into());
         ClientSessionKey {
             kind: b"session",
             dns_name: PayloadU8::new(dns_name_str.as_bytes().to_vec()),
         }
     }
 
-    pub fn hint_for_dns_name(dns_name: webpki::DNSNameRef) -> ClientSessionKey {
-        let dns_name_str: &str = dns_name.into();
+    pub fn hint_for_dns_name(dns_name: Option<webpki::DNSNameRef>) -> ClientSessionKey {
+        let dns_name_str: &str = dns_name.map_or("", |n| n.into());
         ClientSessionKey {
             kind: b"kx-hint",
             dns_name: PayloadU8::new(dns_name_str.as_bytes().to_vec()),

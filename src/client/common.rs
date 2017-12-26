@@ -54,11 +54,11 @@ pub struct HandshakeDetails {
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
-    pub dns_name: webpki::DNSName,
+    pub dns_name: Option<webpki::DNSName>,
 }
 
 impl HandshakeDetails {
-    pub fn new(host_name: webpki::DNSName) -> HandshakeDetails {
+    pub fn new(host_name: Option<webpki::DNSName>) -> HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
             resuming_session: None,
