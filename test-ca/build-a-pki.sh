@@ -36,7 +36,7 @@ openssl rsa \
           -out rsa/end.rsa
 
 openssl req -nodes \
-          -newkey rsa:2560 \
+          -newkey rsa:2048 \
           -keyout rsa/client.key \
           -out rsa/client.req \
           -sha256 \
