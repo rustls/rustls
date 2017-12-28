@@ -31,6 +31,7 @@ macro_rules! println_err(
 struct Options {
     port: u16,
     server: bool,
+    mtu: Option<usize>,
     resumes: usize,
     verify_peer: bool,
     require_any_client_cert: bool,
@@ -40,6 +41,7 @@ struct Options {
     shut_down_after_handshake: bool,
     check_close_notify: bool,
     host_name: String,
+    use_sni: bool,
     key_file: String,
     cert_file: String,
     protocols: Vec<String>,
@@ -54,6 +56,7 @@ struct Options {
     export_keying_material_label: String,
     export_keying_material_context: String,
     export_keying_material_context_used: bool,
+    read_size: usize,
 }
 
 impl Options {
@@ -61,10 +64,12 @@ impl Options {
         Options {
             port: 0,
             server: false,
+            mtu: None,
             resumes: 0,
             verify_peer: false,
             tickets: true,
             host_name: "example.com".to_string(),
+            use_sni: false,
             queue_data: false,
             shut_down_after_handshake: false,
             check_close_notify: false,
@@ -84,6 +89,7 @@ impl Options {
             export_keying_material_label: "".to_string(),
             export_keying_material_context: "".to_string(),
             export_keying_material_context_used: false,
+            read_size: 512,
         }
     }
 
@@ -178,6 +184,8 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let persist = rustls::ServerSessionMemoryCache::new(32);
     cfg.set_persistence(persist);
 
+    cfg.mtu = opts.mtu;
+
     let cert = load_cert(&opts.cert_file);
     let key = load_key(&opts.key_file);
     cfg.set_single_cert_with_ocsp_and_sct(cert.clone(), key,
@@ -210,6 +218,8 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     let persist = rustls::ClientSessionMemoryCache::new(32);
     cfg.set_persistence(persist);
     cfg.root_store.add(&load_cert("cert.pem")[0]).unwrap();
+    cfg.enable_sni = opts.use_sni;
+    cfg.mtu = opts.mtu;
 
     if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
@@ -361,8 +371,8 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             sent_exporter = true;
         }
 
-        let mut buf = [0u8; 128];
-        let len = match sess.read(&mut buf) {
+        let mut buf = [0u8; 1024];
+        let len = match sess.read(&mut buf[..opts.read_size]) {
             Ok(len) => len,
             Err(ref err) if err.kind() == io::ErrorKind::ConnectionAborted => {
                 if opts.check_close_notify {
@@ -430,6 +440,14 @@ fn main() {
             "-max-version" => {
                 let max = args.remove(0).parse::<u16>().unwrap();
                 opts.max_version = Some(ProtocolVersion::Unknown(max));
+            }
+            "-max-send-fragment" => {
+                let mtu = args.remove(0).parse::<usize>().unwrap();
+                opts.mtu = Some(mtu);
+            }
+            "-read-size" => {
+                let rdsz = args.remove(0).parse::<usize>().unwrap();
+                opts.read_size = rdsz;
             }
             "-tls13-variant" => {
                 let variant = args.remove(0).parse::<u16>().unwrap();
@@ -499,6 +517,7 @@ fn main() {
             }
             "-host-name" => {
                 opts.host_name = args.remove(0);
+                opts.use_sni = true;
             }
             "-advertise-alpn" => {
                 opts.protocols = split_protocols(&args.remove(0));
