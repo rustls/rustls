@@ -21,6 +21,7 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then pip install --upgrade pip ; fi
   - if [[ "$COVERAGE" == "1" ]]; then admin/build-lcov ; fi
   - if [[ "$COVERAGE" == "1" ]]; then gem install coveralls-lcov ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then rustup install stable ; fi
   - if [[ "$COVERAGE" == "1" ]]; then sudo apt-get install libclang-common-3.8-dev llvm-3.8-dev ; fi
 script:
   - cargo build
