@@ -108,6 +108,9 @@ pub struct ServerConfig {
     /// which is supported by the client.
     pub ignore_client_order: bool,
 
+    /// Our MTU.  If None, we don't limit TLS message sizes.
+    pub mtu: Option<usize>,
+
     /// How to store client sessions.
     pub session_storage: Arc<StoresServerSessions + Send + Sync>,
 
@@ -145,6 +148,7 @@ impl ServerConfig {
         ServerConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             ignore_client_order: false,
+            mtu: None,
             session_storage: Arc::new(handy::NoSessionStorage {}),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
@@ -235,7 +239,7 @@ impl ServerSessionImpl {
 
         ServerSessionImpl {
             config: server_config.clone(),
-            common: SessionCommon::new(None, false),
+            common: SessionCommon::new(server_config.mtu, false),
             sni: None,
             alpn_protocol: None,
             error: None,
