@@ -8,6 +8,7 @@ extern crate rustls;
 extern crate webpki;
 extern crate env_logger;
 extern crate base64;
+extern crate sct;
 
 use std::env;
 use std::process;
@@ -42,6 +43,7 @@ struct Options {
     check_close_notify: bool,
     host_name: String,
     use_sni: bool,
+    send_sct: bool,
     key_file: String,
     cert_file: String,
     protocols: Vec<String>,
@@ -70,6 +72,7 @@ impl Options {
             tickets: true,
             host_name: "example.com".to_string(),
             use_sni: false,
+            send_sct: false,
             queue_data: false,
             shut_down_after_handshake: false,
             check_close_notify: false,
@@ -213,6 +216,8 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     Arc::new(cfg)
 }
 
+static EMPTY_LOGS: [&sct::Log; 0] = [];
+
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     let mut cfg = rustls::ClientConfig::new();
     let persist = rustls::ClientSessionMemoryCache::new(32);
@@ -220,6 +225,10 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     cfg.root_store.add(&load_cert("cert.pem")[0]).unwrap();
     cfg.enable_sni = opts.use_sni;
     cfg.mtu = opts.mtu;
+
+    if opts.send_sct {
+        cfg.ct_logs = Some(&EMPTY_LOGS);
+    }
 
     if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
@@ -525,6 +534,9 @@ fn main() {
             "-use-null-client-ca-list" => {
                 opts.offer_no_client_cas = true;
             }
+            "-enable-signed-cert-timestamps" => {
+                opts.send_sct = true;
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -538,7 +550,6 @@ fn main() {
             "-expect-extended-master-secret" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
-            "-enable-signed-cert-timestamps" |
             // internal openssl details:
             "-async" |
             "-implicit-handshake" |
