@@ -471,6 +471,14 @@ impl SessionCommon {
 
     pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
+            // Reject unknown AlertLevels.
+            match alert.level {
+                AlertLevel::Unknown(_) => {
+                    self.send_fatal_alert(AlertDescription::IllegalParameter);
+                }
+                _ => {}
+            }
+
             // If we get a CloseNotify, make a note to declare EOF to our
             // caller.
             if alert.description == AlertDescription::CloseNotify {
