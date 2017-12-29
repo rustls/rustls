@@ -907,7 +907,9 @@ impl ExpectClientHello {
         self.handshake.transcript.add_message(chm);
         self.emit_server_hello_tls13(sess, &client_hello.session_id,
                                      chosen_share, chosen_psk_index, resuming_psk)?;
-        self.emit_fake_ccs(sess);
+        if !self.done_retry {
+            self.emit_fake_ccs(sess);
+        }
         self.emit_encrypted_extensions(sess, &mut server_key, client_hello, !full_handshake)?;
 
         let doing_client_auth = if full_handshake {

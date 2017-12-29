@@ -202,13 +202,18 @@ struct ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
 
-fn emit_fake_ccs(sess: &mut ClientSessionImpl) {
+fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
+    if hs.sent_tls13_fake_ccs {
+        return;
+    }
+
     let m = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
     };
     sess.common.send_msg(m, false);
+    hs.sent_tls13_fake_ccs = true;
 }
 
 fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
@@ -377,7 +382,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        emit_fake_ccs(sess);
+        emit_fake_ccs(&mut handshake, sess);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -630,6 +635,7 @@ impl State for ExpectServerHello {
         if sess.common.is_tls13() {
             validate_server_hello_tls13(sess, server_hello)?;
             self.start_handshake_traffic(sess, server_hello)?;
+            emit_fake_ccs(&mut self.handshake, sess);
             return Ok(self.into_expect_tls13_encrypted_extensions());
         }
 
@@ -877,7 +883,6 @@ impl State for ExpectTLS13EncryptedExtensions {
 
         validate_encrypted_extensions(sess, &self.hello, exts)?;
         process_alpn_protocol(sess, exts.get_alpn_protocol())?;
-        emit_fake_ccs(sess);
 
         if self.handshake.resuming_session.is_some() {
             let certv = verify::ServerCertVerified::assertion();
