@@ -466,7 +466,12 @@ impl SessionCommon {
 
         let seq = self.read_seq;
         self.read_seq += 1;
-        self.message_decrypter.decrypt(encr, seq)
+        let ret = self.message_decrypter.decrypt(encr, seq);
+        if let Err(TLSError::PeerSentOversizedRecord) = ret {
+            self.send_fatal_alert(AlertDescription::RecordOverflow);
+        }
+
+        ret
     }
 
     pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {

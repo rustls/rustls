@@ -173,8 +173,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
             .len();
 
         if plain_len > MAX_FRAGMENT_LEN {
-            let msg = "peer sent oversized fragment".to_string();
-            return Err(TLSError::PeerMisbehavedError(msg));
+            return Err(TLSError::PeerSentOversizedRecord);
         }
 
         buf.truncate(plain_len);
@@ -330,6 +329,10 @@ impl MessageDecrypter for TLS13MessageDecrypter {
 
         buf.truncate(plain_len);
 
+        if buf.len() > MAX_FRAGMENT_LEN + 1 {
+            return Err(TLSError::PeerSentOversizedRecord);
+        }
+
         let content_type = unpad_tls13(&mut buf);
         if content_type == ContentType::Unknown(0) {
             let msg = "peer sent bad TLSInnerPlaintext".to_string();
@@ -337,8 +340,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
         }
 
         if buf.len() > MAX_FRAGMENT_LEN {
-            let msg = "peer sent oversized fragment".to_string();
-            return Err(TLSError::PeerMisbehavedError(msg));
+            return Err(TLSError::PeerSentOversizedRecord);
         }
 
         Ok(Message {
@@ -450,8 +452,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             .len();
 
         if plain_len > MAX_FRAGMENT_LEN {
-            let err_msg = "peer sent oversized fragment".to_string();
-            return Err(TLSError::PeerMisbehavedError(err_msg));
+            return Err(TLSError::PeerSentOversizedRecord);
         }
 
         buf.truncate(plain_len);

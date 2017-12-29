@@ -70,6 +70,9 @@ pub enum TLSError {
     /// This function doesn't work until the TLS handshake
     /// is complete.
     HandshakeNotComplete,
+
+    /// The peer sent an oversized record/fragment.
+    PeerSentOversizedRecord,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -106,6 +109,7 @@ impl fmt::Display for TLSError {
             TLSError::CorruptMessage |
             TLSError::NoCertificatesPresented |
             TLSError::DecryptError |
+            TLSError::PeerSentOversizedRecord |
             TLSError::HandshakeNotComplete => write!(f, "{}", self.description()),
             _ => write!(f, "{}: {:?}", self.description(), self),
         }
@@ -132,6 +136,7 @@ impl Error for TLSError {
             TLSError::FailedToGetCurrentTime => "failed to get current time",
             TLSError::InvalidDNSName(_) => "invalid DNS name",
             TLSError::HandshakeNotComplete => "handshake not complete",
+            TLSError::PeerSentOversizedRecord => "peer sent excess record size",
         }
     }
 }
@@ -163,7 +168,9 @@ mod tests {
                        TLSError::AlertReceived(AlertDescription::ExportRestriction),
                        TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
                        TLSError::InvalidSCT(sct::Error::MalformedSCT),
-                       TLSError::General("undocumented error".to_string())];
+                       TLSError::General("undocumented error".to_string()),
+                       TLSError::HandshakeNotComplete,
+                       TLSError::PeerSentOversizedRecord];
 
         for err in all {
             println!("{:?}:", err);
