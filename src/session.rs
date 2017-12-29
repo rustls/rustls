@@ -414,8 +414,18 @@ impl SessionCommon {
         self.suite.as_ref().unwrap()
     }
 
-    pub fn set_suite(&mut self, suite: &'static SupportedCipherSuite) {
-        self.suite = Some(suite);
+    pub fn set_suite(&mut self, suite: &'static SupportedCipherSuite) -> bool {
+        match self.suite {
+            None => {
+                self.suite = Some(suite);
+                true
+            }
+            Some(s) if s == suite => {
+                self.suite = Some(suite);
+                true
+            }
+            _ => false
+        }
     }
 
     pub fn get_mut_key_schedule(&mut self) -> &mut KeySchedule {

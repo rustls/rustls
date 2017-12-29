@@ -650,7 +650,9 @@ impl State for ExpectServerHello {
         }
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
-        sess.common.set_suite(scs.unwrap());
+        if !sess.common.set_suite(scs.unwrap()) {
+            return Err(illegal_param(sess, "server varied selected ciphersuite"));
+        }
 
         let version = sess.common.negotiated_version.unwrap();
         if !sess.common.get_suite().usable_for_version(version) {
@@ -820,6 +822,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 return Err(illegal_param(sess, "server requested unsupported cs in hrr"));
             }
         };
+
+        // HRR selects the ciphersuite.
+        sess.common.set_suite(cs);
 
         // This is the draft19 change where the transcript became a tree
         self.0.handshake.transcript.start_hash(cs.get_hash());
