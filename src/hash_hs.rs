@@ -10,7 +10,7 @@ use msgs::handshake::HandshakeMessagePayload;
 /// incremental hashing.
 ///
 /// For client auth, we also need to buffer all the messages.
-/// This is disable in cases where client auth is not possible.
+/// This is disabled in cases where client auth is not possible.
 pub struct HandshakeHash {
     /// None before we know what hash function we're using
     alg: Option<&'static digest::Algorithm>,
