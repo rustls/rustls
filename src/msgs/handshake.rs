@@ -2240,7 +2240,10 @@ impl Codec for HandshakeMessagePayload {
         self.payload.encode(&mut sub);
 
         // output type, length, and encoded payload
-        self.typ.encode(bytes);
+        match self.typ {
+            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
+            _ => self.typ,
+        }.encode(bytes);
         codec::encode_u24(sub.len() as u32, bytes);
         bytes.append(&mut sub);
     }
@@ -2336,6 +2339,10 @@ impl HandshakeMessagePayload {
             }
             HandshakeType::MessageHash => {
                 // does not appear on the wire
+                return None;
+            }
+            HandshakeType::HelloRetryRequest => {
+                // not legal on wire
                 return None;
             }
             _ => HandshakePayload::Unknown(try_ret!(Payload::read(&mut sub))),
