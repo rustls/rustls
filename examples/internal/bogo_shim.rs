@@ -218,9 +218,31 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
 
 static EMPTY_LOGS: [&sct::Log; 0] = [];
 
+struct ClientCacheWithoutKxHints(Arc<rustls::ClientSessionMemoryCache>);
+
+impl ClientCacheWithoutKxHints {
+    fn new() -> Arc<ClientCacheWithoutKxHints> {
+        Arc::new(ClientCacheWithoutKxHints(rustls::ClientSessionMemoryCache::new(32)))
+    }
+}
+
+impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+        if key.len() > 2 && key[0] == b'k' && key[1] == b'x' {
+            true
+        } else {
+            self.0.put(key, value)
+        }
+    }
+
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.0.get(key)
+    }
+}
+
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     let mut cfg = rustls::ClientConfig::new();
-    let persist = rustls::ClientSessionMemoryCache::new(32);
+    let persist = ClientCacheWithoutKxHints::new();
     cfg.set_persistence(persist);
     cfg.root_store.add(&load_cert("cert.pem")[0]).unwrap();
     cfg.enable_sni = opts.use_sni;
@@ -269,8 +291,10 @@ fn quit_err(why: &str) -> ! {
 fn handle_err(err: rustls::TLSError) -> ! {
     use rustls::TLSError;
     use rustls::internal::msgs::enums::{AlertDescription, ContentType};
+    use std::{thread, time};
 
     println!("TLS error: {:?}", err);
+    thread::sleep(time::Duration::from_millis(100));
 
     match err {
         TLSError::InappropriateHandshakeMessage { .. } |
@@ -306,6 +330,9 @@ fn handle_err(err: rustls::TLSError) -> ! {
         }
         TLSError::WebPKIError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => {
             quit(":WRONG_SIGNATURE_TYPE:")
+        }
+        TLSError::PeerSentOversizedRecord => {
+            quit(":DATA_LENGTH_TOO_LONG:")
         }
         _ => {
             println_err!("unhandled error: {:?}", err);
@@ -393,8 +420,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             Err(err) => panic!("unhandled read error {:?}", err),
         };
 
-        if len > 0 &&
-            opts.shut_down_after_handshake &&
+        if opts.shut_down_after_handshake &&
             !sent_shutdown &&
             !sess.is_handshaking() {
             sess.send_close_notify();
@@ -475,8 +501,15 @@ fn main() {
             "-expect-ocsp-response" |
             "-expect-signed-cert-timestamps" |
             "-expect-certificate-types" |
+            "-expect-client-ca-list" |
             "-expect-msg-callback" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
+            }
+
+            "-expect-secure-renegotiation" |
+            "-expect-no-session-id" |
+            "-expect-session-id" => {
+                println!("not checking {}; NYI", arg);
             }
 
             "-export-keying-material" => {
@@ -590,6 +623,19 @@ fn main() {
             "-enable-early-data" |
             "-expect-cipher-aes" |
             "-retain-only-sha256-client-cert-initial" |
+            "-use-client-ca-list" |
+            "-expect-draft-downgrade" |
+            "-allow-unknown-alpn-protos" |
+            "-on-initial-tls13-variant" |
+            "-on-initial-expect-curve-id" |
+            "-enable-ed25519" |
+            "-on-resume-export-early-keying-material" |
+            "-export-early-keying-material" |
+            "-handshake-twice" |
+            "-verify-prefs" |
+            "-no-op-extra-handshake" |
+            "-on-resume-enable-early-data" |
+            "-read-with-unfinished-write" |
             "-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
