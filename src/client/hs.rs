@@ -579,8 +579,7 @@ impl State for ExpectServerHello {
         };
 
         if server_hello.compression_method != Compression::Null {
-            sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
-            return Err(TLSError::PeerMisbehavedError("server chose non-Null compression".to_string()));
+            return Err(illegal_param(sess, "server chose non-Null compression"));
         }
 
         if server_hello.has_duplicate_extension() {
