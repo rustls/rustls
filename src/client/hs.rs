@@ -581,18 +581,27 @@ impl State for ExpectServerHello {
         let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
         trace!("We got ServerHello {:#?}", server_hello);
 
-        let server_version = server_hello.get_supported_versions()
-            .unwrap_or(server_hello.legacy_version);
+        use ProtocolVersion::{TLSv1_2, TLSv1_3};
+
+        let server_version = if server_hello.legacy_version == TLSv1_2 {
+            server_hello.get_supported_versions()
+              .unwrap_or(server_hello.legacy_version)
+        } else {
+            server_hello.legacy_version
+        };
 
         match server_version {
-            ProtocolVersion::TLSv1_2 if sess.config.versions.contains(&ProtocolVersion::TLSv1_2) => {
-                sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_2);
-            }
-            ProtocolVersion::TLSv1_3 |
-            ProtocolVersion::Unknown(TLS13_DRAFT) if sess.config
+            TLSv1_3 | ProtocolVersion::Unknown(TLS13_DRAFT) if sess.config
                 .versions
-                .contains(&ProtocolVersion::TLSv1_3) => {
-                sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+                .contains(&TLSv1_3) => {
+                sess.common.negotiated_version = Some(TLSv1_3);
+            }
+            TLSv1_2 if sess.config.versions.contains(&TLSv1_2) => {
+                sess.common.negotiated_version = Some(TLSv1_2);
+
+                if server_hello.get_supported_versions().is_some() {
+                    return Err(illegal_param(sess, "server chose v1.2 using v1.3 extension"));
+                }
             }
             _ => {
                 sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
