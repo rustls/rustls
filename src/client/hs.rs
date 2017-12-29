@@ -984,6 +984,11 @@ impl State for ExpectTLS13Certificate {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
             }
+
+            if sess.config.ct_logs.is_none() {
+                let error_msg = "server sent unsolicited SCT list".to_string();
+                return Err(TLSError::PeerMisbehavedError(error_msg));
+            }
         }
 
         Ok(self.into_expect_tls13_certificate_verify())
