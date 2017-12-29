@@ -406,6 +406,10 @@ impl SessionCommon {
       }
     }
 
+    pub fn has_suite(&self) -> bool {
+        self.suite.is_some()
+    }
+
     pub fn get_suite(&self) -> &'static SupportedCipherSuite {
         self.suite.as_ref().unwrap()
     }

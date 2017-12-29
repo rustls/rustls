@@ -216,6 +216,20 @@ fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
     hs.sent_tls13_fake_ccs = true;
 }
 
+fn compatible_suite(sess: &ClientSessionImpl,
+                    resuming_suite: Option<&suites::SupportedCipherSuite>) -> bool {
+    match resuming_suite {
+        Some(suite) => {
+            if sess.common.has_suite() {
+                sess.common.get_suite().can_resume_to(&suite)
+            } else {
+                true
+            }
+        }
+        None => false
+    }
+}
+
 fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                                mut handshake: HandshakeDetails,
                                mut hello: ClientHelloDetails,
@@ -314,28 +328,37 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             .alpn_protocols)));
     }
 
+
     let fill_in_binder = if support_tls13 && sess.config.enable_tickets &&
                             resume_version == ProtocolVersion::TLSv1_3 &&
                             !ticket.is_empty() {
-        // Finally, and only for TLS1.3 with a ticket resumption, include a binder
-        // for our ticket.  This must go last.
-        //
-        // Include an empty binder. It gets filled in below because it depends on
-        // the message it's contained in (!!!).
-        let (obfuscated_ticket_age, suite) = {
-            let resuming = handshake.resuming_session
-                .as_ref()
-                .unwrap();
-            (resuming.get_obfuscated_ticket_age(ticketer::timebase()), resuming.cipher_suite)
-        };
+        let resuming_suite = handshake.resuming_session
+            .as_ref()
+            .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite));
 
-        let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
-        let binder = vec![0u8; binder_len];
+        if compatible_suite(sess, resuming_suite) {
+            // Finally, and only for TLS1.3 with a ticket resumption, include a binder
+            // for our ticket.  This must go last.
+            //
+            // Include an empty binder. It gets filled in below because it depends on
+            // the message it's contained in (!!!).
+            let (obfuscated_ticket_age, suite) = {
+                let resuming = handshake.resuming_session
+                    .as_ref()
+                    .unwrap();
+                (resuming.get_obfuscated_ticket_age(ticketer::timebase()), resuming.cipher_suite)
+            };
 
-        let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
-        let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
-        exts.push(ClientExtension::PresharedKey(psk_ext));
-        true
+            let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
+            let binder = vec![0u8; binder_len];
+
+            let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
+            let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
+            exts.push(ClientExtension::PresharedKey(psk_ext));
+            true
+        } else {
+            false
+        }
     } else if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
