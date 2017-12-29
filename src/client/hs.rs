@@ -1178,6 +1178,9 @@ fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSErro
         TLSError::WebPKIError(webpki::Error::BadDER) => {
             sess.common.send_fatal_alert(AlertDescription::DecodeError);
         }
+        TLSError::PeerMisbehavedError(_) => {
+            sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
+        }
         _ => {
             sess.common.send_fatal_alert(AlertDescription::BadCertificate);
         }
