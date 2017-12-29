@@ -946,11 +946,6 @@ impl State for ExpectClientHello {
         let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
         trace!("we got a clienthello {:?}", client_hello);
 
-        if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
-            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-            return Err(TLSError::PeerIncompatibleError("client does not support TLSv1_2".to_string()));
-        }
-
         if !client_hello.compression_methods.contains(&Compression::Null) {
             sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
             return Err(TLSError::PeerIncompatibleError("client did not offer Null compression"
@@ -970,6 +965,9 @@ impl State for ExpectClientHello {
                 sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
                 return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
             }
+        } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
+            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
+            return Err(incompatible(sess, "Client does not support TLSv1_2"));
         } else if !tls12_enabled && tls13_enabled {
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
             return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
