@@ -606,13 +606,6 @@ impl ExpectClientHello {
                          -> Result<(), TLSError> {
         let extensions = self.process_extensions(sess, server_key, hello, for_resume)?;
 
-        if self.handshake.session_id.is_empty() {
-            let sessid = sess.config
-                .session_storage
-                .generate();
-            self.handshake.session_id = sessid;
-        }
-
         let sh = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -1113,6 +1106,15 @@ impl State for ExpectClientHello {
                     debug!("Ticket didn't decrypt");
                 }
             }
+        }
+
+        // If we're not offered a ticket or a potential session ID,
+        // allocate a session ID.
+        if self.handshake.session_id.is_empty() && !ticket_received {
+            let sessid = sess.config
+                .session_storage
+                .generate();
+            self.handshake.session_id = sessid;
         }
 
         // Perhaps resume?  If we received a ticket, the sessionid
