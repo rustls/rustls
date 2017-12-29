@@ -347,24 +347,21 @@ impl ClientSessionImpl {
         self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
-    /// Detect and drop/reject HelloRequests.  This is needed irrespective
-    /// of the current protocol state, which should illustrate how badly
-    /// TLS renegotiation is designed.
-    fn process_hello_req(&mut self) {
-        // If we're post handshake, send a refusal alert.
-        // Otherwise, drop it silently.
-        if !self.is_handshaking() {
-            self.common.send_warning_alert(AlertDescription::NoRenegotiation);
-        }
+    fn reject_renegotiation_attempt(&mut self) -> Result<(), TLSError> {
+        self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+        Ok(())
     }
 
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via a `Expectation`.  Finally, we ask the handler
     /// to handle the message.
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
-        if msg.is_handshake_type(HandshakeType::HelloRequest) && !self.common.is_tls13() {
-            self.process_hello_req();
-            return Ok(());
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotation requests.  These can occur any time.
+        if msg.is_handshake_type(HandshakeType::HelloRequest) &&
+            !self.common.is_tls13() &&
+            !self.is_handshaking() {
+            return self.reject_renegotiation_attempt();
         }
 
         let state = self.state.take().unwrap();
