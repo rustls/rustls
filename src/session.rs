@@ -525,12 +525,14 @@ impl SessionCommon {
     fn do_write_key_update(&mut self) {
         // TLS1.3 putting key update triggering here breaks layering
         // between the handshake and record layer.
-
         let kind = if self.is_client {
             SecretKind::ClientApplicationTrafficSecret
         } else {
             SecretKind::ServerApplicationTrafficSecret
         };
+
+        self.want_write_key_update = false;
+        self.send_msg_encrypt(Message::build_key_update_notify());
 
         let write_key = self.get_key_schedule().derive_next(kind);
         let scs = self.get_suite();
@@ -541,9 +543,6 @@ impl SessionCommon {
         } else {
             self.get_mut_key_schedule().current_server_traffic_secret = write_key;
         }
-
-        self.want_write_key_update = false;
-        self.send_msg_encrypt(Message::build_key_update_notify());
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
