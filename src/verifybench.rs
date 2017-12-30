@@ -57,7 +57,7 @@ fn test_reddit_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("reddit.com")
           .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -73,7 +73,7 @@ fn test_github_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("github.com")
           .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -90,7 +90,7 @@ fn test_arstechnica_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("arstechnica.com")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -107,7 +107,7 @@ fn test_servo_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("servo.org")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -123,7 +123,7 @@ fn test_twitter_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("twitter.com")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap(); });
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap(); });
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn test_wikipedia_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("wikipedia.org")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -155,7 +155,7 @@ fn test_google_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.google.com")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -172,7 +172,7 @@ fn test_hn_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("news.ycombinator.com")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -188,7 +188,7 @@ fn test_stackoverflow_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("stackoverflow.com")
           .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -204,7 +204,7 @@ fn test_duckduckgo_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("duckduckgo.com")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -221,7 +221,7 @@ fn test_rustlang_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.rust-lang.org")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 
@@ -238,7 +238,7 @@ fn test_wapo_cert() {
           |_| {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.washingtonpost.com")
             .unwrap();
-        V.verify_server_cert(&anchors, &chain[..], dns_name, &[]).unwrap();
+        V.verify_server_cert(&anchors, &chain[..], Some(dns_name), &[]).unwrap();
     });
 }
 

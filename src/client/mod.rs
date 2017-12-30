@@ -117,6 +117,11 @@ pub struct ClientConfig {
 
     /// How to verify the server certificate chain.
     verifier: Arc<verify::ServerCertVerifier>,
+
+    /// Whether to verify server certificate against given hostname.
+    ///
+    /// The defauls is true.
+    verify_hostname: bool,
 }
 
 impl ClientConfig {
@@ -135,7 +140,8 @@ impl ClientConfig {
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
             enable_sni: true,
-            verifier: Arc::new(verify::WebPKIVerifier::new())
+            verifier: Arc::new(verify::WebPKIVerifier::new()),
+            verify_hostname: true,
         }
     }
 
@@ -214,6 +220,11 @@ pub mod danger {
         pub fn set_certificate_verifier(&mut self,
                                         verifier: Arc<ServerCertVerifier>) {
             self.cfg.verifier = verifier;
+        }
+
+        /// Hostname verification is enabled by default. Pass `false` to disable.
+        pub fn set_verify_hostname(&mut self, verify: bool) {
+            self.cfg.verify_hostname = verify;
         }
     }
 }

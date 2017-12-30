@@ -1147,7 +1147,11 @@ impl State for ExpectTLS13CertificateVerify {
             .get_verifier()
             .verify_server_cert(&sess.config.root_store,
                                 &self.server_cert.cert_chain,
-                                self.handshake.dns_name.as_ref(),
+                                if sess.config.verify_hostname {
+                                    Some(self.handshake.dns_name.as_ref())
+                                } else {
+                                    None
+                                },
                                 &self.server_cert.ocsp_response)?;
 
         // 2. Verify their signature on the handshake.
@@ -1519,7 +1523,11 @@ impl State for ExpectTLS12ServerDone {
             .get_verifier()
             .verify_server_cert(&sess.config.root_store,
                                 &st.server_cert.cert_chain,
-                                st.handshake.dns_name.as_ref(),
+                                if sess.config.verify_hostname {
+                                    Some(st.handshake.dns_name.as_ref())
+                                } else {
+                                    None
+                                },
                                 &st.server_cert.ocsp_response)?;
 
         // 2. Verify any included SCTs.
