@@ -1,6 +1,6 @@
 use msgs::enums::{ProtocolVersion, HandshakeType};
 use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat};
-use msgs::enums::{HashAlgorithm, SignatureAlgorithm, HeartbeatMode, ServerNameType};
+use msgs::enums::{HashAlgorithm, SignatureAlgorithm, ServerNameType};
 use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use msgs::enums::{ClientCertificateType, CertificateStatusType};
 use msgs::enums::ECCurveType;
@@ -590,7 +590,6 @@ pub enum ClientExtension {
     ECPointFormats(ECPointFormatList),
     NamedGroups(NamedGroups),
     SignatureAlgorithms(SupportedSignatureSchemes),
-    Heartbeat(HeartbeatMode),
     ServerName(ServerNameRequest),
     SessionTicketRequest,
     SessionTicketOffer(Payload),
@@ -612,7 +611,6 @@ impl ClientExtension {
             ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
             ClientExtension::NamedGroups(_) => ExtensionType::EllipticCurves,
             ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
-            ClientExtension::Heartbeat(_) => ExtensionType::Heartbeat,
             ClientExtension::ServerName(_) => ExtensionType::ServerName,
             ClientExtension::SessionTicketRequest |
                 ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
@@ -639,7 +637,6 @@ impl Codec for ClientExtension {
             ClientExtension::ECPointFormats(ref r) => r.encode(&mut sub),
             ClientExtension::NamedGroups(ref r) => r.encode(&mut sub),
             ClientExtension::SignatureAlgorithms(ref r) => r.encode(&mut sub),
-            ClientExtension::Heartbeat(ref r) => r.encode(&mut sub),
             ClientExtension::ServerName(ref r) => r.encode(&mut sub),
             ClientExtension::SessionTicketRequest |
                 ClientExtension::ExtendedMasterSecretRequest |
@@ -674,9 +671,6 @@ impl Codec for ClientExtension {
             ExtensionType::SignatureAlgorithms => {
                 let schemes = try_ret!(SupportedSignatureSchemes::read(&mut sub));
                 ClientExtension::SignatureAlgorithms(schemes)
-            }
-            ExtensionType::Heartbeat => {
-                ClientExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub)))
             }
             ExtensionType::ServerName => {
                 ClientExtension::ServerName(try_ret!(ServerNameRequest::read(&mut sub)))
@@ -845,7 +839,6 @@ fn can_roundtrip_single_proto() {
 #[derive(Debug)]
 pub enum ServerExtension {
     ECPointFormats(ECPointFormatList),
-    Heartbeat(HeartbeatMode),
     ServerNameAck,
     SessionTicketAck,
     RenegotiationInfo(PayloadU8),
@@ -863,7 +856,6 @@ impl ServerExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             ServerExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
-            ServerExtension::Heartbeat(_) => ExtensionType::Heartbeat,
             ServerExtension::ServerNameAck => ExtensionType::ServerName,
             ServerExtension::SessionTicketAck => ExtensionType::SessionTicket,
             ServerExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
@@ -886,7 +878,6 @@ impl Codec for ServerExtension {
         let mut sub: Vec<u8> = Vec::new();
         match *self {
             ServerExtension::ECPointFormats(ref r) => r.encode(&mut sub),
-            ServerExtension::Heartbeat(ref r) => r.encode(&mut sub),
             ServerExtension::ServerNameAck |
                 ServerExtension::SessionTicketAck |
                 ServerExtension::ExtendedMasterSecretAck |
@@ -912,9 +903,6 @@ impl Codec for ServerExtension {
         Some(match typ {
             ExtensionType::ECPointFormats => {
                 ServerExtension::ECPointFormats(try_ret!(ECPointFormatList::read(&mut sub)))
-            }
-            ExtensionType::Heartbeat => {
-                ServerExtension::Heartbeat(try_ret!(HeartbeatMode::read(&mut sub)))
             }
             ExtensionType::ServerName => ServerExtension::ServerNameAck,
             ExtensionType::SessionTicket => ServerExtension::SessionTicketAck,
