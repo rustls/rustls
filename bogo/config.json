@@ -75,9 +75,7 @@
     "SendHalfHelloRequest-*": "",
     "RetainOnlySHA256-*": "",
     "ExtendedMasterSecret-Renego-*": "",
-    "Draft-Downgrade-Server": "not implemented; TODO",
-    "Unclean-Shutdown-Ignored": "broken on macos -- FIXME",
-    "Shutdown-Shim-Sync-SplitHandshakeRecords": "likewise"
+    "Draft-Downgrade-Server": "not implemented; TODO"
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
