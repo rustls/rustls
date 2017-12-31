@@ -1,5 +1,5 @@
 # Rustls
-Rustls is a new, modern TLS library written in Rust.  It's pronounced 'rustles'.
+Rustls is a modern TLS library written in Rust.  It's pronounced 'rustles'.
 It uses [*ring*](https://github.com/briansmith/ring) for cryptography
 and [libwebpki](https://github.com/briansmith/webpki) for certificate
 verification.
@@ -13,6 +13,19 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.12.0 (2017-12-31):
+  - New API for learning negotiated cipher suite.
+  - Move TLS1.3 support from draft 18 to 22.
+  - Allow server-side MTU configuration.
+  - Tested against latest BoringSSL test suite.
+  - Support RFC5705 exporters.
+  - Provide `ResolvesServerCertUsingSNI` for doing SNI-based
+    certificate switching.
+  - Allow disabling SNI extension on clients, for use with
+    custom server certificate verifiers where the hostname
+    may not make sense.
+  - DNS names are now typesafe, using `webpki::DNSName`.
+  - Update dependencies.
 * 0.11.0 (2017-08-28):
   - New server API for learning requested SNI name.
   - Server now checks selected certificate for validity.
