@@ -411,11 +411,11 @@ impl SessionCommon {
       }
     }
 
-    pub fn has_suite(&self) -> bool {
-        self.suite.is_some()
+    pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
+        self.suite
     }
 
-    pub fn get_suite(&self) -> &'static SupportedCipherSuite {
+    pub fn get_suite_assert(&self) -> &'static SupportedCipherSuite {
         self.suite.as_ref().unwrap()
     }
 
@@ -540,7 +540,7 @@ impl SessionCommon {
         self.send_msg_encrypt(Message::build_key_update_notify());
 
         let write_key = self.get_key_schedule().derive_next(kind);
-        let scs = self.get_suite();
+        let scs = self.get_suite_assert();
         self.set_message_encrypter(cipher::new_tls13_write(scs, &write_key));
 
         if self.is_client {
@@ -714,7 +714,7 @@ impl SessionCommon {
     }
 
     pub fn start_encryption_tls12(&mut self, secrets: SessionSecrets) {
-        let (dec, enc) = cipher::new_tls12(self.get_suite(), &secrets);
+        let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), &secrets);
         self.message_encrypter = enc;
         self.message_decrypter = dec;
         self.secrets = Some(secrets);
@@ -771,7 +771,7 @@ impl SessionCommon {
         // Update our read-side keys.
         let new_read_key = self.get_key_schedule()
             .derive_next(read_kind);
-        let suite = self.get_suite();
+        let suite = self.get_suite_assert();
         self.set_message_decrypter(cipher::new_tls13_read(suite, &new_read_key));
 
         if read_kind == SecretKind::ServerApplicationTrafficSecret {

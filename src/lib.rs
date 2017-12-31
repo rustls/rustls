@@ -264,6 +264,7 @@ pub mod internal {
 // The public interface is:
 pub use msgs::enums::ProtocolVersion;
 pub use msgs::enums::SignatureScheme;
+pub use msgs::enums::CipherSuite;
 pub use error::TLSError;
 pub use session::Session;
 pub use stream::Stream;

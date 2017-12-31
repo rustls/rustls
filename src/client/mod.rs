@@ -420,7 +420,7 @@ impl ClientSessionImpl {
     }
 
     pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
-        Some(self.common.get_suite())
+        self.common.get_suite()
     }
 }
 

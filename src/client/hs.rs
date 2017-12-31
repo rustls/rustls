@@ -219,9 +219,9 @@ fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
 fn compatible_suite(sess: &ClientSessionImpl,
                     resuming_suite: Option<&suites::SupportedCipherSuite>) -> bool {
     match resuming_suite {
-        Some(suite) => {
-            if sess.common.has_suite() {
-                sess.common.get_suite().can_resume_to(&suite)
+        Some(resuming_suite) => {
+            if let Some(suite) = sess.common.get_suite() {
+                suite.can_resume_to(&resuming_suite)
             } else {
                 true
             }
@@ -474,7 +474,7 @@ impl ExpectServerHello {
                                sess: &mut ClientSessionImpl,
                                server_hello: &ServerHelloPayload)
                                -> Result<(), TLSError> {
-        let suite = sess.common.get_suite();
+        let suite = sess.common.get_suite_assert();
         let hash = suite.get_hash();
         let mut key_schedule = KeySchedule::new(hash);
 
@@ -655,12 +655,12 @@ impl State for ExpectServerHello {
         }
 
         let version = sess.common.negotiated_version.unwrap();
-        if !sess.common.get_suite().usable_for_version(version) {
+        if !sess.common.get_suite_assert().usable_for_version(version) {
             return Err(illegal_param(sess, "server chose unusable ciphersuite for version"));
         }
 
         // Start our handshake hash, and input the server-hello.
-        self.handshake.transcript.start_hash(sess.common.get_suite().get_hash());
+        self.handshake.transcript.start_hash(sess.common.get_suite_assert().get_hash());
         self.handshake.transcript.add_message(&m);
 
         // For TLS1.3, start message encryption using
@@ -1172,7 +1172,7 @@ impl State for ExpectTLS12ServerKX {
 
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
-        let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite().kx);
+        let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite_assert().kx);
         self.handshake.transcript.add_message(&m);
 
         if maybe_decoded_kx.is_none() {
@@ -1656,7 +1656,7 @@ impl State for ExpectTLS12ServerDone {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            let scs = sess.common.get_suite();
+            let scs = sess.common.get_suite_assert();
             if scs.sign != sig.scheme.sign() {
                 let error_message =
                     format!("peer signed kx with wrong algorithm (got {:?} expect {:?})",
@@ -1678,7 +1678,7 @@ impl State for ExpectTLS12ServerDone {
         }
 
         // 5a.
-        let kxd = sess.common.get_suite()
+        let kxd = sess.common.get_suite_assert()
             .do_client_kx(&st.server_kx.kx_params)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
@@ -1698,7 +1698,7 @@ impl State for ExpectTLS12ServerDone {
         emit_ccs(sess);
 
         // 5e. Now commit secrets.
-        let hashalg = sess.common.get_suite().get_hash();
+        let hashalg = sess.common.get_suite_assert().get_hash();
         let secrets = if st.handshake.using_ems {
             SessionSecrets::new_ems(&st.handshake.randoms,
                                     &handshake_hash,
@@ -1817,7 +1817,7 @@ fn save_session(handshake: &mut HandshakeDetails,
 
     let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
-    let scs = sess.common.get_suite();
+    let scs = sess.common.get_suite_assert();
     let master_secret = sess.common.secrets.as_ref().unwrap().get_master_secret();
     let version = sess.get_protocol_version().unwrap();
     let mut value = persist::ClientSessionValue::new(version,
@@ -1975,7 +1975,7 @@ impl State for ExpectTLS13Finished {
         let read_key = sess.common
             .get_key_schedule()
             .derive(SecretKind::ServerApplicationTrafficSecret, &handshake_hash);
-        let suite = sess.common.get_suite();
+        let suite = sess.common.get_suite_assert();
         sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
         sess.common
             .get_mut_key_schedule()
@@ -2120,7 +2120,7 @@ impl ExpectTLS13Traffic {
             .derive_ticket_psk(&resumption_master_secret, &nst.nonce.0);
 
         let mut value = persist::ClientSessionValue::new(ProtocolVersion::TLSv1_3,
-                                                         sess.common.get_suite().suite,
+                                                         sess.common.get_suite_assert().suite,
                                                          &SessionID::empty(),
                                                          nst.ticket.0.clone(),
                                                          secret);

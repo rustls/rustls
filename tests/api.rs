@@ -10,9 +10,10 @@ use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ServerConfig, ServerSession, ResolvesServerCert};
 use rustls::Session;
 use rustls::Stream;
-use rustls::{ProtocolVersion, SignatureScheme};
+use rustls::{ProtocolVersion, SignatureScheme, CipherSuite};
 use rustls::TLSError;
 use rustls::sign;
+use rustls::{ALL_CIPHERSUITES, SupportedCipherSuite};
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
 use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
@@ -999,4 +1000,124 @@ fn test_tls13_exporter() {
     client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
 
     do_exporter_test(client_config, server_config);
+}
+
+fn do_suite_test(client_config: ClientConfig,
+                 server_config: ServerConfig,
+                 expect_suite: &'static SupportedCipherSuite,
+                 expect_version: ProtocolVersion) {
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    assert_eq!(None, client.get_negotiated_ciphersuite());
+    assert_eq!(None, server.get_negotiated_ciphersuite());
+    assert_eq!(None, client.get_protocol_version());
+    assert_eq!(None, server.get_protocol_version());
+    assert_eq!(true, client.is_handshaking());
+    assert_eq!(true, server.is_handshaking());
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    assert_eq!(true, client.is_handshaking());
+    assert_eq!(true, server.is_handshaking());
+    assert_eq!(None, client.get_protocol_version());
+    assert_eq!(Some(expect_version), server.get_protocol_version());
+    assert_eq!(None, client.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    assert_eq!(Some(expect_suite), client.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    assert_eq!(false, client.is_handshaking());
+    assert_eq!(false, server.is_handshaking());
+    assert_eq!(Some(expect_version), client.get_protocol_version());
+    assert_eq!(Some(expect_version), server.get_protocol_version());
+    assert_eq!(Some(expect_suite), client.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+}
+
+fn find_suite(suite: CipherSuite) -> &'static SupportedCipherSuite {
+    for scs in ALL_CIPHERSUITES.iter() {
+        if scs.suite == suite {
+            return scs;
+        }
+    }
+
+    panic!("find_suite given unsuppported suite");
+}
+
+static TEST_CIPHERSUITES: [(ProtocolVersion, CipherSuite); 9] = [
+    (ProtocolVersion::TLSv1_3, CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
+    (ProtocolVersion::TLSv1_3, CipherSuite::TLS13_AES_256_GCM_SHA384),
+    (ProtocolVersion::TLSv1_3, CipherSuite::TLS13_AES_128_GCM_SHA256),
+    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
+    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
+    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384),
+    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256),
+    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
+    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256)
+];
+
+#[test]
+fn negotiated_ciphersuite_default() {
+    do_suite_test(make_client_config(),
+                  make_server_config(),
+                  find_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
+                  ProtocolVersion::TLSv1_3);
+}
+
+#[test]
+fn all_suites_covered() {
+    assert_eq!(ALL_CIPHERSUITES.len(), TEST_CIPHERSUITES.len());
+}
+
+#[test]
+fn negotiated_ciphersuite_client() {
+    for item in TEST_CIPHERSUITES.iter() {
+        let (version, suite) = *item;
+        let scs = find_suite(suite);
+        let mut client_config = make_client_config();
+        client_config.ciphersuites = vec![scs];
+        client_config.versions = vec![version];
+
+        if format!("{:?}", scs.sign) == "ECDSA" {
+            println!("cannot test ECDSA");
+            continue;
+        }
+
+        do_suite_test(client_config,
+                      make_server_config(),
+                      scs,
+                      version);
+    }
+}
+
+#[test]
+fn negotiated_ciphersuite_server() {
+    for item in TEST_CIPHERSUITES.iter() {
+        let (version, suite) = *item;
+        let scs = find_suite(suite);
+        let mut server_config = make_server_config();
+        server_config.ciphersuites = vec![scs];
+        server_config.versions = vec![version];
+
+        if format!("{:?}", scs.sign) == "ECDSA" {
+            println!("cannot test ECDSA");
+            continue;
+        }
+
+        do_suite_test(make_client_config(),
+                      server_config,
+                      scs,
+                      version);
+    }
 }
