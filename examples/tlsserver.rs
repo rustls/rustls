@@ -109,6 +109,7 @@ struct Connection {
     socket: TcpStream,
     token: mio::Token,
     closing: bool,
+    closed: bool,
     mode: ServerMode,
     tls_session: rustls::ServerSession,
     back: Option<TcpStream>,
@@ -153,6 +154,7 @@ impl Connection {
             socket: socket,
             token: token,
             closing: false,
+            closed: false,
             mode: mode,
             tls_session: tls_session,
             back: back,
@@ -178,6 +180,7 @@ impl Connection {
         if self.closing && !self.tls_session.wants_write() {
             let _ = self.socket.shutdown(Shutdown::Both);
             self.close_back();
+            self.closed = true;
         } else {
             self.reregister(poll);
         }
@@ -354,7 +357,7 @@ impl Connection {
     }
 
     fn is_closed(&self) -> bool {
-        self.closing
+        self.closed
     }
 }
 
