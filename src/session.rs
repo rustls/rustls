@@ -115,6 +115,11 @@ pub trait Session: Read + Write + Send + Sync {
                               label: &[u8],
                               context: Option<&[u8]>) -> Result<(), TLSError>;
 
+    /// Retrives the ciphersuite agreed with the peer.
+    ///
+    /// This returns None until the ciphersuite is agreed.
+    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite>;
+
     /// This function uses `io` to complete any outstanding IO for
     /// this session.
     ///

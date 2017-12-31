@@ -379,6 +379,10 @@ impl ServerSessionImpl {
         self.common.negotiated_version
     }
 
+    pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+        Some(self.common.get_suite())
+    }
+
     pub fn get_sni(&self)-> Option<&webpki::DNSName> {
         self.sni.as_ref()
     }
@@ -479,6 +483,10 @@ impl Session for ServerSession {
                               label: &[u8],
                               context: Option<&[u8]>) -> Result<(), TLSError> {
         self.imp.common.export_keying_material(output, label, context)
+    }
+
+    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+        self.imp.get_negotiated_ciphersuite()
     }
 }
 
