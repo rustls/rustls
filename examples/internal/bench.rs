@@ -53,23 +53,30 @@ fn time<F>(mut f: F) -> f64
     f64::from(dur)
 }
 
-fn transfer(left: &mut Session, right: &mut Session) {
+fn transfer(left: &mut Session, right: &mut Session) -> f64 {
     let mut buf = [0u8; 262144];
+    let mut read_time = 0f64;
 
     while left.wants_write() {
         let sz = left.write_tls(&mut buf.as_mut()).unwrap();
+
         if sz == 0 {
-            return;
+            return read_time;
         }
 
         let mut offs = 0;
         loop {
+            let start = Instant::now();
             offs += right.read_tls(&mut buf[offs..sz].as_ref()).unwrap();
+            let end = Instant::now();
+            read_time += f64::from(duration_nanos(end.duration_since(start)));
             if sz == offs {
                 break;
             }
         }
     }
+
+    read_time
 }
 
 fn drain(d: &mut Session, expect_len: usize) {
@@ -278,8 +285,10 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
             server.write_all(&buf).unwrap();
             ()
         });
+
+        time_recv += transfer(&mut server, &mut client);
+
         time_recv += time(|| {
-            transfer(&mut server, &mut client);
             client.process_new_packets().unwrap()
         });
         drain(&mut client, buf.len());
