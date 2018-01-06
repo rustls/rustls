@@ -13,7 +13,7 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
-* 0.12.0 (2017-12-31):
+* 0.12.0 (2018-01-06):
   - New API for learning negotiated cipher suite.
   - Move TLS1.3 support from draft 18 to 22.
   - Allow server-side MTU configuration.
