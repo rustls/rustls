@@ -121,14 +121,16 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     /// Make a `ClientConfig` with a default set of ciphersuites,
-    /// no root certificates, no ALPN protocols, no
-    /// session persistence, and no client auth.
+    /// no root certificates, no ALPN protocols, and no client auth.
+    ///
+    /// The default session persistence provider stores up to 32
+    /// items in memory.
     pub fn new() -> ClientConfig {
         ClientConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
-            session_persistence: Arc::new(handy::NoSessionStorage {}),
+            session_persistence: handy::ClientSessionMemoryCache::new(32),
             mtu: None,
             client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
             enable_tickets: true,

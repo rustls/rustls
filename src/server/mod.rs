@@ -25,7 +25,7 @@ pub mod handy;
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
 ///
-/// `put` and `del` are mutating operations; this isn't expressed
+/// `put` is a mutating operation; this isn't expressed
 /// in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common
 /// choice.
@@ -36,15 +36,11 @@ pub trait StoresServerSessions : Send + Sync {
     /// Store session secrets encoded in `value` against key `id`,
     /// overwrites any existing value against `id`.  Returns `true`
     /// if the value was stored.
-    fn put(&self, id: &SessionID, value: Vec<u8>) -> bool;
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
 
     /// Find a session with the given `id`.  Return it, or None
     /// if it doesn't exist.
-    fn get(&self, id: &SessionID) -> Option<Vec<u8>>;
-
-    /// Erase a session with the given `id`.  Return true if
-    /// `id` existed and was removed.
-    fn del(&self, id: &SessionID) -> bool;
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.
@@ -134,22 +130,24 @@ pub struct ServerConfig {
 
 impl ServerConfig {
     /// Make a `ServerConfig` with a default set of ciphersuites,
-    /// no keys/certificates, no ALPN protocols, and no session persistence.
+    /// no keys/certificates, and no ALPN protocols.  Session resumption
+    /// is enabled by storing up to 256 recent sessions in memory. Tickets are
+    /// disabled.
     ///
     /// Publicly-available web servers on the internet generally don't do client
     /// authentication; for this use case, `client_cert_verifier` should be a
     /// `NoClientAuth`. Otherwise, use `AllowAnyAuthenticatedClient` or another
     /// implementation to enforce client authentication.
-    //
-    // We don't provide a default for `client_cert_verifier` because the safest
-    // default, requiring client authentication, requires additional
-    // configuration that we cannot provide reasonable defaults for.
+    ///
+    /// We don't provide a default for `client_cert_verifier` because the safest
+    /// default, requiring client authentication, requires additional
+    /// configuration that we cannot provide reasonable defaults for.
     pub fn new(client_cert_verifier: Arc<verify::ClientCertVerifier>) -> ServerConfig {
         ServerConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             ignore_client_order: false,
             mtu: None,
-            session_storage: Arc::new(handy::NoSessionStorage {}),
+            session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
             cert_resolver: Arc::new(handy::FailResolveChain {}),

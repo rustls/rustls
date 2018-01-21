@@ -1119,7 +1119,7 @@ impl State for ExpectClientHello {
         // does not correspond to a real session.
         if !client_hello.session_id.is_empty() && !ticket_received {
             let maybe_resume = sess.config.session_storage
-                .get(&client_hello.session_id)
+                .get(&client_hello.session_id.get_encoding())
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x));
 
             if can_resume(sess, &self.handshake, &maybe_resume) {
@@ -1608,7 +1608,7 @@ impl State for ExpectTLS12Finished {
             let value = get_server_session_value_tls12(&self.handshake, sess);
 
             let worked = sess.config.session_storage
-                .put(&self.handshake.session_id, value.get_encoding());
+                .put(self.handshake.session_id.get_encoding(), value.get_encoding());
             if worked {
                 debug!("Session saved");
             } else {

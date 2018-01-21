@@ -1,6 +1,5 @@
 use msgs::enums::SignatureScheme;
 use msgs::handshake::SessionID;
-use msgs::codec::Codec;
 use rand;
 use sign;
 use key;
@@ -12,20 +11,17 @@ use std::collections;
 use std::sync::{Arc, Mutex};
 
 /// Something which never stores sessions.
-pub struct NoSessionStorage {}
+pub struct NoServerSessionStorage {}
 
-impl server::StoresServerSessions for NoSessionStorage {
+impl server::StoresServerSessions for NoServerSessionStorage {
     fn generate(&self) -> SessionID {
         SessionID::empty()
     }
-    fn put(&self, _id: &SessionID, _sec: Vec<u8>) -> bool {
+    fn put(&self, _id: Vec<u8>, _sec: Vec<u8>) -> bool {
         false
     }
-    fn get(&self, _id: &SessionID) -> Option<Vec<u8>> {
+    fn get(&self, _id: &[u8]) -> Option<Vec<u8>> {
         None
-    }
-    fn del(&self, _id: &SessionID) -> bool {
-        false
     }
 }
 
@@ -64,24 +60,18 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
         SessionID::new(&v)
     }
 
-    fn put(&self, id: &SessionID, sec: Vec<u8>) -> bool {
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         self.cache.lock()
             .unwrap()
-            .insert(id.get_encoding(), sec);
+            .insert(key, value);
         self.limit_size();
         true
     }
 
-    fn get(&self, id: &SessionID) -> Option<Vec<u8>> {
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
         self.cache.lock()
             .unwrap()
-            .get(&id.get_encoding()).cloned()
-    }
-
-    fn del(&self, id: &SessionID) -> bool {
-        self.cache.lock()
-            .unwrap()
-            .remove(&id.get_encoding()).is_some()
+            .get(key).cloned()
     }
 }
 
@@ -190,5 +180,81 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
             // This kind of resolver requires SNI
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use StoresServerSessions;
+
+    #[test]
+    fn test_noserversessionstorage_yields_no_sessid() {
+        let c = NoServerSessionStorage {};
+        assert_eq!(c.generate(), SessionID::empty());
+        assert_eq!(c.generate().len(), 0);
+        assert!(c.generate().is_empty());
+    }
+
+    #[test]
+    fn test_noserversessionstorage_drops_put() {
+        let c = NoServerSessionStorage {};
+        assert_eq!(c.put(vec![0x01], vec![0x02]), false);
+    }
+
+    #[test]
+    fn test_noserversessionstorage_denies_gets() {
+        let c = NoServerSessionStorage {};
+        c.put(vec![0x01], vec![0x02]);
+        assert_eq!(c.get(&[]), None);
+        assert_eq!(c.get(&[0x01]), None);
+        assert_eq!(c.get(&[0x02]), None);
+    }
+
+    #[test]
+    fn test_serversessionmemorycache_yields_sessid() {
+        let c = ServerSessionMemoryCache::new(4);
+        assert_eq!(c.generate().len(), 32);
+    }
+
+    #[test]
+    fn test_serversessionmemorycache_accepts_put() {
+        let c = ServerSessionMemoryCache::new(4);
+        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
+    }
+
+    #[test]
+    fn test_serversessionmemorycache_persists_put() {
+        let c = ServerSessionMemoryCache::new(4);
+        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
+        assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
+        assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
+    }
+
+    #[test]
+    fn test_serversessionmemorycache_overwrites_put() {
+        let c = ServerSessionMemoryCache::new(4);
+        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
+        assert_eq!(c.put(vec![0x01], vec![0x04]), true);
+        assert_eq!(c.get(&[0x01]), Some(vec![0x04]));
+    }
+
+    #[test]
+    fn test_serversessionmemorycache_drops_to_maintain_size_invariant() {
+        let c = ServerSessionMemoryCache::new(4);
+        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
+        assert_eq!(c.put(vec![0x03], vec![0x04]), true);
+        assert_eq!(c.put(vec![0x05], vec![0x06]), true);
+        assert_eq!(c.put(vec![0x07], vec![0x08]), true);
+        assert_eq!(c.put(vec![0x09], vec![0x0a]), true);
+
+        let mut count = 0;
+        if c.get(&[0x01]).is_some() { count += 1; }
+        if c.get(&[0x03]).is_some() { count += 1; }
+        if c.get(&[0x05]).is_some() { count += 1; }
+        if c.get(&[0x07]).is_some() { count += 1; }
+        if c.get(&[0x09]).is_some() { count += 1; }
+
+        assert_eq!(count, 4);
     }
 }
