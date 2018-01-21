@@ -169,6 +169,8 @@ mod tests {
                        TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
                        TLSError::InvalidSCT(sct::Error::MalformedSCT),
                        TLSError::General("undocumented error".to_string()),
+                       TLSError::FailedToGetCurrentTime,
+                       TLSError::InvalidDNSName("dns something".to_string()),
                        TLSError::HandshakeNotComplete,
                        TLSError::PeerSentOversizedRecord];
 
