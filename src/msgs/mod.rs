@@ -16,6 +16,9 @@ pub mod fragmenter;
 pub mod hsjoiner;
 
 #[cfg(test)]
+mod handshake_test;
+
+#[cfg(test)]
 mod enums_test;
 
 #[cfg(test)]
