@@ -40,9 +40,16 @@ impl<'a, S, T> Read for Stream<'a, S, T> where S: 'a + Session, T: 'a + Read + W
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        if self.sess.wants_read() {
-            self.sess.complete_io(self.sock)?;
-        }
+        // We call complete_io() in a loop since a single call may read only
+        // a partial packet from the underlying transport. A full packet is
+        // needed to get more plaintext, which we must do if EOF has not been
+        // hit. Otherwise, we will prematurely signal EOF by returning 0. We
+        // determine if EOF has actually been hit by checking if 0 bytes were
+        // read from the underlying transport.
+        while
+            self.sess.wants_read() &&
+            self.sess.complete_io(self.sock)?.0 != 0
+        { }
 
         self.sess.read(buf)
     }
