@@ -247,6 +247,8 @@ mod ticketer;
 mod server;
 mod client;
 mod key;
+mod bs_debug;
+
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
