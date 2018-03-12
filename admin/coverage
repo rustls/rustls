@@ -31,7 +31,8 @@ def rustc(*args):
     exe = [cargo(), 'rustc', '--all-features'] + list(args)
     env = dict(os.environ)
     env.update(RUSTC_WRAPPER = './admin/coverage-rustc',
-               COVERAGE_OPTIONS = COVERAGE_OPTIONS)
+               COVERAGE_OPTIONS = COVERAGE_OPTIONS,
+               CARGO_INCREMENTAL = '0')
     subprocess.check_call(exe, env = env)
 
 def lcov(outfile):
