@@ -6,7 +6,7 @@ use session::Session;
 /// a socket.
 ///
 /// This allows you to use a rustls Session like a normal stream.
-pub struct Stream<'a, S: 'a + Session, T: 'a + Read + Write> {
+pub struct Stream<'a, S: 'a + Session + ?Sized, T: 'a + Read + Write + ?Sized> {
     /// Our session
     pub sess: &'a mut S,
 
@@ -65,5 +65,22 @@ impl<'a, S, T> Write for Stream<'a, S, T> where S: 'a + Session, T: 'a + Read + 
             self.sess.complete_io(self.sock)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Stream;
+    use session::Session;
+    use std::net::TcpStream;
+
+    #[test]
+    fn session_can_be_instantiated_with() {
+        fn _foo<'a>(sess: &'a mut Session, sock: &'a mut TcpStream) -> Stream<'a, Session, TcpStream> {
+            Stream {
+                sess: sess,
+                sock: sock,
+            }
+        }
     }
 }

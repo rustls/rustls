@@ -38,6 +38,16 @@ pub trait Session: Read + Write + Send + Sync {
     fn read_tls(&mut self, rd: &mut Read) -> Result<usize, io::Error>;
 
     /// Writes TLS messages to `wr`.
+    ///
+    /// On success the function returns `Ok(n)` where `n` is a number
+    /// of bytes written to `wr`, number of bytes after encoding and
+    /// encryption.
+    ///
+    /// Note that after function return the session buffer maybe not
+    /// yet fully flushed. [`wants_write`] function can be used
+    /// to check if output buffer is not empty.
+    ///
+    /// [`wants_write`]: #tymethod.wants_write
     fn write_tls(&mut self, wr: &mut Write) -> Result<usize, io::Error>;
 
     /// Processes any new packets read by a previous call to `read_tls`.
