@@ -13,6 +13,8 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* Next release:
+  - Move TLS1.3 support from draft 22 to 23.
 * 0.12.0 (2018-01-06):
   - New API for learning negotiated cipher suite.
   - Move TLS1.3 support from draft 18 to 22.
@@ -91,7 +93,7 @@ obsolete cryptography.
 
 ## Current features
 
-* TLS1.2 and TLS1.3 (draft 22) only.
+* TLS1.2 and TLS1.3 (draft 23) only.
 * ECDSA or RSA server authentication by clients.
 * RSA server authentication by servers.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
@@ -173,6 +175,7 @@ Options:
                         May be used multiple times to offer serveral protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
+    --no-sni            Disable server name indication support.
     --insecure          Disable certificate verification.
     --verbose           Emit log output.
     --mtu MTU           Limit outgoing messages to MTU bytes.
