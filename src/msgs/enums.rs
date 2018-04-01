@@ -210,7 +210,6 @@ enum_builder! {@U16
         Padding => 0x0015,
         ExtendedMasterSecret => 0x0017,
         SessionTicket => 0x0023,
-        KeyShare => 0x0028,
         PreSharedKey => 0x0029,
         EarlyData => 0x002a,
         SupportedVersions => 0x002b,
@@ -219,6 +218,9 @@ enum_builder! {@U16
         TicketEarlyDataInfo => 0x002e,
         CertificateAuthorities => 0x002f,
         OIDFilters => 0x0030,
+        PostHandshakeAuth => 0x0031,
+        SignatureAlgorithmsCert => 0x0032,
+        KeyShare => 0x0033,
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01
