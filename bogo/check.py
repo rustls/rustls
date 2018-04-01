@@ -1,6 +1,7 @@
 import re
 import json
 import fnmatch
+import sys
 
 config = json.load(open('config.json'))
 test_error_set = set(config['TestErrorMap'].keys())
@@ -12,7 +13,7 @@ unimpl_tests = set()
 disabled_tests = set()
 passed_tests = set()
 
-for line in open('out'):
+for line in sys.stdin:
     m = re.match('^(PASSED|UNIMPLEMENTED|FAILED|DISABLED) \((.*)\)$', line.strip())
     if m:
         status, name = m.groups()
