@@ -38,8 +38,8 @@ use std::mem;
 use ring::constant_time;
 use webpki;
 
-// draft-ietf-tls-tls13-22
-const TLS13_DRAFT: u16 = 0x7f16;
+// draft-ietf-tls-tls13-23
+const TLS13_DRAFT: u16 = 0x7f17;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
