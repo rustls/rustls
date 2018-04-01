@@ -577,6 +577,7 @@ fn main() {
             "-no-tls11" |
             "-no-tls1" |
             "-no-ssl3" |
+            "-handoff" |
             "-decline-alpn" |
             "-expect-no-session" |
             "-expect-session-miss" |
