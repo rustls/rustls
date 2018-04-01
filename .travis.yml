@@ -18,7 +18,6 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then curl -sSL https://rvm.io/mpapis.asc | gpg --import - ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then rvm get stable       ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then pip install --upgrade pip ; fi
   - if [[ "$COVERAGE" == "1" ]]; then admin/build-lcov ; fi
   - if [[ "$COVERAGE" == "1" ]]; then gem install coveralls-lcov ; fi
   - if [[ "$COVERAGE" == "1" ]]; then rustup install stable ; fi
