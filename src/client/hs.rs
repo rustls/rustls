@@ -394,6 +394,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     let ch = Message {
         typ: ContentType::Handshake,
+        // "This value MUST be set to 0x0303 for all records generated
+        //  by a TLS 1.3 implementation other than an initial ClientHello
+        //  (i.e., one not generated after a HelloRetryRequest)"
         version: if retryreq.is_some() {
             ProtocolVersion::TLSv1_2
         } else {
