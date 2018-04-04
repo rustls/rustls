@@ -223,7 +223,8 @@ enum_builder! {@U16
         KeyShare => 0x0033,
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
-        RenegotiationInfo => 0xff01
+        RenegotiationInfo => 0xff01,
+        TransportParameters => 0x001a
     }
 }
 

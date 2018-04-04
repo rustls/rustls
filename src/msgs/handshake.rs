@@ -8,6 +8,7 @@ use msgs::enums::PSKKeyExchangeMode;
 use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
+use msgs::quic::{ClientTransportParameters, ServerTransportParameters};
 use std;
 use std::fmt;
 use std::io::Write;
@@ -602,6 +603,7 @@ pub enum ClientExtension {
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
     SignedCertificateTimestampRequest,
+    TransportParameters(ClientTransportParameters),
     Unknown(UnknownExtension),
 }
 
@@ -623,6 +625,7 @@ impl ClientExtension {
             ClientExtension::ExtendedMasterSecretRequest => ExtensionType::ExtendedMasterSecret,
             ClientExtension::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
+            ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -649,6 +652,7 @@ impl Codec for ClientExtension {
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
+            ClientExtension::TransportParameters(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -738,6 +742,7 @@ pub enum ServerExtension {
     CertificateStatusAck,
     SignedCertificateTimestamp(SCTList),
     SupportedVersions(ProtocolVersion),
+    TransportParameters(ServerTransportParameters),
     Unknown(UnknownExtension),
 }
 
@@ -755,6 +760,7 @@ impl ServerExtension {
             ServerExtension::CertificateStatusAck => ExtensionType::StatusRequest,
             ServerExtension::SignedCertificateTimestamp(_) => ExtensionType::SCT,
             ServerExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
+            ServerExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -777,6 +783,7 @@ impl Codec for ServerExtension {
             ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
             ServerExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             ServerExtension::SupportedVersions(ref r) => r.encode(&mut sub),
+            ServerExtension::TransportParameters(ref r) => r.encode(&mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
