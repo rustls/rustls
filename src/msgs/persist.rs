@@ -3,7 +3,6 @@ use msgs::enums::{CipherSuite, ProtocolVersion};
 use msgs::codec::{Reader, Codec};
 use msgs::handshake::CertificatePayload;
 use msgs::base::{PayloadU8, PayloadU16};
-use msgs::codec;
 
 use webpki;
 use untrusted;
@@ -72,9 +71,9 @@ impl Codec for ClientSessionValue {
         self.session_id.encode(bytes);
         self.ticket.encode(bytes);
         self.master_secret.encode(bytes);
-        codec::encode_u64(self.epoch, bytes);
-        codec::encode_u32(self.lifetime, bytes);
-        codec::encode_u32(self.age_add, bytes);
+        self.epoch.encode(bytes);
+        self.lifetime.encode(bytes);
+        self.age_add.encode(bytes);
         (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
     }
 
@@ -84,9 +83,9 @@ impl Codec for ClientSessionValue {
         let sid = try_ret!(SessionID::read(r));
         let ticket = try_ret!(PayloadU16::read(r));
         let ms = try_ret!(PayloadU8::read(r));
-        let epoch = try_ret!(codec::read_u64(r));
-        let lifetime = try_ret!(codec::read_u32(r));
-        let age_add = try_ret!(codec::read_u32(r));
+        let epoch = try_ret!(u64::read(r));
+        let lifetime = try_ret!(u32::read(r));
+        let age_add = try_ret!(u32::read(r));
         let extended_ms = try_ret!(u8::read(r));
 
         Some(ClientSessionValue {

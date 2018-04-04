@@ -1,5 +1,5 @@
 
-use msgs::codec::{Codec, Reader, encode_u16, read_u16};
+use msgs::codec::{Codec, Reader};
 use msgs::base::Payload;
 use msgs::alert::AlertMessagePayload;
 use msgs::ccs::ChangeCipherSpecPayload;
@@ -82,7 +82,7 @@ impl Codec for Message {
     fn read(r: &mut Reader) -> Option<Message> {
         let typ = try_ret!(ContentType::read(r));
         let version = try_ret!(ProtocolVersion::read(r));
-        let len = try_ret!(read_u16(r));
+        let len = try_ret!(u16::read(r));
 
         let mut sub = try_ret!(r.sub(len as usize));
         let payload = try_ret!(Payload::read(&mut sub));
@@ -97,7 +97,7 @@ impl Codec for Message {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.typ.encode(bytes);
         self.version.encode(bytes);
-        encode_u16(self.payload.length() as u16, bytes);
+        (self.payload.length() as u16).encode(bytes);
         self.payload.encode(bytes);
     }
 }
@@ -111,7 +111,7 @@ impl Message {
 
         let typ = try_ret!(ContentType::read(&mut rd));
         let version = try_ret!(ProtocolVersion::read(&mut rd));
-        let len = try_ret!(read_u16(&mut rd));
+        let len = try_ret!(u16::read(&mut rd));
 
         // Don't accept any new content-types.
         if let ContentType::Unknown(_) = typ {

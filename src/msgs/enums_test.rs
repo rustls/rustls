@@ -1,19 +1,19 @@
 /// These tests are intended to provide coverage and
 /// check panic-safety of relatively unused values.
 
-use super::codec::{Codec, decode_u8, decode_u16, encode_u16};
+use super::codec::Codec;
 use super::enums::*;
 
 fn get8<T: Codec>(enum_value: &T) -> u8 {
     let enc = enum_value.get_encoding();
     assert_eq!(enc.len(), 1);
-    decode_u8(&enc).unwrap()
+    enc[0]
 }
 
 fn get16<T: Codec>(enum_value: &T) -> u16 {
     let enc = enum_value.get_encoding();
     assert_eq!(enc.len(), 2);
-    decode_u16(&enc).unwrap()
+    (enc[0] as u16 >> 8) | (enc[1] as u16)
 }
 
 fn test_enum16<T: Codec>(first: T, last: T) {
@@ -22,7 +22,7 @@ fn test_enum16<T: Codec>(first: T, last: T) {
 
     for val in first_v..last_v + 1 {
         let mut buf = Vec::new();
-        encode_u16(val, &mut buf);
+        val.encode(&mut buf);
         assert_eq!(buf.len(), 2);
 
         let t = T::read_bytes(&buf).unwrap();

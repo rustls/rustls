@@ -307,7 +307,7 @@ pub enum ServerNamePayload {
 
 impl ServerNamePayload {
     fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let name = try_ret!(r.take(len));
         let dns_name = try_ret!(webpki::DNSNameRef::try_from_ascii(
                 untrusted::Input::from(name)).ok());
@@ -316,7 +316,7 @@ impl ServerNamePayload {
 
     fn encode_hostname(name: webpki::DNSNameRef, bytes: &mut Vec<u8>) {
         let dns_name_str: &str = name.into();
-        codec::encode_u16(dns_name_str.len() as u16, bytes);
+        (dns_name_str.len() as u16).encode(bytes);
         bytes.extend_from_slice(dns_name_str.as_bytes());
     }
 
@@ -463,13 +463,13 @@ impl PresharedKeyIdentity {
 impl Codec for PresharedKeyIdentity {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.identity.encode(bytes);
-        codec::encode_u32(self.obfuscated_ticket_age, bytes);
+        self.obfuscated_ticket_age.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<PresharedKeyIdentity> {
         Some(PresharedKeyIdentity {
             identity: try_ret!(PayloadU16::read(r)),
-            obfuscated_ticket_age: try_ret!(codec::read_u32(r)),
+            obfuscated_ticket_age: try_ret!(u32::read(r)),
         })
     }
 }
@@ -656,13 +656,13 @@ impl Codec for ClientExtension {
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
-        codec::encode_u16(sub.len() as u16, bytes);
+        (sub.len() as u16).encode(bytes);
         bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<ClientExtension> {
         let typ = try_ret!(ExtensionType::read(r));
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
@@ -780,20 +780,20 @@ impl Codec for ServerExtension {
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
-            ServerExtension::PresharedKey(r) => codec::encode_u16(r, &mut sub),
+            ServerExtension::PresharedKey(r) => r.encode(&mut sub),
             ServerExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             ServerExtension::SupportedVersions(ref r) => r.encode(&mut sub),
             ServerExtension::TransportParameters(ref r) => r.encode(&mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
-        codec::encode_u16(sub.len() as u16, bytes);
+        (sub.len() as u16).encode(bytes);
         bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<ServerExtension> {
         let typ = try_ret!(ExtensionType::read(r));
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
@@ -813,7 +813,7 @@ impl Codec for ServerExtension {
                 ServerExtension::KeyShare(try_ret!(KeyShareEntry::read(&mut sub)))
             }
             ExtensionType::PreSharedKey => {
-                ServerExtension::PresharedKey(try_ret!(codec::read_u16(&mut sub)))
+                ServerExtension::PresharedKey(try_ret!(u16::read(&mut sub)))
             }
             ExtensionType::ExtendedMasterSecret => ServerExtension::ExtendedMasterSecretAck,
             ExtensionType::SCT => {
@@ -1064,13 +1064,13 @@ impl Codec for HelloRetryExtension {
             HelloRetryExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
-        codec::encode_u16(sub.len() as u16, bytes);
+        (sub.len() as u16).encode(bytes);
         bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryExtension> {
         let typ = try_ret!(ExtensionType::read(r));
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
@@ -1346,13 +1346,13 @@ impl Codec for CertificateExtension {
             CertificateExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
-        codec::encode_u16(sub.len() as u16, bytes);
+        (sub.len() as u16).encode(bytes);
         bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<CertificateExtension> {
         let typ = try_ret!(ExtensionType::read(r));
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
@@ -1826,13 +1826,13 @@ impl Codec for CertReqExtension {
             CertReqExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
-        codec::encode_u16(sub.len() as u16, bytes);
+        (sub.len() as u16).encode(bytes);
         bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<CertReqExtension> {
         let typ = try_ret!(ExtensionType::read(r));
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
@@ -1914,12 +1914,12 @@ impl NewSessionTicketPayload {
 
 impl Codec for NewSessionTicketPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u32(self.lifetime_hint, bytes);
+        self.lifetime_hint.encode(bytes);
         self.ticket.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<NewSessionTicketPayload> {
-        let lifetime = try_ret!(codec::read_u32(r));
+        let lifetime = try_ret!(u32::read(r));
         let ticket = try_ret!(PayloadU16::read(r));
 
         Some(NewSessionTicketPayload {
@@ -1952,13 +1952,13 @@ impl Codec for NewSessionTicketExtension {
             NewSessionTicketExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
-        codec::encode_u16(sub.len() as u16, bytes);
+        (sub.len() as u16).encode(bytes);
         bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Option<NewSessionTicketExtension> {
         let typ = try_ret!(ExtensionType::read(r));
-        let len = try_ret!(codec::read_u16(r)) as usize;
+        let len = try_ret!(u16::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
 
         Some(match typ {
@@ -1997,16 +1997,16 @@ impl NewSessionTicketPayloadTLS13 {
 
 impl Codec for NewSessionTicketPayloadTLS13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u32(self.lifetime, bytes);
-        codec::encode_u32(self.age_add, bytes);
+        self.lifetime.encode(bytes);
+        self.age_add.encode(bytes);
         self.nonce.encode(bytes);
         self.ticket.encode(bytes);
         self.exts.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<NewSessionTicketPayloadTLS13> {
-        let lifetime = try_ret!(codec::read_u32(r));
-        let age_add = try_ret!(codec::read_u32(r));
+        let lifetime = try_ret!(u32::read(r));
+        let age_add = try_ret!(u32::read(r));
         let nonce = try_ret!(PayloadU8::read(r));
         let ticket = try_ret!(PayloadU16::read(r));
         let exts = try_ret!(NewSessionTicketExtensions::read(r));
@@ -2128,7 +2128,7 @@ impl Codec for HandshakeMessagePayload {
             HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
             _ => self.typ,
         }.encode(bytes);
-        codec::encode_u24(sub.len() as u32, bytes);
+        codec::u24(sub.len() as u32).encode(bytes);
         bytes.append(&mut sub);
     }
 
@@ -2146,7 +2146,7 @@ impl HandshakeMessagePayload {
 
     pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<HandshakeMessagePayload> {
         let mut typ = try_ret!(HandshakeType::read(r));
-        let len = try_ret!(codec::read_u24(r)) as usize;
+        let len = try_ret!(codec::u24::read(r)).0 as usize;
         let mut sub = try_ret!(r.sub(len));
 
         let payload = match typ {

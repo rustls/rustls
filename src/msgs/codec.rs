@@ -90,39 +90,43 @@ pub fn put_u16(v: u16, out: &mut [u8]) {
     out[1] = v as u8;
 }
 
-pub fn encode_u16(v: u16, bytes: &mut Vec<u8>) {
-    let mut b16 = [0u8; 2];
-    put_u16(v, &mut b16);
-    bytes.extend_from_slice(&b16);
-}
-
 pub fn decode_u16(bytes: &[u8]) -> Option<u16> {
     Some(((bytes[0] as u16) << 8) | bytes[1] as u16)
 }
 
-pub fn read_u16(r: &mut Reader) -> Option<u16> {
-    r.take(2).and_then(decode_u16)
+impl Codec for u16 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let mut b16 = [0u8; 2];
+        put_u16(*self, &mut b16);
+        bytes.extend_from_slice(&b16);
+    }
+
+    fn read(r: &mut Reader) -> Option<u16> {
+        r.take(2).and_then(decode_u16)
+    }
 }
 
-pub fn encode_u24(v: u32, bytes: &mut Vec<u8>) {
-    bytes.push((v >> 16) as u8);
-    bytes.push((v >> 8) as u8);
-    bytes.push(v as u8);
+// Make a distinct type for u24, even though it's a u32 underneath
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+pub struct u24(pub u32);
+
+impl u24 {
+    pub fn decode(bytes: &[u8]) -> Option<u24> {
+        Some(u24(((bytes[0] as u32) << 16) | ((bytes[1] as u32) << 8) | bytes[2] as u32))
+    }
 }
 
-pub fn decode_u24(bytes: &[u8]) -> Option<u32> {
-    Some(((bytes[0] as u32) << 16) | ((bytes[1] as u32) << 8) | bytes[2] as u32)
-}
+impl Codec for u24 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.push((self.0 >> 16) as u8);
+        bytes.push((self.0 >> 8) as u8);
+        bytes.push(self.0 as u8);
+    }
 
-pub fn read_u24(r: &mut Reader) -> Option<u32> {
-    r.take(3).and_then(decode_u24)
-}
-
-pub fn encode_u32(v: u32, bytes: &mut Vec<u8>) {
-    bytes.push((v >> 24) as u8);
-    bytes.push((v >> 16) as u8);
-    bytes.push((v >> 8) as u8);
-    bytes.push(v as u8);
+    fn read(r: &mut Reader) -> Option<u24> {
+        r.take(3).and_then(u24::decode)
+    }
 }
 
 pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
@@ -130,14 +134,17 @@ pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
          bytes[3] as u32)
 }
 
-pub fn read_u32(r: &mut Reader) -> Option<u32> {
-    r.take(4).and_then(decode_u32)
-}
+impl Codec for u32 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.push((*self >> 24) as u8);
+        bytes.push((*self >> 16) as u8);
+        bytes.push((*self >> 8) as u8);
+        bytes.push(*self as u8);
+    }
 
-pub fn encode_u64(v: u64, bytes: &mut Vec<u8>) {
-    let mut b64 = [0u8; 8];
-    put_u64(v, &mut b64);
-    bytes.extend_from_slice(&b64);
+    fn read(r: &mut Reader) -> Option<u32> {
+        r.take(4).and_then(decode_u32)
+    }
 }
 
 pub fn put_u64(v: u64, bytes: &mut [u8]) {
@@ -158,8 +165,16 @@ pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
          ((bytes[6] as u64) << 8) | bytes[7] as u64)
 }
 
-pub fn read_u64(r: &mut Reader) -> Option<u64> {
-    r.take(8).and_then(decode_u64)
+impl Codec for u64 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let mut b64 = [0u8; 8];
+        put_u64(*self, &mut b64);
+        bytes.extend_from_slice(&b64);
+    }
+
+    fn read(r: &mut Reader) -> Option<u64> {
+        r.take(8).and_then(decode_u64)
+    }
 }
 
 pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
@@ -180,7 +195,7 @@ pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     }
 
     debug_assert!(sub.len() <= 0xffff);
-    encode_u16(sub.len() as u16, bytes);
+    (sub.len() as u16).encode(bytes);
     bytes.append(&mut sub);
 }
 
@@ -191,7 +206,7 @@ pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     }
 
     debug_assert!(sub.len() <= 0xffffff);
-    encode_u24(sub.len() as u32, bytes);
+    u24(sub.len() as u32).encode(bytes);
     bytes.append(&mut sub);
 }
 
@@ -209,7 +224,7 @@ pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
 
 pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
-    let len = try_ret!(read_u16(r)) as usize;
+    let len = try_ret!(u16::read(r)) as usize;
     let mut sub = try_ret!(r.sub(len));
 
     while sub.any_left() {
@@ -221,7 +236,7 @@ pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
 
 pub fn read_vec_u24_limited<T: Codec>(r: &mut Reader, max_bytes: usize) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
-    let len = try_ret!(read_u24(r)) as usize;
+    let len = try_ret!(u24::read(r)).0 as usize;
     if len > max_bytes {
         return None;
     }

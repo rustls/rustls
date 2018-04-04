@@ -9,13 +9,13 @@ pub struct ClientTransportParameters {
 
 impl codec::Codec for ClientTransportParameters {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u32(self.initial_version, bytes);
+        self.initial_version.encode(bytes);
         codec::encode_vec_u16(bytes, &self.parameters);
     }
 
     fn read(r: &mut codec::Reader) -> Option<Self> {
         Some(ClientTransportParameters {
-            initial_version: try_ret!(codec::read_u32(r)),
+            initial_version: try_ret!(u32::read(r)),
             parameters: try_ret!(codec::read_vec_u16(r)),
         })
     }
@@ -30,27 +30,15 @@ pub struct ServerTransportParameters {
 
 impl codec::Codec for ServerTransportParameters {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u32(self.negotiated_version, bytes);
-        debug_assert!(self.supported_versions.len() * 4 <= 0xff);
-        codec::encode_u8((self.supported_versions.len() * 4) as u8, bytes);
-        for version in self.supported_versions.iter() {
-            codec::encode_u32(*version, bytes);
-        }
+        self.negotiated_version.encode(bytes);
+        codec::encode_vec_u8(bytes, &self.supported_versions);
         codec::encode_vec_u16(bytes, &self.parameters);
     }
 
     fn read(r: &mut codec::Reader) -> Option<Self> {
         Some(ServerTransportParameters {
-            negotiated_version: try_ret!(codec::read_u32(r)),
-            supported_versions: {
-                let len = try_ret!(codec::read_u8(r)) as usize;
-                let mut sub = try_ret!(r.sub(len));
-                let mut ret = Vec::new();
-                while sub.any_left() {
-                    ret.push(try_ret!(codec::read_u32(&mut sub)));
-                }
-                ret
-            },
+            negotiated_version: try_ret!(u32::read(r)),
+            supported_versions: try_ret!(codec::read_vec_u8(r)),
             parameters: try_ret!(codec::read_vec_u16(r)),
         })
     }
@@ -60,12 +48,12 @@ type Parameter = (u16, PayloadU16);
 
 impl codec::Codec for Parameter {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u16(self.0, bytes);
+        self.0.encode(bytes);
         self.1.encode(bytes);
     }
 
     fn read(r: &mut codec::Reader) -> Option<Self> {
-        Some((try_ret!(codec::read_u16(r)), try_ret!(PayloadU16::read(r))))
+        Some((try_ret!(u16::read(r)), try_ret!(PayloadU16::read(r))))
     }
 }
 

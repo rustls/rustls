@@ -1,7 +1,7 @@
 /// Key schedule maintenance for TLS1.3
 
 use ring::{hmac, digest, hkdf};
-use msgs::codec::{self, Codec};
+use msgs::codec::Codec;
 use error::TLSError;
 
 /// The kinds of secret we can extract from `KeySchedule`.
@@ -198,7 +198,7 @@ fn _hkdf_expand_label(output: &mut [u8],
     let label_prefix = b"tls13 ";
 
     let mut hkdflabel = Vec::new();
-    codec::encode_u16(output.len() as u16, &mut hkdflabel);
+    (output.len() as u16).encode(&mut hkdflabel);
     ((label.len() + label_prefix.len()) as u8).encode(&mut hkdflabel);
     hkdflabel.extend_from_slice(label_prefix);
     hkdflabel.extend_from_slice(label);

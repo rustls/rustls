@@ -5,7 +5,7 @@ use msgs::deframer::MessageDeframer;
 use msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use msgs::hsjoiner::HandshakeJoiner;
 use msgs::base::Payload;
-use msgs::codec::{Codec, encode_u16};
+use msgs::codec::Codec;
 use msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
 use msgs::enums::KeyUpdateRequest;
 use error::TLSError;
@@ -344,7 +344,7 @@ impl SessionSecrets {
         randoms.extend_from_slice(&self.randoms.server);
         if let Some(context) = context {
             assert!(context.len() <= 0xffff);
-            encode_u16(context.len() as u16, &mut randoms);
+            (context.len() as u16).encode(&mut randoms);
             randoms.extend_from_slice(context);
         }
 
