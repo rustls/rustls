@@ -72,16 +72,17 @@ pub trait Codec: Debug + Sized {
 }
 
 // Encoding functions.
-pub fn encode_u8(v: u8, bytes: &mut Vec<u8>) {
-    bytes.push(v);
-}
-
 pub fn decode_u8(bytes: &[u8]) -> Option<u8> {
     Some(bytes[0])
 }
 
-pub fn read_u8(r: &mut Reader) -> Option<u8> {
-    r.take(1).and_then(decode_u8)
+impl Codec for u8 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.push(*self);
+    }
+    fn read(r: &mut Reader) -> Option<u8> {
+        r.take(1).and_then(decode_u8)
+    }
 }
 
 pub fn put_u16(v: u16, out: &mut [u8]) {
@@ -168,7 +169,7 @@ pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     }
 
     debug_assert!(sub.len() <= 0xff);
-    encode_u8(sub.len() as u8, bytes);
+    (sub.len() as u8).encode(bytes);
     bytes.append(&mut sub);
 }
 
@@ -196,7 +197,7 @@ pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
 
 pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
-    let len = try_ret!(read_u8(r)) as usize;
+    let len = try_ret!(u8::read(r)) as usize;
     let mut sub = try_ret!(r.sub(len));
 
     while sub.any_left() {
