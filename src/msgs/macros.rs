@@ -26,11 +26,11 @@ macro_rules! enum_builder {
         }
         impl Codec for $enum_name {
             fn encode(&self, bytes: &mut Vec<u8>) {
-                encode_u8(self.get_u8(), bytes);
+                self.get_u8().encode(bytes);
             }
 
             fn read(r: &mut Reader) -> Option<Self> {
-                Some(match read_u8(r) {
+                Some(match u8::read(r) {
                     None => return None,
                     $( Some($enum_val) => $enum_name::$enum_var),*
                     ,Some(x) => $enum_name::Unknown(x)

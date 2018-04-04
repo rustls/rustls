@@ -1,7 +1,7 @@
 /// These tests are intended to provide coverage and
 /// check panic-safety of relatively unused values.
 
-use super::codec::{Codec, decode_u8, encode_u8, decode_u16, encode_u16};
+use super::codec::{Codec, decode_u8, decode_u16, encode_u16};
 use super::enums::*;
 
 fn get8<T: Codec>(enum_value: &T) -> u8 {
@@ -36,7 +36,7 @@ fn test_enum8<T: Codec>(first: T, last: T) {
 
     for val in first_v..last_v + 1 {
         let mut buf = Vec::new();
-        encode_u8(val, &mut buf);
+        val.encode(&mut buf);
         assert_eq!(buf.len(), 1);
 
         let t = T::read_bytes(&buf).unwrap();
