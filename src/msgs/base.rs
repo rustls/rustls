@@ -133,12 +133,12 @@ impl PayloadU8 {
 
 impl Codec for PayloadU8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_u8(self.0.len() as u8, bytes);
+        (self.0.len() as u8).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU8> {
-        let len = try_ret!(codec::read_u8(r)) as usize;
+        let len = try_ret!(u8::read(r)) as usize;
         let mut sub = try_ret!(r.sub(len));
         let body = sub.rest().to_vec();
         Some(PayloadU8(body))

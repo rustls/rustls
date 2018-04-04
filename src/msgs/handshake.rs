@@ -130,7 +130,7 @@ impl Codec for SessionID {
     }
 
     fn read(r: &mut Reader) -> Option<SessionID> {
-        let len = try_ret!(codec::read_u8(r)) as usize;
+        let len = try_ret!(u8::read(r)) as usize;
         if len > 32 {
             return None;
         }
