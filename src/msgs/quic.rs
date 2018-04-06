@@ -1,7 +1,7 @@
 use super::codec;
 use super::base::PayloadU16;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ClientTransportParameters {
     initial_version: u32,
     parameters: Vec<Parameter>,
@@ -21,7 +21,7 @@ impl codec::Codec for ClientTransportParameters {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ServerTransportParameters {
     negotiated_version: u32,
     supported_versions: Vec<u32>,

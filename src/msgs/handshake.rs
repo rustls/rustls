@@ -177,7 +177,7 @@ impl SessionID {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UnknownExtension {
     pub typ: ExtensionType,
     pub payload: Payload,
@@ -412,7 +412,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
 }
 
 // --- TLS 1.3 Key shares ---
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct KeyShareEntry {
     pub group: NamedGroup,
     pub payload: PayloadU16,
@@ -445,7 +445,7 @@ impl Codec for KeyShareEntry {
 }
 
 // --- TLS 1.3 PresharedKey offers ---
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PresharedKeyIdentity {
     pub identity: PayloadU16,
     pub obfuscated_ticket_age: u32,
@@ -478,7 +478,7 @@ declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
 pub type PresharedKeyBinder = PayloadU8;
 pub type PresharedKeyBinders = VecU16OfPayloadU8;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
     pub identities: PresharedKeyIdentities,
     pub binders: PresharedKeyBinders,
@@ -511,7 +511,7 @@ impl Codec for PresharedKeyOffer {
 // --- RFC6066 certificate status request ---
 type ResponderIDs = VecU16OfPayloadU16;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OCSPCertificateStatusRequest {
     pub responder_ids: ResponderIDs,
     pub extensions: PayloadU16,
@@ -532,7 +532,7 @@ impl Codec for OCSPCertificateStatusRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CertificateStatusRequest {
     OCSP(OCSPCertificateStatusRequest),
     Unknown((CertificateStatusType, Payload))
@@ -586,7 +586,7 @@ declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 declare_u16_vec!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ClientExtension {
     ECPointFormats(ECPointFormatList),
     NamedGroups(NamedGroups),
@@ -729,7 +729,7 @@ impl ClientExtension {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ServerExtension {
     ECPointFormats(ECPointFormatList),
     ServerNameAck,
