@@ -14,7 +14,6 @@ pub mod persist;
 pub mod deframer;
 pub mod fragmenter;
 pub mod hsjoiner;
-pub mod quic;
 
 #[cfg(test)]
 mod handshake_test;

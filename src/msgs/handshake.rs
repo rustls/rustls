@@ -8,7 +8,6 @@ use msgs::enums::PSKKeyExchangeMode;
 use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
-use msgs::quic::{ClientTransportParameters, ServerTransportParameters};
 use std;
 use std::fmt;
 use std::io::Write;
@@ -603,7 +602,7 @@ pub enum ClientExtension {
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
     SignedCertificateTimestampRequest,
-    TransportParameters(ClientTransportParameters),
+    TransportParameters(Vec<u8>),
     Unknown(UnknownExtension),
 }
 
@@ -652,7 +651,7 @@ impl Codec for ClientExtension {
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
-            ClientExtension::TransportParameters(ref r) => r.encode(&mut sub),
+            ClientExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -742,7 +741,7 @@ pub enum ServerExtension {
     CertificateStatusAck,
     SignedCertificateTimestamp(SCTList),
     SupportedVersions(ProtocolVersion),
-    TransportParameters(ServerTransportParameters),
+    TransportParameters(Vec<u8>),
     Unknown(UnknownExtension),
 }
 
@@ -783,7 +782,7 @@ impl Codec for ServerExtension {
             ServerExtension::PresharedKey(r) => r.encode(&mut sub),
             ServerExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             ServerExtension::SupportedVersions(ref r) => r.encode(&mut sub),
-            ServerExtension::TransportParameters(ref r) => r.encode(&mut sub),
+            ServerExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
