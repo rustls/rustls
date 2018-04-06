@@ -242,19 +242,19 @@ impl fmt::Debug for ClientSessionImpl {
 }
 
 impl ClientSessionImpl {
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSName)
-               -> ClientSessionImpl {
-        let mut cs = ClientSessionImpl {
+    pub fn new(config: &Arc<ClientConfig>) -> ClientSessionImpl {
+        ClientSessionImpl {
             config: config.clone(),
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
             state: None,
             server_cert_chain: Vec::new(),
-        };
+        }
+    }
 
-        cs.state = Some(hs::start_handshake(&mut cs, hostname));
-        cs
+    pub fn start_handshake(&mut self, hostname: webpki::DNSName) {
+        self.state = Some(hs::start_handshake(self, hostname));
     }
 
     pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
@@ -444,7 +444,9 @@ impl ClientSession {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
-        ClientSession { imp: ClientSessionImpl::new(config, hostname.into()) }
+        let mut imp = ClientSessionImpl::new(config);
+        imp.start_handshake(hostname.into());
+        ClientSession { imp }
     }
 }
 
