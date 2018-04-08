@@ -38,7 +38,7 @@ use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
 use ring::constant_time;
 
-const TLS13_DRAFT: u16 = 0x7f1a;
+const TLS13_DRAFT: u16 = 0x7f1c;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
