@@ -1672,6 +1672,7 @@ impl State for ExpectTLS12ServerDone {
                                          sig)
                 .map_err(|err| send_cert_error_alert(sess, err))?
         };
+        sess.server_cert_chain = st.server_cert.take_chain();
 
         // 4.
         if st.client_auth.is_some() {
