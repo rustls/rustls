@@ -89,6 +89,38 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
     }
 }
 
+struct AllClientVersions {
+    client_config: ClientConfig,
+    index: usize,
+}
+
+impl AllClientVersions {
+    fn new(client_config: ClientConfig) -> AllClientVersions {
+        AllClientVersions { client_config, index: 0 }
+    }
+}
+
+impl Iterator for AllClientVersions {
+    type Item = ClientConfig;
+
+    fn next(&mut self) -> Option<ClientConfig> {
+        let mut config = self.client_config.clone();
+        self.index += 1;
+
+        match self.index {
+            1 => {
+                config.versions = vec![ProtocolVersion::TLSv1_2];
+                Some(config)
+            },
+            2 => {
+                config.versions = vec![ProtocolVersion::TLSv1_3];
+                Some(config)
+            },
+            _ => None
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 enum TLSErrorFromPeer { Client(TLSError), Server(TLSError) }
 
@@ -118,14 +150,18 @@ fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Opt
     client_config.alpn_protocols = client_protos;
     server_config.alpn_protocols = server_protos;
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(server_config);
 
-    assert_eq!(client.get_alpn_protocol(), None);
-    assert_eq!(server.get_alpn_protocol(), None);
-    do_handshake(&mut client, &mut server);
-    assert_eq!(client.get_alpn_protocol(), agreed);
-    assert_eq!(server.get_alpn_protocol(), agreed);
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
+
+        assert_eq!(client.get_alpn_protocol(), None);
+        assert_eq!(server.get_alpn_protocol(), None);
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.get_alpn_protocol(), agreed);
+        assert_eq!(server.get_alpn_protocol(), agreed);
+    }
 }
 
 #[test]
@@ -231,83 +267,90 @@ fn check_read(reader: &mut io::Read, bytes: &[u8]) {
 
 #[test]
 fn buffered_client_data_sent() {
-    let client_config = make_client_config();
-    let server_config = make_server_config();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(make_server_config());
 
-    assert_eq!(5, client.write(b"hello").unwrap());
+    for client_config in AllClientVersions::new(make_client_config()) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
 
-    do_handshake(&mut client, &mut server);
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
+        assert_eq!(5, client.write(b"hello").unwrap());
 
-    check_read(&mut server, b"hello");
+        do_handshake(&mut client, &mut server);
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+
+        check_read(&mut server, b"hello");
+    }
 }
 
 #[test]
 fn buffered_server_data_sent() {
-    let client_config = make_client_config();
-    let server_config = make_server_config();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(make_server_config());
 
-    assert_eq!(5, server.write(b"hello").unwrap());
+    for client_config in AllClientVersions::new(make_client_config()) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
 
-    do_handshake(&mut client, &mut server);
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
+        assert_eq!(5, server.write(b"hello").unwrap());
 
-    check_read(&mut client, b"hello");
+        do_handshake(&mut client, &mut server);
+        transfer(&mut server, &mut client);
+        client.process_new_packets().unwrap();
+
+        check_read(&mut client, b"hello");
+    }
 }
 
 #[test]
 fn buffered_both_data_sent() {
-    let client_config = make_client_config();
-    let server_config = make_server_config();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(make_server_config());
 
-    assert_eq!(12, server.write(b"from-server!").unwrap());
-    assert_eq!(12, client.write(b"from-client!").unwrap());
+    for client_config in AllClientVersions::new(make_client_config()) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
 
-    do_handshake(&mut client, &mut server);
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
 
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
+        do_handshake(&mut client, &mut server);
 
-    check_read(&mut client, b"from-server!");
-    check_read(&mut server, b"from-client!");
+        transfer(&mut server, &mut client);
+        client.process_new_packets().unwrap();
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+
+        check_read(&mut client, b"from-server!");
+        check_read(&mut server, b"from-client!");
+    }
 }
 
 #[test]
 fn client_can_get_server_cert() {
-    let client_config = make_client_config();
-    let server_config = make_server_config();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    for client_config in AllClientVersions::new(make_client_config()) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&Arc::new(make_server_config()));
+        do_handshake(&mut client, &mut server);
 
-    do_handshake(&mut client, &mut server);
-
-    let certs = client.get_peer_certificates();
-    assert_eq!(certs, Some(get_chain()));
+        let certs = client.get_peer_certificates();
+        assert_eq!(certs, Some(get_chain()));
+    }
 }
 
 #[test]
 fn server_can_get_client_cert() {
     let mut client_config = make_client_config();
-    let server_config = make_server_config_with_mandatory_client_auth();
     client_config.set_single_client_cert(get_chain(), get_key());
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
 
-    do_handshake(&mut client, &mut server);
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
+        do_handshake(&mut client, &mut server);
 
-    let certs = server.get_peer_certificates();
-    assert_eq!(certs, Some(get_chain()));
+        let certs = server.get_peer_certificates();
+        assert_eq!(certs, Some(get_chain()));
+    }
 }
 
 fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
@@ -324,53 +367,57 @@ fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
 #[test]
 fn server_close_notify() {
     let mut client_config = make_client_config();
-    let server_config = make_server_config_with_mandatory_client_auth();
-
     client_config.set_single_client_cert(get_chain(), get_key());
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
 
-    do_handshake(&mut client, &mut server);
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
 
-    // check that alerts don't overtake appdata
-    assert_eq!(12, server.write(b"from-server!").unwrap());
-    assert_eq!(12, client.write(b"from-client!").unwrap());
-    server.send_close_notify();
+        do_handshake(&mut client, &mut server);
 
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
-    check_read_and_close(&mut client, b"from-server!");
+        // check that alerts don't overtake appdata
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
+        server.send_close_notify();
 
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    check_read(&mut server, b"from-client!");
+        transfer(&mut server, &mut client);
+        client.process_new_packets().unwrap();
+        check_read_and_close(&mut client, b"from-server!");
+
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+        check_read(&mut server, b"from-client!");
+    }
 }
 
 #[test]
 fn client_close_notify() {
     let mut client_config = make_client_config();
-    let server_config = make_server_config_with_mandatory_client_auth();
-
     client_config.set_single_client_cert(get_chain(), get_key());
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
 
-    do_handshake(&mut client, &mut server);
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
 
-    // check that alerts don't overtake appdata
-    assert_eq!(12, server.write(b"from-server!").unwrap());
-    assert_eq!(12, client.write(b"from-client!").unwrap());
-    client.send_close_notify();
+        do_handshake(&mut client, &mut server);
 
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    check_read_and_close(&mut server, b"from-client!");
+        // check that alerts don't overtake appdata
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
+        client.send_close_notify();
 
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
-    check_read(&mut client, b"from-server!");
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+        check_read_and_close(&mut server, b"from-client!");
+
+        transfer(&mut server, &mut client);
+        client.process_new_packets().unwrap();
+        check_read(&mut client, b"from-server!");
+    }
 }
 
 struct ServerCheckCertResolve {
@@ -441,28 +488,33 @@ fn client_with_sni_disabled_does_not_send_sni() {
 
     let mut server_config = make_server_config();
     server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
+    let server_config = Arc::new(server_config);
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("value-not-sent"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("value-not-sent"));
+        let mut server = ServerSession::new(&server_config);
 
-    let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err.is_err(), true);
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert_eq!(err.is_err(), true);
+    }
 }
 
 #[test]
 fn client_checks_server_certificate_with_given_name() {
     let client_config = make_client_config();
-    let server_config = make_server_config();
+    let server_config = Arc::new(make_server_config());
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("not-the-right-hostname.com"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("not-the-right-hostname.com"));
+        let mut server = ServerSession::new(&server_config);
 
-    let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err,
-               Err(TLSErrorFromPeer::Client(
-                       TLSError::WebPKIError(webpki::Error::CertNotValidForName))
-                   )
-               );
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert_eq!(err,
+                   Err(TLSErrorFromPeer::Client(
+                           TLSError::WebPKIError(webpki::Error::CertNotValidForName))
+                       )
+                   );
+    }
 }
 
 struct ClientCheckCertResolve {
@@ -512,16 +564,18 @@ impl ResolvesClientCert for ClientCheckCertResolve {
 #[test]
 fn client_cert_resolve() {
     let mut client_config = make_client_config();
-    let server_config = make_server_config_with_mandatory_client_auth();
+    client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(2));
 
-    client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(1));
+    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    for client_config in AllClientVersions::new(client_config) {
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let mut server = ServerSession::new(&server_config);
 
-    assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
-        Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+        assert_eq!(
+            do_handshake_until_error(&mut client, &mut server),
+            Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+    }
 }
 
 #[test]
