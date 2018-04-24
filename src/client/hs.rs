@@ -171,9 +171,9 @@ struct InitialState {
 }
 
 impl InitialState {
-    fn new(host_name: webpki::DNSName) -> InitialState {
+    fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
-            handshake: HandshakeDetails::new(host_name),
+            handshake: HandshakeDetails::new(host_name, extra_exts),
         }
     }
 
@@ -187,8 +187,9 @@ impl InitialState {
 }
 
 
-pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName) -> NextState {
-    InitialState::new(host_name)
+pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName,
+                       extra_exts: Vec<ClientExtension>) -> NextState {
+    InitialState::new(host_name, extra_exts)
         .emit_initial_client_hello(sess)
 }
 
@@ -370,6 +371,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     } else {
         false
     };
+
+    exts.extend(handshake.extra_exts.iter().cloned());
 
     // Note what extensions we sent.
     hello.sent_extensions = exts.iter()
