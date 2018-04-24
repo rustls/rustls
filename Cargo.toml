@@ -21,6 +21,7 @@ sct = "0.3"
 default = ["logging"]
 logging = ["log"]
 dangerous_configuration = []
+quic = []
 
 [dev-dependencies]
 log = "0.4"

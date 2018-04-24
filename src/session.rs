@@ -16,12 +16,13 @@ use key;
 use key_schedule::{SecretKind, KeySchedule};
 use prf;
 use rand;
+use quic;
 
 use std::io;
 use std::collections::VecDeque;
 
 /// Generalises `ClientSession` and `ServerSession`
-pub trait Session: Read + Write + Send + Sync {
+pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).

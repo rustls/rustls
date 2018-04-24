@@ -408,7 +408,7 @@ impl ServerSessionImpl {
 #[derive(Debug)]
 pub struct ServerSession {
     // We use the pimpl idiom to hide unimportant details.
-    imp: ServerSessionImpl,
+    pub(crate) imp: ServerSessionImpl,
 }
 
 impl ServerSession {

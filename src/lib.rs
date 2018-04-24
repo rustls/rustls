@@ -292,6 +292,19 @@ pub use keylog::{KeyLog, NoKeyLog, KeyLogFile};
 /// Message signing interfaces and implementations.
 pub mod sign;
 
+#[cfg(feature = "quic")]
+/// APIs for implementing QUIC TLS
+pub mod quic;
+
+#[cfg(not(feature = "quic"))]
+// If QUIC support is disabled, just define a private module with an empty
+// trait to allow Session having QuicExt as a trait bound.
+mod quic {
+    pub trait QuicExt {}
+    impl QuicExt for super::ClientSession {}
+    impl QuicExt for super::ServerSession {}
+}
+
 #[cfg(feature = "dangerous_configuration")]
 pub use verify::{ServerCertVerifier, ServerCertVerified,
     ClientCertVerifier, ClientCertVerified};
