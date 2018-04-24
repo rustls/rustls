@@ -133,9 +133,9 @@ pub struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub fn new(perhaps_client_auth: bool) -> ExpectClientHello {
+    pub fn new(perhaps_client_auth: bool, extra_exts: Vec<ServerExtension>) -> ExpectClientHello {
         let mut ret = ExpectClientHello {
-            handshake: HandshakeDetails::new(),
+            handshake: HandshakeDetails::new(extra_exts),
             done_retry: false,
             send_cert_status: false,
             send_sct: false,
@@ -285,6 +285,8 @@ impl ExpectClientHello {
             }
 
         }
+
+        ret.extend(self.handshake.extra_exts.iter().cloned());
 
         Ok(ret)
     }

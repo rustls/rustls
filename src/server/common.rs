@@ -1,5 +1,5 @@
 use session::SessionRandoms;
-use msgs::handshake::SessionID;
+use msgs::handshake::{ServerExtension, SessionID};
 use hash_hs;
 use suites;
 use key;
@@ -12,16 +12,18 @@ pub struct HandshakeDetails {
     pub session_id: SessionID,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
+    pub extra_exts: Vec<ServerExtension>,
 }
 
 impl HandshakeDetails {
-    pub fn new() -> HandshakeDetails {
+    pub fn new(extra_exts: Vec<ServerExtension>) -> HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
             hash_at_server_fin: Vec::new(),
             session_id: SessionID::empty(),
             randoms: SessionRandoms::for_server(),
             using_ems: false,
+            extra_exts,
         }
     }
 }

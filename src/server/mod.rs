@@ -3,7 +3,7 @@ use keylog::{KeyLog, NoKeyLog};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::SessionID;
+use msgs::handshake::{ServerExtension, SessionID};
 use msgs::message::Message;
 use error::TLSError;
 use sign;
@@ -238,7 +238,8 @@ impl fmt::Debug for ServerSessionImpl {
 }
 
 impl ServerSessionImpl {
-    pub fn new(server_config: &Arc<ServerConfig>) -> ServerSessionImpl {
+    pub fn new(server_config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>)
+               -> ServerSessionImpl {
         let perhaps_client_auth = server_config.verifier.offer_client_auth();
 
         ServerSessionImpl {
@@ -247,7 +248,7 @@ impl ServerSessionImpl {
             sni: None,
             alpn_protocol: None,
             error: None,
-            state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth))),
+            state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth, extra_exts))),
             client_cert_chain: None,
         }
     }
@@ -412,7 +413,7 @@ impl ServerSession {
     /// Make a new ServerSession.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
-        ServerSession { imp: ServerSessionImpl::new(config) }
+        ServerSession { imp: ServerSessionImpl::new(config, vec![]) }
     }
 
     /// Retrieves the SNI hostname, if any, used to select the certificate and
