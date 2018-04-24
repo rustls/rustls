@@ -439,7 +439,7 @@ impl ClientSessionImpl {
 #[derive(Debug)]
 pub struct ClientSession {
     // We use the pimpl idiom to hide unimportant details.
-    imp: ClientSessionImpl,
+    pub(crate) imp: ClientSessionImpl,
 }
 
 impl ClientSession {
