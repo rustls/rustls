@@ -896,6 +896,55 @@ fn server_stream_read() {
     }
 }
 
+fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
+    let mut server_config = make_server_config();
+    server_config.ciphersuites = vec![];
+
+    (make_client_config(), server_config)
+}
+
+#[test]
+fn client_stream_handshake_error() {
+    let (client_config, server_config) = make_disjoint_suite_configs();
+
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    {
+        let mut pipe = OtherSession::new_fails(&mut server);
+        let mut client_stream = Stream::new(&mut client, &mut pipe);
+        let rc = client_stream.write(b"hello");
+        assert!(rc.is_err());
+        assert_eq!(format!("{:?}", rc),
+                   "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })");
+        let rc = client_stream.write(b"hello");
+        assert!(rc.is_err());
+        assert_eq!(format!("{:?}", rc),
+                   "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })");
+
+    }
+}
+
+#[test]
+fn server_stream_handshake_error() {
+    let (client_config, server_config) = make_disjoint_suite_configs();
+
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    client.write(b"world").unwrap();
+
+    {
+        let mut pipe = OtherSession::new_fails(&mut client);
+        let mut server_stream = Stream::new(&mut server, &mut pipe);
+        let mut bytes = [0u8; 5];
+        let rc = server_stream.read(&mut bytes);
+        assert!(rc.is_err());
+        assert_eq!(format!("{:?}", rc),
+                   "Err(Custom { kind: InvalidData, error: PeerIncompatibleError(\"no ciphersuites in common\") })");
+    }
+}
+
 #[test]
 fn server_config_is_clone() {
     make_server_config().clone();
@@ -920,9 +969,8 @@ fn server_session_is_debug() {
 
 #[test]
 fn server_complete_io_for_handshake_ending_with_alert() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server_config = make_server_config();
-    server_config.ciphersuites = vec![];
+    let (client_config, server_config) = make_disjoint_suite_configs();
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     assert_eq!(true, server.is_handshaking());
