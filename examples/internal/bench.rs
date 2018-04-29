@@ -14,6 +14,8 @@ use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
 use rustls::ServerSessionMemoryCache;
 use rustls::ClientSessionMemoryCache;
+use rustls::NoServerSessionStorage;
+use rustls::NoClientSessionStorage;
 use rustls::{NoClientAuth, RootCertStore, AllowAnyAuthenticatedClient};
 use rustls::Session;
 use rustls::Ticketer;
@@ -127,11 +129,11 @@ impl Resumption {
 }
 
 fn make_server_config(version: rustls::ProtocolVersion,
-                      client_auth: &ClientAuth,
-                      resume: &Resumption)
+                      client_auth: ClientAuth,
+                      resume: Resumption)
                       -> ServerConfig {
     let client_auth = match client_auth {
-        &ClientAuth::Yes => {
+        ClientAuth::Yes => {
             let roots = get_chain();
             let mut client_auth_roots = RootCertStore::empty();
             for root in roots {
@@ -139,7 +141,7 @@ fn make_server_config(version: rustls::ProtocolVersion,
             }
             AllowAnyAuthenticatedClient::new(client_auth_roots)
         },
-        &ClientAuth::No => {
+        ClientAuth::No => {
             NoClientAuth::new()
         }
     };
@@ -147,10 +149,12 @@ fn make_server_config(version: rustls::ProtocolVersion,
     let mut cfg = ServerConfig::new(client_auth);
     cfg.set_single_cert(get_chain(), get_key());
 
-    if resume == &Resumption::SessionID {
+    if resume == Resumption::SessionID {
         cfg.set_persistence(ServerSessionMemoryCache::new(128));
-    } else if resume == &Resumption::Tickets {
+    } else if resume == Resumption::Tickets {
         cfg.ticketer = Ticketer::new();
+    } else {
+        cfg.set_persistence(Arc::new(NoServerSessionStorage {}));
     }
 
     cfg.versions.clear();
@@ -161,8 +165,8 @@ fn make_server_config(version: rustls::ProtocolVersion,
 
 fn make_client_config(version: rustls::ProtocolVersion,
                       suite: &'static rustls::SupportedCipherSuite,
-                      clientauth: &ClientAuth,
-                      resume: &Resumption)
+                      clientauth: ClientAuth,
+                      resume: Resumption)
                       -> ClientConfig {
     let mut cfg = ClientConfig::new();
     let mut rootbuf = io::BufReader::new(fs::File::open("test-ca/rsa/ca.cert").unwrap());
@@ -172,12 +176,14 @@ fn make_client_config(version: rustls::ProtocolVersion,
     cfg.versions.clear();
     cfg.versions.push(version);
 
-    if clientauth == &ClientAuth::Yes {
+    if clientauth == ClientAuth::Yes {
         cfg.set_single_client_cert(get_chain(), get_key());
     }
 
-    if resume != &Resumption::No {
+    if resume != Resumption::No {
         cfg.set_persistence(ClientSessionMemoryCache::new(128));
+    } else {
+        cfg.set_persistence(Arc::new(NoClientSessionStorage {}));
     }
 
     cfg
@@ -187,8 +193,8 @@ fn bench_handshake(version: rustls::ProtocolVersion,
                    suite: &'static rustls::SupportedCipherSuite,
                    clientauth: ClientAuth,
                    resume: Resumption) {
-    let client_config = Arc::new(make_client_config(version, suite, &clientauth, &resume));
-    let server_config = Arc::new(make_server_config(version, &clientauth, &resume));
+    let client_config = Arc::new(make_client_config(version, suite, clientauth, resume));
+    let server_config = Arc::new(make_server_config(version, clientauth, resume));
 
     if !suite.usable_for_version(version) {
         return;
@@ -255,8 +261,8 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
 fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::SupportedCipherSuite,
               plaintext_size: u32) {
     let client_config =
-        Arc::new(make_client_config(version, suite, &ClientAuth::No, &Resumption::No));
-    let server_config = Arc::new(make_server_config(version, &ClientAuth::No, &Resumption::No));
+        Arc::new(make_client_config(version, suite, ClientAuth::No, Resumption::No));
+    let server_config = Arc::new(make_server_config(version, ClientAuth::No, Resumption::No));
 
     if !suite.usable_for_version(version) {
         return;
