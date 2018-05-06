@@ -38,6 +38,15 @@ fn rejects_sessionid_with_bad_length() {
 }
 
 #[test]
+fn sessionid_with_different_lengths_are_unequal() {
+    let a = SessionID::new(&[1u8; 32]);
+    let b = SessionID::new(&[2u8; 32]);
+    assert_eq!(a, a);
+    assert_eq!(b, b);
+    assert_ne!(a, b);
+}
+
+#[test]
 fn accepts_short_sessionid() {
     let bytes = [1; 2];
     let mut rd = Reader::init(&bytes);
@@ -109,6 +118,27 @@ fn can_roundtrip_other_sni_name_types() {
 
     assert_eq!(ext.get_type(), ExtensionType::ServerName);
     assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn get_hostname_returns_none_for_other_sni_name_types() {
+    let bytes = [
+        0, 0,
+        0, 7,
+        0, 5,
+          1, 0, 02, 0x6c, 0x6f
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd)
+        .unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    if let ClientExtension::ServerName(snr) = ext {
+        assert!(snr.get_hostname().is_none());
+    } else {
+        unreachable!();
+    }
 }
 
 #[test]
