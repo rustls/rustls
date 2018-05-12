@@ -248,6 +248,7 @@ mod server;
 mod client;
 mod key;
 mod bs_debug;
+mod keylog;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
@@ -286,6 +287,7 @@ pub use verify::{NoClientAuth, AllowAnyAuthenticatedClient,
                  AllowAnyAnonymousOrAuthenticatedClient};
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
+pub use keylog::{KeyLog, NoKeyLog, KeyLogFile};
 
 /// Message signing interfaces and implementations.
 pub mod sign;

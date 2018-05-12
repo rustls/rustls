@@ -1,6 +1,7 @@
 use msgs::enums::CipherSuite;
 use msgs::enums::{AlertDescription, HandshakeType};
 use session::{Session, SessionCommon};
+use keylog::{KeyLog, NoKeyLog};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::CertificatePayload;
 use msgs::enums::SignatureScheme;
@@ -117,6 +118,10 @@ pub struct ClientConfig {
 
     /// How to verify the server certificate chain.
     verifier: Arc<verify::ServerCertVerifier>,
+
+    /// How to output key material for debugging.  The default
+    /// does nothing.
+    pub key_log: Arc<KeyLog>,
 }
 
 impl ClientConfig {
@@ -137,7 +142,8 @@ impl ClientConfig {
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
             enable_sni: true,
-            verifier: Arc::new(verify::WebPKIVerifier::new())
+            verifier: Arc::new(verify::WebPKIVerifier::new()),
+            key_log: Arc::new(NoKeyLog {}),
         }
     }
 

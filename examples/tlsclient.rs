@@ -428,6 +428,7 @@ fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig) {
 /// Build a `ClientConfig` from our arguments
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let mut config = rustls::ClientConfig::new();
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if !args.flag_suite.is_empty() {
         config.ciphersuites = lookup_suites(&args.flag_suite);

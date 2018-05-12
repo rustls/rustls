@@ -1,4 +1,5 @@
 use session::{Session, SessionCommon};
+use keylog::{KeyLog, NoKeyLog};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
@@ -126,6 +127,10 @@ pub struct ServerConfig {
 
     /// How to verify client certificates.
     verifier: Arc<verify::ClientCertVerifier>,
+
+    /// How to output key material for debugging.  The default
+    /// does nothing.
+    pub key_log: Arc<KeyLog>,
 }
 
 impl ServerConfig {
@@ -153,6 +158,7 @@ impl ServerConfig {
             cert_resolver: Arc::new(handy::FailResolveChain {}),
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
             verifier: client_cert_verifier,
+            key_log: Arc::new(NoKeyLog {}),
         }
     }
 

@@ -1,7 +1,9 @@
 // Assorted public API tests.
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic;
 use std::fs;
+use std::mem;
 use std::io::{self, Write, Read};
 
 extern crate rustls;
@@ -17,6 +19,7 @@ use rustls::{ALL_CIPHERSUITES, SupportedCipherSuite};
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
 use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
+use rustls::KeyLog;
 
 extern crate webpki;
 
@@ -1222,4 +1225,134 @@ fn negotiated_ciphersuite_server() {
                       scs,
                       version);
     }
+}
+
+#[derive(Debug, PartialEq)]
+struct KeyLogItem {
+    label: String,
+    client_random: Vec<u8>,
+    secret: Vec<u8>,
+}
+
+struct KeyLogToVec(Mutex<Vec<KeyLogItem>>);
+
+impl KeyLogToVec {
+    fn new() -> Self {
+        KeyLogToVec(Mutex::new(vec![]))
+    }
+
+    fn take(&self) -> Vec<KeyLogItem> {
+        mem::replace(&mut self.0.lock()
+                         .unwrap(),
+                     vec![])
+    }
+}
+
+impl KeyLog for KeyLogToVec {
+    fn log(&self, label: &str, client: &[u8], secret: &[u8]) {
+        let value = KeyLogItem {
+            label: label.into(),
+            client_random: client.into(),
+            secret: secret.into()
+        };
+
+        self.0.lock()
+            .unwrap()
+            .push(value);
+    }
+}
+
+#[test]
+fn key_log_for_tls12() {
+    let client_key_log = Arc::new(KeyLogToVec::new());
+    let server_key_log = Arc::new(KeyLogToVec::new());
+
+    let mut client_config = make_client_config();
+    client_config.versions = vec![ ProtocolVersion::TLSv1_2 ];
+    client_config.key_log = client_key_log.clone();
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config();
+    server_config.key_log = server_key_log.clone();
+    let server_config = Arc::new(server_config);
+
+    // full handshake
+    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
+    let mut server = ServerSession::new(&server_config);
+    do_handshake(&mut client, &mut server);
+
+    let client_full_log = client_key_log.take();
+    let server_full_log = server_key_log.take();
+    assert_eq!(client_full_log, server_full_log);
+    assert_eq!(1, client_full_log.len());
+    assert_eq!("CLIENT_RANDOM", client_full_log[0].label);
+
+    // resumed
+    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
+    let mut server = ServerSession::new(&server_config);
+    do_handshake(&mut client, &mut server);
+
+    let client_resume_log = client_key_log.take();
+    let server_resume_log = server_key_log.take();
+    assert_eq!(client_resume_log, server_resume_log);
+    assert_eq!(1, client_resume_log.len());
+    assert_eq!("CLIENT_RANDOM", client_resume_log[0].label);
+    assert_eq!(client_full_log[0].secret, client_resume_log[0].secret);
+}
+
+#[test]
+fn key_log_for_tls13() {
+    let client_key_log = Arc::new(KeyLogToVec::new());
+    let server_key_log = Arc::new(KeyLogToVec::new());
+
+    let mut client_config = make_client_config();
+    client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
+    client_config.key_log = client_key_log.clone();
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config();
+    server_config.key_log = server_key_log.clone();
+    let server_config = Arc::new(server_config);
+
+    // full handshake
+    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
+    let mut server = ServerSession::new(&server_config);
+    do_handshake(&mut client, &mut server);
+
+    let client_full_log = client_key_log.take();
+    let server_full_log = server_key_log.take();
+
+    assert_eq!(5, client_full_log.len());
+    assert_eq!("CLIENT_HANDSHAKE_TRAFFIC_SECRET", client_full_log[0].label);
+    assert_eq!("SERVER_HANDSHAKE_TRAFFIC_SECRET", client_full_log[1].label);
+    assert_eq!("SERVER_TRAFFIC_SECRET_0", client_full_log[2].label);
+    assert_eq!("EXPORTER_SECRET", client_full_log[3].label);
+    assert_eq!("CLIENT_TRAFFIC_SECRET_0", client_full_log[4].label);
+
+    assert_eq!(client_full_log[0], server_full_log[1]);
+    assert_eq!(client_full_log[1], server_full_log[0]);
+    assert_eq!(client_full_log[2], server_full_log[2]);
+    assert_eq!(client_full_log[3], server_full_log[3]);
+    assert_eq!(client_full_log[4], server_full_log[4]);
+
+    // resumed
+    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
+    let mut server = ServerSession::new(&server_config);
+    do_handshake(&mut client, &mut server);
+
+    let client_resume_log = client_key_log.take();
+    let server_resume_log = server_key_log.take();
+
+    assert_eq!(5, client_resume_log.len());
+    assert_eq!("CLIENT_HANDSHAKE_TRAFFIC_SECRET", client_resume_log[0].label);
+    assert_eq!("SERVER_HANDSHAKE_TRAFFIC_SECRET", client_resume_log[1].label);
+    assert_eq!("SERVER_TRAFFIC_SECRET_0", client_resume_log[2].label);
+    assert_eq!("EXPORTER_SECRET", client_resume_log[3].label);
+    assert_eq!("CLIENT_TRAFFIC_SECRET_0", client_resume_log[4].label);
+
+    assert_eq!(client_resume_log[0], server_resume_log[1]);
+    assert_eq!(client_resume_log[1], server_resume_log[0]);
+    assert_eq!(client_resume_log[2], server_resume_log[2]);
+    assert_eq!(client_resume_log[3], server_resume_log[3]);
+    assert_eq!(client_resume_log[4], server_resume_log[4]);
 }

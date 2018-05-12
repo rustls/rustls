@@ -518,6 +518,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     };
 
     let mut config = rustls::ServerConfig::new(client_auth);
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
     let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));

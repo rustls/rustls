@@ -15,6 +15,7 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 * Next release:
   - Move TLS1.3 support from draft 22 to 23.
+  - Add support for `SSLKEYLOGFILE`; not enabled by default.
 * 0.12.0 (2018-01-06):
   - New API for learning negotiated cipher suite.
   - Move TLS1.3 support from draft 18 to 22.

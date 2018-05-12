@@ -371,6 +371,12 @@ impl ExpectClientHello {
         let read_key = key_schedule.derive(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+        sess.config.key_log.log("SERVER_HANDSHAKE_TRAFFIC_SECRET",
+                                &self.handshake.randoms.client,
+                                &write_key);
+        sess.config.key_log.log("CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+                                &self.handshake.randoms.client,
+                                &read_key);
         key_schedule.current_client_traffic_secret = read_key;
         key_schedule.current_server_traffic_secret = write_key;
         sess.common.set_key_schedule(key_schedule);
@@ -585,6 +591,9 @@ impl ExpectClientHello {
                     &self.handshake.hash_at_server_fin);
         let suite = sess.common.get_suite_assert();
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+        sess.config.key_log.log("SERVER_TRAFFIC_SECRET_0",
+                                &self.handshake.randoms.client,
+                                &write_key);
         sess.common
             .get_mut_key_schedule()
             .current_server_traffic_secret = write_key;
@@ -593,6 +602,9 @@ impl ExpectClientHello {
             .get_key_schedule()
             .derive(SecretKind::ExporterMasterSecret,
                     &self.handshake.hash_at_server_fin);
+        sess.config.key_log.log("EXPORTER_SECRET",
+                                &self.handshake.randoms.client,
+                                &exporter_secret);
         sess.common
             .get_mut_key_schedule()
             .current_exporter_secret = exporter_secret;
@@ -772,11 +784,13 @@ impl ExpectClientHello {
         self.emit_server_hello(sess, None, client_hello, true)?;
 
         let hashalg = sess.common.get_suite_assert().get_hash();
-        sess.common.start_encryption_tls12(
-            SessionSecrets::new_resume(&self.handshake.randoms,
-                                       hashalg,
-                                       &resumedata.master_secret.0)
-        );
+        let secrets = SessionSecrets::new_resume(&self.handshake.randoms,
+                                                 hashalg,
+                                                 &resumedata.master_secret.0);
+        sess.config.key_log.log("CLIENT_RANDOM",
+                                &secrets.randoms.client,
+                                &secrets.master_secret);
+        sess.common.start_encryption_tls12(secrets);
         sess.client_cert_chain = resumedata.client_cert_chain;
 
         if self.send_ticket {
@@ -1042,6 +1056,9 @@ impl State for ExpectClientHello {
                 .to_string()));
         }
 
+        // Save their Random.
+        client_hello.random.write_slice(&mut self.handshake.randoms.client);
+
         if sess.common.is_tls13() {
             return self.handle_client_hello_tls13(sess, sni, certkey, &m);
         }
@@ -1049,9 +1066,6 @@ impl State for ExpectClientHello {
         // -- TLS1.2 only from hereon in --
         self.save_sni(sess, sni.clone());
         self.handshake.transcript.add_message(&m);
-
-        // Save their Random.
-        client_hello.random.write_slice(&mut self.handshake.randoms.client);
 
         if client_hello.ems_support_offered() {
             self.handshake.using_ems = true;
@@ -1329,6 +1343,9 @@ impl State for ExpectTLS12ClientKX {
                                 hashalg,
                                 &kxd.premaster_secret)
         };
+        sess.config.key_log.log("CLIENT_RANDOM",
+                                &secrets.randoms.client,
+                                &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
 
         if self.client_cert.is_some() {
@@ -1712,6 +1729,9 @@ impl State for ExpectTLS13Finished {
             .get_key_schedule()
             .derive(SecretKind::ClientApplicationTrafficSecret,
                     &self.handshake.hash_at_server_fin);
+        sess.config.key_log.log("CLIENT_TRAFFIC_SECRET_0",
+                                &self.handshake.randoms.client,
+                                &read_key);
 
         let suite = sess.common.get_suite_assert();
         check_aligned_handshake(sess)?;

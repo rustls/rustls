@@ -239,7 +239,7 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
 pub struct SessionSecrets {
     pub randoms: SessionRandoms,
     hash: &'static ring::digest::Algorithm,
-    master_secret: [u8; 48],
+    pub master_secret: [u8; 48],
 }
 
 impl SessionSecrets {
