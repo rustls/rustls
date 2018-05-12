@@ -49,6 +49,9 @@ def merge(outfile, infiles):
     arg.append(outfile)
     subprocess.check_call(lcov_exe(*arg))
 
+def remove(outfile, infile, pattern):
+    subprocess.check_call(lcov_exe('--remove', infile, os.getcwd() + pattern, '-o', outfile))
+
 def extract(outfile, infile):
     subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/src/*', '-o', outfile))
 
@@ -78,6 +81,7 @@ for test in 'api badssl bugs client_suites curves errors features server_suites 
 sh('cd bogo && ./runme')
 all_infos.append(lcov('tests.info'))
 
-merge('coverage.info', all_infos)
+merge('merged.info', all_infos)
+remove('coverage.info', 'merged.info', '/src/msgs/macros.rs')
 extract('final.info', 'coverage.info')
 genhtml('target/coverage/', 'final.info')
