@@ -527,10 +527,10 @@ impl ExpectServerHello {
         let read_key = key_schedule.derive(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-        sess.common.key_log.log("CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+        sess.config.key_log.log("CLIENT_HANDSHAKE_TRAFFIC_SECRET",
                                 &self.handshake.randoms.client,
                                 &write_key);
-        sess.common.key_log.log("SERVER_HANDSHAKE_TRAFFIC_SECRET",
+        sess.config.key_log.log("SERVER_HANDSHAKE_TRAFFIC_SECRET",
                                 &self.handshake.randoms.client,
                                 &read_key);
         key_schedule.current_client_traffic_secret = write_key;
@@ -739,11 +739,13 @@ impl State for ExpectServerHello {
                     return Err(TLSError::PeerMisbehavedError(error_msg));
                 }
 
-                sess.common.start_encryption_tls12(
-                    SessionSecrets::new_resume(&self.handshake.randoms,
-                                               scs.unwrap().get_hash(),
-                                               &resuming.master_secret.0)
-                );
+                let secrets = SessionSecrets::new_resume(&self.handshake.randoms,
+                                                         scs.unwrap().get_hash(),
+                                                         &resuming.master_secret.0);
+                sess.config.key_log.log("CLIENT_RANDOM",
+                                        &secrets.randoms.client,
+                                        &secrets.master_secret);
+                sess.common.start_encryption_tls12(secrets);
             }
         }
 
@@ -1720,6 +1722,9 @@ impl State for ExpectTLS12ServerDone {
                                 hashalg,
                                 &kxd.premaster_secret)
         };
+        sess.config.key_log.log("CLIENT_RANDOM",
+                                &secrets.randoms.client,
+                                &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
 
         // 6.
@@ -1986,7 +1991,7 @@ impl State for ExpectTLS13Finished {
         let read_key = sess.common
             .get_key_schedule()
             .derive(SecretKind::ServerApplicationTrafficSecret, &handshake_hash);
-        sess.common.key_log.log("SERVER_TRAFFIC_SECRET_0",
+        sess.config.key_log.log("SERVER_TRAFFIC_SECRET_0",
                                 &st.handshake.randoms.client,
                                 &read_key);
         let suite = sess.common.get_suite_assert();
@@ -1998,7 +2003,7 @@ impl State for ExpectTLS13Finished {
         let exporter_secret = sess.common
             .get_key_schedule()
             .derive(SecretKind::ExporterMasterSecret, &handshake_hash);
-        sess.common.key_log.log("EXPORTER_SECRET", &st.handshake.randoms.client, &exporter_secret);
+        sess.config.key_log.log("EXPORTER_SECRET", &st.handshake.randoms.client, &exporter_secret);
         sess.common
             .get_mut_key_schedule()
             .current_exporter_secret = exporter_secret;
@@ -2022,7 +2027,7 @@ impl State for ExpectTLS13Finished {
         let write_key = sess.common
             .get_key_schedule()
             .derive(SecretKind::ClientApplicationTrafficSecret, &handshake_hash);
-        sess.common.key_log.log("CLIENT_TRAFFIC_SECRET_0",
+        sess.config.key_log.log("CLIENT_TRAFFIC_SECRET_0",
                                 &st.handshake.randoms.client,
                                 &write_key);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));

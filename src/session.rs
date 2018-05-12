@@ -17,11 +17,8 @@ use key_schedule::{SecretKind, KeySchedule};
 use prf;
 use rand;
 
-use std::env;
-use std::fs::File;
 use std::io;
 use std::collections::VecDeque;
-use std::path::Path;
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: Read + Write + Send + Sync {
@@ -242,7 +239,7 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
 pub struct SessionSecrets {
     pub randoms: SessionRandoms,
     hash: &'static ring::digest::Algorithm,
-    master_secret: [u8; 48],
+    pub master_secret: [u8; 48],
 }
 
 impl SessionSecrets {
@@ -389,7 +386,6 @@ pub struct SessionCommon {
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub sendable_tls: ChunkVecBuffer,
-    pub key_log: KeyLogFile,
 }
 
 impl SessionCommon {
@@ -415,7 +411,6 @@ impl SessionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            key_log: KeyLogFile::new(),
         }
     }
 
@@ -732,7 +727,6 @@ impl SessionCommon {
         let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), &secrets);
         self.message_encrypter = enc;
         self.message_decrypter = dec;
-        self.key_log.log("CLIENT_RANDOM", &secrets.randoms.client, &secrets.master_secret);
         self.secrets = Some(secrets);
     }
 
@@ -818,67 +812,5 @@ impl SessionCommon {
                 })
                 .ok_or_else(|| TLSError::HandshakeNotComplete)
         }
-    }
-}
-
-pub struct KeyLogFile {
-    file: Option<File>,
-    buf: Vec<u8>,
-}
-
-impl KeyLogFile {
-    fn new() -> Self {
-        let var = env::var("SSLKEYLOGFILE");
-        let path = match var {
-            Ok(ref s) => Path::new(s),
-            Err(env::VarError::NotUnicode(ref s)) => Path::new(s),
-            Err(env::VarError::NotPresent) => {
-                return KeyLogFile {
-                    file: None,
-                    buf: Vec::new(),
-                };
-            }
-        };
-
-        let file = match File::create(path) {
-            Ok(f) => Some(f),
-            Err(e) => {
-                warn!("unable to create key log file '{:?}': {}", path, e);
-                None
-            }
-        };
-
-        KeyLogFile {
-            file,
-            buf: Vec::new(),
-        }
-    }
-
-    pub fn log(&mut self, label: &str, client_random: &[u8], secret: &[u8]) {
-        match Self::try_write(self, label, client_random, secret) {
-            Ok(()) => {},
-            Err(e) => {
-                warn!("error writing to key log file: {}", e);
-            }
-        }
-    }
-
-    fn try_write(&mut self, label: &str, client_random: &[u8], secret: &[u8]) -> io::Result<()> {
-        let mut file = match self.file {
-            None => { return Ok(()); }
-            Some(ref f) => f,
-        };
-
-        self.buf.truncate(0);
-        write!(self.buf, "{} ", label)?;
-        for b in client_random.iter() {
-            write!(self.buf, "{:02x}", b)?;
-        }
-        write!(self.buf, " ")?;
-        for b in secret.iter() {
-            write!(self.buf, "{:02x}", b)?;
-        }
-        write!(self.buf, "\n")?;
-        file.write_all(&self.buf)
     }
 }
