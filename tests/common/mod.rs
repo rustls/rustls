@@ -275,6 +275,7 @@ impl TlsClient {
 
         let output = process::Command::new(tlsclient_find())
             .args(&args)
+            .env("SSLKEYLOGFILE", "./sslkeylogfile.txt")
             .output()
             .unwrap_or_else(|e| panic!("failed to execute: {}", e));
 
