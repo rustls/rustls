@@ -954,6 +954,14 @@ impl ClientHelloPayload {
         }
     }
 
+    pub fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
+        let ext = try_ret!(self.find_extension(ExtensionType::TransportParameters));
+        match *ext {
+            ClientExtension::TransportParameters(ref bytes) => Some(bytes.to_vec()),
+            _ => None,
+        }
+    }
+
     pub fn get_ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
     }
@@ -1760,6 +1768,14 @@ pub trait HasServerExtensions {
         let ext = try_ret!(self.find_extension(ExtensionType::ALProtocolNegotiation));
         match *ext {
             ServerExtension::Protocols(ref protos) => protos.as_single_string(),
+            _ => None,
+        }
+    }
+
+    fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
+        let ext = try_ret!(self.find_extension(ExtensionType::TransportParameters));
+        match *ext {
+            ServerExtension::TransportParameters(ref bytes) => Some(bytes.to_vec()),
             _ => None,
         }
     }
