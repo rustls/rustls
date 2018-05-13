@@ -38,7 +38,7 @@ use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
 use ring::constant_time;
 
-const TLS13_DRAFT: u16 = 0x7f17;
+const TLS13_DRAFT: u16 = 0x7f1c;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -975,9 +975,6 @@ impl State for ExpectClientHello {
         if let Some(versions) = maybe_versions_ext {
             if versions.contains(&ProtocolVersion::Unknown(TLS13_DRAFT)) && tls13_enabled {
                 sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
-            } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
-                sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-                return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
             sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);

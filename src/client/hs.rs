@@ -38,8 +38,8 @@ use std::mem;
 use ring::constant_time;
 use webpki;
 
-// draft-ietf-tls-tls13-23
-const TLS13_DRAFT: u16 = 0x7f17;
+// draft-ietf-tls-tls13-28
+const TLS13_DRAFT: u16 = 0x7f1c;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -248,16 +248,11 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         (SessionID::empty(), Vec::new(), ProtocolVersion::Unknown(0))
     };
 
-    let support_tls12 = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
     let support_tls13 = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
 
     let mut supported_versions = Vec::new();
     if support_tls13 {
         supported_versions.push(ProtocolVersion::Unknown(TLS13_DRAFT));
-    }
-
-    if support_tls12 {
-        supported_versions.push(ProtocolVersion::TLSv1_2);
     }
 
     let mut key_shares = vec![];
