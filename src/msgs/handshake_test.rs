@@ -39,8 +39,8 @@ fn rejects_sessionid_with_bad_length() {
 
 #[test]
 fn sessionid_with_different_lengths_are_unequal() {
-    let a = SessionID::new(&[1u8; 32]);
-    let b = SessionID::new(&[2u8; 32]);
+    let a = SessionID::new(&[1u8]);
+    let b = SessionID::new(&[1u8, 2u8]);
     assert_eq!(a, a);
     assert_eq!(b, b);
     assert_ne!(a, b);

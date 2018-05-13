@@ -20,6 +20,9 @@ pub mod quic;
 mod handshake_test;
 
 #[cfg(test)]
+mod persist_test;
+
+#[cfg(test)]
 mod enums_test;
 
 #[cfg(test)]
