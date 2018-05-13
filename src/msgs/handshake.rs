@@ -711,6 +711,9 @@ impl Codec for ClientExtension {
             ExtensionType::SCT if !sub.any_left() => {
                 ClientExtension::SignedCertificateTimestampRequest
             }
+            ExtensionType::TransportParameters => {
+                ClientExtension::TransportParameters(sub.rest().to_vec())
+            }
             _ => ClientExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
     }
@@ -821,6 +824,9 @@ impl Codec for ServerExtension {
             }
             ExtensionType::SupportedVersions => {
                 ServerExtension::SupportedVersions(try_ret!(ProtocolVersion::read(&mut sub)))
+            }
+            ExtensionType::TransportParameters => {
+                ServerExtension::TransportParameters(sub.rest().to_vec())
             }
             _ => ServerExtension::Unknown(try_ret!(UnknownExtension::read(typ, &mut sub))),
         })
