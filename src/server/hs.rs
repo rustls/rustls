@@ -224,6 +224,11 @@ impl ExpectClientHello {
             }
         }
 
+        // QUIC transport parameters
+        if let Some(params) = hello.get_quic_params_extension() {
+            sess.quic_params = Some(params);
+        }
+
         // SNI
         if !for_resume && hello.get_sni_extension().is_some() {
             ret.push(ServerExtension::ServerNameAck);

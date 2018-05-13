@@ -935,6 +935,11 @@ impl State for ExpectTLS13EncryptedExtensions {
         validate_encrypted_extensions(sess, &self.hello, exts)?;
         process_alpn_protocol(sess, exts.get_alpn_protocol())?;
 
+        // QUIC transport parameters
+        if let Some(params) = exts.get_quic_params_extension() {
+            sess.quic_params = Some(params);
+        }
+
         if self.handshake.resuming_session.is_some() {
             let certv = verify::ServerCertVerified::assertion();
             let sigv =  verify::HandshakeSignatureValid::assertion();

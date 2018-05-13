@@ -230,6 +230,7 @@ pub mod danger {
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub alpn_protocol: Option<String>,
+    pub quic_params: Option<Vec<u8>>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send + Sync>>,
@@ -247,6 +248,7 @@ impl ClientSessionImpl {
         ClientSessionImpl {
             config: config.clone(),
             alpn_protocol: None,
+            quic_params: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
             state: None,
