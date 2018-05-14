@@ -644,6 +644,13 @@ impl State for ExpectServerHello {
             process_alpn_protocol(sess, server_hello.get_alpn_protocol())?;
         }
 
+        // Reject QUIC if TLS1.2 is in use.
+        if !sess.common.is_tls13() &&
+            server_hello.find_extension(ExtensionType::TransportParameters).is_some() {
+            sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+            return Err(TLSError::PeerMisbehavedError("server wants to do quic+tls1.2".to_string()));
+        }
+
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
         if let Some(point_fmts) = server_hello.get_ecpoints_extension() {

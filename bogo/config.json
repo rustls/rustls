@@ -15,7 +15,6 @@
     "TLS13-WrongOuterRecord": "we're lax on this",
     "*DTLS*": "not supported",
     "TokenBinding-*": "not supported",
-    "QUICTransportParams-*": "not supported",
     "DummyPQPadding-*": "not supported",
     "MTU*": "dtls only",
     "DisableEverything": "not useful",
@@ -272,6 +271,8 @@
     "CurveTest-Server-Compressed-P-384-TLS12": ":PEER_MISBEHAVIOUR:",
     "CurveTest-Client-Compressed-P-384-TLS13Draft23": ":PEER_MISBEHAVIOUR:",
     "CurveTest-Server-Compressed-P-384-TLS13Draft23": ":PEER_MISBEHAVIOUR:",
+    "QUICTransportParams-Client-Rejected-TLS12": ":PEER_MISBEHAVIOUR:",
+    "QUICTransportParams-Server-Rejected-TLS12": "missing peer quic transport params",
     "ExtendedMasterSecret-NoToYes-Client": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-YesToNo-Server": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-YesToNo-Client": ":PEER_MISBEHAVIOUR:"

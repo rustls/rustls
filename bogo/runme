@@ -6,7 +6,7 @@
 set -xe
 
 if [ ! -e ../target/debug/examples/bogo_shim ] ; then
-  cargo test --no-run --features dangerous_configuration
+  cargo test --no-run --features dangerous_configuration,quic
 fi
 
 if [ ! -e bogo/ ] ; then

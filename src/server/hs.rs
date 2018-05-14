@@ -225,7 +225,7 @@ impl ExpectClientHello {
         }
 
         // QUIC transport parameters
-        if let Some(params) = hello.get_quic_params_extension() {
+        if let (Some(params), true) = (hello.get_quic_params_extension(), sess.common.is_tls13()) {
             sess.quic_params = Some(params);
         }
 
