@@ -179,6 +179,11 @@
 //!   such as replacing the certificate verification process.  Applications
 //!   requesting this feature should be reviewed carefully.
 //!
+//! - `quic`: this feature exposes additional constructors and functions
+//!   for using rustls as a TLS library for QUIC.  See the `quic` module for
+//!   details of these.  You will only need this if you're writing a QUIC
+//!   implementation.
+//!
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code,
