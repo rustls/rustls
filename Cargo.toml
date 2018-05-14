@@ -37,7 +37,7 @@ regex = "0.2"
 [[example]]
 name = "bogo_shim"
 path = "examples/internal/bogo_shim.rs"
-required-features = ["dangerous_configuration"]
+required-features = ["dangerous_configuration", "quic"]
 
 [[example]]
 name = "trytls_shim"

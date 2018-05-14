@@ -19,6 +19,8 @@ use std::io::BufReader;
 use std::io::{Write, Read};
 use std::sync::Arc;
 use rustls::internal::msgs::enums::ProtocolVersion;
+use rustls::quic::ClientQuicExt;
+use rustls::quic::ServerQuicExt;
 
 static BOGO_NACK: i32 = 89;
 
@@ -59,6 +61,8 @@ struct Options {
     export_keying_material_context: String,
     export_keying_material_context_used: bool,
     read_size: usize,
+    quic_transport_params: Vec<u8>,
+    expect_quic_transport_params: Vec<u8>,
 }
 
 impl Options {
@@ -93,6 +97,8 @@ impl Options {
             export_keying_material_context: "".to_string(),
             export_keying_material_context_used: false,
             read_size: 512,
+            quic_transport_params: vec![],
+            expect_quic_transport_params: vec![],
         }
     }
 
@@ -407,6 +413,14 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             sent_exporter = true;
         }
 
+        if !sess.is_handshaking() &&
+            !opts.expect_quic_transport_params.is_empty() {
+            let their_transport_params = sess.get_quic_transport_parameters()
+                .expect("missing peer quic transport params");
+            assert_eq!(opts.expect_quic_transport_params,
+                       their_transport_params);
+        }
+
         let mut buf = [0u8; 1024];
         let len = match sess.read(&mut buf[..opts.read_size]) {
             Ok(len) => len,
@@ -523,6 +537,14 @@ fn main() {
             }
             "-use-export-context" => {
                 opts.export_keying_material_context_used = true;
+            }
+            "-quic-transport-params" => {
+                opts.quic_transport_params = base64::decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+            }
+            "-expected-quic-transport-params" => {
+                opts.expect_quic_transport_params = base64::decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
             }
 
             "-ocsp-response" => {
@@ -664,16 +686,26 @@ fn main() {
 
     let make_session = || {
         if opts.server {
-            let s: Box<rustls::Session> =
-                Box::new(rustls::ServerSession::new(server_cfg.as_ref().unwrap()));
-            s
+            let s = if opts.quic_transport_params.is_empty() {
+                rustls::ServerSession::new(server_cfg.as_ref().unwrap())
+            } else {
+                rustls::ServerSession::new_quic(server_cfg.as_ref().unwrap(),
+                                                opts.quic_transport_params.clone())
+
+            };
+            Box::new(s) as Box<rustls::Session>
         } else {
             let dns_name =
                 webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
-            let s: Box<rustls::Session> =
-                Box::new(rustls::ClientSession::new(client_cfg.as_ref().unwrap(),
-                                                    dns_name));
-            s
+            let s = if opts.quic_transport_params.is_empty() {
+                rustls::ClientSession::new(client_cfg.as_ref().unwrap(),
+                                           dns_name)
+            } else {
+                rustls::ClientSession::new_quic(client_cfg.as_ref().unwrap(),
+                                                dns_name,
+                                                opts.quic_transport_params.clone())
+            };
+            Box::new(s) as Box<rustls::Session>
         }
     };
 
