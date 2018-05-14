@@ -375,6 +375,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::SignedCertificateTimestampRequest,
+            ClientExtension::TransportParameters(vec![ 1, 2, 3 ]),
             ClientExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload(vec![ 1, 2, 3 ])
@@ -386,6 +387,11 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
 #[test]
 fn can_print_all_clientextensions() {
     println!("client hello {:?}", get_sample_clienthellopayload());
+}
+
+#[test]
+fn can_clone_all_clientextensions() {
+    let _ = get_sample_serverhellopayload().extensions.clone();
 }
 
 fn get_sample_serverhellopayload() -> ServerHelloPayload {
@@ -407,12 +413,23 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::CertificateStatusAck,
             ServerExtension::SignedCertificateTimestamp(vec![ PayloadU16(vec![0]) ]),
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
+            ServerExtension::TransportParameters(vec![ 1, 2, 3 ]),
             ServerExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload(vec![ 1, 2, 3 ])
             })
         ]
     }
+}
+
+#[test]
+fn can_print_all_serverextensions() {
+    println!("server hello {:?}", get_sample_serverhellopayload());
+}
+
+#[test]
+fn can_clone_all_serverextensions() {
+    let _ = get_sample_serverhellopayload().extensions.clone();
 }
 
 fn get_sample_helloretryrequest() -> HelloRetryRequest {
