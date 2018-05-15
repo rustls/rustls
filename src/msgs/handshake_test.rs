@@ -5,6 +5,8 @@ use super::codec::{Reader, Codec};
 use webpki::DNSNameRef;
 use key::Certificate;
 
+use std::mem;
+
 #[test]
 fn rejects_short_random() {
     let bytes = [0x01; 31];
@@ -392,6 +394,214 @@ fn can_print_all_clientextensions() {
 #[test]
 fn can_clone_all_clientextensions() {
     let _ = get_sample_serverhellopayload().extensions.clone();
+}
+
+#[test]
+fn client_has_duplicate_extensions_works() {
+    let mut chp = get_sample_clienthellopayload();
+    assert!(chp.has_duplicate_extension()); // due to SessionTicketRequest/SessionTicketOffer
+
+    chp.extensions.drain(1..);
+    assert!(!chp.has_duplicate_extension());
+
+    chp.extensions = vec![];
+    assert!(!chp.has_duplicate_extension());
+}
+
+fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
+    let mut chp = get_sample_clienthellopayload();
+    let ext = chp.find_extension(typ).unwrap().clone();
+
+    chp.extensions = vec![];
+    assert!(!getter(&chp));
+
+    chp.extensions = vec![ext];
+    assert!(getter(&chp));
+
+    chp.extensions = vec![
+        ClientExtension::Unknown(UnknownExtension {
+            typ: typ,
+            payload: Payload(vec![])
+        })
+    ];
+    assert!(!getter(&chp));
+}
+
+#[test]
+fn client_get_sni_extension() {
+    test_client_extension_getter(ExtensionType::ServerName,
+                                 |chp| chp.get_sni_extension().is_some());
+}
+
+#[test]
+fn client_get_sigalgs_extension() {
+    test_client_extension_getter(ExtensionType::SignatureAlgorithms,
+                                 |chp| chp.get_sigalgs_extension().is_some());
+}
+
+#[test]
+fn client_get_namedgroups_extension() {
+    test_client_extension_getter(ExtensionType::EllipticCurves,
+                                 |chp| chp.get_namedgroups_extension().is_some());
+}
+
+#[test]
+fn client_get_ecpoints_extension() {
+    test_client_extension_getter(ExtensionType::ECPointFormats,
+                                 |chp| chp.get_ecpoints_extension().is_some());
+}
+
+#[test]
+fn client_get_alpn_extension() {
+    test_client_extension_getter(ExtensionType::ALProtocolNegotiation,
+                                 |chp| chp.get_alpn_extension().is_some());
+}
+
+#[test]
+fn client_get_quic_params_extension() {
+    test_client_extension_getter(ExtensionType::TransportParameters,
+                                 |chp| chp.get_quic_params_extension().is_some());
+}
+
+#[test]
+fn client_get_versions_extension() {
+    test_client_extension_getter(ExtensionType::SupportedVersions,
+                                 |chp| chp.get_versions_extension().is_some());
+}
+
+#[test]
+fn client_get_keyshare_extension() {
+    test_client_extension_getter(ExtensionType::KeyShare,
+                                 |chp| chp.get_keyshare_extension().is_some());
+}
+
+#[test]
+fn client_get_psk() {
+    test_client_extension_getter(ExtensionType::PreSharedKey,
+                                 |chp| chp.get_psk().is_some());
+}
+
+#[test]
+fn client_get_psk_modes() {
+    test_client_extension_getter(ExtensionType::PSKKeyExchangeModes,
+                                 |chp| chp.get_psk_modes().is_some());
+}
+
+fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
+    let mut hrr = get_sample_helloretryrequest();
+    let mut exts = mem::replace(&mut hrr.extensions, vec![]);
+    exts.retain(|ext| ext.get_type() == typ);
+
+    assert!(!getter(&hrr));
+
+    hrr.extensions = exts;
+    assert!(getter(&hrr));
+
+    hrr.extensions = vec![
+        HelloRetryExtension::Unknown(UnknownExtension {
+            typ: typ,
+            payload: Payload(vec![])
+        })
+    ];
+    assert!(!getter(&hrr));
+}
+
+#[test]
+fn helloretry_get_requested_key_share_group() {
+    test_helloretry_extension_getter(ExtensionType::KeyShare,
+                                     |hrr| hrr.get_requested_key_share_group().is_some());
+}
+
+#[test]
+fn helloretry_get_cookie() {
+    test_helloretry_extension_getter(ExtensionType::Cookie,
+                                     |hrr| hrr.get_cookie().is_some());
+}
+
+#[test]
+fn helloretry_get_supported_versions() {
+    test_helloretry_extension_getter(ExtensionType::SupportedVersions,
+                                     |hrr| hrr.get_supported_versions().is_some());
+}
+
+fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPayload) -> bool) {
+    let mut shp = get_sample_serverhellopayload();
+    let ext = shp.find_extension(typ).unwrap().clone();
+
+    shp.extensions = vec![];
+    assert!(!getter(&shp));
+
+    shp.extensions = vec![ext];
+    assert!(getter(&shp));
+
+    shp.extensions = vec![
+        ServerExtension::Unknown(UnknownExtension {
+            typ: typ,
+            payload: Payload(vec![])
+        })
+    ];
+    assert!(!getter(&shp));
+}
+
+#[test]
+fn server_get_key_share() {
+    test_server_extension_getter(ExtensionType::KeyShare,
+                                 |shp| shp.get_key_share().is_some());
+}
+
+#[test]
+fn server_get_psk_index() {
+    test_server_extension_getter(ExtensionType::PreSharedKey,
+                                 |shp| shp.get_psk_index().is_some());
+}
+
+#[test]
+fn server_get_ecpoints_extension() {
+    test_server_extension_getter(ExtensionType::ECPointFormats,
+                                 |shp| shp.get_ecpoints_extension().is_some());
+}
+
+#[test]
+fn server_get_sct_list() {
+    test_server_extension_getter(ExtensionType::SCT,
+                                 |shp| shp.get_sct_list().is_some());
+}
+
+#[test]
+fn server_get_supported_versions() {
+    test_server_extension_getter(ExtensionType::SupportedVersions,
+                                 |shp| shp.get_supported_versions().is_some());
+}
+
+fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) -> bool) {
+    let mut ce = get_sample_certificatepayloadtls13().list.remove(0);
+    let mut exts = mem::replace(&mut ce.exts, vec![]);
+    exts.retain(|ext| ext.get_type() == typ);
+
+    assert!(!getter(&ce));
+
+    ce.exts = exts;
+    assert!(getter(&ce));
+
+    ce.exts = vec![
+        CertificateExtension::Unknown(UnknownExtension {
+            typ: typ,
+            payload: Payload(vec![])
+        })
+    ];
+    assert!(!getter(&ce));
+}
+
+#[test]
+fn certentry_get_ocsp_response() {
+    test_cert_extension_getter(ExtensionType::StatusRequest,
+                               |ce| ce.get_ocsp_response().is_some());
+}
+
+#[test]
+fn certentry_get_scts() {
+    test_cert_extension_getter(ExtensionType::SCT,
+                               |ce| ce.get_scts().is_some());
 }
 
 fn get_sample_serverhellopayload() -> ServerHelloPayload {
