@@ -26,14 +26,11 @@ mod online {
 
     #[test]
     fn google() {
-        // Test we agree chacha20-poly1305 and curve25519
         connect("google.com")
-    .verbose()
-    .expect("HTTP/1.1 ") // currently 302 redirects
-    .expect_log("Using ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256")
-    .expect_log(r"ECDHE curve is ECParameters \{ curve_type: NamedCurve, named_group: X25519 \}")
-    .go()
-    .unwrap();
+            .verbose()
+            .expect("HTTP/1.1 ") // currently 302 redirects
+            .go()
+            .unwrap();
     }
 
     #[test]
@@ -79,9 +76,9 @@ mod online {
     #[test]
     fn facebook() {
         connect("www.facebook.com")
-    .expect("HTTP/1.1 ") // also 302s to a 'piss off' page. charming.
-    .go()
-    .unwrap();
+            .expect("HTTP/1.1 ") // also 302s to a 'piss off' page. charming.
+            .go()
+            .unwrap();
     }
 
     #[test]
