@@ -199,7 +199,8 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let key = load_key(&opts.key_file);
     cfg.set_single_cert_with_ocsp_and_sct(cert.clone(), key,
                                           opts.server_ocsp_response.clone(),
-                                          opts.server_sct_list.clone());
+                                          opts.server_sct_list.clone())
+        .unwrap();
 
     if opts.tickets {
         cfg.ticketer = rustls::Ticketer::new();

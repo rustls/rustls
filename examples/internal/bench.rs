@@ -147,7 +147,8 @@ fn make_server_config(version: rustls::ProtocolVersion,
     };
 
     let mut cfg = ServerConfig::new(client_auth);
-    cfg.set_single_cert(get_chain(), get_key());
+    cfg.set_single_cert(get_chain(), get_key())
+        .expect("bad certs/private key?");
 
     if resume == Resumption::SessionID {
         cfg.set_persistence(ServerSessionMemoryCache::new(128));

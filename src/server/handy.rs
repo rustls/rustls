@@ -110,25 +110,25 @@ pub struct AlwaysResolvesChain(sign::CertifiedKey);
 
 impl AlwaysResolvesChain {
     pub fn new_rsa(chain: Vec<key::Certificate>,
-                   priv_key: &key::PrivateKey) -> AlwaysResolvesChain {
+                   priv_key: &key::PrivateKey) -> Result<AlwaysResolvesChain, TLSError> {
         let key = sign::RSASigningKey::new(priv_key)
-            .expect("Invalid RSA private key");
+            .map_err(|_| TLSError::General("invalid RSA private key".into()))?;
         let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
-        AlwaysResolvesChain(sign::CertifiedKey::new(chain, key))
+        Ok(AlwaysResolvesChain(sign::CertifiedKey::new(chain, key)))
     }
 
     pub fn new_rsa_with_extras(chain: Vec<key::Certificate>,
                                priv_key: &key::PrivateKey,
                                ocsp: Vec<u8>,
-                               scts: Vec<u8>) -> AlwaysResolvesChain {
-        let mut r = AlwaysResolvesChain::new_rsa(chain, priv_key);
+                               scts: Vec<u8>) -> Result<AlwaysResolvesChain, TLSError> {
+        let mut r = AlwaysResolvesChain::new_rsa(chain, priv_key)?;
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
         }
         if !scts.is_empty() {
             r.0.sct_list = Some(scts);
         }
-        r
+        Ok(r)
     }
 }
 

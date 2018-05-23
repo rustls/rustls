@@ -183,10 +183,14 @@ impl ServerConfig {
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
     /// `key_der` is a DER-encoded RSA private key.
+    ///
+    /// This function fails if `key_der` is invalid.
     pub fn set_single_cert(&mut self,
                            cert_chain: Vec<key::Certificate>,
-                           key_der: key::PrivateKey) {
-        self.cert_resolver = Arc::new(handy::AlwaysResolvesChain::new_rsa(cert_chain, &key_der));
+                           key_der: key::PrivateKey) -> Result<(), TLSError> {
+        let resolver = handy::AlwaysResolvesChain::new_rsa(cert_chain, &key_der)?;
+        self.cert_resolver = Arc::new(resolver);
+        Ok(())
     }
 
     /// Sets a single certificate chain, matching private key and OCSP
@@ -198,16 +202,19 @@ impl ServerConfig {
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
     /// and is ignored if empty.
+    ///
+    /// This function fails if `key_der` is invalid.
     pub fn set_single_cert_with_ocsp_and_sct(&mut self,
                                              cert_chain: Vec<key::Certificate>,
                                              key_der: key::PrivateKey,
                                              ocsp: Vec<u8>,
-                                             scts: Vec<u8>) {
+                                             scts: Vec<u8>) -> Result<(), TLSError> {
         let resolver = handy::AlwaysResolvesChain::new_rsa_with_extras(cert_chain,
                                                                        &key_der,
                                                                        ocsp,
-                                                                       scts);
+                                                                       scts)?;
         self.cert_resolver = Arc::new(resolver);
+        Ok(())
     }
 
     /// Set the ALPN protocol list to the given protocol names.

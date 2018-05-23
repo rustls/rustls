@@ -56,7 +56,7 @@ fn get_key() -> PrivateKey {
 
 fn make_server_config() -> ServerConfig {
     let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_single_cert(get_chain(), get_key());
+    cfg.set_single_cert(get_chain(), get_key()).unwrap();
 
     cfg
 }
@@ -70,7 +70,7 @@ fn make_server_config_with_mandatory_client_auth() -> ServerConfig {
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
     let mut cfg = ServerConfig::new(client_auth);
-    cfg.set_single_cert(get_chain(), get_key());
+    cfg.set_single_cert(get_chain(), get_key()).unwrap();
 
     cfg
 }
