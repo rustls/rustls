@@ -88,7 +88,7 @@ impl HandshakeJoiner {
 
             let m = Message {
                 typ: ContentType::Handshake,
-                version: version,
+                version,
                 payload: MessagePayload::Handshake(payload.unwrap()),
             };
 

@@ -37,7 +37,7 @@ impl AEADTicketer {
                       lifetime_seconds: u32)
                       -> AEADTicketer {
         AEADTicketer {
-            alg: alg,
+            alg,
             enc: aead::SealingKey::new(alg, key).unwrap(),
             dec: aead::OpeningKey::new(alg, key).unwrap(),
             lifetime: lifetime_seconds,
@@ -126,8 +126,8 @@ impl TicketSwitcher {
                generator: fn() -> Box<ProducesTickets>)
                -> TicketSwitcher {
         TicketSwitcher {
-            generator: generator,
-            lifetime: lifetime,
+            generator,
+            lifetime,
             state: Mutex::new(TicketSwitcherState {
                 current: generator(),
                 previous: None,

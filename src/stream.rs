@@ -85,8 +85,8 @@ mod tests {
     fn session_can_be_instantiated_with() {
         fn _foo<'a>(sess: &'a mut Session, sock: &'a mut TcpStream) -> Stream<'a, Session, TcpStream> {
             Stream {
-                sess: sess,
-                sock: sock,
+                sess,
+                sock,
             }
         }
     }

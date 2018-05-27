@@ -56,7 +56,7 @@ impl KeySchedule {
         KeySchedule {
             current: hmac::SigningKey::new(hash, &zeroes[..hash.output_len]),
             need_derive_for_extract: false,
-            hash: hash,
+            hash,
             hash_of_empty_message: empty_hash,
             current_server_traffic_secret: Vec::new(),
             current_client_traffic_secret: Vec::new(),

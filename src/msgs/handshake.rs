@@ -142,7 +142,7 @@ impl Codec for SessionID {
 
         Some(SessionID {
             data: out,
-            len: len,
+            len,
         })
     }
 }
@@ -190,8 +190,8 @@ impl UnknownExtension {
     fn read(typ: ExtensionType, r: &mut Reader) -> Option<UnknownExtension> {
         let payload = try_ret!(Payload::read(r));
         Some(UnknownExtension {
-            typ: typ,
-            payload: payload,
+            typ,
+            payload,
         })
     }
 }
@@ -348,8 +348,8 @@ impl Codec for ServerName {
         };
 
         Some(ServerName {
-            typ: typ,
-            payload: payload,
+            typ,
+            payload,
         })
     }
 }
@@ -420,7 +420,7 @@ pub struct KeyShareEntry {
 impl KeyShareEntry {
     pub fn new(group: NamedGroup, payload: &[u8]) -> KeyShareEntry {
         KeyShareEntry {
-            group: group,
+            group,
             payload: PayloadU16::new(payload.to_vec()),
         }
     }
@@ -437,8 +437,8 @@ impl Codec for KeyShareEntry {
         let payload = try_ret!(PayloadU16::read(r));
 
         Some(KeyShareEntry {
-            group: group,
-            payload: payload,
+            group,
+            payload,
         })
     }
 }
@@ -1130,8 +1130,8 @@ impl Codec for HelloRetryRequest {
 
         Some(HelloRetryRequest {
             legacy_version: ProtocolVersion::Unknown(0),
-            session_id: session_id,
-            cipher_suite: cipher_suite,
+            session_id,
+            cipher_suite,
             extensions: try_ret!(codec::read_vec_u16::<HelloRetryExtension>(r)),
         })
     }
@@ -1227,7 +1227,7 @@ impl Codec for ServerHelloPayload {
         let mut ret = ServerHelloPayload {
             legacy_version: ProtocolVersion::Unknown(0),
             random: ZERO_RANDOM.clone(),
-            session_id: session_id,
+            session_id,
             cipher_suite: suite,
             compression_method: compression,
             extensions: Vec::new(),
@@ -1407,7 +1407,7 @@ impl Codec for CertificateEntry {
 impl CertificateEntry {
     pub fn new(cert: key::Certificate) -> CertificateEntry {
         CertificateEntry {
-            cert: cert,
+            cert,
             exts: Vec::new(),
         }
     }
@@ -1581,7 +1581,7 @@ pub struct DigitallySignedStruct {
 impl DigitallySignedStruct {
     pub fn new(scheme: SignatureScheme, sig: Vec<u8>) -> DigitallySignedStruct {
         DigitallySignedStruct {
-            scheme: scheme,
+            scheme,
             sig: PayloadU16::new(sig),
         }
     }
@@ -1598,8 +1598,8 @@ impl Codec for DigitallySignedStruct {
         let sig = try_ret!(PayloadU16::read(r));
 
         Some(DigitallySignedStruct {
-            scheme: scheme,
-            sig: sig,
+            scheme,
+            sig,
         })
     }
 }
@@ -1672,8 +1672,8 @@ impl Codec for ECDHEServerKeyExchange {
         let dss = try_ret!(DigitallySignedStruct::read(r));
 
         Some(ECDHEServerKeyExchange {
-            params: params,
-            dss: dss,
+            params,
+            dss,
         })
     }
 }
@@ -1812,9 +1812,9 @@ impl Codec for CertificateRequestPayload {
         let canames = try_ret!(DistinguishedNames::read(r));
 
         Some(CertificateRequestPayload {
-            certtypes: certtypes,
-            sigschemes: sigschemes,
-            canames: canames,
+            certtypes,
+            sigschemes,
+            canames,
         })
     }
 }
@@ -1889,8 +1889,8 @@ impl Codec for CertificateRequestPayloadTLS13 {
         let extensions = try_ret!(CertReqExtensions::read(r));
 
         Some(CertificateRequestPayloadTLS13 {
-            context: context,
-            extensions: extensions,
+            context,
+            extensions,
         })
     }
 }
@@ -1927,7 +1927,7 @@ pub struct NewSessionTicketPayload {
 impl NewSessionTicketPayload {
     pub fn new(lifetime_hint: u32, ticket: Vec<u8>) -> NewSessionTicketPayload {
         NewSessionTicketPayload {
-            lifetime_hint: lifetime_hint,
+            lifetime_hint,
             ticket: PayloadU16::new(ticket),
         }
     }
@@ -1945,7 +1945,7 @@ impl Codec for NewSessionTicketPayload {
 
         Some(NewSessionTicketPayload {
             lifetime_hint: lifetime,
-            ticket: ticket,
+            ticket,
         })
     }
 }
@@ -2007,8 +2007,8 @@ impl NewSessionTicketPayloadTLS13 {
                nonce: Vec<u8>,
                ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
         NewSessionTicketPayloadTLS13 {
-            lifetime: lifetime,
-            age_add: age_add,
+            lifetime,
+            age_add,
             nonce: PayloadU8::new(nonce),
             ticket: PayloadU16::new(ticket),
             exts: vec![],
@@ -2033,11 +2033,11 @@ impl Codec for NewSessionTicketPayloadTLS13 {
         let exts = try_ret!(NewSessionTicketExtensions::read(r));
 
         Some(NewSessionTicketPayloadTLS13 {
-            lifetime: lifetime,
-            age_add: age_add,
-            nonce: nonce,
-            ticket: ticket,
-            exts: exts,
+            lifetime,
+            age_add,
+            nonce,
+            ticket,
+            exts,
         })
     }
 }
@@ -2257,8 +2257,8 @@ impl HandshakeMessagePayload {
             None
         } else {
             Some(HandshakeMessagePayload {
-                typ: typ,
-                payload: payload,
+                typ,
+                payload,
             })
         }
     }

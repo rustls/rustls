@@ -63,9 +63,9 @@ impl KeyExchange {
 
         Some(KeyExchange {
             group: named_group,
-            alg: alg,
+            alg,
             privkey: ours,
-            pubkey: pubkey,
+            pubkey,
         })
     }
 

@@ -61,8 +61,8 @@ impl CertifiedKey {
     /// must be the end-entity certificate.
     pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<SigningKey>>) -> CertifiedKey {
         CertifiedKey {
-            cert: cert,
-            key: key,
+            cert,
+            key,
             ocsp: None,
             sct_list: None,
         }
@@ -125,7 +125,7 @@ impl CertifiedKey {
             // certificate is valid; it only validates that the name is one
             // that the certificate is valid for, if the certificate is
             // valid.
-            if !end_entity_cert.verify_is_valid_for_dns_name(name).is_ok() {
+            if end_entity_cert.verify_is_valid_for_dns_name(name).is_err() {
                 return Err(TLSError::General("The server certificate is not \
                                              valid for the given name".to_string()));
             }

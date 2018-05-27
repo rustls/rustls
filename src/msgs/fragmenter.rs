@@ -37,8 +37,8 @@ impl MessageFragmenter {
 
         for chunk in payload.chunks(self.max_frag) {
             let m = Message {
-                typ: typ,
-                version: version,
+                typ,
+                version,
                 payload: MessagePayload::new_opaque(chunk.to_vec())
             };
             out.push_back(m);
@@ -54,8 +54,8 @@ impl MessageFragmenter {
                                out: &mut VecDeque<BorrowMessage<'a>>) {
         for chunk in payload.chunks(self.max_frag) {
             let cm = BorrowMessage {
-                typ: typ,
-                version: version,
+                typ,
+                version,
                 payload: chunk
             };
             out.push_back(cm);
@@ -93,8 +93,8 @@ mod tests {
         let typ = ContentType::Handshake;
         let version = ProtocolVersion::TLSv1_2;
         let m = Message {
-            typ: typ,
-            version: version,
+            typ,
+            version,
             payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 

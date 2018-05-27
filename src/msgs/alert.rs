@@ -15,11 +15,11 @@ impl Codec for AlertMessagePayload {
 
     fn read(r: &mut Reader) -> Option<AlertMessagePayload> {
         let level = try_ret!(AlertLevel::read(r));
-        let desc = try_ret!(AlertDescription::read(r));
+        let description = try_ret!(AlertDescription::read(r));
 
         Some(AlertMessagePayload {
-            level: level,
-            description: desc,
+            level,
+            description,
         })
     }
 }

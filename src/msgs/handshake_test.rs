@@ -420,7 +420,7 @@ fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPaylo
 
     chp.extensions = vec![
         ClientExtension::Unknown(UnknownExtension {
-            typ: typ,
+            typ,
             payload: Payload(vec![])
         })
     ];
@@ -499,7 +499,7 @@ fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRe
 
     hrr.extensions = vec![
         HelloRetryExtension::Unknown(UnknownExtension {
-            typ: typ,
+            typ,
             payload: Payload(vec![])
         })
     ];
@@ -536,7 +536,7 @@ fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPaylo
 
     shp.extensions = vec![
         ServerExtension::Unknown(UnknownExtension {
-            typ: typ,
+            typ,
             payload: Payload(vec![])
         })
     ];
@@ -585,7 +585,7 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
 
     ce.exts = vec![
         CertificateExtension::Unknown(UnknownExtension {
-            typ: typ,
+            typ,
             payload: Payload(vec![])
         })
     ];

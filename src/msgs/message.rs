@@ -88,8 +88,8 @@ impl Codec for Message {
         let payload = try_ret!(Payload::read(&mut sub));
 
         Some(Message {
-            typ: typ,
-            version: version,
+            typ,
+            version,
             payload: MessagePayload::Opaque(payload),
         })
     }
@@ -192,7 +192,7 @@ impl Message {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
-                level: level,
+                level,
                 description: desc,
             }),
         }

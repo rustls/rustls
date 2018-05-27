@@ -205,7 +205,7 @@ pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
         i.encode(&mut sub);
     }
 
-    debug_assert!(sub.len() <= 0xffffff);
+    debug_assert!(sub.len() <= 0xff_ffff);
     u24(sub.len() as u32).encode(bytes);
     bytes.append(&mut sub);
 }

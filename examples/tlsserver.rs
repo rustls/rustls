@@ -54,11 +54,11 @@ struct TlsServer {
 impl TlsServer {
     fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig>) -> TlsServer {
         TlsServer {
-            server: server,
+            server,
             connections: HashMap::new(),
             next_id: 2,
             tls_config: cfg,
-            mode: mode,
+            mode,
         }
     }
 
@@ -151,13 +151,13 @@ impl Connection {
            -> Connection {
         let back = open_back(&mode);
         Connection {
-            socket: socket,
-            token: token,
+            socket,
+            token,
             closing: false,
             closed: false,
-            mode: mode,
-            tls_session: tls_session,
-            back: back,
+            mode,
+            tls_session,
+            back,
             sent_http_response: false,
         }
     }

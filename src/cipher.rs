@@ -230,7 +230,7 @@ impl GCMMessageEncrypter {
            nonce_offset: &[u8])
            -> GCMMessageEncrypter {
         let mut ret = GCMMessageEncrypter {
-            alg: alg,
+            alg,
             enc_key: ring::aead::SealingKey::new(alg, enc_key).unwrap(),
             enc_salt: [0u8; 4],
             nonce_offset: [0u8; 8],
@@ -356,7 +356,7 @@ impl TLS13MessageEncrypter {
            enc_key: &[u8],
            enc_iv: &[u8]) -> TLS13MessageEncrypter {
         let mut ret = TLS13MessageEncrypter {
-            alg: alg,
+            alg,
             enc_key: ring::aead::SealingKey::new(alg, enc_key).unwrap(),
             enc_offset: [0u8; 12],
         };
@@ -371,7 +371,7 @@ impl TLS13MessageDecrypter {
            dec_key: &[u8],
            dec_iv: &[u8]) -> TLS13MessageDecrypter {
         let mut ret = TLS13MessageDecrypter {
-            alg: alg,
+            alg,
             dec_key: ring::aead::OpeningKey::new(alg, dec_key).unwrap(),
             dec_offset: [0u8; 12],
         };
@@ -403,7 +403,7 @@ impl ChaCha20Poly1305MessageEncrypter {
            enc_key: &[u8],
            enc_iv: &[u8]) -> ChaCha20Poly1305MessageEncrypter {
         let mut ret = ChaCha20Poly1305MessageEncrypter {
-            alg: alg,
+            alg,
             enc_key: ring::aead::SealingKey::new(alg, enc_key).unwrap(),
             enc_offset: [0u8; 12],
         };

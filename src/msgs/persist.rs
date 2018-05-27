@@ -92,11 +92,11 @@ impl Codec for ClientSessionValue {
             version: v,
             cipher_suite: cs,
             session_id: sid,
-            ticket: ticket,
+            ticket,
             master_secret: ms,
-            epoch: epoch,
-            lifetime: lifetime,
-            age_add: age_add,
+            epoch,
+            lifetime,
+            age_add,
             extended_ms: extended_ms == 1u8,
         })
     }
@@ -204,7 +204,7 @@ impl Codec for ServerSessionValue {
         };
 
         Some(ServerSessionValue {
-            sni: sni,
+            sni,
             version: v,
             cipher_suite: cs,
             master_secret: ms,

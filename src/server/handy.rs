@@ -175,7 +175,7 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
                -> Option<sign::CertifiedKey> {
         if let Some(name) = server_name {
             self.by_name.get(name.into())
-                .map(|ck| ck.clone())
+                .cloned()
         } else {
             // This kind of resolver requires SNI
             None

@@ -305,7 +305,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
 
-    if let Some(_) = sess.config.ct_logs {
+    if sess.config.ct_logs.is_some() {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
     }
 
@@ -384,7 +384,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&handshake.randoms.client),
-            session_id: session_id,
+            session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -1808,7 +1808,7 @@ impl ExpectTLS12NewTicket {
     fn into_expect_tls12_ccs(self, ticket: ReceivedTicketDetails) -> NextState {
         Box::new(ExpectTLS12CCS {
             handshake: self.handshake,
-            ticket: ticket,
+            ticket,
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,

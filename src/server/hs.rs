@@ -349,10 +349,10 @@ impl ExpectClientHello {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.handshake.randoms.server),
-                    session_id: session_id.clone(),
+                    session_id: *session_id,
                     cipher_suite: sess.common.get_suite_assert().suite,
                     compression_method: Compression::Null,
-                    extensions: extensions,
+                    extensions,
                 }),
             }),
         };
@@ -496,7 +496,7 @@ impl ExpectClientHello {
 
         for cert in certs {
             let entry = CertificateEntry {
-                cert: cert,
+                cert,
                 exts: Vec::new(),
             };
 
@@ -636,7 +636,7 @@ impl ExpectClientHello {
                     session_id: self.handshake.session_id,
                     cipher_suite: sess.common.get_suite_assert().suite,
                     compression_method: Compression::Null,
-                    extensions: extensions,
+                    extensions,
                 }),
             }),
         };
