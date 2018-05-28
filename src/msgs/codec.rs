@@ -212,11 +212,11 @@ pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
 
 pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
-    let len = try_ret!(u8::read(r)) as usize;
-    let mut sub = try_ret!(r.sub(len));
+    let len = u8::read(r)? as usize;
+    let mut sub = r.sub(len)?;
 
     while sub.any_left() {
-        ret.push(try_ret!(T::read(&mut sub)));
+        ret.push(T::read(&mut sub)?);
     }
 
     Some(ret)
@@ -224,11 +224,11 @@ pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
 
 pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
-    let len = try_ret!(u16::read(r)) as usize;
-    let mut sub = try_ret!(r.sub(len));
+    let len = u16::read(r)? as usize;
+    let mut sub = r.sub(len)?;
 
     while sub.any_left() {
-        ret.push(try_ret!(T::read(&mut sub)));
+        ret.push(T::read(&mut sub)?);
     }
 
     Some(ret)
@@ -236,15 +236,15 @@ pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
 
 pub fn read_vec_u24_limited<T: Codec>(r: &mut Reader, max_bytes: usize) -> Option<Vec<T>> {
     let mut ret: Vec<T> = Vec::new();
-    let len = try_ret!(u24::read(r)).0 as usize;
+    let len = u24::read(r)?.0 as usize;
     if len > max_bytes {
         return None;
     }
 
-    let mut sub = try_ret!(r.sub(len));
+    let mut sub = r.sub(len)?;
 
     while sub.any_left() {
-        ret.push(try_ret!(T::read(&mut sub)));
+        ret.push(T::read(&mut sub)?);
     }
 
     Some(ret)

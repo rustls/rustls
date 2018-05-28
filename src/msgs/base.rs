@@ -42,8 +42,8 @@ impl Codec for key::Certificate {
     }
 
     fn read(r: &mut Reader) -> Option<key::Certificate> {
-        let len = try_ret!(codec::u24::read(r)).0 as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = codec::u24::read(r)?.0 as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(key::Certificate(body))
     }
@@ -74,8 +74,8 @@ impl Codec for PayloadU24 {
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU24> {
-        let len = try_ret!(codec::u24::read(r)).0 as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = codec::u24::read(r)?.0 as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(PayloadU24(body))
     }
@@ -106,8 +106,8 @@ impl Codec for PayloadU16 {
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU16> {
-        let len = try_ret!(u16::read(r)) as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = u16::read(r)? as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(PayloadU16(body))
     }
@@ -138,8 +138,8 @@ impl Codec for PayloadU8 {
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU8> {
-        let len = try_ret!(u8::read(r)) as usize;
-        let mut sub = try_ret!(r.sub(len));
+        let len = u8::read(r)? as usize;
+        let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(PayloadU8(body))
     }

@@ -9,7 +9,7 @@ impl Codec for ChangeCipherSpecPayload {
     }
 
     fn read(r: &mut Reader) -> Option<ChangeCipherSpecPayload> {
-        let typ = try_ret!(u8::read(r));
+        let typ = u8::read(r)?;
 
         if typ == 1 && !r.any_left() {
             Some(ChangeCipherSpecPayload {})

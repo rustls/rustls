@@ -78,15 +78,15 @@ impl Codec for ClientSessionValue {
     }
 
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
-        let v = try_ret!(ProtocolVersion::read(r));
-        let cs = try_ret!(CipherSuite::read(r));
-        let sid = try_ret!(SessionID::read(r));
-        let ticket = try_ret!(PayloadU16::read(r));
-        let ms = try_ret!(PayloadU8::read(r));
-        let epoch = try_ret!(u64::read(r));
-        let lifetime = try_ret!(u32::read(r));
-        let age_add = try_ret!(u32::read(r));
-        let extended_ms = try_ret!(u8::read(r));
+        let v = ProtocolVersion::read(r)?;
+        let cs = CipherSuite::read(r)?;
+        let sid = SessionID::read(r)?;
+        let ticket = PayloadU16::read(r)?;
+        let ms = PayloadU8::read(r)?;
+        let epoch = u64::read(r)?;
+        let lifetime = u32::read(r)?;
+        let age_add = u32::read(r)?;
+        let extended_ms = u8::read(r)?;
 
         Some(ClientSessionValue {
             version: v,
@@ -184,19 +184,19 @@ impl Codec for ServerSessionValue {
     }
 
     fn read(r: &mut Reader) -> Option<ServerSessionValue> {
-        let has_sni = try_ret!(u8::read(r));
+        let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
-            let dns_name = try_ret!(PayloadU8::read(r));
-            let dns_name = try_ret!(webpki::DNSNameRef::try_from_ascii(
-                untrusted::Input::from(&dns_name.0)).ok());
+            let dns_name = PayloadU8::read(r)?;
+            let dns_name = webpki::DNSNameRef::try_from_ascii(
+                untrusted::Input::from(&dns_name.0)).ok()?;
             Some(dns_name.into())
         } else {
             None
         };
-        let v = try_ret!(ProtocolVersion::read(r));
-        let cs = try_ret!(CipherSuite::read(r));
-        let ms = try_ret!(PayloadU8::read(r));
-        let ems = try_ret!(u8::read(r));
+        let v = ProtocolVersion::read(r)?;
+        let cs = CipherSuite::read(r)?;
+        let ms = PayloadU8::read(r)?;
+        let ems = u8::read(r)?;
         let ccert = if r.any_left() {
             CertificatePayload::read(r)
         } else {

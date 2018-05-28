@@ -36,14 +36,14 @@ impl MessagePayload {
             let mut r = Reader::init(&payload.0);
             let parsed = match typ {
                 ContentType::Alert => {
-                    Some(MessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r))))
+                    Some(MessagePayload::Alert(AlertMessagePayload::read(&mut r)?))
                 }
                 ContentType::Handshake => {
-                    let p = try_ret!(HandshakeMessagePayload::read_version(&mut r, vers));
+                    let p = HandshakeMessagePayload::read_version(&mut r, vers)?;
                     Some(MessagePayload::Handshake(p))
                 }
                 ContentType::ChangeCipherSpec => {
-                    let p = try_ret!(ChangeCipherSpecPayload::read(&mut r));
+                    let p = ChangeCipherSpecPayload::read(&mut r)?;
                     Some(MessagePayload::ChangeCipherSpec(p))
                 }
                 _ => None,
@@ -80,12 +80,12 @@ pub struct Message {
 
 impl Codec for Message {
     fn read(r: &mut Reader) -> Option<Message> {
-        let typ = try_ret!(ContentType::read(r));
-        let version = try_ret!(ProtocolVersion::read(r));
-        let len = try_ret!(u16::read(r));
+        let typ = ContentType::read(r)?;
+        let version = ProtocolVersion::read(r)?;
+        let len = u16::read(r)?;
 
-        let mut sub = try_ret!(r.sub(len as usize));
-        let payload = try_ret!(Payload::read(&mut sub));
+        let mut sub = r.sub(len as usize)?;
+        let payload = Payload::read(&mut sub)?;
 
         Some(Message {
             typ,
@@ -109,9 +109,9 @@ impl Message {
     pub fn check_header(bytes: &[u8]) -> Option<usize> {
         let mut rd = Reader::init(bytes);
 
-        let typ = try_ret!(ContentType::read(&mut rd));
-        let version = try_ret!(ProtocolVersion::read(&mut rd));
-        let len = try_ret!(u16::read(&mut rd));
+        let typ = ContentType::read(&mut rd)?;
+        let version = ProtocolVersion::read(&mut rd)?;
+        let len = u16::read(&mut rd)?;
 
         // Don't accept any new content-types.
         if let ContentType::Unknown(_) = typ {

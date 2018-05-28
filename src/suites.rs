@@ -46,14 +46,14 @@ impl KeyExchange {
 
     pub fn client_ecdhe(kx_params: &[u8]) -> Option<KeyExchangeResult> {
         let mut rd = Reader::init(kx_params);
-        let ecdh_params = try_ret!(ServerECDHParams::read(&mut rd));
+        let ecdh_params = ServerECDHParams::read(&mut rd)?;
 
-        try_ret!(KeyExchange::start_ecdhe(ecdh_params.curve_params.named_group))
+        KeyExchange::start_ecdhe(ecdh_params.curve_params.named_group)?
             .complete(&ecdh_params.public.0)
     }
 
     pub fn start_ecdhe(named_group: NamedGroup) -> Option<KeyExchange> {
-        let alg = try_ret!(KeyExchange::named_group_to_ecdh_alg(named_group));
+        let alg = KeyExchange::named_group_to_ecdh_alg(named_group)?;
         let rng = ring::rand::SystemRandom::new();
         let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng).unwrap();
 
