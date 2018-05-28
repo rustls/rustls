@@ -77,9 +77,6 @@
 //!     write_tls()     +-----------------------+      io::Write
 //! ```
 //!
-//! These objects are `Send` but not `Sync`, so are usable in only one thread unless
-//! you make your own arrangements.
-//!
 //! ### Rustls takes care of server certificate verification
 //! You do not need to provide anything other than a set of root certificates to trust.
 //! Certificate verification cannot be turned off or disabled in the main API.
