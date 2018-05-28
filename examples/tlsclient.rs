@@ -22,6 +22,10 @@ extern crate rustls;
 extern crate webpki;
 extern crate webpki_roots;
 extern crate ct_logs;
+extern crate vecio;
+
+mod util;
+use util::WriteVAdapter;
 
 use rustls::Session;
 
@@ -144,7 +148,7 @@ impl TlsClient {
     }
 
     fn do_write(&mut self) {
-        self.tls_session.write_tls(&mut self.socket).unwrap();
+        self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket)).unwrap();
     }
 
     fn register(&self, poll: &mut mio::Poll) {

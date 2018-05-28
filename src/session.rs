@@ -11,7 +11,7 @@ use msgs::enums::KeyUpdateRequest;
 use error::TLSError;
 use suites::SupportedCipherSuite;
 use cipher::{MessageDecrypter, MessageEncrypter, self};
-use vecbuf::ChunkVecBuffer;
+use vecbuf::{ChunkVecBuffer, WriteV};
 use key;
 use key_schedule::{SecretKind, KeySchedule};
 use prf;
@@ -50,6 +50,11 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     ///
     /// [`wants_write`]: #tymethod.wants_write
     fn write_tls(&mut self, wr: &mut Write) -> Result<usize, io::Error>;
+
+    /// Like `write_tls`, but writes potentially many records in one
+    /// go via `wr`; a `rustls::WriteV`.  This function has the same semantics
+    /// as `write_tls` otherwise.
+    fn writev_tls(&mut self, wr: &mut WriteV) -> Result<usize, io::Error>;
 
     /// Processes any new packets read by a previous call to `read_tls`.
     /// Errors from this function relate to TLS protocol errors, and
@@ -636,6 +641,10 @@ impl SessionCommon {
 
     pub fn write_tls(&mut self, wr: &mut Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
+    }
+
+    pub fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+        self.sendable_tls.writev_to(wr)
     }
 
     /// Send plaintext application data, fragmenting and

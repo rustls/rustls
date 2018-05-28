@@ -9,6 +9,8 @@ use error::TLSError;
 use sign;
 use verify;
 use key;
+use vecbuf::WriteV;
+
 use webpki;
 
 use std::sync::Arc;
@@ -454,6 +456,10 @@ impl Session for ServerSession {
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
         self.imp.common.write_tls(wr)
+    }
+
+    fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+        self.imp.common.writev_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<(), TLSError> {

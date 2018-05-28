@@ -692,17 +692,29 @@ struct OtherSession<'a> {
     sess: &'a mut Session,
     pub reads: usize,
     pub writes: usize,
+    pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
+    pub short_writes: bool,
     pub last_error: Option<rustls::TLSError>,
 }
 
 impl<'a> OtherSession<'a> {
     fn new(sess: &'a mut Session) -> OtherSession<'a> {
-        OtherSession { sess, reads: 0, writes: 0, fail_ok: false, last_error: None, }
+        OtherSession {
+            sess,
+            reads: 0,
+            writes: 0,
+            writevs: vec![],
+            fail_ok: false,
+            short_writes: false,
+            last_error: None,
+        }
     }
 
     fn new_fails(sess: &'a mut Session) -> OtherSession<'a> {
-        OtherSession { sess, reads: 0, writes: 0, fail_ok: true, last_error: None, }
+        let mut os = OtherSession::new(sess);
+        os.fail_ok = true;
+        os
     }
 }
 
@@ -730,6 +742,37 @@ impl<'a> io::Write for OtherSession<'a> {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+impl<'a> rustls::WriteV for OtherSession<'a> {
+    fn writev(&mut self, b: &[&[u8]]) -> io::Result<usize> {
+        let mut total = 0;
+        let mut lengths = vec![];
+        for bytes in b {
+            let write_len = if self.short_writes {
+                if bytes.len() > 5 { bytes.len() / 2 } else { bytes.len() }
+            } else {
+                bytes.len()
+            };
+
+            let l = self.sess.read_tls(&mut io::Cursor::new(&bytes[..write_len]))?;
+            lengths.push(l);
+            total += l;
+            if bytes.len() != l {
+                break;
+            }
+        }
+
+        let rc = self.sess.process_new_packets();
+        if !self.fail_ok {
+            rc.unwrap();
+        } else if rc.is_err() {
+            self.last_error = rc.err();
+        }
+
+        self.writevs.push(lengths);
+        Ok(total)
     }
 }
 
@@ -1355,4 +1398,131 @@ fn key_log_for_tls13() {
     assert_eq!(client_resume_log[2], server_resume_log[2]);
     assert_eq!(client_resume_log[3], server_resume_log[3]);
     assert_eq!(client_resume_log[4], server_resume_log[4]);
+}
+
+#[test]
+fn vectored_write_for_server_appdata() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+
+    server.write(b"01234567890123456789").unwrap();
+    server.write(b"01234567890123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.writev_tls(&mut pipe).unwrap();
+        assert_eq!(84, wrlen);
+        assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+    }
+    check_read(&mut client, b"0123456789012345678901234567890123456789");
+}
+
+#[test]
+fn vectored_write_for_client_appdata() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    do_handshake(&mut client, &mut server);
+
+    client.write(b"01234567890123456789").unwrap();
+    client.write(b"01234567890123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let wrlen = client.writev_tls(&mut pipe).unwrap();
+        assert_eq!(84, wrlen);
+        assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+    }
+    check_read(&mut server, b"0123456789012345678901234567890123456789");
+}
+
+#[test]
+fn vectored_write_for_server_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    server.write(b"01234567890123456789").unwrap();
+    server.write(b"0123456789").unwrap();
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.writev_tls(&mut pipe).unwrap();
+        // don't assert exact sizes here, to avoid a brittle test
+        assert!(wrlen > 5000); // its pretty big (contains cert chain)
+        assert_eq!(pipe.writevs.len(), 1); // only one writev
+        assert!(pipe.writevs[0].len() > 3); // at least a server hello/cert/serverkx
+    }
+
+    client.process_new_packets().unwrap();
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.writev_tls(&mut pipe).unwrap();
+        assert_eq!(wrlen, 74);
+        assert_eq!(pipe.writevs, vec![vec![42, 32]]);
+    }
+
+    assert_eq!(server.is_handshaking(), false);
+    assert_eq!(client.is_handshaking(), false);
+    check_read(&mut client, b"012345678901234567890123456789");
+}
+
+#[test]
+fn vectored_write_for_client_handshake() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    client.write(b"01234567890123456789").unwrap();
+    client.write(b"0123456789").unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let wrlen = client.writev_tls(&mut pipe).unwrap();
+        // don't assert exact sizes here, to avoid a brittle test
+        assert!(wrlen > 200); // just the client hello
+        assert_eq!(pipe.writevs.len(), 1); // only one writev
+        assert!(pipe.writevs[0].len() == 1); // only a client hello
+    }
+
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let wrlen = client.writev_tls(&mut pipe).unwrap();
+        assert_eq!(wrlen, 138);
+        // CCS, finished, then two application datas
+        assert_eq!(pipe.writevs, vec![vec![6, 58, 42, 32]]);
+    }
+
+    assert_eq!(server.is_handshaking(), false);
+    assert_eq!(client.is_handshaking(), false);
+    check_read(&mut server, b"012345678901234567890123456789");
+}
+
+#[test]
+fn vectored_write_with_slow_client() {
+    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+
+    client.set_buffer_limit(32);
+
+    do_handshake(&mut client, &mut server);
+    server.write(b"01234567890123456789").unwrap();
+
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        pipe.short_writes = true;
+        let wrlen = server.writev_tls(&mut pipe).unwrap() +
+            server.writev_tls(&mut pipe).unwrap() +
+            server.writev_tls(&mut pipe).unwrap() +
+            server.writev_tls(&mut pipe).unwrap() +
+            server.writev_tls(&mut pipe).unwrap() +
+            server.writev_tls(&mut pipe).unwrap();
+        assert_eq!(42, wrlen);
+        assert_eq!(pipe.writevs, vec![vec![21], vec![10], vec![5], vec![3], vec![3]]);
+    }
+    check_read(&mut client, b"01234567890123456789");
 }

@@ -3,6 +3,25 @@ use std::io;
 use std::cmp;
 use std::collections::VecDeque;
 
+/// This trait specifies rustls's precise requirements doing writes with
+/// vectored IO.
+///
+/// The purpose of vectored IO is to pass contigious output in many blocks
+/// to the kernel without either coalescing it in user-mode (by allocating
+/// and copying) or making many system calls.
+///
+/// We don't directly use types from the vecio crate because the traits
+/// don't compose well: the most useful trait (`Rawv`) is hard to test
+/// with (it can't be implemented without an FD) and implies a readable
+/// source too.  You will have to write a trivial adaptor struct which
+/// glues either `vecio::Rawv` or `vecio::Writev` to this trait.  See
+/// the rustls examples.
+pub trait WriteV {
+    /// Writes as much data from `vbytes` as possible, returning
+    /// the number of bytes written.
+    fn writev(&mut self, vbytes: &[&[u8]]) -> io::Result<usize>;
+}
+
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
 /// appending a new byte vector, at the expense of
@@ -87,33 +106,49 @@ impl ChunkVecBuffer {
         while offs < buf.len() && !self.is_empty() {
             let used = self.chunks[0].as_slice().read(&mut buf[offs..])?;
 
-            if used == self.chunks[0].len() {
-                self.take_one();
-            } else {
-                self.chunks[0] = self.chunks[0].split_off(used);
-            }
-
+            self.consume(used);
             offs += used;
         }
 
         Ok(offs)
     }
 
-    /// Read data of this object, passing it `wr`
+    fn consume(&mut self, mut used: usize) {
+        while used > 0 && !self.is_empty() {
+            if used >= self.chunks[0].len() {
+                used -= self.chunks[0].len();
+                self.take_one();
+            } else {
+                self.chunks[0] = self.chunks[0].split_off(used);
+                used = 0;
+            }
+        }
+    }
+
+    /// Read data out of this object, passing it `wr`
     pub fn write_to(&mut self, wr: &mut io::Write) -> io::Result<usize> {
-        // would desperately like writev support here!
         if self.is_empty() {
             return Ok(0);
         }
 
         let used = wr.write(&self.chunks[0])?;
+        self.consume(used);
+        Ok(used)
+    }
 
-        if used == self.chunks[0].len() {
-            self.take_one();
-        } else {
-            self.chunks[0] = self.chunks[0].split_off(used);
+    pub fn writev_to(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+        if self.is_empty() {
+            return Ok(0);
         }
 
+        let used = {
+            let chunks = self.chunks.iter()
+                .map(|ch| ch.as_ref())
+                .collect::<Vec<&[u8]>>();
+
+            wr.writev(&chunks)?
+        };
+        self.consume(used);
         Ok(used)
     }
 }

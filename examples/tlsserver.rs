@@ -18,11 +18,14 @@ extern crate docopt;
 use docopt::Docopt;
 
 extern crate env_logger;
-
+extern crate vecio;
 extern crate rustls;
 
 use rustls::{RootCertStore, Session, NoClientAuth, AllowAnyAuthenticatedClient,
              AllowAnyAnonymousOrAuthenticatedClient};
+
+mod util;
+use util::WriteVAdapter;
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -301,7 +304,7 @@ impl Connection {
     }
 
     fn do_tls_write(&mut self) {
-        let rc = self.tls_session.write_tls(&mut self.socket);
+        let rc = self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket));
         if rc.is_err() {
             error!("write failed {:?}", rc);
             self.closing = true;

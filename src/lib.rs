@@ -301,6 +301,7 @@ pub use verify::{NoClientAuth, AllowAnyAuthenticatedClient,
 pub use suites::{ALL_CIPHERSUITES, SupportedCipherSuite};
 pub use key::{Certificate, PrivateKey};
 pub use keylog::{KeyLog, NoKeyLog, KeyLogFile};
+pub use vecbuf::WriteV;
 
 /// Message signing interfaces and implementations.
 pub mod sign;
