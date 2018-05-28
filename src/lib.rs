@@ -195,6 +195,14 @@
         unused_extern_crates,
         unused_qualifications)]
 
+// Relax these clippy lints:
+// - needless_pass_by_value: this is unhelpful for trait implementations
+//   which need to match the trait.
+#![cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
+// - ptr_arg: this triggers on references to type aliases that are Vec
+//   underneath.
+#![cfg_attr(feature = "cargo-clippy", allow(ptr_arg))]
+
 // Our dependencies:
 
 // webpki for certificate verification.

@@ -950,12 +950,12 @@ fn server_stream_handshake_error() {
 
 #[test]
 fn server_config_is_clone() {
-    make_server_config().clone();
+    let _ = make_server_config().clone();
 }
 
 #[test]
 fn client_config_is_clone() {
-    make_client_config().clone();
+    let _ = make_client_config().clone();
 }
 
 #[test]

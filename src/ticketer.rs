@@ -131,7 +131,7 @@ impl TicketSwitcher {
             state: Mutex::new(TicketSwitcherState {
                 current: generator(),
                 previous: None,
-                next_switch_time: timebase() + lifetime as u64,
+                next_switch_time: timebase() + u64::from(lifetime),
             }),
         }
     }
@@ -148,7 +148,7 @@ impl TicketSwitcher {
 
         if now > state.next_switch_time {
             state.previous = Some(mem::replace(&mut state.current, (self.generator)()));
-            state.next_switch_time = now + self.lifetime as u64;
+            state.next_switch_time = now + u64::from(self.lifetime);
         }
     }
 }
@@ -157,6 +157,7 @@ impl ProducesTickets for TicketSwitcher {
     fn get_lifetime(&self) -> u32 {
         self.lifetime * 2
     }
+
     fn enabled(&self) -> bool {
         true
     }

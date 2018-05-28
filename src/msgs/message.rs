@@ -60,7 +60,7 @@ impl MessagePayload {
             MessagePayload::Alert(ref x) => x.length(),
             MessagePayload::Handshake(ref x) => x.length(),
             MessagePayload::ChangeCipherSpec(ref x) => x.length(),
-            MessagePayload::Opaque(ref x) => x.len(),
+            MessagePayload::Opaque(ref x) => x.0.len(),
         }
     }
 

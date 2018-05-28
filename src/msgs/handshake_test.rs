@@ -203,7 +203,6 @@ fn can_roundtrip_psk_identity() {
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes))
         .unwrap();
     println!("{:?}", psk_id);
-    assert_eq!(psk_id.identity.len(), 0);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
     assert_eq!(psk_id.get_encoding(), bytes.to_vec());
 
@@ -211,7 +210,6 @@ fn can_roundtrip_psk_identity() {
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes))
         .unwrap();
     println!("{:?}", psk_id);
-    assert_eq!(psk_id.identity.len(), 5);
     assert_eq!(psk_id.identity.0, vec![0x1, 0x2, 0x3, 0x4, 0x5]);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
     assert_eq!(psk_id.get_encoding(), bytes.to_vec());

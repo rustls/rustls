@@ -128,7 +128,7 @@ fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, grou
 /// If we have a ticket, we use the sessionid as a signal that we're
 /// doing an abbreviated handshake.  See section 3.4 in RFC5077.
 fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
-    if csv.ticket.len() > 0 {
+    if !csv.ticket.0.is_empty() {
         let mut random_id = [0u8; 32];
         rand::fill_random(&mut random_id);
         csv.session_id = SessionID::new(&random_id);
@@ -804,7 +804,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or has an empty cookie.
-        if has_cookie && hrr.get_cookie().unwrap().len() == 0 {
+        if has_cookie && hrr.get_cookie().unwrap().0.is_empty() {
             return Err(illegal_param(sess, "server requested hrr with empty cookie"));
         }
 
@@ -989,7 +989,7 @@ impl State for ExpectTLS13Certificate {
         self.handshake.transcript.add_message(&m);
 
         // This is only non-empty for client auth.
-        if cert_chain.context.len() > 0 {
+        if !cert_chain.context.0.is_empty() {
             warn!("certificate with non-empty context during handshake");
             sess.common.send_fatal_alert(AlertDescription::DecodeError);
             return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
@@ -1502,7 +1502,7 @@ impl State for ExpectTLS13CertificateRequest {
         // TLS1.3.
 
         // Must be empty during handshake.
-        if certreq.context.len() > 0 {
+        if !certreq.context.0.is_empty() {
             warn!("Server sent non-empty certreq context");
             sess.common.send_fatal_alert(AlertDescription::DecodeError);
             return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));

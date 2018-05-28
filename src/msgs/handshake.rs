@@ -136,9 +136,7 @@ impl Codec for SessionID {
 
         let bytes = r.take(len)?;
         let mut out = [0u8; 32];
-        for i in 0..len {
-            out[i] = bytes[i];
-        }
+        out[..len].clone_from_slice(&bytes[..len]);
 
         Some(SessionID {
             data: out,
@@ -151,9 +149,8 @@ impl SessionID {
     pub fn new(bytes: &[u8]) -> SessionID {
         debug_assert!(bytes.len() <= 32);
         let mut d = [0u8; 32];
-        for i in 0..bytes.len() {
-            d[i] = bytes[i];
-        }
+        d[..bytes.len()].clone_from_slice(&bytes[..]);
+
         SessionID {
             data: d,
             len: bytes.len(),
@@ -1723,10 +1720,9 @@ impl ServerKeyExchangePayload {
     pub fn encode_params(&self, bytes: &mut Vec<u8>) {
         bytes.clear();
 
-        match *self {
-            ServerKeyExchangePayload::ECDHE(ref x) => x.params.encode(bytes),
-            _ => (),
-        };
+        if let ServerKeyExchangePayload::ECDHE(ref x) = *self {
+            x.params.encode(bytes);
+        }
     }
 
     pub fn get_sig(&self) -> Option<DigitallySignedStruct> {

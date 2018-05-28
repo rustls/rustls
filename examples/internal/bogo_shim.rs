@@ -159,7 +159,7 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
 
     fn client_auth_mandatory(&self) -> bool { self.mandatory }
 
-    fn client_auth_root_subjects<'a>(&'a self) -> rustls::DistinguishedNames {
+    fn client_auth_root_subjects(&self) -> rustls::DistinguishedNames {
         rustls::DistinguishedNames::new()
     }
 

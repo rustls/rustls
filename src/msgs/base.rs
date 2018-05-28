@@ -29,10 +29,6 @@ impl Payload {
         v.extend_from_slice(data);
         Payload(v)
     }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
 }
 
 impl Codec for key::Certificate {
@@ -56,10 +52,6 @@ pub struct PayloadU24(pub Vec<u8>);
 impl PayloadU24 {
     pub fn new(bytes: Vec<u8>) -> PayloadU24 {
         PayloadU24(bytes)
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
     }
 
     pub fn empty() -> PayloadU24 {
@@ -88,10 +80,6 @@ pub struct PayloadU16(pub Vec<u8>);
 impl PayloadU16 {
     pub fn new(bytes: Vec<u8>) -> PayloadU16 {
         PayloadU16(bytes)
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
     }
 
     pub fn empty() -> PayloadU16 {
@@ -124,10 +112,6 @@ impl PayloadU8 {
 
     pub fn empty() -> PayloadU8 {
         PayloadU8(Vec::new())
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
     }
 }
 

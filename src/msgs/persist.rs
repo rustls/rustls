@@ -136,7 +136,7 @@ impl ClientSessionValue {
     }
 
     pub fn has_expired(&self, time_now: u64) -> bool {
-        self.lifetime != 0 && self.epoch + (self.lifetime as u64) < time_now
+        self.lifetime != 0 && self.epoch + u64::from(self.lifetime) < time_now
     }
 
     pub fn get_obfuscated_ticket_age(&self, time_now: u64) -> u32 {
@@ -167,7 +167,7 @@ pub struct ServerSessionValue {
 
 impl Codec for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        if let &Some(ref sni) = &self.sni {
+        if let Some(ref sni) = self.sni {
             1u8.encode(bytes);
             let sni_bytes: &str = sni.as_ref().into();
             PayloadU8::new(Vec::from(sni_bytes)).encode(bytes);
@@ -222,7 +222,7 @@ impl ServerSessionValue {
                cert_chain: &Option<CertificatePayload>)
                -> ServerSessionValue {
         ServerSessionValue {
-            sni: sni.map(|sni| sni.clone()),
+            sni: sni.cloned(),
             version: v,
             cipher_suite: cs,
             master_secret: PayloadU8::new(ms),
