@@ -42,27 +42,58 @@ fn transfer(left: &mut Session, right: &mut Session) {
     }
 }
 
-fn get_chain() -> Vec<Certificate> {
-    pemfile::certs(&mut io::BufReader::new(fs::File::open("test-ca/rsa/end.fullchain").unwrap()))
-        .unwrap()
+#[derive(Clone, Copy)]
+enum KeyType {
+    RSA,
+    ECDSA
 }
 
-fn get_key() -> PrivateKey {
-    pemfile::rsa_private_keys(&mut io::BufReader::new(fs::File::open("test-ca/rsa/end.rsa")
-                .unwrap()))
-            .unwrap()[0]
-        .clone()
+static ALL_KEY_TYPES: [KeyType; 2] = [ KeyType::RSA, KeyType::ECDSA ];
+
+impl KeyType {
+    fn path_for(&self, part: &str) -> String {
+        match self {
+            KeyType::RSA => format!("test-ca/rsa/{}", part),
+            KeyType::ECDSA => format!("test-ca/ecdsa/{}", part),
+        }
+    }
+
+    fn get_chain(&self) -> Vec<Certificate> {
+        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("end.fullchain"))
+                                               .unwrap()))
+            .unwrap()
+    }
+
+    fn get_key(&self) -> PrivateKey {
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("end.key"))
+                                                            .unwrap()))
+                .unwrap()[0]
+            .clone()
+    }
+
+    fn get_client_chain(&self) -> Vec<Certificate> {
+        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("client.fullchain"))
+                                               .unwrap()))
+            .unwrap()
+    }
+
+    fn get_client_key(&self) -> PrivateKey {
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("client.key"))
+                                                            .unwrap()))
+                .unwrap()[0]
+            .clone()
+    }
 }
 
-fn make_server_config() -> ServerConfig {
+fn make_server_config(kt: KeyType) -> ServerConfig {
     let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_single_cert(get_chain(), get_key()).unwrap();
+    cfg.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
 
     cfg
 }
 
-fn make_server_config_with_mandatory_client_auth() -> ServerConfig {
-    let roots = get_chain();
+fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+    let roots = kt.get_chain();
     let mut client_auth_roots = RootCertStore::empty();
     for root in roots {
         client_auth_roots.add(&root).unwrap();
@@ -70,17 +101,42 @@ fn make_server_config_with_mandatory_client_auth() -> ServerConfig {
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
     let mut cfg = ServerConfig::new(client_auth);
-    cfg.set_single_cert(get_chain(), get_key()).unwrap();
+    cfg.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
 
     cfg
 }
 
-fn make_client_config() -> ClientConfig {
+fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut cfg = ClientConfig::new();
-    let mut rootbuf = io::BufReader::new(fs::File::open("test-ca/rsa/ca.cert").unwrap());
+    let mut rootbuf = io::BufReader::new(fs::File::open(kt.path_for("ca.cert")).unwrap());
     cfg.root_store.add_pem_file(&mut rootbuf).unwrap();
 
     cfg
+}
+
+fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
+    let mut cfg = make_client_config(kt);
+    cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key());
+    cfg
+}
+
+fn make_pair(kt: KeyType) -> (ClientSession, ServerSession) {
+    make_pair_for_configs(make_client_config(kt),
+                          make_server_config(kt))
+}
+
+fn make_pair_for_configs(client_config: ClientConfig,
+                         server_config: ServerConfig) -> (ClientSession, ServerSession) {
+    make_pair_for_arc_configs(&Arc::new(client_config),
+                              &Arc::new(server_config))
+}
+
+fn make_pair_for_arc_configs(client_config: &Arc<ClientConfig>,
+                             server_config: &Arc<ServerConfig>) -> (ClientSession, ServerSession) {
+    (
+        ClientSession::new(client_config, dns_name("localhost")),
+        ServerSession::new(server_config)
+    )
 }
 
 fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
@@ -147,8 +203,8 @@ fn dns_name(name: &'static str) -> webpki::DNSNameRef {
 }
 
 fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<&str>) {
-    let mut client_config = make_client_config();
-    let mut server_config = make_server_config();
+    let mut client_config = make_client_config(KeyType::RSA);
+    let mut server_config = make_server_config(KeyType::RSA);
 
     client_config.alpn_protocols = client_protos;
     server_config.alpn_protocols = server_protos;
@@ -156,8 +212,8 @@ fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Opt
     let server_config = Arc::new(server_config);
 
     for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
 
         assert_eq!(client.get_alpn_protocol(), None);
         assert_eq!(server.get_alpn_protocol(), None);
@@ -195,8 +251,8 @@ fn alpn() {
 fn version_test(client_versions: Vec<ProtocolVersion>,
                 server_versions: Vec<ProtocolVersion>,
                 result: Option<ProtocolVersion>) {
-    let mut client_config = make_client_config();
-    let mut server_config = make_server_config();
+    let mut client_config = make_client_config(KeyType::RSA);
+    let mut server_config = make_server_config(KeyType::RSA);
 
     println!("version {:?} {:?} -> {:?}",
              client_versions,
@@ -211,8 +267,7 @@ fn version_test(client_versions: Vec<ProtocolVersion>,
         server_config.versions = server_versions;
     }
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_eq!(client.get_protocol_version(), None);
     assert_eq!(server.get_protocol_version(), None);
@@ -270,11 +325,11 @@ fn check_read(reader: &mut io::Read, bytes: &[u8]) {
 
 #[test]
 fn buffered_client_data_sent() {
-    let server_config = Arc::new(make_server_config());
+    let server_config = Arc::new(make_server_config(KeyType::RSA));
 
-    for client_config in AllClientVersions::new(make_client_config()) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
+    for client_config in AllClientVersions::new(make_client_config(KeyType::RSA)) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
 
         assert_eq!(5, client.write(b"hello").unwrap());
 
@@ -288,11 +343,11 @@ fn buffered_client_data_sent() {
 
 #[test]
 fn buffered_server_data_sent() {
-    let server_config = Arc::new(make_server_config());
+    let server_config = Arc::new(make_server_config(KeyType::RSA));
 
-    for client_config in AllClientVersions::new(make_client_config()) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
+    for client_config in AllClientVersions::new(make_client_config(KeyType::RSA)) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
 
         assert_eq!(5, server.write(b"hello").unwrap());
 
@@ -306,11 +361,11 @@ fn buffered_server_data_sent() {
 
 #[test]
 fn buffered_both_data_sent() {
-    let server_config = Arc::new(make_server_config());
+    let server_config = Arc::new(make_server_config(KeyType::RSA));
 
-    for client_config in AllClientVersions::new(make_client_config()) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
+    for client_config in AllClientVersions::new(make_client_config(KeyType::RSA)) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
 
         assert_eq!(12, server.write(b"from-server!").unwrap());
         assert_eq!(12, client.write(b"from-client!").unwrap());
@@ -329,30 +384,34 @@ fn buffered_both_data_sent() {
 
 #[test]
 fn client_can_get_server_cert() {
-    for client_config in AllClientVersions::new(make_client_config()) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&Arc::new(make_server_config()));
-        do_handshake(&mut client, &mut server);
+    for kt in ALL_KEY_TYPES.iter() {
+        for client_config in AllClientVersions::new(make_client_config(*kt)) {
+            let (mut client, mut server) = make_pair_for_configs(client_config,
+                                                                 make_server_config(*kt));
+            do_handshake(&mut client, &mut server);
 
-        let certs = client.get_peer_certificates();
-        assert_eq!(certs, Some(get_chain()));
+            let certs = client.get_peer_certificates();
+            assert_eq!(certs, Some(kt.get_chain()));
+        }
     }
 }
 
 #[test]
 fn server_can_get_client_cert() {
-    let mut client_config = make_client_config();
-    client_config.set_single_client_cert(get_chain(), get_key());
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        client_config.set_single_client_cert(kt.get_chain(), kt.get_key());
 
-    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
 
-    for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
-        do_handshake(&mut client, &mut server);
+        for client_config in AllClientVersions::new(client_config) {
+            let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                     &server_config);
+            do_handshake(&mut client, &mut server);
 
-        let certs = server.get_peer_certificates();
-        assert_eq!(certs, Some(get_chain()));
+            let certs = server.get_peer_certificates();
+            assert_eq!(certs, Some(kt.get_chain()));
+        }
     }
 }
 
@@ -369,15 +428,15 @@ fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
 
 #[test]
 fn server_close_notify() {
-    let mut client_config = make_client_config();
-    client_config.set_single_client_cert(get_chain(), get_key());
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
+    client_config.set_single_client_cert(kt.get_chain(), kt.get_key());
 
-    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
+    let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt));
 
     for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
-
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
         do_handshake(&mut client, &mut server);
 
         // check that alerts don't overtake appdata
@@ -397,15 +456,15 @@ fn server_close_notify() {
 
 #[test]
 fn client_close_notify() {
-    let mut client_config = make_client_config();
-    client_config.set_single_client_cert(get_chain(), get_key());
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
+    client_config.set_single_client_cert(kt.get_chain(), kt.get_key());
 
-    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
+    let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt));
 
     for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
-
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
         do_handshake(&mut client, &mut server);
 
         // check that alerts don't overtake appdata
@@ -459,16 +518,18 @@ impl ResolvesServerCert for ServerCheckCertResolve {
 
 #[test]
 fn server_cert_resolve_with_sni() {
-    let client_config = make_client_config();
-    let mut server_config = make_server_config();
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+        let mut server_config = make_server_config(*kt);
 
-    server_config.cert_resolver = Arc::new(ServerCheckCertResolve::new("the-value-from-sni"));
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve::new("the-value-from-sni"));
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("the-value-from-sni"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("the-value-from-sni"));
+        let mut server = ServerSession::new(&Arc::new(server_config));
 
-    let err = do_handshake_until_error(&mut client, &mut server);
-    assert_eq!(err.is_err(), true);
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert_eq!(err.is_err(), true);
+    }
 }
 
 struct ServerCheckNoSNI {}
@@ -486,37 +547,42 @@ impl ResolvesServerCert for ServerCheckNoSNI {
 
 #[test]
 fn client_with_sni_disabled_does_not_send_sni() {
-    let mut client_config = make_client_config();
-    client_config.enable_sni = false;
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        client_config.enable_sni = false;
 
-    let mut server_config = make_server_config();
-    server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
-    let server_config = Arc::new(server_config);
+        let mut server_config = make_server_config(*kt);
+        server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
+        let server_config = Arc::new(server_config);
 
-    for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("value-not-sent"));
-        let mut server = ServerSession::new(&server_config);
+        for client_config in AllClientVersions::new(client_config) {
+            let mut client = ClientSession::new(&Arc::new(client_config), dns_name("value-not-sent"));
+            let mut server = ServerSession::new(&server_config);
 
-        let err = do_handshake_until_error(&mut client, &mut server);
-        assert_eq!(err.is_err(), true);
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(err.is_err(), true);
+        }
     }
 }
 
 #[test]
 fn client_checks_server_certificate_with_given_name() {
-    let client_config = make_client_config();
-    let server_config = Arc::new(make_server_config());
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+        let server_config = Arc::new(make_server_config(*kt));
 
-    for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("not-the-right-hostname.com"));
-        let mut server = ServerSession::new(&server_config);
+        for client_config in AllClientVersions::new(client_config) {
+            let mut client = ClientSession::new(&Arc::new(client_config),
+                                                dns_name("not-the-right-hostname.com"));
+            let mut server = ServerSession::new(&server_config);
 
-        let err = do_handshake_until_error(&mut client, &mut server);
-        assert_eq!(err,
-                   Err(TLSErrorFromPeer::Client(
-                           TLSError::WebPKIError(webpki::Error::CertNotValidForName))
-                       )
-                   );
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(err,
+                       Err(TLSErrorFromPeer::Client(
+                               TLSError::WebPKIError(webpki::Error::CertNotValidForName))
+                           )
+                       );
+        }
     }
 }
 
@@ -566,25 +632,40 @@ impl ResolvesClientCert for ClientCheckCertResolve {
 
 #[test]
 fn client_cert_resolve() {
-    let mut client_config = make_client_config();
-    client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(2));
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(2));
 
-    let server_config = Arc::new(make_server_config_with_mandatory_client_auth());
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
 
-    for client_config in AllClientVersions::new(client_config) {
-        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-        let mut server = ServerSession::new(&server_config);
+        for client_config in AllClientVersions::new(client_config) {
+            let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                     &server_config);
 
-        assert_eq!(
-            do_handshake_until_error(&mut client, &mut server),
-            Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+            assert_eq!(
+                do_handshake_until_error(&mut client, &mut server),
+                Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+        }
+    }
+}
+
+#[test]
+fn client_auth_works() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config_with_auth(*kt);
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
+
+        for client_config in AllClientVersions::new(client_config) {
+            let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                     &server_config);
+            do_handshake(&mut client, &mut server);
+        }
     }
 }
 
 #[test]
 fn client_error_is_sticky() {
-    let client_config = make_client_config();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+    let (mut client, _) = make_pair(KeyType::RSA);
     client.read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref()).unwrap();
     let mut err = client.process_new_packets();
     assert_eq!(err.is_err(), true);
@@ -594,8 +675,7 @@ fn client_error_is_sticky() {
 
 #[test]
 fn server_error_is_sticky() {
-    let server_config = make_server_config();
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let (_, mut server) = make_pair(KeyType::RSA);
     server.read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref()).unwrap();
     let mut err = server.process_new_packets();
     assert_eq!(err.is_err(), true);
@@ -605,24 +685,21 @@ fn server_error_is_sticky() {
 
 #[test]
 fn server_is_send_and_sync() {
-    let server_config = make_server_config();
-    let server = ServerSession::new(&Arc::new(server_config));
+    let (_, server) = make_pair(KeyType::RSA);
     &server as &Send;
     &server as &Sync;
 }
 
 #[test]
 fn client_is_send_and_sync() {
-    let client_config = make_client_config();
-    let client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+    let (client, _) = make_pair(KeyType::RSA);
     &client as &Send;
     &client as &Sync;
 }
 
 #[test]
 fn server_respects_buffer_limit_pre_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     server.set_buffer_limit(32);
 
@@ -638,8 +715,7 @@ fn server_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn server_respects_buffer_limit_post_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     // this test will vary in behaviour depending on the default suites
     do_handshake(&mut client, &mut server);
@@ -656,8 +732,7 @@ fn server_respects_buffer_limit_post_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_pre_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     client.set_buffer_limit(32);
 
@@ -673,8 +748,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_post_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     do_handshake(&mut client, &mut server);
     client.set_buffer_limit(48);
@@ -778,8 +852,7 @@ impl<'a> rustls::WriteV for OtherSession<'a> {
 
 #[test]
 fn client_complete_io_for_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     assert_eq!(true, client.is_handshaking());
     let (rdlen, wrlen) = client.complete_io(&mut OtherSession::new(&mut server)).unwrap();
@@ -789,7 +862,7 @@ fn client_complete_io_for_handshake() {
 
 #[test]
 fn client_complete_io_for_handshake_eof() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let (mut client, _) = make_pair(KeyType::RSA);
     let mut input = io::Cursor::new(Vec::new());
 
     assert_eq!(true, client.is_handshaking());
@@ -799,53 +872,56 @@ fn client_complete_io_for_handshake_eof() {
 
 #[test]
 fn client_complete_io_for_write() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    do_handshake(&mut client, &mut server);
+        do_handshake(&mut client, &mut server);
 
-    client.write(b"01234567890123456789").unwrap();
-    client.write(b"01234567890123456789").unwrap();
-    {
-        let mut pipe = OtherSession::new(&mut server);
-        let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
-        assert!(rdlen == 0 && wrlen > 0);
-        assert_eq!(pipe.writes, 2);
+        client.write(b"01234567890123456789").unwrap();
+        client.write(b"01234567890123456789").unwrap();
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+            assert!(rdlen == 0 && wrlen > 0);
+            assert_eq!(pipe.writes, 2);
+        }
+        check_read(&mut server, b"0123456789012345678901234567890123456789");
     }
-    check_read(&mut server, b"0123456789012345678901234567890123456789");
 }
 
 #[test]
 fn client_complete_io_for_read() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    do_handshake(&mut client, &mut server);
+        do_handshake(&mut client, &mut server);
 
-    server.write(b"01234567890123456789").unwrap();
-    {
-        let mut pipe = OtherSession::new(&mut server);
-        let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
-        assert!(rdlen > 0 && wrlen == 0);
-        assert_eq!(pipe.reads, 1);
+        server.write(b"01234567890123456789").unwrap();
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+            assert!(rdlen > 0 && wrlen == 0);
+            assert_eq!(pipe.reads, 1);
+        }
+        check_read(&mut client, b"01234567890123456789");
     }
-    check_read(&mut client, b"01234567890123456789");
 }
 
 #[test]
 fn server_complete_io_for_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    assert_eq!(true, server.is_handshaking());
-    let (rdlen, wrlen) = server.complete_io(&mut OtherSession::new(&mut client)).unwrap();
-    assert!(rdlen > 0 && wrlen > 0);
-    assert_eq!(false, server.is_handshaking());
+        assert_eq!(true, server.is_handshaking());
+        let (rdlen, wrlen) = server.complete_io(&mut OtherSession::new(&mut client)).unwrap();
+        assert!(rdlen > 0 && wrlen > 0);
+        assert_eq!(false, server.is_handshaking());
+    }
 }
 
 #[test]
 fn server_complete_io_for_handshake_eof() {
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (_, mut server) = make_pair(KeyType::RSA);
     let mut input = io::Cursor::new(Vec::new());
 
     assert_eq!(true, server.is_handshaking());
@@ -855,106 +931,111 @@ fn server_complete_io_for_handshake_eof() {
 
 #[test]
 fn server_complete_io_for_write() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    do_handshake(&mut client, &mut server);
+        do_handshake(&mut client, &mut server);
 
-    server.write(b"01234567890123456789").unwrap();
-    server.write(b"01234567890123456789").unwrap();
-    {
-        let mut pipe = OtherSession::new(&mut client);
-        let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
-        assert!(rdlen == 0 && wrlen > 0);
-        assert_eq!(pipe.writes, 2);
+        server.write(b"01234567890123456789").unwrap();
+        server.write(b"01234567890123456789").unwrap();
+        {
+            let mut pipe = OtherSession::new(&mut client);
+            let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
+            assert!(rdlen == 0 && wrlen > 0);
+            assert_eq!(pipe.writes, 2);
+        }
+        check_read(&mut client, b"0123456789012345678901234567890123456789");
     }
-    check_read(&mut client, b"0123456789012345678901234567890123456789");
 }
 
 #[test]
 fn server_complete_io_for_read() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    do_handshake(&mut client, &mut server);
+        do_handshake(&mut client, &mut server);
 
-    client.write(b"01234567890123456789").unwrap();
-    {
-        let mut pipe = OtherSession::new(&mut client);
-        let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
-        assert!(rdlen > 0 && wrlen == 0);
-        assert_eq!(pipe.reads, 1);
+        client.write(b"01234567890123456789").unwrap();
+        {
+            let mut pipe = OtherSession::new(&mut client);
+            let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
+            assert!(rdlen > 0 && wrlen == 0);
+            assert_eq!(pipe.reads, 1);
+        }
+        check_read(&mut server, b"01234567890123456789");
     }
-    check_read(&mut server, b"01234567890123456789");
 }
 
 #[test]
 fn client_stream_write() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    {
-        let mut pipe = OtherSession::new(&mut server);
-        let mut stream = Stream::new(&mut client, &mut pipe);
-        assert_eq!(stream.write(b"hello").unwrap(), 5);
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            let mut stream = Stream::new(&mut client, &mut pipe);
+            assert_eq!(stream.write(b"hello").unwrap(), 5);
+        }
+        check_read(&mut server, b"hello");
     }
-    check_read(&mut server, b"hello");
 }
 
 #[test]
 fn client_stream_read() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    server.write(b"world").unwrap();
+        server.write(b"world").unwrap();
 
-    {
-        let mut pipe = OtherSession::new(&mut server);
-        let mut stream = Stream::new(&mut client, &mut pipe);
-        check_read(&mut stream, b"world");
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            let mut stream = Stream::new(&mut client, &mut pipe);
+            check_read(&mut stream, b"world");
+        }
     }
 }
 
 #[test]
 fn server_stream_write() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    {
-        let mut pipe = OtherSession::new(&mut client);
-        let mut stream = Stream::new(&mut server, &mut pipe);
-        assert_eq!(stream.write(b"hello").unwrap(), 5);
+        {
+            let mut pipe = OtherSession::new(&mut client);
+            let mut stream = Stream::new(&mut server, &mut pipe);
+            assert_eq!(stream.write(b"hello").unwrap(), 5);
+        }
+        check_read(&mut client, b"hello");
     }
-    check_read(&mut client, b"hello");
 }
 
 #[test]
 fn server_stream_read() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
 
-    client.write(b"world").unwrap();
+        client.write(b"world").unwrap();
 
-    {
-        let mut pipe = OtherSession::new(&mut client);
-        let mut stream = Stream::new(&mut server, &mut pipe);
-        check_read(&mut stream, b"world");
+        {
+            let mut pipe = OtherSession::new(&mut client);
+            let mut stream = Stream::new(&mut server, &mut pipe);
+            check_read(&mut stream, b"world");
+        }
     }
 }
 
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
-    let mut server_config = make_server_config();
+    let kt = KeyType::RSA;
+    let mut server_config = make_server_config(kt);
     server_config.ciphersuites = vec![];
 
-    (make_client_config(), server_config)
+    (make_client_config(kt), server_config)
 }
 
 #[test]
 fn client_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
-
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     {
         let mut pipe = OtherSession::new_fails(&mut server);
@@ -974,9 +1055,7 @@ fn client_stream_handshake_error() {
 #[test]
 fn server_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
-
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     client.write(b"world").unwrap();
 
@@ -993,31 +1072,30 @@ fn server_stream_handshake_error() {
 
 #[test]
 fn server_config_is_clone() {
-    let _ = make_server_config().clone();
+    let _ = make_server_config(KeyType::RSA).clone();
 }
 
 #[test]
 fn client_config_is_clone() {
-    let _ = make_client_config().clone();
+    let _ = make_client_config(KeyType::RSA).clone();
 }
 
 #[test]
 fn client_session_is_debug() {
-    let client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let (client, _) = make_pair(KeyType::RSA);
     println!("{:?}", client);
 }
 
 #[test]
 fn server_session_is_debug() {
-    let server = ServerSession::new(&Arc::new(make_server_config()));
+    let (_, server) = make_pair(KeyType::RSA);
     println!("{:?}", server);
 }
 
 #[test]
 fn server_complete_io_for_handshake_ending_with_alert() {
     let (client_config, server_config) = make_disjoint_suite_configs();
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_eq!(true, server.is_handshaking());
 
@@ -1034,9 +1112,10 @@ fn server_complete_io_for_handshake_ending_with_alert() {
 
 #[test]
 fn server_exposes_offered_sni() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()),
+    let kt = KeyType::RSA;
+    let mut client = ClientSession::new(&Arc::new(make_client_config(kt)),
                                         dns_name("second.testserver.com"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
 
     assert_eq!(None, server.get_sni_hostname());
     do_handshake(&mut client, &mut server);
@@ -1045,25 +1124,26 @@ fn server_exposes_offered_sni() {
 
 #[test]
 fn sni_resolver_works() {
+    let kt = KeyType::RSA;
     let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
-    let signing_key = sign::RSASigningKey::new(&get_key())
+    let signing_key = sign::RSASigningKey::new(&kt.get_key())
         .unwrap();
     let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
     resolver.add("localhost",
-                 sign::CertifiedKey::new(get_chain(), signing_key.clone()))
+                 sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()))
         .unwrap();
 
-    let mut server_config = make_server_config();
+    let mut server_config = make_server_config(kt);
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerSession::new(&server_config);
-    let mut client1 = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
+    let mut client1 = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("localhost"));
     let err = do_handshake_until_error(&mut client1, &mut server1);
     assert_eq!(err, Ok(()));
 
     let mut server2 = ServerSession::new(&server_config);
-    let mut client2 = ClientSession::new(&Arc::new(make_client_config()), dns_name("notlocalhost"));
+    let mut client2 = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("notlocalhost"));
     let err = do_handshake_until_error(&mut client2, &mut server2);
     assert_eq!(err,
                Err(TLSErrorFromPeer::Server(
@@ -1072,26 +1152,28 @@ fn sni_resolver_works() {
 
 #[test]
 fn sni_resolver_rejects_wrong_names() {
+    let kt = KeyType::RSA;
     let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
-    let signing_key = sign::RSASigningKey::new(&get_key())
+    let signing_key = sign::RSASigningKey::new(&kt.get_key())
         .unwrap();
     let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
     assert_eq!(Ok(()),
                resolver.add("localhost",
-                            sign::CertifiedKey::new(get_chain(), signing_key.clone())));
+                            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())));
     assert_eq!(Err(TLSError::General("The server certificate is not valid for the given name".into())),
                resolver.add("not-localhost",
-                            sign::CertifiedKey::new(get_chain(), signing_key.clone())));
+                            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())));
     assert_eq!(Err(TLSError::General("Bad DNS name".into())),
                resolver.add("not ascii 🦀",
-                            sign::CertifiedKey::new(get_chain(), signing_key.clone())));
+                            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())));
 }
 
 #[test]
 fn sni_resolver_rejects_bad_certs() {
+    let kt = KeyType::RSA;
     let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
-    let signing_key = sign::RSASigningKey::new(&get_key())
+    let signing_key = sign::RSASigningKey::new(&kt.get_key())
         .unwrap();
     let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
@@ -1109,8 +1191,7 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     let mut client_secret = [0u8; 64];
     let mut server_secret = [0u8; 64];
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_eq!(Err(TLSError::HandshakeNotComplete),
                client.export_keying_material(&mut client_secret, b"label", Some(b"context")));
@@ -1134,28 +1215,32 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
 
 #[test]
 fn test_tls12_exporter() {
-    let mut client_config = make_client_config();
-    let server_config = make_server_config();
-    client_config.versions = vec![ ProtocolVersion::TLSv1_2 ];
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        let server_config = make_server_config(*kt);
+        client_config.versions = vec![ ProtocolVersion::TLSv1_2 ];
 
-    do_exporter_test(client_config, server_config);
+        do_exporter_test(client_config, server_config);
+    }
 }
 
 #[test]
 fn test_tls13_exporter() {
-    let mut client_config = make_client_config();
-    let server_config = make_server_config();
-    client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        let server_config = make_server_config(*kt);
+        client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
 
-    do_exporter_test(client_config, server_config);
+        do_exporter_test(client_config, server_config);
+    }
 }
 
 fn do_suite_test(client_config: ClientConfig,
                  server_config: ServerConfig,
                  expect_suite: &'static SupportedCipherSuite,
                  expect_version: ProtocolVersion) {
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(server_config));
+    println!("do_suite_test {:?} {:?}", expect_version, expect_suite.suite);
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_eq!(None, client.get_negotiated_ciphersuite());
     assert_eq!(None, server.get_negotiated_ciphersuite());
@@ -1203,24 +1288,26 @@ fn find_suite(suite: CipherSuite) -> &'static SupportedCipherSuite {
     panic!("find_suite given unsuppported suite");
 }
 
-static TEST_CIPHERSUITES: [(ProtocolVersion, CipherSuite); 9] = [
-    (ProtocolVersion::TLSv1_3, CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
-    (ProtocolVersion::TLSv1_3, CipherSuite::TLS13_AES_256_GCM_SHA384),
-    (ProtocolVersion::TLSv1_3, CipherSuite::TLS13_AES_128_GCM_SHA256),
-    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
-    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
-    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384),
-    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256),
-    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
-    (ProtocolVersion::TLSv1_2, CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256)
+static TEST_CIPHERSUITES: [(ProtocolVersion, KeyType, CipherSuite); 9] = [
+    (ProtocolVersion::TLSv1_3, KeyType::RSA, CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
+    (ProtocolVersion::TLSv1_3, KeyType::RSA, CipherSuite::TLS13_AES_256_GCM_SHA384),
+    (ProtocolVersion::TLSv1_3, KeyType::RSA, CipherSuite::TLS13_AES_128_GCM_SHA256),
+    (ProtocolVersion::TLSv1_2, KeyType::ECDSA, CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
+    (ProtocolVersion::TLSv1_2, KeyType::RSA,   CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
+    (ProtocolVersion::TLSv1_2, KeyType::ECDSA, CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384),
+    (ProtocolVersion::TLSv1_2, KeyType::ECDSA, CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256),
+    (ProtocolVersion::TLSv1_2, KeyType::RSA,   CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
+    (ProtocolVersion::TLSv1_2, KeyType::RSA,   CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256)
 ];
 
 #[test]
 fn negotiated_ciphersuite_default() {
-    do_suite_test(make_client_config(),
-                  make_server_config(),
-                  find_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
-                  ProtocolVersion::TLSv1_3);
+    for kt in ALL_KEY_TYPES.iter() {
+        do_suite_test(make_client_config(*kt),
+                      make_server_config(*kt),
+                      find_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
+                      ProtocolVersion::TLSv1_3);
+    }
 }
 
 #[test]
@@ -1231,19 +1318,14 @@ fn all_suites_covered() {
 #[test]
 fn negotiated_ciphersuite_client() {
     for item in TEST_CIPHERSUITES.iter() {
-        let (version, suite) = *item;
+        let (version, kt, suite) = *item;
         let scs = find_suite(suite);
-        let mut client_config = make_client_config();
+        let mut client_config = make_client_config(kt);
         client_config.ciphersuites = vec![scs];
         client_config.versions = vec![version];
 
-        if format!("{:?}", scs.sign) == "ECDSA" {
-            println!("cannot test ECDSA");
-            continue;
-        }
-
         do_suite_test(client_config,
-                      make_server_config(),
+                      make_server_config(kt),
                       scs,
                       version);
     }
@@ -1252,18 +1334,13 @@ fn negotiated_ciphersuite_client() {
 #[test]
 fn negotiated_ciphersuite_server() {
     for item in TEST_CIPHERSUITES.iter() {
-        let (version, suite) = *item;
+        let (version, kt, suite) = *item;
         let scs = find_suite(suite);
-        let mut server_config = make_server_config();
+        let mut server_config = make_server_config(kt);
         server_config.ciphersuites = vec![scs];
         server_config.versions = vec![version];
 
-        if format!("{:?}", scs.sign) == "ECDSA" {
-            println!("cannot test ECDSA");
-            continue;
-        }
-
-        do_suite_test(make_client_config(),
+        do_suite_test(make_client_config(kt),
                       server_config,
                       scs,
                       version);
@@ -1310,18 +1387,18 @@ fn key_log_for_tls12() {
     let client_key_log = Arc::new(KeyLogToVec::new());
     let server_key_log = Arc::new(KeyLogToVec::new());
 
-    let mut client_config = make_client_config();
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
     client_config.versions = vec![ ProtocolVersion::TLSv1_2 ];
     client_config.key_log = client_key_log.clone();
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config();
+    let mut server_config = make_server_config(kt);
     server_config.key_log = server_key_log.clone();
     let server_config = Arc::new(server_config);
 
     // full handshake
-    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
-    let mut server = ServerSession::new(&server_config);
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     do_handshake(&mut client, &mut server);
 
     let client_full_log = client_key_log.take();
@@ -1331,8 +1408,7 @@ fn key_log_for_tls12() {
     assert_eq!("CLIENT_RANDOM", client_full_log[0].label);
 
     // resumed
-    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
-    let mut server = ServerSession::new(&server_config);
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     do_handshake(&mut client, &mut server);
 
     let client_resume_log = client_key_log.take();
@@ -1348,18 +1424,18 @@ fn key_log_for_tls13() {
     let client_key_log = Arc::new(KeyLogToVec::new());
     let server_key_log = Arc::new(KeyLogToVec::new());
 
-    let mut client_config = make_client_config();
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
     client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
     client_config.key_log = client_key_log.clone();
     let client_config = Arc::new(client_config);
 
-    let mut server_config = make_server_config();
+    let mut server_config = make_server_config(kt);
     server_config.key_log = server_key_log.clone();
     let server_config = Arc::new(server_config);
 
     // full handshake
-    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
-    let mut server = ServerSession::new(&server_config);
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     do_handshake(&mut client, &mut server);
 
     let client_full_log = client_key_log.take();
@@ -1379,8 +1455,7 @@ fn key_log_for_tls13() {
     assert_eq!(client_full_log[4], server_full_log[4]);
 
     // resumed
-    let mut client = ClientSession::new(&client_config, dns_name("localhost"));
-    let mut server = ServerSession::new(&server_config);
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     do_handshake(&mut client, &mut server);
 
     let client_resume_log = client_key_log.take();
@@ -1402,9 +1477,7 @@ fn key_log_for_tls13() {
 
 #[test]
 fn vectored_write_for_server_appdata() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
-
+    let (mut client, mut server) = make_pair(KeyType::RSA);
     do_handshake(&mut client, &mut server);
 
     server.write(b"01234567890123456789").unwrap();
@@ -1420,9 +1493,7 @@ fn vectored_write_for_server_appdata() {
 
 #[test]
 fn vectored_write_for_client_appdata() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
-
+    let (mut client, mut server) = make_pair(KeyType::RSA);
     do_handshake(&mut client, &mut server);
 
     client.write(b"01234567890123456789").unwrap();
@@ -1438,8 +1509,7 @@ fn vectored_write_for_client_appdata() {
 
 #[test]
 fn vectored_write_for_server_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     server.write(b"01234567890123456789").unwrap();
     server.write(b"0123456789").unwrap();
@@ -1472,8 +1542,7 @@ fn vectored_write_for_server_handshake() {
 
 #[test]
 fn vectored_write_for_client_handshake() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     client.write(b"01234567890123456789").unwrap();
     client.write(b"0123456789").unwrap();
@@ -1504,8 +1573,7 @@ fn vectored_write_for_client_handshake() {
 
 #[test]
 fn vectored_write_with_slow_client() {
-    let mut client = ClientSession::new(&Arc::new(make_client_config()), dns_name("localhost"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config()));
+    let (mut client, mut server) = make_pair(KeyType::RSA);
 
     client.set_buffer_limit(32);
 
