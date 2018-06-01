@@ -691,7 +691,7 @@ impl ExpectClientHello {
 
     fn emit_server_kx(&mut self,
                       sess: &mut ServerSessionImpl,
-                      sigscheme: SignatureScheme,
+                      sigschemes: Vec<SignatureScheme>,
                       group: &NamedGroup,
                       server_certkey: &mut sign::CertifiedKey)
                       -> Result<suites::KeyExchange, TLSError> {
@@ -706,9 +706,10 @@ impl ExpectClientHello {
         secdh.encode(&mut msg);
 
         let signing_key = &server_certkey.key;
-        let sig = signing_key.choose_scheme(&[sigscheme])
-            .ok_or_else(|| TLSError::General("incompatible signing key".to_string()))
-            .and_then(|signer| signer.sign(&msg))?;
+        let signer = signing_key.choose_scheme(&sigschemes)
+            .ok_or_else(|| TLSError::General("incompatible signing key".to_string()))?;
+        let sigscheme = signer.get_scheme();
+        let sig = signer.sign(&msg)?;
 
         let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
             params: secdh,
@@ -1152,9 +1153,12 @@ impl State for ExpectClientHello {
         }
 
         // Now we have chosen a ciphersuite, we can make kx decisions.
-        let sigscheme = sess.common.get_suite_assert()
-            .resolve_sig_scheme(sigschemes_ext)
-            .ok_or_else(|| incompatible(sess, "no supported sig scheme"))?;
+        let sigschemes = sess.common.get_suite_assert()
+            .resolve_sig_schemes(sigschemes_ext);
+
+        if sigschemes.is_empty() {
+            return Err(incompatible(sess, "no supported sig scheme"));
+        }
 
         let group = util::first_in_both(NamedGroups::supported().as_slice(),
                                         groups_ext.as_slice())
@@ -1169,7 +1173,7 @@ impl State for ExpectClientHello {
         self.emit_server_hello(sess, Some(&mut certkey), client_hello, false)?;
         self.emit_certificate(sess, &mut certkey);
         self.emit_cert_status(sess, &mut certkey);
-        let kx = self.emit_server_kx(sess, sigscheme, &group, &mut certkey)?;
+        let kx = self.emit_server_kx(sess, sigschemes, &group, &mut certkey)?;
         let doing_client_auth = self.emit_certificate_req(sess);
         self.emit_server_hello_done(sess);
 

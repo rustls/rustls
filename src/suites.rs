@@ -4,7 +4,6 @@ use msgs::handshake::KeyExchangeAlgorithm;
 use msgs::handshake::DecomposedSignatureScheme;
 use msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use msgs::codec::{Reader, Codec};
-use util;
 
 use ring;
 use untrusted;
@@ -184,12 +183,12 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Resolve a single supported `SignatureScheme` from the
-    /// offered `SupportedSignatureSchemes`.  If we return None,
-    /// the handshake terminates.
-    pub fn resolve_sig_scheme(&self,
+    /// Resolve the set of supported `SignatureScheme`s from the
+    /// offered `SupportedSignatureSchemes`.  If we return an empty
+    /// set, the handshake terminates.
+    pub fn resolve_sig_schemes(&self,
                               offered: &[SignatureScheme])
-                              -> Option<SignatureScheme> {
+                              -> Vec<SignatureScheme> {
         let mut our_preference = vec![
             // Prefer the designated hash algorithm of this suite, for
             // security level consistency.
@@ -209,7 +208,8 @@ impl SupportedCipherSuite {
             our_preference.push(SignatureScheme::RSA_PSS_SHA256);
         }
 
-        util::first_in_both(our_preference.as_slice(), offered)
+        our_preference.retain(|pref| offered.contains(pref));
+        our_preference
     }
 
     /// Which AEAD algorithm to use for this suite.
