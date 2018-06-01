@@ -81,11 +81,11 @@ impl client::ResolvesClientCert for FailResolveClientCert {
 pub struct AlwaysResolvesClientCert(sign::CertifiedKey);
 
 impl AlwaysResolvesClientCert {
-    pub fn new_rsa(chain: Vec<key::Certificate>,
+    pub fn new(chain: Vec<key::Certificate>,
                    priv_key: &key::PrivateKey) -> AlwaysResolvesClientCert {
-        let key = sign::RSASigningKey::new(priv_key).expect("Invalid RSA private key");
-        let key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(key));
-        AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, key))
+        let key = sign::any_supported_type(priv_key)
+            .expect("Invalid private key");
+        AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, Arc::new(key)))
     }
 }
 

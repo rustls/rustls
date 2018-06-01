@@ -184,13 +184,13 @@ impl ServerConfig {
     /// disregarded.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA private key.
+    /// `key_der` is a DER-encoded RSA or ECDSA private key.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn set_single_cert(&mut self,
                            cert_chain: Vec<key::Certificate>,
                            key_der: key::PrivateKey) -> Result<(), TLSError> {
-        let resolver = handy::AlwaysResolvesChain::new_rsa(cert_chain, &key_der)?;
+        let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
         self.cert_resolver = Arc::new(resolver);
         Ok(())
     }
@@ -200,7 +200,7 @@ impl ServerConfig {
     /// connections, irrespective of things like SNI hostname.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA private key.
+    /// `key_der` is a DER-encoded RSA or ECDSA private key.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
     /// and is ignored if empty.
@@ -211,10 +211,10 @@ impl ServerConfig {
                                              key_der: key::PrivateKey,
                                              ocsp: Vec<u8>,
                                              scts: Vec<u8>) -> Result<(), TLSError> {
-        let resolver = handy::AlwaysResolvesChain::new_rsa_with_extras(cert_chain,
-                                                                       &key_der,
-                                                                       ocsp,
-                                                                       scts)?;
+        let resolver = handy::AlwaysResolvesChain::new_with_extras(cert_chain,
+                                                                   &key_der,
+                                                                   ocsp,
+                                                                   scts)?;
         self.cert_resolver = Arc::new(resolver);
         Ok(())
     }
