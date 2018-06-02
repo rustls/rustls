@@ -7,16 +7,17 @@
 //!
 //! * TLS1.2 and TLS1.3 (draft 23) only.
 //! * ECDSA or RSA server authentication by clients.
-//! * RSA server authentication by servers.
+//! * ECDSA or RSA server authentication by servers.
 //! * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
 //! * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
 //! * Chacha20Poly1305 bulk encryption.
 //! * ALPN support.
 //! * SNI support.
 //! * Tunable MTU to make TLS messages match size of underlying transport.
+//! * Optional use of vectored IO to minimise system calls.
 //! * TLS1.2 session resumption.
 //! * TLS1.2 resumption via tickets (RFC5077).
-//! * TLS1.3 resumption via tickets.
+//! * TLS1.3 resumption via tickets or session storage.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //! * Extended master secret support (RFC7627).
@@ -27,7 +28,6 @@
 //!
 //! ## Possible future features
 //!
-//! * ECDSA server authentication by servers.
 //! * PSK support.
 //! * OCSP verification by clients.
 //! * Certificate pinning.
