@@ -41,6 +41,7 @@
     "*-ECDSA-SHA1-*": "no ecdsa-sha1",
     "*-Sign-RSA-PKCS1-SHA1-*": "no sha1",
     "*-P-224-*": "no p224",
+    "*-P224-*": "",
     "*-P521-*": "no p521",
     "CurveTest-Client-P-521-TLS12": "",
     "CurveTest-Server-P-521-TLS12": "",

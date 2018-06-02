@@ -55,6 +55,7 @@ struct Options {
     max_version: Option<ProtocolVersion>,
     server_ocsp_response: Vec<u8>,
     server_sct_list: Vec<u8>,
+    use_signing_scheme: u16,
     expect_curve: u16,
     export_keying_material: usize,
     export_keying_material_label: String,
@@ -91,6 +92,7 @@ impl Options {
             max_version: None,
             server_ocsp_response: vec![],
             server_sct_list: vec![],
+            use_signing_scheme: 0,
             expect_curve: 0,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
@@ -176,6 +178,80 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
     }
 }
 
+struct FixedSignatureSchemeSigningKey {
+    key: Arc<Box<rustls::sign::SigningKey>>,
+    scheme: rustls::SignatureScheme,
+}
+
+impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
+    fn choose_scheme(&self, offered: &[rustls::SignatureScheme]) -> Option<Box<rustls::sign::Signer>> {
+        if offered.contains(&self.scheme) {
+            self.key.choose_scheme(&[self.scheme])
+        } else {
+            self.key.choose_scheme(&[])
+        }
+    }
+    fn algorithm(&self) -> rustls::internal::msgs::enums::SignatureAlgorithm { self.key.algorithm() }
+}
+
+struct FixedSignatureSchemeServerCertResolver {
+    resolver: Arc<rustls::ResolvesServerCert>,
+    scheme: rustls::SignatureScheme,
+}
+
+impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
+    fn resolve(&self,
+               server_name: Option<webpki::DNSNameRef>,
+               sigschemes: &[rustls::SignatureScheme]) -> Option<rustls::sign::CertifiedKey> {
+        let mut certkey = self.resolver.resolve(server_name, sigschemes)?;
+        certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
+            key: certkey.key.clone(),
+            scheme: self.scheme,
+        }));
+        Some(certkey)
+    }
+}
+
+struct FixedSignatureSchemeClientCertResolver {
+    resolver: Arc<rustls::ResolvesClientCert>,
+    scheme: rustls::SignatureScheme,
+}
+
+impl rustls::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
+    fn resolve(&self,
+               acceptable_issuers: &[&[u8]],
+               sigschemes: &[rustls::SignatureScheme]) -> Option<rustls::sign::CertifiedKey> {
+        if !sigschemes.contains(&self.scheme) {
+            quit(":NO_COMMON_SIGNATURE_ALGORITHMS:");
+        }
+        let mut certkey = self.resolver.resolve(acceptable_issuers, sigschemes)?;
+        certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
+            key: certkey.key.clone(),
+            scheme: self.scheme,
+        }));
+        Some(certkey)
+    }
+
+    fn has_certs(&self) -> bool { self.resolver.has_certs() }
+}
+
+fn lookup_scheme(scheme: u16) -> rustls::SignatureScheme {
+    match scheme {
+        0x0401 => rustls::SignatureScheme::RSA_PKCS1_SHA256,
+        0x0501 => rustls::SignatureScheme::RSA_PKCS1_SHA384,
+        0x0601 => rustls::SignatureScheme::RSA_PKCS1_SHA512,
+        0x0403 => rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+        0x0503 => rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+        0x0804 => rustls::SignatureScheme::RSA_PSS_SHA256,
+        0x0805 => rustls::SignatureScheme::RSA_PSS_SHA384,
+        0x0806 => rustls::SignatureScheme::RSA_PSS_SHA512,
+        _ => {
+            println_err!("Unsupported signature scheme {:04x}", scheme);
+            process::exit(BOGO_NACK);
+        }
+    }
+}
+
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
@@ -196,6 +272,13 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
                                           opts.server_ocsp_response.clone(),
                                           opts.server_sct_list.clone())
         .unwrap();
+    if opts.use_signing_scheme > 0 {
+        let scheme = lookup_scheme(opts.use_signing_scheme);
+        cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
+            resolver: cfg.cert_resolver.clone(),
+            scheme
+        });
+    }
 
     if opts.tickets {
         cfg.ticketer = rustls::Ticketer::new();
@@ -258,6 +341,14 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         let cert = load_cert(&opts.cert_file);
         let key = load_key(&opts.key_file);
         cfg.set_single_client_cert(cert, key);
+    }
+
+    if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {
+        let scheme = lookup_scheme(opts.use_signing_scheme);
+        cfg.client_auth_cert_resolver = Arc::new(FixedSignatureSchemeClientCertResolver {
+            resolver: cfg.client_auth_cert_resolver.clone(),
+            scheme
+        });
     }
 
     cfg.dangerous()
@@ -501,6 +592,10 @@ fn main() {
                     process::exit(BOGO_NACK);
                 }
             }
+            "-signing-prefs" => {
+                let alg = args.remove(0).parse::<u16>().unwrap();
+                opts.use_signing_scheme = alg;
+            }
             "-max-cert-list" |
             "-expect-curve-id" |
             "-expect-resume-curve-id" |
@@ -518,6 +613,7 @@ fn main() {
 
             "-expect-secure-renegotiation" |
             "-expect-no-session-id" |
+            "-enable-ed25519" |
             "-expect-session-id" => {
                 println!("not checking {}; NYI", arg);
             }
@@ -626,7 +722,6 @@ fn main() {
             "-p384-only" |
             "-expect-verify-result" |
             "-send-alert" |
-            "-signing-prefs" |
             "-digest-prefs" |
             "-use-exporter-between-reads" |
             "-ticket-key" |
@@ -647,7 +742,6 @@ fn main() {
             "-allow-unknown-alpn-protos" |
             "-on-initial-tls13-variant" |
             "-on-initial-expect-curve-id" |
-            "-enable-ed25519" |
             "-on-resume-export-early-keying-material" |
             "-export-early-keying-material" |
             "-handshake-twice" |
