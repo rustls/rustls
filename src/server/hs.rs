@@ -489,12 +489,7 @@ impl ExpectClientHello {
                               server_key: &mut sign::CertifiedKey) {
         let mut cert_body = CertificatePayloadTLS13::new();
 
-        let (certs, ocsp, sct_list) = {
-            let ck = server_key;
-            (ck.take_cert(), ck.take_ocsp(), ck.take_sct_list())
-        };
-
-        for cert in certs {
+        for cert in server_key.take_cert() {
             let entry = CertificateEntry {
                 cert,
                 exts: Vec::new(),
@@ -503,22 +498,22 @@ impl ExpectClientHello {
             cert_body.list.push(entry);
         }
 
-        // Apply OCSP response to first certificate (we don't support OCSP
-        // except for leaf certs).
-        if self.send_cert_status &&
-           ocsp.is_some() &&
-           !cert_body.list.is_empty() {
-            let first_entry = cert_body.list.first_mut().unwrap();
-            let cst = CertificateStatus::new(ocsp.unwrap());
-            first_entry.exts.push(CertificateExtension::CertificateStatus(cst));
-        }
+        if let Some(end_entity_cert) = cert_body.list.first_mut() {
+            // Apply OCSP response to first certificate (we don't support OCSP
+            // except for leaf certs).
+            if self.send_cert_status {
+                if let Some(ocsp) = server_key.take_ocsp() {
+                    let cst = CertificateStatus::new(ocsp);
+                    end_entity_cert.exts.push(CertificateExtension::CertificateStatus(cst));
+                }
+            }
 
-        // Likewise, SCT
-        if self.send_sct &&
-           sct_list.is_some() &&
-           !cert_body.list.is_empty() {
-            let first_entry = cert_body.list.first_mut().unwrap();
-            first_entry.exts.push(CertificateExtension::make_sct(sct_list.unwrap()));
+            // Likewise, SCT
+            if self.send_sct {
+                if let Some(sct_list) = server_key.take_sct_list() {
+                    end_entity_cert.exts.push(CertificateExtension::make_sct(sct_list));
+                }
+            }
         }
 
         let c = Message {
