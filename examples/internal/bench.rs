@@ -93,18 +93,6 @@ fn drain(d: &mut Session, expect_len: usize) {
     }
 }
 
-fn get_chain() -> Vec<rustls::Certificate> {
-    pemfile::certs(&mut io::BufReader::new(fs::File::open("test-ca/rsa/end.fullchain").unwrap()))
-        .unwrap()
-}
-
-fn get_key() -> rustls::PrivateKey {
-    pemfile::rsa_private_keys(&mut io::BufReader::new(fs::File::open("test-ca/rsa/end.rsa")
-                .unwrap()))
-            .unwrap()[0]
-        .clone()
-}
-
 #[derive(PartialEq, Clone, Copy)]
 enum ClientAuth {
     No,
@@ -128,13 +116,65 @@ impl Resumption {
     }
 }
 
+// copied from tests/api.rs
+#[derive(PartialEq, Clone, Copy)]
+enum KeyType {
+    RSA,
+    ECDSA
+}
+
+impl KeyType {
+    fn for_suite(suite: &'static rustls::SupportedCipherSuite) -> KeyType {
+        if suite.sign == SignatureAlgorithm::ECDSA {
+            KeyType::ECDSA
+        } else {
+            KeyType::RSA
+        }
+    }
+
+    fn path_for(&self, part: &str) -> String {
+        match self {
+            KeyType::RSA => format!("test-ca/rsa/{}", part),
+            KeyType::ECDSA => format!("test-ca/ecdsa/{}", part),
+        }
+    }
+
+    fn get_chain(&self) -> Vec<rustls::Certificate> {
+        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("end.fullchain"))
+                                               .unwrap()))
+            .unwrap()
+    }
+
+    fn get_key(&self) -> rustls::PrivateKey {
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("end.key"))
+                                                            .unwrap()))
+                .unwrap()[0]
+            .clone()
+    }
+
+    fn get_client_chain(&self) -> Vec<rustls::Certificate> {
+        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("client.fullchain"))
+                                               .unwrap()))
+            .unwrap()
+    }
+
+    fn get_client_key(&self) -> rustls::PrivateKey {
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("client.key"))
+                                                            .unwrap()))
+                .unwrap()[0]
+            .clone()
+    }
+}
+
 fn make_server_config(version: rustls::ProtocolVersion,
+                      suite: &'static rustls::SupportedCipherSuite,
                       client_auth: ClientAuth,
                       resume: Resumption)
                       -> ServerConfig {
+    let kt = KeyType::for_suite(suite);
     let client_auth = match client_auth {
         ClientAuth::Yes => {
-            let roots = get_chain();
+            let roots = kt.get_chain();
             let mut client_auth_roots = RootCertStore::empty();
             for root in roots {
                 client_auth_roots.add(&root).unwrap();
@@ -147,7 +187,7 @@ fn make_server_config(version: rustls::ProtocolVersion,
     };
 
     let mut cfg = ServerConfig::new(client_auth);
-    cfg.set_single_cert(get_chain(), get_key())
+    cfg.set_single_cert(kt.get_chain(), kt.get_key())
         .expect("bad certs/private key?");
 
     if resume == Resumption::SessionID {
@@ -169,8 +209,9 @@ fn make_client_config(version: rustls::ProtocolVersion,
                       clientauth: ClientAuth,
                       resume: Resumption)
                       -> ClientConfig {
+    let kt = KeyType::for_suite(suite);
     let mut cfg = ClientConfig::new();
-    let mut rootbuf = io::BufReader::new(fs::File::open("test-ca/rsa/ca.cert").unwrap());
+    let mut rootbuf = io::BufReader::new(fs::File::open(kt.path_for("ca.cert")).unwrap());
     cfg.root_store.add_pem_file(&mut rootbuf).unwrap();
     cfg.ciphersuites.clear();
     cfg.ciphersuites.push(suite);
@@ -178,7 +219,7 @@ fn make_client_config(version: rustls::ProtocolVersion,
     cfg.versions.push(version);
 
     if clientauth == ClientAuth::Yes {
-        cfg.set_single_client_cert(get_chain(), get_key());
+        cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key());
     }
 
     if resume != Resumption::No {
@@ -195,7 +236,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
                    clientauth: ClientAuth,
                    resume: Resumption) {
     let client_config = Arc::new(make_client_config(version, suite, clientauth, resume));
-    let server_config = Arc::new(make_server_config(version, clientauth, resume));
+    let server_config = Arc::new(make_server_config(version, suite, clientauth, resume));
 
     if !suite.usable_for_version(version) {
         return;
@@ -263,7 +304,7 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
               plaintext_size: u32) {
     let client_config =
         Arc::new(make_client_config(version, suite, ClientAuth::No, Resumption::No));
-    let server_config = Arc::new(make_server_config(version, ClientAuth::No, Resumption::No));
+    let server_config = Arc::new(make_server_config(version, suite, ClientAuth::No, Resumption::No));
 
     if !suite.usable_for_version(version) {
         return;
@@ -374,11 +415,6 @@ fn selected_tests(mut args: env::Args) {
 fn all_tests() {
     for version in &[rustls::ProtocolVersion::TLSv1_3, rustls::ProtocolVersion::TLSv1_2] {
         for suite in &rustls::ALL_CIPHERSUITES {
-            if suite.sign == SignatureAlgorithm::ECDSA {
-                // TODO: Need ECDSA server support for this.
-                continue;
-            }
-
             bench_bulk(*version, suite, 1024 * 1024);
             bench_handshake(*version, suite, ClientAuth::No, Resumption::No);
             bench_handshake(*version, suite, ClientAuth::Yes, Resumption::No);
