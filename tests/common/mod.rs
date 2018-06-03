@@ -441,12 +441,15 @@ pub struct TlsServer {
 
 impl TlsServer {
     pub fn new(port: u16) -> Self {
-        let keytype = "rsa";
+        Self::new_keytype(port, "rsa")
+    }
+
+    pub fn new_keytype(port: u16, keytype: &str) -> Self {
         TlsServer {
             port: unused_port(port),
             http: false,
             echo: false,
-            key: format!("test-ca/{}/end.rsa", keytype),
+            key: format!("test-ca/{}/end.key", keytype),
             certs: format!("test-ca/{}/end.fullchain", keytype),
             cafile: format!("test-ca/{}/ca.cert", keytype),
             verbose: false,

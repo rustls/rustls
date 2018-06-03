@@ -35,6 +35,34 @@ fn ecdhe_rsa_aes_256_gcm_sha384() {
     server.kill();
 }
 
-// cannot do ecdsa tls_ecdhe_ecdsa_* because we don't support ECDSA
-// signing yet.
+#[test]
+fn ecdhe_ecdsa_aes_128_gcm_sha256() {
+    let mut server = TlsServer::new_keytype(7020, "ecdsa");
+
+    server.echo_mode()
+        .suite("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")
+        .run();
+
+    server.client()
+        .expect("Cipher    : ECDHE-ECDSA-AES128-GCM-SHA256")
+        .go();
+
+    server.kill();
+}
+
+#[test]
+fn ecdhe_ecdsa_aes_256_gcm_sha384() {
+    let mut server = TlsServer::new_keytype(7030, "ecdsa");
+
+    server.echo_mode()
+        .suite("TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384")
+        .run();
+
+    server.client()
+        .expect("Cipher    : ECDHE-ECDSA-AES256-GCM-SHA384")
+        .go();
+
+    server.kill();
+}
+
 // cannot do chacha20poly1305 because openssl doesn't support it.
