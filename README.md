@@ -1,4 +1,5 @@
-# Rustls
+![Logo](https://raw.githubusercontent.com/ctz/rustls/master/admin/rustls-logo-web.png)
+
 Rustls is a modern TLS library written in Rust.  It's pronounced 'rustles'.
 It uses [*ring*](https://github.com/briansmith/ring) for cryptography
 and [libwebpki](https://github.com/briansmith/webpki) for certificate
