@@ -176,10 +176,12 @@ Options:
     --auth-key KEY      Read client authentication key from KEY.
     --auth-certs CERTS  Read client authentication certificates from CERTS.
                         CERTS must match up with KEY.
+    --protover VERSION  Disable default TLS version list, and use
+                        VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
-                        May be used multiple times to offer serveral protocols.
+                        May be used multiple times to offer several protocols.
     --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
     --no-sni            Disable server name indication support.
@@ -250,6 +252,8 @@ Options:
                         authentication.
     --resumption        Support session resumption.
     --tickets           Support tickets.
+    --protover VERSION  Disable default TLS version list, and use
+                        VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.

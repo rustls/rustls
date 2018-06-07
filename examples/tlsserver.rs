@@ -405,6 +405,8 @@ Options:
                         authentication.
     --resumption        Support session resumption.
     --tickets           Support tickets.
+    --protover VERSION  Disable default TLS version list, and use
+                        VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Negotiate PROTOCOL using ALPN.
@@ -421,6 +423,7 @@ struct Args {
     cmd_forward: bool,
     flag_port: Option<u16>,
     flag_verbose: bool,
+    flag_protover: Vec<String>,
     flag_suite: Vec<String>,
     flag_proto: Vec<String>,
     flag_certs: Option<String>,
@@ -454,6 +457,22 @@ fn lookup_suites(suites: &[String]) -> Vec<&'static rustls::SupportedCipherSuite
             Some(s) => out.push(s),
             None => panic!("cannot look up ciphersuite '{}'", csname),
         }
+    }
+
+    out
+}
+
+/// Make a vector of protocol versions named in `versions`
+fn lookup_versions(versions: &[String]) -> Vec<rustls::ProtocolVersion> {
+    let mut out = Vec::new();
+
+    for vname in versions {
+        let version = match vname.as_ref() {
+            "1.2" => rustls::ProtocolVersion::TLSv1_2,
+            "1.3" => rustls::ProtocolVersion::TLSv1_3,
+            _ => panic!("cannot look up version '{}', valid are '1.2' and '1.3'", vname),
+        };
+        out.push(version);
     }
 
     out
@@ -531,6 +550,10 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
 
     if !args.flag_suite.is_empty() {
         config.ciphersuites = lookup_suites(&args.flag_suite);
+    }
+
+    if !args.flag_protover.is_empty() {
+        config.versions = lookup_versions(&args.flag_protover);
     }
 
     if args.flag_resumption {
