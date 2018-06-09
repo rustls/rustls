@@ -579,9 +579,9 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_verbose {
-        let mut logger = env_logger::LogBuilder::new();
-        logger.parse("trace");
-        logger.init().unwrap();
+        env_logger::Builder::new()
+            .parse("trace")
+            .init();
     }
 
     let mut addr: net::SocketAddr = "0.0.0.0:443".parse().unwrap();

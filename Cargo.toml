@@ -13,7 +13,7 @@ categories = ["network-programming", "cryptography"]
 untrusted = "0.6.1"
 base64 = "0.9"
 log = { version = "0.4.0", optional = true }
-ring = { version = "0.13.0-alpha4", features = ["rsa_signing"] }
+ring = { version = "0.13.0-alpha5", features = ["rsa_signing"] }
 webpki = "0.18.0-alpha3"
 sct = "0.3"
 
@@ -25,14 +25,14 @@ quic = []
 
 [dev-dependencies]
 log = "0.4"
-env_logger = "0.4.2"
+env_logger = "0.5"
 mio = "0.6"
-docopt = "0.8"
+docopt = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 webpki-roots = "0.14.0"
 ct-logs = "0.3"
-regex = "0.2"
+regex = "1.0"
 vecio = "0.1"
 
 [[example]]

@@ -515,9 +515,9 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_verbose {
-        let mut logger = env_logger::LogBuilder::new();
-        logger.parse("trace");
-        logger.init().unwrap();
+        env_logger::Builder::new()
+            .parse("trace")
+            .init();
     }
 
     let port = args.flag_port.unwrap_or(443);
