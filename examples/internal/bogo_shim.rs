@@ -538,7 +538,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
 
 fn main() {
     let mut args: Vec<_> = env::args().collect();
-    env_logger::init().unwrap();
+    env_logger::init();
 
     args.remove(0);
     println!("options: {:?}", args);
