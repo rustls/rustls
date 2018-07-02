@@ -747,9 +747,7 @@ impl SessionCommon {
 
     pub fn send_warning_alert(&mut self, desc: AlertDescription) {
         warn!("Sending warning alert {:?}", desc);
-        let m = Message::build_alert(AlertLevel::Warning, desc);
-        let enc = self.we_encrypting;
-        self.send_msg(m, enc);
+        self.send_warning_alert_no_log(desc);
     }
 
     pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
@@ -760,7 +758,8 @@ impl SessionCommon {
     }
 
     pub fn send_close_notify(&mut self) {
-        self.send_warning_alert(AlertDescription::CloseNotify)
+        info!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
 
     pub fn process_key_update(&mut self,
@@ -819,5 +818,11 @@ impl SessionCommon {
                 })
                 .ok_or_else(|| TLSError::HandshakeNotComplete)
         }
+    }
+
+    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
+        let m = Message::build_alert(AlertLevel::Warning, desc);
+        let enc = self.we_encrypting;
+        self.send_msg(m, enc);
     }
 }
