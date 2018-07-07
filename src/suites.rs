@@ -8,7 +8,7 @@ use msgs::codec::{Reader, Codec};
 use ring;
 use untrusted;
 
-#[allow(non_camel_case_types)]
+#[allow(missing_docs, non_camel_case_types)]
 #[derive(Debug, PartialEq)]
 pub enum BulkAlgorithm {
     AES_128_GCM,
