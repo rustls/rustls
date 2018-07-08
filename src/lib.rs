@@ -280,7 +280,7 @@ pub use msgs::enums::SignatureScheme;
 pub use msgs::enums::CipherSuite;
 pub use error::TLSError;
 pub use session::Session;
-pub use stream::Stream;
+pub use stream::{Stream, StreamOwned};
 pub use anchors::{DistinguishedNames, RootCertStore};
 pub use client::StoresClientSessions;
 pub use client::handy::{NoClientSessionStorage, ClientSessionMemoryCache};

@@ -11,7 +11,7 @@ extern crate rustls;
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ServerConfig, ServerSession, ResolvesServerCert};
 use rustls::Session;
-use rustls::Stream;
+use rustls::{Stream, StreamOwned};
 use rustls::{ProtocolVersion, SignatureScheme, CipherSuite};
 use rustls::TLSError;
 use rustls::sign;
@@ -981,6 +981,20 @@ fn client_stream_write() {
 }
 
 #[test]
+fn client_streamowned_write() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+
+        {
+            let pipe = OtherSession::new(&mut server);
+            let mut stream = StreamOwned::new(client, pipe);
+            assert_eq!(stream.write(b"hello").unwrap(), 5);
+        }
+        check_read(&mut server, b"hello");
+    }
+}
+
+#[test]
 fn client_stream_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, mut server) = make_pair(*kt);
@@ -990,6 +1004,21 @@ fn client_stream_read() {
         {
             let mut pipe = OtherSession::new(&mut server);
             let mut stream = Stream::new(&mut client, &mut pipe);
+            check_read(&mut stream, b"world");
+        }
+    }
+}
+
+#[test]
+fn client_streamowned_read() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (client, mut server) = make_pair(*kt);
+
+        server.write(b"world").unwrap();
+
+        {
+            let pipe = OtherSession::new(&mut server);
+            let mut stream = StreamOwned::new(client, pipe);
             check_read(&mut stream, b"world");
         }
     }
@@ -1010,6 +1039,20 @@ fn server_stream_write() {
 }
 
 #[test]
+fn server_streamowned_write() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, server) = make_pair(*kt);
+
+        {
+            let pipe = OtherSession::new(&mut client);
+            let mut stream = StreamOwned::new(server, pipe);
+            assert_eq!(stream.write(b"hello").unwrap(), 5);
+        }
+        check_read(&mut client, b"hello");
+    }
+}
+
+#[test]
 fn server_stream_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, mut server) = make_pair(*kt);
@@ -1019,6 +1062,21 @@ fn server_stream_read() {
         {
             let mut pipe = OtherSession::new(&mut client);
             let mut stream = Stream::new(&mut server, &mut pipe);
+            check_read(&mut stream, b"world");
+        }
+    }
+}
+
+#[test]
+fn server_streamowned_read() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, server) = make_pair(*kt);
+
+        client.write(b"world").unwrap();
+
+        {
+            let pipe = OtherSession::new(&mut client);
+            let mut stream = StreamOwned::new(server, pipe);
             check_read(&mut stream, b"world");
         }
     }
@@ -1053,6 +1111,23 @@ fn client_stream_handshake_error() {
 }
 
 #[test]
+fn client_streamowned_handshake_error() {
+    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (client, mut server) = make_pair_for_configs(client_config, server_config);
+
+    let pipe = OtherSession::new_fails(&mut server);
+    let mut client_stream = StreamOwned::new(client, pipe);
+    let rc = client_stream.write(b"hello");
+    assert!(rc.is_err());
+    assert_eq!(format!("{:?}", rc),
+               "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })");
+    let rc = client_stream.write(b"hello");
+    assert!(rc.is_err());
+    assert_eq!(format!("{:?}", rc),
+               "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })");
+}
+
+#[test]
 fn server_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -1068,6 +1143,22 @@ fn server_stream_handshake_error() {
         assert_eq!(format!("{:?}", rc),
                    "Err(Custom { kind: InvalidData, error: PeerIncompatibleError(\"no ciphersuites in common\") })");
     }
+}
+
+#[test]
+fn server_streamowned_handshake_error() {
+    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (mut client, server) = make_pair_for_configs(client_config, server_config);
+
+    client.write(b"world").unwrap();
+
+    let pipe = OtherSession::new_fails(&mut client);
+    let mut server_stream = StreamOwned::new(server, pipe);
+    let mut bytes = [0u8; 5];
+    let rc = server_stream.read(&mut bytes);
+    assert!(rc.is_err());
+    assert_eq!(format!("{:?}", rc),
+               "Err(Custom { kind: InvalidData, error: PeerIncompatibleError(\"no ciphersuites in common\") })");
 }
 
 #[test]

@@ -75,16 +75,84 @@ impl<'a, S, T> Write for Stream<'a, S, T> where S: 'a + Session, T: 'a + Read + 
     }
 }
 
+/// This type implements `io::Read` and `io::Write`, encapsulating
+/// and owning a Session `S` and an underlying blocking transport
+/// `T`, such as a socket.
+///
+/// This allows you to use a rustls Session like a normal stream.
+pub struct StreamOwned<S: Session + Sized, T: Read + Write + Sized> {
+    /// Our session
+    pub sess: S,
+
+    /// The underlying transport, like a socket
+    pub sock: T,
+}
+
+impl<S, T> StreamOwned<S, T> where S: Session, T: Read + Write {
+    /// Make a new StreamOwned taking the Session `sess` and socket-like
+    /// object `sock`.  This does not fail and does no IO.
+    ///
+    /// This is the same as `Stream::new` except `sess` and `sock` are
+    /// moved into the StreamOwned.
+    pub fn new(sess: S, sock: T) -> StreamOwned<S, T> {
+        StreamOwned { sess, sock }
+    }
+}
+
+impl<'a, S, T> StreamOwned<S, T> where S: Session, T: Read + Write {
+    fn as_stream(&'a mut self) -> Stream<'a, S, T> {
+        Stream { sess: &mut self.sess, sock: &mut self.sock }
+    }
+}
+
+impl<S, T> Read for StreamOwned<S, T> where S: Session, T: Read + Write {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        self.as_stream().read(buf)
+    }
+}
+
+impl<S, T> Write for StreamOwned<S, T> where S: Session, T: Read + Write {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        self.as_stream().write(buf)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.as_stream().flush()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Stream;
+    use super::{Stream, StreamOwned};
     use session::Session;
+    use client::ClientSession;
+    use server::ServerSession;
     use std::net::TcpStream;
 
     #[test]
-    fn session_can_be_instantiated_with() {
+    fn stream_can_be_created_for_session_and_tcpstream() {
         fn _foo<'a>(sess: &'a mut Session, sock: &'a mut TcpStream) -> Stream<'a, Session, TcpStream> {
             Stream {
+                sess,
+                sock,
+            }
+        }
+    }
+
+    #[test]
+    fn streamowned_can_be_created_for_client_and_tcpstream() {
+        fn _foo(sess: ClientSession, sock: TcpStream) -> StreamOwned<ClientSession, TcpStream> {
+            StreamOwned {
+                sess,
+                sock,
+            }
+        }
+    }
+
+    #[test]
+    fn streamowned_can_be_created_for_server_and_tcpstream() {
+        fn _foo(sess: ServerSession, sock: TcpStream) -> StreamOwned<ServerSession, TcpStream> {
+            StreamOwned {
                 sess,
                 sock,
             }
