@@ -14,7 +14,7 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
-* Next release:
+* 0.13.0 (2018-07-15):
   - Move TLS1.3 support from draft 22 to 23.
   - Add support for `SSLKEYLOGFILE`; not enabled by default.
   - Add support for basic usage in QUIC.
@@ -22,6 +22,8 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
   - Add support for vectored IO: `writev_tls` can now be used to
     optimise system call usage.
   - Support ECDSA signing for server and client authentication.
+  - Add type like `rustls::Stream` which owns its underlying TCP stream
+    and rustls session.
 * 0.12.0 (2018-01-06):
   - New API for learning negotiated cipher suite.
   - Move TLS1.3 support from draft 18 to 22.
