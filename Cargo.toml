@@ -59,3 +59,8 @@ path = "examples/tlsserver.rs"
 [[example]]
 name = "simpleclient"
 path = "examples/simpleclient.rs"
+
+[[example]]
+name = "simple_0rtt_client"
+path = "examples/simple_0rtt_client.rs"
+required-features = ["logging"]
