@@ -79,7 +79,9 @@
     "SendHalfHelloRequest-*": "",
     "RetainOnlySHA256-*": "",
     "ExtendedMasterSecret-Renego-*": "",
-    "Draft-Downgrade-Server": "not implemented; TODO"
+    "Draft-Downgrade-Server": "not implemented; TODO",
+    "EarlyData-*ALPN*-*": "no alpn change in resumed sessions",
+    "*EarlyKeyingMaterial-Client-*": "early exporter NYI"
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
@@ -276,7 +278,11 @@
     "QUICTransportParams-Server-Rejected-TLS12": "missing peer quic transport params",
     "ExtendedMasterSecret-NoToYes-Client": ":PEER_MISBEHAVIOUR:",
     "ExtendedMasterSecret-YesToNo-Server": ":PEER_MISBEHAVIOUR:",
-    "ExtendedMasterSecret-YesToNo-Client": ":PEER_MISBEHAVIOUR:"
+    "ExtendedMasterSecret-YesToNo-Client": ":PEER_MISBEHAVIOUR:",
+    "ServerAcceptsEarlyDataOnHRR-Client-TLS13Draft23": ":PEER_MISBEHAVIOUR:",
+    "EarlyDataVersionDowngrade-Client-TLS13Draft23": ":WRONG_VERSION:",
+    "EarlyDataWithoutResume-Client-TLS13Draft23": ":PEER_MISBEHAVIOUR:",
+    "EarlyDataVersionDowngrade-Client-TLS13Draft23": ":PEER_MISBEHAVIOUR:"
   },
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
