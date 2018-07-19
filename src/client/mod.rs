@@ -124,6 +124,12 @@ pub struct ClientConfig {
     /// How to output key material for debugging.  The default
     /// does nothing.
     pub key_log: Arc<KeyLog>,
+
+    /// Whether to send data on the first flight ("early data") in
+    /// TLS 1.3 handshakes.
+    ///
+    /// The default is false.
+    pub enable_early_data: bool,
 }
 
 impl ClientConfig {
@@ -146,6 +152,7 @@ impl ClientConfig {
             enable_sni: true,
             verifier: Arc::new(verify::WebPKIVerifier::new()),
             key_log: Arc::new(NoKeyLog {}),
+            enable_early_data: false,
         }
     }
 
@@ -513,6 +520,14 @@ impl Session for ClientSession {
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
         self.imp.get_negotiated_ciphersuite()
+    }
+
+    fn is_in_early_data(&self) -> bool {
+        !self.imp.common.traffic && self.imp.common.early_traffic
+    }
+
+    fn is_early_data_accepted(&self) -> bool {
+        !self.imp.common.early_traffic && self.imp.common.early_data_accepted
     }
 }
 
