@@ -600,6 +600,7 @@ pub enum ClientExtension {
     CertificateStatusRequest(CertificateStatusRequest),
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
+    EarlyData,
     Unknown(UnknownExtension),
 }
 
@@ -622,6 +623,7 @@ impl ClientExtension {
             ClientExtension::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
+            ClientExtension::EarlyData => ExtensionType::EarlyData,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -639,7 +641,8 @@ impl Codec for ClientExtension {
             ClientExtension::ServerName(ref r) => r.encode(&mut sub),
             ClientExtension::SessionTicketRequest |
                 ClientExtension::ExtendedMasterSecretRequest |
-                ClientExtension::SignedCertificateTimestampRequest => (),
+                ClientExtension::SignedCertificateTimestampRequest |
+                ClientExtension::EarlyData => (),
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
             ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
@@ -711,6 +714,9 @@ impl Codec for ClientExtension {
             ExtensionType::TransportParameters => {
                 ClientExtension::TransportParameters(sub.rest().to_vec())
             }
+            ExtensionType::EarlyData if !sub.any_left() => {
+                ClientExtension::EarlyData
+            }
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         })
     }
@@ -742,6 +748,7 @@ pub enum ServerExtension {
     SignedCertificateTimestamp(SCTList),
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
+    EarlyData,
     Unknown(UnknownExtension),
 }
 
@@ -760,6 +767,7 @@ impl ServerExtension {
             ServerExtension::SignedCertificateTimestamp(_) => ExtensionType::SCT,
             ServerExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ServerExtension::TransportParameters(_) => ExtensionType::TransportParameters,
+            ServerExtension::EarlyData => ExtensionType::EarlyData,
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -775,7 +783,8 @@ impl Codec for ServerExtension {
             ServerExtension::ServerNameAck |
                 ServerExtension::SessionTicketAck |
                 ServerExtension::ExtendedMasterSecretAck |
-                ServerExtension::CertificateStatusAck => (),
+                ServerExtension::CertificateStatusAck |
+                ServerExtension::EarlyData => (),
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
@@ -825,6 +834,7 @@ impl Codec for ServerExtension {
             ExtensionType::TransportParameters => {
                 ServerExtension::TransportParameters(sub.rest().to_vec())
             }
+            ExtensionType::EarlyData => ServerExtension::EarlyData,
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         })
     }
@@ -1040,6 +1050,10 @@ impl ClientHelloPayload {
     pub fn ems_support_offered(&self) -> bool {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
+    }
+
+    pub fn early_data_extension_offered(&self) -> bool {
+        self.find_extension(ExtensionType::EarlyData).is_some()
     }
 }
 
@@ -1775,6 +1789,10 @@ pub trait HasServerExtensions {
             _ => None,
         }
     }
+
+    fn early_data_extension_offered(&self) -> bool {
+        self.find_extension(ExtensionType::EarlyData).is_some()
+    }
 }
 
 impl HasServerExtensions for EncryptedExtensions {
@@ -1949,12 +1967,14 @@ impl Codec for NewSessionTicketPayload {
 // -- NewSessionTicket electric boogaloo --
 #[derive(Debug)]
 pub enum NewSessionTicketExtension {
+    EarlyData(u32),
     Unknown(UnknownExtension),
 }
 
 impl NewSessionTicketExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
+            NewSessionTicketExtension::EarlyData(_) => ExtensionType::EarlyData,
             NewSessionTicketExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -1966,6 +1986,7 @@ impl Codec for NewSessionTicketExtension {
 
         let mut sub: Vec<u8> = Vec::new();
         match *self {
+            NewSessionTicketExtension::EarlyData(r) => r.encode(&mut sub),
             NewSessionTicketExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -1979,6 +2000,7 @@ impl Codec for NewSessionTicketExtension {
         let mut sub = r.sub(len)?;
 
         Some(match typ {
+            ExtensionType::EarlyData => NewSessionTicketExtension::EarlyData(u32::read(&mut sub)?),
             _ => {
                 NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?)
             }
@@ -2008,6 +2030,18 @@ impl NewSessionTicketPayloadTLS13 {
             nonce: PayloadU8::new(nonce),
             ticket: PayloadU16::new(ticket),
             exts: vec![],
+        }
+    }
+
+    pub fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
+        self.exts.iter().find(|x| x.get_type() == ext)
+    }
+
+    pub fn get_max_early_data_size(&self) -> Option<u32> {
+        let ext = self.find_extension(ExtensionType::EarlyData)?;
+        match *ext {
+            NewSessionTicketExtension::EarlyData(ref sz) => Some(*sz),
+            _ => None
         }
     }
 }
@@ -2090,6 +2124,8 @@ pub enum HandshakePayload {
     CertificateRequestTLS13(CertificateRequestPayloadTLS13),
     CertificateVerify(DigitallySignedStruct),
     ServerHelloDone,
+    EarlyData,
+    EndOfEarlyData,
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
     NewSessionTicketTLS13(NewSessionTicketPayloadTLS13),
@@ -2105,7 +2141,9 @@ impl HandshakePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             HandshakePayload::HelloRequest |
-                HandshakePayload::ServerHelloDone => {}
+                HandshakePayload::ServerHelloDone |
+                HandshakePayload::EarlyData |
+                HandshakePayload::EndOfEarlyData => {}
             HandshakePayload::ClientHello(ref x) => x.encode(bytes),
             HandshakePayload::ServerHello(ref x) => x.encode(bytes),
             HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
