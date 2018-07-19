@@ -698,7 +698,8 @@ impl SessionCommon {
             } else {
                 self.max_early_data_limit = 0;
                 let _ = self.send_appdata_encrypt(&data[..max_early_data_limit], limit);
-                self.sendable_plaintext.append_limited_copy(&data[max_early_data_limit..]);
+                // Push the unsent partial buffer back to the front of sendable_plaintext
+                self.sendable_plaintext.push_front_copy(&data[max_early_data_limit..]);
                 return Err(io::Error::new(io::ErrorKind::Other,
                                           "Early data exceeds max_early_data_size"));
             }
