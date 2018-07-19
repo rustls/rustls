@@ -8,6 +8,7 @@ use error::TLSError;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SecretKind {
     ResumptionPSKBinderKey,
+    ClientEarlyTrafficSecret,
     ClientHandshakeTrafficSecret,
     ServerHandshakeTrafficSecret,
     ClientApplicationTrafficSecret,
@@ -21,6 +22,7 @@ impl SecretKind {
     fn to_bytes(&self) -> &'static [u8] {
         match *self {
             SecretKind::ResumptionPSKBinderKey => b"res binder",
+            SecretKind::ClientEarlyTrafficSecret => b"c e traffic",
             SecretKind::ClientHandshakeTrafficSecret => b"c hs traffic",
             SecretKind::ServerHandshakeTrafficSecret => b"s hs traffic",
             SecretKind::ClientApplicationTrafficSecret => b"c ap traffic",
@@ -102,6 +104,7 @@ impl KeySchedule {
         match kind {
             SecretKind::ServerHandshakeTrafficSecret |
             SecretKind::ServerApplicationTrafficSecret => &self.current_server_traffic_secret,
+            SecretKind::ClientEarlyTrafficSecret |
             SecretKind::ClientHandshakeTrafficSecret |
             SecretKind::ClientApplicationTrafficSecret => &self.current_client_traffic_secret,
             _ => unreachable!(),
