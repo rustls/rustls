@@ -16,8 +16,9 @@ use std::net;
 use std::fs;
 use std::io;
 use std::io::BufReader;
-use std::io::{Write, Read};
+use std::io::Write;
 use std::sync::Arc;
+use std::ops::{Deref, DerefMut};
 use rustls::internal::msgs::enums::ProtocolVersion;
 use rustls::quic::ClientQuicExt;
 use rustls::quic::ServerQuicExt;
@@ -451,7 +452,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
     }
 }
 
-fn flush(sess: &mut Box<rustls::Session>, conn: &mut net::TcpStream) {
+fn flush(sess: &mut ClientOrServer, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         match sess.write_tls(conn) {
             Err(err) => {
@@ -464,9 +465,52 @@ fn flush(sess: &mut Box<rustls::Session>, conn: &mut net::TcpStream) {
     conn.flush().unwrap();
 }
 
-fn exec(opts: &Options, sess: &mut Box<rustls::Session>, count: usize) {
+enum ClientOrServer {
+    Client(rustls::ClientSession),
+    Server(rustls::ServerSession)
+}
+
+impl Deref for ClientOrServer {
+    type Target = rustls::Session;
+
+    fn deref(&self) -> &Self::Target {
+        match &self {
+            ClientOrServer::Client(ref c) => c,
+            ClientOrServer::Server(ref s) => s,
+        }
+    }
+}
+
+impl DerefMut for ClientOrServer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            ClientOrServer::Client(ref mut c) => c,
+            ClientOrServer::Server(ref mut s) => s,
+        }
+    }
+}
+
+impl ClientOrServer {
+    fn client(&mut self) -> &mut rustls::ClientSession {
+        match self {
+            ClientOrServer::Client(ref mut c) => c,
+            ClientOrServer::Server(_) => panic!("ClientSession required here"),
+        }
+    }
+}
+
+fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
     if opts.queue_data || (opts.queue_data_on_resume && count > 0) {
-        let _ = sess.write_all(b"hello");
+        if count > 0 && opts.enable_early_data {
+            let len = sess.client().early_data()
+                .expect("0rtt not available")
+                .write(b"hello")
+                .expect("0rtt write failed");
+            sess.write_all(&b"hello"[len..])
+                .unwrap();
+        } else {
+            let _ = sess.write_all(b"hello");
+        }
     }
 
     let mut conn = net::TcpStream::connect(("localhost", opts.port)).expect("cannot connect");
@@ -475,7 +519,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>, count: usize) {
     let mut sent_exporter = false;
 
     loop {
-        flush(sess, &mut conn);
+        flush(&mut sess, &mut conn);
 
         if sess.wants_read() {
             let len = sess.read_tls(&mut conn)
@@ -495,7 +539,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>, count: usize) {
             }
 
             if let Err(err) = sess.process_new_packets() {
-                flush(sess, &mut conn); /* send any alerts before exiting */
+                flush(&mut sess, &mut conn); /* send any alerts before exiting */
                 handle_err(err);
             }
         }
@@ -517,9 +561,9 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>, count: usize) {
         }
 
         if opts.enable_early_data && !sess.is_handshaking() && count > 0 {
-            if opts.expect_accept_early_data && !sess.is_early_data_accepted() {
+            if opts.expect_accept_early_data && !sess.client().is_early_data_accepted() {
                 quit_err("Early data was not accepted, but we expect the opposite");
-            } else if opts.expect_reject_early_data && sess.is_early_data_accepted() {
+            } else if opts.expect_reject_early_data && sess.client().is_early_data_accepted() {
                 quit_err("Early data was accepted, but we expect the opposite");
             }
             if opts.expect_version == 0x0304 {
@@ -841,11 +885,11 @@ fn main() {
                                                 opts.quic_transport_params.clone())
 
             };
-            Box::new(s) as Box<rustls::Session>
+            ClientOrServer::Server(s)
         } else {
             let dns_name =
                 webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
-            let s = if opts.quic_transport_params.is_empty() {
+            let c = if opts.quic_transport_params.is_empty() {
                 rustls::ClientSession::new(client_cfg.as_ref().unwrap(),
                                            dns_name)
             } else {
@@ -853,12 +897,12 @@ fn main() {
                                                 dns_name,
                                                 opts.quic_transport_params.clone())
             };
-            Box::new(s) as Box<rustls::Session>
+            ClientOrServer::Client(c)
         }
     };
 
     for i in 0..opts.resumes + 1 {
-        let mut sess = make_session();
-        exec(&opts, &mut sess, i);
+        let sess = make_session();
+        exec(&opts, sess, i);
     }
 }

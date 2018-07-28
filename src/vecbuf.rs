@@ -92,17 +92,6 @@ impl ChunkVecBuffer {
         len
     }
 
-    /// Take and push the given `bytes` at the beginning.
-    pub fn push_front_copy(&mut self, bytes: &[u8]) -> usize {
-        let len = bytes.len();
-
-        if !bytes.is_empty() {
-            self.chunks.push_front(bytes.to_vec());
-        }
-
-        len
-    }
-
     /// Take one of the chunks from this object.  This
     /// function panics if the object `is_empty`.
     pub fn take_one(&mut self) -> Vec<u8> {

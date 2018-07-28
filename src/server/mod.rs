@@ -508,14 +508,6 @@ impl Session for ServerSession {
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
         self.imp.get_negotiated_ciphersuite()
     }
-
-    fn is_in_early_data(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn is_early_data_accepted(&self) -> bool {
-        unimplemented!()
-    }
 }
 
 impl io::Read for ServerSession {
