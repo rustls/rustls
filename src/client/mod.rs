@@ -18,6 +18,7 @@ use vecbuf::WriteV;
 use std::sync::Arc;
 use std::io;
 use std::fmt;
+use std::mem;
 
 use sct;
 use webpki;
@@ -235,6 +236,122 @@ pub mod danger {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum EarlyDataState {
+    Disabled,
+    Ready,
+    Accepted,
+    AcceptedFinished,
+    Rejected,
+    RejectedFinished,
+}
+
+pub struct EarlyData {
+    state: EarlyDataState,
+    left: usize,
+}
+
+impl EarlyData {
+    fn new() -> EarlyData {
+        EarlyData {
+            left: 0,
+            state: EarlyDataState::Disabled,
+        }
+    }
+
+    fn is_enabled(&self) -> bool {
+        match self.state {
+            EarlyDataState::Ready | EarlyDataState::Accepted  => true,
+            _ => false
+        }
+    }
+
+    fn is_accepted(&self) -> bool {
+        match self.state {
+            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished => true,
+            _ => false
+        }
+    }
+
+    fn enable(&mut self, max_data: usize) {
+        assert_eq!(self.state, EarlyDataState::Disabled);
+        self.state = EarlyDataState::Ready;
+        self.left = max_data;
+    }
+
+    fn rejected(&mut self) {
+        trace!("EarlyData rejected");
+        self.state = EarlyDataState::Rejected;
+    }
+
+    fn accepted(&mut self) {
+        trace!("EarlyData accepted");
+        assert_eq!(self.state, EarlyDataState::Ready);
+        self.state = EarlyDataState::Accepted;
+    }
+
+    fn finished(&mut self) {
+        trace!("EarlyData finished");
+        self.state = match self.state {
+            EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
+            EarlyDataState::Rejected => EarlyDataState::RejectedFinished,
+            _ => panic!("bad EarlyData state"),
+        }
+    }
+
+    fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+        match self.state {
+            EarlyDataState::Disabled => unreachable!(),
+            EarlyDataState::Ready | EarlyDataState::Accepted => {
+                let take = if self.left < sz {
+                    mem::replace(&mut self.left, 0)
+                } else {
+                    self.left -= sz;
+                    sz
+                };
+
+                Ok(take)
+            },
+            EarlyDataState::Rejected
+                | EarlyDataState::RejectedFinished
+                | EarlyDataState::AcceptedFinished => {
+                Err(io::Error::from(io::ErrorKind::InvalidInput))
+            },
+        }
+    }
+
+    fn bytes_left(&self) -> usize {
+        self.left
+    }
+}
+
+/// Stub that implements io::Write and dispatches to `write_early_data`.
+pub struct WriteEarlyData<'a> {
+    sess: &'a mut ClientSessionImpl,
+}
+
+impl<'a> WriteEarlyData<'a> {
+    fn new(sess: &'a mut ClientSessionImpl) -> WriteEarlyData<'a> {
+        WriteEarlyData { sess }
+    }
+
+    /// How many bytes you may send.  Writes will become short
+    /// once this reaches zero.
+    pub fn bytes_left(&self) -> usize {
+        self.sess.early_data.bytes_left()
+    }
+}
+
+impl<'a> io::Write for WriteEarlyData<'a> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.sess.write_early_data(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub alpn_protocol: Option<String>,
@@ -243,6 +360,7 @@ pub struct ClientSessionImpl {
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send + Sync>>,
     pub server_cert_chain: CertificatePayload,
+    pub early_data: EarlyData,
 }
 
 impl fmt::Debug for ClientSessionImpl {
@@ -261,6 +379,7 @@ impl ClientSessionImpl {
             error: None,
             state: None,
             server_cert_chain: Vec::new(),
+            early_data: EarlyData::new(),
         }
     }
 
@@ -441,6 +560,13 @@ impl ClientSessionImpl {
     pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common.get_suite()
     }
+
+    pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.early_data.check_write(data.len())
+            .and_then(|sz| {
+                self.common.send_early_plaintext(&data[..sz])
+            })
+    }
 }
 
 /// This represents a single TLS client session.
@@ -458,6 +584,41 @@ impl ClientSession {
         let mut imp = ClientSessionImpl::new(config);
         imp.start_handshake(hostname.into(), vec![]);
         ClientSession { imp }
+    }
+
+    /// Returns an `io::Write` implementor you can write bytes to
+    /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
+    ///
+    /// This returns None in many circumstances when the capability to
+    /// send early data is not available, including but not limited to:
+    ///
+    /// - The server hasn't been talked to previously.
+    /// - The server does not support resumption.
+    /// - The server does not support early data.
+    /// - The resumption data for the server has expired.
+    ///
+    /// The server specifies a maximum amount of early data.  You can
+    /// learn this limit through the returned object, and writes through
+    /// it will process only this many bytes.
+    ///
+    /// The server can choose not to accept any sent early data --
+    /// in this case the data is lost but the connection continues.  You
+    /// can tell this happened using `is_early_data_accepted`.
+    pub fn early_data<'a>(&'a mut self) -> Option<WriteEarlyData<'a>> {
+        if self.imp.early_data.is_enabled() {
+            Some(WriteEarlyData::new(&mut self.imp))
+        } else {
+            None
+        }
+    }
+
+    /// Returns True if the server signalled it will process early data.
+    ///
+    /// If you sent early data and this returns false at the end of the
+    /// handshake then the server will not process the data.  This
+    /// is not an error, but you may wish to resend the data.
+    pub fn is_early_data_accepted(&self) -> bool {
+        self.imp.early_data.is_accepted()
     }
 }
 
@@ -522,13 +683,6 @@ impl Session for ClientSession {
         self.imp.get_negotiated_ciphersuite()
     }
 
-    fn is_in_early_data(&self) -> bool {
-        !self.imp.common.traffic && self.imp.common.early_traffic
-    }
-
-    fn is_early_data_accepted(&self) -> bool {
-        !self.imp.common.early_traffic && self.imp.common.early_data_accepted
-    }
 }
 
 impl io::Read for ClientSession {
