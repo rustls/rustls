@@ -17,6 +17,7 @@ use key_schedule::{SecretKind, KeySchedule};
 use prf;
 use rand;
 use quic;
+use hash_hs;
 
 use std::io;
 use std::collections::VecDeque;
@@ -410,6 +411,7 @@ pub struct SessionCommon {
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub sendable_tls: ChunkVecBuffer,
+    pub hs_transcript: hash_hs::HandshakeHash,
 }
 
 impl SessionCommon {
@@ -436,6 +438,7 @@ impl SessionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
+            hs_transcript: hash_hs::HandshakeHash::new(),
         }
     }
 
