@@ -266,16 +266,19 @@ impl fmt::Debug for ServerSessionImpl {
 impl ServerSessionImpl {
     pub fn new(server_config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>)
                -> ServerSessionImpl {
-        let perhaps_client_auth = server_config.verifier.offer_client_auth();
+        let mut common = SessionCommon::new(server_config.mtu, false);
+        if server_config.verifier.offer_client_auth() {
+            common.hs_transcript.set_client_auth_enabled();
+        }
 
         ServerSessionImpl {
             config: server_config.clone(),
-            common: SessionCommon::new(server_config.mtu, false),
+            common,
             sni: None,
             alpn_protocol: None,
             quic_params: None,
             error: None,
-            state: Some(Box::new(hs::ExpectClientHello::new(perhaps_client_auth, extra_exts))),
+            state: Some(Box::new(hs::ExpectClientHello::new(extra_exts))),
             client_cert_chain: None,
         }
     }
