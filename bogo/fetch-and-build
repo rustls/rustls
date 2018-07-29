@@ -11,4 +11,5 @@ mkdir -p bogo
 cd bogo/
 tar -xzf ../runner.tar.gz
 patch -p1 < ../patches/testerrormap.diff
+patch -p1 < ../patches/tls13draft28.diff
 go test -c
