@@ -284,6 +284,15 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
     }
 }
 
+const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
+fn make_tls13_aad(len: usize, out: &mut [u8]) {
+    out[0] = 0x17; // ContentType::ApplicationData
+    out[1] = 0x3; // ProtocolVersion (major)
+    out[2] = 0x3; // ProtocolVersion (minor)
+    out[3] = (len >> 8) as u8;
+    out[4] = len as u8;
+}
+
 impl MessageEncrypter for TLS13MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
         let mut nonce = [0u8; 12];
@@ -297,8 +306,10 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         buf.extend_from_slice(msg.payload);
         msg.typ.encode(&mut buf);
         buf.resize(total_len, 0u8);
+        let mut aad = [0u8; TLS13_AAD_SIZE];
+        make_tls13_aad(total_len, &mut aad);
 
-        ring::aead::seal_in_place(&self.enc_key, &nonce, &[], &mut buf, tag_len)
+        ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf, tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
@@ -323,7 +334,9 @@ impl MessageDecrypter for TLS13MessageDecrypter {
             return Err(TLSError::DecryptError);
         }
 
-        let plain_len = ring::aead::open_in_place(&self.dec_key, &nonce, &[], 0, &mut buf)
+        let mut aad = [0u8; TLS13_AAD_SIZE];
+        make_tls13_aad(buf.len(), &mut aad);
+        let plain_len = ring::aead::open_in_place(&self.dec_key, &nonce, &aad, 0, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
             .len();
 
