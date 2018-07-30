@@ -52,6 +52,7 @@ impl ServerKXDetails {
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
     pub resuming_session: Option<persist::ClientSessionValue>,
+    pub hash_at_client_recvd_server_hello: Vec<u8>,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
@@ -64,6 +65,7 @@ impl HandshakeDetails {
     pub fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
+            hash_at_client_recvd_server_hello: Vec::new(),
             resuming_session: None,
             randoms: SessionRandoms::for_client(),
             using_ems: false,

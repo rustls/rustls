@@ -16,8 +16,9 @@ use std::net;
 use std::fs;
 use std::io;
 use std::io::BufReader;
-use std::io::{Write, Read};
+use std::io::Write;
 use std::sync::Arc;
+use std::ops::{Deref, DerefMut};
 use rustls::internal::msgs::enums::ProtocolVersion;
 use rustls::quic::ClientQuicExt;
 use rustls::quic::ServerQuicExt;
@@ -64,6 +65,12 @@ struct Options {
     read_size: usize,
     quic_transport_params: Vec<u8>,
     expect_quic_transport_params: Vec<u8>,
+    enable_early_data: bool,
+    expect_ticket_supports_early_data: bool,
+    expect_accept_early_data: bool,
+    expect_reject_early_data: bool,
+    queue_data_on_resume: bool,
+    expect_version: u16,
 }
 
 impl Options {
@@ -101,6 +108,12 @@ impl Options {
             read_size: 512,
             quic_transport_params: vec![],
             expect_quic_transport_params: vec![],
+            enable_early_data: false,
+            expect_ticket_supports_early_data: false,
+            expect_accept_early_data: false,
+            expect_reject_early_data: false,
+            queue_data_on_resume: false,
+            expect_version: 0,
         }
     }
 
@@ -111,7 +124,7 @@ impl Options {
 
     fn tls13_supported(&self) -> bool {
         self.support_tls13 && (self.version_allowed(ProtocolVersion::TLSv1_3) ||
-                               self.version_allowed(ProtocolVersion::Unknown(0x7f12)))
+                               self.version_allowed(ProtocolVersion::Unknown(0x7f17)))
     }
 
     fn tls12_supported(&self) -> bool {
@@ -368,6 +381,10 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         cfg.versions.push(ProtocolVersion::TLSv1_3);
     }
 
+    if opts.enable_early_data {
+        cfg.enable_early_data = true;
+    }
+
     Arc::new(cfg)
 }
 
@@ -396,6 +413,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
             quit(":TLSV1_ALERT_RECORD_OVERFLOW:")
         }
         TLSError::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
+        TLSError::AlertReceived(AlertDescription::ProtocolVersion) => quit(":WRONG_VERSION:"),
         TLSError::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
         TLSError::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
             quit(":BAD_CHANGE_CIPHER_SPEC:")
@@ -434,7 +452,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
     }
 }
 
-fn flush(sess: &mut Box<rustls::Session>, conn: &mut net::TcpStream) {
+fn flush(sess: &mut ClientOrServer, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         match sess.write_tls(conn) {
             Err(err) => {
@@ -447,10 +465,52 @@ fn flush(sess: &mut Box<rustls::Session>, conn: &mut net::TcpStream) {
     conn.flush().unwrap();
 }
 
-fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
-    if opts.queue_data {
-        sess.write_all(b"hello world")
-            .unwrap();
+enum ClientOrServer {
+    Client(rustls::ClientSession),
+    Server(rustls::ServerSession)
+}
+
+impl Deref for ClientOrServer {
+    type Target = rustls::Session;
+
+    fn deref(&self) -> &Self::Target {
+        match &self {
+            ClientOrServer::Client(ref c) => c,
+            ClientOrServer::Server(ref s) => s,
+        }
+    }
+}
+
+impl DerefMut for ClientOrServer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            ClientOrServer::Client(ref mut c) => c,
+            ClientOrServer::Server(ref mut s) => s,
+        }
+    }
+}
+
+impl ClientOrServer {
+    fn client(&mut self) -> &mut rustls::ClientSession {
+        match self {
+            ClientOrServer::Client(ref mut c) => c,
+            ClientOrServer::Server(_) => panic!("ClientSession required here"),
+        }
+    }
+}
+
+fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
+    if opts.queue_data || (opts.queue_data_on_resume && count > 0) {
+        if count > 0 && opts.enable_early_data {
+            let len = sess.client().early_data()
+                .expect("0rtt not available")
+                .write(b"hello")
+                .expect("0rtt write failed");
+            sess.write_all(&b"hello"[len..])
+                .unwrap();
+        } else {
+            let _ = sess.write_all(b"hello");
+        }
     }
 
     let mut conn = net::TcpStream::connect(("localhost", opts.port)).expect("cannot connect");
@@ -459,7 +519,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
     let mut sent_exporter = false;
 
     loop {
-        flush(sess, &mut conn);
+        flush(&mut sess, &mut conn);
 
         if sess.wants_read() {
             let len = sess.read_tls(&mut conn)
@@ -479,7 +539,7 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             }
 
             if let Err(err) = sess.process_new_packets() {
-                flush(sess, &mut conn); /* send any alerts before exiting */
+                flush(&mut sess, &mut conn); /* send any alerts before exiting */
                 handle_err(err);
             }
         }
@@ -498,6 +558,21 @@ fn exec(opts: &Options, sess: &mut Box<rustls::Session>) {
             sess.write_all(&export)
                 .unwrap();
             sent_exporter = true;
+        }
+
+        if opts.enable_early_data && !sess.is_handshaking() && count > 0 {
+            if opts.expect_accept_early_data && !sess.client().is_early_data_accepted() {
+                quit_err("Early data was not accepted, but we expect the opposite");
+            } else if opts.expect_reject_early_data && sess.client().is_early_data_accepted() {
+                quit_err("Early data was accepted, but we expect the opposite");
+            }
+            if opts.expect_version == 0x0304 {
+                match sess.get_protocol_version() {
+                    Some(ProtocolVersion::TLSv1_3) |
+                    Some(ProtocolVersion::Unknown(0x7f17)) => (),
+                    _ => quit_err("wrong protocol version"),
+                }
+            }
         }
 
         if !sess.is_handshaking() &&
@@ -602,6 +677,9 @@ fn main() {
             "-expect-peer-signature-algorithm" |
             "-expect-advertised-alpn" |
             "-expect-alpn" |
+            "-on-initial-expect-alpn" |
+            "-on-resume-expect-alpn" |
+            "-on-retry-expect-alpn" |
             "-expect-server-name" |
             "-expect-ocsp-response" |
             "-expect-signed-cert-timestamps" |
@@ -684,6 +762,25 @@ fn main() {
             "-enable-signed-cert-timestamps" => {
                 opts.send_sct = true;
             }
+            "-enable-early-data" |
+            "-on-resume-enable-early-data" => {
+                opts.enable_early_data = true;
+            }
+            "-on-resume-shim-writes-first" => {
+                opts.queue_data_on_resume = true;
+            }
+            "-expect-ticket-supports-early-data" => {
+                opts.expect_ticket_supports_early_data = true;
+            }
+            "-expect-accept-early-data" => {
+                opts.expect_accept_early_data = true;
+            }
+            "-expect-reject-early-data" => {
+                opts.expect_reject_early_data = true;
+            }
+            "-expect-version" => {
+                opts.expect_version = args.remove(0).parse::<u16>().unwrap();
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -734,7 +831,6 @@ fn main() {
             "-enable-channel-id" |
             "-resumption-delay" |
             "-expect-early-data-info" |
-            "-enable-early-data" |
             "-expect-cipher-aes" |
             "-retain-only-sha256-client-cert-initial" |
             "-use-client-ca-list" |
@@ -747,9 +843,10 @@ fn main() {
             "-handshake-twice" |
             "-verify-prefs" |
             "-no-op-extra-handshake" |
-            "-on-resume-enable-early-data" |
             "-read-with-unfinished-write" |
-            "-expect-peer-cert-file" => {
+            "-on-resume-read-with-unfinished-write" |
+            "-expect-peer-cert-file" |
+            "-on-initial-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
             }
@@ -759,6 +856,11 @@ fn main() {
                 process::exit(1);
             }
         }
+    }
+
+    if opts.enable_early_data && opts.server {
+        println!("For now we only test client-side early data");
+        process::exit(BOGO_NACK);
     }
 
     println!("opts {:?}", opts);
@@ -783,11 +885,11 @@ fn main() {
                                                 opts.quic_transport_params.clone())
 
             };
-            Box::new(s) as Box<rustls::Session>
+            ClientOrServer::Server(s)
         } else {
             let dns_name =
                 webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
-            let s = if opts.quic_transport_params.is_empty() {
+            let c = if opts.quic_transport_params.is_empty() {
                 rustls::ClientSession::new(client_cfg.as_ref().unwrap(),
                                            dns_name)
             } else {
@@ -795,12 +897,12 @@ fn main() {
                                                 dns_name,
                                                 opts.quic_transport_params.clone())
             };
-            Box::new(s) as Box<rustls::Session>
+            ClientOrServer::Client(c)
         }
     };
 
-    for _ in 0..opts.resumes + 1 {
-        let mut sess = make_session();
-        exec(&opts, &mut sess);
+    for i in 0..opts.resumes + 1 {
+        let sess = make_session();
+        exec(&opts, sess, i);
     }
 }

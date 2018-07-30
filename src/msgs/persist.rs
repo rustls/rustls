@@ -62,6 +62,7 @@ pub struct ClientSessionValue {
     pub lifetime: u32,
     pub age_add: u32,
     pub extended_ms: bool,
+    pub max_early_data_size: u32,
 }
 
 impl Codec for ClientSessionValue {
@@ -75,6 +76,7 @@ impl Codec for ClientSessionValue {
         self.lifetime.encode(bytes);
         self.age_add.encode(bytes);
         (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
+        self.max_early_data_size.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
@@ -87,6 +89,7 @@ impl Codec for ClientSessionValue {
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
         let extended_ms = u8::read(r)?;
+        let max_early_data_size = u32::read(r)?;
 
         Some(ClientSessionValue {
             version: v,
@@ -98,6 +101,7 @@ impl Codec for ClientSessionValue {
             lifetime,
             age_add,
             extended_ms: extended_ms == 1u8,
+            max_early_data_size,
         })
     }
 }
@@ -121,6 +125,7 @@ impl ClientSessionValue {
             lifetime: 0,
             age_add: 0,
             extended_ms: false,
+            max_early_data_size: 0,
         }
     }
 
@@ -149,6 +154,10 @@ impl ClientSessionValue {
         let new_ticket = PayloadU16::new(Vec::new());
         let old_ticket = mem::replace(&mut self.ticket, new_ticket);
         old_ticket.0
+    }
+
+    pub fn set_max_early_data_size(&mut self, sz: u32) {
+        self.max_early_data_size = sz;
     }
 }
 

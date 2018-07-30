@@ -385,6 +385,7 @@ pub struct SessionCommon {
     pub peer_encrypting: bool,
     pub we_encrypting: bool,
     pub traffic: bool,
+    pub early_traffic: bool,
     pub want_write_key_update: bool,
     pub message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
@@ -410,6 +411,7 @@ impl SessionCommon {
             peer_encrypting: false,
             we_encrypting: false,
             traffic: false,
+            early_traffic: false,
             want_write_key_update: false,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
@@ -656,6 +658,17 @@ impl SessionCommon {
         self.send_plain(data, Limit::Yes)
     }
 
+    pub fn send_early_plaintext(&mut self, data: &[u8]) -> io::Result<usize> {
+        debug_assert!(self.early_traffic);
+        debug_assert!(self.we_encrypting);
+
+        if data.is_empty() {
+            // Don't send empty fragments.
+            return Ok(0);
+        }
+
+        Ok(self.send_appdata_encrypt(data, Limit::Yes))
+    }
 
     fn send_plain(&mut self, data: &[u8], limit: Limit) -> io::Result<usize> {
         if !self.traffic {
