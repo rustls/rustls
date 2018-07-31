@@ -243,7 +243,6 @@ enum EarlyDataState {
     Accepted,
     AcceptedFinished,
     Rejected,
-    RejectedFinished,
 }
 
 pub struct EarlyData {
@@ -294,7 +293,6 @@ impl EarlyData {
         trace!("EarlyData finished");
         self.state = match self.state {
             EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
-            EarlyDataState::Rejected => EarlyDataState::RejectedFinished,
             _ => panic!("bad EarlyData state"),
         }
     }
@@ -313,7 +311,6 @@ impl EarlyData {
                 Ok(take)
             },
             EarlyDataState::Rejected
-                | EarlyDataState::RejectedFinished
                 | EarlyDataState::AcceptedFinished => {
                 Err(io::Error::from(io::ErrorKind::InvalidInput))
             },
