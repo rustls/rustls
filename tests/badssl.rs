@@ -58,7 +58,7 @@ mod online {
         polite();
         connect("self-signed.badssl.com")
             .fails()
-            .expect(r"TLS error: WebPKIError\(UnknownIssuer\)")
+            .expect(r"TLS error: WebPKIError\((UnknownIssuer|CertExpired)\)")
             .go()
             .unwrap();
     }
