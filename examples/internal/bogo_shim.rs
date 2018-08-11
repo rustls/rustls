@@ -662,7 +662,7 @@ fn main() {
             }
             "-tls13-variant" => {
                 let variant = args.remove(0).parse::<u16>().unwrap();
-                if variant != 5 {
+                if variant != 1 {
                     println!("NYI TLS1.3 variant selection: {:?} {:?}", arg, variant);
                     process::exit(BOGO_NACK);
                 }
