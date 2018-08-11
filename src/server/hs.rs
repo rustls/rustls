@@ -38,8 +38,6 @@ use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
 use ring::constant_time;
 
-const TLS13_DRAFT: u16 = 0x7f1c;
-
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
     match $m.payload {
@@ -335,7 +333,7 @@ impl ExpectClientHello {
 
         let kse = KeyShareEntry::new(share.group, &kxr.pubkey);
         extensions.push(ServerExtension::KeyShare(kse));
-        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::Unknown(TLS13_DRAFT)));
+        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
         if let Some(psk_idx) = chosen_psk_idx {
             extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
@@ -412,7 +410,7 @@ impl ExpectClientHello {
         };
 
         req.extensions.push(HelloRetryExtension::KeyShare(group));
-        req.extensions.push(HelloRetryExtension::SupportedVersions(ProtocolVersion::Unknown(TLS13_DRAFT)));
+        req.extensions.push(HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
         let m = Message {
             typ: ContentType::Handshake,
@@ -976,7 +974,7 @@ impl State for ExpectClientHello {
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.get_versions_extension();
         if let Some(versions) = maybe_versions_ext {
-            if versions.contains(&ProtocolVersion::Unknown(TLS13_DRAFT)) && tls13_enabled {
+            if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
                 sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
