@@ -211,6 +211,8 @@ pub struct SessionRandoms {
     pub server: [u8; 32],
 }
 
+static TLS12_DOWNGRADE_SENTINEL: &[u8] = &[0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
+
 impl SessionRandoms {
     pub fn for_server() -> SessionRandoms {
         let mut ret = SessionRandoms {
@@ -232,6 +234,21 @@ impl SessionRandoms {
 
         rand::fill_random(&mut ret.client);
         ret
+    }
+
+    pub fn set_tls12_downgrade_marker(&mut self) {
+        assert!(!self.we_are_client);
+        self.server[24..]
+            .as_mut()
+            .write_all(TLS12_DOWNGRADE_SENTINEL)
+            .unwrap();
+    }
+
+    pub fn has_tls12_downgrade_marker(&mut self) -> bool {
+        assert!(self.we_are_client);
+        // both the server random and TLS12_DOWNGRADE_SENTINEL are
+        // public values and don't require constant time comparison
+        &self.server[24..] == TLS12_DOWNGRADE_SENTINEL
     }
 }
 

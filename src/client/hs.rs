@@ -642,6 +642,7 @@ impl State for ExpectServerHello {
         trace!("We got ServerHello {:#?}", server_hello);
 
         use ProtocolVersion::{TLSv1_2, TLSv1_3};
+        let tls13_supported = sess.config.versions.contains(&TLSv1_3);
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello.get_supported_versions()
@@ -651,7 +652,7 @@ impl State for ExpectServerHello {
         };
 
         match server_version {
-            TLSv1_3 if sess.config.versions.contains(&TLSv1_3) => {
+            TLSv1_3 if tls13_supported => {
                 sess.common.negotiated_version = Some(TLSv1_3);
             }
             TLSv1_2 if sess.config.versions.contains(&TLSv1_2) => {
@@ -748,6 +749,11 @@ impl State for ExpectServerHello {
         // Save ServerRandom and SessionID
         server_hello.random.write_slice(&mut self.handshake.randoms.server);
         self.handshake.session_id = server_hello.session_id;
+
+        // Look for TLS1.3 downgrade signal in server random
+        if tls13_supported && self.handshake.randoms.has_tls12_downgrade_marker() {
+            return Err(illegal_param(sess, "downgrade to TLS1.2 when TLS1.3 is supported"));
+        }
 
         // Doing EMS?
         if server_hello.ems_support_acked() {
