@@ -38,9 +38,6 @@ use std::mem;
 use ring::constant_time;
 use webpki;
 
-// draft-ietf-tls-tls13-28
-const TLS13_DRAFT: u16 = 0x7f1c;
-
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
     match $m.payload {
@@ -255,7 +252,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     let mut supported_versions = Vec::new();
     if support_tls13 {
-        supported_versions.push(ProtocolVersion::Unknown(TLS13_DRAFT));
+        supported_versions.push(ProtocolVersion::TLSv1_3);
     }
 
     if support_tls12 {
@@ -654,9 +651,7 @@ impl State for ExpectServerHello {
         };
 
         match server_version {
-            TLSv1_3 | ProtocolVersion::Unknown(TLS13_DRAFT) if sess.config
-                .versions
-                .contains(&TLSv1_3) => {
+            TLSv1_3 if sess.config.versions.contains(&TLSv1_3) => {
                 sess.common.negotiated_version = Some(TLSv1_3);
             }
             TLSv1_2 if sess.config.versions.contains(&TLSv1_2) => {
@@ -883,8 +878,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.get_supported_versions() {
-            Some(ProtocolVersion::TLSv1_3) |
-                Some(ProtocolVersion::Unknown(TLS13_DRAFT)) => {
+            Some(ProtocolVersion::TLSv1_3) => {
                 sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
             _ => {
