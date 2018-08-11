@@ -1086,6 +1086,11 @@ impl State for ExpectClientHello {
                 .to_string()));
         }
 
+        // -- If TLS1.3 is enabled, signal the downgrade in the server random
+        if tls13_enabled {
+            self.handshake.randoms.set_tls12_downgrade_marker();
+        }
+
         // -- Check for resumption --
         // We can do this either by (in order of preference):
         // 1. receiving a ticket that decrypts
