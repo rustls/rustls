@@ -14,6 +14,9 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
 
 ## Release history:
 
+* 0.13.1 (2018-08-17):
+  - Fix a bug in rustls::Stream for non-blocking transports
+    (backport).
 * 0.13.0 (2018-07-15):
   - Move TLS1.3 support from draft 22 to 23.
   - Add support for `SSLKEYLOGFILE`; not enabled by default.
