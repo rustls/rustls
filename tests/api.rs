@@ -1082,6 +1082,64 @@ fn server_streamowned_read() {
     }
 }
 
+struct FailsWrites {
+    errkind: io::ErrorKind,
+    after: usize,
+}
+
+impl io::Read for FailsWrites {
+    fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl io::Write for FailsWrites {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        if self.after > 0 {
+            self.after -= 1;
+            Ok(b.len())
+        } else {
+            Err(io::Error::new(self.errkind, "oops"))
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+    do_handshake(&mut client, &mut server);
+
+    let mut pipe = FailsWrites {
+        errkind: io::ErrorKind::WouldBlock,
+        after: 0,
+    };
+    client.write(b"hello").unwrap();
+    let mut client_stream = Stream::new(&mut client, &mut pipe);
+    let rc = client_stream.write(b"world");
+    assert!(rc.is_err());
+    assert_eq!(format!("{:?}", rc),
+               "Err(Custom { kind: WouldBlock, error: StringError(\"oops\") })");
+}
+
+#[test]
+fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+    do_handshake(&mut client, &mut server);
+
+    let mut pipe = FailsWrites {
+        errkind: io::ErrorKind::WouldBlock,
+        after: 1,
+    };
+    client.write(b"hello").unwrap();
+    let mut client_stream = Stream::new(&mut client, &mut pipe);
+    let rc = client_stream.write(b"world");
+    assert_eq!(format!("{:?}", rc), "Ok(5)");
+}
+
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::RSA;
     let mut server_config = make_server_config(kt);

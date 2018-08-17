@@ -2,8 +2,7 @@ use std::io::{Read, Write, Result};
 use session::Session;
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// a Session `S` and an underlying blocking transport `T`, such as
-/// a socket.
+/// a Session `S` and an underlying transport `T`, such as a socket.
 ///
 /// This allows you to use a rustls Session like a normal stream.
 pub struct Stream<'a, S: 'a + Session + ?Sized, T: 'a + Read + Write + ?Sized> {
@@ -60,7 +59,12 @@ impl<'a, S, T> Write for Stream<'a, S, T> where S: 'a + Session, T: 'a + Read + 
         self.complete_prior_io()?;
 
         let len = self.sess.write(buf)?;
-        self.sess.complete_io(self.sock)?;
+
+        // Try to write the underlying transport here, but don't let
+        // any errors mask the fact we've consumed `len` bytes.
+        // Callers will learn of permanent errors on the next call.
+        let _ = self.sess.complete_io(self.sock);
+
         Ok(len)
     }
 
