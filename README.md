@@ -1,4 +1,5 @@
 ![Logo](https://raw.githubusercontent.com/ctz/rustls/master/admin/rustls-logo-web.png)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fctz%2Frustls.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fctz%2Frustls?ref=badge_shield)
 
 Rustls is a modern TLS library written in Rust.  It's pronounced 'rustles'.
 It uses [*ring*](https://github.com/briansmith/ring) for cryptography
@@ -299,3 +300,6 @@ These are included as LICENSE-APACHE, LICENSE-MIT and LICENSE-ISC
 respectively.  You may use this software under the terms of any
 of these licenses, at your option.
 
+
+
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fctz%2Frustls.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fctz%2Frustls?ref=badge_large)
