@@ -41,6 +41,7 @@ struct Options {
     require_any_client_cert: bool,
     offer_no_client_cas: bool,
     tickets: bool,
+    resume_with_tickets_disabled: bool,
     queue_data: bool,
     shut_down_after_handshake: bool,
     check_close_notify: bool,
@@ -82,6 +83,7 @@ impl Options {
             resumes: 0,
             verify_peer: false,
             tickets: true,
+            resume_with_tickets_disabled: false,
             host_name: "example.com".to_string(),
             use_sni: false,
             send_sct: false,
@@ -522,8 +524,11 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
         flush(&mut sess, &mut conn);
 
         if sess.wants_read() {
-            let len = sess.read_tls(&mut conn)
-                .expect("read failed");
+            let len = match sess.read_tls(&mut conn) {
+                Ok(len) => len,
+                Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => 0,
+                err @ Err(_) => err.expect("read failed")
+            };
 
             if len == 0 {
                 if opts.check_close_notify {
@@ -616,6 +621,11 @@ fn main() {
     env_logger::init();
 
     args.remove(0);
+
+    if !args.is_empty() && args[0] == "-is-handshaker-supported" {
+        println!("No");
+        process::exit(0);
+    }
     println!("options: {:?}", args);
 
     let mut opts = Options::new();
@@ -667,6 +677,12 @@ fn main() {
                     process::exit(BOGO_NACK);
                 }
             }
+            "-no-ticket" => {
+                opts.tickets = false;
+            }
+            "-on-resume-no-ticket" => {
+                opts.resume_with_tickets_disabled = true;
+            }
             "-signing-prefs" => {
                 let alg = args.remove(0).parse::<u16>().unwrap();
                 opts.use_signing_scheme = alg;
@@ -675,6 +691,7 @@ fn main() {
             "-expect-curve-id" |
             "-expect-resume-curve-id" |
             "-expect-peer-signature-algorithm" |
+            "-expect-peer-verify-pref" |
             "-expect-advertised-alpn" |
             "-expect-alpn" |
             "-on-initial-expect-alpn" |
@@ -685,6 +702,7 @@ fn main() {
             "-expect-signed-cert-timestamps" |
             "-expect-certificate-types" |
             "-expect-client-ca-list" |
+            "-handshaker-path" |
             "-expect-msg-callback" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
@@ -841,11 +859,14 @@ fn main() {
             "-on-resume-export-early-keying-material" |
             "-export-early-keying-material" |
             "-handshake-twice" |
+            "-on-resume-verify-fail" |
+            "-reverify-on-resume" |
             "-verify-prefs" |
             "-no-op-extra-handshake" |
             "-read-with-unfinished-write" |
             "-on-resume-read-with-unfinished-write" |
             "-expect-peer-cert-file" |
+            "-no-rsa-pss-rsae-certs" |
             "-on-initial-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
@@ -865,7 +886,7 @@ fn main() {
 
     println!("opts {:?}", opts);
 
-    let server_cfg = if opts.server {
+    let mut server_cfg = if opts.server {
         Some(make_server_cfg(&opts))
     } else {
         None
@@ -876,12 +897,14 @@ fn main() {
         None
     };
 
-    let make_session = || {
+    fn make_session(opts: &Options,
+                    scfg: &Option<Arc<rustls::ServerConfig>>,
+                    ccfg: &Option<Arc<rustls::ClientConfig>>) -> ClientOrServer {
         if opts.server {
             let s = if opts.quic_transport_params.is_empty() {
-                rustls::ServerSession::new(server_cfg.as_ref().unwrap())
+                rustls::ServerSession::new(scfg.as_ref().unwrap())
             } else {
-                rustls::ServerSession::new_quic(server_cfg.as_ref().unwrap(),
+                rustls::ServerSession::new_quic(scfg.as_ref().unwrap(),
                                                 opts.quic_transport_params.clone())
 
             };
@@ -890,19 +913,28 @@ fn main() {
             let dns_name =
                 webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
             let c = if opts.quic_transport_params.is_empty() {
-                rustls::ClientSession::new(client_cfg.as_ref().unwrap(),
+                rustls::ClientSession::new(ccfg.as_ref().unwrap(),
                                            dns_name)
             } else {
-                rustls::ClientSession::new_quic(client_cfg.as_ref().unwrap(),
+                rustls::ClientSession::new_quic(ccfg.as_ref().unwrap(),
                                                 dns_name,
                                                 opts.quic_transport_params.clone())
             };
             ClientOrServer::Client(c)
         }
-    };
+    }
 
     for i in 0..opts.resumes + 1 {
-        let sess = make_session();
+        let sess = make_session(&opts, &server_cfg, &client_cfg);
         exec(&opts, sess, i);
+
+        if opts.resume_with_tickets_disabled {
+            server_cfg = {
+                let mut newcfg = server_cfg.unwrap();
+                let default = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+                Arc::make_mut(&mut newcfg).ticketer = default.ticketer.clone();
+                Some(newcfg)
+            };
+        }
     }
 }
