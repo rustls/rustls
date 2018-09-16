@@ -540,7 +540,7 @@ impl ExpectClientHello {
 
         let signing_key = &server_key.key;
         let signer = signing_key.choose_scheme(schemes)
-            .ok_or_else(|| TLSError::PeerIncompatibleError("no overlapping sigschemes".to_string()))?;
+            .ok_or_else(|| incompatible(sess, "no overlapping sigschemes"))?;
 
         let scheme = signer.get_scheme();
         let sig = signer.sign(&message)?;
