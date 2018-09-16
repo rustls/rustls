@@ -1605,7 +1605,7 @@ impl State for ExpectTLS13CertificateRequest {
             .collect::<Vec<SignatureScheme>>();
 
         if compat_sigschemes.is_empty() {
-            sess.common.send_fatal_alert(AlertDescription::DecodeError);
+            sess.common.send_fatal_alert(AlertDescription::HandshakeFailure);
             return Err(TLSError::PeerIncompatibleError("server sent bad certreq schemes".to_string()));
         }
 
