@@ -224,7 +224,7 @@ enum_builder! {@U16
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
-        TransportParameters => 0x001a
+        TransportParameters => 0xffa5
     }
 }
 
