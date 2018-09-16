@@ -1873,6 +1873,9 @@ impl Codec for CertReqExtension {
         Some(match typ {
             ExtensionType::SignatureAlgorithms => {
                 let schemes = SupportedSignatureSchemes::read(&mut sub)?;
+                if schemes.is_empty() {
+                    return None;
+                }
                 CertReqExtension::SignatureAlgorithms(schemes)
             }
             ExtensionType::CertificateAuthorities => {
