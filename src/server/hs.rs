@@ -957,8 +957,8 @@ impl State for ExpectClientHello {
 
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError {
         let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
-        let tls13_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
-        let tls12_enabled = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
+        let tls13_enabled = sess.config.supports_version(ProtocolVersion::TLSv1_3);
+        let tls12_enabled = sess.config.supports_version(ProtocolVersion::TLSv1_2);
         trace!("we got a clienthello {:?}", client_hello);
 
         if !client_hello.compression_methods.contains(&Compression::Null) {

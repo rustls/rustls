@@ -247,8 +247,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         (SessionID::empty(), Vec::new(), ProtocolVersion::Unknown(0))
     };
 
-    let support_tls12 = sess.config.versions.contains(&ProtocolVersion::TLSv1_2);
-    let support_tls13 = sess.config.versions.contains(&ProtocolVersion::TLSv1_3);
+    let support_tls12 = sess.config.supports_version(ProtocolVersion::TLSv1_2);
+    let support_tls13 = sess.config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut supported_versions = Vec::new();
     if support_tls13 {
@@ -642,7 +642,7 @@ impl State for ExpectServerHello {
         trace!("We got ServerHello {:#?}", server_hello);
 
         use ProtocolVersion::{TLSv1_2, TLSv1_3};
-        let tls13_supported = sess.config.versions.contains(&TLSv1_3);
+        let tls13_supported = sess.config.supports_version(TLSv1_3);
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello.get_supported_versions()
@@ -655,7 +655,7 @@ impl State for ExpectServerHello {
             TLSv1_3 if tls13_supported => {
                 sess.common.negotiated_version = Some(TLSv1_3);
             }
-            TLSv1_2 if sess.config.versions.contains(&TLSv1_2) => {
+            TLSv1_2 if sess.config.supports_version(TLSv1_2) => {
                 if sess.early_data.is_enabled() && sess.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.

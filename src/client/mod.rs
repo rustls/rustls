@@ -158,6 +158,14 @@ impl ClientConfig {
     }
 
     #[doc(hidden)]
+    /// We support a given TLS version if it's quoted in the configured
+    /// versions *and* at least one ciphersuite for this version is
+    /// also configured.
+    pub fn supports_version(&self, v: ProtocolVersion) -> bool {
+        self.versions.contains(&v) && self.ciphersuites.iter().any(|cs| cs.usable_for_version(v))
+    }
+
+    #[doc(hidden)]
     pub fn get_verifier(&self) -> &verify::ServerCertVerifier {
         self.verifier.as_ref()
     }

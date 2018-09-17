@@ -1143,9 +1143,12 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::RSA;
     let mut server_config = make_server_config(kt);
-    server_config.ciphersuites = vec![];
+    server_config.ciphersuites = vec![find_suite(CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)];
 
-    (make_client_config(kt), server_config)
+    let mut client_config = make_client_config(kt);
+    client_config.ciphersuites = vec![find_suite(CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384)];
+
+    (client_config, server_config)
 }
 
 #[test]

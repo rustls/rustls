@@ -19,6 +19,7 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
   - Introduce client-side support for 0-RTT data in TLS1.3.
   - Fix a bug in rustls::Stream for non-blocking transports.
   - Move TLS1.3 support from draft 28 to final RFC8446 version.
+  - Don't offer (eg) TLS1.3 if no TLS1.3 suites are configured.
 * 0.13.1 (2018-08-17):
   - Fix a bug in rustls::Stream for non-blocking transports
     (backport).
