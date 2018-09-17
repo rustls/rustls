@@ -15,6 +15,7 @@ fn alpn_offer() {
     let mut server = OpenSSLServer::new_rsa(9000);
     server.arg("-alpn")
         .arg("ponytown,breakfast,edgware")
+        .arg("-tls1_2")
         .run();
 
     if !server.running() {
@@ -78,7 +79,8 @@ fn alpn_agree() {
 #[test]
 fn client_auth_by_client() {
     let mut server = OpenSSLServer::new_rsa(9020);
-    server.arg("-verify").arg("0");
+    server.arg("-verify").arg("0")
+          .arg("-tls1_2");
     server.run();
 
     server.client()
@@ -95,7 +97,8 @@ fn client_auth_by_client() {
 #[test]
 fn client_auth_by_client_with_ecdsa_suite() {
     let mut server = OpenSSLServer::new_ecdsa(9025);
-    server.arg("-verify").arg("0");
+    server.arg("-verify").arg("0")
+          .arg("-tls1_2");
     server.run();
 
     server.client()
@@ -112,7 +115,8 @@ fn client_auth_by_client_with_ecdsa_suite() {
 #[test]
 fn client_auth_requested_but_unsupported() {
     let mut server = OpenSSLServer::new_rsa(9030);
-    server.arg("-verify").arg("0");
+    server.arg("-verify").arg("0")
+          .arg("-tls1_2");
     server.run();
 
     server.client()
@@ -128,7 +132,8 @@ fn client_auth_requested_but_unsupported() {
 #[test]
 fn client_auth_required_but_unsupported() {
     let mut server = OpenSSLServer::new_rsa(9040);
-    server.arg("-Verify").arg("0");
+    server.arg("-Verify").arg("0")
+          .arg("-tls1_2");
     server.run();
 
     server.client()
@@ -194,6 +199,7 @@ fn client_auth_by_server_required() {
 #[test]
 fn client_resumes() {
     let mut server = OpenSSLServer::new_rsa(9070);
+    server.arg("-tls1_2");
     server.run();
 
     // no resumption without client support

@@ -5,20 +5,6 @@ mod common;
 use common::OpenSSLServer;
 
 #[test]
-fn no_tls12() {
-    let mut server = OpenSSLServer::new_rsa(8000);
-    server.arg("-no_tls1_2");
-    server.run();
-
-    server.client()
-        .verbose()
-        .fails()
-        .expect_log("TLS alert received:")
-        .expect(r"TLS error: AlertReceived\((HandshakeFailure|ProtocolVersion)\)")
-        .go();
-}
-
-#[test]
 fn no_ecdhe() {
     let mut server = OpenSSLServer::new_rsa(8010);
     if common::openssl_server_supports_no_echde() {
