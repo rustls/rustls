@@ -23,6 +23,12 @@ use std::collections::VecDeque;
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
+    /// TODO
+    fn get_secrets(&self) -> Option<&SessionSecrets>;
+
+    /// TODO
+    fn get_seq(&self) -> (u64, u64);
+
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
@@ -396,8 +402,8 @@ pub struct SessionCommon {
     pub secrets: Option<SessionSecrets>,
     key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
-    write_seq: u64,
-    read_seq: u64,
+    pub write_seq: u64,
+    pub read_seq: u64,
     peer_eof: bool,
     pub peer_encrypting: bool,
     pub we_encrypting: bool,
