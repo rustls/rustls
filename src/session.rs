@@ -23,12 +23,6 @@ use std::collections::VecDeque;
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
-    /// TODO
-    fn get_secrets(&self) -> Option<&SessionSecrets>;
-
-    /// TODO
-    fn get_seq(&self) -> (u64, u64);
-
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
@@ -141,6 +135,14 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     ///
     /// This returns None until the ciphersuite is agreed.
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite>;
+
+    /// Get session secrets.
+    ///
+    /// The return value is None until handshake completion.
+    fn get_secrets(&self) -> Option<&SessionSecrets>;
+
+    /// Get read and write sequence number.
+    fn get_seq(&self) -> (u64, u64);
 
     /// This function uses `io` to complete any outstanding IO for
     /// this session.
