@@ -1,9 +1,10 @@
 // Assorted public API tests.
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::fs;
 use std::mem;
+use std::fmt;
 use std::io::{self, Write, Read};
 
 extern crate rustls;
@@ -23,13 +24,15 @@ use rustls::KeyLog;
 
 extern crate webpki;
 
-fn transfer(left: &mut Session, right: &mut Session) {
+fn transfer(left: &mut Session, right: &mut Session) -> usize {
     let mut buf = [0u8; 262144];
+    let mut total = 0;
 
     while left.wants_write() {
         let sz = left.write_tls(&mut buf.as_mut()).unwrap();
+        total += sz;
         if sz == 0 {
-            return;
+            return total;
         }
 
         let mut offs = 0;
@@ -40,6 +43,8 @@ fn transfer(left: &mut Session, right: &mut Session) {
             }
         }
     }
+
+    total
 }
 
 #[derive(Clone, Copy)]
@@ -139,13 +144,15 @@ fn make_pair_for_arc_configs(client_config: &Arc<ClientConfig>,
     )
 }
 
-fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
+fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) -> (usize, usize) {
+    let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
-        transfer(client, server);
+        to_server += transfer(client, server);
         server.process_new_packets().unwrap();
-        transfer(server, client);
+        to_client += transfer(server, client);
         client.process_new_packets().unwrap();
     }
+    (to_server, to_client)
 }
 
 struct AllClientVersions {
@@ -587,14 +594,14 @@ fn client_checks_server_certificate_with_given_name() {
 }
 
 struct ClientCheckCertResolve {
-    query_count: atomic::AtomicUsize,
+    query_count: AtomicUsize,
     expect_queries: usize
 }
 
 impl ClientCheckCertResolve {
     fn new(expect_queries: usize) -> ClientCheckCertResolve {
         ClientCheckCertResolve {
-            query_count: atomic::AtomicUsize::new(0),
+            query_count: AtomicUsize::new(0),
             expect_queries: expect_queries
         }
     }
@@ -602,7 +609,7 @@ impl ClientCheckCertResolve {
 
 impl Drop for ClientCheckCertResolve {
     fn drop(&mut self) {
-        let count = self.query_count.load(atomic::Ordering::SeqCst);
+        let count = self.query_count.load(Ordering::SeqCst);
         assert_eq!(count, self.expect_queries);
     }
 }
@@ -612,7 +619,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
                acceptable_issuers: &[&[u8]],
                sigschemes: &[SignatureScheme])
         -> Option<sign::CertifiedKey> {
-        self.query_count.fetch_add(1, atomic::Ordering::SeqCst);
+        self.query_count.fetch_add(1, Ordering::SeqCst);
 
         if acceptable_issuers.len() == 0 {
             panic!("no issuers offered by server");
@@ -1683,8 +1690,8 @@ fn vectored_write_for_server_handshake() {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.writev_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 74);
-        assert_eq!(pipe.writevs, vec![vec![42, 32]]);
+        assert_eq!(wrlen, 177);
+        assert_eq!(pipe.writevs, vec![vec![103, 42, 32]]);
     }
 
     assert_eq!(server.is_handshaking(), false);
@@ -1745,4 +1752,127 @@ fn vectored_write_with_slow_client() {
         assert_eq!(pipe.writevs, vec![vec![21], vec![10], vec![5], vec![3], vec![3]]);
     }
     check_read(&mut client, b"01234567890123456789");
+}
+
+struct ServerStorage {
+    storage: Arc<rustls::StoresServerSessions>,
+    put_count: AtomicUsize,
+    get_count: AtomicUsize,
+    take_count: AtomicUsize,
+}
+
+impl ServerStorage {
+    fn new() -> ServerStorage {
+        ServerStorage {
+            storage: rustls::ServerSessionMemoryCache::new(1024),
+            put_count: AtomicUsize::new(0),
+            get_count: AtomicUsize::new(0),
+            take_count: AtomicUsize::new(0),
+        }
+    }
+
+    fn puts(&self) -> usize { self.put_count.load(Ordering::SeqCst) }
+    fn gets(&self) -> usize { self.get_count.load(Ordering::SeqCst) }
+    fn takes(&self) -> usize { self.take_count.load(Ordering::SeqCst) }
+}
+
+impl fmt::Debug for ServerStorage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(put: {:?}, get: {:?}, take: {:?})",
+               self.put_count, self.get_count, self.take_count)
+    }
+}
+
+impl rustls::StoresServerSessions for ServerStorage {
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+        self.put_count.fetch_add(1, Ordering::SeqCst);
+        self.storage.put(key, value)
+    }
+
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.get_count.fetch_add(1, Ordering::SeqCst);
+        self.storage.get(key)
+    }
+
+    fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.take_count.fetch_add(1, Ordering::SeqCst);
+        self.storage.take(key)
+    }
+}
+
+#[test]
+fn tls13_stateful_resumption() {
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
+    client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(kt);
+    let storage = Arc::new(ServerStorage::new());
+    server_config.session_storage = storage.clone();
+    let server_config = Arc::new(server_config);
+
+    // full handshake
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
+    assert_eq!(storage.puts(), 1);
+    assert_eq!(storage.gets(), 0);
+    assert_eq!(storage.takes(), 0);
+
+    // resumed
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
+    assert!(resume_c2s > full_c2s);
+    assert!(resume_s2c < full_s2c);
+    assert_eq!(storage.puts(), 2);
+    assert_eq!(storage.gets(), 0);
+    assert_eq!(storage.takes(), 1);
+
+    // resumed again
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (resume2_c2s, resume2_s2c) = do_handshake(&mut client, &mut server);
+    assert_eq!(resume_s2c, resume2_s2c);
+    assert_eq!(resume_c2s, resume2_c2s);
+    assert_eq!(storage.puts(), 3);
+    assert_eq!(storage.gets(), 0);
+    assert_eq!(storage.takes(), 2);
+}
+
+#[test]
+fn tls13_stateless_resumption() {
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
+    client_config.versions = vec![ ProtocolVersion::TLSv1_3 ];
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(kt);
+    server_config.ticketer = rustls::Ticketer::new();
+    let storage = Arc::new(ServerStorage::new());
+    server_config.session_storage = storage.clone();
+    let server_config = Arc::new(server_config);
+
+    // full handshake
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
+    assert_eq!(storage.puts(), 0);
+    assert_eq!(storage.gets(), 0);
+    assert_eq!(storage.takes(), 0);
+
+    // resumed
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
+    assert!(resume_c2s > full_c2s);
+    assert!(resume_s2c < full_s2c);
+    assert_eq!(storage.puts(), 0);
+    assert_eq!(storage.gets(), 0);
+    assert_eq!(storage.takes(), 0);
+
+    // resumed again
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (resume2_c2s, resume2_s2c) = do_handshake(&mut client, &mut server);
+    assert_eq!(resume_s2c, resume2_s2c);
+    assert_eq!(resume_c2s, resume2_c2s);
+    assert_eq!(storage.puts(), 0);
+    assert_eq!(storage.gets(), 0);
+    assert_eq!(storage.takes(), 0);
 }

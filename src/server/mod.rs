@@ -3,7 +3,7 @@ use keylog::{KeyLog, NoKeyLog};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::enums::{ContentType, SignatureScheme};
 use msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
-use msgs::handshake::{ServerExtension, SessionID};
+use msgs::handshake::ServerExtension;
 use msgs::message::Message;
 use error::TLSError;
 use sign;
@@ -21,29 +21,37 @@ mod hs;
 mod common;
 pub mod handy;
 
-/// A trait for the ability to generate Session IDs, and store
-/// server session data. The keys and values are opaque.
+/// A trait for the ability to store server session data.
+///
+/// The keys and values are opaque.
 ///
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
-/// to break all security of the corresponding session.
+/// to break all security of the corresponding sessions.
 ///
-/// `put` is a mutating operation; this isn't expressed
+/// Implementations can be lossy (in other words, forgetting
+/// key/value pairs) without any negative security consequences.
+///
+/// However, note that `take` **must** reliably delete a returned
+/// value.  If it does not, there may be security consequences.
+///
+/// `put` and `take` are mutating operations; this isn't expressed
 /// in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common
 /// choice.
 pub trait StoresServerSessions : Send + Sync {
-    /// Generate a session ID.
-    fn generate(&self) -> SessionID;
-
-    /// Store session secrets encoded in `value` against key `id`,
-    /// overwrites any existing value against `id`.  Returns `true`
+    /// Store session secrets encoded in `value` against `key`,
+    /// overwrites any existing value against `key`.  Returns `true`
     /// if the value was stored.
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
 
-    /// Find a session with the given `id`.  Return it, or None
+    /// Find a value with the given `key`.  Return it, or None
     /// if it doesn't exist.
     fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+
+    /// Find a value with the given `key`.  Return it and delete it;
+    /// or None if it doesn't exist.
+    fn take(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.

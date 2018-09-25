@@ -1009,7 +1009,8 @@ impl State for ExpectTLS13EncryptedExtensions {
         }
 
         if self.handshake.resuming_session.is_some() {
-            if sess.common.early_traffic {
+            let was_early_traffic = sess.common.early_traffic;
+            if was_early_traffic {
                 if exts.early_data_extension_offered() {
                     sess.early_data.accepted();
                 } else {
@@ -1018,7 +1019,7 @@ impl State for ExpectTLS13EncryptedExtensions {
                 }
             }
 
-            if !sess.common.early_traffic {
+            if was_early_traffic && !sess.common.early_traffic {
                 // If no early traffic, set the encryption key for handshakes
                 let suite = sess.common.get_suite_assert();
                 let write_key = sess.common.get_key_schedule()

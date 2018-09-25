@@ -1,6 +1,4 @@
 use msgs::enums::SignatureScheme;
-use msgs::handshake::SessionID;
-use rand;
 use sign;
 use key;
 use webpki;
@@ -14,13 +12,13 @@ use std::sync::{Arc, Mutex};
 pub struct NoServerSessionStorage {}
 
 impl server::StoresServerSessions for NoServerSessionStorage {
-    fn generate(&self) -> SessionID {
-        SessionID::empty()
-    }
     fn put(&self, _id: Vec<u8>, _sec: Vec<u8>) -> bool {
         false
     }
     fn get(&self, _id: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
+    fn take(&self, _id: &[u8]) -> Option<Vec<u8>> {
         None
     }
 }
@@ -54,12 +52,6 @@ impl ServerSessionMemoryCache {
 }
 
 impl server::StoresServerSessions for ServerSessionMemoryCache {
-    fn generate(&self) -> SessionID {
-        let mut v = [0u8; 32];
-        rand::fill_random(&mut v);
-        SessionID::new(&v)
-    }
-
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         self.cache.lock()
             .unwrap()
@@ -72,6 +64,12 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
         self.cache.lock()
             .unwrap()
             .get(key).cloned()
+    }
+
+    fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.cache.lock()
+            .unwrap()
+            .remove(key)
     }
 }
 
@@ -194,14 +192,6 @@ mod test {
     use StoresServerSessions;
 
     #[test]
-    fn test_noserversessionstorage_yields_no_sessid() {
-        let c = NoServerSessionStorage {};
-        assert_eq!(c.generate(), SessionID::empty());
-        assert_eq!(c.generate().len(), 0);
-        assert!(c.generate().is_empty());
-    }
-
-    #[test]
     fn test_noserversessionstorage_drops_put() {
         let c = NoServerSessionStorage {};
         assert_eq!(c.put(vec![0x01], vec![0x02]), false);
@@ -214,12 +204,6 @@ mod test {
         assert_eq!(c.get(&[]), None);
         assert_eq!(c.get(&[0x01]), None);
         assert_eq!(c.get(&[0x02]), None);
-    }
-
-    #[test]
-    fn test_serversessionmemorycache_yields_sessid() {
-        let c = ServerSessionMemoryCache::new(4);
-        assert_eq!(c.generate().len(), 32);
     }
 
     #[test]
