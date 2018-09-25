@@ -768,6 +768,22 @@ impl ExpectClientHello {
         sess.common.send_msg(m, false);
     }
 
+    fn attempt_tls13_ticket_decryption(&mut self,
+                                       sess: &mut ServerSessionImpl,
+                                       ticket: &[u8]) -> Option<persist::ServerSessionValue> {
+        if sess.config.ticketer.enabled() {
+            sess.config
+                .ticketer
+                .decrypt(ticket)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+        } else {
+            sess.config
+                .session_storage
+                .take(ticket)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+        }
+    }
+
     fn start_resumption(mut self,
                         sess: &mut ServerSessionImpl,
                         client_hello: &ClientHelloPayload,
@@ -881,10 +897,7 @@ impl ExpectClientHello {
             }
 
             for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                let maybe_resume = sess.config
-                    .ticketer
-                    .decrypt(&psk_id.identity.0)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
+                let maybe_resume = self.attempt_tls13_ticket_decryption(sess, &psk_id.identity.0);
 
                 if !can_resume(sess, &self.handshake, &maybe_resume) {
                     continue;
@@ -1129,10 +1142,9 @@ impl State for ExpectClientHello {
         // If we're not offered a ticket or a potential session ID,
         // allocate a session ID.
         if self.handshake.session_id.is_empty() && !ticket_received {
-            let sessid = sess.config
-                .session_storage
-                .generate();
-            self.handshake.session_id = sessid;
+            let mut bytes = [0u8; 32];
+            rand::fill_random(&mut bytes);
+            self.handshake.session_id = SessionID::new(&bytes);
         }
 
         // Perhaps resume?  If we received a ticket, the sessionid
@@ -1672,11 +1684,8 @@ impl ExpectTLS13Finished {
         })
     }
 
-    fn emit_ticket_tls13(&mut self, sess: &mut ServerSessionImpl) {
-        if !self.send_ticket {
-            return;
-        }
-
+    fn emit_stateless_ticket_tls13(&mut self, sess: &mut ServerSessionImpl) {
+        debug_assert!(self.send_ticket);
         let nonce = rand::random_vec(32);
         let plain = get_server_session_value_tls13(&self.handshake, sess, &nonce)
             .get_encoding();
@@ -1701,9 +1710,37 @@ impl ExpectTLS13Finished {
             }),
         };
 
-        trace!("sending new ticket {:?}", m);
+        trace!("sending new stateless ticket {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
+    }
+
+    fn emit_stateful_ticket_tls13(&mut self, sess: &mut ServerSessionImpl) {
+        debug_assert!(self.send_ticket);
+        let nonce = rand::random_vec(32);
+        let id = rand::random_vec(32);
+        let plain = get_server_session_value_tls13(&self.handshake, sess, &nonce)
+            .get_encoding();
+
+        if sess.config.session_storage.put(id.clone(), plain) {
+            let stateful_lifetime = 24 * 60 * 60; // this is a bit of a punt
+            let age_add = rand::random_u32();
+            let payload = NewSessionTicketPayloadTLS13::new(stateful_lifetime, age_add, nonce, id);
+            let m = Message {
+                typ: ContentType::Handshake,
+                version: ProtocolVersion::TLSv1_3,
+                payload: MessagePayload::Handshake(HandshakeMessagePayload {
+                    typ: HandshakeType::NewSessionTicket,
+                    payload: HandshakePayload::NewSessionTicketTLS13(payload),
+                }),
+            };
+
+            trace!("sending new stateful ticket {:?}", m);
+            self.handshake.transcript.add_message(&m);
+            sess.common.send_msg(m, true);
+        } else {
+            trace!("resumption not available; not issuing ticket");
+        }
     }
 }
 
@@ -1749,8 +1786,12 @@ impl State for ExpectTLS13Finished {
             .get_mut_key_schedule()
             .current_client_traffic_secret = read_key;
 
-        if sess.config.ticketer.enabled() {
-            self.emit_ticket_tls13(sess);
+        if self.send_ticket {
+            if sess.config.ticketer.enabled() {
+                self.emit_stateless_ticket_tls13(sess);
+            } else {
+                self.emit_stateful_ticket_tls13(sess);
+            }
         }
 
         sess.common.we_now_encrypting();
