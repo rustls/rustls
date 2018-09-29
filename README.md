@@ -22,6 +22,8 @@ Rustls is currently in development and hence unstable.  [Here's what I'm working
   - Don't offer (eg) TLS1.3 if no TLS1.3 suites are configured.
   - Support stateful resumption in TLS1.3.  Stateless resumption
     was previously supported, but is not the default configuration.
+  - *Breaking API change*: `generate()` removed from `StoresServerSessions` trait.
+  - *Breaking API change*: `take()` added to `StoresServerSessions` trait.
 * 0.13.1 (2018-08-17):
   - Fix a bug in rustls::Stream for non-blocking transports
     (backport).
