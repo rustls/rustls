@@ -6,7 +6,10 @@ and [libwebpki](https://github.com/briansmith/webpki) for certificate
 verification.
 
 # Status
-Rustls is currently in development and hence unstable.  [Here's what I'm working on now](https://github.com/ctz/rustls/projects/1).
+Rustls is ready for use.  There are no major breaking interface changes
+expected.  [Here's what I'm working on now](https://github.com/ctz/rustls/projects/1).
+
+If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [![Build Status](https://travis-ci.org/ctz/rustls.svg?branch=master)](https://travis-ci.org/ctz/rustls)
 [![Coverage Status](https://coveralls.io/repos/github/ctz/rustls/badge.svg?branch=master)](https://coveralls.io/github/ctz/rustls?branch=master)
