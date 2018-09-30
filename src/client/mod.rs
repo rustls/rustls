@@ -1,6 +1,6 @@
 use msgs::enums::CipherSuite;
 use msgs::enums::{AlertDescription, HandshakeType};
-use session::{Session, SessionCommon};
+use session::{Session, SessionCommon, SessionSecrets};
 use keylog::{KeyLog, NoKeyLog};
 use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use msgs::handshake::CertificatePayload;
@@ -628,6 +628,16 @@ impl ClientSession {
 }
 
 impl Session for ClientSession {
+    #[cfg(feature = "pub-secrets")]
+    fn get_secrets(&self) -> Option<&SessionSecrets> {
+        self.imp.common.secrets.as_ref()
+    }
+
+    #[cfg(feature = "pub-secrets")]
+    fn get_seq(&self) -> (u64, u64) {
+        (self.imp.common.read_seq, self.imp.common.write_seq)
+    }
+
     fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
         self.imp.common.read_tls(rd)
     }

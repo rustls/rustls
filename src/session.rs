@@ -136,6 +136,18 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// This returns None until the ciphersuite is agreed.
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite>;
 
+    /// Get session secrets.
+    ///
+    /// This allows you to use Rustls as handshake and then use KTLS or
+    /// other implementations for encryption.
+    /// The return value is None until handshake completion.
+    #[cfg(feature = "pub-secrets")]
+    fn get_secrets(&self) -> Option<&SessionSecrets>;
+
+    /// Get read and write sequence number.
+    #[cfg(feature = "pub-secrets")]
+    fn get_seq(&self) -> (u64, u64);
+
     /// This function uses `io` to complete any outstanding IO for
     /// this session.
     ///
@@ -396,8 +408,8 @@ pub struct SessionCommon {
     pub secrets: Option<SessionSecrets>,
     key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
-    write_seq: u64,
-    read_seq: u64,
+    pub write_seq: u64,
+    pub read_seq: u64,
     peer_eof: bool,
     pub peer_encrypting: bool,
     pub we_encrypting: bool,
