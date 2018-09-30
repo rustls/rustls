@@ -457,10 +457,12 @@ impl ServerSession {
 }
 
 impl Session for ServerSession {
+    #[cfg(feature = "pub-secrets")]
     fn get_secrets(&self) -> Option<&SessionSecrets> {
         self.imp.common.secrets.as_ref()
     }
 
+    #[cfg(feature = "pub-secrets")]
     fn get_seq(&self) -> (u64, u64) {
         (self.imp.common.read_seq, self.imp.common.write_seq)
     }

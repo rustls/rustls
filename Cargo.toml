@@ -22,6 +22,7 @@ default = ["logging"]
 logging = ["log"]
 dangerous_configuration = []
 quic = []
+pub-secrets = []
 
 [dev-dependencies]
 log = "0.4"

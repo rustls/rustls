@@ -138,10 +138,14 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
 
     /// Get session secrets.
     ///
+    /// This allows you to use Rustls as handshake and then use KTLS or
+    /// other implementations for encryption.
     /// The return value is None until handshake completion.
+    #[cfg(feature = "pub-secrets")]
     fn get_secrets(&self) -> Option<&SessionSecrets>;
 
     /// Get read and write sequence number.
+    #[cfg(feature = "pub-secrets")]
     fn get_seq(&self) -> (u64, u64);
 
     /// This function uses `io` to complete any outstanding IO for
