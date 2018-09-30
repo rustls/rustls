@@ -5,7 +5,7 @@
 //!
 //! ## Current features
 //!
-//! * TLS1.2 and TLS1.3 (draft 23) only.
+//! * TLS1.2 and TLS1.3.
 //! * ECDSA or RSA server authentication by clients.
 //! * ECDSA or RSA server authentication by servers.
 //! * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
@@ -18,6 +18,7 @@
 //! * TLS1.2 session resumption.
 //! * TLS1.2 resumption via tickets (RFC5077).
 //! * TLS1.3 resumption via tickets or session storage.
+//! * TLS1.3 0-RTT data for clients.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //! * Extended master secret support (RFC7627).
