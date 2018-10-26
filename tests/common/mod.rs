@@ -279,8 +279,10 @@ impl TlsClient {
             .output()
             .unwrap_or_else(|e| panic!("failed to execute: {}", e));
 
-        let stdout_str = unsafe { String::from_utf8_unchecked(output.stdout.clone()) };
-        let stderr_str = unsafe { String::from_utf8_unchecked(output.stderr.clone()) };
+        let stdout_str = String::from_utf8(output.stdout.clone())
+            .unwrap();
+        let stderr_str = String::from_utf8(output.stderr.clone())
+            .unwrap();
 
         for expect in &self.expect_output {
             let re = Regex::new(expect).unwrap();
