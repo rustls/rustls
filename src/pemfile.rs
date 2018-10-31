@@ -32,7 +32,7 @@ fn extract<A>(rd: &mut io::BufRead,
 
         if line.starts_with(end_mark) {
             take_base64 = false;
-            let der = base64::decode_config(&b64buf, base64::MIME)
+            let der = base64::decode(&b64buf)
                 .map_err(|_| ())?;
             ders.push(f(der));
             b64buf = String::new();
