@@ -25,7 +25,7 @@ quic = []
 
 [dev-dependencies]
 log = "0.4"
-env_logger = "0.5"
+env_logger = "0.6"
 mio = "0.6"
 docopt = "1.0"
 serde = "1.0"
