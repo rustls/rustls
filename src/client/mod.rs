@@ -360,7 +360,6 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub alpn_protocol: Option<Vec<u8>>,
-    pub quic_params: Option<Vec<u8>>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send + Sync>>,
@@ -379,7 +378,6 @@ impl ClientSessionImpl {
         ClientSessionImpl {
             config: config.clone(),
             alpn_protocol: None,
-            quic_params: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
             state: None,
@@ -478,7 +476,7 @@ impl ClientSessionImpl {
         self.process_main_protocol(msg)
     }
 
-    fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
+    pub fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
         while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
             self.process_main_protocol(msg)?;
         }
