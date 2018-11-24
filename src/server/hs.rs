@@ -21,7 +21,7 @@ use msgs::handshake::{CertReqExtension, SupportedMandatedSignatureSchemes};
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
-use session::SessionSecrets;
+use session::{SessionSecrets, Protocol};
 use cipher;
 use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
@@ -33,6 +33,8 @@ use sign;
 use error::TLSError;
 use handshake::{check_handshake_message, check_message};
 use webpki;
+#[cfg(feature = "quic")]
+use quic;
 
 use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
@@ -216,9 +218,12 @@ impl ExpectClientHello {
             }
         }
 
-        // QUIC transport parameters
-        if let (Some(params), true) = (hello.get_quic_params_extension(), sess.common.is_tls13()) {
-            sess.quic_params = Some(params);
+        #[cfg(feature = "quic")]
+        {
+            // QUIC transport parameters
+            if let Some(params) = hello.get_quic_params_extension() {
+                sess.common.quic.params = Some(params);
+            }
         }
 
         // SNI
@@ -376,6 +381,14 @@ impl ExpectClientHello {
         sess.config.key_log.log("CLIENT_HANDSHAKE_TRAFFIC_SECRET",
                                 &self.handshake.randoms.client,
                                 &read_key);
+
+        #[cfg(feature = "quic")] {
+            sess.common.quic.hs_secrets = Some(quic::Secrets {
+                client: read_key.clone(),
+                server: write_key.clone(),
+            });
+        }
+
         key_schedule.current_client_traffic_secret = read_key;
         key_schedule.current_server_traffic_secret = write_key;
         sess.common.set_key_schedule(key_schedule);
@@ -385,6 +398,9 @@ impl ExpectClientHello {
 
     fn emit_fake_ccs(&mut self,
                      sess: &mut ServerSessionImpl) {
+        #[cfg(feature = "quic")] {
+            if let Protocol::Quic = sess.common.protocol { return; }
+        }
         let m = Message {
             typ: ContentType::ChangeCipherSpec,
             version: ProtocolVersion::TLSv1_2,
@@ -588,9 +604,22 @@ impl ExpectClientHello {
         sess.config.key_log.log("SERVER_TRAFFIC_SECRET_0",
                                 &self.handshake.randoms.client,
                                 &write_key);
+
+        #[cfg(feature = "quic")] {
+            let read_key = sess.common
+                .get_key_schedule()
+                .derive(SecretKind::ClientApplicationTrafficSecret,
+                        &self.handshake.hash_at_server_fin);
+            sess.common.quic.traffic_secrets = Some(quic::Secrets {
+                client: read_key,
+                server: write_key.clone(),
+            });
+        }
+
         sess.common
             .get_mut_key_schedule()
             .current_server_traffic_secret = write_key;
+
 
         let exporter_secret = sess.common
             .get_key_schedule()
@@ -1789,6 +1818,7 @@ impl State for ExpectTLS13Finished {
 
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
+
         Ok(self.into_expect_tls13_traffic(fin))
     }
 }

@@ -20,7 +20,7 @@ use msgs::codec::Codec;
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::ClientSessionImpl;
-use session::SessionSecrets;
+use session::{SessionSecrets, Protocol};
 use key_schedule::{KeySchedule, SecretKind};
 use cipher;
 use suites;
@@ -30,6 +30,8 @@ use rand;
 use ticketer;
 use error::TLSError;
 use handshake::{check_message, check_handshake_message};
+#[cfg(feature = "quic")]
+use quic;
 
 use client::common::{ServerCertDetails, ServerKXDetails, HandshakeDetails};
 use client::common::{ClientHelloDetails, ReceivedTicketDetails, ClientAuthDetails};
@@ -202,6 +204,10 @@ struct ExpectServerHello {
 struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
 
 fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
+    #[cfg(feature = "quic")] {
+        if let Protocol::Quic = sess.common.protocol { return; }
+    }
+
     if hs.sent_tls13_fake_ccs {
         return;
     }
@@ -592,6 +598,14 @@ impl ExpectServerHello {
                                 &read_key);
         sess.common.get_mut_key_schedule().current_server_traffic_secret = read_key;
 
+        #[cfg(feature = "quic")] {
+            let key_schedule = sess.common.key_schedule.as_ref().unwrap();
+            sess.common.quic.hs_secrets = Some(quic::Secrets {
+                client: key_schedule.current_client_traffic_secret.clone(),
+                server: key_schedule.current_server_traffic_secret.clone(),
+            });
+        }
+
         Ok(())
     }
 
@@ -698,13 +712,6 @@ impl State for ExpectServerHello {
         // Extract ALPN protocol
         if !sess.common.is_tls13() {
             process_alpn_protocol(sess, server_hello.get_alpn_protocol())?;
-        }
-
-        // Reject QUIC if TLS1.2 is in use.
-        if !sess.common.is_tls13() &&
-            server_hello.find_extension(ExtensionType::TransportParameters).is_some() {
-            sess.common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(TLSError::PeerMisbehavedError("server wants to do quic+tls1.2".to_string()));
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
@@ -1008,9 +1015,11 @@ impl State for ExpectTLS13EncryptedExtensions {
         validate_encrypted_extensions(sess, &self.hello, exts)?;
         process_alpn_protocol(sess, exts.get_alpn_protocol())?;
 
-        // QUIC transport parameters
-        if let Some(params) = exts.get_quic_params_extension() {
-            sess.quic_params = Some(params);
+        #[cfg(feature = "quic")] {
+            // QUIC transport parameters
+            if let Some(params) = exts.get_quic_params_extension() {
+                sess.common.quic.params = Some(params);
+            }
         }
 
         if self.handshake.resuming_session.is_some() {
@@ -2171,6 +2180,14 @@ impl State for ExpectTLS13Finished {
         sess.common
             .get_mut_key_schedule()
             .current_client_traffic_secret = write_key;
+
+        #[cfg(feature = "quic")] {
+            let key_schedule = sess.common.key_schedule.as_ref().unwrap();
+            sess.common.quic.traffic_secrets = Some(quic::Secrets {
+                client: key_schedule.current_client_traffic_secret.clone(),
+                server: key_schedule.current_server_traffic_secret.clone(),
+            });
+        }
 
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
