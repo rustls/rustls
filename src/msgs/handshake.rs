@@ -305,8 +305,14 @@ impl ServerNamePayload {
     fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
         let len = u16::read(r)? as usize;
         let name = r.take(len)?;
-        let dns_name = webpki::DNSNameRef::try_from_ascii(
-                untrusted::Input::from(name)).ok()?;
+        let dns_name = match webpki::DNSNameRef::try_from_ascii(
+                untrusted::Input::from(name)) {
+            Ok(dns_name) => dns_name,
+            Err(_) => {
+                warn!("Illegal SNI hostname received {:?}", name);
+                return None;
+            }
+        };
         Some(ServerNamePayload::HostName(dns_name.into()))
     }
 
@@ -881,7 +887,6 @@ impl Codec for ClientHelloPayload {
     }
 
     fn read(r: &mut Reader) -> Option<ClientHelloPayload> {
-
         let mut ret = ClientHelloPayload {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
