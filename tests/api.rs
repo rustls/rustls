@@ -209,7 +209,7 @@ fn dns_name(name: &'static str) -> webpki::DNSNameRef {
     webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
 }
 
-fn alpn_test(server_protos: Vec<String>, client_protos: Vec<String>, agreed: Option<&str>) {
+fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: Option<&[u8]>) {
     let mut client_config = make_client_config(KeyType::RSA);
     let mut server_config = make_server_config(KeyType::RSA);
 
@@ -236,23 +236,23 @@ fn alpn() {
     alpn_test(vec![], vec![], None);
 
     // server support
-    alpn_test(vec!["server-proto".to_string()], vec![], None);
+    alpn_test(vec![b"server-proto".to_vec()], vec![], None);
 
     // client support
-    alpn_test(vec![], vec!["client-proto".to_string()], None);
+    alpn_test(vec![], vec![b"client-proto".to_vec()], None);
 
     // no overlap
-    alpn_test(vec!["server-proto".to_string()],
-              vec!["client-proto".to_string()],
+    alpn_test(vec![b"server-proto".to_vec()],
+              vec![b"client-proto".to_vec()],
               None);
 
     // server chooses preference
-    alpn_test(vec!["server-proto".to_string(), "client-proto".to_string()],
-              vec!["client-proto".to_string(), "server-proto".to_string()],
-              Some("server-proto"));
+    alpn_test(vec![b"server-proto".to_vec(), b"client-proto".to_vec()],
+              vec![b"client-proto".to_vec(), b"server-proto".to_vec()],
+              Some(b"server-proto"));
 
     // case sensitive
-    alpn_test(vec!["PROTO".to_string()], vec!["proto".to_string()], None);
+    alpn_test(vec![b"PROTO".to_vec()], vec![b"proto".to_vec()], None);
 }
 
 fn version_test(client_versions: Vec<ProtocolVersion>,

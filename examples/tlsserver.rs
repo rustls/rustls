@@ -564,7 +564,10 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         config.ticketer = rustls::Ticketer::new();
     }
 
-    config.set_protocols(&args.flag_proto);
+    config.set_protocols(&args.flag_proto
+        .iter()
+        .map(|proto| proto.as_bytes().to_vec())
+        .collect::<Vec<_>>()[..]);
 
     Arc::new(config)
 }

@@ -86,7 +86,7 @@ pub struct ClientConfig {
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
-    pub alpn_protocols: Vec<String>,
+    pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
     pub session_persistence: Arc<StoresClientSessions>,
@@ -174,7 +174,7 @@ impl ClientConfig {
     /// Overwrites any existing configured protocols.
     /// The first element in the `protocols` list is the most
     /// preferred, the last is the least preferred.
-    pub fn set_protocols(&mut self, protocols: &[String]) {
+    pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
         self.alpn_protocols.clear();
         self.alpn_protocols.extend_from_slice(protocols);
     }
@@ -359,7 +359,7 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
-    pub alpn_protocol: Option<String>,
+    pub alpn_protocol: Option<Vec<u8>>,
     pub quic_params: Option<Vec<u8>>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
@@ -554,7 +554,7 @@ impl ClientSessionImpl {
         Some(r)
     }
 
-    pub fn get_alpn_protocol(&self) -> Option<&str> {
+    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
         self.alpn_protocol.as_ref().map(|s| s.as_ref())
     }
 
@@ -669,7 +669,7 @@ impl Session for ClientSession {
         self.imp.get_peer_certificates()
     }
 
-    fn get_alpn_protocol(&self) -> Option<&str> {
+    fn get_alpn_protocol(&self) -> Option<&[u8]> {
         self.imp.get_alpn_protocol()
     }
 

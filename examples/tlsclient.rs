@@ -484,7 +484,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
 
     let persist = Arc::new(PersistCache::new(&args.flag_cache));
 
-    config.set_protocols(&args.flag_proto);
+    config.set_protocols(&args.flag_proto
+        .iter()
+        .map(|proto| proto.as_bytes().to_vec())
+        .collect::<Vec<_>>()[..]);
     config.set_persistence(persist);
     config.set_mtu(&args.flag_mtu);
 

@@ -1,5 +1,6 @@
 
 use std::process;
+use std::str;
 use std::thread;
 use std::time;
 use std::net;
@@ -102,7 +103,7 @@ pub struct TlsClient {
     pub client_auth_certs: Option<String>,
     pub cache: Option<String>,
     pub suites: Vec<String>,
-    pub protos: Vec<String>,
+    pub protos: Vec<Vec<u8>>,
     pub no_tickets: bool,
     pub no_sni: bool,
     pub insecure: bool,
@@ -198,8 +199,8 @@ impl TlsClient {
         self
     }
 
-    pub fn proto(&mut self, proto: &str) -> &mut TlsClient {
-        self.protos.push(proto.to_string());
+    pub fn proto(&mut self, proto: &[u8]) -> &mut TlsClient {
+        self.protos.push(proto.to_vec());
         self
     }
 
@@ -260,7 +261,7 @@ impl TlsClient {
 
         for proto in &self.protos {
             args.push("--proto");
-            args.push(proto.as_ref());
+            args.push(str::from_utf8(proto.as_ref()).unwrap());
         }
 
         if self.verbose {
@@ -430,9 +431,9 @@ pub struct TlsServer {
     pub key: String,
     pub cafile: String,
     pub suites: Vec<String>,
-    pub protos: Vec<String>,
+    pub protos: Vec<Vec<u8>>,
     used_suites: Vec<String>,
-    used_protos: Vec<String>,
+    used_protos: Vec<Vec<u8>>,
     pub resumes: bool,
     pub tickets: bool,
     pub client_auth_roots: String,
@@ -494,8 +495,8 @@ impl TlsServer {
         self
     }
 
-    pub fn proto(&mut self, proto: &str) -> &mut Self {
-        self.protos.push(proto.to_string());
+    pub fn proto(&mut self, proto: &[u8]) -> &mut Self {
+        self.protos.push(proto.to_vec());
         self
     }
 
@@ -538,7 +539,7 @@ impl TlsServer {
         self.used_protos = self.protos.clone();
         for proto in &self.used_protos {
             args.push("--proto");
-            args.push(proto.as_ref());
+            args.push(str::from_utf8(proto.as_ref()).unwrap());
         }
 
         if self.resumes {
