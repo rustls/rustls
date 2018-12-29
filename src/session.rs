@@ -107,7 +107,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// A return value of None after handshake completion
     /// means no protocol was agreed (because no protocols
     /// were offered or accepted by the peer).
-    fn get_alpn_protocol(&self) -> Option<&str>;
+    fn get_alpn_protocol(&self) -> Option<&[u8]>;
 
     /// Retrieves the protocol version agreed with the peer.
     ///

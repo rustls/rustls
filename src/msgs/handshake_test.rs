@@ -297,9 +297,9 @@ fn can_roundtrip_multi_proto() {
     match ext {
         ClientExtension::Protocols(prot) => {
             assert_eq!(2, prot.len());
-            assert_eq!(vec!["hi".to_string(), "lo".to_string()],
-                       prot.to_strings());
-            assert_eq!(prot.as_single_string(), None);
+            assert_eq!(vec![b"hi".to_vec(), b"lo".to_vec()],
+                       prot.to_vecs());
+            assert_eq!(prot.as_single_vec(), None);
         }
         _ => unreachable!()
     }
@@ -323,8 +323,8 @@ fn can_roundtrip_single_proto() {
     match ext {
         ClientExtension::Protocols(prot) => {
             assert_eq!(1, prot.len());
-            assert_eq!(vec!["hi".to_string()], prot.to_strings());
-            assert_eq!(prot.as_single_string(), Some("hi"));
+            assert_eq!(vec![b"hi".to_vec()], prot.to_vecs());
+            assert_eq!(prot.as_single_vec(), Some(&b"hi"[..]));
         }
         _ => unreachable!()
     }

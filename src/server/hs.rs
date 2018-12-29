@@ -202,17 +202,17 @@ impl ExpectClientHello {
         let our_protocols = &sess.config.alpn_protocols;
         let maybe_their_protocols = hello.get_alpn_extension();
         if let Some(their_protocols) = maybe_their_protocols {
-            let their_proto_strings = their_protocols.to_strings();
+            let their_proto_vecs = their_protocols.to_vecs();
 
-            if their_proto_strings.contains(&"".to_string()) {
+            if their_proto_vecs.iter().any(|proto| proto.is_empty()) {
                 return Err(TLSError::PeerMisbehavedError("client offered empty ALPN protocol"
                     .to_string()));
             }
 
-            sess.alpn_protocol = util::first_in_both(our_protocols, &their_proto_strings);
+            sess.alpn_protocol = util::first_in_both(our_protocols, &their_proto_vecs);
             if let Some(ref selected_protocol) = sess.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
-                ret.push(ServerExtension::make_alpn(selected_protocol.clone()));
+                ret.push(ServerExtension::make_alpn(&[selected_protocol]));
             }
         }
 

@@ -129,7 +129,7 @@ pub struct ServerConfig {
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
-    pub alpn_protocols: Vec<String>,
+    pub alpn_protocols: Vec<Vec<u8>>,
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
@@ -240,7 +240,7 @@ impl ServerConfig {
     ///
     /// The first element in the `protocols` list is the most
     /// preferred, the last is the least preferred.
-    pub fn set_protocols(&mut self, protocols: &[String]) {
+    pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
         self.alpn_protocols.clear();
         self.alpn_protocols.extend_from_slice(protocols);
     }
@@ -250,7 +250,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub common: SessionCommon,
     sni: Option<webpki::DNSName>,
-    pub alpn_protocol: Option<String>,
+    pub alpn_protocol: Option<Vec<u8>>,
     pub quic_params: Option<Vec<u8>>,
     pub error: Option<TLSError>,
     pub state: Option<Box<hs::State + Send + Sync>>,
@@ -406,7 +406,7 @@ impl ServerSessionImpl {
         Some(r)
     }
 
-    pub fn get_alpn_protocol(&self) -> Option<&str> {
+    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
         self.alpn_protocol.as_ref().map(|s| s.as_ref())
     }
 
@@ -509,7 +509,7 @@ impl Session for ServerSession {
         self.imp.get_peer_certificates()
     }
 
-    fn get_alpn_protocol(&self) -> Option<&str> {
+    fn get_alpn_protocol(&self) -> Option<&[u8]> {
         self.imp.get_alpn_protocol()
     }
 

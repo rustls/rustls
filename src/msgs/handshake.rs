@@ -8,7 +8,6 @@ use msgs::enums::PSKKeyExchangeMode;
 use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use msgs::codec;
 use msgs::codec::{Codec, Reader};
-use std;
 use std::fmt;
 use std::io::Write;
 use std::collections;
@@ -378,35 +377,33 @@ impl ConvertServerNameList for ServerNameRequest {
 pub type ProtocolNameList = VecU16OfPayloadU8;
 
 pub trait ConvertProtocolNameList {
-    fn from_strings(names: &[String]) -> Self;
-    fn to_strings(&self) -> Vec<String>;
-    fn as_single_string(&self) -> Option<&str>;
+    fn from_slices(names: &[&[u8]]) -> Self;
+    fn to_vecs(&self) -> Vec<Vec<u8>>;
+    fn as_single_vec(&self) -> Option<&[u8]>;
 }
 
 impl ConvertProtocolNameList for ProtocolNameList {
-    fn from_strings(names: &[String]) -> ProtocolNameList {
+    fn from_slices(names: &[&[u8]]) -> ProtocolNameList {
         let mut ret = Vec::new();
 
         for name in names {
-            ret.push(PayloadU8::new(name.as_bytes().to_vec()));
+            ret.push(PayloadU8::new(name.to_vec()));
         }
 
         ret
     }
 
-    fn to_strings(&self) -> Vec<String> {
+    fn to_vecs(&self) -> Vec<Vec<u8>> {
         let mut ret = Vec::new();
         for proto in self {
-            if let Ok(st) = String::from_utf8(proto.0.clone()) {
-                ret.push(st);
-            }
+            ret.push(proto.0.clone());
         }
         ret
     }
 
-    fn as_single_string(&self) -> Option<&str> {
+    fn as_single_vec(&self) -> Option<&[u8]> {
         if self.len() == 1 {
-            std::str::from_utf8(&self[0].0).ok()
+            Some(&self[0].0)
         } else {
             None
         }
@@ -847,8 +844,8 @@ impl Codec for ServerExtension {
 }
 
 impl ServerExtension {
-    pub fn make_alpn(proto: String) -> ServerExtension {
-        ServerExtension::Protocols(ProtocolNameList::from_strings(&[proto]))
+    pub fn make_alpn(proto: &[&[u8]]) -> ServerExtension {
+        ServerExtension::Protocols(ProtocolNameList::from_slices(proto))
     }
 
     pub fn make_empty_renegotiation_info() -> ServerExtension {
@@ -1779,10 +1776,10 @@ pub trait HasServerExtensions {
         self.get_extensions().iter().find(|x| x.get_type() == ext)
     }
 
-    fn get_alpn_protocol(&self) -> Option<&str> {
+    fn get_alpn_protocol(&self) -> Option<&[u8]> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
-            ServerExtension::Protocols(ref protos) => protos.as_single_string(),
+            ServerExtension::Protocols(ref protos) => protos.as_single_vec(),
             _ => None,
         }
     }

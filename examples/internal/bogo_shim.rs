@@ -302,7 +302,10 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     }
 
     if !opts.protocols.is_empty() {
-        cfg.set_protocols(&opts.protocols);
+        cfg.set_protocols(&opts.protocols
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect::<Vec<_>>()[..]);
     }
 
     cfg.versions.clear();
@@ -372,7 +375,10 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         .set_certificate_verifier(Arc::new(DummyServerAuth {}));
 
     if !opts.protocols.is_empty() {
-        cfg.set_protocols(&opts.protocols);
+        cfg.set_protocols(&opts.protocols
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect::<Vec<_>>()[..]);
     }
 
     cfg.versions.clear();

@@ -25,15 +25,15 @@ fn alpn_offer() {
 
     // Basic workingness.
     server.client()
-        .proto("breakfast")
-        .expect_log("ALPN protocol is Some\\(\"breakfast\"\\)")
+        .proto(b"breakfast")
+        .expect_log("ALPN protocol is Some\\(\\[98, 114, 101, 97, 107, 102, 97, 115, 116\\]\\)")
         .go();
 
     // Client preference has little effect (we're testing openssl here really)
     server.client()
-        .proto("edgware")
-        .proto("ponytown")
-        .expect_log("ALPN protocol is Some\\(\"ponytown\"\\)")
+        .proto(b"edgware")
+        .proto(b"ponytown")
+        .expect_log("ALPN protocol is Some\\(\\[112, 111, 110, 121, 116, 111, 119, 110\\]\\)")
         .go();
 
     server.kill();
@@ -47,9 +47,9 @@ fn alpn_agree() {
     }
 
     let mut server = TlsServer::new(9010);
-    server.proto("connaught")
-        .proto("bonjour")
-        .proto("egg")
+    server.proto(b"connaught")
+        .proto(b"bonjour")
+        .proto(b"egg")
         .http_mode()
         .run();
 

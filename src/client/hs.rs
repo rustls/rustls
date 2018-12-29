@@ -323,8 +323,12 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 
     if !sess.config.alpn_protocols.is_empty() {
-        exts.push(ClientExtension::Protocols(ProtocolNameList::from_strings(&sess.config
-            .alpn_protocols)));
+        exts.push(ClientExtension::Protocols(ProtocolNameList::from_slices(&sess.config
+            .alpn_protocols
+            .iter()
+            .map(|proto| &proto[..])
+            .collect::<Vec<_>>()
+        )));
     }
 
 
@@ -497,7 +501,7 @@ fn validate_server_hello_tls13(sess: &mut ClientSessionImpl,
 }
 
 fn process_alpn_protocol(sess: &mut ClientSessionImpl,
-                         proto: Option<&str>)
+                         proto: Option<&[u8]>)
                          -> Result<(), TLSError> {
     sess.alpn_protocol = proto.map(|s| s.to_owned());
     if sess.alpn_protocol.is_some() &&
