@@ -25,7 +25,7 @@ pub enum BulkAlgorithm {
 /// The result of a key exchange.  This has our public key,
 /// and the agreed premaster secret.
 pub struct KeyExchangeResult {
-    pub pubkey: Vec<u8>,
+    pub pubkey: ring::agreement::PublicKey,
     pub premaster_secret: Vec<u8>,
 }
 
@@ -35,7 +35,7 @@ pub struct KeyExchange {
     pub group: NamedGroup,
     alg: &'static ring::agreement::Algorithm,
     privkey: ring::agreement::EphemeralPrivateKey,
-    pub pubkey: Vec<u8>,
+    pub pubkey: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
@@ -62,9 +62,7 @@ impl KeyExchange {
         let rng = ring::rand::SystemRandom::new();
         let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng).unwrap();
 
-        let mut pubkey = Vec::new();
-        pubkey.resize(ours.public_key_len(), 0u8);
-        ours.compute_public_key(pubkey.as_mut_slice()).unwrap();
+        let pubkey = ours.compute_public_key().unwrap();
 
         Some(KeyExchange {
             group: named_group,

@@ -325,7 +325,7 @@ impl ExpectClientHello {
             .and_then(|kx| kx.complete(&share.payload.0))
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
-        let kse = KeyShareEntry::new(share.group, &kxr.pubkey);
+        let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
         extensions.push(ServerExtension::KeyShare(kse));
         extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
@@ -685,7 +685,7 @@ impl ExpectClientHello {
         let kx = sess.common.get_suite_assert()
             .start_server_kx(*group)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
-        let secdh = ServerECDHParams::new(group, &kx.pubkey);
+        let secdh = ServerECDHParams::new(group, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();
         msg.extend(&self.handshake.randoms.client);
