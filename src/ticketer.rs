@@ -63,18 +63,24 @@ impl ProducesTickets for AEADTicketer {
     /// Encrypt `message` and return the ciphertext.
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
-        let mut nonce = [0u8; 12];
-        rand::fill_random(&mut nonce);
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            rand::fill_random(&mut nonce);
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
+        let nonce_len = nonce.as_ref().len();
+        let aad = ring::aead::Aad::empty();
 
         let mut out = Vec::new();
-        out.extend_from_slice(&nonce);
+        out.extend_from_slice(nonce.as_ref());
         out.extend_from_slice(message);
-        out.resize(nonce.len() + message.len() + self.alg.tag_len(), 0u8);
+        let out_len = out.len() + self.alg.tag_len();
+        out.resize(out_len, 0u8);
 
         let rc = aead::seal_in_place(&self.enc,
-                                     &nonce,
-                                     &[],
-                                     &mut out[nonce.len()..],
+                                     nonce,
+                                     aad,
+                                     &mut out[nonce_len..],
                                      self.alg.tag_len());
         if rc.is_err() { None } else { Some(out) }
     }
@@ -88,11 +94,13 @@ impl ProducesTickets for AEADTicketer {
             return None;
         }
 
-        let nonce = &ciphertext[0..nonce_len];
+        let nonce = ring::aead::Nonce::try_assume_unique_for_key(&ciphertext[0..nonce_len]).unwrap();
+        let aad = ring::aead::Aad::empty();
+
         let mut out = Vec::new();
         out.extend_from_slice(&ciphertext[nonce_len..]);
 
-        let plain_len = match aead::open_in_place(&self.dec, nonce, &[], 0, &mut out) {
+        let plain_len = match aead::open_in_place(&self.dec, nonce, aad, 0, &mut out) {
             Ok(plaintext) => plaintext.len(),
             Err(..) => { return None; }
         };
