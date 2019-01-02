@@ -157,16 +157,20 @@ impl MessageDecrypter for GCMMessageDecrypter {
             return Err(TLSError::DecryptError);
         }
 
-        let mut nonce = [0u8; 12];
-        nonce.as_mut().write_all(&self.dec_salt).unwrap();
-        nonce[4..].as_mut().write_all(&buf[..8]).unwrap();
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            nonce.as_mut().write_all(&self.dec_salt).unwrap();
+            nonce[4..].as_mut().write_all(&buf[..8]).unwrap();
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
         make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD, &mut aad);
+        let aad = ring::aead::Aad::from(&aad);
 
         let plain_len = ring::aead::open_in_place(&self.dec_key,
-                                                  &nonce,
-                                                  &aad,
+                                                  nonce,
+                                                  aad,
                                                   GCM_EXPLICIT_NONCE_LEN,
                                                   &mut buf)
             .map_err(|_| TLSError::DecryptError)?
@@ -196,23 +200,27 @@ impl MessageEncrypter for GCMMessageEncrypter {
         // a starting point extracted from the key block, xored with
         // the sequence number.
         //
-        let mut nonce = [0u8; 12];
-        nonce.as_mut().write_all(&self.enc_salt).unwrap();
-        codec::put_u64(seq, &mut nonce[4..]);
-        xor(&mut nonce[4..], &self.nonce_offset);
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            nonce.as_mut().write_all(&self.enc_salt).unwrap();
+            codec::put_u64(seq, &mut nonce[4..]);
+            xor(&mut nonce[4..], &self.nonce_offset);
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
 
         // make output buffer with room for nonce/tag
         let tag_len = self.alg.tag_len();
         let total_len = 8 + msg.payload.len() + tag_len;
         let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(&nonce[4..]);
+        buf.extend_from_slice(&nonce.as_ref()[4..]);
         buf.extend_from_slice(msg.payload);
         buf.resize(total_len, 0u8);
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
         make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
+        let aad = ring::aead::Aad::from(&aad);
 
-        ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf[8..], tag_len)
+        ring::aead::seal_in_place(&self.enc_key, nonce, aad, &mut buf[8..], tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
@@ -295,9 +303,12 @@ fn make_tls13_aad(len: usize, out: &mut [u8]) {
 
 impl MessageEncrypter for TLS13MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
-        let mut nonce = [0u8; 12];
-        codec::put_u64(seq, &mut nonce[4..]);
-        xor(&mut nonce, &self.enc_offset);
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            codec::put_u64(seq, &mut nonce[4..]);
+            xor(&mut nonce, &self.enc_offset);
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
 
         // make output buffer with room for content type and tag
         let tag_len = self.alg.tag_len();
@@ -309,7 +320,8 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         let mut aad = [0u8; TLS13_AAD_SIZE];
         make_tls13_aad(total_len, &mut aad);
 
-        ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf, tag_len)
+        ring::aead::seal_in_place(&self.enc_key, nonce, ring::aead::Aad::from(&aad), &mut buf,
+                                  tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
@@ -322,9 +334,12 @@ impl MessageEncrypter for TLS13MessageEncrypter {
 
 impl MessageDecrypter for TLS13MessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
-        let mut nonce = [0u8; 12];
-        codec::put_u64(seq, &mut nonce[4..]);
-        xor(&mut nonce, &self.dec_offset);
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            codec::put_u64(seq, &mut nonce[4..]);
+            xor(&mut nonce, &self.dec_offset);
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
 
         let payload = msg.take_opaque_payload()
             .ok_or(TLSError::DecryptError)?;
@@ -336,7 +351,8 @@ impl MessageDecrypter for TLS13MessageDecrypter {
 
         let mut aad = [0u8; TLS13_AAD_SIZE];
         make_tls13_aad(buf.len(), &mut aad);
-        let plain_len = ring::aead::open_in_place(&self.dec_key, &nonce, &aad, 0, &mut buf)
+        let aad = ring::aead::Aad::from(&aad);
+        let plain_len = ring::aead::open_in_place(&self.dec_key, nonce, aad, 0, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
             .len();
 
@@ -453,14 +469,18 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         // Nonce is offset_96 ^ (0_32 || seq_64)
-        let mut nonce = [0u8; 12];
-        codec::put_u64(seq, &mut nonce[4..]);
-        xor(&mut nonce, &self.dec_offset);
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            codec::put_u64(seq, &mut nonce[4..]);
+            xor(&mut nonce, &self.dec_offset);
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
         make_tls12_aad(seq, msg.typ, msg.version, buf.len() - CHACHAPOLY1305_OVERHEAD, &mut aad);
+        let aad = ring::aead::Aad::from(&aad);
 
-        let plain_len = ring::aead::open_in_place(&self.dec_key, &nonce, &aad, 0, &mut buf)
+        let plain_len = ring::aead::open_in_place(&self.dec_key, nonce, aad, 0, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
             .len();
 
@@ -480,12 +500,16 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
-        let mut nonce = [0u8; 12];
-        codec::put_u64(seq, &mut nonce[4..]);
-        xor(&mut nonce, &self.enc_offset);
+        let nonce = {
+            let mut nonce = [0u8; 12];
+            codec::put_u64(seq, &mut nonce[4..]);
+            xor(&mut nonce, &self.enc_offset);
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        };
 
         let mut aad = [0u8; TLS12_AAD_SIZE];
         make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
+        let aad = ring::aead::Aad::from(&aad);
 
         // make result buffer with room for tag, etc.
         let tag_len = self.alg.tag_len();
@@ -494,7 +518,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         buf.extend_from_slice(msg.payload);
         buf.resize(total_len, 0u8);
 
-        ring::aead::seal_in_place(&self.enc_key, &nonce, &aad, &mut buf, tag_len)
+        ring::aead::seal_in_place(&self.enc_key, nonce, aad, &mut buf, tag_len)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
