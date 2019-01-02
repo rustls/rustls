@@ -5,9 +5,7 @@ use error::TLSError;
 
 use untrusted;
 
-use ring;
-use ring::signature;
-use ring::signature::RSAKeyPair;
+use ring::{self, signature::{self, EcdsaKeyPair, RsaKeyPair}};
 use webpki;
 
 use std::sync::Arc;
@@ -164,7 +162,7 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<SigningKey>, ()> {
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS
 pub struct RSASigningKey {
-    key: Arc<RSAKeyPair>,
+    key: Arc<RsaKeyPair>,
 }
 
 static ALL_RSA_SCHEMES: &'static [SignatureScheme] = &[
@@ -180,8 +178,8 @@ impl RSASigningKey {
     /// Make a new `RSASigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
     pub fn new(der: &key::PrivateKey) -> Result<RSASigningKey, ()> {
-        RSAKeyPair::from_der(untrusted::Input::from(&der.0))
-            .or_else(|_| RSAKeyPair::from_pkcs8(untrusted::Input::from(&der.0)))
+        RsaKeyPair::from_der(untrusted::Input::from(&der.0))
+            .or_else(|_| RsaKeyPair::from_pkcs8(untrusted::Input::from(&der.0)))
             .map(|s| {
                  RSASigningKey {
                      key: Arc::new(s),
@@ -203,14 +201,14 @@ impl SigningKey for RSASigningKey {
 }
 
 struct RSASigner {
-    key: Arc<RSAKeyPair>,
+    key: Arc<RsaKeyPair>,
     scheme: SignatureScheme,
-    encoding: &'static signature::RSAEncoding
+    encoding: &'static signature::RsaEncoding
 }
 
 impl RSASigner {
-    fn new(key: Arc<RSAKeyPair>, scheme: SignatureScheme) -> Box<Signer> {
-        let encoding: &signature::RSAEncoding = match scheme {
+    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<Signer> {
+        let encoding: &signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_SHA512,
@@ -229,10 +227,7 @@ impl Signer for RSASigner {
         let mut sig = vec![0; self.key.public_modulus_len()];
 
         let rng = ring::rand::SystemRandom::new();
-        let mut signer = signature::RSASigningState::new(self.key.clone())
-            .map_err(|_| TLSError::General("signing state creation failed".to_string()))?;
-
-        signer.sign(self.encoding, &rng, message, &mut sig)
+        self.key.sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
             .map_err(|_| TLSError::General("signing failed".to_string()))
     }
@@ -254,7 +249,7 @@ impl Signer for RSASigner {
 ///
 /// Currently this is only implemented for ECDSA keys.
 struct SingleSchemeSigningKey {
-    key: Arc<signature::KeyPair>,
+    key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
 
@@ -263,9 +258,8 @@ impl SingleSchemeSigningKey {
     /// expecting a key usable with precisely the given signature scheme.
     pub fn new(der: &key::PrivateKey,
                scheme: SignatureScheme,
-               sigalg: &'static signature::SigningAlgorithm) -> Result<SingleSchemeSigningKey, ()> {
-        signature::key_pair_from_pkcs8(sigalg,
-                                       untrusted::Input::from(&der.0))
+               sigalg: &'static signature::EcdsaSigningAlgorithm) -> Result<SingleSchemeSigningKey, ()> {
+        EcdsaKeyPair::from_pkcs8(sigalg, untrusted::Input::from(&der.0))
             .map(|kp| SingleSchemeSigningKey { key: Arc::new(kp), scheme })
             .map_err(|_| ())
     }
@@ -287,16 +281,14 @@ impl SigningKey for SingleSchemeSigningKey {
 }
 
 struct SingleSchemeSigner {
-    key: Arc<signature::KeyPair>,
+    key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
 
 impl Signer for SingleSchemeSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
         let rng = ring::rand::SystemRandom::new();
-        ring::signature::sign(&self.key,
-                              &rng,
-                              untrusted::Input::from(message))
+        self.key.sign(&rng, untrusted::Input::from(message))
             .map_err(|_| TLSError::General("signing failed".into()))
             .map(|sig| sig.as_ref().into())
     }
