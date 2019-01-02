@@ -278,13 +278,13 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             // in reply to HelloRetryRequest, we must not alter any existing key
             // shares
             if let Some(already_offered_share) = hello.find_key_share(group) {
-                key_shares.push(KeyShareEntry::new(group, &already_offered_share.pubkey));
+                key_shares.push(KeyShareEntry::new(group, already_offered_share.pubkey.as_ref()));
                 hello.offered_key_shares.push(already_offered_share);
                 continue;
             }
 
             if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
-                key_shares.push(KeyShareEntry::new(group, &key_share.pubkey));
+                key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
                 hello.offered_key_shares.push(key_share);
             }
         }
@@ -1418,7 +1418,7 @@ fn emit_certificate(client_auth: &mut ClientAuthDetails,
 fn emit_clientkx(sess: &mut ClientSessionImpl,
                  kxd: &suites::KeyExchangeResult) {
     let mut buf = Vec::new();
-    let ecpoint = PayloadU8::new(kxd.pubkey.clone());
+    let ecpoint = PayloadU8::new(Vec::from(kxd.pubkey.as_ref()));
     ecpoint.encode(&mut buf);
     let pubkey = Payload::new(buf);
 
