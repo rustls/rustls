@@ -184,6 +184,8 @@
     "ServerAuth-Verify-RSA-PKCS1-SHA384-TLS13": ":PEER_MISBEHAVIOUR:",
     "ClientAuth-Verify-RSA-PKCS1-SHA512-TLS13": ":PEER_MISBEHAVIOUR:",
     "ServerAuth-Verify-RSA-PKCS1-SHA512-TLS13": ":PEER_MISBEHAVIOUR:",
+    "ClientAuth-InvalidSignature-RSA-PKCS1-SHA1-TLS12": ":PEER_MISBEHAVIOUR:",
+    "ServerAuth-InvalidSignature-RSA-PKCS1-SHA1-TLS12": ":PEER_MISBEHAVIOUR:",
     "ServerAuth-Sign-RSA-PKCS1-SHA256-TLS13": ":INCOMPATIBLE:",
     "ServerAuth-Sign-RSA-PKCS1-SHA384-TLS13": ":INCOMPATIBLE:",
     "ServerAuth-Sign-RSA-PKCS1-SHA512-TLS13": ":INCOMPATIBLE:",
@@ -296,6 +298,8 @@
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
     "GarbageCertificate-Server-TLS12": "remote error: access denied",
-    "GarbageCertificate-Server-TLS13": "remote error: access denied"
+    "GarbageCertificate-Server-TLS13": "remote error: access denied",
+    "ClientAuth-Verify-RSA-PKCS1-SHA1-TLS12": "remote error: access denied",
+    "ServerAuth-Verify-RSA-PKCS1-SHA1-TLS12": "remote error: illegal parameter"
   }
 }
