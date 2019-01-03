@@ -111,6 +111,7 @@ impl RootCertStore {
         let mut invalid_count = 0;
 
         for der in ders {
+            #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
             match self.add(&der) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
