@@ -1303,8 +1303,11 @@ impl State for ExpectTLS12ServerKX {
         decoded_kx.encode_params(&mut kx_params);
         let skx = ServerKXDetails::new(kx_params, decoded_kx.get_sig().unwrap());
 
-        if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
-            debug!("ECDHE curve is {:?}", ecdhe.params.curve_params);
+        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+        {
+            if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
+                debug!("ECDHE curve is {:?}", ecdhe.params.curve_params);
+            }
         }
 
         Ok(self.into_expect_tls12_server_done_or_certreq(skx))

@@ -379,6 +379,7 @@ pub fn verify_scts(cert: &Certificate,
     let mut last_sct_error = None;
 
     for sct in scts {
+        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         match sct::verify_sct(&cert.0, &sct.0, now, logs) {
             Ok(index) => {
                 debug!("Valid SCT signed by {} on {}",
