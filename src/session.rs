@@ -904,6 +904,7 @@ pub(crate) struct Quic {
     pub params: Option<Vec<u8>>,
     pub alert: Option<AlertDescription>,
     pub hs_queue: VecDeque<(bool, Vec<u8>)>,
+    pub early_secret: Option<Vec<u8>>,
     pub hs_secrets: Option<quic::Secrets>,
     pub traffic_secrets: Option<quic::Secrets>,
 }
@@ -918,6 +919,7 @@ impl Quic {
             params: None,
             alert: None,
             hs_queue: VecDeque::new(),
+            early_secret: None,
             hs_secrets: None,
             traffic_secrets: None,
         }
