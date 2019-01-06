@@ -24,6 +24,9 @@ pub trait QuicExt {
     /// Return the TLS-encoded transport parameters for the session's peer.
     fn get_quic_transport_parameters(&self) -> Option<&[u8]>;
 
+    /// Return the early traffic secret, used to encrypt 0-RTT data.
+    fn get_early_secret(&self) -> Option<&[u8]>;
+
     /// Consume unencrypted TLS handshake data.
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
@@ -49,6 +52,10 @@ impl QuicExt for ClientSession {
         self.imp.common.quic.params.as_ref().map(|v| v.as_ref())
     }
 
+    fn get_early_secret(&self) -> Option<&[u8]> {
+        self.imp.common.quic.early_secret.as_ref().map(|x| &x[..])
+    }
+
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
         self.imp.common
             .handshake_joiner
@@ -71,6 +78,10 @@ impl QuicExt for ClientSession {
 impl QuicExt for ServerSession {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
         self.imp.common.quic.params.as_ref().map(|v| v.as_ref())
+    }
+
+    fn get_early_secret(&self) -> Option<&[u8]> {
+        self.imp.common.quic.early_secret.as_ref().map(|x| &x[..])
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {

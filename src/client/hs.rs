@@ -456,6 +456,11 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         sess.common
             .set_message_encrypter(cipher::new_tls13_write(resuming_suite, &client_early_traffic_secret));
 
+        #[cfg(feature = "quic")]
+        {
+            sess.common.quic.early_secret = Some(client_early_traffic_secret);
+        }
+
         // Now the client can send encrypted early data
         sess.common.early_traffic = true;
         trace!("Starting early data traffic");
@@ -600,8 +605,16 @@ impl ExpectServerHello {
 
         #[cfg(feature = "quic")] {
             let key_schedule = sess.common.key_schedule.as_ref().unwrap();
+            let client = if sess.early_data.is_enabled() {
+                // Traffic secret wasn't computed and stored above, so do it here.
+                sess.common.get_key_schedule()
+                    .derive(SecretKind::ClientHandshakeTrafficSecret,
+                            &self.handshake.hash_at_client_recvd_server_hello)
+            } else {
+                key_schedule.current_client_traffic_secret.clone()
+            };
             sess.common.quic.hs_secrets = Some(quic::Secrets {
-                client: key_schedule.current_client_traffic_secret.clone(),
+                client,
                 server: key_schedule.current_server_traffic_secret.clone(),
             });
         }
@@ -2053,6 +2066,11 @@ fn emit_finished_tls13(sess: &mut ClientSessionImpl) {
 }
 
 fn emit_end_of_early_data_tls13(sess: &mut ClientSessionImpl) {
+    #[cfg(feature = "quic")]
+    {
+        if let Protocol::Quic = sess.common.protocol { return; }
+    }
+
     let m = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
