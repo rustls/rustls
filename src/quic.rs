@@ -12,6 +12,7 @@ use std::sync::Arc;
 use webpki;
 
 /// Secrets used to encrypt/decrypt traffic
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
     pub client: Vec<u8>,
