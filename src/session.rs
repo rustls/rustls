@@ -205,7 +205,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Protocol {
     Tls13,
     #[cfg(feature = "quic")]

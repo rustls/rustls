@@ -141,6 +141,11 @@ pub struct ServerConfig {
     /// How to output key material for debugging.  The default
     /// does nothing.
     pub key_log: Arc<KeyLog>,
+
+    /// Amount of early data to accept; 0 to disable.
+    #[cfg(feature = "quic")]    // TLS support unimplemented
+    #[doc(hidden)]
+    pub max_early_data_size: u32,
 }
 
 impl ServerConfig {
@@ -169,6 +174,8 @@ impl ServerConfig {
             versions: vec![ ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2 ],
             verifier: client_cert_verifier,
             key_log: Arc::new(NoKeyLog {}),
+            #[cfg(feature = "quic")]
+            max_early_data_size: 0,
         }
     }
 
