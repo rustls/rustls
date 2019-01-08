@@ -791,7 +791,7 @@ impl SessionCommon {
     }
 
     pub fn send_close_notify(&mut self) {
-        info!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
 
