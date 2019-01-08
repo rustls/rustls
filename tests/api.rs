@@ -1909,6 +1909,7 @@ fn quic_handshake() {
     let client_config = Arc::new(client_config);
     let mut server_config = make_server_config(kt);
     server_config.versions = vec![ProtocolVersion::TLSv1_3];
+    server_config.max_early_data_size = 0xffffffff;
     let server_config = Arc::new(server_config);
     let client_params = &b"client params"[..];
     let server_params = &b"server params"[..];
@@ -1968,6 +1969,15 @@ fn quic_handshake() {
         ]
     );
 
+    // 0-RTT handshake
+    let mut client =
+        ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
+    let mut server = ServerSession::new_quic(&server_config, server_params.into());
+    step(&mut client, &mut server).unwrap();
+    let client_early = client.get_early_secret().unwrap();
+    let server_early = server.get_early_secret().unwrap();
+    assert_eq!(client_early, server_early);
+
     // failed handshake
     let mut client = ClientSession::new_quic(
         &client_config,
@@ -1982,7 +1992,4 @@ fn quic_handshake() {
         client.get_alert(),
         Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
     );
-
-    // TODO: We can't easily test 0-RTT secret availability because we don't yet support 0-RTT on
-    // the server.
 }
