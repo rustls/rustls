@@ -85,12 +85,16 @@ impl PayloadU16 {
     pub fn empty() -> PayloadU16 {
         PayloadU16::new(Vec::new())
     }
+
+    pub fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
+        (slice.len() as u16).encode(bytes);
+        bytes.extend_from_slice(slice);
+    }
 }
 
 impl Codec for PayloadU16 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        (self.0.len() as u16).encode(bytes);
-        bytes.extend_from_slice(&self.0);
+        Self::encode_slice(&self.0, bytes);
     }
 
     fn read(r: &mut Reader) -> Option<PayloadU16> {
