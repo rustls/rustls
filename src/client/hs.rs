@@ -1,7 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
 use msgs::message::{Message, MessagePayload};
-use msgs::base::{Payload, PayloadU8};
+use msgs::base::{Payload, PayloadU8, PayloadU16};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random, ServerHelloPayload};
 use msgs::handshake::{ClientExtension, HasServerExtensions};
@@ -16,7 +16,7 @@ use msgs::handshake::DigitallySignedStruct;
 use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
 use msgs::handshake::{CertificateStatusRequest, SCTList};
 use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode, ECPointFormat};
-use msgs::codec::Codec;
+use msgs::codec::{Codec, Reader};
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::ClientSessionImpl;
@@ -99,10 +99,17 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef)
     }
 
     let value = maybe_value.unwrap();
-    if let Some(result) = persist::ClientSessionValue::read_bytes(&value) {
+    let mut reader = Reader::init(&value[..]);
+    if let Some(result) = persist::ClientSessionValue::read(&mut reader) {
         if result.has_expired(ticketer::timebase()) {
             None
         } else {
+            #[cfg(feature = "quic")] {
+                if sess.common.protocol == Protocol::Quic {
+                    let params = PayloadU16::read(&mut reader)?;
+                    sess.common.quic.params = Some(params.0);
+                }
+            }
             Some(result)
         }
     } else {
@@ -2329,8 +2336,14 @@ impl ExpectTLS13Traffic {
 
         let key = persist::ClientSessionKey::session_for_dns_name(self.handshake.dns_name.as_ref());
 
+        let mut ticket = value.get_encoding();
+        #[cfg(feature = "quic")] {
+            if sess.common.protocol == Protocol::Quic {
+                PayloadU16::encode_slice(sess.common.quic.params.as_ref().unwrap(), &mut ticket);
+            }
+        }
         let worked = sess.config.session_persistence.put(key.get_encoding(),
-                                                         value.get_encoding());
+                                                         ticket);
 
         if worked {
             debug!("Ticket saved");

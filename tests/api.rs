@@ -1974,6 +1974,7 @@ fn quic_handshake() {
         ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
     let mut server = ServerSession::new_quic(&server_config, server_params.into());
     step(&mut client, &mut server).unwrap();
+    assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
     let client_early = client.get_early_secret().unwrap();
     let server_early = server.get_early_secret().unwrap();
     assert_eq!(client_early, server_early);
