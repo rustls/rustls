@@ -379,7 +379,7 @@ pub type ProtocolNameList = VecU16OfPayloadU8;
 pub trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
     fn to_vecs(&self) -> Vec<Vec<u8>>;
-    fn as_single_vec(&self) -> Option<&[u8]>;
+    fn as_single_slice(&self) -> Option<&[u8]>;
 }
 
 impl ConvertProtocolNameList for ProtocolNameList {
@@ -401,7 +401,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
         ret
     }
 
-    fn as_single_vec(&self) -> Option<&[u8]> {
+    fn as_single_slice(&self) -> Option<&[u8]> {
         if self.len() == 1 {
             Some(&self[0].0)
         } else {
@@ -1779,7 +1779,7 @@ pub trait HasServerExtensions {
     fn get_alpn_protocol(&self) -> Option<&[u8]> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
-            ServerExtension::Protocols(ref protos) => protos.as_single_vec(),
+            ServerExtension::Protocols(ref protos) => protos.as_single_slice(),
             _ => None,
         }
     }
