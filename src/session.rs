@@ -421,6 +421,7 @@ pub struct SessionCommon {
     pub hs_transcript: hash_hs::HandshakeHash,
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub protocol: Protocol,
+    #[cfg(feature = "quic")]
     pub(crate) quic: Quic,
 }
 
@@ -450,6 +451,7 @@ impl SessionCommon {
             sendable_tls: ChunkVecBuffer::new(),
             hs_transcript: hash_hs::HandshakeHash::new(),
             protocol: Protocol::Tls13,
+            #[cfg(feature = "quic")]
             quic: Quic::new(),
         }
     }
@@ -909,11 +911,8 @@ pub(crate) struct Quic {
     pub traffic_secrets: Option<quic::Secrets>,
 }
 
-#[cfg(not(feature = "quic"))]
-pub(crate) struct Quic {}
-
+#[cfg(feature = "quic")]
 impl Quic {
-    #[cfg(feature = "quic")]
     pub fn new() -> Self {
         Self {
             params: None,
@@ -924,6 +923,4 @@ impl Quic {
             traffic_secrets: None,
         }
     }
-    #[cfg(not(feature = "quic"))]
-    pub fn new() -> Self { Self {} }
 }

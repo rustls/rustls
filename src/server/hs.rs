@@ -12,7 +12,7 @@ use msgs::handshake::{NamedGroups, SupportedGroups, ClientExtension};
 use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
-use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload, NewSessionTicketExtension};
+use msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload};
 use msgs::handshake::{CertificateRequestPayloadTLS13, NewSessionTicketPayloadTLS13};
 use msgs::handshake::{HelloRetryRequest, HelloRetryExtension, KeyShareEntry};
 use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
@@ -21,7 +21,7 @@ use msgs::handshake::{CertReqExtension, SupportedMandatedSignatureSchemes};
 use msgs::ccs::ChangeCipherSpecPayload;
 use msgs::codec::Codec;
 use msgs::persist;
-use session::{SessionSecrets, Protocol};
+use session::SessionSecrets;
 use cipher;
 use server::ServerSessionImpl;
 use key_schedule::{KeySchedule, SecretKind};
@@ -34,7 +34,11 @@ use error::TLSError;
 use handshake::{check_handshake_message, check_message};
 use webpki;
 #[cfg(feature = "quic")]
-use quic;
+use {
+    quic,
+    msgs::handshake::NewSessionTicketExtension,
+    session::Protocol
+};
 
 use server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 
@@ -370,7 +374,9 @@ impl ExpectClientHello {
 
         check_aligned_handshake(sess)?;
 
-        let client_hello_hash = sess.common.hs_transcript.get_hash_given(sess.common.get_suite_assert().get_hash(), &[]);
+        #[cfg(feature = "quic")]
+        let client_hello_hash = sess.common.hs_transcript
+            .get_hash_given(sess.common.get_suite_assert().get_hash(), &[]);
 
         trace!("sending server hello {:?}", sh);
         sess.common.hs_transcript.add_message(&sh);
@@ -1753,6 +1759,7 @@ impl ExpectTLS13Finished {
 
         let ticket = maybe_ticket.unwrap();
         let age_add = rand::random_u32(); // nb, we don't do 0-RTT data, so whatever
+        #[allow(unused_mut)]
         let mut payload = NewSessionTicketPayloadTLS13::new(ticket_lifetime, age_add, nonce, ticket);
         #[cfg(feature = "quic")] {
             if sess.config.max_early_data_size > 0 && sess.common.protocol == Protocol::Quic {
@@ -1783,6 +1790,7 @@ impl ExpectTLS13Finished {
         if sess.config.session_storage.put(id.clone(), plain) {
             let stateful_lifetime = 24 * 60 * 60; // this is a bit of a punt
             let age_add = rand::random_u32();
+            #[allow(unused_mut)]
             let mut payload = NewSessionTicketPayloadTLS13::new(stateful_lifetime, age_add, nonce, id);
             #[cfg(feature = "quic")] {
                 if sess.config.max_early_data_size > 0 && sess.common.protocol == Protocol::Quic {

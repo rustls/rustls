@@ -1,7 +1,7 @@
 use msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
 use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
 use msgs::message::{Message, MessagePayload};
-use msgs::base::{Payload, PayloadU8, PayloadU16};
+use msgs::base::{Payload, PayloadU8};
 use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use msgs::handshake::{SessionID, Random, ServerHelloPayload};
 use msgs::handshake::{ClientExtension, HasServerExtensions};
@@ -20,7 +20,7 @@ use msgs::codec::{Codec, Reader};
 use msgs::persist;
 use msgs::ccs::ChangeCipherSpecPayload;
 use client::ClientSessionImpl;
-use session::{SessionSecrets, Protocol};
+use session::SessionSecrets;
 use key_schedule::{KeySchedule, SecretKind};
 use cipher;
 use suites;
@@ -31,7 +31,11 @@ use ticketer;
 use error::TLSError;
 use handshake::{check_message, check_handshake_message};
 #[cfg(feature = "quic")]
-use quic;
+use {
+    quic,
+    msgs::base::PayloadU16,
+    session::Protocol
+};
 
 use client::common::{ServerCertDetails, ServerKXDetails, HandshakeDetails};
 use client::common::{ClientHelloDetails, ReceivedTicketDetails, ClientAuthDetails};
@@ -2347,13 +2351,15 @@ impl ExpectTLS13Traffic {
         }
 
         let key = persist::ClientSessionKey::session_for_dns_name(self.handshake.dns_name.as_ref());
-
+        #[allow(unused_mut)]
         let mut ticket = value.get_encoding();
+
         #[cfg(feature = "quic")] {
             if sess.common.protocol == Protocol::Quic {
                 PayloadU16::encode_slice(sess.common.quic.params.as_ref().unwrap(), &mut ticket);
             }
         }
+
         let worked = sess.config.session_persistence.put(key.get_encoding(),
                                                          ticket);
 
