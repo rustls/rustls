@@ -17,11 +17,21 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
+* 0.15.0 (next release):
+  - Update dependencies.
+  - *Breaking API change*: ALPN protocols are now encoded as a `Vec<u8>`, not
+    a `String`.  This alters the type of:
+    - `ClientConfig::alpn_protocols`
+    - `ClientConfig::set_protocols`
+    - `ServerConfig::alpn_protocols`
+    - `ServerConfig::set_protocols`
+    - `Session::get_alpn_protocol`
+  - Emit a warning when receiving an invalid SNI extension, such as one
+    including an IP address.
 * 0.14.0 (2018-09-30):
-  - Move TLS1.3 support from draft 23 to 28.
   - Introduce client-side support for 0-RTT data in TLS1.3.
   - Fix a bug in rustls::Stream for non-blocking transports.
-  - Move TLS1.3 support from draft 28 to final RFC8446 version.
+  - Move TLS1.3 support from draft 23 to final RFC8446 version.
   - Don't offer (eg) TLS1.3 if no TLS1.3 suites are configured.
   - Support stateful resumption in TLS1.3.  Stateless resumption
     was previously supported, but is not the default configuration.
