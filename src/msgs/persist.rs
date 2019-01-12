@@ -172,6 +172,7 @@ pub struct ServerSessionValue {
     pub master_secret: PayloadU8,
     pub extended_ms: bool,
     pub client_cert_chain: Option<CertificatePayload>,
+    pub alpn: Option<PayloadU8>,
 }
 
 impl Codec for ServerSessionValue {
@@ -187,8 +188,17 @@ impl Codec for ServerSessionValue {
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
         (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
-        if self.client_cert_chain.is_some() {
-            self.client_cert_chain.as_ref().unwrap().encode(bytes);
+        if let Some(ref chain) = self.client_cert_chain {
+            1u8.encode(bytes);
+            chain.encode(bytes);
+        } else {
+            0u8.encode(bytes);
+        }
+        if let Some(ref alpn) = self.alpn {
+            1u8.encode(bytes);
+            alpn.encode(bytes);
+        } else {
+            0u8.encode(bytes);
         }
     }
 
@@ -206,8 +216,15 @@ impl Codec for ServerSessionValue {
         let cs = CipherSuite::read(r)?;
         let ms = PayloadU8::read(r)?;
         let ems = u8::read(r)?;
-        let ccert = if r.any_left() {
-            CertificatePayload::read(r)
+        let has_ccert = u8::read(r)? == 1;
+        let ccert = if has_ccert {
+            Some(CertificatePayload::read(r)?)
+        } else {
+            None
+        };
+        let has_alpn = u8::read(r)? == 1;
+        let alpn = if has_alpn {
+            Some(PayloadU8::read(r)?)
         } else {
             None
         };
@@ -219,6 +236,7 @@ impl Codec for ServerSessionValue {
             master_secret: ms,
             extended_ms: ems == 1u8,
             client_cert_chain: ccert,
+            alpn,
         })
     }
 }
@@ -228,7 +246,8 @@ impl ServerSessionValue {
                v: ProtocolVersion,
                cs: CipherSuite,
                ms: Vec<u8>,
-               cert_chain: &Option<CertificatePayload>)
+               cert_chain: &Option<CertificatePayload>,
+               alpn: Option<Vec<u8>>)
                -> ServerSessionValue {
         ServerSessionValue {
             sni: sni.cloned(),
@@ -237,6 +256,7 @@ impl ServerSessionValue {
             master_secret: PayloadU8::new(ms),
             extended_ms: false,
             client_cert_chain: cert_chain.clone(),
+            alpn: alpn.map(PayloadU8::new),
         }
     }
 

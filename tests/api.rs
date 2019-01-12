@@ -1910,6 +1910,7 @@ fn quic_handshake() {
     let mut server_config = make_server_config(kt);
     server_config.versions = vec![ProtocolVersion::TLSv1_3];
     server_config.max_early_data_size = 0xffffffff;
+    server_config.alpn_protocols = vec!["foo".into()];
     let server_config = Arc::new(server_config);
     let client_params = &b"client params"[..];
     let server_params = &b"server params"[..];
@@ -1975,9 +1976,32 @@ fn quic_handshake() {
     let mut server = ServerSession::new_quic(&server_config, server_params.into());
     step(&mut client, &mut server).unwrap();
     assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
-    let client_early = client.get_early_secret().unwrap();
-    let server_early = server.get_early_secret().unwrap();
-    assert_eq!(client_early, server_early);
+    {
+        let client_early = client.get_early_secret().unwrap();
+        let server_early = server.get_early_secret().unwrap();
+        assert_eq!(client_early, server_early);
+    }
+    step(&mut server, &mut client).unwrap().unwrap();
+    step(&mut client, &mut server).unwrap().unwrap();
+    step(&mut server, &mut client).unwrap().unwrap();
+    assert!(client.is_early_data_accepted());
+
+    // 0-RTT rejection
+    {
+        let mut client_config = (*client_config).clone();
+        client_config.alpn_protocols = vec!["foo".into()];
+        let mut client =
+            ClientSession::new_quic(&Arc::new(client_config), dns_name("localhost"), client_params.into());
+        let mut server = ServerSession::new_quic(&server_config, server_params.into());
+        step(&mut client, &mut server).unwrap();
+        assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
+        assert!(client.get_early_secret().is_some());
+        assert!(server.get_early_secret().is_none());
+        step(&mut server, &mut client).unwrap().unwrap();
+        step(&mut client, &mut server).unwrap().unwrap();
+        step(&mut server, &mut client).unwrap().unwrap();
+        assert!(!client.is_early_data_accepted());
+    }
 
     // failed handshake
     let mut client = ClientSession::new_quic(
