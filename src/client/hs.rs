@@ -2100,13 +2100,13 @@ struct ExpectTLS13Finished {
 
 impl ExpectTLS13Finished {
     fn into_expect_tls13_traffic(self,
-                                 fin: verify::FinishedMessageVerified) -> NextState {
-        Box::new(ExpectTLS13Traffic {
+                                 fin: verify::FinishedMessageVerified) -> ExpectTLS13Traffic {
+        ExpectTLS13Traffic {
             handshake: self.handshake,
             _cert_verified: self.cert_verified,
             _sig_verified: self.sig_verified,
             _fin_verified: fin,
-        })
+        }
     }
 }
 
@@ -2206,17 +2206,22 @@ impl State for ExpectTLS13Finished {
             .get_mut_key_schedule()
             .current_client_traffic_secret = write_key;
 
-        #[cfg(feature = "quic")] {
-            let key_schedule = sess.common.key_schedule.as_ref().unwrap();
-            sess.common.quic.traffic_secrets = Some(quic::Secrets {
-                client: key_schedule.current_client_traffic_secret.clone(),
-                server: key_schedule.current_server_traffic_secret.clone(),
-            });
-        }
-
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
-        Ok(st.into_expect_tls13_traffic(fin))
+
+        let st = st.into_expect_tls13_traffic(fin);
+        #[cfg(feature = "quic")] {
+            if sess.common.protocol == Protocol::Quic {
+                let key_schedule = sess.common.key_schedule.as_ref().unwrap();
+                sess.common.quic.traffic_secrets = Some(quic::Secrets {
+                    client: key_schedule.current_client_traffic_secret.clone(),
+                    server: key_schedule.current_server_traffic_secret.clone(),
+                });
+                return Ok(Box::new(ExpectQUICTraffic(st)));
+            }
+        }
+
+        Ok(Box::new(st))
     }
 }
 
@@ -2382,6 +2387,21 @@ impl State for ExpectTLS13Traffic {
             self.handle_key_update(sess, m)?;
         }
 
+        Ok(self)
+    }
+}
+
+#[cfg(feature = "quic")]
+pub struct ExpectQUICTraffic(ExpectTLS13Traffic);
+
+#[cfg(feature = "quic")]
+impl State for ExpectQUICTraffic {
+    fn check_message(&self, m: &Message) -> CheckResult {
+        check_message(m, &[ContentType::Handshake], &[HandshakeType::NewSessionTicket])
+    }
+
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
+        self.0.handle_new_ticket_tls13(sess, m)?;
         Ok(self)
     }
 }

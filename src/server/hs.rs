@@ -1860,6 +1860,12 @@ impl State for ExpectTLS13Finished {
         sess.common.we_now_encrypting();
         sess.common.start_traffic();
 
+        #[cfg(feature = "quic")] {
+            if sess.common.protocol == Protocol::Quic {
+                return Ok(Box::new(ExpectQUICTraffic { _fin_verified: fin }));
+            }
+        }
+
         Ok(self.into_expect_tls13_traffic(fin))
     }
 }
@@ -1914,5 +1920,24 @@ impl State for ExpectTLS13Traffic {
         }
 
         Ok(self)
+    }
+}
+
+#[cfg(feature = "quic")]
+pub struct ExpectQUICTraffic {
+    _fin_verified: verify::FinishedMessageVerified,
+}
+
+#[cfg(feature = "quic")]
+impl State for ExpectQUICTraffic {
+    fn check_message(&self, m: &Message) -> CheckResult {
+        Err(TLSError::InappropriateMessage {
+            expect_types: Vec::new(),
+            got_type: m.typ,
+        })
+    }
+
+    fn handle(self: Box<Self>, _: &mut ServerSessionImpl, _: Message) -> NextStateOrError {
+        unreachable!("check_message always fails");
     }
 }
