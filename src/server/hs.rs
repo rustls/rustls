@@ -196,7 +196,7 @@ impl ExpectClientHello {
                           sess: &mut ServerSessionImpl,
                           server_key: Option<&mut sign::CertifiedKey>,
                           hello: &ClientHelloPayload,
-                          for_resume: bool)
+                          resumedata: Option<&persist::ServerSessionValue>)
                           -> Result<Vec<ServerExtension>, TLSError> {
         let mut ret = Vec::new();
 
@@ -218,14 +218,28 @@ impl ExpectClientHello {
             }
         }
 
-        #[cfg(feature = "quic")]
-        {
-            // QUIC transport parameters
-            if let Some(params) = hello.get_quic_params_extension() {
-                sess.common.quic.params = Some(params);
+        #[cfg(feature = "quic")] {
+            if sess.common.protocol == Protocol::Quic {
+                if let Some(params) = hello.get_quic_params_extension() {
+                    sess.common.quic.params = Some(params);
+                }
+
+                if let Some(resume) = resumedata {
+                    if sess.config.max_early_data_size > 0
+                        && resume.version == sess.common.negotiated_version.unwrap()
+                        && resume.cipher_suite == sess.common.get_suite_assert().suite
+                        && resume.alpn.as_ref().map(|x| &x.0) == sess.alpn_protocol.as_ref()
+                    {
+                        ret.push(ServerExtension::EarlyData);
+                    } else {
+                        // Clobber value set in emit_server_hello_tls13
+                        sess.common.quic.early_secret = None;
+                    }
+                }
             }
         }
 
+        let for_resume = resumedata.is_some();
         // SNI
         if !for_resume && hello.get_sni_extension().is_some() {
             ret.push(ServerExtension::ServerNameAck);
@@ -321,7 +335,7 @@ impl ExpectClientHello {
                                session_id: &SessionID,
                                share: &KeyShareEntry,
                                chosen_psk_idx: Option<usize>,
-                               resuming_psk: Option<Vec<u8>>)
+                               resuming_psk: Option<&[u8]>)
                                -> Result<(), TLSError> {
         let mut extensions = Vec::new();
 
@@ -366,12 +380,14 @@ impl ExpectClientHello {
         let suite = sess.common.get_suite_assert();
         let mut key_schedule = KeySchedule::new(suite.get_hash());
         if let Some(psk) = resuming_psk {
-            key_schedule.input_secret(&psk);
+            key_schedule.input_secret(psk);
 
             #[cfg(feature = "quic")] {
                 if sess.common.protocol == Protocol::Quic {
                     let client_early_traffic_secret = key_schedule
                         .derive(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash);
+                    // If 0-RTT should be rejected, this will be clobbered by process_extensions
+                    // before the application can see.
                     sess.common.quic.early_secret = Some(client_early_traffic_secret);
                 }
             }
@@ -451,9 +467,9 @@ impl ExpectClientHello {
                                  sess: &mut ServerSessionImpl,
                                  server_key: &mut sign::CertifiedKey,
                                  hello: &ClientHelloPayload,
-                                 for_resume: bool)
+                                 resumedata: Option<&persist::ServerSessionValue>)
                                  -> Result<(), TLSError> {
-        let encrypted_exts = self.process_extensions(sess, Some(server_key), hello, for_resume)?;
+        let encrypted_exts = self.process_extensions(sess, Some(server_key), hello, resumedata)?;
         let ee = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
@@ -647,9 +663,9 @@ impl ExpectClientHello {
                          sess: &mut ServerSessionImpl,
                          server_key: Option<&mut sign::CertifiedKey>,
                          hello: &ClientHelloPayload,
-                         for_resume: bool)
+                         resumedata: Option<&persist::ServerSessionValue>)
                          -> Result<(), TLSError> {
-        let extensions = self.process_extensions(sess, server_key, hello, for_resume)?;
+        let extensions = self.process_extensions(sess, server_key, hello, resumedata)?;
 
         let sh = Message {
             typ: ContentType::Handshake,
@@ -831,7 +847,7 @@ impl ExpectClientHello {
         }
 
         self.handshake.session_id = *id;
-        self.emit_server_hello(sess, None, client_hello, true)?;
+        self.emit_server_hello(sess, None, client_hello, Some(&resumedata))?;
 
         let hashalg = sess.common.get_suite_assert().get_hash();
         let secrets = SessionSecrets::new_resume(&self.handshake.randoms,
@@ -915,7 +931,7 @@ impl ExpectClientHello {
             .unwrap();
 
         let mut chosen_psk_index = None;
-        let mut resuming_psk = None;
+        let mut resumedata = None;
         if let Some(psk_offer) = client_hello.get_psk() {
             if !client_hello.check_psk_ext_is_last() {
                 return Err(illegal_param(sess, "psk extension in wrong position"));
@@ -944,7 +960,7 @@ impl ExpectClientHello {
                 }
 
                 chosen_psk_index = Some(i);
-                resuming_psk = Some(resume.master_secret.0);
+                resumedata = Some(resume);
                 break;
             }
         }
@@ -953,19 +969,20 @@ impl ExpectClientHello {
             warn!("Resumption ignored, DHE_KE not offered");
             self.send_ticket = false;
             chosen_psk_index = None;
-            resuming_psk = None;
+            resumedata = None;
         } else {
             self.send_ticket = true;
         }
 
-        let full_handshake = resuming_psk.is_none();
+        let full_handshake = resumedata.is_none();
         sess.common.hs_transcript.add_message(chm);
         self.emit_server_hello_tls13(sess, &client_hello.session_id,
-                                     chosen_share, chosen_psk_index, resuming_psk)?;
+                                     chosen_share, chosen_psk_index,
+                                     resumedata.as_ref().map(|x| &x.master_secret.0[..]))?;
         if !self.done_retry {
             self.emit_fake_ccs(sess);
         }
-        self.emit_encrypted_extensions(sess, &mut server_key, client_hello, !full_handshake)?;
+        self.emit_encrypted_extensions(sess, &mut server_key, client_hello, resumedata.as_ref())?;
 
         let doing_client_auth = if full_handshake {
             let client_auth = self.emit_certificate_req_tls13(sess);
@@ -1214,7 +1231,7 @@ impl State for ExpectClientHello {
 
         debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-        self.emit_server_hello(sess, Some(&mut certkey), client_hello, false)?;
+        self.emit_server_hello(sess, Some(&mut certkey), client_hello, None)?;
         self.emit_certificate(sess, &mut certkey);
         self.emit_cert_status(sess, &mut certkey);
         let kx = self.emit_server_kx(sess, sigschemes, &group, &mut certkey)?;
@@ -1549,9 +1566,11 @@ fn get_server_session_value_tls12(handshake: &HandshakeDetails,
         .unwrap()
         .get_master_secret();
 
-    let mut v = persist::ServerSessionValue::new(sess.get_sni(), version,
-                                                 scs.suite, secret,
-                                                 &sess.client_cert_chain);
+    let mut v = persist::ServerSessionValue::new(
+        sess.get_sni(), version,
+        scs.suite, secret,
+        &sess.client_cert_chain,
+        sess.alpn_protocol.clone());
 
     if handshake.using_ems {
         v.set_extended_ms_used();
@@ -1575,9 +1594,11 @@ fn get_server_session_value_tls13(sess: &ServerSessionImpl,
         .get_key_schedule()
         .derive_ticket_psk(&resumption_master_secret, nonce);
 
-    persist::ServerSessionValue::new(sess.get_sni(), version,
-                                     scs.suite, secret,
-                                     &sess.client_cert_chain)
+    persist::ServerSessionValue::new(
+        sess.get_sni(), version,
+        scs.suite, secret,
+        &sess.client_cert_chain,
+        sess.alpn_protocol.clone())
 }
 
 fn emit_ticket(handshake: &mut HandshakeDetails,
