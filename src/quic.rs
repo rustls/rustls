@@ -161,6 +161,7 @@ pub trait ServerQuicExt {
     /// TLS-encoded transport parameters to send.
     fn new_quic(config: &Arc<ServerConfig>, params: Vec<u8>) -> ServerSession {
         assert!(config.versions.iter().all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()), "QUIC requires TLS version >= 1.3");
+        assert!(config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff, "QUIC sessions must set a max early data of 0 or 2^32-1");
         let mut imp = ServerSessionImpl::new(config, vec![
             ServerExtension::TransportParameters(params),
         ]);
