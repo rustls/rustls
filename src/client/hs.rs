@@ -2332,6 +2332,13 @@ impl ExpectTLS13Traffic {
 
         if let Some(sz) = nst.get_max_early_data_size() {
             value.set_max_early_data_size(sz);
+            #[cfg(feature = "quic")] {
+                if sess.common.protocol == Protocol::Quic {
+                    if sz != 0 && sz != 0xffff_ffff {
+                        return Err(TLSError::PeerMisbehavedError("invalid max_early_data_size".into()));
+                    }
+                }
+            }
         }
 
         let key = persist::ClientSessionKey::session_for_dns_name(self.handshake.dns_name.as_ref());
