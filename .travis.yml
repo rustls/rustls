@@ -23,7 +23,7 @@ before_install:
 script:
   - cargo build
   - RUST_BACKTRACE=1 cargo test
-  - RUST_BACKTRACE=1 cargo test --features dangerous_configuration danger
+  - RUST_BACKTRACE=1 cargo test --all-features
   - cargo test --release --no-run
   - ./target/release/examples/bench
 #  - ( cd trytls && ./runme )
