@@ -89,7 +89,7 @@
     "Draft-Downgrade-Server": "not implemented; TODO",
     "EarlyData-*ALPN*-*": "no alpn change in resumed sessions",
     "*EarlyKeyingMaterial-Client-*": "early exporter NYI",
-    "QUICTransportParams-*-TLS12": "QUIC support requires TLS >= 1.3"
+    "QUICTransportParams-*": "Bogo assumes this can be tested over TLS1.3 framing"
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
