@@ -285,7 +285,7 @@ pub use stream::{Stream, StreamOwned};
 pub use anchors::{DistinguishedNames, RootCertStore};
 pub use client::StoresClientSessions;
 pub use client::handy::{NoClientSessionStorage, ClientSessionMemoryCache};
-pub use client::{ClientConfig, ClientSession};
+pub use client::{ClientConfig, ClientSession, WriteEarlyData};
 pub use client::ResolvesClientCert;
 pub use server::StoresServerSessions;
 pub use server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
