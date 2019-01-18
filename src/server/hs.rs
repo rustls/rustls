@@ -70,6 +70,11 @@ fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
     TLSError::PeerIncompatibleError(why.to_string())
 }
 
+fn bad_version(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
+    sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
+    TLSError::PeerIncompatibleError(why.to_string())
+}
+
 fn illegal_param(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
     sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
     TLSError::PeerMisbehavedError(why.to_string())
@@ -1046,15 +1051,12 @@ impl State for ExpectClientHello {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
-                sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-                return Err(incompatible(sess, "TLS1.2 not offered/enabled"));
+                return Err(bad_version(sess, "TLS1.2 not offered/enabled"));
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
-            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-            return Err(incompatible(sess, "Client does not support TLSv1_2"));
+            return Err(bad_version(sess, "Client does not support TLSv1_2"));
         } else if !tls12_enabled && tls13_enabled {
-            sess.common.send_fatal_alert(AlertDescription::ProtocolVersion);
-            return Err(incompatible(sess, "Server requires TLS1.3, but client omitted versions ext"));
+            return Err(bad_version(sess, "Server requires TLS1.3, but client omitted versions ext"));
         }
 
         if sess.common.negotiated_version == None {
