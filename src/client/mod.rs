@@ -386,8 +386,13 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hostname: webpki::DNSName, extra_exts: Vec<ClientExtension>) {
-        self.state = Some(hs::start_handshake(self, hostname, extra_exts));
+    pub fn start_handshake(
+        &mut self,
+        hostname: webpki::DNSName,
+        server_name: webpki::DNSName,
+        extra_exts: Vec<ClientExtension>,
+    ) {
+        self.state = Some(hs::start_handshake(self, hostname, server_name, extra_exts));
     }
 
     pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
@@ -584,8 +589,20 @@ impl ClientSession {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
+        ClientSession::with_server_name(config, hostname, hostname)
+    }
+
+    /// Make a new ClientSession.  `config` controls how
+    /// we behave in the TLS protocol. `hostname` is the
+    /// hostname of who we want to talk to.  `server_name` is the hostname to
+    /// be sent in the Server Name Indication (SNI) extension, if enabled.
+    pub fn with_server_name(
+        config: &Arc<ClientConfig>,
+        hostname: webpki::DNSNameRef,
+        server_name: webpki::DNSNameRef,
+    ) -> ClientSession {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), vec![]);
+        imp.start_handshake(hostname.into(), server_name.into(), vec![]);
         ClientSession { imp }
     }
 

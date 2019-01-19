@@ -145,7 +145,7 @@ pub trait ClientQuicExt {
         assert!(config.versions.iter().all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()), "QUIC requires TLS version >= 1.3");
         let mut imp = ClientSessionImpl::new(config);
         imp.common.protocol = Protocol::Quic;
-        imp.start_handshake(hostname.into(), vec![
+        imp.start_handshake(hostname.into(), hostname.into(), vec![
             ClientExtension::TransportParameters(params),
         ]);
         ClientSession { imp }
