@@ -7,7 +7,7 @@ use std::mem;
 use std::fmt;
 use std::io::{self, Write, Read};
 
-extern crate rustls;
+use rustls;
 
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ServerConfig, ServerSession, ResolvesServerCert};
@@ -24,9 +24,9 @@ use rustls::KeyLog;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 
-extern crate webpki;
+use webpki;
 
-fn transfer(left: &mut Session, right: &mut Session) -> usize {
+fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -207,7 +207,7 @@ fn do_handshake_until_error(client: &mut ClientSession,
     Ok(())
 }
 
-fn dns_name(name: &'static str) -> webpki::DNSNameRef {
+fn dns_name(name: &'static str) -> webpki::DNSNameRef<'_> {
     webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
 }
 
@@ -326,7 +326,7 @@ fn versions() {
                  Some(ProtocolVersion::TLSv1_2));
 }
 
-fn check_read(reader: &mut io::Read, bytes: &[u8]) {
+fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
     let mut buf = Vec::new();
     assert_eq!(bytes.len(), reader.read_to_end(&mut buf).unwrap());
     assert_eq!(bytes.to_vec(), buf);
@@ -424,7 +424,7 @@ fn server_can_get_client_cert() {
     }
 }
 
-fn check_read_and_close(reader: &mut io::Read, expect: &[u8]) {
+fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
     let mut buf = Vec::new();
     buf.resize(expect.len(), 0u8);
     assert_eq!(expect.len(), reader.read(&mut buf).unwrap());
@@ -505,7 +505,7 @@ impl ServerCheckCertResolve {
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef>,
+               server_name: Option<webpki::DNSNameRef<'_>>,
                sigschemes: &[SignatureScheme])
         -> Option<sign::CertifiedKey> {
         if let Some(got_dns_name) = server_name {
@@ -545,7 +545,7 @@ struct ServerCheckNoSNI {}
 
 impl ResolvesServerCert for ServerCheckNoSNI {
     fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef>,
+               server_name: Option<webpki::DNSNameRef<'_>>,
                _sigschemes: &[SignatureScheme])
         -> Option<sign::CertifiedKey> {
         assert!(server_name.is_none());
@@ -695,15 +695,15 @@ fn server_error_is_sticky() {
 #[test]
 fn server_is_send_and_sync() {
     let (_, server) = make_pair(KeyType::RSA);
-    &server as &Send;
-    &server as &Sync;
+    &server as &dyn Send;
+    &server as &dyn Sync;
 }
 
 #[test]
 fn client_is_send_and_sync() {
     let (client, _) = make_pair(KeyType::RSA);
-    &client as &Send;
-    &client as &Sync;
+    &client as &dyn Send;
+    &client as &dyn Sync;
 }
 
 #[test]
@@ -772,7 +772,7 @@ fn client_respects_buffer_limit_post_handshake() {
 }
 
 struct OtherSession<'a> {
-    sess: &'a mut Session,
+    sess: &'a mut dyn Session,
     pub reads: usize,
     pub writes: usize,
     pub writevs: Vec<Vec<usize>>,
@@ -782,7 +782,7 @@ struct OtherSession<'a> {
 }
 
 impl<'a> OtherSession<'a> {
-    fn new(sess: &'a mut Session) -> OtherSession<'a> {
+    fn new(sess: &'a mut dyn Session) -> OtherSession<'a> {
         OtherSession {
             sess,
             reads: 0,
@@ -794,7 +794,7 @@ impl<'a> OtherSession<'a> {
         }
     }
 
-    fn new_fails(sess: &'a mut Session) -> OtherSession<'a> {
+    fn new_fails(sess: &'a mut dyn Session) -> OtherSession<'a> {
         let mut os = OtherSession::new(sess);
         os.fail_ok = true;
         os
@@ -992,7 +992,7 @@ fn client_stream_write() {
 #[test]
 fn client_streamowned_write() {
     for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
+        let (client, mut server) = make_pair(*kt);
 
         {
             let pipe = OtherSession::new(&mut server);
@@ -1289,7 +1289,7 @@ fn sni_resolver_works() {
     let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
     let signing_key = sign::RSASigningKey::new(&kt.get_key())
         .unwrap();
-    let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
+    let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
     resolver.add("localhost",
                  sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()))
         .unwrap();
@@ -1317,7 +1317,7 @@ fn sni_resolver_rejects_wrong_names() {
     let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
     let signing_key = sign::RSASigningKey::new(&kt.get_key())
         .unwrap();
-    let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
+    let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
     assert_eq!(Ok(()),
                resolver.add("localhost",
@@ -1336,7 +1336,7 @@ fn sni_resolver_rejects_bad_certs() {
     let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
     let signing_key = sign::RSASigningKey::new(&kt.get_key())
         .unwrap();
-    let signing_key: Arc<Box<sign::SigningKey>> = Arc::new(Box::new(signing_key));
+    let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
     assert_eq!(Err(TLSError::General("No end-entity certificate in certificate chain".into())),
                resolver.add("localhost",
@@ -1757,7 +1757,7 @@ fn vectored_write_with_slow_client() {
 }
 
 struct ServerStorage {
-    storage: Arc<rustls::StoresServerSessions>,
+    storage: Arc<dyn rustls::StoresServerSessions>,
     put_count: AtomicUsize,
     get_count: AtomicUsize,
     take_count: AtomicUsize,
@@ -1779,7 +1779,7 @@ impl ServerStorage {
 }
 
 impl fmt::Debug for ServerStorage {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(put: {:?}, get: {:?}, take: {:?})",
                self.put_count, self.get_count, self.take_count)
     }
@@ -1883,7 +1883,7 @@ fn tls13_stateless_resumption() {
 #[cfg(feature = "quic")]
 fn quic_handshake() {
     // Returns the sender's next secrets to use, or the receiver's error.
-    fn step(send: &mut Session, recv: &mut Session) -> Result<Option<quic::Secrets>, TLSError> {
+    fn step(send: &mut dyn Session, recv: &mut dyn Session) -> Result<Option<quic::Secrets>, TLSError> {
         let mut buf = Vec::new();
         let secrets = loop {
             let prev = buf.len();

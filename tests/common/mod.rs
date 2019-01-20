@@ -5,7 +5,7 @@ use std::thread;
 use std::time;
 use std::net;
 
-extern crate regex;
+use regex;
 use self::regex::Regex;
 
 // For tests which connect to internet servers, don't go crazy.

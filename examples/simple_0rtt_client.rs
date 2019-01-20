@@ -3,10 +3,10 @@ use std::sync::Arc;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
-extern crate rustls;
-extern crate webpki;
-extern crate webpki_roots;
-extern crate env_logger;
+use rustls;
+use webpki;
+use webpki_roots;
+use env_logger;
 
 fn start_session(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain_name).unwrap();

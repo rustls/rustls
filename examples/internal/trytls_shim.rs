@@ -4,9 +4,9 @@
 // See: https://github.com/HowNetWorks/trytls-rustls-stub
 //
 
-extern crate rustls;
-extern crate webpki;
-extern crate webpki_roots;
+
+use webpki;
+use webpki_roots;
 
 use std::io::{Read, Write, BufReader};
 use std::net::TcpStream;
@@ -22,7 +22,7 @@ enum Verdict {
     Reject(TLSError),
 }
 
-fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<Error>> {
+fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Error>> {
     let mut config = ClientConfig::new();
     match args.len() {
         3 => {
@@ -43,7 +43,7 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<Error>
     Ok((args[1].clone(), port, config))
 }
 
-fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict, Box<Error>> {
+fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict, Box<dyn Error>> {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(&host).unwrap();
     let rc_config = Arc::new(config);
     let mut client = ClientSession::new(&rc_config, dns_name);

@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::net::TcpStream;
 use std::io::{Read, Write, stdout};
 
-extern crate rustls;
-extern crate webpki;
-extern crate webpki_roots;
+use rustls;
+use webpki;
+use webpki_roots;
 
 use rustls::Session;
 

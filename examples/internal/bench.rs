@@ -9,7 +9,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::env;
 
-extern crate rustls;
+use rustls;
 use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
 use rustls::ServerSessionMemoryCache;
@@ -22,7 +22,7 @@ use rustls::Ticketer;
 use rustls::internal::pemfile;
 use rustls::internal::msgs::enums::SignatureAlgorithm;
 
-extern crate webpki;
+use webpki;
 
 fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
@@ -55,7 +55,7 @@ fn time<F>(mut f: F) -> f64
     f64::from(dur)
 }
 
-fn transfer(left: &mut Session, right: &mut Session) -> f64 {
+fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> f64 {
     let mut buf = [0u8; 262144];
     let mut read_time = 0f64;
 
@@ -81,7 +81,7 @@ fn transfer(left: &mut Session, right: &mut Session) -> f64 {
     read_time
 }
 
-fn drain(d: &mut Session, expect_len: usize) {
+fn drain(d: &mut dyn Session, expect_len: usize) {
     let mut left = expect_len;
     let mut buf = [0u8; 8192];
     loop {

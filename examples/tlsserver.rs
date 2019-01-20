@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-extern crate mio;
+use mio;
 use mio::tcp::{TcpListener, TcpStream, Shutdown};
 
 #[macro_use]
@@ -14,12 +14,12 @@ use std::collections::HashMap;
 
 #[macro_use]
 extern crate serde_derive;
-extern crate docopt;
+
 use docopt::Docopt;
 
-extern crate env_logger;
-extern crate vecio;
-extern crate rustls;
+use env_logger;
+
+use rustls;
 
 use rustls::{RootCertStore, Session, NoClientAuth, AllowAnyAuthenticatedClient,
              AllowAnyAnonymousOrAuthenticatedClient};

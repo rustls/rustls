@@ -4,11 +4,11 @@ use rustls;
 
 /// This glues our `rustls::WriteV` trait to `vecio::Rawv`.
 pub struct WriteVAdapter<'a> {
-    rawv: &'a mut Rawv
+    rawv: &'a mut dyn Rawv
 }
 
 impl<'a> WriteVAdapter<'a> {
-    pub fn new(rawv: &'a mut Rawv) -> WriteVAdapter<'a> {
+    pub fn new(rawv: &'a mut dyn Rawv) -> WriteVAdapter<'a> {
         WriteVAdapter { rawv }
     }
 }

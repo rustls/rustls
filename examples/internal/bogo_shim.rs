@@ -4,11 +4,11 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-extern crate rustls;
-extern crate webpki;
-extern crate env_logger;
-extern crate base64;
-extern crate sct;
+use rustls;
+use webpki;
+use env_logger;
+use base64;
+use sct;
 
 use std::env;
 use std::process;
@@ -187,19 +187,19 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(&self,
                           _roots: &rustls::RootCertStore,
                           _certs: &[rustls::Certificate],
-                          _hostname: webpki::DNSNameRef,
+                          _hostname: webpki::DNSNameRef<'_>,
                           _ocsp: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         Ok(rustls::ServerCertVerified::assertion())
     }
 }
 
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<Box<rustls::sign::SigningKey>>,
+    key: Arc<Box<dyn rustls::sign::SigningKey>>,
     scheme: rustls::SignatureScheme,
 }
 
 impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
-    fn choose_scheme(&self, offered: &[rustls::SignatureScheme]) -> Option<Box<rustls::sign::Signer>> {
+    fn choose_scheme(&self, offered: &[rustls::SignatureScheme]) -> Option<Box<dyn rustls::sign::Signer>> {
         if offered.contains(&self.scheme) {
             self.key.choose_scheme(&[self.scheme])
         } else {
@@ -210,13 +210,13 @@ impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
 }
 
 struct FixedSignatureSchemeServerCertResolver {
-    resolver: Arc<rustls::ResolvesServerCert>,
+    resolver: Arc<dyn rustls::ResolvesServerCert>,
     scheme: rustls::SignatureScheme,
 }
 
 impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef>,
+               server_name: Option<webpki::DNSNameRef<'_>>,
                sigschemes: &[rustls::SignatureScheme]) -> Option<rustls::sign::CertifiedKey> {
         let mut certkey = self.resolver.resolve(server_name, sigschemes)?;
         certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
@@ -228,7 +228,7 @@ impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
 }
 
 struct FixedSignatureSchemeClientCertResolver {
-    resolver: Arc<rustls::ResolvesClientCert>,
+    resolver: Arc<dyn rustls::ResolvesClientCert>,
     scheme: rustls::SignatureScheme,
 }
 
@@ -321,7 +321,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     Arc::new(cfg)
 }
 
-static EMPTY_LOGS: [&sct::Log; 0] = [];
+static EMPTY_LOGS: [&sct::Log<'_>; 0] = [];
 
 struct ClientCacheWithoutKxHints(Arc<rustls::ClientSessionMemoryCache>);
 
@@ -481,7 +481,7 @@ enum ClientOrServer {
 }
 
 impl Deref for ClientOrServer {
-    type Target = rustls::Session;
+    type Target = dyn rustls::Session;
 
     fn deref(&self) -> &Self::Target {
         match &self {

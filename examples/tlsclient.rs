@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::process;
 
-extern crate mio;
+use mio;
 use mio::tcp::TcpStream;
 
 use std::net::SocketAddr;
@@ -11,18 +11,18 @@ use std::fs;
 use std::collections;
 use std::io::{Read, Write, BufReader};
 
-extern crate env_logger;
+use env_logger;
 
 #[macro_use]
 extern crate serde_derive;
-extern crate docopt;
+
 use docopt::Docopt;
 
-extern crate rustls;
-extern crate webpki;
-extern crate webpki_roots;
-extern crate ct_logs;
-extern crate vecio;
+use rustls;
+use webpki;
+use webpki_roots;
+use ct_logs;
+
 
 mod util;
 use crate::util::WriteVAdapter;
@@ -81,7 +81,7 @@ impl io::Read for TlsClient {
 }
 
 impl TlsClient {
-    fn new(sock: TcpStream, hostname: webpki::DNSNameRef, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
+    fn new(sock: TcpStream, hostname: webpki::DNSNameRef<'_>, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
         TlsClient {
             socket: sock,
             closing: false,
@@ -90,7 +90,7 @@ impl TlsClient {
         }
     }
 
-    fn read_source_to_end(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    fn read_source_to_end(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
         self.tls_session.write_all(&buf).unwrap();
@@ -425,7 +425,7 @@ mod danger {
         fn verify_server_cert(&self,
                               _roots: &rustls::RootCertStore,
                               _presented_certs: &[rustls::Certificate],
-                              _dns_name: webpki::DNSNameRef,
+                              _dns_name: webpki::DNSNameRef<'_>,
                               _ocsp: &[u8]) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
             Ok(rustls::ServerCertVerified::assertion())
         }
