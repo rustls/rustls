@@ -14,6 +14,8 @@ use crate::sign;
 use crate::error::TLSError;
 use crate::key;
 use crate::vecbuf::WriteV;
+#[cfg(feature = "logging")]
+use crate::log::trace;
 
 use std::sync::Arc;
 use std::io;

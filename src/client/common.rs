@@ -10,6 +10,8 @@ use crate::msgs::enums::NamedGroup;
 use crate::session::SessionRandoms;
 use crate::sign;
 use crate::suites;
+#[cfg(feature = "logging")]
+use crate::log::trace;
 use webpki;
 
 use std::mem;

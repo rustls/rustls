@@ -5,6 +5,9 @@ use std::io;
 use std::io::Write;
 use std::sync::Mutex;
 
+#[cfg(feature = "logging")]
+use crate::log::warn;
+
 /// This trait represents the ability to do something useful
 /// with key material, such as logging it to a file for debugging.
 ///

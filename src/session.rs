@@ -18,6 +18,8 @@ use crate::prf;
 use crate::rand;
 use crate::quic;
 use crate::hash_hs;
+#[cfg(feature = "logging")]
+use crate::log::{warn, debug, error};
 
 use std::io;
 use std::collections::VecDeque;

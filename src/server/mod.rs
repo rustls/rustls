@@ -10,6 +10,8 @@ use crate::sign;
 use crate::verify;
 use crate::key;
 use crate::vecbuf::WriteV;
+#[cfg(feature = "logging")]
+use crate::log::trace;
 
 use webpki;
 

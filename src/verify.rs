@@ -10,6 +10,8 @@ use crate::msgs::handshake::SCTList;
 use crate::msgs::enums::SignatureScheme;
 use crate::error::TLSError;
 use crate::anchors::{DistinguishedNames, RootCertStore};
+#[cfg(feature = "logging")]
+use crate::log::{warn, debug};
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 

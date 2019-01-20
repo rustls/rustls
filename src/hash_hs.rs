@@ -3,6 +3,8 @@ use std::mem;
 use crate::msgs::codec::Codec;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::handshake::HandshakeMessagePayload;
+#[cfg(feature = "logging")]
+use crate::log::warn;
 
 /// This deals with keeping a running hash of the handshake
 /// payloads.  This is computed by buffering initially.  Once

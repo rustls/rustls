@@ -8,11 +8,15 @@ use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
+use crate::key;
+
+#[cfg(feature = "logging")]
+use crate::log::warn;
+
 use std::fmt;
 use std::io::Write;
 use std::collections;
 use std::mem;
-use crate::key;
 use untrusted;
 use webpki;
 

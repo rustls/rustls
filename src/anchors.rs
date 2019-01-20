@@ -5,6 +5,8 @@ pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
 use crate::pemfile;
 use crate::x509;
 use crate::key;
+#[cfg(feature = "logging")]
+use crate::log::{debug, trace};
 use std::io;
 
 /// This is like a `webpki::TrustAnchor`, except it owns

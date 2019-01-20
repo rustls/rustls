@@ -30,6 +30,8 @@ use crate::verify;
 use crate::util;
 use crate::rand;
 use crate::sign;
+#[cfg(feature = "logging")]
+use crate::log::{warn, trace, debug};
 use crate::error::TLSError;
 use crate::handshake::{check_handshake_message, check_message};
 use webpki;

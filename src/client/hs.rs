@@ -28,6 +28,8 @@ use crate::hash_hs;
 use crate::verify;
 use crate::rand;
 use crate::ticketer;
+#[cfg(feature = "logging")]
+use crate::log::{debug, trace, warn};
 use crate::error::TLSError;
 use crate::handshake::{check_message, check_handshake_message};
 #[cfg(feature = "quic")]
