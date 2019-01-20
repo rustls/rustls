@@ -17,7 +17,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
-* 0.15.0 (next release):
+* 0.15.0 (2019-01-20):
   - Update dependencies.
   - *Breaking API change*: ALPN protocols are now encoded as a `Vec<u8>`, not
     a `String`.  This alters the type of:
@@ -32,6 +32,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - Correct bug where we'd send more than one fatal alert for
     handshake failure cases.
   - Discontinue support for SHA1 signatures.
+  - Move to Rust 2018 edition.
 * 0.14.0 (2018-09-30):
   - Introduce client-side support for 0-RTT data in TLS1.3.
   - Fix a bug in rustls::Stream for non-blocking transports.
