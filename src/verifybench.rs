@@ -13,7 +13,7 @@ use crate::verify::ServerCertVerifier;
 use crate::key;
 use webpki;
 
-extern crate webpki_roots;
+use webpki_roots;
 
 fn duration_nanos(d: Duration) -> u64 {
     ((d.as_secs() as f64) * 1e9 + (d.subsec_nanos() as f64)) as u64
