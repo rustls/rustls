@@ -1,7 +1,7 @@
-diff -ru original/runner.go bogo/runner.go
---- original/runner.go	2017-12-28 16:24:49.000000000 +0000
-+++ bogo/runner.go	2017-12-29 13:53:29.061166983 +0000
-@@ -83,6 +83,14 @@
+diff -u original/runner.go bogo/runner.go
+--- original/runner.go	2018-09-13 21:07:29.000000000 +0100
++++ bogo/runner.go	2019-01-20 11:51:00.705040230 +0000
+@@ -84,6 +84,14 @@
  	// like “SSL_ERROR_NO_CYPHER_OVERLAP”.
  	ErrorMap map[string]string
  
@@ -16,7 +16,7 @@ diff -ru original/runner.go bogo/runner.go
  	// HalfRTTTickets is the number of half-RTT tickets the client should
  	// expect before half-RTT data when testing 0-RTT.
  	HalfRTTTickets int
-@@ -939,7 +947,11 @@
+@@ -986,7 +994,11 @@
  	}
  }
  
@@ -29,7 +29,7 @@ diff -ru original/runner.go bogo/runner.go
  	if translated, ok := shimConfig.ErrorMap[errorStr]; ok {
  		return translated
  	}
-@@ -951,6 +963,14 @@
+@@ -998,6 +1010,14 @@
  	return errorStr
  }
  
@@ -44,13 +44,14 @@ diff -ru original/runner.go bogo/runner.go
  func runTest(test *testCase, shimPath string, mallocNumToFail int64) error {
  	// Help debugging panics on the Go side.
  	defer func() {
-@@ -1215,15 +1235,16 @@
+@@ -1275,18 +1295,20 @@
  	}
  
  	failed := err != nil || childErr != nil
 -	expectedError := translateExpectedError(test.expectedError)
 +	expectedError := translateExpectedError(test.name, test.expectedError)
  	correctFailure := len(expectedError) == 0 || strings.Contains(stderr, expectedError)
++	shouldFail := test.shouldFail || expectedError != ""
  
 +	var expectedLocalError = translateExpectedLocalError(test.name, test.expectedLocalError)
  	localError := "none"
@@ -63,4 +64,21 @@ diff -ru original/runner.go bogo/runner.go
 +		correctFailure = correctFailure && strings.Contains(localError, expectedLocalError)
  	}
  
- 	if failed != test.shouldFail || failed && !correctFailure || mustFail {
+-	if failed != test.shouldFail || failed && !correctFailure || mustFail {
++	if failed != shouldFail || failed && !correctFailure || mustFail {
+ 		childError := "none"
+ 		if childErr != nil {
+ 			childError = childErr.Error()
+@@ -1294,9 +1316,9 @@
+ 
+ 		var msg string
+ 		switch {
+-		case failed && !test.shouldFail:
++		case failed && !shouldFail:
+ 			msg = "unexpected failure"
+-		case !failed && test.shouldFail:
++		case !failed && shouldFail:
+ 			msg = "unexpected success"
+ 		case failed && !correctFailure:
+ 			msg = "bad error (wanted '" + expectedError + "' / '" + test.expectedLocalError + "')"
+Only in bogo/: runner.go.orig
