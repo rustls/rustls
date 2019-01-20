@@ -1,8 +1,8 @@
 /// Key schedule maintenance for TLS1.3
 
 use ring::{hmac, digest, hkdf};
-use msgs::codec::Codec;
-use error::TLSError;
+use crate::msgs::codec::Codec;
+use crate::error::TLSError;
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]

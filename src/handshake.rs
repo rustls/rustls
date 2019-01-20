@@ -1,6 +1,6 @@
-use msgs::enums::{ContentType, HandshakeType};
-use msgs::message::{Message, MessagePayload};
-use error::TLSError;
+use crate::msgs::enums::{ContentType, HandshakeType};
+use crate::msgs::message::{Message, MessagePayload};
+use crate::error::TLSError;
 
 pub fn check_handshake_message(m: &Message,
                                handshake_types: &[HandshakeType]) -> Result<(), TLSError> {

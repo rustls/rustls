@@ -2,9 +2,9 @@
 use std::collections::VecDeque;
 use std::io;
 
-use msgs::codec;
-use msgs::codec::Codec;
-use msgs::message::Message;
+use crate::msgs::codec;
+use crate::msgs::codec::Codec;
+use crate::msgs::message::Message;
 
 const HEADER_SIZE: usize = 1 + 2 + 2;
 
@@ -126,7 +126,7 @@ impl MessageDeframer {
 mod tests {
     use super::MessageDeframer;
     use std::io;
-    use msgs;
+    use crate::msgs;
 
     const FIRST_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.1.bin");
     const SECOND_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.2.bin");

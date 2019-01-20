@@ -1,7 +1,7 @@
 
 use std::collections::VecDeque;
-use msgs::message::{BorrowMessage, Message, MessagePayload};
-use msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
+use crate::msgs::enums::{ContentType, ProtocolVersion};
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -66,9 +66,9 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use msgs::message::{MessagePayload, Message};
-    use msgs::enums::{ContentType, ProtocolVersion};
-    use msgs::codec::Codec;
+    use crate::msgs::message::{MessagePayload, Message};
+    use crate::msgs::enums::{ContentType, ProtocolVersion};
+    use crate::msgs::codec::Codec;
     use std::collections::VecDeque;
 
     fn msg_eq(mm: Option<Message>,

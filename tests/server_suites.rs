@@ -3,7 +3,7 @@
 
 #[allow(dead_code)]
 mod common;
-use common::TlsServer;
+use crate::common::TlsServer;
 
 #[test]
 fn ecdhe_rsa_aes_128_gcm_sha256() {

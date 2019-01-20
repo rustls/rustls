@@ -1,5 +1,5 @@
-use msgs::enums::{AlertLevel, AlertDescription};
-use msgs::codec::{Codec, Reader};
+use crate::msgs::enums::{AlertLevel, AlertDescription};
+use crate::msgs::codec::{Codec, Reader};
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {

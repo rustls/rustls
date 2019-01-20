@@ -1,14 +1,14 @@
 use ring;
 use std::io::Write;
-use msgs::codec;
-use msgs::codec::Codec;
-use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::message::{BorrowMessage, Message, MessagePayload};
-use msgs::fragmenter::MAX_FRAGMENT_LEN;
-use error::TLSError;
-use session::SessionSecrets;
-use suites::{SupportedCipherSuite, BulkAlgorithm};
-use key_schedule::{derive_traffic_key, derive_traffic_iv};
+use crate::msgs::codec;
+use crate::msgs::codec::Codec;
+use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
+use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
+use crate::error::TLSError;
+use crate::session::SessionSecrets;
+use crate::suites::{SupportedCipherSuite, BulkAlgorithm};
+use crate::key_schedule::{derive_traffic_key, derive_traffic_iv};
 
 // accum[i] ^= offset[i] for all i in 0..len(accum)
 fn xor(accum: &mut [u8], offset: &[u8]) {

@@ -1,18 +1,18 @@
-use msgs::enums::{ProtocolVersion, HandshakeType};
-use msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat};
-use msgs::enums::{HashAlgorithm, SignatureAlgorithm, ServerNameType};
-use msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
-use msgs::enums::{ClientCertificateType, CertificateStatusType};
-use msgs::enums::ECCurveType;
-use msgs::enums::PSKKeyExchangeMode;
-use msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
-use msgs::codec;
-use msgs::codec::{Codec, Reader};
+use crate::msgs::enums::{ProtocolVersion, HandshakeType};
+use crate::msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat};
+use crate::msgs::enums::{HashAlgorithm, SignatureAlgorithm, ServerNameType};
+use crate::msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
+use crate::msgs::enums::{ClientCertificateType, CertificateStatusType};
+use crate::msgs::enums::ECCurveType;
+use crate::msgs::enums::PSKKeyExchangeMode;
+use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::codec;
+use crate::msgs::codec::{Codec, Reader};
 use std::fmt;
 use std::io::Write;
 use std::collections;
 use std::mem;
-use key;
+use crate::key;
 use untrusted;
 use webpki;
 
@@ -241,8 +241,8 @@ impl DecomposedSignatureScheme for SignatureScheme {
     }
 
     fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme {
-        use msgs::enums::SignatureAlgorithm::{RSA, ECDSA};
-        use msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
+        use crate::msgs::enums::SignatureAlgorithm::{RSA, ECDSA};
+        use crate::msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
 
         match (alg, hash) {
             (RSA, SHA1) => SignatureScheme::RSA_PKCS1_SHA1,

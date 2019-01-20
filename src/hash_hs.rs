@@ -1,8 +1,8 @@
 use ring::digest;
 use std::mem;
-use msgs::codec::Codec;
-use msgs::message::{Message, MessagePayload};
-use msgs::handshake::HandshakeMessagePayload;
+use crate::msgs::codec::Codec;
+use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::handshake::HandshakeMessagePayload;
 
 /// This deals with keeping a running hash of the handshake
 /// payloads.  This is computed by buffering initially.  Once

@@ -25,7 +25,7 @@ extern crate ct_logs;
 extern crate vecio;
 
 mod util;
-use util::WriteVAdapter;
+use crate::util::WriteVAdapter;
 
 use rustls::Session;
 

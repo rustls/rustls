@@ -1,10 +1,10 @@
 use webpki;
 use untrusted;
 
-pub use msgs::handshake::{DistinguishedName, DistinguishedNames};
-use pemfile;
-use x509;
-use key;
+pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
+use crate::pemfile;
+use crate::x509;
+use crate::key;
 use std::io;
 
 /// This is like a `webpki::TrustAnchor`, except it owns

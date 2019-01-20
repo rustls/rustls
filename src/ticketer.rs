@@ -1,6 +1,6 @@
 
-use server::ProducesTickets;
-use rand;
+use crate::server::ProducesTickets;
+use crate::rand;
 
 use std::mem;
 use std::sync::{Mutex, Arc};

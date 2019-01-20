@@ -1,6 +1,6 @@
 use std::fmt;
 use std::error::Error;
-use msgs::enums::{ContentType, HandshakeType, AlertDescription};
+use crate::msgs::enums::{ContentType, HandshakeType, AlertDescription};
 use webpki;
 use sct;
 
@@ -147,7 +147,7 @@ mod tests {
     fn smoke() {
         use super::TLSError;
         use std::error::Error;
-        use msgs::enums::{ContentType, HandshakeType, AlertDescription};
+        use crate::msgs::enums::{ContentType, HandshakeType, AlertDescription};
         use webpki;
         use sct;
 

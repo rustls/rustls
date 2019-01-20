@@ -3,7 +3,7 @@ use super::enums::*;
 use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Reader, Codec};
 use webpki::DNSNameRef;
-use key::Certificate;
+use crate::key::Certificate;
 
 use std::mem;
 

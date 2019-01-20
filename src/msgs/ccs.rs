@@ -1,4 +1,4 @@
-use msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{Codec, Reader};
 
 #[derive(Debug)]
 pub struct ChangeCipherSpecPayload;

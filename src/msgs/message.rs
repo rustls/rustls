@@ -1,12 +1,12 @@
 
-use msgs::codec::{Codec, Reader};
-use msgs::base::Payload;
-use msgs::alert::AlertMessagePayload;
-use msgs::ccs::ChangeCipherSpecPayload;
-use msgs::handshake::HandshakeMessagePayload;
-use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::enums::{AlertLevel, AlertDescription};
-use msgs::enums::HandshakeType;
+use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::base::Payload;
+use crate::msgs::alert::AlertMessagePayload;
+use crate::msgs::ccs::ChangeCipherSpecPayload;
+use crate::msgs::handshake::HandshakeMessagePayload;
+use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::enums::{AlertLevel, AlertDescription};
+use crate::msgs::enums::HandshakeType;
 
 use std::mem;
 

@@ -1,44 +1,44 @@
-use msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
-use msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
-use msgs::message::{Message, MessagePayload};
-use msgs::base::{Payload, PayloadU8};
-use msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
-use msgs::handshake::{SessionID, Random, ServerHelloPayload};
-use msgs::handshake::{ClientExtension, HasServerExtensions};
-use msgs::handshake::{SupportedSignatureSchemes, SupportedMandatedSignatureSchemes};
-use msgs::handshake::DecomposedSignatureScheme;
-use msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry, EncryptedExtensions};
-use msgs::handshake::{ECPointFormatList, SupportedPointFormats};
-use msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
-use msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
-use msgs::handshake::ServerKeyExchangePayload;
-use msgs::handshake::DigitallySignedStruct;
-use msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
-use msgs::handshake::{CertificateStatusRequest, SCTList};
-use msgs::enums::{ClientCertificateType, PSKKeyExchangeMode, ECPointFormat};
-use msgs::codec::{Codec, Reader};
-use msgs::persist;
-use msgs::ccs::ChangeCipherSpecPayload;
-use client::ClientSessionImpl;
-use session::SessionSecrets;
-use key_schedule::{KeySchedule, SecretKind};
-use cipher;
-use suites;
-use hash_hs;
-use verify;
-use rand;
-use ticketer;
-use error::TLSError;
-use handshake::{check_message, check_handshake_message};
+use crate::msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
+use crate::msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
+use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::base::{Payload, PayloadU8};
+use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
+use crate::msgs::handshake::{SessionID, Random, ServerHelloPayload};
+use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
+use crate::msgs::handshake::{SupportedSignatureSchemes, SupportedMandatedSignatureSchemes};
+use crate::msgs::handshake::DecomposedSignatureScheme;
+use crate::msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry, EncryptedExtensions};
+use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
+use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
+use crate::msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
+use crate::msgs::handshake::ServerKeyExchangePayload;
+use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
+use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
+use crate::msgs::enums::{ClientCertificateType, PSKKeyExchangeMode, ECPointFormat};
+use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::persist;
+use crate::msgs::ccs::ChangeCipherSpecPayload;
+use crate::client::ClientSessionImpl;
+use crate::session::SessionSecrets;
+use crate::key_schedule::{KeySchedule, SecretKind};
+use crate::cipher;
+use crate::suites;
+use crate::hash_hs;
+use crate::verify;
+use crate::rand;
+use crate::ticketer;
+use crate::error::TLSError;
+use crate::handshake::{check_message, check_handshake_message};
 #[cfg(feature = "quic")]
-use {
+use crate::{
     quic,
     msgs::base::PayloadU16,
     session::Protocol
 };
 
-use client::common::{ServerCertDetails, ServerKXDetails, HandshakeDetails};
-use client::common::{ClientHelloDetails, ReceivedTicketDetails, ClientAuthDetails};
+use crate::client::common::{ServerCertDetails, ServerKXDetails, HandshakeDetails};
+use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails, ClientAuthDetails};
 
 use std::mem;
 use ring::constant_time;
@@ -683,7 +683,7 @@ impl State for ExpectServerHello {
         let server_hello = extract_handshake!(m, HandshakePayload::ServerHello).unwrap();
         trace!("We got ServerHello {:#?}", server_hello);
 
-        use ProtocolVersion::{TLSv1_2, TLSv1_3};
+        use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
         let tls13_supported = sess.config.supports_version(TLSv1_3);
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {

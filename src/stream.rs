@@ -1,5 +1,5 @@
 use std::io::{Read, Write, Result};
-use session::Session;
+use crate::session::Session;
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// a Session `S` and an underlying transport `T`, such as a socket.
@@ -128,9 +128,9 @@ impl<S, T> Write for StreamOwned<S, T> where S: Session, T: Read + Write {
 #[cfg(test)]
 mod tests {
     use super::{Stream, StreamOwned};
-    use session::Session;
-    use client::ClientSession;
-    use server::ServerSession;
+    use crate::session::Session;
+    use crate::client::ClientSession;
+    use crate::server::ServerSession;
     use std::net::TcpStream;
 
     #[test]

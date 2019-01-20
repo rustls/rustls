@@ -1,10 +1,10 @@
 
 use std::collections::VecDeque;
 
-use msgs::codec;
-use msgs::message::{Message, MessagePayload};
-use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::handshake::HandshakeMessagePayload;
+use crate::msgs::codec;
+use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::handshake::HandshakeMessagePayload;
 
 const HEADER_SIZE: usize = 1 + 3;
 
@@ -103,10 +103,10 @@ impl HandshakeJoiner {
 #[cfg(test)]
 mod tests {
     use super::HandshakeJoiner;
-    use msgs::enums::{ProtocolVersion, ContentType, HandshakeType};
-    use msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
-    use msgs::message::{Message, MessagePayload};
-    use msgs::base::Payload;
+    use crate::msgs::enums::{ProtocolVersion, ContentType, HandshakeType};
+    use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
+    use crate::msgs::message::{Message, MessagePayload};
+    use crate::msgs::base::Payload;
 
     #[test]
     fn want() {

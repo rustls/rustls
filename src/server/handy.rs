@@ -1,9 +1,9 @@
-use msgs::enums::SignatureScheme;
-use sign;
-use key;
+use crate::msgs::enums::SignatureScheme;
+use crate::sign;
+use crate::key;
 use webpki;
-use server;
-use error::TLSError;
+use crate::server;
+use crate::error::TLSError;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -189,7 +189,7 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
 #[cfg(test)]
 mod test {
     use super::*;
-    use StoresServerSessions;
+    use crate::StoresServerSessions;
 
     #[test]
     fn test_noserversessionstorage_drops_put() {

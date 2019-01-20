@@ -2,7 +2,7 @@
 
 #[allow(dead_code)]
 mod common;
-use common::OpenSSLServer;
+use crate::common::OpenSSLServer;
 
 #[test]
 fn curve_nistp256() {

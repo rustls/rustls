@@ -4,7 +4,7 @@
 /// they panic on error.
 
 use ring::rand::{SystemRandom, SecureRandom};
-use msgs::codec;
+use crate::msgs::codec;
 
 /// Fill the whole slice with random material.
 pub fn fill_random(bytes: &mut [u8]) {

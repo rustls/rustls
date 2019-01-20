@@ -1,7 +1,7 @@
-use msgs::enums::SignatureScheme;
-use sign;
-use key;
-use client;
+use crate::msgs::enums::SignatureScheme;
+use crate::sign;
+use crate::key;
+use crate::client;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -105,7 +105,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 #[cfg(test)]
 mod test {
     use super::*;
-    use StoresClientSessions;
+    use crate::StoresClientSessions;
 
     #[test]
     fn test_noclientsessionstorage_drops_put() {

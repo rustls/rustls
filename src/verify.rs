@@ -4,12 +4,12 @@ use sct;
 use std;
 use std::sync::Arc;
 
-use key::Certificate;
-use msgs::handshake::DigitallySignedStruct;
-use msgs::handshake::SCTList;
-use msgs::enums::SignatureScheme;
-use error::TLSError;
-use anchors::{DistinguishedNames, RootCertStore};
+use crate::key::Certificate;
+use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::handshake::SCTList;
+use crate::msgs::enums::SignatureScheme;
+use crate::error::TLSError;
+use crate::anchors::{DistinguishedNames, RootCertStore};
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
@@ -321,7 +321,7 @@ pub fn verify_signed_struct(message: &[u8],
 
 fn convert_alg_tls13(scheme: SignatureScheme)
                      -> Result<&'static webpki::SignatureAlgorithm, TLSError> {
-    use msgs::enums::SignatureScheme::*;
+    use crate::msgs::enums::SignatureScheme::*;
 
     match scheme {
         ECDSA_NISTP256_SHA256 => Ok(&webpki::ECDSA_P256_SHA256),

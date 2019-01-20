@@ -3,7 +3,7 @@
 
 #[allow(dead_code)]
 mod common;
-use common::OpenSSLServer;
+use crate::common::OpenSSLServer;
 
 #[test]
 fn ecdhe_rsa_aes_128_gcm_sha256() {

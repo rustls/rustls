@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod common;
-use common::OpenSSLServer;
-use common::TlsServer;
+use crate::common::OpenSSLServer;
+use crate::common::TlsServer;
 
 use std::fs;
 

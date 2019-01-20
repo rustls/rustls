@@ -1,9 +1,9 @@
-use msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
-use msgs::enums::{NamedGroup, ProtocolVersion};
-use msgs::handshake::KeyExchangeAlgorithm;
-use msgs::handshake::DecomposedSignatureScheme;
-use msgs::handshake::{ClientECDHParams, ServerECDHParams};
-use msgs::codec::{Reader, Codec};
+use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
+use crate::msgs::enums::{NamedGroup, ProtocolVersion};
+use crate::msgs::handshake::KeyExchangeAlgorithm;
+use crate::msgs::handshake::DecomposedSignatureScheme;
+use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
+use crate::msgs::codec::{Reader, Codec};
 
 use ring;
 use untrusted;
@@ -422,7 +422,7 @@ pub fn reduce_given_version(all: &[&'static SupportedCipherSuite],
 
 #[cfg(test)]
 mod test {
-    use msgs::enums::CipherSuite;
+    use crate::msgs::enums::CipherSuite;
 
     #[test]
     fn test_client_pref() {

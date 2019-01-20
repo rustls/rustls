@@ -1,19 +1,19 @@
-use msgs::enums::CipherSuite;
-use msgs::enums::{AlertDescription, HandshakeType};
-use session::{Session, SessionCommon};
-use keylog::{KeyLog, NoKeyLog};
-use suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use msgs::handshake::CertificatePayload;
-use msgs::enums::SignatureScheme;
-use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::handshake::ClientExtension;
-use msgs::message::Message;
-use verify;
-use anchors;
-use sign;
-use error::TLSError;
-use key;
-use vecbuf::WriteV;
+use crate::msgs::enums::CipherSuite;
+use crate::msgs::enums::{AlertDescription, HandshakeType};
+use crate::session::{Session, SessionCommon};
+use crate::keylog::{KeyLog, NoKeyLog};
+use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::msgs::handshake::CertificatePayload;
+use crate::msgs::enums::SignatureScheme;
+use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::handshake::ClientExtension;
+use crate::msgs::message::Message;
+use crate::verify;
+use crate::anchors;
+use crate::sign;
+use crate::error::TLSError;
+use crate::key;
+use crate::vecbuf::WriteV;
 
 use std::sync::Arc;
 use std::io;
@@ -193,7 +193,7 @@ impl ClientConfig {
         // Externally the MTU is the whole packet size.  The difference
         // is PACKET_OVERHEAD.
         if let Some(x) = *mtu {
-            use msgs::fragmenter;
+            use crate::msgs::fragmenter;
             debug_assert!(x > fragmenter::PACKET_OVERHEAD);
             self.mtu = Some(x - fragmenter::PACKET_OVERHEAD);
         } else {

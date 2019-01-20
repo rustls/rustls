@@ -1,7 +1,7 @@
-use msgs::enums::{SignatureAlgorithm, SignatureScheme};
-use util;
-use key;
-use error::TLSError;
+use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
+use crate::util;
+use crate::key;
+use crate::error::TLSError;
 
 use untrusted;
 
@@ -275,7 +275,7 @@ impl SigningKey for SingleSchemeSigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        use msgs::handshake::DecomposedSignatureScheme;
+        use crate::msgs::handshake::DecomposedSignatureScheme;
         self.scheme.sign()
     }
 }

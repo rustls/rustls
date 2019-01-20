@@ -1,6 +1,6 @@
 use std::io;
 use base64;
-use key;
+use crate::key;
 
 /// Extract and decode all PEM sections from `rd`, which begin with `start_mark`
 /// and end with `end_mark`.  Apply the functor `f` to each decoded buffer,

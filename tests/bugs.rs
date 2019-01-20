@@ -1,6 +1,6 @@
 #[allow(dead_code)]
 mod common;
-use common::OpenSSLServer;
+use crate::common::OpenSSLServer;
 
 // Test where the server gives certificates A -> B where the
 // validation path is A -> B -> C where C is a trust root

@@ -6,11 +6,11 @@
 
 use std::time::{Duration, Instant};
 
-use anchors;
-use error::TLSError;
-use verify;
-use verify::ServerCertVerifier;
-use key;
+use crate::anchors;
+use crate::error::TLSError;
+use crate::verify;
+use crate::verify::ServerCertVerifier;
+use crate::key;
 use webpki;
 
 extern crate webpki_roots;

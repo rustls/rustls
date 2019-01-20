@@ -1,15 +1,15 @@
-use msgs::handshake::CertificatePayload;
-use msgs::handshake::DigitallySignedStruct;
-use msgs::handshake::SessionID;
-use msgs::handshake::SCTList;
-use msgs::handshake::ServerExtension;
-use msgs::handshake::ClientExtension;
-use msgs::persist;
-use msgs::enums::ExtensionType;
-use msgs::enums::NamedGroup;
-use session::SessionRandoms;
-use sign;
-use suites;
+use crate::msgs::handshake::CertificatePayload;
+use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::handshake::SessionID;
+use crate::msgs::handshake::SCTList;
+use crate::msgs::handshake::ServerExtension;
+use crate::msgs::handshake::ClientExtension;
+use crate::msgs::persist;
+use crate::msgs::enums::ExtensionType;
+use crate::msgs::enums::NamedGroup;
+use crate::session::SessionRandoms;
+use crate::sign;
+use crate::suites;
 use webpki;
 
 use std::mem;
