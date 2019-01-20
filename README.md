@@ -29,6 +29,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - Emit a warning when receiving an invalid SNI extension, such as one
     including an IP address.
   - Extended QUIC support for later QUIC drafts.
+  - Correct bug where we'd send more than one fatal alert for
+    handshake failure cases.
+  - Discontinue support for SHA1 signatures.
 * 0.14.0 (2018-09-30):
   - Introduce client-side support for 0-RTT data in TLS1.3.
   - Fix a bug in rustls::Stream for non-blocking transports.
