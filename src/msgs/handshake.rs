@@ -210,16 +210,6 @@ impl SupportedPointFormats for ECPointFormatList {
 
 declare_u16_vec!(NamedGroups, NamedGroup);
 
-pub trait SupportedGroups {
-    fn supported() -> NamedGroups;
-}
-
-impl SupportedGroups for NamedGroups {
-    fn supported() -> NamedGroups {
-        vec![ NamedGroup::X25519, NamedGroup::secp384r1, NamedGroup::secp256r1 ]
-    }
-}
-
 declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
 
 pub trait DecomposedSignatureScheme {
@@ -258,41 +248,6 @@ impl DecomposedSignatureScheme for SignatureScheme {
             (ECDSA, SHA512) => SignatureScheme::ECDSA_NISTP521_SHA512,
             (_, _) => unreachable!(),
         }
-    }
-}
-
-pub trait SupportedMandatedSignatureSchemes {
-    fn supported_verify() -> SupportedSignatureSchemes;
-    fn supported_sign_tls13() -> SupportedSignatureSchemes;
-}
-
-impl SupportedMandatedSignatureSchemes for SupportedSignatureSchemes {
-    /// Supported signature verification algorithms in decreasing order of expected security.
-    fn supported_verify() -> SupportedSignatureSchemes {
-        vec![
-            /* FIXME: ECDSA-P521-SHA512 */
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA256,
-
-            SignatureScheme::RSA_PKCS1_SHA512,
-            SignatureScheme::RSA_PKCS1_SHA384,
-            SignatureScheme::RSA_PKCS1_SHA256,
-        ]
-    }
-
-    fn supported_sign_tls13() -> SupportedSignatureSchemes {
-        vec![
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA256,
-        ]
     }
 }
 

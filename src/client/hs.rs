@@ -5,9 +5,8 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use crate::msgs::handshake::{SessionID, Random, ServerHelloPayload};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
-use crate::msgs::handshake::{SupportedSignatureSchemes, SupportedMandatedSignatureSchemes};
 use crate::msgs::handshake::DecomposedSignatureScheme;
-use crate::msgs::handshake::{NamedGroups, SupportedGroups, KeyShareEntry, EncryptedExtensions};
+use crate::msgs::handshake::{KeyShareEntry, EncryptedExtensions};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use crate::msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
@@ -26,6 +25,7 @@ use crate::cipher;
 use crate::suites;
 use crate::hash_hs;
 use crate::verify;
+use crate::sign;
 use crate::rand;
 use crate::ticketer;
 #[cfg(feature = "logging")]
@@ -317,8 +317,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
     }
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
-    exts.push(ClientExtension::NamedGroups(NamedGroups::supported()));
-    exts.push(ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()));
+    exts.push(ClientExtension::NamedGroups(suites::KeyExchange::supported_groups()));
+    exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
 
@@ -893,7 +893,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks for us to retry on an unsupported group.
         if let Some(group) = req_group {
-            if !NamedGroups::supported().contains(&group) {
+            if !suites::KeyExchange::supported_groups().contains(&group) {
                 return Err(illegal_param(sess, "server requested hrr with bad group"));
             }
         }
@@ -1635,7 +1635,7 @@ impl State for ExpectTLS13CertificateRequest {
             return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
         }
 
-        let tls13_sign_schemes = SupportedSignatureSchemes::supported_sign_tls13();
+        let tls13_sign_schemes = sign::supported_sign_tls13();
         let no_sigschemes = Vec::new();
         let compat_sigschemes = certreq.get_sigalgs_extension()
             .unwrap_or(&no_sigschemes)

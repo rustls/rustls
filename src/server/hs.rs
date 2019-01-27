@@ -8,7 +8,7 @@ use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::handshake::{HandshakeMessagePayload, ServerHelloPayload, Random};
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
-use crate::msgs::handshake::{NamedGroups, SupportedGroups, ClientExtension};
+use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{ServerECDHParams, DigitallySignedStruct};
 use crate::msgs::handshake::{ServerKeyExchangePayload, ECDHEServerKeyExchange};
@@ -17,7 +17,7 @@ use crate::msgs::handshake::{CertificateRequestPayloadTLS13, NewSessionTicketPay
 use crate::msgs::handshake::{HelloRetryRequest, HelloRetryExtension, KeyShareEntry};
 use crate::msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use crate::msgs::handshake::{CertificateStatus, CertificateExtension};
-use crate::msgs::handshake::{CertReqExtension, SupportedMandatedSignatureSchemes};
+use crate::msgs::handshake::CertReqExtension;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::persist;
@@ -508,7 +508,7 @@ impl ExpectClientHello {
             extensions: Vec::new(),
         };
 
-        let schemes = SupportedSignatureSchemes::supported_verify();
+        let schemes = verify::supported_verify_schemes();
         cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes));
 
         let names = sess.config.verifier.client_auth_root_subjects();
@@ -797,7 +797,7 @@ impl ExpectClientHello {
         let cr = CertificateRequestPayload {
             certtypes: vec![ ClientCertificateType::RSASign,
                          ClientCertificateType::ECDSASign ],
-            sigschemes: SupportedSignatureSchemes::supported_verify(),
+            sigschemes: verify::supported_verify_schemes(),
             canames: names,
         };
 
@@ -902,7 +902,7 @@ impl ExpectClientHello {
             .ok_or_else(|| incompatible(sess, "client didn't describe sigschemes"))?
             .clone();
 
-        let tls13_schemes = SupportedSignatureSchemes::supported_sign_tls13();
+        let tls13_schemes = sign::supported_sign_tls13();
         sigschemes_ext.retain(|scheme| tls13_schemes.contains(scheme));
 
         let shares_ext = client_hello.get_keyshare_extension()
@@ -916,11 +916,11 @@ impl ExpectClientHello {
             .map(|share| share.group)
             .collect();
 
-        let chosen_group = util::first_in_both(&NamedGroups::supported(), &share_groups);
+        let chosen_group = util::first_in_both(&suites::KeyExchange::supported_groups(), &share_groups);
         if chosen_group.is_none() {
             // We don't have a suitable key share.  Choose a suitable group and
             // send a HelloRetryRequest.
-            let retry_group_maybe = util::first_in_both(&NamedGroups::supported(), groups_ext);
+            let retry_group_maybe = util::first_in_both(&suites::KeyExchange::supported_groups(), groups_ext);
             sess.common.hs_transcript.add_message(chm);
 
             if let Some(group) = retry_group_maybe {
@@ -1231,7 +1231,7 @@ impl State for ExpectClientHello {
             return Err(incompatible(sess, "no supported sig scheme"));
         }
 
-        let group = util::first_in_both(NamedGroups::supported().as_slice(),
+        let group = util::first_in_both(suites::KeyExchange::supported_groups().as_slice(),
                                         groups_ext.as_slice())
             .ok_or_else(|| incompatible(sess, "no supported group"))?;
 

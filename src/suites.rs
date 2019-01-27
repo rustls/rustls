@@ -49,6 +49,15 @@ impl KeyExchange {
         }
     }
 
+    pub fn supported_groups() -> Vec<NamedGroup> {
+        // in preference order
+        vec![
+            NamedGroup::X25519,
+            NamedGroup::secp384r1,
+            NamedGroup::secp256r1
+        ]
+    }
+
     pub fn client_ecdhe(kx_params: &[u8]) -> Option<KeyExchangeResult> {
         let mut rd = Reader::init(kx_params);
         let ecdh_params = ServerECDHParams::read(&mut rd)?;

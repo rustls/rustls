@@ -358,8 +358,8 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
         compression_methods: vec![ Compression::Null ],
         extensions: vec![
             ClientExtension::ECPointFormats(ECPointFormatList::supported()),
-            ClientExtension::NamedGroups(NamedGroups::supported()),
-            ClientExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()),
+            ClientExtension::NamedGroups(vec![ NamedGroup::X25519 ]),
+            ClientExtension::SignatureAlgorithms(vec![ SignatureScheme::ECDSA_NISTP256_SHA256 ]),
             ClientExtension::make_sni(DNSNameRef::try_from_ascii_str("hello").unwrap()),
             ClientExtension::SessionTicketRequest,
             ClientExtension::SessionTicketOffer(Payload(vec![])),
@@ -701,7 +701,7 @@ fn get_sample_serverkeyexchangepayload_unknown() -> ServerKeyExchangePayload {
 fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
     CertificateRequestPayload {
         certtypes: vec![ ClientCertificateType::RSASign ],
-        sigschemes: SupportedSignatureSchemes::supported_verify(),
+        sigschemes: vec![ SignatureScheme::ECDSA_NISTP256_SHA256 ],
         canames: vec![ PayloadU16(vec![ 1, 2, 3 ]) ]
     }
 }
@@ -710,7 +710,7 @@ fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13
     CertificateRequestPayloadTLS13 {
         context: PayloadU8(vec![ 1, 2, 3 ]),
         extensions: vec![
-            CertReqExtension::SignatureAlgorithms(SupportedSignatureSchemes::supported_verify()),
+            CertReqExtension::SignatureAlgorithms(vec![ SignatureScheme::ECDSA_NISTP256_SHA256 ]),
             CertReqExtension::AuthorityNames(vec![ PayloadU16(vec![ 1, 2, 3 ]) ]),
             CertReqExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
