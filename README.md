@@ -17,6 +17,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
+* 0.15.1 (next release):
+  - Fix incorrect offering of SHA1.
 * 0.15.0 (2019-01-20):
   - Update dependencies.
   - *Breaking API change*: ALPN protocols are now encoded as a `Vec<u8>`, not
