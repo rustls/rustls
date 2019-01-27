@@ -62,6 +62,7 @@
     "LargeMessage-Reject": "",
     "SkipEarlyData*": "no 0rtt support",
     "TLS13-DuplicateTicketEarlyDataInfo": "",
+    "*-InvalidSignature-*-SHA1-*": "no sha1",
     "NoCommonCurves": "nothing to fall back to",
     "ClientHelloPadding": "hello padding extension not implemented",
     "Resume-Client-CipherMismatch": "tries to vary to unimplemented CBC-mode cs",
@@ -176,7 +177,7 @@
     "TLS12-AEAD-AES256-GCM-SHA384-client": ":PEER_MISBEHAVIOUR:",
     "SkipHelloRetryRequest-TLS13": ":PEER_MISBEHAVIOUR:",
     "NoSupportedVersions": ":INCOMPATIBLE:",
-    "ClientAuth-Verify-RSA-PKCS1-SHA1-TLS12": ":FIXME:",
+    "ClientAuth-Verify-RSA-PKCS1-SHA1-TLS12": ":PEER_ALERT_INTERNAL_ERROR:",
     "ServerAuth-Verify-RSA-PKCS1-SHA1-TLS12": ":HANDSHAKE_FAILURE:",
     "ClientAuth-Verify-RSA-PKCS1-SHA1-TLS13": ":PEER_MISBEHAVIOUR:",
     "ServerAuth-Verify-RSA-PKCS1-SHA1-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -298,7 +299,7 @@
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
     "GarbageCertificate-Server-TLS12": "remote error: access denied",
     "GarbageCertificate-Server-TLS13": "remote error: access denied",
-    "ClientAuth-Verify-RSA-PKCS1-SHA1-TLS12": "remote error: access denied",
-    "ServerAuth-Verify-RSA-PKCS1-SHA1-TLS12": "remote error: illegal parameter"
+    "ClientAuth-Verify-RSA-PKCS1-SHA1-TLS12": "tls: no common signature algorithms",
+    "ServerAuth-Verify-RSA-PKCS1-SHA1-TLS12": "tls: no common signature algorithms"
   }
 }

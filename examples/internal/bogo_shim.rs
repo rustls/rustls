@@ -424,6 +424,7 @@ fn handle_err(err: rustls::TLSError) -> ! {
         }
         TLSError::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
         TLSError::AlertReceived(AlertDescription::ProtocolVersion) => quit(":WRONG_VERSION:"),
+        TLSError::AlertReceived(AlertDescription::InternalError) => quit(":PEER_ALERT_INTERNAL_ERROR:"),
         TLSError::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
         TLSError::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
             quit(":BAD_CHANGE_CIPHER_SPEC:")
