@@ -317,8 +317,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
     }
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
-    exts.push(ClientExtension::NamedGroups(suites::KeyExchange::supported_groups()));
-    exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes()));
+    exts.push(ClientExtension::NamedGroups(suites::KeyExchange::supported_groups().to_vec()));
+    exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes().to_vec()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
 

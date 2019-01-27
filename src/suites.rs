@@ -49,9 +49,9 @@ impl KeyExchange {
         }
     }
 
-    pub fn supported_groups() -> Vec<NamedGroup> {
+    pub fn supported_groups() -> &'static [NamedGroup] {
         // in preference order
-        vec![
+        &[
             NamedGroup::X25519,
             NamedGroup::secp384r1,
             NamedGroup::secp256r1

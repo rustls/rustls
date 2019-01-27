@@ -509,7 +509,7 @@ impl ExpectClientHello {
         };
 
         let schemes = verify::supported_verify_schemes();
-        cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes));
+        cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
         let names = sess.config.verifier.client_auth_root_subjects();
         if !names.is_empty() {
@@ -797,7 +797,7 @@ impl ExpectClientHello {
         let cr = CertificateRequestPayload {
             certtypes: vec![ ClientCertificateType::RSASign,
                          ClientCertificateType::ECDSASign ],
-            sigschemes: verify::supported_verify_schemes(),
+            sigschemes: verify::supported_verify_schemes().to_vec(),
             canames: names,
         };
 
@@ -916,11 +916,12 @@ impl ExpectClientHello {
             .map(|share| share.group)
             .collect();
 
-        let chosen_group = util::first_in_both(&suites::KeyExchange::supported_groups(), &share_groups);
+        let supported_groups = suites::KeyExchange::supported_groups();
+        let chosen_group = util::first_in_both(supported_groups, &share_groups);
         if chosen_group.is_none() {
             // We don't have a suitable key share.  Choose a suitable group and
             // send a HelloRetryRequest.
-            let retry_group_maybe = util::first_in_both(&suites::KeyExchange::supported_groups(), groups_ext);
+            let retry_group_maybe = util::first_in_both(supported_groups, groups_ext);
             sess.common.hs_transcript.add_message(chm);
 
             if let Some(group) = retry_group_maybe {
@@ -1231,7 +1232,7 @@ impl State for ExpectClientHello {
             return Err(incompatible(sess, "no supported sig scheme"));
         }
 
-        let group = util::first_in_both(suites::KeyExchange::supported_groups().as_slice(),
+        let group = util::first_in_both(suites::KeyExchange::supported_groups(),
                                         groups_ext.as_slice())
             .ok_or_else(|| incompatible(sess, "no supported group"))?;
 

@@ -405,8 +405,8 @@ pub fn verify_scts(cert: &Certificate,
     Ok(())
 }
 
-pub fn supported_verify_schemes() -> Vec<SignatureScheme> {
-    vec![
+pub fn supported_verify_schemes() -> &'static [SignatureScheme] {
+    &[
         SignatureScheme::ECDSA_NISTP384_SHA384,
         SignatureScheme::ECDSA_NISTP256_SHA256,
 

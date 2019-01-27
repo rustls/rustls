@@ -300,8 +300,8 @@ impl Signer for SingleSchemeSigner {
 
 /// The set of schemes we support for signatures and
 /// that are allowed for TLS1.3.
-pub fn supported_sign_tls13() -> Vec<SignatureScheme> {
-    vec![
+pub fn supported_sign_tls13() -> &'static [SignatureScheme] {
+    &[
         SignatureScheme::ECDSA_NISTP384_SHA384,
         SignatureScheme::ECDSA_NISTP256_SHA256,
 
