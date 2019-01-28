@@ -2018,3 +2018,39 @@ fn quic_handshake() {
         Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
     );
 }
+
+#[test]
+fn test_client_does_not_offer_sha1() {
+    use rustls::internal::msgs::{message::Message, message::MessagePayload,
+        handshake::HandshakePayload, enums::HandshakeType, codec::Codec};
+
+    for kt in ALL_KEY_TYPES.iter() {
+        for client_config in AllClientVersions::new(make_client_config(*kt)) {
+            let (mut client, _) = make_pair_for_configs(client_config,
+                                                        make_server_config(*kt));
+
+            assert!(client.wants_write());
+            let mut buf = [0u8; 262144];
+            let sz = client.write_tls(&mut buf.as_mut())
+                .unwrap();
+            let mut msg = Message::read_bytes(&buf[..sz])
+                .unwrap();
+            assert!(msg.decode_payload());
+            assert!(msg.is_handshake_type(HandshakeType::ClientHello));
+
+            let client_hello = match msg.payload {
+                MessagePayload::Handshake(hs) => match hs.payload {
+                    HandshakePayload::ClientHello(ch) => ch,
+                    _ => unreachable!()
+                }
+                _ => unreachable!()
+            };
+
+            let sigalgs = client_hello.get_sigalgs_extension()
+                .unwrap();
+            assert_eq!(sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1), false,
+                       "sha1 unexpectedly offered");
+        }
+    }
+
+}
