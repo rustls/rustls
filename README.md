@@ -17,7 +17,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
-* 0.15.1 (next release):
+* 0.15.1 (2019-01-29):
   - Fix incorrect offering of SHA1.
 * 0.15.0 (2019-01-20):
   - Update dependencies.
