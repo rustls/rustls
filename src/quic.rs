@@ -58,17 +58,9 @@ impl QuicExt for ClientSession {
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
-        self.imp.common
-            .handshake_joiner
-            .take_message(Message {
-                typ: ContentType::Handshake,
-                version: ProtocolVersion::TLSv1_3,
-                payload: MessagePayload::new_opaque(plaintext.into()),
-            });
-        self.imp.process_new_handshake_messages()?;
-        Ok(())
+        read_hs(&mut self.imp.common, plaintext)?;
+        self.imp.process_new_handshake_messages()
     }
-
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Secrets> { write_hs(&mut self.imp.common, buf) }
 
     fn get_alert(&self) -> Option<AlertDescription> { self.imp.common.quic.alert }
@@ -86,22 +78,29 @@ impl QuicExt for ServerSession {
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
-        self.imp.common
-            .handshake_joiner
-            .take_message(Message {
-                typ: ContentType::Handshake,
-                version: ProtocolVersion::TLSv1_3,
-                payload: MessagePayload::new_opaque(plaintext.into()),
-            });
-        self.imp.process_new_handshake_messages()?;
-        Ok(())
+        read_hs(&mut self.imp.common, plaintext)?;
+        self.imp.process_new_handshake_messages()
     }
-    
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Secrets> { write_hs(&mut self.imp.common, buf) }
 
     fn get_alert(&self) -> Option<AlertDescription> { self.imp.common.quic.alert }
 
     fn update_secrets(&self, client: &[u8], server: &[u8]) -> Secrets { update_secrets(&self.imp.common, client, server) }
+}
+
+fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TLSError> {
+    if this
+        .handshake_joiner
+        .take_message(Message {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::new_opaque(plaintext.into()),
+        }).is_none()
+    {
+        this.quic.alert = Some(AlertDescription::DecodeError);
+        return Err(TLSError::CorruptMessage);
+    }
+    Ok(())
 }
 
 fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Secrets> {
