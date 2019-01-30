@@ -399,6 +399,9 @@ impl ExpectClientHello {
                 if sess.common.protocol == Protocol::Quic {
                     let client_early_traffic_secret = key_schedule
                         .derive(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash);
+                    sess.config.key_log.log(sess.common.protocol.labels().client_early_traffic_secret,
+                                &self.handshake.randoms.client,
+                                &client_early_traffic_secret);
                     // If 0-RTT should be rejected, this will be clobbered by process_extensions
                     // before the application can see.
                     sess.common.quic.early_secret = Some(client_early_traffic_secret);
@@ -414,10 +417,10 @@ impl ExpectClientHello {
         let read_key = key_schedule.derive(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-        sess.config.key_log.log("SERVER_HANDSHAKE_TRAFFIC_SECRET",
+        sess.config.key_log.log(sess.common.protocol.labels().server_handshake_traffic_secret,
                                 &self.handshake.randoms.client,
                                 &write_key);
-        sess.config.key_log.log("CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+        sess.config.key_log.log(sess.common.protocol.labels().client_handshake_traffic_secret,
                                 &self.handshake.randoms.client,
                                 &read_key);
 
@@ -640,7 +643,7 @@ impl ExpectClientHello {
                     &self.handshake.hash_at_server_fin);
         let suite = sess.common.get_suite_assert();
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-        sess.config.key_log.log("SERVER_TRAFFIC_SECRET_0",
+        sess.config.key_log.log(sess.common.protocol.labels().server_traffic_secret_0,
                                 &self.handshake.randoms.client,
                                 &write_key);
 
@@ -664,7 +667,7 @@ impl ExpectClientHello {
             .get_key_schedule()
             .derive(SecretKind::ExporterMasterSecret,
                     &self.handshake.hash_at_server_fin);
-        sess.config.key_log.log("EXPORTER_SECRET",
+        sess.config.key_log.log(sess.common.protocol.labels().exporter_secret,
                                 &self.handshake.randoms.client,
                                 &exporter_secret);
         sess.common
@@ -866,7 +869,7 @@ impl ExpectClientHello {
         let secrets = SessionSecrets::new_resume(&self.handshake.randoms,
                                                  hashalg,
                                                  &resumedata.master_secret.0);
-        sess.config.key_log.log("CLIENT_RANDOM",
+        sess.config.key_log.log(sess.common.protocol.labels().client_random,
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
@@ -1426,7 +1429,7 @@ impl State for ExpectTLS12ClientKX {
                                 hashalg,
                                 &kxd.premaster_secret)
         };
-        sess.config.key_log.log("CLIENT_RANDOM",
+        sess.config.key_log.log(sess.common.protocol.labels().client_random,
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
@@ -1851,7 +1854,7 @@ impl State for ExpectTLS13Finished {
             .get_key_schedule()
             .derive(SecretKind::ClientApplicationTrafficSecret,
                     &self.handshake.hash_at_server_fin);
-        sess.config.key_log.log("CLIENT_TRAFFIC_SECRET_0",
+        sess.config.key_log.log(sess.common.protocol.labels().client_traffic_secret_0,
                                 &self.handshake.randoms.client,
                                 &read_key);
 
