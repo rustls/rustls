@@ -214,6 +214,42 @@ pub enum Protocol {
     Quic,
 }
 
+pub struct Labels {
+    pub client_early_traffic_secret: &'static str,
+    pub client_handshake_traffic_secret: &'static str,
+    pub server_handshake_traffic_secret: &'static str,
+    pub client_traffic_secret_0: &'static str,
+    pub server_traffic_secret_0: &'static str,
+    pub client_random: &'static str,
+    pub exporter_secret: &'static str,
+}
+
+impl Protocol {
+    pub fn labels(&self) -> &'static Labels {
+        match *self {
+            Protocol::Tls13 => &Labels {
+                client_early_traffic_secret: "CLIENT_EARLY_TRAFFIC_SECRET",
+                client_handshake_traffic_secret: "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+                server_handshake_traffic_secret: "SERVER_HANDSHAKE_TRAFFIC_SECRET",
+                client_traffic_secret_0: "CLIENT_TRAFFIC_SECRET_0",
+                server_traffic_secret_0: "SERVER_TRAFFIC_SECRET_0",
+                client_random: "CLIENT_RANDOM",
+                exporter_secret: "EXPORTER_SECRET",
+            },
+            #[cfg(feature = "quic")]
+            Protocol::Quic => &Labels {
+                client_early_traffic_secret: "QUIC_CLIENT_EARLY_TRAFFIC_SECRET",
+                client_handshake_traffic_secret: "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+                server_handshake_traffic_secret: "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET",
+                client_traffic_secret_0: "QUIC_CLIENT_TRAFFIC_SECRET_0",
+                server_traffic_secret_0: "QUIC_SERVER_TRAFFIC_SECRET_0",
+                client_random: "QUIC_CLIENT_RANDOM",
+                exporter_secret: "QUIC_EXPORTER_SECRET",
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SessionRandoms {
     pub we_are_client: bool,
