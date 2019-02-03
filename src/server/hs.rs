@@ -237,6 +237,7 @@ impl ExpectClientHello {
 
                 if let Some(resume) = resumedata {
                     if sess.config.max_early_data_size > 0
+                        && hello.early_data_extension_offered()
                         && resume.version == sess.common.negotiated_version.unwrap()
                         && resume.cipher_suite == sess.common.get_suite_assert().suite
                         && resume.alpn.as_ref().map(|x| &x.0) == sess.alpn_protocol.as_ref()
