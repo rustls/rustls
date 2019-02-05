@@ -147,7 +147,7 @@ impl ClientSessionValue {
     pub fn get_obfuscated_ticket_age(&self, time_now: u64) -> u32 {
         let age_secs = time_now.saturating_sub(self.epoch);
         let age_millis = age_secs as u32 * 1000;
-        age_millis.wrapping_sub(self.age_add)
+        age_millis.wrapping_add(self.age_add)
     }
 
     pub fn take_ticket(&mut self) -> Vec<u8> {
