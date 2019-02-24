@@ -110,16 +110,6 @@ mod online {
     }
 
     #[test]
-    fn many_sans() {
-        // This exercises webpki, but also handshake reassembly.
-        polite();
-        connect("1000-sans.badssl.com")
-            .expect("<title>1000-sans.badssl.com</title>")
-            .go()
-            .unwrap();
-    }
-
-    #[test]
     fn too_many_sans() {
         polite();
         connect("10000-sans.badssl.com")
