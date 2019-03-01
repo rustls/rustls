@@ -7,7 +7,9 @@ use crate::common::OpenSSLServer;
 // but B is not.
 #[test]
 fn partial_chain() {
-    let mut server = OpenSSLServer::new_rsa(3000);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 3000);
     server.partial_chain();
     server.run();
     server.client()

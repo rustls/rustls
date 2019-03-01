@@ -7,7 +7,9 @@ use crate::common::OpenSSLServer;
 
 #[test]
 fn ecdhe_rsa_aes_128_gcm_sha256() {
-    let mut server = OpenSSLServer::new_rsa(5000);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 5000);
     server.run();
     server.client()
         .verbose()
@@ -19,7 +21,9 @@ fn ecdhe_rsa_aes_128_gcm_sha256() {
 
 #[test]
 fn ecdhe_rsa_aes_256_gcm_sha384() {
-    let mut server = OpenSSLServer::new_rsa(5010);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 5010);
     server.run();
     server.client()
         .verbose()
@@ -31,7 +35,9 @@ fn ecdhe_rsa_aes_256_gcm_sha384() {
 
 #[test]
 fn ecdhe_ecdsa_aes_128_gcm_sha256() {
-    let mut server = OpenSSLServer::new_ecdsa(5020);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_ecdsa(test_ca.path(), 5020);
     server.run();
     server.client()
         .verbose()
@@ -43,7 +49,9 @@ fn ecdhe_ecdsa_aes_128_gcm_sha256() {
 
 #[test]
 fn ecdhe_ecdsa_aes_256_gcm_sha384() {
-    let mut server = OpenSSLServer::new_ecdsa(5030);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_ecdsa(test_ca.path(), 5030);
     server.run();
     server.client()
         .verbose()
