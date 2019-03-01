@@ -1,9 +1,9 @@
-
+use std::env;
+use std::net;
 use std::process;
 use std::str;
 use std::thread;
 use std::time;
-use std::net;
 
 use regex;
 use self::regex::Regex;
@@ -57,14 +57,18 @@ pub fn tlsclient_find() -> &'static str {
     "target/debug/examples/tlsclient"
 }
 
-pub fn openssl_find() -> &'static str {
+pub fn openssl_find() -> String {
+    if let Ok(dir) = env::var("OPENSSL_DIR") {
+        return format!("{}/bin/openssl", dir);
+    }
+
     // We need a homebrew openssl, because OSX comes with
     // 0.9.8y or something equally ancient!
     if cfg!(target_os = "macos") {
-        return "/usr/local/opt/openssl/bin/openssl";
+        return "/usr/local/opt/openssl/bin/openssl".to_string();
     }
 
-    "openssl"
+    "openssl".to_string()
 }
 
 fn openssl_supports_option(cmd: &str, opt: &str) -> bool {
