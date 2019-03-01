@@ -2,7 +2,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::fs;
 use std::mem;
 use std::fmt;
 use std::io::{self, Write, Read};
@@ -25,6 +24,9 @@ use rustls::KeyLog;
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 
 use webpki;
+
+#[allow(dead_code)]
+mod common;
 
 fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
     let mut buf = [0u8; 262144];
@@ -58,35 +60,31 @@ enum KeyType {
 static ALL_KEY_TYPES: [KeyType; 2] = [ KeyType::RSA, KeyType::ECDSA ];
 
 impl KeyType {
-    fn path_for(&self, part: &str) -> String {
+    fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
-            KeyType::RSA => format!("test-ca/rsa/{}", part),
-            KeyType::ECDSA => format!("test-ca/ecdsa/{}", part),
+            KeyType::RSA => common::bytes_for("rsa", part),
+            KeyType::ECDSA => common::bytes_for("ecdsa", part),
         }
     }
 
     fn get_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("end.fullchain"))
-                                               .unwrap()))
+        pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain")))
             .unwrap()
     }
 
     fn get_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("end.key"))
-                                                            .unwrap()))
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key")))
                 .unwrap()[0]
             .clone()
     }
 
     fn get_client_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("client.fullchain"))
-                                               .unwrap()))
+        pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
             .unwrap()
     }
 
     fn get_client_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("client.key"))
-                                                            .unwrap()))
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key")))
                 .unwrap()[0]
             .clone()
     }
@@ -115,7 +113,7 @@ fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
 
 fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut cfg = ClientConfig::new();
-    let mut rootbuf = io::BufReader::new(fs::File::open(kt.path_for("ca.cert")).unwrap());
+    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     cfg.root_store.add_pem_file(&mut rootbuf).unwrap();
 
     cfg

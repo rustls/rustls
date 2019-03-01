@@ -12,7 +12,9 @@ fn alpn_offer() {
         return;
     }
 
-    let mut server = OpenSSLServer::new_rsa(9000);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9000);
     server.arg("-alpn")
         .arg("ponytown,breakfast,edgware")
         .arg("-tls1_2")
@@ -46,7 +48,9 @@ fn alpn_agree() {
         return;
     }
 
-    let mut server = TlsServer::new(9010);
+    let test_ca = common::new_test_ca();
+
+    let mut server = TlsServer::new(test_ca.path(), 9010);
     server.proto(b"connaught")
         .proto(b"bonjour")
         .proto(b"egg")
@@ -78,13 +82,18 @@ fn alpn_agree() {
 
 #[test]
 fn client_auth_by_client() {
-    let mut server = OpenSSLServer::new_rsa(9020);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9020);
     server.arg("-verify").arg("0")
           .arg("-tls1_2");
     server.run();
 
     server.client()
-        .client_auth("test-ca/rsa/end.fullchain", "test-ca/rsa/end.rsa")
+        .client_auth(
+            &test_ca.path().join("rsa").join("end.fullchain"),
+            &test_ca.path().join("rsa").join("end.rsa"),
+        )
         .expect_log("Got CertificateRequest")
         .expect_log("Attempting client auth")
         .expect("Client certificate\n")
@@ -96,13 +105,18 @@ fn client_auth_by_client() {
 
 #[test]
 fn client_auth_by_client_with_ecdsa_suite() {
-    let mut server = OpenSSLServer::new_ecdsa(9025);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_ecdsa(test_ca.path(), 9025);
     server.arg("-verify").arg("0")
           .arg("-tls1_2");
     server.run();
 
     server.client()
-        .client_auth("test-ca/rsa/end.fullchain", "test-ca/rsa/end.rsa")
+        .client_auth(
+            &test_ca.path().join("rsa").join("end.fullchain"),
+            &test_ca.path().join("rsa").join("end.rsa"),
+        )
         .expect_log("Got CertificateRequest")
         .expect_log("Attempting client auth")
         .expect(r"AlertReceived\(UnknownCA\)")
@@ -114,7 +128,9 @@ fn client_auth_by_client_with_ecdsa_suite() {
 
 #[test]
 fn client_auth_requested_but_unsupported() {
-    let mut server = OpenSSLServer::new_rsa(9030);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9030);
     server.arg("-verify").arg("0")
           .arg("-tls1_2");
     server.run();
@@ -131,7 +147,9 @@ fn client_auth_requested_but_unsupported() {
 
 #[test]
 fn client_auth_required_but_unsupported() {
-    let mut server = OpenSSLServer::new_rsa(9040);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9040);
     server.arg("-Verify").arg("0")
           .arg("-tls1_2");
     server.run();
@@ -148,8 +166,10 @@ fn client_auth_required_but_unsupported() {
 
 #[test]
 fn client_auth_by_server_accepted() {
-    let mut server = TlsServer::new(9050);
-    server.client_auth_roots("test-ca/rsa/client.chain")
+    let test_ca = common::new_test_ca();
+
+    let mut server = TlsServer::new(test_ca.path(), 9050);
+    server.client_auth_roots(&test_ca.path().join("rsa").join("client.chain"))
         .http_mode()
         .run();
 
@@ -161,9 +181,9 @@ fn client_auth_by_server_accepted() {
     // And with
     server.client()
         .arg("-key")
-        .arg("test-ca/rsa/client.key")
+        .arg(test_ca.path().join("rsa").join("client.key").to_str().unwrap())
         .arg("-cert")
-        .arg("test-ca/rsa/client.fullchain")
+        .arg(test_ca.path().join("rsa").join("client.fullchain").to_str().unwrap())
         .expect("Acceptable client certificate CA names")
         .go();
 
@@ -172,8 +192,10 @@ fn client_auth_by_server_accepted() {
 
 #[test]
 fn client_auth_by_server_required() {
-    let mut server = TlsServer::new(9060);
-    server.client_auth_roots("test-ca/rsa/client.chain")
+    let test_ca = common::new_test_ca();
+
+    let mut server = TlsServer::new(test_ca.path(), 9060);
+    server.client_auth_roots(&test_ca.path().join("rsa").join("client.chain"))
         .client_auth_required()
         .http_mode()
         .run();
@@ -187,9 +209,9 @@ fn client_auth_by_server_required() {
     // ... but does with.
     server.client()
         .arg("-key")
-        .arg("test-ca/rsa/client.key")
+        .arg(test_ca.path().join("rsa").join("client.key").to_str().unwrap())
         .arg("-cert")
-        .arg("test-ca/rsa/client.fullchain")
+        .arg(test_ca.path().join("rsa").join("client.fullchain").to_str().unwrap())
         .expect("Acceptable client certificate CA names")
         .go();
 
@@ -198,7 +220,9 @@ fn client_auth_by_server_required() {
 
 #[test]
 fn client_resumes() {
-    let mut server = OpenSSLServer::new_rsa(9070);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9070);
     server.arg("-tls1_2");
     server.run();
 
@@ -234,7 +258,9 @@ fn client_resumes() {
 
 #[test]
 fn server_resumes() {
-    let mut server = TlsServer::new(9080);
+    let test_ca = common::new_test_ca();
+
+    let mut server = TlsServer::new(test_ca.path(), 9080);
     server.resumes()
         .http_mode()
         .run();
@@ -277,7 +303,9 @@ fn server_resumes() {
 
 #[test]
 fn server_resumes_with_tickets() {
-    let mut server = TlsServer::new(9090);
+    let test_ca = common::new_test_ca();
+
+    let mut server = TlsServer::new(test_ca.path(), 9090);
     server.tickets()
         .http_mode()
         .run();
@@ -305,7 +333,9 @@ fn server_resumes_with_tickets() {
 
 #[test]
 fn recv_low_mtu() {
-    let mut server = OpenSSLServer::new_rsa(9100);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9100);
     server.arg("-mtu").arg("32");
     server.run();
 
@@ -316,7 +346,9 @@ fn recv_low_mtu() {
 
 #[test]
 fn send_low_mtu() {
-    let mut server = OpenSSLServer::new_rsa(9110);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9110);
     server.run();
 
     server.client()
@@ -327,7 +359,9 @@ fn send_low_mtu() {
 
 #[test]
 fn send_sni() {
-    let mut server = OpenSSLServer::new_rsa(9115);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9115);
     server
         .arg("-servername_fatal")
         .arg("-servername")
@@ -342,7 +376,9 @@ fn send_sni() {
 
 #[test]
 fn do_not_send_sni() {
-    let mut server = OpenSSLServer::new_rsa(9116);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9116);
     server
         .arg("-servername_fatal")
         .arg("-servername")

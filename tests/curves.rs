@@ -6,7 +6,9 @@ use crate::common::OpenSSLServer;
 
 #[test]
 fn curve_nistp256() {
-    let mut server = OpenSSLServer::new_rsa(4000);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 4000);
     server.arg("-named_curve").arg("prime256v1");
     server.run();
     server.client()
@@ -18,7 +20,9 @@ fn curve_nistp256() {
 
 #[test]
 fn curve_nistp384() {
-    let mut server = OpenSSLServer::new_rsa(4010);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 4010);
     server.arg("-named_curve").arg("secp384r1");
     server.run();
     server.client()

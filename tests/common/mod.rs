@@ -1,5 +1,9 @@
 use std::env;
 use std::net;
+
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::str;
 use std::thread;
@@ -7,6 +11,83 @@ use std::time;
 
 use regex;
 use self::regex::Regex;
+use tempfile;
+
+macro_rules! embed_files {
+    (
+        $(
+            ($name:ident, $keytype:expr, $path:expr);
+        )+
+    ) => {
+        $(
+            const $name: &'static [u8] = include_bytes!(
+                concat!("../../test-ca/", $keytype, "/", $path));
+        )+
+
+        pub fn bytes_for(keytype: &str, path: &str) -> &'static [u8] {
+            match (keytype, path) {
+                $(
+                    ($keytype, $path) => $name,
+                )+
+                _ => panic!("unknown keytype {} with path {}", keytype, path),
+            }
+        }
+
+        pub fn new_test_ca() -> tempfile::TempDir {
+            let dir = tempfile::TempDir::new().unwrap();
+
+            fs::create_dir(dir.path().join("ecdsa")).unwrap();
+            fs::create_dir(dir.path().join("rsa")).unwrap();
+
+            $(
+                let mut f = File::create(dir.path().join($keytype).join($path)).unwrap();
+                f.write($name).unwrap();
+            )+
+
+            dir
+        }
+    }
+}
+
+embed_files! {
+    (ECDSA_CA_CERT, "ecdsa", "ca.cert");
+    (ECDSA_CA_DER, "ecdsa", "ca.der");
+    (ECDSA_CA_KEY, "ecdsa", "ca.key");
+    (ECDSA_CLIENT_CERT, "ecdsa", "client.cert");
+    (ECDSA_CLIENT_CHAIN, "ecdsa", "client.chain");
+    (ECDSA_CLIENT_FULLCHAIN, "ecdsa", "client.fullchain");
+    (ECDSA_CLIENT_KEY, "ecdsa", "client.key");
+    (ECDSA_CLIENT_REQ, "ecdsa", "client.req");
+    (ECDSA_END_CERT, "ecdsa", "end.cert");
+    (ECDSA_END_CHAIN, "ecdsa", "end.chain");
+    (ECDSA_END_FULLCHAIN, "ecdsa", "end.fullchain");
+    (ECDSA_END_KEY, "ecdsa", "end.key");
+    (ECDSA_END_REQ, "ecdsa", "end.req");
+    (ECDSA_INTER_CERT, "ecdsa", "inter.cert");
+    (ECDSA_INTER_KEY, "ecdsa", "inter.key");
+    (ECDSA_INTER_REQ, "ecdsa", "inter.req");
+    (ECDSA_NISTP256_PEM, "ecdsa", "nistp256.pem");
+    (ECDSA_NISTP384_PEM, "ecdsa", "nistp384.pem");
+
+    (RSA_CA_CERT, "rsa", "ca.cert");
+    (RSA_CA_DER, "rsa", "ca.der");
+    (RSA_CA_KEY, "rsa", "ca.key");
+    (RSA_CLIENT_CERT, "rsa", "client.cert");
+    (RSA_CLIENT_CHAIN, "rsa", "client.chain");
+    (RSA_CLIENT_FULLCHAIN, "rsa", "client.fullchain");
+    (RSA_CLIENT_KEY, "rsa", "client.key");
+    (RSA_CLIENT_REQ, "rsa", "client.req");
+    (RSA_CLIENT_RSA, "rsa", "client.rsa");
+    (RSA_END_CERT, "rsa", "end.cert");
+    (RSA_END_CHAIN, "rsa", "end.chain");
+    (RSA_END_FULLCHAIN, "rsa", "end.fullchain");
+    (RSA_END_KEY, "rsa", "end.key");
+    (RSA_END_REQ, "rsa", "end.req");
+    (RSA_END_RSA, "rsa", "end.rsa");
+    (RSA_INTER_CERT, "rsa", "inter.cert");
+    (RSA_INTER_KEY, "rsa", "inter.key");
+    (RSA_INTER_REQ, "rsa", "inter.req");
+}
 
 // For tests which connect to internet servers, don't go crazy.
 pub fn polite() {
@@ -102,9 +183,9 @@ pub struct TlsClient {
     pub hostname: String,
     pub port: u16,
     pub http: bool,
-    pub cafile: Option<String>,
-    pub client_auth_key: Option<String>,
-    pub client_auth_certs: Option<String>,
+    pub cafile: Option<PathBuf>,
+    pub client_auth_key: Option<PathBuf>,
+    pub client_auth_certs: Option<PathBuf>,
     pub cache: Option<String>,
     pub suites: Vec<String>,
     pub protos: Vec<Vec<u8>>,
@@ -141,14 +222,14 @@ impl TlsClient {
         }
     }
 
-    pub fn client_auth(&mut self, certs: &str, key: &str) -> &mut Self {
-        self.client_auth_key = Some(key.to_string());
-        self.client_auth_certs = Some(certs.to_string());
+    pub fn client_auth(&mut self, certs: &Path, key: &Path) -> &mut Self {
+        self.client_auth_key = Some(key.to_path_buf());
+        self.client_auth_certs = Some(certs.to_path_buf());
         self
     }
 
-    pub fn cafile(&mut self, cafile: &str) -> &mut TlsClient {
-        self.cafile = Some(cafile.to_string());
+    pub fn cafile(&mut self, cafile: &Path) -> &mut TlsClient {
+        self.cafile = Some(cafile.to_path_buf());
         self
     }
 
@@ -245,17 +326,17 @@ impl TlsClient {
 
         if self.cafile.is_some() {
             args.push("--cafile");
-            args.push(self.cafile.as_ref().unwrap());
+            args.push(self.cafile.as_ref().unwrap().to_str().unwrap());
         }
 
         if self.client_auth_key.is_some() {
             args.push("--auth-key");
-            args.push(self.client_auth_key.as_ref().unwrap());
+            args.push(self.client_auth_key.as_ref().unwrap().to_str().unwrap());
         }
 
         if self.client_auth_certs.is_some() {
             args.push("--auth-certs");
-            args.push(self.client_auth_certs.as_ref().unwrap());
+            args.push(self.client_auth_certs.as_ref().unwrap().to_str().unwrap());
         }
 
         for suite in &self.suites {
@@ -321,37 +402,37 @@ pub struct OpenSSLServer {
     pub port: u16,
     pub http: bool,
     pub quiet: bool,
-    pub key: String,
-    pub cert: String,
-    pub chain: String,
-    pub intermediate: String,
-    pub cacert: String,
+    pub key: PathBuf,
+    pub cert: PathBuf,
+    pub chain: PathBuf,
+    pub intermediate: PathBuf,
+    pub cacert: PathBuf,
     pub extra_args: Vec<&'static str>,
     pub child: Option<process::Child>,
 }
 
 impl OpenSSLServer {
-    pub fn new(keytype: &str, start_port: u16) -> OpenSSLServer {
+    pub fn new(test_ca: &Path, keytype: &str, start_port: u16) -> OpenSSLServer {
         OpenSSLServer {
             port: unused_port(start_port),
             http: true,
             quiet: true,
-            key: format!("test-ca/{}/end.key", keytype),
-            cert: format!("test-ca/{}/end.cert", keytype),
-            chain: format!("test-ca/{}/end.chain", keytype),
-            cacert: format!("test-ca/{}/ca.cert", keytype),
-            intermediate: format!("test-ca/{}/inter.cert", keytype),
+            key: test_ca.join(keytype).join("end.key"),
+            cert: test_ca.join(keytype).join("end.cert"),
+            chain: test_ca.join(keytype).join("end.chain"),
+            cacert: test_ca.join(keytype).join("ca.cert"),
+            intermediate: test_ca.join(keytype).join("inter.cert"),
             extra_args: Vec::new(),
             child: None,
         }
     }
 
-    pub fn new_rsa(start_port: u16) -> OpenSSLServer {
-        OpenSSLServer::new("rsa", start_port)
+    pub fn new_rsa(test_ca: &Path, start_port: u16) -> OpenSSLServer {
+        OpenSSLServer::new(test_ca, "rsa", start_port)
     }
 
-    pub fn new_ecdsa(start_port: u16) -> OpenSSLServer {
-        OpenSSLServer::new("ecdsa", start_port)
+    pub fn new_ecdsa(test_ca: &Path, start_port: u16) -> OpenSSLServer {
+        OpenSSLServer::new(test_ca, "ecdsa", start_port)
     }
 
     pub fn partial_chain(&mut self) -> &mut Self {
@@ -431,34 +512,34 @@ pub struct TlsServer {
     pub port: u16,
     pub http: bool,
     pub echo: bool,
-    pub certs: String,
-    pub key: String,
-    pub cafile: String,
+    pub certs: PathBuf,
+    pub key: PathBuf,
+    pub cafile: PathBuf,
     pub suites: Vec<String>,
     pub protos: Vec<Vec<u8>>,
     used_suites: Vec<String>,
     used_protos: Vec<Vec<u8>>,
     pub resumes: bool,
     pub tickets: bool,
-    pub client_auth_roots: String,
+    pub client_auth_roots: Option<PathBuf>,
     pub client_auth_required: bool,
     pub verbose: bool,
     pub child: Option<process::Child>,
 }
 
 impl TlsServer {
-    pub fn new(port: u16) -> Self {
-        Self::new_keytype(port, "rsa")
+    pub fn new(test_ca: &Path, port: u16) -> Self {
+        Self::new_keytype(test_ca, port, "rsa")
     }
 
-    pub fn new_keytype(port: u16, keytype: &str) -> Self {
+    pub fn new_keytype(test_ca: &Path, port: u16, keytype: &str) -> Self {
         TlsServer {
             port: unused_port(port),
             http: false,
             echo: false,
-            key: format!("test-ca/{}/end.key", keytype),
-            certs: format!("test-ca/{}/end.fullchain", keytype),
-            cafile: format!("test-ca/{}/ca.cert", keytype),
+            key: test_ca.join(keytype).join("end.key"),
+            certs: test_ca.join(keytype).join("end.fullchain"),
+            cafile: test_ca.join(keytype).join("ca.cert"),
             verbose: false,
             suites: Vec::new(),
             protos: Vec::new(),
@@ -466,7 +547,7 @@ impl TlsServer {
             used_protos: Vec::new(),
             resumes: false,
             tickets: false,
-            client_auth_roots: String::new(),
+            client_auth_roots: None,
             client_auth_required: false,
             child: None,
         }
@@ -514,8 +595,8 @@ impl TlsServer {
         self
     }
 
-    pub fn client_auth_roots(&mut self, cafile: &str) -> &mut Self {
-        self.client_auth_roots = cafile.to_string();
+    pub fn client_auth_roots(&mut self, cafile: &Path) -> &mut Self {
+        self.client_auth_roots = Some(cafile.to_path_buf());
         self
     }
 
@@ -530,9 +611,9 @@ impl TlsServer {
         args.push("--port");
         args.push(&portstring);
         args.push("--key");
-        args.push(&self.key);
+        args.push(self.key.to_str().unwrap());
         args.push("--certs");
-        args.push(&self.certs);
+        args.push(self.certs.to_str().unwrap());
 
         self.used_suites = self.suites.clone();
         for suite in &self.used_suites {
@@ -554,9 +635,9 @@ impl TlsServer {
             args.push("--tickets");
         }
 
-        if !self.client_auth_roots.is_empty() {
+        if let Some(ref client_auth_roots) = self.client_auth_roots {
             args.push("--auth");
-            args.push(&self.client_auth_roots);
+            args.push(client_auth_roots.to_str().unwrap());
 
             if self.client_auth_required {
                 args.push("--require-auth");
@@ -612,8 +693,8 @@ impl Drop for TlsServer {
 
 pub struct OpenSSLClient {
     pub port: u16,
-    pub cafile: String,
-    pub extra_args: Vec<&'static str>,
+    pub cafile: PathBuf,
+    pub extra_args: Vec<String>,
     pub expect_fails: bool,
     pub expect_output: Vec<String>,
     pub expect_log: Vec<String>,
@@ -623,7 +704,7 @@ impl OpenSSLClient {
     pub fn new(port: u16) -> OpenSSLClient {
         OpenSSLClient {
             port: port,
-            cafile: "".to_string(),
+            cafile: PathBuf::new(),
             extra_args: Vec::new(),
             expect_fails: false,
             expect_output: Vec::new(),
@@ -631,13 +712,13 @@ impl OpenSSLClient {
         }
     }
 
-    pub fn arg(&mut self, arg: &'static str) -> &mut Self {
-        self.extra_args.push(arg);
+    pub fn arg(&mut self, arg: &str) -> &mut Self {
+        self.extra_args.push(arg.to_string());
         self
     }
 
-    pub fn cafile(&mut self, cafile: &str) -> &mut Self {
-        self.cafile = cafile.to_string();
+    pub fn cafile(&mut self, cafile: &Path) -> &mut Self {
+        self.cafile = cafile.to_path_buf();
         self
     }
 
@@ -657,7 +738,7 @@ impl OpenSSLClient {
     }
 
     pub fn go(&mut self) -> Option<()> {
-        let mut extra_args = Vec::<&'static str>::new();
+        let mut extra_args = Vec::new();
         extra_args.extend(&self.extra_args);
 
         let mut subp = process::Command::new(openssl_find());

@@ -6,7 +6,9 @@ use crate::common::OpenSSLServer;
 
 #[test]
 fn no_ecdhe() {
-    let mut server = OpenSSLServer::new_rsa(8010);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 8010);
     if common::openssl_server_supports_no_echde() {
         server.arg("-no_ecdhe");
     } else {
@@ -25,7 +27,9 @@ fn no_ecdhe() {
 
 #[test]
 fn tls11_only() {
-    let mut server = OpenSSLServer::new_rsa(8020);
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 8020);
     server.arg("-tls1_1");
     server.run();
 
