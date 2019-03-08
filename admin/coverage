@@ -68,11 +68,11 @@ run('rustls')
 all_infos.append(lcov('rustls.info'))
 
 cleanup()
-for example in 'tlsclient tlsserver bench bogo_shim trytls_shim'.split():
+for example in 'bench bogo_shim trytls_shim'.split():
     rustc('--profile', 'dev', '--example', example)
 
 # tests
-for test in 'api badssl bugs client_suites curves errors features server_suites topsites'.split():
+for test in 'api'.split():
     rustc('--profile', 'dev', '--test', test)
     run(test)
 

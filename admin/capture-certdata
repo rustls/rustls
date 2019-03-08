@@ -33,7 +33,7 @@ def extract_certs(line):
 
 def collect(hostname):
     subp = subprocess.Popen([
-        './target/debug/examples/tlsclient',
+        './rustls-mio/target/debug/examples/tlsclient',
         '--verbose',
         '--http',
         hostname],
