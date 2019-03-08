@@ -583,7 +583,7 @@ fn main() {
 
     if args.flag_verbose {
         env_logger::Builder::new()
-            .parse("trace")
+            .parse_filters("trace")
             .init();
     }
 
