@@ -25,7 +25,6 @@ use ct_logs;
 
 
 mod util;
-use crate::util::WriteVAdapter;
 
 use rustls::Session;
 
@@ -147,7 +146,14 @@ impl TlsClient {
         }
     }
 
+    #[cfg(target_os = "windows")]
     fn do_write(&mut self) {
+        self.tls_session.write_tls(&mut self.socket).unwrap();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn do_write(&mut self) {
+        use crate::util::WriteVAdapter;
         self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket)).unwrap();
     }
 
