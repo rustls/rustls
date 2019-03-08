@@ -25,44 +25,7 @@ dangerous_configuration = []
 quic = []
 
 [dev-dependencies]
-ct-logs = "0.5"
-docopt = "1.0"
 env_logger = "0.6.1"
-log = "0.4"
-mio = "0.6"
 regex = "1.0"
-serde = "1.0"
-serde_derive = "1.0"
 tempfile = "3.0"
-vecio = "0.1"
 webpki-roots = "0.16"
-
-[[example]]
-name = "bogo_shim"
-path = "examples/internal/bogo_shim.rs"
-required-features = ["dangerous_configuration", "quic"]
-
-[[example]]
-name = "trytls_shim"
-path = "examples/internal/trytls_shim.rs"
-
-[[example]]
-name = "bench"
-path = "examples/internal/bench.rs"
-
-[[example]]
-name = "tlsclient"
-path = "examples/tlsclient.rs"
-
-[[example]]
-name = "tlsserver"
-path = "examples/tlsserver.rs"
-
-[[example]]
-name = "simpleclient"
-path = "examples/simpleclient.rs"
-
-[[example]]
-name = "simple_0rtt_client"
-path = "examples/simple_0rtt_client.rs"
-required-features = ["logging"]

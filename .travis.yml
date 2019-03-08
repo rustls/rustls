@@ -30,5 +30,6 @@ script:
   - ( cd bogo && ./runme )
   - cargo build --no-default-features
   - cargo test --no-default-features --no-run
+  - ( cd examples && cargo build --examples --all-features )
   - if [[ "$COVERAGE" == "1" ]]; then ./admin/coverage          ; fi
   - if [[ "$COVERAGE" == "1" ]]; then coveralls-lcov final.info ; fi
