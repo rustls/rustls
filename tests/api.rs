@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::mem;
 use std::fmt;
+use std::env;
 use std::io::{self, Write, Read};
 
 use rustls;
@@ -2050,5 +2051,74 @@ fn test_client_does_not_offer_sha1() {
                        "sha1 unexpectedly offered");
         }
     }
+}
 
+#[test]
+fn test_client_mtu_reduction() {
+    fn collect_write_lengths(client: &mut ClientSession) -> Vec<usize> {
+        let mut r = Vec::new();
+        let mut buf = [0u8; 128];
+
+        loop {
+            let sz = client.write_tls(&mut buf.as_mut())
+                .unwrap();
+            r.push(sz);
+            assert!(sz <= 64);
+            if sz < 64 {
+                break;
+            }
+        }
+
+        r
+    }
+
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        client_config.set_mtu(&Some(64));
+
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+        let writes = collect_write_lengths(&mut client);
+        assert!(writes.iter().all(|x| *x <= 64));
+        assert!(writes.len() > 1);
+    }
+}
+
+#[test]
+fn exercise_key_log_file_for_client() {
+    let server_config = Arc::new(make_server_config(KeyType::RSA));
+    let mut client_config = make_client_config(KeyType::RSA);
+    env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
+    client_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+    for client_config in AllClientVersions::new(client_config) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
+
+        assert_eq!(5, client.write(b"hello").unwrap());
+
+        do_handshake(&mut client, &mut server);
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+    }
+}
+
+#[test]
+fn exercise_key_log_file_for_server() {
+    let mut server_config = make_server_config(KeyType::RSA);
+
+    env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
+    server_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+    let server_config = Arc::new(server_config);
+
+    for client_config in AllClientVersions::new(make_client_config(KeyType::RSA)) {
+        let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config),
+                                                                 &server_config);
+
+        assert_eq!(5, client.write(b"hello").unwrap());
+
+        do_handshake(&mut client, &mut server);
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+    }
 }
