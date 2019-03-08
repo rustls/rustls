@@ -1,0 +1,45 @@
+variables:
+  clippy_toolchain: 1.33.0
+  minimum_toolchain: 1.22.0
+
+resources:
+  repositories:
+    - repository: templates
+      type: github
+      name: crate-ci/resources
+      endpoint: ctz
+
+jobs:
+- template: az-pipeline/unstable/clippy.yml@templates
+  parameters:
+    rustup_toolchain: ${{ variables.clippy_toolchain }}
+- job: Windows
+  pool:
+    vmImage: vs2017-win2016
+  steps:
+    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/cargo-steps.yml
+- job: MacOS
+  pool:
+    vmImage: macOS-10.13
+  steps:
+    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/cargo-steps.yml
+- job: Linux
+  pool:
+    vmImage: ubuntu-16.04
+  strategy:
+    matrix:
+      stable:
+        rustup_toolchain: stable
+      beta:
+        rustup_toolchain: beta
+      nightly:
+        rustup_toolchain: nightly
+      minimum:
+        rustup_toolchain: ${{ variables.minimum_toolchain }}
+  steps:
+    - template: az-pipeline/unstable/rustup.yml@templates
+      parameters:
+        rustup_toolchain: $(rustup_toolchain)
+    - template: admin/pipelines/cargo-steps.yml
