@@ -1,0 +1,64 @@
+[package]
+name = "rustls-examples"
+version = "0.15.1"
+edition = "2018"
+authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
+license = "Apache-2.0/ISC/MIT"
+readme = "README.md"
+description = "Rustls is a modern TLS library written in Rust."
+homepage = "https://github.com/ctz/rustls"
+repository = "https://github.com/ctz/rustls"
+categories = ["network-programming", "cryptography"]
+
+[features]
+default = ["logging"]
+logging = ["log"]
+dangerous_configuration = ["rustls/dangerous_configuration"]
+quic = ["rustls/quic"]
+
+[dependencies]
+base64 = "0.10"
+log = { version = "0.4.0", optional = true }
+rustls = { path = ".." }
+sct = "0.5"
+webpki = "0.19"
+
+[dev-dependencies]
+ct-logs = "0.5"
+docopt = "1.0"
+env_logger = "0.6"
+mio = "0.6"
+serde = "1.0"
+serde_derive = "1.0"
+vecio = "0.1"
+webpki-roots = "0.16"
+
+[[example]]
+name = "bogo_shim"
+path = "examples/internal/bogo_shim.rs"
+required-features = ["dangerous_configuration", "quic"]
+
+[[example]]
+name = "trytls_shim"
+path = "examples/internal/trytls_shim.rs"
+
+[[example]]
+name = "bench"
+path = "examples/internal/bench.rs"
+
+[[example]]
+name = "tlsclient"
+path = "examples/tlsclient.rs"
+
+[[example]]
+name = "tlsserver"
+path = "examples/tlsserver.rs"
+
+[[example]]
+name = "simpleclient"
+path = "examples/simpleclient.rs"
+
+[[example]]
+name = "simple_0rtt_client"
+path = "examples/simple_0rtt_client.rs"
+required-features = ["logging"]
