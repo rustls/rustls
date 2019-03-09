@@ -524,7 +524,12 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
         }
     }
 
-    let mut conn = net::TcpStream::connect(("localhost", opts.port)).expect("cannot connect");
+    let addrs = [
+        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
+        net::SocketAddr::from((net::Ipv6Addr::LOCALHOST, opts.port))
+    ];
+    let mut conn = net::TcpStream::connect(&addrs[..])
+        .expect("cannot connect");
     let mut sent_shutdown = false;
     let mut seen_eof = false;
     let mut sent_exporter = false;
