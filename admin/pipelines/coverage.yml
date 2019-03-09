@@ -1,0 +1,11 @@
+steps:
+  - script: admin/build-lcov
+    displayName: "download and build lcov"
+  - script: gem install coveralls-lcov
+    displayName: "install coveralls-lcov"
+  - script: sudo apt-get install libclang-common-3.8-dev llvm-3.8-dev
+    displayName: "install llvm"
+  - script: admin/coverage
+    displayName: "measure coverage"
+  - script: coveralls-lcov final.info
+    displayName: "report coverage to coveralls"

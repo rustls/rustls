@@ -19,12 +19,14 @@ jobs:
   steps:
     - template: az-pipeline/unstable/rustup.yml@templates
     - template: admin/pipelines/cargo-steps.yml
+    - template: admin/pipelines/bench.yml
 - job: MacOS
   pool:
     vmImage: macOS-10.13
   steps:
     - template: az-pipeline/unstable/rustup.yml@templates
     - template: admin/pipelines/cargo-steps.yml
+    - template: admin/pipelines/bench.yml
 - job: Linux
   pool:
     vmImage: ubuntu-16.04
@@ -43,3 +45,10 @@ jobs:
       parameters:
         rustup_toolchain: $(rustup_toolchain)
     - template: admin/pipelines/cargo-steps.yml
+    - template: admin/pipelines/bench.yml
+- job: Coverage
+  pool:
+    vmImage: ubuntu-16.04
+  steps:
+    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/coverage.yml
