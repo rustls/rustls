@@ -12,7 +12,9 @@ expected.  [Here's what I'm working on now](https://github.com/ctz/rustls/projec
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [![Build Status](https://travis-ci.org/ctz/rustls.svg?branch=master)](https://travis-ci.org/ctz/rustls)
-[![Coverage Status](https://coveralls.io/repos/github/ctz/rustls/badge.svg?branch=master)](https://coveralls.io/github/ctz/rustls?branch=master)
+[![Build Status](https://dev.azure.com/ctz99/ctz/_apis/build/status/ctz.rustls?branchName=master)](https://dev.azure.com/ctz99/ctz/_build/latest?definitionId=3&branchName=master)
+[![Coverage Status (coveralls)](https://coveralls.io/repos/github/ctz/rustls/badge.svg?branch=master)](https://coveralls.io/github/ctz/rustls?branch=master)
+[![Coverage Status (codecov.io)](https://codecov.io/gh/ctz/rustls/branch/master/graph/badge.svg)](https://codecov.io/gh/ctz/rustls/)
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 
 ## Release history:
