@@ -46,6 +46,7 @@ jobs:
         rustup_toolchain: $(rustup_toolchain)
     - template: admin/pipelines/cargo-steps.yml
     - template: admin/pipelines/bench.yml
+    - template: admin/pipelines/bogo.yml
 
 # Coverage build. Requires linux, and both nightly
 # and stable rust toolchains
