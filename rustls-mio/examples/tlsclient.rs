@@ -102,7 +102,11 @@ impl TlsClient {
         // is broken.
         let rc = self.tls_session.read_tls(&mut self.socket);
         if rc.is_err() {
-            println!("TLS read error: {:?}", rc);
+            let error = rc.unwrap_err();
+            if error.kind() == io::ErrorKind::WouldBlock {
+                return;
+            }
+            println!("TLS read error: {:?}", error);
             self.closing = true;
             return;
         }
