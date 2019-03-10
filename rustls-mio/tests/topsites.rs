@@ -12,105 +12,71 @@ mod common;
 mod online {
     use super::common::TlsClient;
 
-    fn connect(hostname: &str) -> TlsClient {
+    fn check(hostname: &str) {
         TlsClient::new(hostname)
+            .expect("HTTP/1.[01] ")
+            .go()
+            .unwrap()
     }
 
     #[test]
     fn joe() {
-        connect("jbp.io")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("jbp.io")
     }
 
     #[test]
     fn google() {
-        connect("google.com")
-            .verbose()
-            .expect("HTTP/1.1 ") // currently 302 redirects
-            .go()
-            .unwrap();
+        check("google.com")
     }
 
     #[test]
     fn github() {
-        connect("github.com")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("github.com")
     }
 
     #[test]
     fn aws() {
-        connect("aws.amazon.com")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("aws.amazon.com")
     }
 
     #[test]
     fn microsoft() {
-        connect("www.microsoft.com")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("www.microsoft.com")
     }
 
     #[test]
     fn wikipedia() {
-        connect("www.wikipedia.org")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("www.wikipedia.org")
     }
 
     #[test]
     fn twitter() {
-        connect("twitter.com")
-            .expect("HTTP/1.1 ")
-            .go()
-            .unwrap();
+        check("twitter.com")
     }
 
     #[test]
     fn facebook() {
-        connect("www.facebook.com")
-            .expect("HTTP/1.1 ") // also 302s to a 'piss off' page. charming.
-            .go()
-            .unwrap();
+        check("www.facebook.com")
     }
 
     #[test]
     fn baidu() {
-        connect("www.baidu.com")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("www.baidu.com")
     }
 
     #[test]
     fn netflix() {
-        connect("www.netflix.com")
-            .expect("HTTP/1.1 ")
-            .go()
-            .unwrap();
+        check("www.netflix.com")
     }
 
     #[test]
     fn stackoverflow() {
-        connect("stackoverflow.com")
-            .expect("HTTP/1.1 ")
-            .go()
-            .unwrap();
+        check("stackoverflow.com")
     }
 
     #[test]
     fn apple() {
-        connect("www.apple.com")
-            .expect("HTTP/1.1 200 OK")
-            .go()
-            .unwrap();
+        check("www.apple.com")
     }
 
 }

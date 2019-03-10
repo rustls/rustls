@@ -543,7 +543,7 @@ fn main() {
     let mut tlsclient = TlsClient::new(sock, dns_name, config);
 
     if args.flag_http {
-        let httpreq = format!("GET / HTTP/1.1\r\nHost: {}\r\nConnection: \
+        let httpreq = format!("GET / HTTP/1.0\r\nHost: {}\r\nConnection: \
                                close\r\nAccept-Encoding: identity\r\n\r\n",
                               args.arg_hostname);
         tlsclient.write_all(httpreq.as_bytes()).unwrap();
