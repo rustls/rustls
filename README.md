@@ -19,6 +19,11 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
+* 0.15.2 (2019-04-02):
+  - Moved example code around for benefit of Fuchsia.
+  - Example code fixes for Windows -- Windows is now a tested platform.
+  - QUIC-specific bug fixes.
+  - Update dependencies.
 * 0.15.1 (2019-01-29):
   - Fix incorrect offering of SHA1.
 * 0.15.0 (2019-01-20):
