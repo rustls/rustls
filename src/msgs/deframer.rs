@@ -165,6 +165,35 @@ mod tests {
         d.read(&mut rd)
     }
 
+    struct ErrorRead {
+        error: Option<io::Error>,
+    }
+
+    impl ErrorRead {
+        fn new(error: io::Error) -> ErrorRead {
+            ErrorRead { error: Some(error) }
+        }
+    }
+
+    impl io::Read for ErrorRead {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            for (i, b) in buf.iter_mut().enumerate() {
+                *b = i as u8;
+            }
+
+            let error = self.error.take()
+                .unwrap();
+            Err(error)
+        }
+    }
+
+    fn input_error(d: &mut MessageDeframer) {
+        let error = io::Error::from(io::ErrorKind::TimedOut);
+        let mut rd = ErrorRead::new(error);
+        d.read(&mut rd)
+            .expect_err("error not propagated");
+    }
+
     fn input_whole_incremental(d: &mut MessageDeframer, bytes: &[u8]) {
         let frames_before = d.frames.len();
 
@@ -246,6 +275,18 @@ mod tests {
         assert_eq!(d.frames.len(), 2);
         pop_first(&mut d);
         pop_second(&mut d);
+        assert_eq!(d.has_pending(), false);
+    }
+
+    #[test]
+    fn test_incremental_with_nonfatal_read_error() {
+        let mut d = MessageDeframer::new();
+        assert_len(3, input_bytes(&mut d, &FIRST_MESSAGE[..3]));
+        input_error(&mut d);
+        assert_len(FIRST_MESSAGE.len() - 3,
+                   input_bytes(&mut d, &FIRST_MESSAGE[3..]));
+        assert_eq!(d.frames.len(), 1);
+        pop_first(&mut d);
         assert_eq!(d.has_pending(), false);
     }
 }
