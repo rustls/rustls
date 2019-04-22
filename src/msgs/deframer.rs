@@ -30,6 +30,18 @@ pub struct MessageDeframer {
     buf: Vec<u8>,
 }
 
+enum BufferContents {
+    /// Contains an invalid message as a header.
+    Invalid,
+
+    /// Might contain a valid message if we receive more.
+    /// Perhaps totally empty!
+    Partial,
+
+    /// Contains a valid frame as a prefix.
+    Valid,
+}
+
 impl MessageDeframer {
     pub fn new() -> MessageDeframer {
         MessageDeframer {
@@ -62,14 +74,14 @@ impl MessageDeframer {
 
         loop {
             match self.buf_contains_message() {
-                None => {
+                BufferContents::Invalid => {
                     self.desynced = true;
                     break;
                 }
-                Some(true) => {
+                BufferContents::Valid => {
                     self.deframe_one();
                 }
-                Some(false) => break,
+                BufferContents::Partial => break,
             }
         }
 
@@ -85,28 +97,27 @@ impl MessageDeframer {
 
     /// Does our `buf` contain a full message?  It does if it is big enough to
     /// contain a header, and that header has a length which falls within `buf`.
-    /// This returns None if it contains a header which is invalid.
-    fn buf_contains_message(&self) -> Option<bool> {
+    fn buf_contains_message(&self) -> BufferContents {
         if self.buf.len() < HEADER_SIZE {
-            return Some(false);
+            return BufferContents::Partial;
         }
 
         let len_maybe = Message::check_header(&self.buf);
 
         // Header damaged.
         if len_maybe == None {
-            return None;
+            return BufferContents::Invalid;
         }
 
         let len = len_maybe.unwrap();
 
         // This is just too large.
         if len >= MAX_MESSAGE - HEADER_SIZE {
-            return None;
+            return BufferContents::Invalid;
         }
 
         let full_message = self.buf.len() >= len + HEADER_SIZE;
-        Some(full_message)
+        if full_message { BufferContents::Valid } else { BufferContents::Partial }
     }
 
     /// Take a TLS message off the front of `buf`, and put it onto the back
