@@ -274,3 +274,19 @@ pub fn do_handshake_until_error(client: &mut ClientSession,
 pub fn dns_name(name: &'static str) -> webpki::DNSNameRef<'_> {
     webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
 }
+
+pub struct FailsReads {
+    errkind: io::ErrorKind
+}
+
+impl FailsReads {
+    pub fn new(errkind: io::ErrorKind) -> FailsReads {
+        FailsReads { errkind }
+    }
+}
+
+impl io::Read for FailsReads {
+    fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::from(self.errkind))
+    }
+}

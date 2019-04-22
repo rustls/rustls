@@ -29,6 +29,7 @@ env_logger = "0.6.1"
 log = "0.4.0"
 tempfile = "3.0"
 webpki-roots = "0.16"
+criterion = "0.2"
 
 [[example]]
 name = "bogo_shim"
@@ -42,3 +43,8 @@ path = "examples/internal/trytls_shim.rs"
 [[example]]
 name = "bench"
 path = "examples/internal/bench.rs"
+
+[[bench]]
+name = "benchmarks"
+path = "tests/benchmarks.rs"
+harness = false
