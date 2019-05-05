@@ -19,7 +19,10 @@ use std::sync::Arc;
 use std::io;
 use std::fmt;
 
+#[macro_use]
 mod hs;
+mod tls12;
+mod tls13;
 mod common;
 pub mod handy;
 
