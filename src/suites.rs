@@ -410,10 +410,10 @@ pub fn choose_ciphersuite_preferring_server(client_suites: &[CipherSuite],
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with `SignatureAlgorithm` `sigalg` removed.
 pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite],
-                           sigalg: &SignatureAlgorithm)
+                           sigalg: SignatureAlgorithm)
                            -> Vec<&'static SupportedCipherSuite> {
     all.iter()
-        .filter(|&&suite| suite.sign == SignatureAlgorithm::Anonymous || &suite.sign == sigalg)
+        .filter(|&&suite| suite.sign == SignatureAlgorithm::Anonymous || suite.sign == sigalg)
         .cloned()
         .collect()
 }

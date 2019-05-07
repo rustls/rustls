@@ -45,6 +45,10 @@ enum BufferContents {
     Valid,
 }
 
+impl Default for MessageDeframer {
+    fn default() -> Self { Self::new() }
+}
+
 impl MessageDeframer {
     pub fn new() -> MessageDeframer {
         MessageDeframer {

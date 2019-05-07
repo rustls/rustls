@@ -288,7 +288,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         // - if not, we might have a hint of what the server supports
         // - if not, send just X25519.
         //
-        let groups = retryreq.and_then(|req| req.get_requested_key_share_group())
+        let groups = retryreq.and_then(HelloRetryRequest::get_requested_key_share_group)
             .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
             .or_else(|| Some(NamedGroup::X25519))
             .map(|grp| vec![ grp ])
@@ -331,7 +331,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         exts.push(ClientExtension::KeyShare(key_shares));
     }
 
-    if let Some(cookie) = retryreq.and_then(|req| req.get_cookie()) {
+    if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
@@ -409,7 +409,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     // Note what extensions we sent.
     hello.sent_extensions = exts.iter()
-        .map(|ext| ext.get_type())
+        .map(ClientExtension::get_type)
         .collect();
 
     let mut chp = HandshakeMessagePayload {
@@ -454,7 +454,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     if sess.early_data.is_enabled() {
-        // For middlebox compatility
+        // For middlebox compatibility
         emit_fake_ccs(&mut handshake, sess);
 
         // It is safe to call unwrap() because fill_in_binder is true.
@@ -502,7 +502,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 pub fn process_alpn_protocol(sess: &mut ClientSessionImpl,
                              proto: Option<&[u8]>)
                              -> Result<(), TLSError> {
-    sess.alpn_protocol = proto.map(|s| s.to_owned());
+    sess.alpn_protocol = proto.map(ToOwned::to_owned);
     if sess.alpn_protocol.is_some() &&
         !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
         return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));

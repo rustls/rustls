@@ -10,6 +10,7 @@ use crate::msgs::handshake::SCTList;
 use crate::msgs::enums::SignatureScheme;
 use crate::error::TLSError;
 use crate::anchors::{DistinguishedNames, RootCertStore};
+use crate::anchors::OwnedTrustAnchor;
 #[cfg(feature = "logging")]
 use crate::log::{warn, debug};
 
@@ -145,7 +146,7 @@ fn prepare<'a, 'b>(roots: &'b RootCertStore, presented_certs: &'a [Certificate])
 
     let trustroots: Vec<webpki::TrustAnchor> = roots.roots
         .iter()
-        .map(|x| x.to_trust_anchor())
+        .map(OwnedTrustAnchor::to_trust_anchor)
         .collect();
 
     Ok((cert, chain, trustroots))

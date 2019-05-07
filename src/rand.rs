@@ -16,8 +16,7 @@ pub fn fill_random(bytes: &mut [u8]) {
 /// Make a Vec<u8> of the given size
 /// containing random material.
 pub fn random_vec(len: usize) -> Vec<u8> {
-    let mut v = Vec::with_capacity(len);
-    v.resize(len, 0u8);
+    let mut v = vec![0; len];
     fill_random(&mut v);
     v
 }

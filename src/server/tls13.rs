@@ -318,7 +318,7 @@ impl ExpectTraffic {
 
     fn handle_key_update(&self, sess: &mut ServerSessionImpl, m: Message) -> Result<(), TLSError> {
         let kur = extract_handshake!(m, HandshakePayload::KeyUpdate).unwrap();
-        sess.common.process_key_update(kur, SecretKind::ClientApplicationTrafficSecret)
+        sess.common.process_key_update(*kur, SecretKind::ClientApplicationTrafficSecret)
     }
 }
 

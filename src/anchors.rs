@@ -32,7 +32,9 @@ impl OwnedTrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
             spki: &self.spki,
-            name_constraints: self.name_constraints.as_ref().map(|x| x.as_slice()),
+            name_constraints: self.name_constraints
+                .as_ref()
+                .map(Vec::as_slice),
         }
     }
 }
