@@ -19,8 +19,8 @@ pub enum SecretKind {
 }
 
 impl SecretKind {
-    fn to_bytes(&self) -> &'static [u8] {
-        match *self {
+    fn to_bytes(self) -> &'static [u8] {
+        match self {
             SecretKind::ResumptionPSKBinderKey => b"res binder",
             SecretKind::ClientEarlyTrafficSecret => b"c e traffic",
             SecretKind::ClientHandshakeTrafficSecret => b"c hs traffic",

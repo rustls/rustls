@@ -1410,48 +1410,48 @@ impl CertificateEntry {
         self.exts
             .iter()
             .find(|ext| ext.get_type() == ExtensionType::StatusRequest)
-            .and_then(|ext| ext.get_cert_status())
+            .and_then(CertificateExtension::get_cert_status)
     }
 
     pub fn get_scts(&self) -> Option<&SCTList> {
         self.exts
             .iter()
             .find(|ext| ext.get_type() == ExtensionType::SCT)
-            .and_then(|ext| ext.get_sct_list())
+            .and_then(CertificateExtension::get_sct_list)
     }
 }
 
 #[derive(Debug)]
 pub struct CertificatePayloadTLS13 {
     pub context: PayloadU8,
-    pub list: Vec<CertificateEntry>,
+    pub entries: Vec<CertificateEntry>,
 }
 
 impl Codec for CertificatePayloadTLS13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
-        codec::encode_vec_u24(bytes, &self.list);
+        codec::encode_vec_u24(bytes, &self.entries);
     }
 
     fn read(r: &mut Reader) -> Option<CertificatePayloadTLS13> {
         Some(CertificatePayloadTLS13 {
             context: PayloadU8::read(r)?,
-            list: codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)?,
+            entries: codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)?,
         })
     }
 }
 
 impl CertificatePayloadTLS13 {
-    pub fn new() -> CertificatePayloadTLS13 {
+    pub fn new(entries: Vec<CertificateEntry>) -> CertificatePayloadTLS13 {
         CertificatePayloadTLS13 {
             context: PayloadU8::empty(),
-            list: Vec::new(),
+            entries,
         }
     }
 
     pub fn any_entry_has_duplicate_extension(&self) -> bool {
-        for ent in &self.list {
-            if ent.has_duplicate_extension() {
+        for entry in &self.entries {
+            if entry.has_duplicate_extension() {
                 return true;
             }
         }
@@ -1460,8 +1460,8 @@ impl CertificatePayloadTLS13 {
     }
 
     pub fn any_entry_has_unknown_extension(&self) -> bool {
-        for ent in &self.list {
-            if ent.has_unknown_extension() {
+        for entry in &self.entries {
+            if entry.has_unknown_extension() {
                 return true;
             }
         }
@@ -1470,8 +1470,8 @@ impl CertificatePayloadTLS13 {
     }
 
     pub fn any_entry_has_extension(&self) -> bool {
-        for ent in &self.list {
-            if !ent.exts.is_empty() {
+        for entry in &self.entries {
+            if !entry.exts.is_empty() {
                 return true;
             }
         }
@@ -1480,21 +1480,21 @@ impl CertificatePayloadTLS13 {
     }
 
     pub fn get_end_entity_ocsp(&self) -> Vec<u8> {
-        self.list.first()
-            .and_then(|ent| ent.get_ocsp_response())
+        self.entries.first()
+            .and_then(CertificateEntry::get_ocsp_response)
             .cloned()
             .unwrap_or_else( Vec::new)
     }
 
     pub fn get_end_entity_scts(&self) -> Option<SCTList> {
-        self.list.first()
-            .and_then(|ent| ent.get_scts())
+        self.entries.first()
+            .and_then(CertificateEntry::get_scts)
             .cloned()
     }
 
     pub fn convert(&self) -> CertificatePayload {
         let mut ret = Vec::new();
-        for entry in &self.list {
+        for entry in &self.entries {
             ret.push(entry.cert.clone());
         }
         ret
@@ -1597,11 +1597,11 @@ pub struct ServerECDHParams {
 }
 
 impl ServerECDHParams {
-    pub fn new(named_group: &NamedGroup, pubkey: &[u8]) -> ServerECDHParams {
+    pub fn new(named_group: NamedGroup, pubkey: &[u8]) -> ServerECDHParams {
         ServerECDHParams {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,
-                named_group: *named_group,
+                named_group,
             },
             public: PayloadU8::new(pubkey.to_vec()),
         }

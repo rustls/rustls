@@ -217,7 +217,7 @@ impl ExpectClientHello {
         if let Some(their_protocols) = maybe_their_protocols {
             let their_proto_vecs = their_protocols.to_vecs();
 
-            if their_proto_vecs.iter().any(|proto| proto.is_empty()) {
+            if their_proto_vecs.iter().any(Vec::is_empty) {
                 return Err(TLSError::PeerMisbehavedError("client offered empty ALPN protocol"
                     .to_string()));
             }
@@ -538,18 +538,17 @@ impl ExpectClientHello {
     fn emit_certificate_tls13(&mut self,
                               sess: &mut ServerSessionImpl,
                               server_key: &mut sign::CertifiedKey) {
-        let mut cert_body = CertificatePayloadTLS13::new();
-
+        let mut cert_entries = vec![];
         for cert in server_key.take_cert() {
             let entry = CertificateEntry {
                 cert,
                 exts: Vec::new(),
             };
 
-            cert_body.list.push(entry);
+            cert_entries.push(entry);
         }
 
-        if let Some(end_entity_cert) = cert_body.list.first_mut() {
+        if let Some(end_entity_cert) = cert_entries.first_mut() {
             // Apply OCSP response to first certificate (we don't support OCSP
             // except for leaf certs).
             if self.send_cert_status {
@@ -567,6 +566,7 @@ impl ExpectClientHello {
             }
         }
 
+        let cert_body = CertificatePayloadTLS13::new(cert_entries);
         let c = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
@@ -751,11 +751,11 @@ impl ExpectClientHello {
     fn emit_server_kx(&mut self,
                       sess: &mut ServerSessionImpl,
                       sigschemes: Vec<SignatureScheme>,
-                      group: &NamedGroup,
+                      group: NamedGroup,
                       server_certkey: &mut sign::CertifiedKey)
                       -> Result<suites::KeyExchange, TLSError> {
         let kx = sess.common.get_suite_assert()
-            .start_server_kx(*group)
+            .start_server_kx(group)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
         let secdh = ServerECDHParams::new(group, kx.pubkey.as_ref());
 
@@ -1096,7 +1096,7 @@ impl State for ExpectClientHello {
 
         // Choose a certificate.
         let mut certkey = {
-            let sni_ref = sni.as_ref().map(|dns_name| dns_name.as_ref());
+            let sni_ref = sni.as_ref().map(webpki::DNSName::as_ref);
             trace!("sni {:?}", sni_ref);
             trace!("sig schemes {:?}", sigschemes_ext);
             let certkey = sess.config.cert_resolver.resolve(sni_ref, sigschemes_ext);
@@ -1109,7 +1109,7 @@ impl State for ExpectClientHello {
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
         let suitable_suites = suites::reduce_given_sigalg(&sess.config.ciphersuites,
-                                                          &certkey.key.algorithm());
+                                                          certkey.key.algorithm());
 
         // And version
         let protocol_version = sess.common.negotiated_version.unwrap();
@@ -1249,7 +1249,7 @@ impl State for ExpectClientHello {
         self.emit_server_hello(sess, Some(&mut certkey), client_hello, None)?;
         self.emit_certificate(sess, &mut certkey);
         self.emit_cert_status(sess, &mut certkey);
-        let kx = self.emit_server_kx(sess, sigschemes, &group, &mut certkey)?;
+        let kx = self.emit_server_kx(sess, sigschemes, group, &mut certkey)?;
         let doing_client_auth = self.emit_certificate_req(sess);
         self.emit_server_hello_done(sess);
 

@@ -102,7 +102,7 @@ impl KeyLogFileInner {
         for b in secret.iter() {
             write!(self.buf, "{:02x}", b)?;
         }
-        write!(self.buf, "\n")?;
+        writeln!(self.buf)?;
         file.write_all(&self.buf)
     }
 }

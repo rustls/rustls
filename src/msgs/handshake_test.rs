@@ -572,7 +572,7 @@ fn server_get_supported_versions() {
 }
 
 fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) -> bool) {
-    let mut ce = get_sample_certificatepayloadtls13().list.remove(0);
+    let mut ce = get_sample_certificatepayloadtls13().entries.remove(0);
     let mut exts = mem::replace(&mut ce.exts, vec![]);
     exts.retain(|ext| ext.get_type() == typ);
 
@@ -660,7 +660,7 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
 fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
     CertificatePayloadTLS13 {
         context: PayloadU8(vec![ 1, 2, 3 ]),
-        list: vec![
+        entries: vec![
             CertificateEntry {
                 cert: Certificate(vec![ 3, 4, 5]),
                 exts: vec![

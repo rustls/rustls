@@ -138,6 +138,10 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
+impl Default for ClientConfig {
+    fn default() -> Self { Self::new() }
+}
+
 impl ClientConfig {
     /// Make a `ClientConfig` with a default set of ciphersuites,
     /// no root certificates, no ALPN protocols, and no client auth.
@@ -558,7 +562,7 @@ impl ClientSessionImpl {
     }
 
     pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol.as_ref().map(|s| s.as_ref())
+        self.alpn_protocol.as_ref().map(AsRef::as_ref)
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
@@ -612,7 +616,7 @@ impl ClientSession {
     /// The server can choose not to accept any sent early data --
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
-    pub fn early_data<'a>(&'a mut self) -> Option<WriteEarlyData<'a>> {
+    pub fn early_data(&mut self) -> Option<WriteEarlyData> {
         if self.imp.early_data.is_enabled() {
             Some(WriteEarlyData::new(&mut self.imp))
         } else {

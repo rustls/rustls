@@ -437,12 +437,12 @@ fn emit_certificate_tls13(client_auth: &mut ClientAuthDetails,
 
     let mut cert_payload = CertificatePayloadTLS13 {
         context: PayloadU8::new(context),
-        list: Vec::new(),
+        entries: Vec::new(),
     };
 
     if let Some(cert_chain) = client_auth.cert.take() {
         for cert in cert_chain {
-            cert_payload.list.push(CertificateEntry::new(cert));
+            cert_payload.entries.push(CertificateEntry::new(cert));
         }
     }
 
@@ -728,7 +728,7 @@ impl ExpectTraffic {
 
     fn handle_key_update(&mut self, sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
         let kur = extract_handshake!(m, HandshakePayload::KeyUpdate).unwrap();
-        sess.common.process_key_update(kur, SecretKind::ServerApplicationTrafficSecret)
+        sess.common.process_key_update(*kur, SecretKind::ServerApplicationTrafficSecret)
     }
 }
 

@@ -225,8 +225,8 @@ pub struct Labels {
 }
 
 impl Protocol {
-    pub fn labels(&self) -> &'static Labels {
-        match *self {
+    pub fn labels(self) -> &'static Labels {
+        match self {
             Protocol::Tls13 => &Labels {
                 client_early_traffic_secret: "CLIENT_EARLY_TRAFFIC_SECRET",
                 client_handshake_traffic_secret: "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
@@ -863,7 +863,7 @@ impl SessionCommon {
     }
 
     pub fn process_key_update(&mut self,
-                              kur: &KeyUpdateRequest,
+                              kur: KeyUpdateRequest,
                               read_kind: SecretKind)
                               -> Result<(), TLSError> {
         #[cfg(feature = "quic")]
@@ -883,7 +883,7 @@ impl SessionCommon {
             return Err(TLSError::PeerMisbehavedError(msg));
         }
 
-        match *kur {
+        match kur {
             KeyUpdateRequest::UpdateNotRequested => {}
             KeyUpdateRequest::UpdateRequested => {
                 self.want_write_key_update = true;
