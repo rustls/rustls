@@ -11,8 +11,9 @@ use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::codec::Codec;
 use crate::msgs::persist;
 use crate::client::ClientSessionImpl;
-use crate::key_schedule::SecretKind;
+use crate::key_schedule::{SecretKind, KeySchedule};
 use crate::cipher;
+use crate::hash_hs;
 use crate::verify;
 use crate::sign;
 use crate::suites;
@@ -108,6 +109,39 @@ pub fn choose_kx_groups(sess: &mut ClientSessionImpl,
 
     exts.push(ClientExtension::KeyShare(key_shares));
 }
+
+/// This implements the horrifying TLS1.3 hack where PSK binders have a
+/// data dependency on the message they are contained within.
+pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl,
+                          handshake: &mut HandshakeDetails,
+                          hmp: &mut HandshakeMessagePayload) {
+    // We need to know the hash function of the suite we're trying to resume into.
+    let resuming = handshake.resuming_session.as_ref().unwrap();
+    let suite_hash = sess.find_cipher_suite(resuming.cipher_suite).unwrap().get_hash();
+
+    // The binder is calculated over the clienthello, but doesn't include itself or its
+    // length, or the length of its container.
+    let binder_plaintext = hmp.get_encoding_for_binder_signing();
+    let handshake_hash =
+        sess.common.hs_transcript.get_hash_given(suite_hash, &binder_plaintext);
+
+    let mut empty_hash_ctx = hash_hs::HandshakeHash::new();
+    empty_hash_ctx.start_hash(suite_hash);
+    let empty_hash = empty_hash_ctx.get_current_hash();
+
+    // Run a fake key_schedule to simulate what the server will do if it choses
+    // to resume.
+    let mut key_schedule = KeySchedule::new(suite_hash);
+    key_schedule.input_secret(&resuming.master_secret.0);
+    let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
+    let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
+
+    if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
+        ch.set_psk_binder(real_binder);
+    };
+    sess.common.set_key_schedule(key_schedule);
+}
+
 
 fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
                                  hello: &ClientHelloDetails,
