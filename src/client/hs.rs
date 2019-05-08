@@ -5,7 +5,6 @@ use crate::msgs::base::Payload;
 use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use crate::msgs::handshake::{SessionID, Random, ServerHelloPayload};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
-use crate::msgs::handshake::KeyShareEntry;
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
@@ -115,14 +114,6 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef)
     } else {
         None
     }
-}
-
-fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
-    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
-    let key_buf = key.get_encoding();
-
-    let maybe_value = sess.config.session_persistence.get(&key_buf);
-    maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
 fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, group: NamedGroup) {
@@ -279,37 +270,6 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         supported_versions.push(ProtocolVersion::TLSv1_2);
     }
 
-    let mut key_shares = vec![];
-
-    if support_tls13 {
-        // Choose our groups:
-        // - if we've been asked via HelloRetryRequest for a specific
-        //   one, do that.
-        // - if not, we might have a hint of what the server supports
-        // - if not, send just X25519.
-        //
-        let groups = retryreq.and_then(HelloRetryRequest::get_requested_key_share_group)
-            .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
-            .or_else(|| Some(NamedGroup::X25519))
-            .map(|grp| vec![ grp ])
-            .unwrap();
-
-        for group in groups {
-            // in reply to HelloRetryRequest, we must not alter any existing key
-            // shares
-            if let Some(already_offered_share) = hello.find_key_share(group) {
-                key_shares.push(KeyShareEntry::new(group, already_offered_share.pubkey.as_ref()));
-                hello.offered_key_shares.push(already_offered_share);
-                continue;
-            }
-
-            if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
-                key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
-                hello.offered_key_shares.push(key_share);
-            }
-        }
-    }
-
     let mut exts = Vec::new();
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));
@@ -328,7 +288,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 
     if support_tls13 {
-        exts.push(ClientExtension::KeyShare(key_shares));
+        tls13::choose_kx_groups(sess, &mut exts, &mut hello, &mut handshake, retryreq);
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
