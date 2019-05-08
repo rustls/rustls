@@ -7,12 +7,11 @@ use crate::msgs::handshake::{SessionID, Random};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
-use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer, HelloRetryRequest};
+use crate::msgs::handshake::HelloRetryRequest;
 use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
 use crate::msgs::enums::{PSKKeyExchangeMode, ECPointFormat};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::persist;
-use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::client::ClientSessionImpl;
 use crate::session::SessionSecrets;
 use crate::key_schedule::SecretKind;
@@ -166,26 +165,8 @@ struct ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
 
-fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
-    #[cfg(feature = "quic")] {
-        if let Protocol::Quic = sess.common.protocol { return; }
-    }
-
-    if hs.sent_tls13_fake_ccs {
-        return;
-    }
-
-    let m = Message {
-        typ: ContentType::ChangeCipherSpec,
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
-    };
-    sess.common.send_msg(m, false);
-    hs.sent_tls13_fake_ccs = true;
-}
-
-fn compatible_suite(sess: &ClientSessionImpl,
-                    resuming_suite: Option<&suites::SupportedCipherSuite>) -> bool {
+pub fn compatible_suite(sess: &ClientSessionImpl,
+                        resuming_suite: Option<&suites::SupportedCipherSuite>) -> bool {
     match resuming_suite {
         Some(resuming_suite) => {
             if let Some(suite) = sess.common.get_suite() {
@@ -278,44 +259,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     let fill_in_binder = if support_tls13 && sess.config.enable_tickets &&
                             resume_version == ProtocolVersion::TLSv1_3 &&
                             !ticket.is_empty() {
-        let resuming_suite = handshake.resuming_session
-            .as_ref()
-            .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite));
-
-        if compatible_suite(sess, resuming_suite) {
-            // The EarlyData extension MUST be supplied together with the
-            // PreSharedKey extension.
-            let max_early_data_size = handshake
-                .resuming_session
-                .as_ref()
-                .map_or(0, |resume| resume.max_early_data_size);
-            if sess.config.enable_early_data && max_early_data_size > 0 && retryreq.is_none() {
-                sess.early_data.enable(max_early_data_size as usize);
-                exts.push(ClientExtension::EarlyData);
-            }
-
-            // Finally, and only for TLS1.3 with a ticket resumption, include a binder
-            // for our ticket.  This must go last.
-            //
-            // Include an empty binder. It gets filled in below because it depends on
-            // the message it's contained in (!!!).
-            let (obfuscated_ticket_age, suite) = {
-                let resuming = handshake.resuming_session
-                    .as_ref()
-                    .unwrap();
-                (resuming.get_obfuscated_ticket_age(ticketer::timebase()), resuming.cipher_suite)
-            };
-
-            let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
-            let binder = vec![0u8; binder_len];
-
-            let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
-            let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
-            exts.push(ClientExtension::PresharedKey(psk_ext));
-            true
-        } else {
-            false
-        }
+        tls13::prepare_resumption(sess, ticket, &handshake, &mut exts,
+                                  retryreq.is_some())
     } else if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
@@ -365,7 +310,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        emit_fake_ccs(&mut handshake, sess);
+        tls13::emit_fake_ccs(&mut handshake, sess);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -376,7 +321,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     if sess.early_data.is_enabled() {
         // For middlebox compatibility
-        emit_fake_ccs(&mut handshake, sess);
+        tls13::emit_fake_ccs(&mut handshake, sess);
 
         // It is safe to call unwrap() because fill_in_binder is true.
         let resuming_suite = handshake.resuming_session
@@ -581,7 +526,7 @@ impl State for ExpectServerHello {
         if sess.common.is_tls13() {
             tls13::validate_server_hello(sess, server_hello)?;
             tls13::start_handshake_traffic(sess, server_hello, &mut self.handshake, &mut self.hello)?;
-            emit_fake_ccs(&mut self.handshake, sess);
+            tls13::emit_fake_ccs(&mut self.handshake, sess);
             return Ok(self.into_expect_tls13_encrypted_extensions());
         }
 
