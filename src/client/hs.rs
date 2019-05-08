@@ -1,9 +1,9 @@
 use crate::msgs::enums::{ContentType, HandshakeType, ExtensionType};
-use crate::msgs::enums::{Compression, ProtocolVersion, AlertDescription, NamedGroup};
+use crate::msgs::enums::{Compression, ProtocolVersion, AlertDescription};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::base::Payload;
 use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
-use crate::msgs::handshake::{SessionID, Random, ServerHelloPayload};
+use crate::msgs::handshake::{SessionID, Random};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
@@ -15,7 +15,7 @@ use crate::msgs::persist;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::client::ClientSessionImpl;
 use crate::session::SessionSecrets;
-use crate::key_schedule::{KeySchedule, SecretKind};
+use crate::key_schedule::SecretKind;
 use crate::cipher;
 use crate::suites;
 use crate::verify;
@@ -71,7 +71,7 @@ pub trait State {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError;
 }
 
-fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
+pub fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
     sess.common.send_fatal_alert(AlertDescription::IllegalParameter);
     TLSError::PeerMisbehavedError(why.to_string())
 }
@@ -113,12 +113,6 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef)
     } else {
         None
     }
-}
-
-fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, group: NamedGroup) {
-    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
-
-    sess.config.session_persistence.put(key.get_encoding(), group.get_encoding());
 }
 
 fn random_sessionid() -> SessionID {
@@ -444,104 +438,6 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl ExpectServerHello {
-    fn start_handshake_traffic(&mut self,
-                               sess: &mut ClientSessionImpl,
-                               server_hello: &ServerHelloPayload)
-                               -> Result<(), TLSError> {
-        let suite = sess.common.get_suite_assert();
-
-        if let Some(selected_psk) = server_hello.get_psk_index() {
-            if let Some(ref resuming) = self.handshake.resuming_session {
-                let resume_from_suite = sess.find_cipher_suite(resuming.cipher_suite).unwrap();
-                if !resume_from_suite.can_resume_to(suite) {
-                    return Err(TLSError::PeerMisbehavedError("server resuming incompatible suite"
-                        .to_string()));
-                }
-
-                if selected_psk != 0 {
-                    return Err(TLSError::PeerMisbehavedError("server selected invalid psk"
-                        .to_string()));
-                }
-
-                debug!("Resuming using PSK");
-                // The key schedule has been initialized and set in fill_in_psk()
-                // Server must be using the resumption suite, otherwise set_suite()
-                // in ExpectServerHello::handle() would fail.
-                // key_schedule.input_secret(&resuming.master_secret.0);
-            } else {
-                return Err(TLSError::PeerMisbehavedError("server selected unoffered psk".to_string()));
-            }
-        } else {
-            debug!("Not resuming");
-            // Discard the early data key schedule.
-            sess.early_data.rejected();
-            sess.common.early_traffic = false;
-            let mut key_schedule = KeySchedule::new(suite.get_hash());
-            key_schedule.input_empty();
-            sess.common.set_key_schedule(key_schedule);
-            self.handshake.resuming_session.take();
-        }
-
-        let their_key_share = server_hello.get_key_share()
-            .ok_or_else(|| {
-                sess.common.send_fatal_alert(AlertDescription::MissingExtension);
-                TLSError::PeerMisbehavedError("missing key share".to_string())
-                })?;
-
-        let our_key_share = self.hello.find_key_share_and_discard_others(their_key_share.group)
-            .ok_or_else(|| illegal_param(sess, "wrong group for key share"))?;
-        let shared = our_key_share.complete(&their_key_share.payload.0)
-            .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed"
-                                                         .to_string()))?;
-
-        save_kx_hint(sess, self.handshake.dns_name.as_ref(), their_key_share.group);
-        sess.common.get_mut_key_schedule().input_secret(&shared.premaster_secret);
-
-        check_aligned_handshake(sess)?;
-
-        self.handshake.hash_at_client_recvd_server_hello =
-            sess.common.hs_transcript.get_current_hash();
-
-        if !sess.early_data.is_enabled() {
-            // Set the client encryption key for handshakes if early data is not used
-            let write_key = sess.common.get_key_schedule()
-                .derive(SecretKind::ClientHandshakeTrafficSecret,
-                    &self.handshake.hash_at_client_recvd_server_hello);
-            sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-            sess.config.key_log.log(sess.common.protocol.labels().client_handshake_traffic_secret,
-                                 &self.handshake.randoms.client,
-                                 &write_key);
-            sess.common.get_mut_key_schedule().current_client_traffic_secret = write_key;
-        }
-
-        let read_key = sess.common.get_key_schedule()
-            .derive(SecretKind::ServerHandshakeTrafficSecret,
-                    &self.handshake.hash_at_client_recvd_server_hello);
-        sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-        sess.config.key_log.log(sess.common.protocol.labels().server_handshake_traffic_secret,
-                                &self.handshake.randoms.client,
-                                &read_key);
-        sess.common.get_mut_key_schedule().current_server_traffic_secret = read_key;
-
-        #[cfg(feature = "quic")] {
-            let key_schedule = sess.common.key_schedule.as_ref().unwrap();
-            let client = if sess.early_data.is_enabled() {
-                // Traffic secret wasn't computed and stored above, so do it here.
-                sess.common.get_key_schedule()
-                    .derive(SecretKind::ClientHandshakeTrafficSecret,
-                            &self.handshake.hash_at_client_recvd_server_hello)
-            } else {
-                key_schedule.current_client_traffic_secret.clone()
-            };
-            sess.common.quic.hs_secrets = Some(quic::Secrets {
-                client,
-                server: key_schedule.current_server_traffic_secret.clone(),
-            });
-        }
-
-        Ok(())
-    }
-
     fn into_expect_tls13_encrypted_extensions(self) -> NextState {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
@@ -684,7 +580,7 @@ impl State for ExpectServerHello {
         // handshake_traffic_secret.
         if sess.common.is_tls13() {
             tls13::validate_server_hello(sess, server_hello)?;
-            self.start_handshake_traffic(sess, server_hello)?;
+            tls13::start_handshake_traffic(sess, server_hello, &mut self.handshake, &mut self.hello)?;
             emit_fake_ccs(&mut self.handshake, sess);
             return Ok(self.into_expect_tls13_encrypted_extensions());
         }
