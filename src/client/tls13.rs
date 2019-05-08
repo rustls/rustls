@@ -1,9 +1,10 @@
 use crate::msgs::enums::{ContentType, HandshakeType, ExtensionType, SignatureScheme};
-use crate::msgs::enums::{ProtocolVersion, AlertDescription};
+use crate::msgs::enums::{ProtocolVersion, AlertDescription, NamedGroup};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload};
 use crate::msgs::handshake::{SessionID, ServerHelloPayload, HasServerExtensions};
+use crate::msgs::handshake::{ClientExtension, HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use crate::msgs::handshake::DigitallySignedStruct;
@@ -14,6 +15,7 @@ use crate::key_schedule::SecretKind;
 use crate::cipher;
 use crate::verify;
 use crate::sign;
+use crate::suites;
 use crate::ticketer;
 #[cfg(feature = "logging")]
 use crate::log::{debug, warn};
@@ -60,6 +62,51 @@ pub fn validate_server_hello(sess: &mut ClientSessionImpl,
     }
 
     Ok(())
+}
+
+fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
+    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
+    let key_buf = key.get_encoding();
+
+    let maybe_value = sess.config.session_persistence.get(&key_buf);
+    maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
+}
+
+pub fn choose_kx_groups(sess: &mut ClientSessionImpl,
+                        exts: &mut Vec<ClientExtension>,
+                        hello: &mut ClientHelloDetails,
+                        handshake: &mut HandshakeDetails,
+                        retryreq: Option<&HelloRetryRequest>) {
+    // Choose our groups:
+    // - if we've been asked via HelloRetryRequest for a specific
+    //   one, do that.
+    // - if not, we might have a hint of what the server supports
+    // - if not, send just X25519.
+    //
+    let groups = retryreq.and_then(HelloRetryRequest::get_requested_key_share_group)
+        .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
+        .or_else(|| Some(NamedGroup::X25519))
+        .map(|grp| vec![ grp ])
+        .unwrap();
+
+    let mut key_shares = vec![];
+
+    for group in groups {
+        // in reply to HelloRetryRequest, we must not alter any existing key
+        // shares
+        if let Some(already_offered_share) = hello.find_key_share(group) {
+            key_shares.push(KeyShareEntry::new(group, already_offered_share.pubkey.as_ref()));
+            hello.offered_key_shares.push(already_offered_share);
+            continue;
+        }
+
+        if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
+            key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
+            hello.offered_key_shares.push(key_share);
+        }
+    }
+
+    exts.push(ClientExtension::KeyShare(key_shares));
 }
 
 fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
