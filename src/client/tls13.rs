@@ -7,7 +7,9 @@ use crate::msgs::handshake::{SessionID, ServerHelloPayload, HasServerExtensions}
 use crate::msgs::handshake::{ClientExtension, HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
+use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::persist;
 use crate::client::ClientSessionImpl;
@@ -148,7 +150,6 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl,
     sess.common.set_key_schedule(key_schedule);
 }
 
-
 pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
                                server_hello: &ServerHelloPayload,
                                handshake: &mut HandshakeDetails,
@@ -248,6 +249,68 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
     Ok(())
 }
 
+pub fn prepare_resumption(sess: &mut ClientSessionImpl,
+                          ticket: Vec<u8>,
+                          handshake: &HandshakeDetails,
+                          exts: &mut Vec<ClientExtension>,
+                          doing_retry: bool) -> bool {
+    let resuming_suite = handshake.resuming_session
+        .as_ref()
+        .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite));
+
+    if hs::compatible_suite(sess, resuming_suite) {
+        // The EarlyData extension MUST be supplied together with the
+        // PreSharedKey extension.
+        let max_early_data_size = handshake
+            .resuming_session
+            .as_ref()
+            .map_or(0, |resume| resume.max_early_data_size);
+        if sess.config.enable_early_data && max_early_data_size > 0 && !doing_retry {
+            sess.early_data.enable(max_early_data_size as usize);
+            exts.push(ClientExtension::EarlyData);
+        }
+
+        // Finally, and only for TLS1.3 with a ticket resumption, include a binder
+        // for our ticket.  This must go last.
+        //
+        // Include an empty binder. It gets filled in below because it depends on
+        // the message it's contained in (!!!).
+        let (obfuscated_ticket_age, suite) = {
+            let resuming = handshake.resuming_session
+                .as_ref()
+                .unwrap();
+            (resuming.get_obfuscated_ticket_age(ticketer::timebase()), resuming.cipher_suite)
+        };
+
+        let binder_len = sess.find_cipher_suite(suite).unwrap().get_hash().output_len;
+        let binder = vec![0u8; binder_len];
+
+        let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
+        let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
+        exts.push(ClientExtension::PresharedKey(psk_ext));
+        true
+    } else {
+        false
+    }
+}
+
+pub fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
+    #[cfg(feature = "quic")] {
+        if let Protocol::Quic = sess.common.protocol { return; }
+    }
+
+    if hs.sent_tls13_fake_ccs {
+        return;
+    }
+
+    let m = Message {
+        typ: ContentType::ChangeCipherSpec,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {})
+    };
+    sess.common.send_msg(m, false);
+    hs.sent_tls13_fake_ccs = true;
+}
 
 fn validate_encrypted_extensions(sess: &mut ClientSessionImpl,
                                  hello: &ClientHelloDetails,
