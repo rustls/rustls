@@ -1,9 +1,12 @@
 /// A macro which defines an enum type.
 macro_rules! enum_builder {
-    (@U8
+    (
+    $(#[$comment:meta])*
+    @U8
         EnumName: $enum_name: ident;
         EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
+        $(#[$comment])*
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub enum $enum_name {
             $( $enum_var),*
@@ -32,10 +35,13 @@ macro_rules! enum_builder {
             }
         }
     };
-    (@U16
+    (
+    $(#[$comment:meta])*
+    @U16
         EnumName: $enum_name: ident;
         EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
+        $(#[$comment])*
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub enum $enum_name {
             $( $enum_var),*
