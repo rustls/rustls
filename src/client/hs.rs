@@ -26,7 +26,6 @@ use crate::error::TLSError;
 use crate::handshake::check_handshake_message;
 #[cfg(feature = "quic")]
 use crate::{
-    quic,
     msgs::base::PayloadU16,
     session::Protocol
 };
