@@ -137,13 +137,17 @@ fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, grou
     sess.config.session_persistence.put(key.get_encoding(), group.get_encoding());
 }
 
+fn random_sessionid() -> SessionID {
+    let mut random_id = [0u8; 32];
+    rand::fill_random(&mut random_id);
+    SessionID::new(&random_id)
+}
+
 /// If we have a ticket, we use the sessionid as a signal that we're
 /// doing an abbreviated handshake.  See section 3.4 in RFC5077.
 fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
     if !csv.ticket.0.is_empty() {
-        let mut random_id = [0u8; 32];
-        rand::fill_random(&mut random_id);
-        csv.session_id = SessionID::new(&random_id);
+        csv.session_id = random_sessionid();
     }
 }
 
@@ -263,7 +267,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         (resuming.session_id, resuming.ticket.0.clone(), resuming.version)
     } else {
         debug!("Not resuming any session");
-        (SessionID::empty(), Vec::new(), ProtocolVersion::Unknown(0))
+        (random_sessionid(), Vec::new(), ProtocolVersion::Unknown(0))
     };
 
     let support_tls12 = sess.config.supports_version(ProtocolVersion::TLSv1_2);
