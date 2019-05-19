@@ -145,7 +145,7 @@ fn random_sessionid() -> SessionID {
 
 /// If we have a ticket, we use the sessionid as a signal that we're
 /// doing an abbreviated handshake.  See section 3.4 in RFC5077.
-fn randomise_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
+fn random_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
     if !csv.ticket.0.is_empty() {
         csv.session_id = random_sessionid();
     }
@@ -261,13 +261,16 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
         let resuming = handshake.resuming_session.as_mut().unwrap();
         if resuming.version == ProtocolVersion::TLSv1_2 {
-            randomise_sessionid_for_ticket(resuming);
+            random_sessionid_for_ticket(resuming);
         }
         debug!("Resuming session");
         (resuming.session_id, resuming.ticket.0.clone(), resuming.version)
     } else {
         debug!("Not resuming any session");
-        (random_sessionid(), Vec::new(), ProtocolVersion::Unknown(0))
+        if handshake.session_id.is_empty() {
+            handshake.session_id = random_sessionid();
+        }
+        (handshake.session_id, Vec::new(), ProtocolVersion::Unknown(0))
     };
 
     let support_tls12 = sess.config.supports_version(ProtocolVersion::TLSv1_2);
