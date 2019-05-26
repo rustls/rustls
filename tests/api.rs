@@ -1939,3 +1939,16 @@ fn exercise_key_log_file_for_server() {
         server.process_new_packets().unwrap();
     }
 }
+
+fn assert_lt(left: usize, right: usize) {
+    if left >= right {
+        panic!("expected {} < {}", left, right);
+    }
+}
+
+#[test]
+fn session_types_are_not_huge() {
+    // Arbitrary sizes
+    assert_lt(mem::size_of::<ServerSession>(), 1536);
+    assert_lt(mem::size_of::<ClientSession>(), 1536);
+}
