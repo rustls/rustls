@@ -27,7 +27,7 @@ pub struct MessageDeframer {
 
     /// A fixed-size buffer containing the currently-accumulating
     /// TLS message.
-    buf: [u8; MAX_MESSAGE],
+    buf: Vec<u8>,
 
     /// What size prefix of `buf` is used.
     used: usize,
@@ -54,7 +54,7 @@ impl MessageDeframer {
         MessageDeframer {
             frames: VecDeque::new(),
             desynced: false,
-            buf: [0u8; MAX_MESSAGE],
+            buf: vec![0u8; MAX_MESSAGE],
             used: 0,
         }
     }
