@@ -138,9 +138,9 @@ impl InitialState {
         }
     }
 
-    fn emit_initial_client_hello(self, sess: &mut ClientSessionImpl) -> NextState {
+    fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> NextState {
         if sess.config.client_auth_cert_resolver.has_certs() {
-            sess.common.hs_transcript.set_client_auth_enabled();
+            self.handshake.transcript.set_client_auth_enabled();
         }
         let hello_details = ClientHelloDetails::new();
         emit_client_hello_for_retry(sess, self.handshake, hello_details, None)
@@ -314,7 +314,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     trace!("Sending ClientHello {:#?}", ch);
 
-    sess.common.hs_transcript.add_message(&ch);
+    handshake.transcript.add_message(&ch);
     sess.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
@@ -327,7 +327,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             .as_ref()
             .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite)).unwrap();
 
-        let client_hello_hash = sess.common.hs_transcript.get_hash_given(resuming_suite.get_hash(), &[]);
+        let client_hello_hash = handshake.transcript.get_hash_given(resuming_suite.get_hash(), &[]);
         let client_early_traffic_secret = sess.common
             .get_key_schedule()
             .derive(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash);
@@ -517,8 +517,8 @@ impl State for ExpectServerHello {
 
         // Start our handshake hash, and input the server-hello.
         let starting_hash = sess.common.get_suite_assert().get_hash();
-        sess.common.hs_transcript.start_hash(starting_hash);
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.start_hash(starting_hash);
+        self.handshake.transcript.add_message(&m);
 
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
@@ -623,7 +623,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         Box::new(self.0)
     }
 
-    fn handle_hello_retry_request(self, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
+    fn handle_hello_retry_request(mut self, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         check_handshake_message(&m, &[HandshakeType::HelloRetryRequest])?;
 
         let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
@@ -690,9 +690,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
         sess.common.set_suite(cs);
 
         // This is the draft19 change where the transcript became a tree
-        sess.common.hs_transcript.start_hash(cs.get_hash());
-        sess.common.hs_transcript.rollup_for_hrr();
-        sess.common.hs_transcript.add_message(&m);
+        self.0.handshake.transcript.start_hash(cs.get_hash());
+        self.0.handshake.transcript.rollup_for_hrr();
+        self.0.handshake.transcript.add_message(&m);
 
         // Early data is not alllowed after HelloRetryrequest
         if sess.early_data.is_enabled() {

@@ -17,7 +17,6 @@ use crate::key_schedule::{SecretKind, KeySchedule};
 use crate::prf;
 use crate::rand;
 use crate::quic;
-use crate::hash_hs;
 #[cfg(feature = "logging")]
 use crate::log::{warn, debug, error};
 
@@ -456,7 +455,6 @@ pub struct SessionCommon {
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub sendable_tls: ChunkVecBuffer,
-    pub hs_transcript: hash_hs::HandshakeHash,
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub protocol: Protocol,
     #[cfg(feature = "quic")]
@@ -487,7 +485,6 @@ impl SessionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            hs_transcript: hash_hs::HandshakeHash::new(),
             protocol: Protocol::Tls13,
             #[cfg(feature = "quic")]
             quic: Quic::new(),

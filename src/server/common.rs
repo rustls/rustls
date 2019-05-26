@@ -2,10 +2,12 @@ use crate::session::SessionRandoms;
 use crate::msgs::handshake::{ServerExtension, SessionID};
 use crate::suites;
 use crate::key;
+use crate::hash_hs;
 
 use std::mem;
 
 pub struct HandshakeDetails {
+    pub transcript: hash_hs::HandshakeHash,
     pub hash_at_server_fin: Vec<u8>,
     pub session_id: SessionID,
     pub randoms: SessionRandoms,
@@ -16,6 +18,7 @@ pub struct HandshakeDetails {
 impl HandshakeDetails {
     pub fn new(extra_exts: Vec<ServerExtension>) -> HandshakeDetails {
         HandshakeDetails {
+            transcript: hash_hs::HandshakeHash::new(),
             hash_at_server_fin: Vec::new(),
             session_id: SessionID::empty(),
             randoms: SessionRandoms::for_server(),

@@ -8,6 +8,7 @@ use crate::msgs::persist;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::NamedGroup;
 use crate::session::SessionRandoms;
+use crate::hash_hs;
 use crate::sign;
 use crate::suites;
 #[cfg(feature = "logging")]
@@ -52,6 +53,7 @@ impl ServerKXDetails {
 
 pub struct HandshakeDetails {
     pub resuming_session: Option<persist::ClientSessionValue>,
+    pub transcript: hash_hs::HandshakeHash,
     pub hash_at_client_recvd_server_hello: Vec<u8>,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
@@ -64,8 +66,9 @@ pub struct HandshakeDetails {
 impl HandshakeDetails {
     pub fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> HandshakeDetails {
         HandshakeDetails {
-            hash_at_client_recvd_server_hello: Vec::new(),
             resuming_session: None,
+            transcript: hash_hs::HandshakeHash::new(),
+            hash_at_client_recvd_server_hello: Vec::new(),
             randoms: SessionRandoms::for_client(),
             using_ems: false,
             session_id: SessionID::empty(),

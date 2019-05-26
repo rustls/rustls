@@ -57,9 +57,9 @@ impl hs::State for ExpectCertificate {
         check_handshake_message(m, &[HandshakeType::Certificate])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
 
         self.server_cert.cert_chain = cert_chain.clone();
 
@@ -92,8 +92,8 @@ impl hs::State for ExpectCertificateStatus {
         check_handshake_message(m, &[HandshakeType::CertificateStatus])
     }
 
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        sess.common.hs_transcript.add_message(&m);
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+        self.handshake.transcript.add_message(&m);
         let mut status = extract_handshake_mut!(m, HandshakePayload::CertificateStatus).unwrap();
 
         self.server_cert.ocsp_response = status.take_ocsp_response();
@@ -164,10 +164,10 @@ impl hs::State for ExpectServerKX {
         check_handshake_message(m, &[HandshakeType::ServerKeyExchange])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let opaque_kx = extract_handshake!(m, HandshakePayload::ServerKeyExchange).unwrap();
         let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite_assert().kx);
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
 
         if maybe_decoded_kx.is_none() {
             sess.common.send_fatal_alert(AlertDescription::DecodeError);
@@ -192,7 +192,8 @@ impl hs::State for ExpectServerKX {
     }
 }
 
-fn emit_certificate(client_auth: &mut ClientAuthDetails,
+fn emit_certificate(handshake: &mut HandshakeDetails,
+                    client_auth: &mut ClientAuthDetails,
                     sess: &mut ClientSessionImpl) {
     let chosen_cert = client_auth.cert.take();
 
@@ -205,11 +206,12 @@ fn emit_certificate(client_auth: &mut ClientAuthDetails,
         }),
     };
 
-    sess.common.hs_transcript.add_message(&cert);
+    handshake.transcript.add_message(&cert);
     sess.common.send_msg(cert, false);
 }
 
-fn emit_clientkx(sess: &mut ClientSessionImpl,
+fn emit_clientkx(handshake: &mut HandshakeDetails,
+                 sess: &mut ClientSessionImpl,
                  kxd: &suites::KeyExchangeResult) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(kxd.pubkey.as_ref()));
@@ -225,19 +227,20 @@ fn emit_clientkx(sess: &mut ClientSessionImpl,
         }),
     };
 
-    sess.common.hs_transcript.add_message(&ckx);
+    handshake.transcript.add_message(&ckx);
     sess.common.send_msg(ckx, false);
 }
 
-fn emit_certverify(client_auth: &mut ClientAuthDetails,
+fn emit_certverify(handshake: &mut HandshakeDetails,
+                   client_auth: &mut ClientAuthDetails,
                    sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     if client_auth.signer.is_none() {
         trace!("Not sending CertificateVerify, no key");
-        sess.common.hs_transcript.abandon_client_auth();
+        handshake.transcript.abandon_client_auth();
         return Ok(());
     }
 
-    let message = sess.common.hs_transcript.take_handshake_buf();
+    let message = handshake.transcript.take_handshake_buf();
     let signer = client_auth.signer.take().unwrap();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
@@ -252,7 +255,7 @@ fn emit_certverify(client_auth: &mut ClientAuthDetails,
         }),
     };
 
-    sess.common.hs_transcript.add_message(&m);
+    handshake.transcript.add_message(&m);
     sess.common.send_msg(m, false);
     Ok(())
 }
@@ -268,8 +271,9 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
     sess.common.we_now_encrypting();
 }
 
-fn emit_finished(sess: &mut ClientSessionImpl) {
-    let vh = sess.common.hs_transcript.get_current_hash();
+fn emit_finished(handshake: &mut HandshakeDetails,
+                 sess: &mut ClientSessionImpl) {
+    let vh = handshake.transcript.get_current_hash();
     let verify_data = sess.common.secrets
         .as_ref()
         .unwrap()
@@ -285,7 +289,7 @@ fn emit_finished(sess: &mut ClientSessionImpl) {
         }),
     };
 
-    sess.common.hs_transcript.add_message(&f);
+    handshake.transcript.add_message(&f);
     sess.common.send_msg(f, true);
 }
 
@@ -316,9 +320,9 @@ impl hs::State for ExpectCertificateRequest {
         check_handshake_message(m, &[HandshakeType::CertificateRequest])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let certreq = extract_handshake!(m, HandshakePayload::CertificateRequest).unwrap();
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
 
         let mut client_auth = ClientAuthDetails::new();
@@ -388,11 +392,11 @@ impl hs::State for ExpectServerDoneOrCertReq {
                                   HandshakeType::ServerHelloDone])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         if extract_handshake!(m, HandshakePayload::CertificateRequest).is_some() {
             self.into_expect_certificate_req().handle(sess, m)
         } else {
-            sess.common.hs_transcript.abandon_client_auth();
+            self.handshake.transcript.abandon_client_auth();
             self.into_expect_server_done().handle(sess, m)
         }
     }
@@ -439,7 +443,7 @@ impl hs::State for ExpectServerDone {
 
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
-        sess.common.hs_transcript.add_message(&m);
+        st.handshake.transcript.add_message(&m);
 
         debug!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.handshake.dns_name);
@@ -507,7 +511,8 @@ impl hs::State for ExpectServerDone {
 
         // 4.
         if st.client_auth.is_some() {
-            emit_certificate(st.client_auth.as_mut().unwrap(),
+            emit_certificate(&mut st.handshake,
+                             st.client_auth.as_mut().unwrap(),
                              sess);
         }
 
@@ -517,13 +522,14 @@ impl hs::State for ExpectServerDone {
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
-        emit_clientkx(sess, &kxd);
+        emit_clientkx(&mut st.handshake, sess, &kxd);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
-        let handshake_hash = sess.common.hs_transcript.get_current_hash();
+        let handshake_hash = st.handshake.transcript.get_current_hash();
 
         // 5c.
         if st.client_auth.is_some() {
-            emit_certverify(st.client_auth.as_mut().unwrap(),
+            emit_certverify(&mut st.handshake,
+                            st.client_auth.as_mut().unwrap(),
                             sess)?;
         }
 
@@ -548,7 +554,7 @@ impl hs::State for ExpectServerDone {
         sess.common.start_encryption_tls12(secrets);
 
         // 6.
-        emit_finished(sess);
+        emit_finished(&mut st.handshake, sess);
 
         if st.must_issue_new_ticket {
             Ok(st.into_expect_new_ticket(certv, sigv))
@@ -626,8 +632,8 @@ impl hs::State for ExpectNewTicket {
         check_handshake_message(m, &[HandshakeType::NewSessionTicket])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        sess.common.hs_transcript.add_message(&m);
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+        self.handshake.transcript.add_message(&m);
 
         let nst = extract_handshake_mut!(m, HandshakePayload::NewSessionTicket).unwrap();
         let recvd = ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint);
@@ -706,7 +712,7 @@ impl hs::State for ExpectFinished {
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
         // Work out what verify_data we expect.
-        let vh = sess.common.hs_transcript.get_current_hash();
+        let vh = st.handshake.transcript.get_current_hash();
         let expect_verify_data = sess.common.secrets
             .as_ref()
             .unwrap()
@@ -722,7 +728,7 @@ impl hs::State for ExpectFinished {
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Hash this message too.
-        sess.common.hs_transcript.add_message(&m);
+        st.handshake.transcript.add_message(&m);
 
         save_session(&mut st.handshake,
                      &mut st.ticket,
@@ -730,7 +736,7 @@ impl hs::State for ExpectFinished {
 
         if st.resuming {
             emit_ccs(sess);
-            emit_finished(sess);
+            emit_finished(&mut st.handshake, sess);
         }
 
         sess.common.we_now_encrypting();

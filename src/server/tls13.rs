@@ -69,7 +69,7 @@ impl CompleteClientHelloHandling {
         };
 
         let suite_hash = sess.common.get_suite_assert().get_hash();
-        let handshake_hash = sess.common.hs_transcript.get_hash_given(suite_hash, &binder_plaintext);
+        let handshake_hash = self.handshake.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
         let mut key_schedule = KeySchedule::new(suite_hash);
         key_schedule.input_secret(psk);
@@ -145,11 +145,11 @@ impl CompleteClientHelloHandling {
         hs::check_aligned_handshake(sess)?;
 
         #[cfg(feature = "quic")]
-        let client_hello_hash = sess.common.hs_transcript
+        let client_hello_hash = self.handshake.transcript
             .get_hash_given(sess.common.get_suite_assert().get_hash(), &[]);
 
         trace!("sending server hello {:?}", sh);
-        sess.common.hs_transcript.add_message(&sh);
+        self.handshake.transcript.add_message(&sh);
         sess.common.send_msg(sh, false);
 
         // Start key schedule
@@ -175,7 +175,7 @@ impl CompleteClientHelloHandling {
         }
         key_schedule.input_secret(&kxr.premaster_secret);
 
-        let handshake_hash = sess.common.hs_transcript.get_current_hash();
+        let handshake_hash = self.handshake.transcript.get_current_hash();
         let write_key = key_schedule.derive(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
         let read_key = key_schedule.derive(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
@@ -237,8 +237,8 @@ impl CompleteClientHelloHandling {
         };
 
         trace!("Requesting retry {:?}", m);
-        sess.common.hs_transcript.rollup_for_hrr();
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.rollup_for_hrr();
+        self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, false);
     }
 
@@ -264,7 +264,7 @@ impl CompleteClientHelloHandling {
         };
 
         trace!("sending encrypted extensions {:?}", ee);
-        sess.common.hs_transcript.add_message(&ee);
+        self.handshake.transcript.add_message(&ee);
         sess.common.send_msg(ee, true);
         Ok(())
     }
@@ -297,7 +297,7 @@ impl CompleteClientHelloHandling {
         };
 
         trace!("Sending CertificateRequest {:?}", m);
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
         true
     }
@@ -344,7 +344,7 @@ impl CompleteClientHelloHandling {
         };
 
         trace!("sending certificate {:?}", c);
-        sess.common.hs_transcript.add_message(&c);
+        self.handshake.transcript.add_message(&c);
         sess.common.send_msg(c, true);
     }
 
@@ -356,7 +356,7 @@ impl CompleteClientHelloHandling {
         let mut message = Vec::new();
         message.resize(64, 0x20u8);
         message.extend_from_slice(b"TLS 1.3, server CertificateVerify\x00");
-        message.extend_from_slice(&sess.common.hs_transcript.get_current_hash());
+        message.extend_from_slice(&self.handshake.transcript.get_current_hash());
 
         let signing_key = &server_key.key;
         let signer = signing_key.choose_scheme(schemes)
@@ -377,13 +377,13 @@ impl CompleteClientHelloHandling {
         };
 
         trace!("sending certificate-verify {:?}", m);
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
         Ok(())
     }
 
     fn emit_finished_tls13(&mut self, sess: &mut ServerSessionImpl) {
-        let handshake_hash = sess.common.hs_transcript.get_current_hash();
+        let handshake_hash = self.handshake.transcript.get_current_hash();
         let verify_data = sess.common
             .get_key_schedule()
             .sign_finish(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
@@ -399,8 +399,8 @@ impl CompleteClientHelloHandling {
         };
 
         trace!("sending finished {:?}", m);
-        sess.common.hs_transcript.add_message(&m);
-        self.handshake.hash_at_server_fin = sess.common.hs_transcript.get_current_hash();
+        self.handshake.transcript.add_message(&m);
+        self.handshake.hash_at_server_fin = self.handshake.transcript.get_current_hash();
         sess.common.send_msg(m, true);
 
         // Now move to application data keys.
@@ -497,7 +497,7 @@ impl CompleteClientHelloHandling {
             // We don't have a suitable key share.  Choose a suitable group and
             // send a HelloRetryRequest.
             let retry_group_maybe = util::first_in_both(supported_groups, groups_ext);
-            sess.common.hs_transcript.add_message(chm);
+            self.handshake.transcript.add_message(chm);
 
             if let Some(group) = retry_group_maybe {
                 if self.done_retry {
@@ -564,7 +564,7 @@ impl CompleteClientHelloHandling {
         }
 
         let full_handshake = resumedata.is_none();
-        sess.common.hs_transcript.add_message(chm);
+        self.handshake.transcript.add_message(chm);
         self.emit_server_hello(sess, &client_hello.session_id,
                                chosen_share, chosen_psk_index,
                                resumedata.as_ref().map(|x| &x.master_secret.0[..]))?;
@@ -621,9 +621,9 @@ impl hs::State for ExpectCertificate {
         check_handshake_message(m, &[HandshakeType::Certificate])
     }
 
-    fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
         let certp = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
 
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
@@ -637,7 +637,7 @@ impl hs::State for ExpectCertificate {
         if cert_chain.is_empty() {
             if !sess.config.verifier.client_auth_mandatory() {
                 debug!("client auth requested but no certificate supplied");
-                sess.common.hs_transcript.abandon_client_auth();
+                self.handshake.transcript.abandon_client_auth();
                 return Ok(self.into_expect_finished());
             }
 
@@ -679,8 +679,8 @@ impl hs::State for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
-            let handshake_hash = sess.common.hs_transcript.get_current_hash();
-            sess.common.hs_transcript.abandon_client_auth();
+            let handshake_hash = self.handshake.transcript.get_current_hash();
+            self.handshake.transcript.abandon_client_auth();
             let certs = &self.client_cert.cert_chain;
 
             verify::verify_tls13(&certs[0],
@@ -697,19 +697,20 @@ impl hs::State for ExpectCertificateVerify {
         trace!("client CertificateVerify OK");
         sess.client_cert_chain = Some(self.client_cert.take_chain());
 
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
         Ok(self.into_expect_finished())
     }
 }
 
 // --- Process client's Finished ---
-fn get_server_session_value(sess: &ServerSessionImpl,
-                                  nonce: &[u8]) -> persist::ServerSessionValue {
+fn get_server_session_value(handshake: &mut HandshakeDetails,
+                            sess: &ServerSessionImpl,
+                            nonce: &[u8]) -> persist::ServerSessionValue {
     let scs = sess.common.get_suite_assert();
     let version = ProtocolVersion::TLSv1_3;
 
-    let handshake_hash = sess.common
-        .hs_transcript
+    let handshake_hash = handshake
+        .transcript
         .get_current_hash();
     let resumption_master_secret = sess.common
         .get_key_schedule()
@@ -740,7 +741,8 @@ impl ExpectFinished {
     fn emit_stateless_ticket(&mut self, sess: &mut ServerSessionImpl) {
         debug_assert!(self.send_ticket);
         let nonce = rand::random_vec(32);
-        let plain = get_server_session_value(sess, &nonce)
+        let plain = get_server_session_value(&mut self.handshake,
+                                             sess, &nonce)
             .get_encoding();
         let maybe_ticket = sess.config
             .ticketer
@@ -770,7 +772,7 @@ impl ExpectFinished {
         };
 
         trace!("sending new ticket {:?}", m);
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
     }
 
@@ -778,7 +780,8 @@ impl ExpectFinished {
         debug_assert!(self.send_ticket);
         let nonce = rand::random_vec(32);
         let id = rand::random_vec(32);
-        let plain = get_server_session_value(sess, &nonce)
+        let plain = get_server_session_value(&mut self.handshake,
+                                             sess, &nonce)
             .get_encoding();
 
         if sess.config.session_storage.put(id.clone(), plain) {
@@ -801,7 +804,7 @@ impl ExpectFinished {
             };
 
             trace!("sending new stateful ticket {:?}", m);
-            sess.common.hs_transcript.add_message(&m);
+            self.handshake.transcript.add_message(&m);
             sess.common.send_msg(m, true);
         } else {
             trace!("resumption not available; not issuing ticket");
@@ -817,7 +820,7 @@ impl hs::State for ExpectFinished {
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
 
-        let handshake_hash = sess.common.hs_transcript.get_current_hash();
+        let handshake_hash = self.handshake.transcript.get_current_hash();
         let expect_verify_data = sess.common
             .get_key_schedule()
             .sign_finish(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
@@ -832,7 +835,7 @@ impl hs::State for ExpectFinished {
 
         // nb. future derivations include Client Finished, but not the
         // main application data keying.
-        sess.common.hs_transcript.add_message(&m);
+        self.handshake.transcript.add_message(&m);
 
         // Now move to using application data keys for client traffic.
         // Server traffic is already done.
