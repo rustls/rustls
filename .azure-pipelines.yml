@@ -61,7 +61,7 @@ jobs:
 
 # Check that the minimum versions specified in Cargo.toml
 # do in fact build.
-- job: Check minimal versions build
+- job: MinimalVersions
   pool:
     vmImage: ubuntu-16.04
   steps:
