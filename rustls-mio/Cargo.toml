@@ -18,7 +18,7 @@ quic = ["rustls/quic"]
 
 [dependencies]
 base64 = "0.10"
-log = { version = "0.4.0", optional = true }
+log = { version = "0.4.4", optional = true }
 rustls = { path = ".." }
 sct = "0.5"
 webpki = "0.19"
@@ -26,8 +26,8 @@ webpki = "0.19"
 [dev-dependencies]
 ct-logs = "0.5"
 docopt = "~1.0"
-env_logger = "0.6"
-mio = "0.6"
+env_logger = "0.6.1"
+mio = "0.6.14"
 regex = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
