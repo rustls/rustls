@@ -11,6 +11,12 @@ matrix:
       sudo: required
       rust: nightly
       env: COVERAGE=1
+    - os: linux
+      dist: trusty
+      sudo: required
+      rust: nightly
+      script:
+          - cargo -Z minimal-versions test --all-features
     - os: osx
       rust: stable
 before_install:
