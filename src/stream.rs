@@ -101,6 +101,16 @@ impl<S, T> StreamOwned<S, T> where S: Session, T: Read + Write {
     pub fn new(sess: S, sock: T) -> StreamOwned<S, T> {
         StreamOwned { sess, sock }
     }
+
+    /// Get a reference to the underlying socket
+    pub fn get_ref(&self) -> &T {
+        &self.sock
+    }
+
+    /// Get a mutable reference to the underlying socket
+    pub fn get_mut(&mut self) -> &T {
+        &mut self.sock
+    }
 }
 
 impl<'a, S, T> StreamOwned<S, T> where S: Session, T: Read + Write {
