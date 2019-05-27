@@ -58,3 +58,14 @@ jobs:
       parameters:
         rustup_toolchain: nightly
     - template: admin/pipelines/coverage.yml
+
+# Check that the minimum versions specified in Cargo.toml
+# do in fact build.
+- job: Check minimal versions build
+  pool:
+    vmImage: ubuntu-16.04
+  steps:
+    - template: az-pipeline/unstable/rustup.yml@templates
+      parameters:
+        rustup_toolchain: nightly
+    - template: admin/pipelines/min-versions.yml

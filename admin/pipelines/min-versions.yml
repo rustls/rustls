@@ -1,0 +1,6 @@
+steps:
+  - script: cargo -Z minimal-versions test --all-features
+    displayName: "rustls cargo test (debug; all features)"
+  - script: cargo -Z minimal-versions test --all-features
+    displayName: "rustls-mio cargo test (debug; all features)"
+    workingDirectory: rustls-mio
