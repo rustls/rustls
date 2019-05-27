@@ -41,7 +41,6 @@ pub struct KeySchedule {
     current: hmac::SigningKey,
     need_derive_for_extract: bool,
     hash: &'static digest::Algorithm,
-    hash_of_empty_message: [u8; digest::MAX_OUTPUT_LEN],
     pub current_client_traffic_secret: Vec<u8>,
     pub current_server_traffic_secret: Vec<u8>,
     pub current_exporter_secret: Vec<u8>,
@@ -51,23 +50,14 @@ impl KeySchedule {
     pub fn new(hash: &'static digest::Algorithm) -> KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
 
-        let mut empty_hash = [0u8; digest::MAX_OUTPUT_LEN];
-        empty_hash[..hash.output_len]
-            .clone_from_slice(digest::digest(hash, &[]).as_ref());
-
         KeySchedule {
             current: hmac::SigningKey::new(hash, &zeroes[..hash.output_len]),
             need_derive_for_extract: false,
             hash,
-            hash_of_empty_message: empty_hash,
             current_server_traffic_secret: Vec::new(),
             current_client_traffic_secret: Vec::new(),
             current_exporter_secret: Vec::new(),
         }
-    }
-
-    pub fn get_hash_of_empty_message(&self) -> &[u8] {
-        &self.hash_of_empty_message[..self.hash.output_len]
     }
 
     /// Input the empty secret.
@@ -80,8 +70,7 @@ impl KeySchedule {
     /// Input the given secret.
     pub fn input_secret(&mut self, secret: &[u8]) {
         if self.need_derive_for_extract {
-            let derived = self.derive(SecretKind::DerivedSecret,
-                                      self.get_hash_of_empty_message());
+            let derived = self.derive_for_empty_hash(SecretKind::DerivedSecret);
             self.current = hmac::SigningKey::new(self.hash, &derived);
         }
         self.need_derive_for_extract = true;
@@ -97,6 +86,18 @@ impl KeySchedule {
                                kind.to_bytes(),
                                hs_hash,
                                self.hash.output_len)
+    }
+
+    /// Derive a secret of given `kind` using the hash of the empty string
+    /// for the handshake hash.  Useful only for
+    /// `SecretKind::ResumptionPSKBinderKey` and
+    /// `SecretKind::DerivedSecret`.
+    pub fn derive_for_empty_hash(&self, kind: SecretKind) -> Vec<u8> {
+        let mut empty_hash = [0u8; digest::MAX_OUTPUT_LEN];
+        empty_hash[..self.hash.output_len]
+            .clone_from_slice(digest::digest(self.hash, &[]).as_ref());
+
+        self.derive(kind, &empty_hash[..self.hash.output_len])
     }
 
     /// Return the current traffic secret, of given `kind`.

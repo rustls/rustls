@@ -73,8 +73,7 @@ impl CompleteClientHelloHandling {
 
         let mut key_schedule = KeySchedule::new(suite_hash);
         key_schedule.input_secret(psk);
-        let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey,
-                                           key_schedule.get_hash_of_empty_message());
+        let base_key = key_schedule.derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
         let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
         constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
