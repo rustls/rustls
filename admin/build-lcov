@@ -3,5 +3,7 @@ set -xe
 
 if [ ! -e lcov/ ] ; then
   git clone https://github.com/linux-test-project/lcov.git
-  cd lcov && sudo make install
+  cd lcov
+  git checkout v1.14
+  sudo make install
 fi
