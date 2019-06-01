@@ -19,6 +19,10 @@ measure: ./target/release/examples/bench
 	$^ bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 	$^ bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	$^ bulk TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+	$^ bulk TLS13_AES_256_GCM_SHA384
 	$^ handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	$^ handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	$^ handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$^ handshake TLS13_AES_256_GCM_SHA384
+	$^ handshake-resume TLS13_AES_256_GCM_SHA384
+	$^ handshake-ticket TLS13_AES_256_GCM_SHA384
