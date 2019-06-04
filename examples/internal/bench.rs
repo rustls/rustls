@@ -231,6 +231,15 @@ fn make_client_config(version: rustls::ProtocolVersion,
     cfg
 }
 
+fn apply_work_multiplier(work: u32) -> u32 {
+    let mul = match env::var("BENCH_MULTIPLIER") {
+        Ok(val) => val.parse::<f64>().expect("invalid BENCH_MULTIPLIER value"),
+        Err(_) => 1.
+    };
+
+    ((work as f64) * mul).round() as u32
+}
+
 fn bench_handshake(version: rustls::ProtocolVersion,
                    suite: &'static rustls::SupportedCipherSuite,
                    clientauth: ClientAuth,
@@ -242,7 +251,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
         return;
     }
 
-    let rounds = if resume == Resumption::No { 512 } else { 4096 };
+    let rounds = apply_work_multiplier(if resume == Resumption::No { 512 } else { 4096 });
     let mut client_time = 0f64;
     let mut server_time = 0f64;
 
@@ -319,11 +328,13 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
     let mut buf = Vec::new();
     buf.resize(plaintext_size as usize, 0u8);
 
-    let total_data = if plaintext_size < 8192 {
-        64 * 1024 * 1024
-    } else {
-        1024 * 1024 * 1024
-    };
+    let total_data = apply_work_multiplier(
+        if plaintext_size < 8192 {
+            64 * 1024 * 1024
+        } else {
+            1024 * 1024 * 1024
+        }
+    );
     let rounds = total_data / plaintext_size;
     let mut time_send = 0f64;
     let mut time_recv = 0f64;
