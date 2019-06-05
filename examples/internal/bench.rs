@@ -231,13 +231,13 @@ fn make_client_config(version: rustls::ProtocolVersion,
     cfg
 }
 
-fn apply_work_multiplier(work: u32) -> u32 {
+fn apply_work_multiplier(work: u64) -> u64 {
     let mul = match env::var("BENCH_MULTIPLIER") {
         Ok(val) => val.parse::<f64>().expect("invalid BENCH_MULTIPLIER value"),
         Err(_) => 1.
     };
 
-    ((work as f64) * mul).round() as u32
+    ((work as f64) * mul).round() as u64
 }
 
 fn bench_handshake(version: rustls::ProtocolVersion,
@@ -287,7 +287,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
                  "server-auth"
              },
              resume.label(),
-             f64::from(rounds) / client_time);
+             (rounds as f64) / client_time);
     println!("handshakes\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
              version,
              suite.suite,
@@ -297,7 +297,7 @@ fn bench_handshake(version: rustls::ProtocolVersion,
                  "server-auth"
              },
              resume.label(),
-             f64::from(rounds) / server_time);
+             (rounds as f64) / server_time);
 }
 
 fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
@@ -310,7 +310,7 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
 }
 
 fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::SupportedCipherSuite,
-              plaintext_size: u32) {
+              plaintext_size: u64) {
     let client_config =
         Arc::new(make_client_config(version, suite, ClientAuth::No, Resumption::No));
     let server_config = Arc::new(make_server_config(version, suite, ClientAuth::No, Resumption::No));
@@ -353,7 +353,7 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
         drain(&mut client, buf.len());
     }
 
-    let total_mbs = f64::from(plaintext_size * rounds) / (1024. * 1024.);
+    let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
     println!("bulk\t{:?}\t{:?}\tsend\t{:.2}\tMB/s",
              version,
              suite.suite,
@@ -383,7 +383,7 @@ fn selected_tests(mut args: env::Args) {
             match args.next() {
                 Some(suite) => {
                     let len = args.next()
-                        .map(|arg| arg.parse::<u32>()
+                        .map(|arg| arg.parse::<u64>()
                              .expect("3rd arg must be integer"))
                         .unwrap_or(1048576);
                     let suite = lookup_suite(&suite);
