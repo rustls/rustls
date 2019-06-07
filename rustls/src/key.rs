@@ -1,3 +1,4 @@
+use std::prelude::v1::*;
 use std::fmt;
 
 /// This type contains a private key by value.

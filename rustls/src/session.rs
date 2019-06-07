@@ -5,6 +5,7 @@ use crate::key;
 use crate::log::{debug, error, warn};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
+use std::prelude::v1::*;
 use crate::msgs::deframer::MessageDeframer;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};

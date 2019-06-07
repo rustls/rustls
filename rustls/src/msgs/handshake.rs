@@ -1,4 +1,5 @@
 use crate::key;
+use std::prelude::v1::*;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};

@@ -1,3 +1,4 @@
+use std::prelude::v1::*;
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::error::TLSError;
 use crate::msgs::message::{BorrowMessage, Message};

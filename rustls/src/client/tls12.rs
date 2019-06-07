@@ -3,6 +3,7 @@ use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
+use std::prelude::v1::*;
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;

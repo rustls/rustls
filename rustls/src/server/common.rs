@@ -1,5 +1,6 @@
 use crate::hash_hs;
 use crate::key;
+use std::prelude::v1::*;
 use crate::msgs::handshake::{ServerExtension, SessionID};
 use crate::session::SessionRandoms;
 use crate::suites;

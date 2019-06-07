@@ -12,23 +12,25 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-base64 = "0.13.0"
-log = { version = "0.4.4", optional = true }
-ring = "0.16.11"
-sct = "0.6.0"
-webpki = "0.21.0"
+base64 = { git = "https://github.com/mesalock-linux/rust-base64-sgx" }
+log = { git = "https://github.com/mesalock-linux/log-sgx", optional = true }
+ring = { git = "https://github.com/mesalock-linux/ring-sgx", tag = "v0.16.5" }
+sct = { git = "https://github.com/mesalock-linux/sct.rs", branch = "mesalock_sgx" }
+webpki = { git = "https://github.com/mesalock-linux/webpki", branch = "mesalock_sgx" }
+sgx_tstd = { rev = "v1.1.3", git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
 
 [features]
-default = ["logging"]
+default = ["logging", "mesalock_sgx"]
 logging = ["log"]
 dangerous_configuration = []
 quic = []
+mesalock_sgx = ["sgx_tstd"]
 
 [dev-dependencies]
-env_logger = "0.8.2"
-log = "0.4.4"
-webpki-roots = "0.21"
-criterion = "0.3.0"
+#env_logger = "0.8.2"
+#log = "0.4.4"
+#webpki-roots = "0.21"
+#criterion = "0.3.0"
 
 [[example]]
 name = "bogo_shim"

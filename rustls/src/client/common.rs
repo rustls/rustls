@@ -3,6 +3,7 @@ use crate::hash_hs;
 use crate::log::trace;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::NamedGroup;
+use std::prelude::v1::*;
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;

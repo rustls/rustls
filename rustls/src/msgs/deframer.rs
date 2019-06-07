@@ -1,3 +1,5 @@
+use std::prelude::v1::*;
+
 use std::collections::VecDeque;
 use std::io;
 

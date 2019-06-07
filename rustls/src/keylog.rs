@@ -1,9 +1,10 @@
+use std::prelude::v1::*;
 use std::env;
-use std::fs::{File, OpenOptions};
+use std::untrusted::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::SgxMutex;
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -132,14 +133,14 @@ impl KeyLogFileInner {
 ///
 /// If such a file cannot be opened, or cannot be written then
 /// this does nothing but logs errors at warning-level.
-pub struct KeyLogFile(Mutex<KeyLogFileInner>);
+pub struct KeyLogFile(SgxMutex<KeyLogFileInner>);
 
 impl KeyLogFile {
     /// Makes a new `KeyLogFile`.  The environment variable is
     /// inspected and the named file is opened during this call.
     pub fn new() -> Self {
         let var = env::var("SSLKEYLOGFILE");
-        KeyLogFile(Mutex::new(KeyLogFileInner::new(var)))
+        KeyLogFile(SgxMutex::new(KeyLogFileInner::new(var)))
     }
 }
 

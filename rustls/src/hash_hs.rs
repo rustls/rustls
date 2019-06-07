@@ -1,3 +1,4 @@
+use std::prelude::v1::*;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::codec::Codec;

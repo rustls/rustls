@@ -1,3 +1,4 @@
+use std::prelude::v1::*;
 use ring::digest;
 use ring::hmac;
 

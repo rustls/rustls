@@ -7,6 +7,7 @@ use crate::error::TLSError;
 use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
+use std::prelude::v1::*;
 use crate::msgs::base::Payload;
 #[cfg(feature = "quic")]
 use crate::msgs::base::PayloadU16;

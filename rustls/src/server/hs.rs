@@ -4,6 +4,7 @@ use crate::log::{debug, trace};
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ExtensionType};
 use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, NamedGroup};
+use std::prelude::v1::*;
 use crate::msgs::enums::{ClientCertificateType, SignatureScheme};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::CertificateRequestPayload;

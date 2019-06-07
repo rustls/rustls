@@ -1,3 +1,4 @@
+use std::prelude::v1::*;
 use crate::key;
 use base64;
 use std::io;

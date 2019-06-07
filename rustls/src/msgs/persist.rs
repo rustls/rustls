@@ -1,5 +1,6 @@
 use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
+use std::prelude::v1::*;
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
