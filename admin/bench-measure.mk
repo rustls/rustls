@@ -26,3 +26,12 @@ measure: ./target/release/examples/bench
 	$^ handshake TLS13_AES_256_GCM_SHA384
 	$^ handshake-resume TLS13_AES_256_GCM_SHA384
 	$^ handshake-ticket TLS13_AES_256_GCM_SHA384
+
+MEMUSAGE=/usr/bin/time -f %M
+memory: ./target/release/examples/bench
+	$(MEMUSAGE) $^ memory TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 100
+	$(MEMUSAGE) $^ memory TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 1000
+	$(MEMUSAGE) $^ memory TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 5000
+	$(MEMUSAGE) $^ memory TLS13_AES_256_GCM_SHA384 100
+	$(MEMUSAGE) $^ memory TLS13_AES_256_GCM_SHA384 1000
+	$(MEMUSAGE) $^ memory TLS13_AES_256_GCM_SHA384 5000
