@@ -8,7 +8,7 @@ mkdir -p rsa/ ecdsa/
 openssl req -nodes \
           -x509 \
           -days 3650 \
-          -newkey rsa:8192 \
+          -newkey rsa:4096 \
           -keyout rsa/ca.key \
           -out rsa/ca.cert \
           -sha256 \
