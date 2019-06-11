@@ -38,7 +38,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// This function returns `Ok(0)` when the underlying `rd` does
     /// so.  This typically happens when a socket is cleanly closed,
     /// or a file is at EOF.
-    fn read_tls(&mut self, rd: &mut Read) -> Result<usize, io::Error>;
+    fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error>;
 
     /// Writes TLS messages to `wr`.
     ///
@@ -51,12 +51,12 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// to check if output buffer is not empty.
     ///
     /// [`wants_write`]: #tymethod.wants_write
-    fn write_tls(&mut self, wr: &mut Write) -> Result<usize, io::Error>;
+    fn write_tls(&mut self, wr: &mut dyn Write) -> Result<usize, io::Error>;
 
     /// Like `write_tls`, but writes potentially many records in one
     /// go via `wr`; a `rustls::WriteV`.  This function has the same semantics
     /// as `write_tls` otherwise.
-    fn writev_tls(&mut self, wr: &mut WriteV) -> Result<usize, io::Error>;
+    fn writev_tls(&mut self, wr: &mut dyn WriteV) -> Result<usize, io::Error>;
 
     /// Processes any new packets read by a previous call to `read_tls`.
     /// Errors from this function relate to TLS protocol errors, and
@@ -436,8 +436,8 @@ enum Limit {
 pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
-    message_encrypter: Box<MessageEncrypter>,
-    message_decrypter: Box<MessageDecrypter>,
+    message_encrypter: Box<dyn MessageEncrypter>,
+    message_decrypter: Box<dyn MessageDecrypter>,
     pub secrets: Option<SessionSecrets>,
     pub key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
@@ -533,14 +533,14 @@ impl SessionCommon {
     }
 
     pub fn set_message_encrypter(&mut self,
-                                 cipher: Box<MessageEncrypter>) {
+                                 cipher: Box<dyn MessageEncrypter>) {
         self.message_encrypter = cipher;
         self.write_seq = 0;
         self.we_encrypting = true;
     }
 
     pub fn set_message_decrypter(&mut self,
-                                 cipher: Box<MessageDecrypter>) {
+                                 cipher: Box<dyn MessageDecrypter>) {
         self.message_decrypter = cipher;
         self.read_seq = 0;
         self.peer_encrypting = true;
@@ -706,15 +706,15 @@ impl SessionCommon {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
-    pub fn read_tls(&mut self, rd: &mut Read) -> io::Result<usize> {
+    pub fn read_tls(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         self.message_deframer.read(rd)
     }
 
-    pub fn write_tls(&mut self, wr: &mut Write) -> io::Result<usize> {
+    pub fn write_tls(&mut self, wr: &mut dyn Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
     }
 
-    pub fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+    pub fn writev_tls(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
         self.sendable_tls.writev_to(wr)
     }
 

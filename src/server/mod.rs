@@ -124,13 +124,13 @@ pub struct ServerConfig {
     pub mtu: Option<usize>,
 
     /// How to store client sessions.
-    pub session_storage: Arc<StoresServerSessions + Send + Sync>,
+    pub session_storage: Arc<dyn StoresServerSessions + Send + Sync>,
 
     /// How to produce tickets.
-    pub ticketer: Arc<ProducesTickets>,
+    pub ticketer: Arc<dyn ProducesTickets>,
 
     /// How to choose a server cert and key.
-    pub cert_resolver: Arc<ResolvesServerCert>,
+    pub cert_resolver: Arc<dyn ResolvesServerCert>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
@@ -141,11 +141,11 @@ pub struct ServerConfig {
     pub versions: Vec<ProtocolVersion>,
 
     /// How to verify client certificates.
-    verifier: Arc<verify::ClientCertVerifier>,
+    verifier: Arc<dyn verify::ClientCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.
-    pub key_log: Arc<KeyLog>,
+    pub key_log: Arc<dyn KeyLog>,
 
     /// Amount of early data to accept; 0 to disable.
     #[cfg(feature = "quic")]    // TLS support unimplemented
@@ -167,7 +167,7 @@ impl ServerConfig {
     /// We don't provide a default for `client_cert_verifier` because the safest
     /// default, requiring client authentication, requires additional
     /// configuration that we cannot provide reasonable defaults for.
-    pub fn new(client_cert_verifier: Arc<verify::ClientCertVerifier>) -> ServerConfig {
+    pub fn new(client_cert_verifier: Arc<dyn verify::ClientCertVerifier>) -> ServerConfig {
         ServerConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
             ignore_client_order: false,
@@ -193,12 +193,12 @@ impl ServerConfig {
     }
 
     #[doc(hidden)]
-    pub fn get_verifier(&self) -> &verify::ClientCertVerifier {
+    pub fn get_verifier(&self) -> &dyn verify::ClientCertVerifier {
         self.verifier.as_ref()
     }
 
     /// Sets the session persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Arc<StoresServerSessions + Send + Sync>) {
+    pub fn set_persistence(&mut self, persist: Arc<dyn StoresServerSessions + Send + Sync>) {
         self.session_storage = persist;
     }
 
@@ -265,7 +265,7 @@ pub struct ServerSessionImpl {
     pub alpn_protocol: Option<Vec<u8>>,
     pub quic_params: Option<Vec<u8>>,
     pub error: Option<TLSError>,
-    pub state: Option<Box<hs::State + Send + Sync>>,
+    pub state: Option<Box<dyn hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
 }
 
@@ -472,16 +472,16 @@ impl ServerSession {
 }
 
 impl Session for ServerSession {
-    fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         self.imp.common.read_tls(rd)
     }
 
     /// Writes TLS messages to `wr`.
-    fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.imp.common.write_tls(wr)
     }
 
-    fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+    fn writev_tls(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
         self.imp.common.writev_tls(wr)
     }
 

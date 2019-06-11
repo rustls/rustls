@@ -109,7 +109,7 @@ impl RootCertStore {
     ///
     /// Returns the number of certificates added, and the number
     /// which were extracted from the PEM but ultimately unsuitable.
-    pub fn add_pem_file(&mut self, rd: &mut io::BufRead) -> Result<(usize, usize), ()> {
+    pub fn add_pem_file(&mut self, rd: &mut dyn io::BufRead) -> Result<(usize, usize), ()> {
         let ders = pemfile::certs(rd)?;
         let mut valid_count = 0;
         let mut invalid_count = 0;

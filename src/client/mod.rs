@@ -94,13 +94,13 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
-    pub session_persistence: Arc<StoresClientSessions>,
+    pub session_persistence: Arc<dyn StoresClientSessions>,
 
     /// Our MTU.  If None, we don't limit TLS message sizes.
     pub mtu: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Arc<ResolvesClientCert>,
+    pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
 
     /// Whether to support RFC5077 tickets.  You must provide a working
     /// `session_persistence` member for this to have any meaningful
@@ -125,11 +125,11 @@ pub struct ClientConfig {
     pub enable_sni: bool,
 
     /// How to verify the server certificate chain.
-    verifier: Arc<verify::ServerCertVerifier>,
+    verifier: Arc<dyn verify::ServerCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.
-    pub key_log: Arc<KeyLog>,
+    pub key_log: Arc<dyn KeyLog>,
 
     /// Whether to send data on the first flight ("early data") in
     /// TLS 1.3 handshakes.
@@ -175,7 +175,7 @@ impl ClientConfig {
     }
 
     #[doc(hidden)]
-    pub fn get_verifier(&self) -> &verify::ServerCertVerifier {
+    pub fn get_verifier(&self) -> &dyn verify::ServerCertVerifier {
         self.verifier.as_ref()
     }
 
@@ -189,7 +189,7 @@ impl ClientConfig {
     }
 
     /// Sets persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Arc<StoresClientSessions>) {
+    pub fn set_persistence(&mut self, persist: Arc<dyn StoresClientSessions>) {
         self.session_persistence = persist;
     }
 
@@ -371,7 +371,7 @@ pub struct ClientSessionImpl {
     pub alpn_protocol: Option<Vec<u8>>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
-    pub state: Option<Box<hs::State + Send + Sync>>,
+    pub state: Option<Box<dyn hs::State + Send + Sync>>,
     pub server_cert_chain: CertificatePayload,
     pub early_data: EarlyData,
 }
@@ -635,16 +635,16 @@ impl ClientSession {
 }
 
 impl Session for ClientSession {
-    fn read_tls(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         self.imp.common.read_tls(rd)
     }
 
     /// Writes TLS messages to `wr`.
-    fn write_tls(&mut self, wr: &mut io::Write) -> io::Result<usize> {
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.imp.common.write_tls(wr)
     }
 
-    fn writev_tls(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+    fn writev_tls(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
         self.imp.common.writev_tls(wr)
     }
 
