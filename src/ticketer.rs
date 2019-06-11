@@ -111,8 +111,8 @@ impl ProducesTickets for AEADTicketer {
 }
 
 struct TicketSwitcherState {
-    current: Box<ProducesTickets>,
-    previous: Option<Box<ProducesTickets>>,
+    current: Box<dyn ProducesTickets>,
+    previous: Option<Box<dyn ProducesTickets>>,
     next_switch_time: u64,
 }
 
@@ -120,7 +120,7 @@ struct TicketSwitcherState {
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
 pub struct TicketSwitcher {
-    generator: fn() -> Box<ProducesTickets>,
+    generator: fn() -> Box<dyn ProducesTickets>,
     lifetime: u32,
     state: Mutex<TicketSwitcherState>,
 }
@@ -131,7 +131,7 @@ impl TicketSwitcher {
     /// longer than twice this duration.  `generator` produces a new
     /// `ProducesTickets` implementation.
     pub fn new(lifetime: u32,
-               generator: fn() -> Box<ProducesTickets>)
+               generator: fn() -> Box<dyn ProducesTickets>)
                -> TicketSwitcher {
         TicketSwitcher {
             generator,
@@ -197,7 +197,7 @@ impl ProducesTickets for TicketSwitcher {
 /// A concrete, safe ticket creation mechanism.
 pub struct Ticketer {}
 
-fn generate_inner() -> Box<ProducesTickets> {
+fn generate_inner() -> Box<dyn ProducesTickets> {
     Box::new(AEADTicketer::new())
 }
 
@@ -206,7 +206,7 @@ impl Ticketer {
     /// with a 12 hour life and randomly generated keys.
     ///
     /// The encryption mechanism used in Chacha20Poly1305.
-    pub fn new() -> Arc<ProducesTickets> {
+    pub fn new() -> Arc<dyn ProducesTickets> {
         Arc::new(TicketSwitcher::new(6 * 60 * 60, generate_inner))
     }
 }

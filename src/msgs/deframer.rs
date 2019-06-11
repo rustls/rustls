@@ -62,7 +62,7 @@ impl MessageDeframer {
     /// Read some bytes from `rd`, and add them to our internal
     /// buffer.  If this means our internal buffer contains
     /// full messages, decode them all.
-    pub fn read(&mut self, rd: &mut io::Read) -> io::Result<usize> {
+    pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         // Try to do the largest reads possible.  Note that if
         // we get a message with a length field out of range here,
         // we do a zero length read.  That looks like an EOF to

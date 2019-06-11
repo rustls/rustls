@@ -127,7 +127,7 @@ impl ChunkVecBuffer {
     }
 
     /// Read data out of this object, passing it `wr`
-    pub fn write_to(&mut self, wr: &mut io::Write) -> io::Result<usize> {
+    pub fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         if self.is_empty() {
             return Ok(0);
         }
@@ -137,7 +137,7 @@ impl ChunkVecBuffer {
         Ok(used)
     }
 
-    pub fn writev_to(&mut self, wr: &mut WriteV) -> io::Result<usize> {
+    pub fn writev_to(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
         if self.is_empty() {
             return Ok(0);
         }

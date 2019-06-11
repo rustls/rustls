@@ -5,10 +5,10 @@ use crate::key;
 /// Extract and decode all PEM sections from `rd`, which begin with `start_mark`
 /// and end with `end_mark`.  Apply the functor `f` to each decoded buffer,
 /// and return a Vec of `f`'s return values.
-fn extract<A>(rd: &mut io::BufRead,
+fn extract<A>(rd: &mut dyn io::BufRead,
               start_mark: &str,
               end_mark: &str,
-              f: &Fn(Vec<u8>) -> A)
+              f: &dyn Fn(Vec<u8>) -> A)
               -> Result<Vec<A>, ()> {
     let mut ders = Vec::new();
     let mut b64buf = String::new();
@@ -48,7 +48,7 @@ fn extract<A>(rd: &mut io::BufRead,
 
 /// Extract all the certificates from rd, and return a vec of `key::Certificate`s
 /// containing the der-format contents.
-pub fn certs(rd: &mut io::BufRead) -> Result<Vec<key::Certificate>, ()> {
+pub fn certs(rd: &mut dyn io::BufRead) -> Result<Vec<key::Certificate>, ()> {
     extract(rd,
             "-----BEGIN CERTIFICATE-----",
             "-----END CERTIFICATE-----",
@@ -57,7 +57,7 @@ pub fn certs(rd: &mut io::BufRead) -> Result<Vec<key::Certificate>, ()> {
 
 /// Extract all RSA private keys from rd, and return a vec of `key::PrivateKey`s
 /// containing the der-format contents.
-pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
+pub fn rsa_private_keys(rd: &mut dyn io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
     extract(rd,
             "-----BEGIN RSA PRIVATE KEY-----",
             "-----END RSA PRIVATE KEY-----",
@@ -66,7 +66,7 @@ pub fn rsa_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()
 
 /// Extract all PKCS8-encoded private keys from rd, and return a vec of
 /// `key::PrivateKey`s containing the der-format contents.
-pub fn pkcs8_private_keys(rd: &mut io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
+pub fn pkcs8_private_keys(rd: &mut dyn io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
     extract(rd,
             "-----BEGIN PRIVATE KEY-----",
             "-----END PRIVATE KEY-----",

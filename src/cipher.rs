@@ -27,19 +27,19 @@ pub trait MessageEncrypter : Send + Sync {
     fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TLSError>;
 }
 
-impl MessageEncrypter {
-    pub fn invalid() -> Box<MessageEncrypter> {
+impl dyn MessageEncrypter {
+    pub fn invalid() -> Box<dyn MessageEncrypter> {
         Box::new(InvalidMessageEncrypter {})
     }
 }
 
-impl MessageDecrypter {
-    pub fn invalid() -> Box<MessageDecrypter> {
+impl dyn MessageDecrypter {
+    pub fn invalid() -> Box<dyn MessageDecrypter> {
         Box::new(InvalidMessageDecrypter {})
     }
 }
 
-pub type MessageCipherPair = (Box<MessageDecrypter>, Box<MessageEncrypter>);
+pub type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 fn make_tls12_aad(seq: u64,
@@ -111,7 +111,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
 }
 
 pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
-                      secret: &[u8]) -> Box<MessageDecrypter> {
+                      secret: &[u8]) -> Box<dyn MessageDecrypter> {
     let hash = scs.get_hash();
     let key = derive_traffic_key(hash, secret, scs.enc_key_len);
     let iv = derive_traffic_iv(hash, secret, scs.fixed_iv_len);
@@ -121,7 +121,7 @@ pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
 }
 
 pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
-                       secret: &[u8]) -> Box<MessageEncrypter> {
+                       secret: &[u8]) -> Box<dyn MessageEncrypter> {
     let hash = scs.get_hash();
     let key = derive_traffic_key(hash, secret, scs.enc_key_len);
     let iv = derive_traffic_iv(hash, secret, scs.fixed_iv_len);

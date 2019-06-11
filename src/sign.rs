@@ -17,7 +17,7 @@ pub trait SigningKey : Send + Sync {
     ///
     /// Expresses the choice something that implements `Signer`,
     /// using the chosen scheme.
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<Signer>>;
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
@@ -40,7 +40,7 @@ pub struct CertifiedKey {
     pub cert: Vec<key::Certificate>,
 
     /// The certified key.
-    pub key: Arc<Box<SigningKey>>,
+    pub key: Arc<Box<dyn SigningKey>>,
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
@@ -57,7 +57,7 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<SigningKey>>) -> CertifiedKey {
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<dyn SigningKey>>) -> CertifiedKey {
         CertifiedKey {
             cert,
             key,
@@ -135,7 +135,7 @@ impl CertifiedKey {
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<SigningKey>, ()> {
+pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
     if let Ok(rsa) = RSASigningKey::new(der) {
         return Ok(Box::new(rsa));
     }
@@ -144,7 +144,7 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<SigningKey>, ()> 
 }
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<SigningKey>, ()> {
+pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
     if let Ok(ecdsa_p256) = SingleSchemeSigningKey::new(der,
                                                         SignatureScheme::ECDSA_NISTP256_SHA256,
                                                         &signature::ECDSA_P256_SHA256_ASN1_SIGNING) {
@@ -190,7 +190,7 @@ impl RSASigningKey {
 }
 
 impl SigningKey for RSASigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<Signer>> {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         util::first_in_both(ALL_RSA_SCHEMES, offered)
             .map(|scheme| RSASigner::new(self.key.clone(), scheme))
     }
@@ -203,12 +203,12 @@ impl SigningKey for RSASigningKey {
 struct RSASigner {
     key: Arc<RsaKeyPair>,
     scheme: SignatureScheme,
-    encoding: &'static signature::RsaEncoding
+    encoding: &'static dyn signature::RsaEncoding
 }
 
 impl RSASigner {
-    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<Signer> {
-        let encoding: &signature::RsaEncoding = match scheme {
+    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
+        let encoding: &dyn signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_SHA512,
@@ -266,7 +266,7 @@ impl SingleSchemeSigningKey {
 }
 
 impl SigningKey for SingleSchemeSigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<Signer>> {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(SingleSchemeSigner { key: self.key.clone(), scheme: self.scheme } ))
         } else {
