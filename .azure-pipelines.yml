@@ -17,14 +17,14 @@ jobs:
   pool:
     vmImage: vs2017-win2016
   steps:
-    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/rustup.yml
     - template: admin/pipelines/cargo-steps.yml
     - template: admin/pipelines/bench.yml
 - job: MacOS
   pool:
     vmImage: macOS-10.13
   steps:
-    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/rustup.yml
     - template: admin/pipelines/cargo-steps.yml
     - template: admin/pipelines/bench.yml
 - job: Linux
@@ -41,7 +41,7 @@ jobs:
       minimum:
         rustup_toolchain: ${{ variables.minimum_toolchain }}
   steps:
-    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: $(rustup_toolchain)
     - template: admin/pipelines/cargo-steps.yml
@@ -54,7 +54,7 @@ jobs:
   pool:
     vmImage: ubuntu-16.04
   steps:
-    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: nightly
     - template: admin/pipelines/coverage.yml
@@ -65,7 +65,7 @@ jobs:
   pool:
     vmImage: ubuntu-16.04
   steps:
-    - template: az-pipeline/unstable/rustup.yml@templates
+    - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: nightly
     - template: admin/pipelines/min-versions.yml
