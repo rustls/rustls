@@ -1499,7 +1499,7 @@ fn vectored_write_for_server_handshake() {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.writev_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
-        assert!(wrlen > 5000); // its pretty big (contains cert chain)
+        assert!(wrlen > 4000); // its pretty big (contains cert chain)
         assert_eq!(pipe.writevs.len(), 1); // only one writev
         assert!(pipe.writevs[0].len() > 3); // at least a server hello/cert/serverkx
     }
