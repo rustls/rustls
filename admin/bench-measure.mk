@@ -1,19 +1,27 @@
+RECORD=perf record -F2000 --call-graph dwarf,16000 --
+FLAMEGRAPH=perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl >
+MEMUSAGE=/usr/bin/time -f %M
+
 perf: ./target/release/examples/bench
-	perf record -F9999 --call-graph dwarf -- ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-aes128-rustls.svg
+	$(RECORD) ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+	$(FLAMEGRAPH) perf-aes128-rustls.svg
 
 perffull: ./target/release/examples/bench
-	perf record -F9999 --call-graph dwarf -- ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-aes256-rustls.svg
-	perf record -F9999 --call-graph dwarf -- ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-chacha-rustls.svg
+	$(RECORD) ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$(FLAMEGRAPH) perf-aes256-rustls.svg
+	$(RECORD) ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+	$(FLAMEGRAPH) perf-chacha-rustls.svg
 	
-	perf record -F9999 --call-graph dwarf -- ./target/release/examples/bench handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-fullhs-rustls.svg
-	perf record -F9999 --call-graph dwarf -- ./target/release/examples/bench handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-resume-rustls.svg
-	perf record -F9999 --call-graph dwarf -- ./target/release/examples/bench handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-ticket-rustls.svg
+	$(RECORD) ./target/release/examples/bench handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$(FLAMEGRAPH) perf-fullhs-rustls.svg
+	$(RECORD) ./target/release/examples/bench handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$(FLAMEGRAPH) perf-resume-rustls.svg
+	$(RECORD) ./target/release/examples/bench handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$(FLAMEGRAPH) perf-ticket-rustls.svg
+
+perf13:
+	$(RECORD) ./target/release/examples/bench handshake-ticket TLS13_AES_256_GCM_SHA384
+	$(FLAMEGRAPH) perf-ticket13-rustls.svg
 
 measure: ./target/release/examples/bench
 	$^ bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -27,7 +35,6 @@ measure: ./target/release/examples/bench
 	$^ handshake-resume TLS13_AES_256_GCM_SHA384
 	$^ handshake-ticket TLS13_AES_256_GCM_SHA384
 
-MEMUSAGE=/usr/bin/time -f %M
 memory: ./target/release/examples/bench
 	$(MEMUSAGE) $^ memory TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 100
 	$(MEMUSAGE) $^ memory TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 1000
