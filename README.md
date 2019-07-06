@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release (0.15.3):
   - Optimisation of read path for polled non-blocking IO.
-  - Correct an omission in TLS1.3 middlebox compatiblity mode, causing
+  - Correct an omission in TLS1.3 middlebox compatibility mode, causing
     handshake failures with servers behind buggy middleboxes.
 * 0.15.2 (2019-04-02):
   - Moved example code around for benefit of Fuchsia.
