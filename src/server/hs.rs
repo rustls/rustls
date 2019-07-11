@@ -507,7 +507,7 @@ impl ExpectClientHello {
         let secrets = SessionSecrets::new_resume(&self.handshake.randoms,
                                                  hashalg,
                                                  &resumedata.master_secret.0);
-        sess.config.key_log.log(sess.common.protocol.labels().client_random,
+        sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
