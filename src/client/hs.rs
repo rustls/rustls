@@ -332,7 +332,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             .get_key_schedule()
             .derive_logged_secret(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash,
                                   &*sess.config.key_log,
-                                  sess.common.protocol.labels().client_early_traffic_secret,
+                                  "CLIENT_EARLY_TRAFFIC_SECRET",
                                   &handshake.randoms.client);
         // Set early data encryption key
         sess.common
@@ -593,7 +593,7 @@ impl State for ExpectServerHello {
                 let secrets = SessionSecrets::new_resume(&self.handshake.randoms,
                                                          scs.unwrap().get_hash(),
                                                          &resuming.master_secret.0);
-                sess.config.key_log.log(sess.common.protocol.labels().client_random,
+                sess.config.key_log.log("CLIENT_RANDOM",
                                         &secrets.randoms.client,
                                         &secrets.master_secret);
                 sess.common.start_encryption_tls12(secrets);

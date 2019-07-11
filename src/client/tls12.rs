@@ -548,7 +548,7 @@ impl hs::State for ExpectServerDone {
                                 hashalg,
                                 &kxd.premaster_secret)
         };
-        sess.config.key_log.log(sess.common.protocol.labels().client_random,
+        sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
