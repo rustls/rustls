@@ -26,6 +26,8 @@ pub trait KeyLog : Send + Sync {
     /// `secret` means:
     ///
     /// - `CLIENT_RANDOM`: `secret` is the master secret for a TLSv1.2 session.
+    /// - `CLIENT_EARLY_TRAFFIC_SECRET`: `secret` encrypts early data
+    ///   transmitted by a client
     /// - `SERVER_HANDSHAKE_TRAFFIC_SECRET`: `secret` encrypts
     ///   handshake messages from the server during a TLSv1.3 handshake.
     /// - `CLIENT_HANDSHAKE_TRAFFIC_SECRET`: `secret` encrypts
