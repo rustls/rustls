@@ -3,15 +3,27 @@ use ring::hmac;
 
 use std::io::Write;
 
-fn concat_sign(key: &hmac::SigningKey, a: &[u8], b: &[u8]) -> hmac::Signature {
-    let mut ctx = hmac::SigningContext::with_key(key);
+fn convert_digest_to_hmac_alg(hash: &'static digest::Algorithm) -> hmac::Algorithm {
+    if hash == &digest::SHA256 {
+        hmac::HMAC_SHA256
+    } else if hash == &digest::SHA384 {
+        hmac::HMAC_SHA384
+    } else if hash == &digest::SHA512 {
+        hmac::HMAC_SHA512
+    } else {
+        panic!("bad digest for prf");
+    }
+}
+
+fn concat_sign(key: &hmac::Key, a: &[u8], b: &[u8]) -> hmac::Tag {
+    let mut ctx = hmac::Context::with_key(key);
     ctx.update(a);
     ctx.update(b);
     ctx.sign()
 }
 
 fn p(out: &mut [u8], hashalg: &'static digest::Algorithm, secret: &[u8], seed: &[u8]) {
-    let hmac_key = hmac::SigningKey::new(hashalg, secret);
+    let hmac_key = hmac::Key::new(convert_digest_to_hmac_alg(hashalg), secret);
 
     // A(1)
     let mut current_a = hmac::sign(&hmac_key, seed);
