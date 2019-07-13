@@ -178,8 +178,8 @@ impl RSASigningKey {
     /// Make a new `RSASigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
     pub fn new(der: &key::PrivateKey) -> Result<RSASigningKey, ()> {
-        RsaKeyPair::from_der(untrusted::Input::from(&der.0))
-            .or_else(|_| RsaKeyPair::from_pkcs8(untrusted::Input::from(&der.0)))
+        RsaKeyPair::from_der(&der.0)
+            .or_else(|_| RsaKeyPair::from_pkcs8(&der.0))
             .map(|s| {
                  RSASigningKey {
                      key: Arc::new(s),
@@ -259,7 +259,7 @@ impl SingleSchemeSigningKey {
     pub fn new(der: &key::PrivateKey,
                scheme: SignatureScheme,
                sigalg: &'static signature::EcdsaSigningAlgorithm) -> Result<SingleSchemeSigningKey, ()> {
-        EcdsaKeyPair::from_pkcs8(sigalg, untrusted::Input::from(&der.0))
+        EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
             .map(|kp| SingleSchemeSigningKey { key: Arc::new(kp), scheme })
             .map_err(|_| ())
     }
@@ -288,7 +288,7 @@ struct SingleSchemeSigner {
 impl Signer for SingleSchemeSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TLSError> {
         let rng = ring::rand::SystemRandom::new();
-        self.key.sign(&rng, untrusted::Input::from(message))
+        self.key.sign(&rng, message)
             .map_err(|_| TLSError::General("signing failed".into()))
             .map(|sig| sig.as_ref().into())
     }
