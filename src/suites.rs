@@ -101,9 +101,9 @@ impl KeyExchange {
     }
 
     pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
+        let peer_key = ring::agreement::UnparsedPublicKey::new(self.alg, peer);
         let secret = ring::agreement::agree_ephemeral(self.privkey,
-                                                      self.alg,
-                                                      untrusted::Input::from(peer),
+                                                      &peer_key,
                                                       (),
                                                       |v| {
                                                           let mut r = Vec::new();
@@ -169,7 +169,6 @@ impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
         match self.hash {
-            HashAlgorithm::SHA1 => &ring::digest::SHA1,
             HashAlgorithm::SHA256 => &ring::digest::SHA256,
             HashAlgorithm::SHA384 => &ring::digest::SHA384,
             HashAlgorithm::SHA512 => &ring::digest::SHA512,
