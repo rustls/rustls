@@ -1,6 +1,6 @@
 /// Key schedule maintenance for TLS1.3
 
-use ring::{hmac, digest, hkdf};
+use ring::{hmac, digest};
 use crate::msgs::codec::Codec;
 use crate::error::TLSError;
 
@@ -16,6 +16,18 @@ pub enum SecretKind {
     ExporterMasterSecret,
     ResumptionMasterSecret,
     DerivedSecret,
+}
+
+fn convert_digest_to_hmac_alg(hash: &'static digest::Algorithm) -> hmac::Algorithm {
+    if hash == &digest::SHA256 {
+        hmac::HMAC_SHA256
+    } else if hash == &digest::SHA384 {
+        hmac::HMAC_SHA384
+    } else if hash == &digest::SHA512 {
+        hmac::HMAC_SHA512
+    } else {
+        panic!("bad digest for prf");
+    }
 }
 
 impl SecretKind {
@@ -34,13 +46,44 @@ impl SecretKind {
     }
 }
 
+// FIXME: this needs refactoring for ring 0.15; for now this implements the
+// old-shape API atop hmac
+fn _hkdf_expand(secret: &hmac::Key, label: &[u8], out: &mut [u8]) {
+    let mut ctx = hmac::Context::with_key(secret);
+    let mut counter = 1u8;
+    let mut index = 0;
+    let block = secret.algorithm().digest_algorithm().output_len;
+
+    while index < out.len() {
+        ctx.update(label);
+        ctx.update(&[counter]);
+        counter += 1;
+
+        let tag = ctx.sign();
+
+        let take = if block < out.len() - index { block } else { out.len() - index };
+        out[index..index+take].copy_from_slice(&tag.as_ref()[..take]);
+        index += take;
+
+        ctx = hmac::Context::with_key(secret);
+        ctx.update(tag.as_ref());
+    }
+}
+
+fn _hkdf_extract(salt: &hmac::Key, secret: &[u8]) -> hmac::Key {
+    let tag = hmac::sign(salt, secret);
+    hmac::Key::new(salt.algorithm(), tag.as_ref())
+}
+
+
 /// This is the TLS1.3 key schedule.  It stores the current secret,
 /// the type of hash, plus the two current traffic keys which form their
 /// own lineage of keys over successive key updates.
 pub struct KeySchedule {
-    current: hmac::SigningKey,
+    current: hmac::Key,
     need_derive_for_extract: bool,
     hash: &'static digest::Algorithm,
+    hmac_alg: hmac::Algorithm,
     pub current_client_traffic_secret: Vec<u8>,
     pub current_server_traffic_secret: Vec<u8>,
     pub current_exporter_secret: Vec<u8>,
@@ -51,9 +94,11 @@ impl KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
 
         KeySchedule {
-            current: hmac::SigningKey::new(hash, &zeroes[..hash.output_len]),
+            current: hmac::Key::new(convert_digest_to_hmac_alg(hash),
+                                    &zeroes[..hash.output_len]),
             need_derive_for_extract: false,
             hash,
+            hmac_alg: convert_digest_to_hmac_alg(hash),
             current_server_traffic_secret: Vec::new(),
             current_client_traffic_secret: Vec::new(),
             current_exporter_secret: Vec::new(),
@@ -71,10 +116,11 @@ impl KeySchedule {
     pub fn input_secret(&mut self, secret: &[u8]) {
         if self.need_derive_for_extract {
             let derived = self.derive_for_empty_hash(SecretKind::DerivedSecret);
-            self.current = hmac::SigningKey::new(self.hash, &derived);
+            self.current = hmac::Key::new(self.hmac_alg,
+                                          &derived);
         }
         self.need_derive_for_extract = true;
-        let new = hkdf::extract(&self.current, secret);
+        let new = _hkdf_extract(&self.current, secret);
         self.current = new
     }
 
@@ -124,12 +170,12 @@ impl KeySchedule {
     pub fn sign_verify_data(&self, base_key: &[u8], hs_hash: &[u8]) -> Vec<u8> {
         debug_assert_eq!(hs_hash.len(), self.hash.output_len);
 
-        let hmac_key = _hkdf_expand_label_vec(&hmac::SigningKey::new(self.hash, base_key),
+        let hmac_key = _hkdf_expand_label_vec(&hmac::Key::new(self.hmac_alg, base_key),
                                               b"finished",
                                               &[],
                                               self.hash.output_len);
 
-        hmac::sign(&hmac::SigningKey::new(self.hash, &hmac_key), hs_hash)
+        hmac::sign(&hmac::Key::new(self.hmac_alg, &hmac_key), hs_hash)
             .as_ref()
             .to_vec()
     }
@@ -138,7 +184,7 @@ impl KeySchedule {
     /// it.
     pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
-        _hkdf_expand_label_vec(&hmac::SigningKey::new(self.hash, base_key),
+        _hkdf_expand_label_vec(&hmac::Key::new(self.hmac_alg, base_key),
                                b"traffic upd",
                                &[],
                                self.hash.output_len)
@@ -147,7 +193,7 @@ impl KeySchedule {
     /// Derive the PSK to use given a resumption_master_secret and
     /// ticket_nonce.
     pub fn derive_ticket_psk(&self, rms: &[u8], nonce: &[u8]) -> Vec<u8> {
-        _hkdf_expand_label_vec(&hmac::SigningKey::new(self.hash, rms),
+        _hkdf_expand_label_vec(&hmac::Key::new(self.hmac_alg, rms),
                                b"resumption",
                                nonce,
                                self.hash.output_len)
@@ -163,7 +209,7 @@ impl KeySchedule {
         let h_empty = digest::digest(self.hash, &[]);
         let mut secret = [0u8; digest::MAX_OUTPUT_LEN];
         _hkdf_expand_label(&mut secret[..self.hash.output_len],
-                           &hmac::SigningKey::new(self.hash,
+                           &hmac::Key::new(self.hmac_alg,
                                                   &self.current_exporter_secret),
                            label,
                            h_empty.as_ref());
@@ -175,14 +221,14 @@ impl KeySchedule {
                               .as_ref());
 
         _hkdf_expand_label(out,
-                           &hmac::SigningKey::new(self.hash, &secret[..self.hash.output_len]),
+                           &hmac::Key::new(self.hmac_alg, &secret[..self.hash.output_len]),
                            b"exporter",
                            &h_context[..self.hash.output_len]);
         Ok(())
     }
 }
 
-fn _hkdf_expand_label_vec(secret: &hmac::SigningKey,
+fn _hkdf_expand_label_vec(secret: &hmac::Key,
                           label: &[u8],
                           context: &[u8],
                           len: usize) -> Vec<u8> {
@@ -196,7 +242,7 @@ fn _hkdf_expand_label_vec(secret: &hmac::SigningKey,
 }
 
 fn _hkdf_expand_label(output: &mut [u8],
-                      secret: &hmac::SigningKey,
+                      secret: &hmac::Key,
                       label: &[u8],
                       context: &[u8]) {
     let label_prefix = b"tls13 ";
@@ -209,15 +255,17 @@ fn _hkdf_expand_label(output: &mut [u8],
     (context.len() as u8).encode(&mut hkdflabel);
     hkdflabel.extend_from_slice(context);
 
-    hkdf::expand(secret, &hkdflabel, output)
+    _hkdf_expand(secret, &hkdflabel, output)
 }
 
 pub fn derive_traffic_key(hash: &'static digest::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
-    _hkdf_expand_label_vec(&hmac::SigningKey::new(hash, secret), b"key", &[], len)
+    let hmac_alg = convert_digest_to_hmac_alg(hash);
+    _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"key", &[], len)
 }
 
 pub fn derive_traffic_iv(hash: &'static digest::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
-    _hkdf_expand_label_vec(&hmac::SigningKey::new(hash, secret), b"iv", &[], len)
+    let hmac_alg = convert_digest_to_hmac_alg(hash);
+    _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"iv", &[], len)
 }
 
 #[cfg(test)]
