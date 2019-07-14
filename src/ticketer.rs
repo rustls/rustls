@@ -22,8 +22,7 @@ pub fn timebase() -> u64 {
 /// constraint.
 pub struct AEADTicketer {
     alg: &'static aead::Algorithm,
-    enc: aead::SealingKey,
-    dec: aead::OpeningKey,
+    key: aead::LessSafeKey,
     lifetime: u32,
 }
 
@@ -36,10 +35,11 @@ impl AEADTicketer {
                       key: &[u8],
                       lifetime_seconds: u32)
                       -> AEADTicketer {
+        let key = aead::UnboundKey::new(alg, key)
+            .unwrap();
         AEADTicketer {
             alg,
-            enc: aead::SealingKey::new(alg, key).unwrap(),
-            dec: aead::OpeningKey::new(alg, key).unwrap(),
+            key: aead::LessSafeKey::new(key),
             lifetime: lifetime_seconds,
         }
     }
@@ -77,11 +77,10 @@ impl ProducesTickets for AEADTicketer {
         let out_len = out.len() + self.alg.tag_len();
         out.resize(out_len, 0u8);
 
-        let rc = aead::seal_in_place(&self.enc,
-                                     nonce,
-                                     aad,
-                                     &mut out[nonce_len..],
-                                     self.alg.tag_len());
+        let rc = self.key.seal_in_place(nonce,
+                                        aad,
+                                        &mut out[nonce_len..],
+                                        self.alg.tag_len());
         if rc.is_err() { None } else { Some(out) }
     }
 
@@ -100,7 +99,7 @@ impl ProducesTickets for AEADTicketer {
         let mut out = Vec::new();
         out.extend_from_slice(&ciphertext[nonce_len..]);
 
-        let plain_len = match aead::open_in_place(&self.dec, nonce, aad, 0, &mut out) {
+        let plain_len = match self.key.open_in_place(nonce, aad, 0, &mut out) {
             Ok(plaintext) => plaintext.len(),
             Err(..) => { return None; }
         };
