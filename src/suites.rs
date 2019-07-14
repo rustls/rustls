@@ -6,7 +6,6 @@ use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use crate::msgs::codec::{Reader, Codec};
 
 use ring;
-use untrusted;
 
 /// Bulk symmetric encryption scheme used by a cipher suite.
 #[allow(non_camel_case_types)]
