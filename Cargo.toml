@@ -15,7 +15,7 @@ base64 = "0.10"
 log = { version = "0.4.4", optional = true }
 ring = "0.14"
 sct = "0.5"
-untrusted = "0.6.2"
+untrusted = "0.7.0"
 webpki = "0.19"
 
 [features]
