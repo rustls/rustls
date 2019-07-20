@@ -3,8 +3,6 @@ use crate::util;
 use crate::key;
 use crate::error::TLSError;
 
-use untrusted;
-
 use ring::{self, signature::{self, EcdsaKeyPair, RsaKeyPair}};
 use webpki;
 
@@ -111,8 +109,7 @@ impl CertifiedKey {
         })?;
 
         // Reject syntactically-invalid end-entity certificates.
-        let end_entity_cert = webpki::EndEntityCert::from(
-            untrusted::Input::from(end_entity_cert.as_ref())).map_err(|_| {
+        let end_entity_cert = webpki::EndEntityCert::from(end_entity_cert.as_ref()).map_err(|_| {
                 TLSError::General("End-entity certificate in certificate \
                                   chain is syntactically invalid".to_string())
         })?;

@@ -1,5 +1,4 @@
 use webpki;
-use untrusted;
 
 pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
 use crate::pemfile;
@@ -79,10 +78,7 @@ impl RootCertStore {
 
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
-        let ta = {
-            let inp = untrusted::Input::from(&der.0);
-            webpki::trust_anchor_util::cert_der_as_trust_anchor(inp)?
-        };
+        let ta = webpki::trust_anchor_util::cert_der_as_trust_anchor(&der.0)?;
 
         let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
         self.roots.push(ota);

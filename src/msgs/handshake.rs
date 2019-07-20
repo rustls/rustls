@@ -17,7 +17,6 @@ use std::fmt;
 use std::io::Write;
 use std::collections;
 use std::mem;
-use untrusted;
 use webpki;
 
 macro_rules! declare_u8_vec(
@@ -261,8 +260,7 @@ impl ServerNamePayload {
     fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
         let len = u16::read(r)? as usize;
         let name = r.take(len)?;
-        let dns_name = match webpki::DNSNameRef::try_from_ascii(
-                untrusted::Input::from(name)) {
+        let dns_name = match webpki::DNSNameRef::try_from_ascii(name) {
             Ok(dns_name) => dns_name,
             Err(_) => {
                 warn!("Illegal SNI hostname received {:?}", name);

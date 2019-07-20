@@ -13,10 +13,9 @@ categories = ["network-programming", "cryptography"]
 [dependencies]
 base64 = "0.10"
 log = { version = "0.4.4", optional = true }
-ring = "0.15.0-alpha4"
-sct = { path = "../sct.rs", version = "0.5" }
-untrusted = "0.7.0-alpha1"
-webpki = "0.20.0-alpha1"
+ring = "0.16.0"
+sct = { path = "../sct.rs", version = "0.6.0-alpha.0" }
+webpki = "0.21.0"
 
 [features]
 default = ["logging"]
@@ -28,7 +27,7 @@ quic = []
 env_logger = "0.6.1"
 log = "0.4.4"
 tempfile = "3.0"
-webpki-roots = { version = "0.16", path = "../webpki-roots" }
+webpki-roots = { path = "../webpki-roots", version = "0.17.0-alpha.0" }
 criterion = "0.2.11"
 
 [[example]]

@@ -68,19 +68,16 @@ impl ProducesTickets for AEADTicketer {
             rand::fill_random(&mut nonce);
             ring::aead::Nonce::assume_unique_for_key(nonce)
         };
-        let nonce_len = nonce.as_ref().len();
         let aad = ring::aead::Aad::empty();
 
-        let mut out = Vec::new();
+        let total_len = nonce.as_ref().len() + message.len() + self.alg.tag_len();
+        let mut out = Vec::with_capacity(total_len);
         out.extend_from_slice(nonce.as_ref());
         out.extend_from_slice(message);
-        let out_len = out.len() + self.alg.tag_len();
-        out.resize(out_len, 0u8);
 
         let rc = self.key.seal_in_place(nonce,
                                         aad,
-                                        &mut out[nonce_len..],
-                                        self.alg.tag_len());
+                                        &mut out);
         if rc.is_err() { None } else { Some(out) }
     }
 
@@ -99,7 +96,7 @@ impl ProducesTickets for AEADTicketer {
         let mut out = Vec::new();
         out.extend_from_slice(&ciphertext[nonce_len..]);
 
-        let plain_len = match self.key.open_in_place(nonce, aad, 0, &mut out) {
+        let plain_len = match self.key.open_in_place(nonce, aad, &mut out) {
             Ok(plaintext) => plaintext.len(),
             Err(..) => { return None; }
         };

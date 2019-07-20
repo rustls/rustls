@@ -5,7 +5,6 @@ use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::base::{PayloadU8, PayloadU16};
 
 use webpki;
-use untrusted;
 
 use std::mem;
 use std::cmp;
@@ -207,7 +206,7 @@ impl Codec for ServerSessionValue {
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
             let dns_name = webpki::DNSNameRef::try_from_ascii(
-                untrusted::Input::from(&dns_name.0)).ok()?;
+                &dns_name.0).ok()?;
             Some(dns_name.into())
         } else {
             None
