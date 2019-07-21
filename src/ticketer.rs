@@ -63,22 +63,26 @@ impl ProducesTickets for AEADTicketer {
     /// Encrypt `message` and return the ciphertext.
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
-        let nonce = {
-            let mut nonce = [0u8; 12];
-            rand::fill_random(&mut nonce);
-            ring::aead::Nonce::assume_unique_for_key(nonce)
-        };
+        let mut nonce_buf = [0u8; 12];
+        rand::fill_random(&mut nonce_buf);
+        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
         let aad = ring::aead::Aad::empty();
 
-        let total_len = nonce.as_ref().len() + message.len() + self.alg.tag_len();
-        let mut out = Vec::with_capacity(total_len);
-        out.extend_from_slice(nonce.as_ref());
-        out.extend_from_slice(message);
+        let cipher_len = message.len() + self.alg.tag_len();
+        let mut ciphertext = Vec::with_capacity(cipher_len);
+        ciphertext.extend_from_slice(message);
 
-        let rc = self.key.seal_in_place(nonce,
-                                        aad,
-                                        &mut out);
-        if rc.is_err() { None } else { Some(out) }
+        match self.key.seal_in_place(nonce,
+                                     aad,
+                                     &mut ciphertext) {
+            Err(_) => return None,
+            Ok(_) => ()
+        };
+
+        let mut out = Vec::with_capacity(nonce_buf.len() + cipher_len);
+        out.extend_from_slice(&nonce_buf);
+        out.extend_from_slice(&ciphertext);
+        Some(out)
     }
 
     /// Decrypt `ciphertext` and recover the original message.
@@ -205,4 +209,15 @@ impl Ticketer {
     pub fn new() -> Arc<dyn ProducesTickets> {
         Arc::new(TicketSwitcher::new(6 * 60 * 60, generate_inner))
     }
+}
+
+#[test]
+fn basic_pairwise_test() {
+    let t = Ticketer::new();
+    assert_eq!(true, t.enabled());
+    let cipher = t.encrypt(b"hello world")
+        .unwrap();
+    let plain = t.decrypt(&cipher)
+        .unwrap();
+    assert_eq!(plain, b"hello world");
 }
