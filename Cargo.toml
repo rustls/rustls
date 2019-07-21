@@ -14,7 +14,7 @@ categories = ["network-programming", "cryptography"]
 base64 = "0.10"
 log = { version = "0.4.4", optional = true }
 ring = "0.16.0"
-sct = { path = "../sct.rs", version = "0.6.0-alpha.0" }
+sct = "0.6.0"
 webpki = "0.21.0"
 
 [features]
@@ -27,7 +27,7 @@ quic = []
 env_logger = "0.6.1"
 log = "0.4.4"
 tempfile = "3.0"
-webpki-roots = { path = "../webpki-roots", version = "0.17.0-alpha.0" }
+webpki-roots = "0.17.0"
 criterion = "0.2.11"
 
 [[example]]
