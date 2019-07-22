@@ -28,7 +28,7 @@ quic = []
 env_logger = "0.6.1"
 log = "0.4.4"
 tempfile = "3.0"
-webpki-roots = "0.16"
+webpki-roots = "0.17"
 criterion = "0.2.11"
 
 [[example]]
