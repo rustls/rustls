@@ -258,6 +258,7 @@ pub fn prepare_resumption(sess: &mut ClientSessionImpl,
         .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite));
 
     if hs::compatible_suite(sess, resuming_suite) {
+        sess.resumption_ciphersuite = resuming_suite;
         // The EarlyData extension MUST be supplied together with the
         // PreSharedKey extension.
         let max_early_data_size = handshake

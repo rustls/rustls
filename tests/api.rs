@@ -1791,6 +1791,7 @@ fn quic_handshake() {
     // 0-RTT handshake
     let mut client =
         ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
+    assert!(client.get_negotiated_ciphersuite().is_some());
     let mut server = ServerSession::new_quic(&server_config, server_params.into());
     step(&mut client, &mut server).unwrap();
     assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
