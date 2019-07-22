@@ -207,22 +207,19 @@ impl MessageEncrypter for GCMMessageEncrypter {
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let total_len = msg.payload.len() + self.alg.tag_len();
-        let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(&msg.payload);
-
         let mut aad = [0u8; TLS12_AAD_SIZE];
         make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
         let aad = aead::Aad::from(&aad);
 
+        let total_len = msg.payload.len() + self.alg.tag_len();
         let mut payload = Vec::with_capacity(GCM_EXPLICIT_NONCE_LEN + total_len);
         payload.extend_from_slice(&nonce.as_ref()[4..]);
+        payload.extend_from_slice(&msg.payload);
 
-        self.enc_key.seal_in_place(nonce, aad, &mut buf)
+        self.enc_key.seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
+            .map(|tag| payload.extend(tag.as_ref()))
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
-        payload.extend_from_slice(&buf);
-        
         Ok(Message {
             typ: msg.typ,
             version: msg.version,
@@ -322,7 +319,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         let mut aad = [0u8; TLS13_AAD_SIZE];
         make_tls13_aad(total_len, &mut aad);
 
-        self.enc_key.seal_in_place(nonce, aead::Aad::from(&aad), &mut buf)
+        self.enc_key.seal_in_place_append_tag(nonce, aead::Aad::from(&aad), &mut buf)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
@@ -524,7 +521,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
 
-        self.enc_key.seal_in_place(nonce, aad, &mut buf)
+        self.enc_key.seal_in_place_append_tag(nonce, aad, &mut buf)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
