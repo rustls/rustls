@@ -68,21 +68,16 @@ impl ProducesTickets for AEADTicketer {
         let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
         let aad = ring::aead::Aad::empty();
 
-        let cipher_len = message.len() + self.alg.tag_len();
-        let mut ciphertext = Vec::with_capacity(cipher_len);
-        ciphertext.extend_from_slice(message);
-
-        match self.key.seal_in_place(nonce,
-                                     aad,
-                                     &mut ciphertext) {
-            Err(_) => return None,
-            Ok(_) => ()
-        };
-
-        let mut out = Vec::with_capacity(nonce_buf.len() + cipher_len);
-        out.extend_from_slice(&nonce_buf);
-        out.extend_from_slice(&ciphertext);
-        Some(out)
+        let mut ciphertext =
+            Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
+        ciphertext.extend(&nonce_buf);
+        ciphertext.extend(message);
+        self.key.seal_in_place_separate_tag(nonce,aad, &mut ciphertext[nonce_buf.len()..])
+            .map(|tag| {
+                ciphertext.extend(tag.as_ref());
+                ciphertext
+            })
+            .ok()
     }
 
     /// Decrypt `ciphertext` and recover the original message.

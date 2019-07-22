@@ -13,7 +13,7 @@ categories = ["network-programming", "cryptography"]
 [dependencies]
 base64 = "0.10"
 log = { version = "0.4.4", optional = true }
-ring = "0.16.0"
+ring = "0.16.2"
 sct = "0.6.0"
 webpki = "0.21.0"
 
