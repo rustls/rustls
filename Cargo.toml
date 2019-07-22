@@ -14,7 +14,7 @@ categories = ["network-programming", "cryptography"]
 base64 = "0.10"
 log = { version = "0.4.4", optional = true }
 ring = "0.14"
-sct = "0.5"
+sct = "0.6"
 untrusted = "0.6.2"
 webpki = "0.19"
 
