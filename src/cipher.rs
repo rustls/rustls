@@ -45,12 +45,13 @@ const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 fn make_tls12_aad(seq: u64,
                   typ: ContentType,
                   vers: ProtocolVersion,
-                  len: usize,
-                  out: &mut [u8]) {
+                  len: usize) -> ring::aead::Aad<[u8; TLS12_AAD_SIZE]> {
+    let mut out = [0; TLS12_AAD_SIZE];
     codec::put_u64(seq, &mut out[0..]);
     out[8] = typ.get_u8();
     codec::put_u16(vers.get_u16(), &mut out[9..]);
     codec::put_u16(len as u16, &mut out[11..]);
+    ring::aead::Aad::from(out)
 }
 
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
@@ -164,9 +165,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD, &mut aad);
-        let aad = aead::Aad::from(&aad);
+        let aad = make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD);
 
         let plain_len = self.dec_key.open_within(nonce,
                                                  aad,
@@ -211,9 +210,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
 
-        let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
-        let aad = aead::Aad::from(&aad);
+        let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
         let mut payload = Vec::with_capacity(GCM_EXPLICIT_NONCE_LEN + total_len);
         payload.extend_from_slice(&nonce.as_ref()[4..]);
@@ -296,13 +293,14 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
     }
 }
 
-const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
-fn make_tls13_aad(len: usize, out: &mut [u8]) {
-    out[0] = 0x17; // ContentType::ApplicationData
-    out[1] = 0x3; // ProtocolVersion (major)
-    out[2] = 0x3; // ProtocolVersion (minor)
-    out[3] = (len >> 8) as u8;
-    out[4] = len as u8;
+fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]>{
+    ring::aead::Aad::from([
+        0x17, // ContentType::ApplicationData
+        0x3, // ProtocolVersion (major)
+        0x3, // ProtocolVersion (minor)
+        (len >> 8) as u8,
+        len as u8,
+    ])
 }
 
 impl MessageEncrypter for TLS13MessageEncrypter {
@@ -319,10 +317,9 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         buf.extend_from_slice(&msg.payload);
         msg.typ.encode(&mut buf);
 
-        let mut aad = [0u8; TLS13_AAD_SIZE];
-        make_tls13_aad(total_len, &mut aad);
+        let aad = make_tls13_aad(total_len);
 
-        self.enc_key.seal_in_place(nonce, aead::Aad::from(&aad), &mut buf)
+        self.enc_key.seal_in_place(nonce, aad, &mut buf)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
@@ -350,9 +347,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
             return Err(TLSError::DecryptError);
         }
 
-        let mut aad = [0u8; TLS13_AAD_SIZE];
-        make_tls13_aad(buf.len(), &mut aad);
-        let aad = aead::Aad::from(&aad);
+        let aad = make_tls13_aad(buf.len());
         let plain_len = self.dec_key.open_in_place(nonce, aad, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
             .len();
@@ -485,9 +480,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, buf.len() - CHACHAPOLY1305_OVERHEAD, &mut aad);
-        let aad = aead::Aad::from(&aad);
+        let aad = make_tls12_aad(seq, msg.typ, msg.version, buf.len() - CHACHAPOLY1305_OVERHEAD);
 
         let plain_len = self.dec_key.open_in_place(nonce, aad, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
@@ -516,9 +509,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let mut aad = [0u8; TLS12_AAD_SIZE];
-        make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len(), &mut aad);
-        let aad = aead::Aad::from(&aad);
+        let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
         let total_len = msg.payload.len() + self.alg.tag_len();
         let mut buf = Vec::with_capacity(total_len);
