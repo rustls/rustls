@@ -125,7 +125,9 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl,
                           hmp: &mut HandshakeMessagePayload) {
     // We need to know the hash function of the suite we're trying to resume into.
     let resuming = handshake.resuming_session.as_ref().unwrap();
-    let suite_hash = sess.find_cipher_suite(resuming.cipher_suite).unwrap().get_hash();
+    let suite = sess.find_cipher_suite(resuming.cipher_suite).unwrap();
+    let hkdf_alg = suite.hkdf_algorithm;
+    let suite_hash = suite.get_hash();
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -139,7 +141,7 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl,
 
     // Run a fake key_schedule to simulate what the server will do if it choses
     // to resume.
-    let mut key_schedule = KeySchedule::new(suite_hash);
+    let mut key_schedule = KeySchedule::new(hkdf_alg);
     key_schedule.input_secret(&resuming.master_secret.0);
     let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
@@ -183,7 +185,7 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
         // Discard the early data key schedule.
         sess.early_data.rejected();
         sess.common.early_traffic = false;
-        let mut key_schedule = KeySchedule::new(suite.get_hash());
+        let mut key_schedule = KeySchedule::new(suite.hkdf_algorithm);
         key_schedule.input_empty();
         sess.common.set_key_schedule(key_schedule);
         handshake.resuming_session.take();
