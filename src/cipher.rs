@@ -143,7 +143,6 @@ pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
 pub struct GCMMessageEncrypter {
-    alg: &'static aead::Algorithm,
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
@@ -199,7 +198,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
 
 impl MessageEncrypter for GCMMessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
-        let total_len = msg.payload.len() + self.alg.tag_len();
+        let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
 
@@ -228,7 +227,6 @@ impl GCMMessageEncrypter {
         let key = aead::UnboundKey::new(alg, enc_key)
             .unwrap();
         GCMMessageEncrypter {
-            alg,
             enc_key: aead::LessSafeKey::new(key),
             iv,
         }
@@ -266,13 +264,11 @@ impl Iv {
 
 
 struct TLS13MessageEncrypter {
-    alg: &'static aead::Algorithm,
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
 struct TLS13MessageDecrypter {
-    alg: &'static aead::Algorithm,
     dec_key: aead::LessSafeKey,
     iv: Iv,
 }
@@ -312,7 +308,7 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]>{
 
 impl MessageEncrypter for TLS13MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
-        let total_len = msg.payload.len() + 1 + self.alg.tag_len();
+        let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
         msg.typ.encode(&mut buf);
@@ -337,7 +333,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
             .ok_or(TLSError::DecryptError)?;
         let mut buf = payload.0;
 
-        if buf.len() < self.alg.tag_len() {
+        if buf.len() < self.dec_key.algorithm().tag_len() {
             return Err(TLSError::DecryptError);
         }
 
@@ -378,7 +374,6 @@ impl TLS13MessageEncrypter {
         let key = aead::UnboundKey::new(alg, enc_key)
             .unwrap();
         TLS13MessageEncrypter {
-            alg,
             enc_key: aead::LessSafeKey::new(key),
             iv: enc_iv,
         }
@@ -392,7 +387,6 @@ impl TLS13MessageDecrypter {
         let key = aead::UnboundKey::new(alg, dec_key)
             .unwrap();
         TLS13MessageDecrypter {
-            alg,
             dec_key: aead::LessSafeKey::new(key),
             iv: dec_iv,
         }
@@ -403,7 +397,6 @@ impl TLS13MessageDecrypter {
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageEncrypter`.
 pub struct ChaCha20Poly1305MessageEncrypter {
-    alg: &'static aead::Algorithm,
     enc_key: aead::LessSafeKey,
     enc_offset: Iv,
 }
@@ -423,7 +416,6 @@ impl ChaCha20Poly1305MessageEncrypter {
         let key = aead::UnboundKey::new(alg, enc_key)
             .unwrap();
         ChaCha20Poly1305MessageEncrypter {
-            alg,
             enc_key: aead::LessSafeKey::new(key),
             enc_offset: enc_iv,
         }
@@ -481,7 +473,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         let nonce = make_tls13_nonce(&self.enc_offset, seq);
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
-        let total_len = msg.payload.len() + self.alg.tag_len();
+        let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
 
