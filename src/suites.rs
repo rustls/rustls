@@ -156,6 +156,8 @@ pub struct SupportedCipherSuite {
     /// in a deterministic and safe way.  GCM needs this,
     /// chacha20poly1305 works this way by design.
     pub explicit_nonce_len: usize,
+
+    pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
 }
 
 impl PartialEq for SupportedCipherSuite {
@@ -167,12 +169,7 @@ impl PartialEq for SupportedCipherSuite {
 impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
-        match self.hash {
-            HashAlgorithm::SHA256 => &ring::digest::SHA256,
-            HashAlgorithm::SHA384 => &ring::digest::SHA384,
-            HashAlgorithm::SHA512 => &ring::digest::SHA512,
-            _ => unreachable!(),
-        }
+        self.hkdf_algorithm.hmac_algorithm().digest_algorithm()
     }
 
     /// We have parameters and a verified public key in `kx_params`.
@@ -276,6 +273,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         enc_key_len: 32,
         fixed_iv_len: 12,
         explicit_nonce_len: 0,
+        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     };
 
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
@@ -288,6 +286,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         enc_key_len: 32,
         fixed_iv_len: 12,
         explicit_nonce_len: 0,
+        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     };
 
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
@@ -299,6 +298,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     enc_key_len: 16,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
@@ -310,6 +310,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     enc_key_len: 32,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA384,
 };
 
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
@@ -321,6 +322,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     enc_key_len: 16,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
@@ -332,6 +334,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     enc_key_len: 32,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA384,
 };
 
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
@@ -343,6 +346,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     enc_key_len: 32,
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
 pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
@@ -354,6 +358,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     enc_key_len: 32,
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA384,
 };
 
 pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
@@ -365,6 +370,7 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
     enc_key_len: 16,
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
 /// A list of all the cipher suites supported by rustls.

@@ -123,9 +123,8 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
 
 pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
                       secret: &[u8]) -> Box<dyn MessageDecrypter> {
-    let hash = scs.get_hash();
-    let key = derive_traffic_key(hash, secret, scs.enc_key_len);
-    let iv = derive_traffic_iv(hash, secret);
+    let key = derive_traffic_key(scs.hkdf_algorithm, secret, scs.enc_key_len);
+    let iv = derive_traffic_iv(scs.hkdf_algorithm, secret);
     let aead_alg = scs.get_aead_alg();
 
     Box::new(TLS13MessageDecrypter::new(aead_alg, &key, iv))
@@ -133,9 +132,8 @@ pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
 
 pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
                        secret: &[u8]) -> Box<dyn MessageEncrypter> {
-    let hash = scs.get_hash();
-    let key = derive_traffic_key(hash, secret, scs.enc_key_len);
-    let iv = derive_traffic_iv(hash, secret);
+    let key = derive_traffic_key(scs.hkdf_algorithm, secret, scs.enc_key_len);
+    let iv = derive_traffic_iv(scs.hkdf_algorithm, secret);
     let aead_alg = scs.get_aead_alg();
 
     Box::new(TLS13MessageEncrypter::new(aead_alg, &key, iv))

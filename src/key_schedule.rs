@@ -1,6 +1,6 @@
 /// Key schedule maintenance for TLS1.3
 
-use ring::{hmac, digest};
+use ring::{hkdf, hmac, digest};
 use crate::msgs::codec::Codec;
 use crate::error::TLSError;
 use std::convert::TryInto;
@@ -18,18 +18,6 @@ pub enum SecretKind {
     ExporterMasterSecret,
     ResumptionMasterSecret,
     DerivedSecret,
-}
-
-fn convert_digest_to_hmac_alg(hash: &'static digest::Algorithm) -> hmac::Algorithm {
-    if hash == &digest::SHA256 {
-        hmac::HMAC_SHA256
-    } else if hash == &digest::SHA384 {
-        hmac::HMAC_SHA384
-    } else if hash == &digest::SHA512 {
-        hmac::HMAC_SHA512
-    } else {
-        panic!("bad digest for prf");
-    }
 }
 
 impl SecretKind {
@@ -84,23 +72,20 @@ fn _hkdf_extract(salt: &hmac::Key, secret: &[u8]) -> hmac::Key {
 pub struct KeySchedule {
     current: hmac::Key,
     need_derive_for_extract: bool,
-    hash: &'static digest::Algorithm,
-    hmac_alg: hmac::Algorithm,
+    algorithm: ring::hkdf::Algorithm,
     pub current_client_traffic_secret: Vec<u8>,
     pub current_server_traffic_secret: Vec<u8>,
     pub current_exporter_secret: Vec<u8>,
 }
 
 impl KeySchedule {
-    pub fn new(hash: &'static digest::Algorithm) -> KeySchedule {
+    pub fn new(algorithm: hkdf::Algorithm) -> KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
-
+        let zeroes = &zeroes[..algorithm.hmac_algorithm().digest_algorithm().output_len];
         KeySchedule {
-            current: hmac::Key::new(convert_digest_to_hmac_alg(hash),
-                                    &zeroes[..hash.output_len]),
+            current: hmac::Key::new(algorithm.hmac_algorithm(), zeroes),
             need_derive_for_extract: false,
-            hash,
-            hmac_alg: convert_digest_to_hmac_alg(hash),
+            algorithm,
             current_server_traffic_secret: Vec::new(),
             current_client_traffic_secret: Vec::new(),
             current_exporter_secret: Vec::new(),
@@ -110,7 +95,7 @@ impl KeySchedule {
     /// Input the empty secret.
     pub fn input_empty(&mut self) {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
-        let hash_len = self.hash.output_len;
+        let hash_len = self.algorithm.hmac_algorithm().digest_algorithm().output_len;
         self.input_secret(&zeroes[..hash_len]);
     }
 
@@ -118,7 +103,7 @@ impl KeySchedule {
     pub fn input_secret(&mut self, secret: &[u8]) {
         if self.need_derive_for_extract {
             let derived = self.derive_for_empty_hash(SecretKind::DerivedSecret);
-            self.current = hmac::Key::new(self.hmac_alg,
+            self.current = hmac::Key::new(self.algorithm.hmac_algorithm(),
                                           &derived);
         }
         self.need_derive_for_extract = true;
@@ -128,12 +113,12 @@ impl KeySchedule {
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
     pub fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
-        debug_assert_eq!(hs_hash.len(), self.hash.output_len);
+        debug_assert_eq!(hs_hash.len(), self.algorithm.hmac_algorithm().digest_algorithm().output_len);
 
         _hkdf_expand_label_vec(&self.current,
                                kind.to_bytes(),
                                hs_hash,
-                               self.hash.output_len)
+                               hs_hash.len())
     }
 
     /// Derive a secret of given `kind` using the hash of the empty string
@@ -141,11 +126,9 @@ impl KeySchedule {
     /// `SecretKind::ResumptionPSKBinderKey` and
     /// `SecretKind::DerivedSecret`.
     pub fn derive_for_empty_hash(&self, kind: SecretKind) -> Vec<u8> {
-        let mut empty_hash = [0u8; digest::MAX_OUTPUT_LEN];
-        empty_hash[..self.hash.output_len]
-            .clone_from_slice(digest::digest(self.hash, &[]).as_ref());
-
-        self.derive(kind, &empty_hash[..self.hash.output_len])
+        let digest_alg = self.algorithm.hmac_algorithm().digest_algorithm();
+        let empty_hash = digest::digest(digest_alg, &[]);
+        self.derive(kind, empty_hash.as_ref())
     }
 
     /// Return the current traffic secret, of given `kind`.
@@ -170,14 +153,17 @@ impl KeySchedule {
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
     pub fn sign_verify_data(&self, base_key: &[u8], hs_hash: &[u8]) -> Vec<u8> {
-        debug_assert_eq!(hs_hash.len(), self.hash.output_len);
+        let hmac_alg = self.algorithm.hmac_algorithm();
+        let digest_alg = hmac_alg.digest_algorithm();
 
-        let hmac_key = _hkdf_expand_label_vec(&hmac::Key::new(self.hmac_alg, base_key),
+        debug_assert_eq!(hs_hash.len(), digest_alg.output_len);
+
+        let hmac_key = _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, base_key),
                                               b"finished",
                                               &[],
-                                              self.hash.output_len);
+                                              digest_alg.output_len);
 
-        hmac::sign(&hmac::Key::new(self.hmac_alg, &hmac_key), hs_hash)
+        hmac::sign(&hmac::Key::new(hmac_alg, &hmac_key), hs_hash)
             .as_ref()
             .to_vec()
     }
@@ -185,20 +171,24 @@ impl KeySchedule {
     /// Derive the next application traffic secret of given `kind`, returning
     /// it.
     pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
+        let hmac_alg = self.algorithm.hmac_algorithm();
+        let digest_alg = hmac_alg.digest_algorithm();
         let base_key = self.current_traffic_secret(kind);
-        _hkdf_expand_label_vec(&hmac::Key::new(self.hmac_alg, base_key),
+        _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, base_key),
                                b"traffic upd",
                                &[],
-                               self.hash.output_len)
+                               digest_alg.output_len)
     }
 
     /// Derive the PSK to use given a resumption_master_secret and
     /// ticket_nonce.
     pub fn derive_ticket_psk(&self, rms: &[u8], nonce: &[u8]) -> Vec<u8> {
-        _hkdf_expand_label_vec(&hmac::Key::new(self.hmac_alg, rms),
+        let hmac_alg = self.algorithm.hmac_algorithm();
+        let digest_alg = hmac_alg.digest_algorithm();
+        _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, rms),
                                b"resumption",
                                nonce,
-                               self.hash.output_len)
+                               digest_alg.output_len)
     }
 
     pub fn export_keying_material(&self, out: &mut [u8],
@@ -208,32 +198,34 @@ impl KeySchedule {
             return Err(TLSError::HandshakeNotComplete);
         }
 
-        let h_empty = digest::digest(self.hash, &[]);
+        let hmac_alg = self.algorithm.hmac_algorithm();
+        let digest_alg = hmac_alg.digest_algorithm();
+
+        let h_empty = digest::digest(digest_alg, &[]);
         let mut secret = [0u8; digest::MAX_OUTPUT_LEN];
-        _hkdf_expand_label(&mut secret[..self.hash.output_len],
-                           &hmac::Key::new(self.hmac_alg,
+        let secret = &mut secret[..digest_alg.output_len];
+        _hkdf_expand_label(secret,
+                           &hmac::Key::new(hmac_alg,
                                                   &self.current_exporter_secret),
                            label,
                            h_empty.as_ref());
 
-        let mut h_context = [0u8; digest::MAX_OUTPUT_LEN];
-        h_context[..self.hash.output_len]
-            .clone_from_slice(digest::digest(self.hash,
-                                             context.unwrap_or(&[]))
-                              .as_ref());
+        let h_context = digest::digest(digest_alg, context.unwrap_or(&[]));
 
         _hkdf_expand_label(out,
-                           &hmac::Key::new(self.hmac_alg, &secret[..self.hash.output_len]),
+                           &hmac::Key::new(hmac_alg, secret),
                            b"exporter",
-                           &h_context[..self.hash.output_len]);
+                           h_context.as_ref());
         Ok(())
     }
 }
 
-fn _hkdf_expand_label_vec(secret: &hmac::Key,
-                          label: &[u8],
-                          context: &[u8],
-                          len: usize) -> Vec<u8> {
+pub(crate) fn _hkdf_expand_label_vec(
+    secret: &hmac::Key,
+    label: &[u8],
+    context: &[u8],
+    len: usize) -> Vec<u8>
+{
     let mut v = Vec::new();
     v.resize(len, 0u8);
     _hkdf_expand_label(&mut v,
@@ -260,14 +252,12 @@ fn _hkdf_expand_label(output: &mut [u8],
     _hkdf_expand(secret, &hkdflabel, output)
 }
 
-pub fn derive_traffic_key(hash: &'static digest::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
-    let hmac_alg = convert_digest_to_hmac_alg(hash);
-    _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"key", &[], len)
+pub fn derive_traffic_key(algorithm: hkdf::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
+    _hkdf_expand_label_vec(&hmac::Key::new(algorithm.hmac_algorithm(), secret), b"key", &[], len)
 }
 
-pub(crate) fn derive_traffic_iv(hash: &'static digest::Algorithm, secret: &[u8]) -> Iv {
-    let hmac_alg = convert_digest_to_hmac_alg(hash);
-    let iv = _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"iv", &[],
+pub(crate) fn derive_traffic_iv(algorithm: hkdf::Algorithm, secret: &[u8]) -> Iv {
+    let iv = _hkdf_expand_label_vec(&hmac::Key::new(algorithm.hmac_algorithm(), secret), b"iv", &[],
     ring::aead::NONCE_LEN);
     Iv::new(iv[..].try_into().unwrap())
 }
@@ -275,13 +265,13 @@ pub(crate) fn derive_traffic_iv(hash: &'static digest::Algorithm, secret: &[u8])
 #[cfg(test)]
 mod test {
     use super::{KeySchedule, SecretKind, derive_traffic_key, derive_traffic_iv};
-    use ring::digest;
+    use ring::hkdf;
 
     #[test]
     fn smoke_test() {
         let fake_handshake_hash = [0u8; 32];
 
-        let mut ks = KeySchedule::new(&digest::SHA256);
+        let mut ks = KeySchedule::new(hkdf::HKDF_SHA256);
         ks.input_empty(); // no PSK
         ks.derive(SecretKind::ResumptionPSKBinderKey, &fake_handshake_hash);
         ks.input_secret(&[1u8, 2u8, 3u8, 4u8]);
@@ -378,8 +368,8 @@ mod test {
             0x0d, 0xb2, 0x8f, 0x98, 0x85, 0x86, 0xa1, 0xb7, 0xe4, 0xd5, 0xc6, 0x9c
         ];
 
-        let hash = &digest::SHA256;
-        let mut ks = KeySchedule::new(hash);
+        let hkdf = hkdf::HKDF_SHA256;
+        let mut ks = KeySchedule::new(hkdf);
         ks.input_empty();
         ks.input_secret(&ecdhe_secret);
 
@@ -387,17 +377,17 @@ mod test {
                                        &hs_start_hash);
         assert_eq!(got_client_hts,
                    client_hts.to_vec());
-        assert_eq!(derive_traffic_key(hash, &got_client_hts, client_hts_key.len()),
+        assert_eq!(derive_traffic_key(hkdf, &got_client_hts, client_hts_key.len()),
                    client_hts_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_client_hts).value(), &client_hts_iv);
+        assert_eq!(derive_traffic_iv(hkdf, &got_client_hts).value(), &client_hts_iv);
 
         let got_server_hts = ks.derive(SecretKind::ServerHandshakeTrafficSecret,
                                        &hs_start_hash);
         assert_eq!(got_server_hts,
                    server_hts.to_vec());
-        assert_eq!(derive_traffic_key(hash, &got_server_hts, server_hts_key.len()),
+        assert_eq!(derive_traffic_key(hkdf, &got_server_hts, server_hts_key.len()),
                    server_hts_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_server_hts).value(), &server_hts_iv);
+        assert_eq!(derive_traffic_iv(hkdf, &got_server_hts).value(), &server_hts_iv);
 
         ks.input_empty();
 
@@ -405,17 +395,17 @@ mod test {
                                        &hs_full_hash);
         assert_eq!(got_client_ats,
                    client_ats.to_vec());
-        assert_eq!(derive_traffic_key(hash, &got_client_ats, client_ats_key.len()),
+        assert_eq!(derive_traffic_key(hkdf, &got_client_ats, client_ats_key.len()),
                    client_ats_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_client_ats).value(), &client_ats_iv);
+        assert_eq!(derive_traffic_iv(hkdf, &got_client_ats).value(), &client_ats_iv);
 
         let got_server_ats = ks.derive(SecretKind::ServerApplicationTrafficSecret,
                                        &hs_full_hash);
         assert_eq!(got_server_ats,
                    server_ats.to_vec());
-        assert_eq!(derive_traffic_key(hash, &got_server_ats, server_ats_key.len()),
+        assert_eq!(derive_traffic_key(hkdf, &got_server_ats, server_ats_key.len()),
                    server_ats_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_server_ats).value(), &server_ats_iv);
+        assert_eq!(derive_traffic_iv(hkdf, &got_server_ats).value(), &server_ats_iv);
 
     }
 }

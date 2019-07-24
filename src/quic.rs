@@ -5,10 +5,11 @@ use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::server::{ServerConfig, ServerSession, ServerSessionImpl};
 use crate::error::TLSError;
-use crate::key_schedule::{KeySchedule, SecretKind};
+use crate::key_schedule;
 use crate::session::{SessionCommon, Protocol};
 
 use std::sync::Arc;
+use ring::hmac;
 use webpki;
 
 /// Secrets used to encrypt/decrypt traffic
@@ -123,14 +124,19 @@ fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Secrets> {
 }
 
 fn update_secrets(this: &SessionCommon, client: &[u8], server: &[u8]) -> Secrets {
-    let suite = this.get_suite_assert();
-    // TODO: Don't clone
-    let mut key_schedule = KeySchedule::new(suite.get_hash());
-    key_schedule.current_client_traffic_secret = client.into();
-    key_schedule.current_server_traffic_secret = server.into();
+    let hmac_alg= this.get_suite_assert().hkdf_algorithm.hmac_algorithm();
+    let digest_alg = hmac_alg.digest_algorithm();
     Secrets {
-        client: key_schedule.derive_next(SecretKind::ClientApplicationTrafficSecret),
-        server: key_schedule.derive_next(SecretKind::ServerApplicationTrafficSecret),
+        client: key_schedule::_hkdf_expand_label_vec(
+            &hmac::Key::new(hmac_alg, client),
+            b"traffic upd",
+            &[],
+            digest_alg.output_len),
+        server: key_schedule::_hkdf_expand_label_vec(
+            &hmac::Key::new(hmac_alg, server),
+            b"traffic upd",
+            &[],
+            digest_alg.output_len)
     }
 }
 
