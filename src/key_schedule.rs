@@ -3,6 +3,8 @@
 use ring::{hmac, digest};
 use crate::msgs::codec::Codec;
 use crate::error::TLSError;
+use std::convert::TryInto;
+use crate::cipher::Iv;
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -263,9 +265,11 @@ pub fn derive_traffic_key(hash: &'static digest::Algorithm, secret: &[u8], len: 
     _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"key", &[], len)
 }
 
-pub fn derive_traffic_iv(hash: &'static digest::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
+pub(crate) fn derive_traffic_iv(hash: &'static digest::Algorithm, secret: &[u8]) -> Iv {
     let hmac_alg = convert_digest_to_hmac_alg(hash);
-    _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"iv", &[], len)
+    let iv = _hkdf_expand_label_vec(&hmac::Key::new(hmac_alg, secret), b"iv", &[],
+    ring::aead::NONCE_LEN);
+    Iv::new(iv[..].try_into().unwrap())
 }
 
 #[cfg(test)]
@@ -385,8 +389,7 @@ mod test {
                    client_hts.to_vec());
         assert_eq!(derive_traffic_key(hash, &got_client_hts, client_hts_key.len()),
                    client_hts_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_client_hts, client_hts_iv.len()),
-                   client_hts_iv.to_vec());
+        assert_eq!(derive_traffic_iv(hash, &got_client_hts).value(), &client_hts_iv);
 
         let got_server_hts = ks.derive(SecretKind::ServerHandshakeTrafficSecret,
                                        &hs_start_hash);
@@ -394,8 +397,7 @@ mod test {
                    server_hts.to_vec());
         assert_eq!(derive_traffic_key(hash, &got_server_hts, server_hts_key.len()),
                    server_hts_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_server_hts, server_hts_iv.len()),
-                   server_hts_iv.to_vec());
+        assert_eq!(derive_traffic_iv(hash, &got_server_hts).value(), &server_hts_iv);
 
         ks.input_empty();
 
@@ -405,8 +407,7 @@ mod test {
                    client_ats.to_vec());
         assert_eq!(derive_traffic_key(hash, &got_client_ats, client_ats_key.len()),
                    client_ats_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_client_ats, client_ats_iv.len()),
-                   client_ats_iv.to_vec());
+        assert_eq!(derive_traffic_iv(hash, &got_client_ats).value(), &client_ats_iv);
 
         let got_server_ats = ks.derive(SecretKind::ServerApplicationTrafficSecret,
                                        &hs_full_hash);
@@ -414,8 +415,7 @@ mod test {
                    server_ats.to_vec());
         assert_eq!(derive_traffic_key(hash, &got_server_ats, server_ats_key.len()),
                    server_ats_key.to_vec());
-        assert_eq!(derive_traffic_iv(hash, &got_server_ats, server_ats_iv.len()),
-                   server_ats_iv.to_vec());
+        assert_eq!(derive_traffic_iv(hash, &got_server_ats).value(), &server_ats_iv);
 
     }
 }
