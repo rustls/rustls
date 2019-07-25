@@ -73,8 +73,7 @@ impl CompleteClientHelloHandling {
         let suite_hash = suite.get_hash();
         let handshake_hash = self.handshake.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
-        let mut key_schedule = KeySchedule::new(hkdf_alg);
-        key_schedule.input_secret(psk);
+        let key_schedule = KeySchedule::new(hkdf_alg, &psk);
         let base_key = key_schedule.derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
         let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
@@ -155,9 +154,9 @@ impl CompleteClientHelloHandling {
 
         // Start key schedule
         let suite = sess.common.get_suite_assert();
-        let mut key_schedule = KeySchedule::new(suite.hkdf_algorithm);
+        let mut key_schedule;
         if let Some(psk) = resuming_psk {
-            key_schedule.input_secret(psk);
+            key_schedule = KeySchedule::new(suite.hkdf_algorithm, psk);
 
             #[cfg(feature = "quic")] {
                 if sess.common.protocol == Protocol::Quic {
@@ -172,7 +171,7 @@ impl CompleteClientHelloHandling {
                 }
             }
         } else {
-            key_schedule.input_empty();
+            key_schedule = KeySchedule::new_with_empty_secret(suite.hkdf_algorithm);
         }
         key_schedule.input_secret(&kxr.premaster_secret);
 
