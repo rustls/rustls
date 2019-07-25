@@ -1,7 +1,6 @@
 /// Key schedule maintenance for TLS1.3
 
 use ring::{hkdf::{self, KeyType as _}, hmac, digest};
-use crate::msgs::codec::Codec;
 use crate::error::TLSError;
 use crate::cipher::{Iv, IvLen};
 use crate::msgs::base::PayloadU8;
@@ -182,40 +181,35 @@ impl KeySchedule {
     }
 }
 
-
-fn info(output_len: usize, label: &[u8], context: &[u8]) -> Vec<u8> {
-    const LABEL_PREFIX: &[u8] = b"tls13 ";
-
-    let mut hkdflabel = Vec::new();
-    (output_len as u16).encode(&mut hkdflabel);
-    ((label.len() + LABEL_PREFIX.len()) as u8).encode(&mut hkdflabel);
-    hkdflabel.extend_from_slice(LABEL_PREFIX);
-    hkdflabel.extend_from_slice(label);
-    (context.len() as u8).encode(&mut hkdflabel);
-    hkdflabel.extend_from_slice(context);
-    hkdflabel
-}
-
 pub(crate) fn hkdf_expand<T, L>(secret: &hkdf::Prk, key_type: L, label: &[u8], context: &[u8]) -> T
     where
         T: for <'a> From<hkdf::Okm<'a, L>>,
         L: hkdf::KeyType,
 {
-    let info = info(key_type.len(), label, context);
-    secret.expand(&[&info[..]], key_type)
-        .unwrap()
-        .into()
+    hkdf_expand_info(secret, key_type, label, context, |okm| okm.into())
 }
 
-fn _hkdf_expand_label(output: &mut [u8],
-                      secret: &hkdf::Prk,
-                      label: &[u8],
-                      context: &[u8]) {
-    let info = info(output.len(), label, context);
-    secret.expand(&[&info[..]], PayloadU8Len(output.len()))
-        .unwrap()
-        .fill(output)
-        .unwrap()
+fn _hkdf_expand_label(output: &mut [u8], secret: &hkdf::Prk, label: &[u8], context: &[u8]) {
+    hkdf_expand_info(secret, PayloadU8Len(output.len()), label, context,
+        |okm| okm.fill(output).unwrap())
+}
+
+fn hkdf_expand_info<F, T, L>(secret: &hkdf::Prk, key_type: L, label: &[u8], context: &[u8], f: F)
+        -> T
+    where
+        F: for<'b> FnOnce(hkdf::Okm<'b, L>) -> T,
+        L: hkdf::KeyType
+{
+    const LABEL_PREFIX: &[u8] = b"tls13 ";
+
+    let output_len = u16::to_be_bytes(key_type.len() as u16);
+    let label_len = u8::to_be_bytes((LABEL_PREFIX.len() + label.len()) as u8);
+    let context_len = u8::to_be_bytes(context.len() as u8);
+
+    let info = &[&output_len[..], &label_len[..], LABEL_PREFIX, label, &context_len[..], context];
+    let okm = secret.expand(info, key_type).unwrap();
+
+    f(okm)
 }
 
 pub(crate) struct PayloadU8Len(pub(crate) usize);
