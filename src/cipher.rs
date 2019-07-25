@@ -1,4 +1,4 @@
-use ring::aead;
+use ring::{aead, hkdf};
 use std::io::Write;
 use crate::msgs::codec;
 use crate::msgs::codec::Codec;
@@ -257,6 +257,19 @@ impl Iv {
     pub(crate) fn value(&self) -> &[u8; 12] { &self.0 }
 }
 
+pub(crate) struct IvLen;
+
+impl hkdf::KeyType for IvLen {
+    fn len(&self) -> usize { aead::NONCE_LEN }
+}
+
+impl From<hkdf::Okm<'_, IvLen>> for Iv {
+    fn from(okm: hkdf::Okm<IvLen>) -> Self {
+        let mut r = Iv(Default::default());
+        okm.fill(&mut r.0[..]).unwrap();
+        r
+    }
+}
 
 struct TLS13MessageEncrypter {
     enc_key: aead::LessSafeKey,

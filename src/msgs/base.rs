@@ -117,6 +117,8 @@ impl PayloadU8 {
     pub fn empty() -> PayloadU8 {
         PayloadU8(Vec::new())
     }
+
+    pub fn into_inner(self) -> Vec<u8> { self.0 }
 }
 
 impl Codec for PayloadU8 {
