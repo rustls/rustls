@@ -173,11 +173,11 @@ impl KeySchedule {
             hkdf_expand(&current_exporter_secret, self.algorithm, label, h_empty.as_ref());
 
         let h_context = digest::digest(digest_alg, context.unwrap_or(&[]));
-        _hkdf_expand_label(out,
-                           &secret,
-                           b"exporter",
-                           h_context.as_ref());
-        Ok(())
+
+        // TODO: Test what happens when this fails
+        hkdf_expand_info(&secret, PayloadU8Len(out.len()), b"exporter", h_context.as_ref(),
+                         |okm| okm.fill(out))
+            .map_err(|_| TLSError::General("exporting too much".to_string()))
     }
 }
 
@@ -187,11 +187,6 @@ pub(crate) fn hkdf_expand<T, L>(secret: &hkdf::Prk, key_type: L, label: &[u8], c
         L: hkdf::KeyType,
 {
     hkdf_expand_info(secret, key_type, label, context, |okm| okm.into())
-}
-
-fn _hkdf_expand_label(output: &mut [u8], secret: &hkdf::Prk, label: &[u8], context: &[u8]) {
-    hkdf_expand_info(secret, PayloadU8Len(output.len()), label, context,
-        |okm| okm.fill(output).unwrap())
 }
 
 fn hkdf_expand_info<F, T, L>(secret: &hkdf::Prk, key_type: L, label: &[u8], context: &[u8], f: F)
