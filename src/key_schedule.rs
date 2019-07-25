@@ -231,15 +231,13 @@ impl From<hkdf::Okm<'_, PayloadU8Len>> for PayloadU8 {
     }
 }
 
-pub fn derive_traffic_key(algorithm: hkdf::Algorithm, secret: &[u8], len: usize) -> Vec<u8> {
-    let secret = hkdf::Prk::new_less_safe(algorithm, secret);
-    let payload: PayloadU8 = hkdf_expand(&secret, PayloadU8Len(len), b"key", &[]);
+pub fn derive_traffic_key(secret: &hkdf::Prk, len: usize) -> Vec<u8> {
+    let payload: PayloadU8 = hkdf_expand(secret, PayloadU8Len(len), b"key", &[]);
     payload.into_inner()
 }
 
-pub(crate) fn derive_traffic_iv(algorithm: hkdf::Algorithm, secret: &[u8]) -> Iv {
-    let secret = hkdf::Prk::new_less_safe(algorithm, secret);
-    hkdf_expand(&secret, IvLen, b"iv", &[])
+pub(crate) fn derive_traffic_iv(secret: &hkdf::Prk) -> Iv {
+    hkdf_expand(secret, IvLen, b"iv", &[])
 }
 
 #[cfg(test)]
@@ -355,17 +353,19 @@ mod test {
                                              &hs_start_hash);
         assert_eq!(got_client_hts,
                    client_hts.to_vec());
-        assert_eq!(derive_traffic_key(hkdf, &got_client_hts, client_hts_key.len()),
+        let got_client_hts = hkdf::Prk::new_less_safe(hkdf, &got_client_hts);
+        assert_eq!(derive_traffic_key(&got_client_hts, client_hts_key.len()),
                    client_hts_key.to_vec());
-        assert_eq!(derive_traffic_iv(hkdf, &got_client_hts).value(), &client_hts_iv);
+        assert_eq!(derive_traffic_iv(&got_client_hts).value(), &client_hts_iv);
 
         let got_server_hts = ks.derive_bytes(SecretKind::ServerHandshakeTrafficSecret,
                                              &hs_start_hash);
         assert_eq!(got_server_hts,
                    server_hts.to_vec());
-        assert_eq!(derive_traffic_key(hkdf, &got_server_hts, server_hts_key.len()),
+        let got_server_hts = hkdf::Prk::new_less_safe(hkdf, &got_server_hts);
+        assert_eq!(derive_traffic_key(&got_server_hts, server_hts_key.len()),
                    server_hts_key.to_vec());
-        assert_eq!(derive_traffic_iv(hkdf, &got_server_hts).value(), &server_hts_iv);
+        assert_eq!(derive_traffic_iv(&got_server_hts).value(), &server_hts_iv);
 
         ks.input_empty();
 
@@ -373,17 +373,19 @@ mod test {
                                              &hs_full_hash);
         assert_eq!(got_client_ats,
                    client_ats.to_vec());
-        assert_eq!(derive_traffic_key(hkdf, &got_client_ats, client_ats_key.len()),
+        let got_client_ats = hkdf::Prk::new_less_safe(hkdf, &got_client_ats);
+        assert_eq!(derive_traffic_key(&got_client_ats, client_ats_key.len()),
                    client_ats_key.to_vec());
-        assert_eq!(derive_traffic_iv(hkdf, &got_client_ats).value(), &client_ats_iv);
+        assert_eq!(derive_traffic_iv(&got_client_ats).value(), &client_ats_iv);
 
         let got_server_ats = ks.derive_bytes(SecretKind::ServerApplicationTrafficSecret,
                                              &hs_full_hash);
         assert_eq!(got_server_ats,
                    server_ats.to_vec());
-        assert_eq!(derive_traffic_key(hkdf, &got_server_ats, server_ats_key.len()),
+        let got_server_ats = hkdf::Prk::new_less_safe(hkdf, &got_server_ats);
+        assert_eq!(derive_traffic_key(&got_server_ats, server_ats_key.len()),
                    server_ats_key.to_vec());
-        assert_eq!(derive_traffic_iv(hkdf, &got_server_ats).value(), &server_ats_iv);
+        assert_eq!(derive_traffic_iv(&got_server_ats).value(), &server_ats_iv);
 
     }
 }
