@@ -71,7 +71,6 @@ fn _hkdf_extract(salt: &hmac::Key, secret: &[u8]) -> hmac::Key {
 /// own lineage of keys over successive key updates.
 pub struct KeySchedule {
     current: hmac::Key,
-    need_derive_for_extract: bool,
     algorithm: ring::hkdf::Algorithm,
     pub current_client_traffic_secret: Vec<u8>,
     pub current_server_traffic_secret: Vec<u8>,
@@ -79,17 +78,23 @@ pub struct KeySchedule {
 }
 
 impl KeySchedule {
-    pub fn new(algorithm: hkdf::Algorithm) -> KeySchedule {
+    pub fn new(algorithm: hkdf::Algorithm, secret: &[u8]) -> KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
         let zeroes = &zeroes[..algorithm.hmac_algorithm().digest_algorithm().output_len];
+        let salt = hmac::Key::new(algorithm.hmac_algorithm(), &zeroes);
         KeySchedule {
-            current: hmac::Key::new(algorithm.hmac_algorithm(), zeroes),
-            need_derive_for_extract: false,
+            current: _hkdf_extract(&salt, secret),
             algorithm,
             current_server_traffic_secret: Vec::new(),
             current_client_traffic_secret: Vec::new(),
             current_exporter_secret: Vec::new(),
         }
+    }
+
+    pub fn new_with_empty_secret(algorithm: hkdf::Algorithm) -> KeySchedule {
+        let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
+        let hash_len = algorithm.hmac_algorithm().digest_algorithm().output_len;
+        Self::new(algorithm, &zeroes[..hash_len])
     }
 
     /// Input the empty secret.
@@ -101,14 +106,10 @@ impl KeySchedule {
 
     /// Input the given secret.
     pub fn input_secret(&mut self, secret: &[u8]) {
-        if self.need_derive_for_extract {
-            let derived = self.derive_for_empty_hash(SecretKind::DerivedSecret);
-            self.current = hmac::Key::new(self.algorithm.hmac_algorithm(),
-                                          &derived);
-        }
-        self.need_derive_for_extract = true;
-        let new = _hkdf_extract(&self.current, secret);
-        self.current = new
+        let derived = self.derive_for_empty_hash(SecretKind::DerivedSecret);
+        let salt = hmac::Key::new(self.algorithm.hmac_algorithm(),
+                                      &derived);
+        self.current = _hkdf_extract(&salt, secret);
     }
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
@@ -271,8 +272,7 @@ mod test {
     fn smoke_test() {
         let fake_handshake_hash = [0u8; 32];
 
-        let mut ks = KeySchedule::new(hkdf::HKDF_SHA256);
-        ks.input_empty(); // no PSK
+        let mut ks = KeySchedule::new_with_empty_secret(hkdf::HKDF_SHA256);
         ks.derive(SecretKind::ResumptionPSKBinderKey, &fake_handshake_hash);
         ks.input_secret(&[1u8, 2u8, 3u8, 4u8]);
         ks.derive(SecretKind::ClientHandshakeTrafficSecret,
@@ -369,8 +369,7 @@ mod test {
         ];
 
         let hkdf = hkdf::HKDF_SHA256;
-        let mut ks = KeySchedule::new(hkdf);
-        ks.input_empty();
+        let mut ks = KeySchedule::new_with_empty_secret(hkdf);
         ks.input_secret(&ecdhe_secret);
 
         let got_client_hts = ks.derive(SecretKind::ClientHandshakeTrafficSecret,
