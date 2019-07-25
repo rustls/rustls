@@ -142,7 +142,7 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl,
     // Run a fake key_schedule to simulate what the server will do if it choses
     // to resume.
     let key_schedule = KeySchedule::new(hkdf_alg, &resuming.master_secret.0);
-    let base_key = key_schedule.derive(SecretKind::ResumptionPSKBinderKey, &empty_hash);
+    let base_key = key_schedule.derive_bytes(SecretKind::ResumptionPSKBinderKey, &empty_hash);
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
     if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
@@ -211,8 +211,8 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
     if !sess.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
         let write_key = sess.common.get_key_schedule()
-            .derive(SecretKind::ClientHandshakeTrafficSecret,
-                &handshake.hash_at_client_recvd_server_hello);
+            .derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
+                          &handshake.hash_at_client_recvd_server_hello);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.config.key_log.log(sess.common.protocol.labels().client_handshake_traffic_secret,
                              &handshake.randoms.client,
@@ -221,8 +221,8 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
     }
 
     let read_key = sess.common.get_key_schedule()
-        .derive(SecretKind::ServerHandshakeTrafficSecret,
-                &handshake.hash_at_client_recvd_server_hello);
+        .derive_bytes(SecretKind::ServerHandshakeTrafficSecret,
+                      &handshake.hash_at_client_recvd_server_hello);
     sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
     sess.config.key_log.log(sess.common.protocol.labels().server_handshake_traffic_secret,
                             &handshake.randoms.client,
@@ -234,8 +234,8 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
         let client = if sess.early_data.is_enabled() {
             // Traffic secret wasn't computed and stored above, so do it here.
             sess.common.get_key_schedule()
-                .derive(SecretKind::ClientHandshakeTrafficSecret,
-                        &handshake.hash_at_client_recvd_server_hello)
+                .derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
+                              &handshake.hash_at_client_recvd_server_hello)
         } else {
             key_schedule.current_client_traffic_secret.clone()
         };
@@ -399,8 +399,8 @@ impl hs::State for ExpectEncryptedExtensions {
                 // If no early traffic, set the encryption key for handshakes
                 let suite = sess.common.get_suite_assert();
                 let write_key = sess.common.get_key_schedule()
-                    .derive(SecretKind::ClientHandshakeTrafficSecret,
-                        &self.handshake.hash_at_client_recvd_server_hello);
+                    .derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
+                                  &self.handshake.hash_at_client_recvd_server_hello);
                 sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
                 sess.config.key_log.log(sess.common.protocol.labels().client_handshake_traffic_secret,
                                 &self.handshake.randoms.client,
@@ -826,8 +826,8 @@ impl hs::State for ExpectFinished {
             /* Derive the client-to-server encryption key before key schedule update */
             let key = sess.common
                 .get_key_schedule()
-                .derive(SecretKind::ClientHandshakeTrafficSecret,
-                        &st.handshake.hash_at_client_recvd_server_hello);
+                .derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
+                              &st.handshake.hash_at_client_recvd_server_hello);
             Some(key)
         } else {
             None
@@ -842,7 +842,7 @@ impl hs::State for ExpectFinished {
         let handshake_hash = st.handshake.transcript.get_current_hash();
         let read_key = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ServerApplicationTrafficSecret, &handshake_hash);
+            .derive_bytes(SecretKind::ServerApplicationTrafficSecret, &handshake_hash);
         sess.config.key_log.log(sess.common.protocol.labels().server_traffic_secret_0,
                                 &st.handshake.randoms.client,
                                 &read_key);
@@ -853,7 +853,7 @@ impl hs::State for ExpectFinished {
 
         let exporter_secret = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ExporterMasterSecret, &handshake_hash);
+            .derive_bytes(SecretKind::ExporterMasterSecret, &handshake_hash);
         sess.config.key_log.log(sess.common.protocol.labels().exporter_secret,
                                 &st.handshake.randoms.client,
                                 &exporter_secret);
@@ -891,7 +891,7 @@ impl hs::State for ExpectFinished {
         hs::check_aligned_handshake(sess)?;
         let write_key = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ClientApplicationTrafficSecret, &handshake_hash);
+            .derive_bytes(SecretKind::ClientApplicationTrafficSecret, &handshake_hash);
         sess.config.key_log.log(sess.common.protocol.labels().client_traffic_secret_0,
                                 &st.handshake.randoms.client,
                                 &write_key);
@@ -935,7 +935,7 @@ impl ExpectTraffic {
         let handshake_hash = self.handshake.transcript.get_current_hash();
         let resumption_master_secret = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
+            .derive_bytes(SecretKind::ResumptionMasterSecret, &handshake_hash);
         let secret = sess.common
             .get_key_schedule()
             .derive_ticket_psk(&resumption_master_secret, &nst.nonce.0);
