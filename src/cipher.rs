@@ -124,21 +124,19 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
 pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
                       secret: &[u8]) -> Box<dyn MessageDecrypter> {
     let secret = hkdf::Prk::new_less_safe(scs.hkdf_algorithm, secret);
-    let key = derive_traffic_key(&secret, scs.enc_key_len);
+    let key = derive_traffic_key(&secret, scs.get_aead_alg());
     let iv = derive_traffic_iv(&secret);
-    let aead_alg = scs.get_aead_alg();
 
-    Box::new(TLS13MessageDecrypter::new(aead_alg, &key, iv))
+    Box::new(TLS13MessageDecrypter::new(key, iv))
 }
 
 pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
                        secret: &[u8]) -> Box<dyn MessageEncrypter> {
     let secret = hkdf::Prk::new_less_safe(scs.hkdf_algorithm, secret);
-    let key = derive_traffic_key(&secret, scs.enc_key_len);
+    let key = derive_traffic_key(&secret, scs.get_aead_alg());
     let iv = derive_traffic_iv(&secret);
-    let aead_alg = scs.get_aead_alg();
 
-    Box::new(TLS13MessageEncrypter::new(aead_alg, &key, iv))
+    Box::new(TLS13MessageEncrypter::new(key, iv))
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
@@ -378,11 +376,7 @@ impl MessageDecrypter for TLS13MessageDecrypter {
 }
 
 impl TLS13MessageEncrypter {
-    fn new(alg: &'static aead::Algorithm,
-           enc_key: &[u8],
-           enc_iv: Iv) -> TLS13MessageEncrypter {
-        let key = aead::UnboundKey::new(alg, enc_key)
-            .unwrap();
+    fn new(key: aead::UnboundKey, enc_iv: Iv) -> TLS13MessageEncrypter {
         TLS13MessageEncrypter {
             enc_key: aead::LessSafeKey::new(key),
             iv: enc_iv,
@@ -391,11 +385,7 @@ impl TLS13MessageEncrypter {
 }
 
 impl TLS13MessageDecrypter {
-    fn new(alg: &'static aead::Algorithm,
-           dec_key: &[u8],
-           dec_iv: Iv) -> TLS13MessageDecrypter {
-        let key = aead::UnboundKey::new(alg, dec_key)
-            .unwrap();
+    fn new(key: aead::UnboundKey, dec_iv: Iv) -> TLS13MessageDecrypter {
         TLS13MessageDecrypter {
             dec_key: aead::LessSafeKey::new(key),
             iv: dec_iv,
