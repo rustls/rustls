@@ -161,7 +161,7 @@ impl CompleteClientHelloHandling {
             #[cfg(feature = "quic")] {
                 if sess.common.protocol == Protocol::Quic {
                     let client_early_traffic_secret = key_schedule
-                        .derive(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash);
+                        .derive_bytes(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash);
                     sess.config.key_log.log(sess.common.protocol.labels().client_early_traffic_secret,
                                 &self.handshake.randoms.client,
                                 &client_early_traffic_secret);
@@ -176,8 +176,8 @@ impl CompleteClientHelloHandling {
         key_schedule.input_secret(&kxr.premaster_secret);
 
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        let write_key = key_schedule.derive(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
-        let read_key = key_schedule.derive(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
+        let write_key = key_schedule.derive_bytes(SecretKind::ServerHandshakeTrafficSecret, &handshake_hash);
+        let read_key = key_schedule.derive_bytes(SecretKind::ClientHandshakeTrafficSecret, &handshake_hash);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
         sess.config.key_log.log(sess.common.protocol.labels().server_handshake_traffic_secret,
@@ -407,8 +407,8 @@ impl CompleteClientHelloHandling {
         sess.common.get_mut_key_schedule().input_empty();
         let write_key = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ServerApplicationTrafficSecret,
-                    &self.handshake.hash_at_server_fin);
+            .derive_bytes(SecretKind::ServerApplicationTrafficSecret,
+                          &self.handshake.hash_at_server_fin);
         let suite = sess.common.get_suite_assert();
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.config.key_log.log(sess.common.protocol.labels().server_traffic_secret_0,
@@ -418,8 +418,8 @@ impl CompleteClientHelloHandling {
         #[cfg(feature = "quic")] {
             let read_key = sess.common
                 .get_key_schedule()
-                .derive(SecretKind::ClientApplicationTrafficSecret,
-                        &self.handshake.hash_at_server_fin);
+                .derive_bytes(SecretKind::ClientApplicationTrafficSecret,
+                              &self.handshake.hash_at_server_fin);
             sess.common.quic.traffic_secrets = Some(quic::Secrets {
                 client: read_key,
                 server: write_key.clone(),
@@ -433,8 +433,8 @@ impl CompleteClientHelloHandling {
 
         let exporter_secret = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ExporterMasterSecret,
-                    &self.handshake.hash_at_server_fin);
+            .derive_bytes(SecretKind::ExporterMasterSecret,
+                          &self.handshake.hash_at_server_fin);
         sess.config.key_log.log(sess.common.protocol.labels().exporter_secret,
                                 &self.handshake.randoms.client,
                                 &exporter_secret);
@@ -714,7 +714,7 @@ fn get_server_session_value(handshake: &mut HandshakeDetails,
         .get_current_hash();
     let resumption_master_secret = sess.common
         .get_key_schedule()
-        .derive(SecretKind::ResumptionMasterSecret, &handshake_hash);
+        .derive_bytes(SecretKind::ResumptionMasterSecret, &handshake_hash);
     let secret = sess.common
         .get_key_schedule()
         .derive_ticket_psk(&resumption_master_secret, nonce);
@@ -841,8 +841,8 @@ impl hs::State for ExpectFinished {
         // Server traffic is already done.
         let read_key = sess.common
             .get_key_schedule()
-            .derive(SecretKind::ClientApplicationTrafficSecret,
-                    &self.handshake.hash_at_server_fin);
+            .derive_bytes(SecretKind::ClientApplicationTrafficSecret,
+                          &self.handshake.hash_at_server_fin);
         sess.config.key_log.log(sess.common.protocol.labels().client_traffic_secret_0,
                                 &self.handshake.randoms.client,
                                 &read_key);

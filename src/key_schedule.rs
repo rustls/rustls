@@ -113,7 +113,7 @@ impl KeySchedule {
     }
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
-    pub fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
+    pub fn derive_bytes(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         debug_assert_eq!(hs_hash.len(), self.algorithm.hmac_algorithm().digest_algorithm().output_len);
 
         _hkdf_expand_label_vec(&self.current,
@@ -129,7 +129,7 @@ impl KeySchedule {
     pub fn derive_for_empty_hash(&self, kind: SecretKind) -> Vec<u8> {
         let digest_alg = self.algorithm.hmac_algorithm().digest_algorithm();
         let empty_hash = digest::digest(digest_alg, &[]);
-        self.derive(kind, empty_hash.as_ref())
+        self.derive_bytes(kind, empty_hash.as_ref())
     }
 
     /// Return the current traffic secret, of given `kind`.
@@ -273,18 +273,18 @@ mod test {
         let fake_handshake_hash = [0u8; 32];
 
         let mut ks = KeySchedule::new_with_empty_secret(hkdf::HKDF_SHA256);
-        ks.derive(SecretKind::ResumptionPSKBinderKey, &fake_handshake_hash);
+        ks.derive_bytes(SecretKind::ResumptionPSKBinderKey, &fake_handshake_hash);
         ks.input_secret(&[1u8, 2u8, 3u8, 4u8]);
-        ks.derive(SecretKind::ClientHandshakeTrafficSecret,
-                  &fake_handshake_hash);
-        ks.derive(SecretKind::ServerHandshakeTrafficSecret,
-                  &fake_handshake_hash);
+        ks.derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
+                        &fake_handshake_hash);
+        ks.derive_bytes(SecretKind::ServerHandshakeTrafficSecret,
+                        &fake_handshake_hash);
         ks.input_empty();
-        ks.derive(SecretKind::ClientApplicationTrafficSecret,
-                  &fake_handshake_hash);
-        ks.derive(SecretKind::ServerApplicationTrafficSecret,
-                  &fake_handshake_hash);
-        ks.derive(SecretKind::ResumptionMasterSecret, &fake_handshake_hash);
+        ks.derive_bytes(SecretKind::ClientApplicationTrafficSecret,
+                        &fake_handshake_hash);
+        ks.derive_bytes(SecretKind::ServerApplicationTrafficSecret,
+                        &fake_handshake_hash);
+        ks.derive_bytes(SecretKind::ResumptionMasterSecret, &fake_handshake_hash);
     }
 
     #[test]
@@ -372,16 +372,16 @@ mod test {
         let mut ks = KeySchedule::new_with_empty_secret(hkdf);
         ks.input_secret(&ecdhe_secret);
 
-        let got_client_hts = ks.derive(SecretKind::ClientHandshakeTrafficSecret,
-                                       &hs_start_hash);
+        let got_client_hts = ks.derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
+                                             &hs_start_hash);
         assert_eq!(got_client_hts,
                    client_hts.to_vec());
         assert_eq!(derive_traffic_key(hkdf, &got_client_hts, client_hts_key.len()),
                    client_hts_key.to_vec());
         assert_eq!(derive_traffic_iv(hkdf, &got_client_hts).value(), &client_hts_iv);
 
-        let got_server_hts = ks.derive(SecretKind::ServerHandshakeTrafficSecret,
-                                       &hs_start_hash);
+        let got_server_hts = ks.derive_bytes(SecretKind::ServerHandshakeTrafficSecret,
+                                             &hs_start_hash);
         assert_eq!(got_server_hts,
                    server_hts.to_vec());
         assert_eq!(derive_traffic_key(hkdf, &got_server_hts, server_hts_key.len()),
@@ -390,16 +390,16 @@ mod test {
 
         ks.input_empty();
 
-        let got_client_ats = ks.derive(SecretKind::ClientApplicationTrafficSecret,
-                                       &hs_full_hash);
+        let got_client_ats = ks.derive_bytes(SecretKind::ClientApplicationTrafficSecret,
+                                             &hs_full_hash);
         assert_eq!(got_client_ats,
                    client_ats.to_vec());
         assert_eq!(derive_traffic_key(hkdf, &got_client_ats, client_ats_key.len()),
                    client_ats_key.to_vec());
         assert_eq!(derive_traffic_iv(hkdf, &got_client_ats).value(), &client_ats_iv);
 
-        let got_server_ats = ks.derive(SecretKind::ServerApplicationTrafficSecret,
-                                       &hs_full_hash);
+        let got_server_ats = ks.derive_bytes(SecretKind::ServerApplicationTrafficSecret,
+                                             &hs_full_hash);
         assert_eq!(got_server_ats,
                    server_ats.to_vec());
         assert_eq!(derive_traffic_key(hkdf, &got_server_ats, server_ats_key.len()),
