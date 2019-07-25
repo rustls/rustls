@@ -1,6 +1,6 @@
 /// Key schedule maintenance for TLS1.3
 
-use ring::{hkdf::{self, KeyType as _}, hmac, digest};
+use ring::{aead, hkdf::{self, KeyType as _}, hmac, digest};
 use crate::error::TLSError;
 use crate::cipher::{Iv, IvLen};
 use crate::msgs::base::PayloadU8;
@@ -220,9 +220,10 @@ impl From<hkdf::Okm<'_, PayloadU8Len>> for PayloadU8 {
     }
 }
 
-pub fn derive_traffic_key(secret: &hkdf::Prk, len: usize) -> Vec<u8> {
-    let payload: PayloadU8 = hkdf_expand(secret, PayloadU8Len(len), b"key", &[]);
-    payload.into_inner()
+pub fn derive_traffic_key(secret: &hkdf::Prk, aead_algorithm: &'static aead::Algorithm)
+    -> aead::UnboundKey
+{
+    hkdf_expand(secret, aead_algorithm, b"key", &[])
 }
 
 pub(crate) fn derive_traffic_iv(secret: &hkdf::Prk) -> Iv {
@@ -232,7 +233,7 @@ pub(crate) fn derive_traffic_iv(secret: &hkdf::Prk) -> Iv {
 #[cfg(test)]
 mod test {
     use super::{KeySchedule, SecretKind, derive_traffic_key, derive_traffic_iv};
-    use ring::hkdf;
+    use ring::{aead, hkdf};
 
     #[test]
     fn smoke_test() {
@@ -384,8 +385,28 @@ mod test {
         let traffic_secret = ks.derive_bytes(kind, &hash);
         assert_eq!(expected_traffic_secret, &traffic_secret[..]);
         let traffic_secret = hkdf::Prk::new_less_safe(ks.algorithm(), &traffic_secret);
-        assert_eq!(derive_traffic_key(&traffic_secret, expected_key.len()),
-                   expected_key);
-        assert_eq!(derive_traffic_iv(&traffic_secret).value(), expected_iv);
+
+        // Since we can't test key equality, we test the output of sealing with the key instead.
+        let aead_alg = &aead::AES_128_GCM;
+        let key = derive_traffic_key(&traffic_secret, aead_alg);
+        let seal_output = seal_zeroes(key);
+        let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
+        let expected_seal_output = seal_zeroes(expected_key);
+        assert_eq!(seal_output, expected_seal_output);
+        assert!(seal_output.len() >= 48); // Sanity check.
+
+        let iv = derive_traffic_iv(&traffic_secret);
+        assert_eq!(iv.value(), expected_iv);
+    }
+
+    fn seal_zeroes(key: aead::UnboundKey) -> Vec<u8> {
+        let key = aead::LessSafeKey::new(key);
+        let mut seal_output = vec![0; 32];
+        key.seal_in_place_append_tag(
+            aead::Nonce::assume_unique_for_key([0; aead::NONCE_LEN]),
+            aead::Aad::empty(),
+            &mut seal_output)
+            .unwrap();
+        seal_output
     }
 }
