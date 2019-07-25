@@ -74,7 +74,7 @@ impl CompleteClientHelloHandling {
         let handshake_hash = self.handshake.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
         let key_schedule = KeySchedule::new(hkdf_alg, &psk);
-        let base_key = key_schedule.derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
+        let base_key = key_schedule.derive_for_empty_hash(hkdf_alg, SecretKind::ResumptionPSKBinderKey);
         let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
         constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
@@ -712,9 +712,11 @@ fn get_server_session_value(handshake: &mut HandshakeDetails,
     let handshake_hash = handshake
         .transcript
         .get_current_hash();
-    let resumption_master_secret = sess.common
-        .get_key_schedule()
-        .derive_bytes(SecretKind::ResumptionMasterSecret, &handshake_hash);
+    let key_schedule = sess.common.get_key_schedule();
+    let resumption_master_secret =
+        key_schedule.derive(key_schedule.algorithm(),
+                            SecretKind::ResumptionMasterSecret,
+                            &handshake_hash);
     let secret = sess.common
         .get_key_schedule()
         .derive_ticket_psk(&resumption_master_secret, nonce);

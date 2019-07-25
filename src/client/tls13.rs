@@ -142,7 +142,7 @@ pub fn fill_in_psk_binder(sess: &mut ClientSessionImpl,
     // Run a fake key_schedule to simulate what the server will do if it choses
     // to resume.
     let key_schedule = KeySchedule::new(hkdf_alg, &resuming.master_secret.0);
-    let base_key = key_schedule.derive_bytes(SecretKind::ResumptionPSKBinderKey, &empty_hash);
+    let base_key = key_schedule.derive(hkdf_alg, SecretKind::ResumptionPSKBinderKey, &empty_hash);
     let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
     if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
@@ -933,9 +933,9 @@ impl ExpectTraffic {
     fn handle_new_ticket_tls13(&mut self, sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
         let nst = extract_handshake!(m, HandshakePayload::NewSessionTicketTLS13).unwrap();
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        let resumption_master_secret = sess.common
-            .get_key_schedule()
-            .derive_bytes(SecretKind::ResumptionMasterSecret, &handshake_hash);
+        let key_schedule = sess.common.get_key_schedule();
+        let resumption_master_secret =
+            key_schedule.derive(key_schedule.algorithm(), SecretKind::ResumptionMasterSecret, &handshake_hash);
         let secret = sess.common
             .get_key_schedule()
             .derive_ticket_psk(&resumption_master_secret, &nst.nonce.0);
