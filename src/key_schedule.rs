@@ -76,8 +76,7 @@ impl KeySchedule {
 
     /// Input the given secret.
     pub fn input_secret(&mut self, secret: &[u8]) {
-        let salt: hkdf::Salt =
-            self.derive_for_empty_hash(self.algorithm, SecretKind::DerivedSecret);
+        let salt: hkdf::Salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
         self.current = salt.extract(secret);
     }
 
@@ -100,14 +99,13 @@ impl KeySchedule {
     /// for the handshake hash.  Useful only for
     /// `SecretKind::ResumptionPSKBinderKey` and
     /// `SecretKind::DerivedSecret`.
-    pub fn derive_for_empty_hash<T, L>(&self, key_type: L, kind: SecretKind) -> T
+    pub fn derive_for_empty_hash<T>(&self, kind: SecretKind) -> T
         where
-            T: for <'a> From<hkdf::Okm<'a, L>>,
-            L: hkdf::KeyType,
+            T: for <'a> From<hkdf::Okm<'a, hkdf::Algorithm>>
     {
         let digest_alg = self.algorithm.hmac_algorithm().digest_algorithm();
         let empty_hash = digest::digest(digest_alg, &[]);
-        self.derive(key_type, kind, empty_hash.as_ref())
+        self.derive(self.algorithm, kind, empty_hash.as_ref())
     }
 
     /// Return the current traffic secret, of given `kind`.
