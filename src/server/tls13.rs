@@ -69,12 +69,11 @@ impl CompleteClientHelloHandling {
         };
 
         let suite = sess.common.get_suite_assert();
-        let hkdf_alg = suite.hkdf_algorithm;
         let suite_hash = suite.get_hash();
         let handshake_hash = self.handshake.transcript.get_hash_given(suite_hash, &binder_plaintext);
 
-        let key_schedule = KeySchedule::new(hkdf_alg, &psk);
-        let base_key = key_schedule.derive_for_empty_hash(hkdf_alg, SecretKind::ResumptionPSKBinderKey);
+        let key_schedule = KeySchedule::new(suite.hkdf_algorithm, &psk);
+        let base_key = key_schedule.derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
         let real_binder = key_schedule.sign_verify_data(&base_key, &handshake_hash);
 
         constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
