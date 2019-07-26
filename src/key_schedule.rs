@@ -4,6 +4,7 @@ use ring::{aead, hkdf::{self, KeyType as _}, hmac, digest};
 use crate::error::TLSError;
 use crate::cipher::{Iv, IvLen};
 use crate::msgs::base::PayloadU8;
+use crate::KeyLog;
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -41,9 +42,9 @@ impl SecretKind {
 pub struct KeySchedule {
     current: hkdf::Prk,
     algorithm: ring::hkdf::Algorithm,
-    pub current_client_traffic_secret: Vec<u8>,
-    pub current_server_traffic_secret: Vec<u8>,
-    pub current_exporter_secret: Vec<u8>,
+    pub current_client_traffic_secret: Option<hkdf::Prk>,
+    pub current_server_traffic_secret: Option<hkdf::Prk>,
+    pub current_exporter_secret: Option<hkdf::Prk>,
 }
 
 impl KeySchedule {
@@ -54,9 +55,9 @@ impl KeySchedule {
         KeySchedule {
             current: salt.extract(secret),
             algorithm,
-            current_server_traffic_secret: Vec::new(),
-            current_client_traffic_secret: Vec::new(),
-            current_exporter_secret: Vec::new(),
+            current_server_traffic_secret: None,
+            current_client_traffic_secret: None,
+            current_exporter_secret: None,
         }
     }
 
@@ -89,10 +90,14 @@ impl KeySchedule {
         hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash)
     }
 
-    pub fn derive_bytes(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
-        let payload: PayloadU8 =
-            self.derive(PayloadU8Len(self.algorithm.len()), kind, hs_hash);
-        payload.into_inner()
+    pub fn derive_logged_secret(&self, kind: SecretKind, hs_hash: &[u8],
+                                key_log: &dyn KeyLog, log_label: &str, client_random: &[u8; 32])
+        -> hkdf::Prk
+    {
+        let secret = self.derive::<PayloadU8, _>(PayloadU8Len(self.algorithm.len()), kind, hs_hash)
+            .into_inner();
+        key_log.log(log_label, client_random, &secret);
+        hkdf::Prk::new_less_safe(self.algorithm, &secret)
     }
 
     /// Derive a secret of given `kind` using the hash of the empty string
@@ -109,13 +114,15 @@ impl KeySchedule {
     }
 
     /// Return the current traffic secret, of given `kind`.
-    fn current_traffic_secret(&self, kind: SecretKind) -> &[u8] {
+    fn current_traffic_secret(&self, kind: SecretKind) -> &hkdf::Prk {
         match kind {
             SecretKind::ServerHandshakeTrafficSecret |
-            SecretKind::ServerApplicationTrafficSecret => &self.current_server_traffic_secret,
+            SecretKind::ServerApplicationTrafficSecret =>
+                &self.current_server_traffic_secret.as_ref().unwrap(),
             SecretKind::ClientEarlyTrafficSecret |
             SecretKind::ClientHandshakeTrafficSecret |
-            SecretKind::ClientApplicationTrafficSecret => &self.current_client_traffic_secret,
+            SecretKind::ClientApplicationTrafficSecret =>
+                &self.current_client_traffic_secret.as_ref().unwrap(),
             _ => unreachable!(),
         }
     }
@@ -124,8 +131,7 @@ impl KeySchedule {
     /// traffic secret.
     pub fn sign_finish(&self, kind: SecretKind, hs_hash: &[u8]) -> Vec<u8> {
         let base_key = self.current_traffic_secret(kind);
-        let base_key = hkdf::Prk::new_less_safe(self.algorithm, base_key);
-        self.sign_verify_data(&base_key, hs_hash)
+        self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
@@ -140,12 +146,9 @@ impl KeySchedule {
 
     /// Derive the next application traffic secret of given `kind`, returning
     /// it.
-    pub fn derive_next(&self, kind: SecretKind) -> Vec<u8> {
+    pub fn derive_next(&self, kind: SecretKind) -> hkdf::Prk {
         let base_key = self.current_traffic_secret(kind);
-        let base_key = hkdf::Prk::new_less_safe(self.algorithm, &base_key);
-        let payload: PayloadU8 =
-            hkdf_expand(&base_key, PayloadU8Len(self.algorithm.len()), b"traffic upd", &[]);
-        payload.into_inner()
+        hkdf_expand(&base_key, self.algorithm, b"traffic upd", &[])
     }
 
     /// Derive the PSK to use given a resumption_master_secret and
@@ -158,17 +161,13 @@ impl KeySchedule {
     pub fn export_keying_material(&self, out: &mut [u8],
                                   label: &[u8],
                                   context: Option<&[u8]>) -> Result<(), TLSError> {
-        if self.current_exporter_secret.is_empty() {
-            return Err(TLSError::HandshakeNotComplete);
-        }
-
+        let current_exporter_secret =
+            self.current_exporter_secret.as_ref().ok_or(TLSError::HandshakeNotComplete)?;
         let digest_alg = self.algorithm.hmac_algorithm().digest_algorithm();
 
         let h_empty = digest::digest(digest_alg, &[]);
-        let current_exporter_secret =
-            hkdf::Prk::new_less_safe(self.algorithm, &self.current_exporter_secret);
         let secret: hkdf::Prk =
-            hkdf_expand(&current_exporter_secret, self.algorithm, label, h_empty.as_ref());
+            hkdf_expand(current_exporter_secret, self.algorithm, label, h_empty.as_ref());
 
         let h_context = digest::digest(digest_alg, context.unwrap_or(&[]));
 
@@ -232,6 +231,7 @@ pub(crate) fn derive_traffic_iv(secret: &hkdf::Prk) -> Iv {
 mod test {
     use super::{KeySchedule, SecretKind, derive_traffic_key, derive_traffic_iv};
     use ring::{aead, hkdf};
+    use crate::KeyLog;
 
     #[test]
     fn test_vectors() {
@@ -361,9 +361,14 @@ mod test {
         expected_key: &[u8],
         expected_iv: &[u8],
     ) {
-        let traffic_secret = ks.derive_bytes(kind, &hash);
-        assert_eq!(expected_traffic_secret, &traffic_secret[..]);
-        let traffic_secret = hkdf::Prk::new_less_safe(ks.algorithm(), &traffic_secret);
+        struct Log<'a>(&'a [u8]);
+        impl KeyLog for Log<'_> {
+            fn log(&self, _label: &str, _client_random: &[u8], secret: &[u8]) {
+                assert_eq!(self.0, secret);
+            }
+        }
+        let log = Log(expected_traffic_secret);
+        let traffic_secret = ks.derive_logged_secret(kind, &hash, &log, "", &[0; 32]);
 
         // Since we can't test key equality, we test the output of sealing with the key instead.
         let aead_alg = &aead::AES_128_GCM;

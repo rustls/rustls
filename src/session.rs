@@ -628,9 +628,9 @@ impl SessionCommon {
         self.set_message_encrypter(cipher::new_tls13_write(scs, &write_key));
 
         if self.is_client {
-            self.get_mut_key_schedule().current_client_traffic_secret = write_key;
+            self.get_mut_key_schedule().current_client_traffic_secret = Some(write_key);
         } else {
-            self.get_mut_key_schedule().current_server_traffic_secret = write_key;
+            self.get_mut_key_schedule().current_server_traffic_secret = Some(write_key);
         }
     }
 
@@ -898,9 +898,9 @@ impl SessionCommon {
         self.set_message_decrypter(cipher::new_tls13_read(suite, &new_read_key));
 
         if read_kind == SecretKind::ServerApplicationTrafficSecret {
-            self.get_mut_key_schedule().current_server_traffic_secret = new_read_key;
+            self.get_mut_key_schedule().current_server_traffic_secret = Some(new_read_key);
         } else {
-            self.get_mut_key_schedule().current_client_traffic_secret = new_read_key;
+            self.get_mut_key_schedule().current_client_traffic_secret = Some(new_read_key);
         }
 
         Ok(())
@@ -941,7 +941,7 @@ pub(crate) struct Quic {
     pub params: Option<Vec<u8>>,
     pub alert: Option<AlertDescription>,
     pub hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub early_secret: Option<Vec<u8>>,
+    pub early_secret: Option<ring::hkdf::Prk>,
     pub hs_secrets: Option<quic::Secrets>,
     pub traffic_secrets: Option<quic::Secrets>,
 }

@@ -9,17 +9,16 @@ use crate::key_schedule;
 use crate::session::{SessionCommon, Protocol};
 
 use std::sync::Arc;
-use ring::hkdf::{self, KeyType as _};
+use ring::hkdf;
 use webpki;
-use crate::msgs::base::PayloadU8;
 
 /// Secrets used to encrypt/decrypt traffic
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    pub client: Vec<u8>,
+    pub client: Option<hkdf::Prk>,
     /// Secret used to encrypt packets transmitted by the server
-    pub server: Vec<u8>,
+    pub server: Option<hkdf::Prk>,
 }
 
 /// Generic methods for QUIC sessions
@@ -28,7 +27,7 @@ pub trait QuicExt {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]>;
 
     /// Return the early traffic secret, used to encrypt 0-RTT data.
-    fn get_early_secret(&self) -> Option<&[u8]>;
+    fn get_early_secret(&self) -> Option<&hkdf::Prk>;
 
     /// Consume unencrypted TLS handshake data.
     ///
@@ -55,8 +54,8 @@ impl QuicExt for ClientSession {
         self.imp.common.quic.params.as_ref().map(|v| v.as_ref())
     }
 
-    fn get_early_secret(&self) -> Option<&[u8]> {
-        self.imp.common.quic.early_secret.as_ref().map(|x| &x[..])
+    fn get_early_secret(&self) -> Option<&hkdf::Prk> {
+        self.imp.common.quic.early_secret.as_ref()
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
@@ -75,8 +74,8 @@ impl QuicExt for ServerSession {
         self.imp.common.quic.params.as_ref().map(|v| v.as_ref())
     }
 
-    fn get_early_secret(&self) -> Option<&[u8]> {
-        self.imp.common.quic.early_secret.as_ref().map(|x| &x[..])
+    fn get_early_secret(&self) -> Option<&hkdf::Prk> {
+        self.imp.common.quic.early_secret.as_ref()
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
@@ -126,20 +125,20 @@ fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Secrets> {
 
 fn update_secrets(this: &SessionCommon, client: &[u8], server: &[u8]) -> Secrets {
     let hkdf_alg= this.get_suite_assert().hkdf_algorithm;
-    let client: PayloadU8 = key_schedule::hkdf_expand(
+    let client = key_schedule::hkdf_expand(
         &hkdf::Prk::new_less_safe(hkdf_alg, client),
-        key_schedule::PayloadU8Len(hkdf_alg.len()),
+        hkdf_alg,
         b"traffic upd",
         &[]);
-    let server: PayloadU8 = key_schedule::hkdf_expand(
+    let server = key_schedule::hkdf_expand(
         &hkdf::Prk::new_less_safe(hkdf_alg, server),
-        key_schedule::PayloadU8Len(hkdf_alg.len()),
+        hkdf_alg,
         b"traffic upd",
         &[]);
 
     Secrets {
-        client: client.into_inner(),
-        server: server.into_inner(),
+        client: Some(client),
+        server: Some(server),
     }
 }
 

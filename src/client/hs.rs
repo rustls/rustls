@@ -330,14 +330,13 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         let client_hello_hash = handshake.transcript.get_hash_given(resuming_suite.get_hash(), &[]);
         let client_early_traffic_secret = sess.common
             .get_key_schedule()
-            .derive_bytes(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash);
+            .derive_logged_secret(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash,
+                                  &*sess.config.key_log,
+                                  sess.common.protocol.labels().client_early_traffic_secret,
+                                  &handshake.randoms.client);
         // Set early data encryption key
         sess.common
             .set_message_encrypter(cipher::new_tls13_write(resuming_suite, &client_early_traffic_secret));
-
-        sess.config.key_log.log(sess.common.protocol.labels().client_early_traffic_secret,
-                                &handshake.randoms.client,
-                                &client_early_traffic_secret);
 
         #[cfg(feature = "quic")]
         {

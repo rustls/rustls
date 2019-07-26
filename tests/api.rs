@@ -1952,6 +1952,6 @@ fn assert_lt(left: usize, right: usize) {
 #[test]
 fn session_types_are_not_huge() {
     // Arbitrary sizes
-    assert_lt(mem::size_of::<ServerSession>(), 1536);
-    assert_lt(mem::size_of::<ClientSession>(), 1536);
+    assert_lt(mem::size_of::<ServerSession>(), 2300);
+    assert_lt(mem::size_of::<ClientSession>(), 2300);
 }
