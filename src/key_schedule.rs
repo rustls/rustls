@@ -234,25 +234,6 @@ mod test {
     use ring::{aead, hkdf};
 
     #[test]
-    fn smoke_test() {
-        let fake_handshake_hash = [0u8; 32];
-
-        let mut ks = KeySchedule::new_with_empty_secret(hkdf::HKDF_SHA256);
-        ks.derive_bytes(SecretKind::ResumptionPSKBinderKey, &fake_handshake_hash);
-        ks.input_secret(&[1u8, 2u8, 3u8, 4u8]);
-        ks.derive_bytes(SecretKind::ClientHandshakeTrafficSecret,
-                        &fake_handshake_hash);
-        ks.derive_bytes(SecretKind::ServerHandshakeTrafficSecret,
-                        &fake_handshake_hash);
-        ks.input_empty();
-        ks.derive_bytes(SecretKind::ClientApplicationTrafficSecret,
-                        &fake_handshake_hash);
-        ks.derive_bytes(SecretKind::ServerApplicationTrafficSecret,
-                        &fake_handshake_hash);
-        ks.derive_bytes(SecretKind::ResumptionMasterSecret, &fake_handshake_hash);
-    }
-
-    #[test]
     fn test_vectors() {
         /* These test vectors generated with OpenSSL. */
         let hs_start_hash = [
