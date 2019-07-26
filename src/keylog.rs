@@ -40,6 +40,13 @@ pub trait KeyLog : Send + Sync {
     /// These strings are selected to match the NSS key log format:
     /// https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
     fn log(&self, label: &str, client_random: &[u8], secret: &[u8]);
+
+    /// Indicates whether the secret with label `label` will be logged.
+    ///
+    /// If `will_log` returns true then `log` will be called with the secret.
+    /// Otherwise, `log` will not be called for the secret. This is a
+    /// performance optimization.
+    fn will_log(&self, _label: &str) -> bool { true }
 }
 
 /// KeyLog that does exactly nothing.
@@ -47,6 +54,8 @@ pub struct NoKeyLog;
 
 impl KeyLog for NoKeyLog {
     fn log(&self, _: &str, _: &[u8], _: &[u8]) {}
+    #[inline]
+    fn will_log(&self, _label: &str) -> bool { false }
 }
 
 // Internal mutable state for KeyLogFile

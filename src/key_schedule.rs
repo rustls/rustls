@@ -94,10 +94,12 @@ impl KeySchedule {
                                 key_log: &dyn KeyLog, log_label: &str, client_random: &[u8; 32])
         -> hkdf::Prk
     {
-        let secret = self.derive::<PayloadU8, _>(PayloadU8Len(self.algorithm.len()), kind, hs_hash)
-            .into_inner();
-        key_log.log(log_label, client_random, &secret);
-        hkdf::Prk::new_less_safe(self.algorithm, &secret)
+        if key_log.will_log(log_label) {
+            let secret = self.derive::<PayloadU8, _>(PayloadU8Len(self.algorithm.len()), kind, hs_hash)
+                .into_inner();
+            key_log.log(log_label, client_random, &secret);
+        }
+        self.derive(self.algorithm, kind, hs_hash)
     }
 
     /// Derive a secret of given `kind` using the hash of the empty string
