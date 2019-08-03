@@ -233,16 +233,16 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
         let key_schedule = sess.common.key_schedule.as_ref().unwrap();
         let client = if sess.early_data.is_enabled() {
             // Traffic secret wasn't computed and stored above, so do it here.
-            Some(sess.common.get_key_schedule().derive(
+            sess.common.get_key_schedule().derive(
                 sess.common.get_key_schedule().algorithm(),
                 SecretKind::ClientHandshakeTrafficSecret,
-                &handshake.hash_at_client_recvd_server_hello))
+                &handshake.hash_at_client_recvd_server_hello)
         } else {
-            key_schedule.current_client_traffic_secret.clone()
+            key_schedule.current_client_traffic_secret.clone().unwrap()
         };
         sess.common.quic.hs_secrets = Some(quic::Secrets {
             client,
-            server: key_schedule.current_server_traffic_secret.clone(),
+            server: key_schedule.current_server_traffic_secret.clone().unwrap(),
         });
     }
 
@@ -916,8 +916,8 @@ impl hs::State for ExpectFinished {
             if sess.common.protocol == Protocol::Quic {
                 let key_schedule = sess.common.key_schedule.as_ref().unwrap();
                 sess.common.quic.traffic_secrets = Some(quic::Secrets {
-                    client: key_schedule.current_client_traffic_secret.clone(),
-                    server: key_schedule.current_server_traffic_secret.clone(),
+                    client: key_schedule.current_client_traffic_secret.clone().unwrap(),
+                    server: key_schedule.current_server_traffic_secret.clone().unwrap(),
                 });
                 return Ok(Box::new(ExpectQUICTraffic(st)));
             }

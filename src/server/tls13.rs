@@ -195,8 +195,8 @@ impl CompleteClientHelloHandling {
 
         #[cfg(feature = "quic")] {
             sess.common.quic.hs_secrets = Some(quic::Secrets {
-                client: Some(write_key.clone()),
-                server: Some(read_key.clone()),
+                client: write_key.clone(),
+                server: read_key.clone(),
             });
         }
 
@@ -427,8 +427,8 @@ impl CompleteClientHelloHandling {
                         SecretKind::ClientApplicationTrafficSecret,
                         &self.handshake.hash_at_server_fin);
             sess.common.quic.traffic_secrets = Some(quic::Secrets {
-                client: Some(read_key),
-                server: Some(write_key.clone()),
+                client: read_key,
+                server: write_key.clone(),
             });
         }
 

@@ -16,9 +16,9 @@ use webpki;
 #[derive(Clone, Debug)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    pub client: Option<hkdf::Prk>,
+    pub client: hkdf::Prk,
     /// Secret used to encrypt packets transmitted by the server
-    pub server: Option<hkdf::Prk>,
+    pub server: hkdf::Prk,
 }
 
 /// Generic methods for QUIC sessions
@@ -137,8 +137,8 @@ fn update_secrets(this: &SessionCommon, client: &[u8], server: &[u8]) -> Secrets
         &[]);
 
     Secrets {
-        client: Some(client),
-        server: Some(server),
+        client,
+        server,
     }
 }
 
