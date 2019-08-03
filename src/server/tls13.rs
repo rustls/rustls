@@ -195,8 +195,8 @@ impl CompleteClientHelloHandling {
 
         #[cfg(feature = "quic")] {
             sess.common.quic.hs_secrets = Some(quic::Secrets {
-                client: write_key.clone(),
-                server: read_key.clone(),
+                client: read_key.clone(),
+                server: write_key.clone(),
             });
         }
 
