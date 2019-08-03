@@ -46,7 +46,7 @@ pub trait QuicExt {
     fn get_alert(&self) -> Option<AlertDescription>;
 
     /// Compute the secrets to use following a 1-RTT key update from their previous values.
-    fn update_secrets(&self, client: &[u8], server: &[u8]) -> Secrets;
+    fn update_secrets(&self, client: &hkdf::Prk, server: &hkdf::Prk) -> Secrets;
 }
 
 impl QuicExt for ClientSession {
@@ -66,7 +66,7 @@ impl QuicExt for ClientSession {
 
     fn get_alert(&self) -> Option<AlertDescription> { self.imp.common.quic.alert }
 
-    fn update_secrets(&self, client: &[u8], server: &[u8]) -> Secrets { update_secrets(&self.imp.common, client, server) }
+    fn update_secrets(&self, client: &hkdf::Prk, server: &hkdf::Prk) -> Secrets { update_secrets(&self.imp.common, client, server) }
 }
 
 impl QuicExt for ServerSession {
@@ -86,7 +86,7 @@ impl QuicExt for ServerSession {
 
     fn get_alert(&self) -> Option<AlertDescription> { self.imp.common.quic.alert }
 
-    fn update_secrets(&self, client: &[u8], server: &[u8]) -> Secrets { update_secrets(&self.imp.common, client, server) }
+    fn update_secrets(&self, client: &hkdf::Prk, server: &hkdf::Prk) -> Secrets { update_secrets(&self.imp.common, client, server) }
 }
 
 fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TLSError> {
@@ -123,15 +123,15 @@ fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Secrets> {
     None
 }
 
-fn update_secrets(this: &SessionCommon, client: &[u8], server: &[u8]) -> Secrets {
+fn update_secrets(this: &SessionCommon, client: &hkdf::Prk, server: &hkdf::Prk) -> Secrets {
     let hkdf_alg= this.get_suite_assert().hkdf_algorithm;
     let client = key_schedule::hkdf_expand(
-        &hkdf::Prk::new_less_safe(hkdf_alg, client),
+        client,
         hkdf_alg,
         b"traffic upd",
         &[]);
     let server = key_schedule::hkdf_expand(
-        &hkdf::Prk::new_less_safe(hkdf_alg, server),
+        server,
         hkdf_alg,
         b"traffic upd",
         &[]);
