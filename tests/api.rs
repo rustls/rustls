@@ -19,6 +19,8 @@ use rustls::TLSError;
 use rustls::sign;
 use rustls::{ALL_CIPHERSUITES, SupportedCipherSuite};
 use rustls::KeyLog;
+#[cfg(feature = "quic")]
+use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 
 use webpki;
 
@@ -1698,7 +1700,6 @@ fn tls13_stateless_resumption() {
 #[test]
 #[cfg(feature = "quic")]
 fn quic_handshake() {
-/* XXX:
     // Returns the sender's next secrets to use, or the receiver's error.
     fn step(send: &mut dyn Session, recv: &mut dyn Session) -> Result<Option<quic::Secrets>, TLSError> {
         let mut buf = Vec::new();
@@ -1717,6 +1718,20 @@ fn quic_handshake() {
             assert_eq!(recv.get_alert(), None);
         }
         Ok(secrets)
+    }
+
+    fn equal_prk(x: &ring::hkdf::Prk, y: &ring::hkdf::Prk) -> bool {
+        let mut x_data = [0; 16];
+        let mut y_data = [0; 16];
+        let x_okm = x.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
+        x_okm.fill(&mut x_data[..]).unwrap();
+        let y_okm = y.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
+        y_okm.fill(&mut y_data[..]).unwrap();
+        x_data == y_data
+    }
+
+    fn equal_secrets(x: &quic::Secrets, y: &quic::Secrets) -> bool {
+        equal_prk(&x.client, &y.client) && equal_prk(&x.server, &y.server)
     }
 
     let kt = KeyType::RSA;
@@ -1743,7 +1758,7 @@ fn quic_handshake() {
     let server_hs = step(&mut server, &mut client).unwrap().unwrap();
     assert!(server.get_early_secret().is_none());
     let client_hs = step(&mut client, &mut server).unwrap().unwrap();
-    assert_eq!(server_hs, client_hs);
+    assert!(equal_secrets(&server_hs, &client_hs));
     assert!(client.is_handshaking());
     let server_1rtt = step(&mut server, &mut client).unwrap().unwrap();
     assert!(!client.is_handshaking());
@@ -1751,8 +1766,8 @@ fn quic_handshake() {
     assert!(server.is_handshaking());
     let client_1rtt = step(&mut client, &mut server).unwrap().unwrap();
     assert!(!server.is_handshaking());
-    assert_eq!(server_1rtt, client_1rtt);
-    assert_ne!(server_hs, server_1rtt);
+    assert!(equal_secrets(&server_1rtt, &client_1rtt));
+    assert!(!equal_secrets(&server_hs, &server_1rtt));
     assert!(step(&mut client, &mut server).unwrap().is_none());
     assert!(step(&mut server, &mut client).unwrap().is_none());
 
@@ -1766,7 +1781,7 @@ fn quic_handshake() {
     {
         let client_early = client.get_early_secret().unwrap();
         let server_early = server.get_early_secret().unwrap();
-        assert_eq!(client_early, server_early);
+        assert!(equal_prk(client_early, server_early));
     }
     step(&mut server, &mut client).unwrap().unwrap();
     step(&mut client, &mut server).unwrap().unwrap();
@@ -1804,7 +1819,6 @@ fn quic_handshake() {
         client.get_alert(),
         Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
     );
-*/
 }
 
 #[test]
