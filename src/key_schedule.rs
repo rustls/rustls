@@ -34,6 +34,19 @@ impl SecretKind {
             SecretKind::DerivedSecret => b"derived",
         }
     }
+
+    fn log_label(self) -> Option<&'static str> {
+        use self::SecretKind::*;
+        Some(match self {
+            ClientEarlyTrafficSecret => "CLIENT_EARLY_TRAFFIC_SECRET",
+            ClientHandshakeTrafficSecret => "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+            ServerHandshakeTrafficSecret => "SERVER_HANDSHAKE_TRAFFIC_SECRET",
+            ClientApplicationTrafficSecret => "CLIENT_TRAFFIC_SECRET_0",
+            ServerApplicationTrafficSecret => "SERVER_TRAFFIC_SECRET_0",
+            ExporterMasterSecret => "EXPORTER_SECRET",
+            _ => { return None; }
+        })
+    }
 }
 
 /// This is the TLS1.3 key schedule.  It stores the current secret,
@@ -91,9 +104,10 @@ impl KeySchedule {
     }
 
     pub fn derive_logged_secret(&self, kind: SecretKind, hs_hash: &[u8],
-                                key_log: &dyn KeyLog, log_label: &str, client_random: &[u8; 32])
+                                key_log: &dyn KeyLog, client_random: &[u8; 32])
         -> hkdf::Prk
     {
+        let log_label = kind.log_label().expect("not a loggable secret");
         if key_log.will_log(log_label) {
             let secret = self.derive::<PayloadU8, _>(PayloadU8Len(self.algorithm.len()), kind, hs_hash)
                 .into_inner();
@@ -370,7 +384,7 @@ mod test {
             }
         }
         let log = Log(expected_traffic_secret);
-        let traffic_secret = ks.derive_logged_secret(kind, &hash, &log, "", &[0; 32]);
+        let traffic_secret = ks.derive_logged_secret(kind, &hash, &log, &[0; 32]);
 
         // Since we can't test key equality, we test the output of sealing with the key instead.
         let aead_alg = &aead::AES_128_GCM;
