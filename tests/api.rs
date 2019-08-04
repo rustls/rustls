@@ -21,6 +21,8 @@ use rustls::{ALL_CIPHERSUITES, SupportedCipherSuite};
 use rustls::KeyLog;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
+#[cfg(feature = "quic")]
+use ring::hkdf;
 
 use webpki;
 
@@ -1770,6 +1772,37 @@ fn quic_handshake() {
     assert!(!equal_secrets(&server_hs, &server_1rtt));
     assert!(step(&mut client, &mut server).unwrap().is_none());
     assert!(step(&mut server, &mut client).unwrap().is_none());
+
+    // key update
+    let initial = quic::Secrets {
+        // Constant dummy values for reproducibility
+        client: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+            0xb8, 0x76, 0x77, 0x08, 0xf8, 0x77, 0x23, 0x58, 0xa6, 0xea, 0x9f, 0xc4, 0x3e, 0x4a,
+            0xdd, 0x2c, 0x96, 0x1b, 0x3f, 0x52, 0x87, 0xa6, 0xd1, 0x46, 0x7e, 0xe0, 0xae, 0xab,
+            0x33, 0x72, 0x4d, 0xbf,
+        ]),
+        server: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+            0x42, 0xdc, 0x97, 0x21, 0x40, 0xe0, 0xf2, 0xe3, 0x98, 0x45, 0xb7, 0x67, 0x61, 0x34,
+            0x39, 0xdc, 0x67, 0x58, 0xca, 0x43, 0x25, 0x9b, 0x87, 0x85, 0x06, 0x82, 0x4e, 0xb1,
+            0xe4, 0x38, 0xd8, 0x55,
+        ]),
+    };
+    let updated = client.update_secrets(&initial.client, &initial.server);
+    // The expected values will need to be updated if the negotiated hash function changes.
+    assert!(equal_prk(
+        &updated.client,
+        &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+            101, 250, 130, 179, 97, 208, 160, 166, 213, 90, 196, 212, 96, 49, 190, 24, 237, 225,
+            68, 97, 141, 123, 162, 108, 231, 21, 255, 184, 49, 245, 178, 148
+        ]))
+    );
+    assert!(equal_prk(
+        &updated.server,
+        &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+            171, 127, 244, 22, 119, 205, 252, 100, 179, 94, 91, 45, 99, 82, 236, 124, 44, 251, 63,
+            57, 94, 215, 175, 138, 178, 161, 97, 80, 51, 250, 107, 85
+        ]))
+    );
 
     // 0-RTT handshake
     let mut client =
