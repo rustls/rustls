@@ -332,7 +332,6 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             .get_key_schedule()
             .derive_logged_secret(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash,
                                   &*sess.config.key_log,
-                                  "CLIENT_EARLY_TRAFFIC_SECRET",
                                   &handshake.randoms.client);
         // Set early data encryption key
         sess.common

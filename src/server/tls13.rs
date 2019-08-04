@@ -164,7 +164,6 @@ impl CompleteClientHelloHandling {
                             SecretKind::ClientEarlyTrafficSecret,
                             &client_hello_hash,
                             &*sess.config.key_log,
-                            "CLIENT_EARLY_TRAFFIC_SECRET",
                             &self.handshake.randoms.client);
                     // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
                     // before the application can see.
@@ -181,7 +180,6 @@ impl CompleteClientHelloHandling {
             SecretKind::ServerHandshakeTrafficSecret,
             &handshake_hash,
             &*sess.config.key_log,
-            "SERVER_HANDSHAKE_TRAFFIC_SECRET",
             &self.handshake.randoms.client);
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
 
@@ -189,7 +187,6 @@ impl CompleteClientHelloHandling {
             SecretKind::ClientHandshakeTrafficSecret,
             &handshake_hash,
             &*sess.config.key_log,
-            "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
             &self.handshake.randoms.client);
         sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
 
@@ -416,7 +413,6 @@ impl CompleteClientHelloHandling {
             .derive_logged_secret(SecretKind::ServerApplicationTrafficSecret,
                                   &self.handshake.hash_at_server_fin,
                                   &*sess.config.key_log,
-                                  "SERVER_TRAFFIC_SECRET_0",
                                   &self.handshake.randoms.client);
         let suite = sess.common.get_suite_assert();
         sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
@@ -439,7 +435,6 @@ impl CompleteClientHelloHandling {
             .derive_logged_secret(SecretKind::ExporterMasterSecret,
                                   &self.handshake.hash_at_server_fin,
                                   &*sess.config.key_log,
-                                  "EXPORTER_SECRET",
                                   &self.handshake.randoms.client);
         sess.common
             .get_mut_key_schedule()
@@ -849,7 +844,6 @@ impl hs::State for ExpectFinished {
             .derive_logged_secret(SecretKind::ClientApplicationTrafficSecret,
                                   &self.handshake.hash_at_server_fin,
                                   &*sess.config.key_log,
-                                  "CLIENT_TRAFFIC_SECRET_0",
                                   &self.handshake.randoms.client);
 
         let suite = sess.common.get_suite_assert();
