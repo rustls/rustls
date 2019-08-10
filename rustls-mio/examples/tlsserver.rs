@@ -222,6 +222,10 @@ impl Connection {
         let processed = self.tls_session.process_new_packets();
         if processed.is_err() {
             error!("cannot process packet: {:?}", processed);
+
+            // last gasp write to send any alerts
+            self.do_tls_write_and_handle_error();
+
             self.closing = true;
             return;
         }
