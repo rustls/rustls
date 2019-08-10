@@ -19,10 +19,14 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
-* Next release (0.15.3):
+* 0.16.0 (2019-08-10):
   - Optimisation of read path for polled non-blocking IO.
   - Correct an omission in TLS1.3 middlebox compatibility mode, causing
     handshake failures with servers behind buggy middleboxes.
+  - Move to *ring* 0.16.
+  - Assorted refactoring to reduce memory usage during and after
+    handshake.
+  - Update other dependencies.
 * 0.15.2 (2019-04-02):
   - Moved example code around for benefit of Fuchsia.
   - Example code fixes for Windows -- Windows is now a tested platform.
