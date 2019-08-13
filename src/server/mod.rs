@@ -256,6 +256,36 @@ impl ServerConfig {
         self.alpn_protocols.clear();
         self.alpn_protocols.extend_from_slice(protocols);
     }
+
+    /// Access configuration options whose use is dangerous and requires
+    /// extra care.
+    #[cfg(feature = "dangerous_configuration")]
+    pub fn dangerous(&mut self) -> danger::DangerousServerConfig {
+        danger::DangerousServerConfig { cfg: self }
+    }
+}
+
+/// Container for unsafe APIs
+#[cfg(feature = "dangerous_configuration")]
+pub mod danger {
+    use std::sync::Arc;
+
+    use super::ServerConfig;
+    use super::verify::ClientCertVerifier;
+
+    /// Accessor for dangerous configuration options.
+    pub struct DangerousServerConfig<'a> {
+        /// The underlying ClientConfig
+        pub cfg: &'a mut ServerConfig
+    }
+
+    impl<'a> DangerousServerConfig<'a> {
+        /// Overrides the default `ClientCertVerifier` with something else.
+        pub fn set_certificate_verifier(&mut self,
+                                        verifier: Arc<ClientCertVerifier>) {
+            self.cfg.verifier = verifier;
+        }
+    }
 }
 
 pub struct ServerSessionImpl {

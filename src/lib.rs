@@ -301,3 +301,5 @@ pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
 #[cfg(feature = "dangerous_configuration")]
 pub use crate::client::danger::DangerousClientConfig;
 
+#[cfg(feature = "dangerous_configuration")]
+pub use crate::server::danger::DangerousServerConfig;
