@@ -256,6 +256,11 @@ impl ServerConfig {
         self.alpn_protocols.clear();
         self.alpn_protocols.extend_from_slice(protocols);
     }
+
+    /// Overrides the default `ClientCertVerifier` with something else.
+    pub fn set_client_certificate_verifier(&mut self, verifier: Arc<dyn verify::ClientCertVerifier>) {
+        self.verifier = verifier;
+    }
 }
 
 pub struct ServerSessionImpl {
