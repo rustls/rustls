@@ -42,6 +42,7 @@ jobs:
       minimum:
         rustup_toolchain: ${{ variables.minimum_toolchain }}
   steps:
+    - template: admin/pipelines/ubuntu.yml
     - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: $(rustup_toolchain)
@@ -56,6 +57,7 @@ jobs:
     vmImage: ubuntu-16.04
   container: ubuntu:18.04
   steps:
+    - template: admin/pipelines/ubuntu.yml
     - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: nightly
@@ -68,6 +70,7 @@ jobs:
     vmImage: ubuntu-16.04
   container: ubuntu:18.04
   steps:
+    - template: admin/pipelines/ubuntu.yml
     - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: nightly
