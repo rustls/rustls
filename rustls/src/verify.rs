@@ -22,6 +22,7 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
     &webpki::ECDSA_P256_SHA384,
     &webpki::ECDSA_P384_SHA256,
     &webpki::ECDSA_P384_SHA384,
+    &webpki::ED25519,
     &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
     &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
     &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
@@ -275,6 +276,8 @@ impl WebPKIVerifier {
             SignatureScheme::ECDSA_NISTP384_SHA384,
             SignatureScheme::ECDSA_NISTP256_SHA256,
 
+            SignatureScheme::ED25519,
+
             SignatureScheme::RSA_PSS_SHA512,
             SignatureScheme::RSA_PSS_SHA384,
             SignatureScheme::RSA_PSS_SHA256,
@@ -421,6 +424,8 @@ static ECDSA_SHA384: SignatureAlgorithms = &[
     &webpki::ECDSA_P384_SHA384
 ];
 
+static ED25519: SignatureAlgorithms = &[&webpki::ED25519];
+
 static RSA_SHA256: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA256];
 static RSA_SHA384: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA384];
 static RSA_SHA512: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA512];
@@ -433,6 +438,8 @@ fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSErr
         // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
         SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
         SignatureScheme::ECDSA_NISTP384_SHA384 => Ok(ECDSA_SHA384),
+
+        SignatureScheme::ED25519 => Ok(ED25519),
 
         SignatureScheme::RSA_PKCS1_SHA256 => Ok(RSA_SHA256),
         SignatureScheme::RSA_PKCS1_SHA384 => Ok(RSA_SHA384),
@@ -486,6 +493,7 @@ fn convert_alg_tls13(scheme: SignatureScheme)
     match scheme {
         ECDSA_NISTP256_SHA256 => Ok(&webpki::ECDSA_P256_SHA256),
         ECDSA_NISTP384_SHA384 => Ok(&webpki::ECDSA_P384_SHA384),
+        ED25519 => Ok(&webpki::ED25519),
         RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
         RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
         RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),

@@ -45,7 +45,9 @@ enum_builder! {
         Anonymous => 0x00,
         RSA => 0x01,
         DSA => 0x02,
-        ECDSA => 0x03
+        ECDSA => 0x03,
+        ED25519 => 0x07,
+        ED448 => 0x08
     }
 }
 

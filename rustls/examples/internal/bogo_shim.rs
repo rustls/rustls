@@ -259,6 +259,9 @@ fn lookup_scheme(scheme: u16) -> rustls::SignatureScheme {
         0x0804 => rustls::SignatureScheme::RSA_PSS_SHA256,
         0x0805 => rustls::SignatureScheme::RSA_PSS_SHA384,
         0x0806 => rustls::SignatureScheme::RSA_PSS_SHA512,
+        0x0807 => rustls::SignatureScheme::ED25519,
+        // TODO: add support for Ed448
+        // 0x0808 => rustls::SignatureScheme::ED448,
         _ => {
             println_err!("Unsupported signature scheme {:04x}", scheme);
             process::exit(BOGO_NACK);

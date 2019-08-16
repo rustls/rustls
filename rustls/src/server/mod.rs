@@ -245,7 +245,7 @@ impl ServerConfig {
     /// disregarded.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA or ECDSA private key.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn set_single_cert(&mut self,
@@ -261,7 +261,7 @@ impl ServerConfig {
     /// connections, irrespective of things like SNI hostname.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA or ECDSA private key.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
     /// and is ignored if empty.

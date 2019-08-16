@@ -63,8 +63,6 @@
     "CurveTest-Server-P-521-TLS13": "",
     "CurveTest-Client-Compressed-P-521-TLS13": "",
     "CurveTest-Server-Compressed-P-521-TLS13": "",
-    "*-Ed25519": "no ed25519 yet",
-    "*-Ed25519-*": "",
     "GREASE-*": "not implemented",
     "LargeMessage-Reject": "",
     "DelegatedCredentials-*": "not implemented",
