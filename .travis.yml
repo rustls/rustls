@@ -3,16 +3,16 @@ group: edge
 matrix:
   include:
     - os: linux
-      dist: trusty
+      dist: bionic
       sudo: required
       rust: stable
     - os: linux
-      dist: trusty
+      dist: bionic
       sudo: required
       rust: nightly
       env: COVERAGE=1
     - os: linux
-      dist: trusty
+      dist: bionic
       sudo: required
       rust: nightly
       script:
@@ -20,12 +20,12 @@ matrix:
     - os: osx
       rust: stable
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update              ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl@1.1 ; fi
   - if [[ "$COVERAGE" == "1" ]]; then admin/build-lcov ; fi
   - if [[ "$COVERAGE" == "1" ]]; then gem install coveralls-lcov ; fi
   - if [[ "$COVERAGE" == "1" ]]; then rustup install stable ; fi
-  - if [[ "$COVERAGE" == "1" ]]; then sudo apt-get install libclang-common-3.8-dev llvm-3.8-dev ; fi
+  - if [[ "$COVERAGE" == "1" ]]; then sudo apt-get install libclang-common-7-dev llvm-7-dev ; fi
 script:
   - cargo build
   - RUST_BACKTRACE=1 cargo test
