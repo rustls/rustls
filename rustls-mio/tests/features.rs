@@ -127,6 +127,29 @@ fn client_auth_by_client_with_ecdsa_suite() {
 }
 
 #[test]
+fn client_auth_by_client_with_eddsa_suite() {
+    let test_ca = common::new_test_ca();
+
+    let mut server = OpenSSLServer::new_eddsa(test_ca.path(), 9025);
+    server.arg("-verify").arg("0")
+          .arg("-tls1_3");
+    server.run();
+
+    server.client()
+        .client_auth(
+            &test_ca.path().join("rsa").join("end.fullchain"),
+            &test_ca.path().join("rsa").join("end.rsa"),
+        )
+        .expect_log("Got CertificateRequest")
+        .expect_log("Attempting client auth")
+        .expect(r"AlertReceived\(UnknownCA\)")
+        .fails()
+        .go();
+
+    server.kill();
+}
+
+#[test]
 fn client_auth_requested_but_unsupported() {
     let test_ca = common::new_test_ca();
 
