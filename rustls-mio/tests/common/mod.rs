@@ -194,7 +194,11 @@ pub fn openssl_find() -> String {
     // We need a homebrew openssl, because OSX comes with
     // 0.9.8y or something equally ancient!
     if cfg!(target_os = "macos") {
-        return "/usr/local/opt/openssl/bin/openssl".to_string();
+        if Path::new("/usr/local/opt/openssl@1.1/bin/openssl").is_file() {
+            return "/usr/local/opt/openssl@1.1/bin/openssl".to_string();
+        } else {
+            return "/usr/local/opt/openssl/bin/openssl".to_string();
+        }
     }
 
     "openssl".to_string()
