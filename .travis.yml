@@ -5,15 +5,15 @@ group: edge
 matrix:
   include:
     - os: linux
-      dist: trusty
+      dist: bionic
       sudo: required
       rust: stable
     - os: linux
-      dist: trusty
+      dist: bionic
       sudo: required
       rust: nightly
     - os: linux
-      dist: trusty
+      dist: bionic
       sudo: required
       rust: nightly
       script:
@@ -21,8 +21,8 @@ matrix:
     - os: osx
       rust: stable
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update              ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl@1.1 ; fi
 script:
   - cargo build
   - RUST_BACKTRACE=1 cargo test
