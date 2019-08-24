@@ -247,7 +247,7 @@ pub mod danger {
     impl<'a> DangerousClientConfig<'a> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self,
-                                        verifier: Arc<ServerCertVerifier>) {
+                                        verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
         }
     }

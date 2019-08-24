@@ -100,7 +100,7 @@ pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
 
     while left.wants_write() {
         let sz = {
-            let into_buf: &mut io::Write = &mut &mut buf[..];
+            let into_buf: &mut dyn io::Write = &mut &mut buf[..];
             left.write_tls(into_buf).unwrap()
         };
         total += sz;
@@ -110,7 +110,7 @@ pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
 
         let mut offs = 0;
         loop {
-            let from_buf: &mut io::Read = &mut &buf[offs..sz];
+            let from_buf: &mut dyn io::Read = &mut &buf[offs..sz];
             offs += right.read_tls(from_buf).unwrap();
             if sz == offs {
                 break;
