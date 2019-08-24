@@ -235,7 +235,7 @@ fn client_resumes() {
             .go();
     }
 
-    let cache_filename = "target/debug/session.cache";
+    let cache_filename = "../target/debug/session.cache";
     let _ = fs::remove_file(cache_filename);
 
     server.client()
@@ -265,8 +265,8 @@ fn server_resumes() {
         .http_mode()
         .run();
 
-    let sess1 = "target/debug/session1.ssl";
-    let sess2 = "target/debug/session2.ssl";
+    let sess1 = "../target/debug/session1.ssl";
+    let sess2 = "../target/debug/session2.ssl";
 
     server.client()
         .arg("-sess_out")
@@ -310,7 +310,7 @@ fn server_resumes_with_tickets() {
         .http_mode()
         .run();
 
-    let sess = "target/debug/ticket.ssl";
+    let sess = "../target/debug/ticket.ssl";
 
     server.client()
         .arg("-sess_out")

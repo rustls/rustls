@@ -1,49 +1,7 @@
-[package]
-name = "rustls"
-version = "0.16.0"
-edition = "2018"
-authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
-license = "Apache-2.0/ISC/MIT"
-readme = "README.md"
-description = "Rustls is a modern TLS library written in Rust."
-homepage = "https://github.com/ctz/rustls"
-repository = "https://github.com/ctz/rustls"
-categories = ["network-programming", "cryptography"]
-
-[dependencies]
-base64 = "0.10"
-log = { version = "0.4.4", optional = true }
-ring = "0.16.5"
-sct = "0.6.0"
-webpki = "0.21.0"
-
-[features]
-default = ["logging"]
-logging = ["log"]
-dangerous_configuration = []
-quic = []
-
-[dev-dependencies]
-env_logger = "0.6.1"
-log = "0.4.4"
-tempfile = "3.0"
-webpki-roots = "0.17.0"
-criterion = "0.2.11"
-
-[[example]]
-name = "bogo_shim"
-path = "examples/internal/bogo_shim.rs"
-required-features = ["dangerous_configuration", "quic"]
-
-[[example]]
-name = "trytls_shim"
-path = "examples/internal/trytls_shim.rs"
-
-[[example]]
-name = "bench"
-path = "examples/internal/bench.rs"
-
-[[bench]]
-name = "benchmarks"
-path = "tests/benchmarks.rs"
-harness = false
+[workspace]
+members = [
+  # the main library and tests
+  "rustls",
+  # tests and example code that depend on mio
+  "rustls-mio",
+]

@@ -19,7 +19,7 @@ quic = ["rustls/quic"]
 [dependencies]
 base64 = "0.10"
 log = { version = "0.4.4", optional = true }
-rustls = { path = ".." }
+rustls = { path = "../rustls" }
 sct = "0.6"
 webpki = "0.21.0"
 

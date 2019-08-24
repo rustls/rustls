@@ -4,11 +4,22 @@ use super::message::Message;
 
 use std::fs;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
 #[test]
 fn test_read_fuzz_corpus() {
-    let prefix = "fuzz/corpus/message/";
-    for file in fs::read_dir(prefix).unwrap() {
+    fn corpus_dir() -> PathBuf {
+        let from_subcrate = Path::new("../fuzz/corpus/message");
+        let from_root = Path::new("fuzz/corpus/message");
+
+        if from_root.is_dir() {
+            from_root.to_path_buf()
+        } else {
+            from_subcrate.to_path_buf()
+        }
+    }
+
+    for file in fs::read_dir(corpus_dir()).unwrap() {
         let mut f = fs::File::open(file.unwrap().path()).unwrap();
         let mut bytes = Vec::new();
         f.read_to_end(&mut bytes).unwrap();

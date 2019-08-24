@@ -26,7 +26,7 @@ macro_rules! embed_files {
     ) => {
         $(
             const $name: &'static [u8] = include_bytes!(
-                concat!("../../test-ca/", $keytype, "/", $path));
+                concat!("../../../test-ca/", $keytype, "/", $path));
         )+
 
         pub fn bytes_for(keytype: &str, path: &str) -> &'static [u8] {

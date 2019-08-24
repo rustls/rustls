@@ -131,11 +131,11 @@ pub fn skipped(why: &str) {
 }
 
 pub fn tlsserver_find() -> &'static str {
-    "target/debug/examples/tlsserver"
+    "../target/debug/examples/tlsserver"
 }
 
 pub fn tlsclient_find() -> &'static str {
-    "target/debug/examples/tlsclient"
+    "../target/debug/examples/tlsclient"
 }
 
 pub fn openssl_find() -> String {

@@ -53,7 +53,7 @@ def remove(outfile, infile, pattern):
     subprocess.check_call(lcov_exe('--remove', infile, os.getcwd() + pattern, '-o', outfile))
 
 def extract(outfile, infile):
-    subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/src/*', '-o', outfile))
+    subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/rustls/src/*', '-o', outfile))
 
 def genhtml(outdir, infile):
     subprocess.check_call(['genhtml', '--branch-coverage', '--demangle-cpp', '--legend',
@@ -63,17 +63,17 @@ all_infos = []
 
 # unit tests
 cleanup()
-rustc('--profile', 'test', '--lib')
+rustc('--package', 'rustls', '--profile', 'test', '--lib')
 run('rustls')
 all_infos.append(lcov('rustls.info'))
 
 cleanup()
 for example in 'bench bogo_shim trytls_shim'.split():
-    rustc('--profile', 'dev', '--example', example)
+    rustc('--package', 'rustls', '--profile', 'dev', '--example', example)
 
-# tests
+# crate-level tests
 for test in 'api'.split():
-    rustc('--profile', 'dev', '--test', test)
+    rustc('--package', 'rustls', '--profile', 'dev', '--test', test)
     run(test)
 
 # trytls/bogo
@@ -82,6 +82,6 @@ sh('cd bogo && ./runme')
 all_infos.append(lcov('tests.info'))
 
 merge('merged.info', all_infos)
-remove('coverage.info', 'merged.info', '/src/msgs/macros.rs')
+remove('coverage.info', 'merged.info', '/rustls/src/msgs/macros.rs')
 extract('final.info', 'coverage.info')
 genhtml('target/coverage/', 'final.info')

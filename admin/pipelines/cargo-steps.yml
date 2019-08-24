@@ -13,6 +13,3 @@ steps:
     displayName: "cargo test (debug; no default features; no run)"
   - script: cargo test --release --no-run
     displayName: "cargo test (release; no run)"
-  - script: cargo test --all-features
-    displayName: "rustls-mio cargo test (debug; all features)"
-    workingDirectory: rustls-mio
