@@ -175,7 +175,8 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
     }
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
-    let mut cfg = ServerConfig::new(client_auth);
+    let mut cfg = ServerConfig::new(NoClientAuth::new());
+    cfg.set_client_certificate_verifier(client_auth);
     cfg.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
 
     cfg
