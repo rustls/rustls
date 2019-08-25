@@ -181,7 +181,7 @@ Options:
 Some sample runs:
 
 ```
-$ ./tlsclient --http mozilla-modern.badssl.com
+$ cargo run --example tlsclient -- --http mozilla-modern.badssl.com
 HTTP/1.1 200 OK
 Server: nginx/1.6.2 (Ubuntu)
 Date: Wed, 01 Jun 2016 18:44:00 GMT
@@ -193,7 +193,7 @@ Content-Length: 644
 or
 
 ```
-$ ./target/debug/examples/tlsclient --http expired.badssl.com
+$ cargo run --example tlsclient -- --http expired.badssl.com
 TLS error: WebPKIError(CertExpired)
 Connection closed
 ```
@@ -253,13 +253,13 @@ Here's a sample run; we start a TLS echo server, then connect to it with
 openssl and tlsclient:
 
 ```
-$ ./tlsserver --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443 echo &
+$ cargo run --example tlsserver -- --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443 echo &
 $ echo hello world | openssl s_client -ign_eof -quiet -connect localhost:8443
 depth=2 CN = ponytown RSA CA
 verify error:num=19:self signed certificate in certificate chain
 hello world
 ^C
-$ echo hello world | ./tlsclient --cafile test-ca/rsa/ca.cert -p 8443 localhost
+$ echo hello world | cargo run --example tlsclient -- --cafile test-ca/rsa/ca.cert -p 8443 localhost
 hello world
 ^C
 ```
