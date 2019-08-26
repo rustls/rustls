@@ -108,7 +108,7 @@ impl<S, T> StreamOwned<S, T> where S: Session, T: Read + Write {
     }
 
     /// Get a mutable reference to the underlying socket
-    pub fn get_mut(&mut self) -> &T {
+    pub fn get_mut(&mut self) -> &mut T {
         &mut self.sock
     }
 }
