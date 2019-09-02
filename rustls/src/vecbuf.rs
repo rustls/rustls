@@ -154,6 +154,30 @@ impl ChunkVecBuffer {
     }
 }
 
+/// This is a simple wrapper around an object
+/// which implements `std::io::Write` in order to autoimplement `WriteV`.
+/// It uses the `write_vectored` method from `std::io::Write` in order
+/// to do this.
+pub struct WriteVAdapter<T: io::Write>(T);
+
+impl<T: io::Write> WriteVAdapter<T> {
+    /// build an adapter from a Write object
+    pub fn new(inner: T) -> Self {
+        WriteVAdapter(inner)
+    }
+}
+
+impl<T: io::Write> WriteV for WriteVAdapter<T> {
+    fn writev(&mut self, buffers: &[&[u8]]) -> io::Result<usize> {
+        self.0.write_vectored(
+            &buffers
+                .iter()
+                .map(|b| io::IoSlice::new(b))
+                .collect::<Vec<io::IoSlice>>(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::ChunkVecBuffer;
