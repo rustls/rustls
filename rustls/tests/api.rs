@@ -311,13 +311,15 @@ fn client_close_notify() {
 }
 
 struct ServerCheckCertResolve {
-    expected: String
+    expected_sni: String,
+    expected_sigalgs: Option<Vec<SignatureScheme>>,
 }
 
 impl ServerCheckCertResolve {
-    fn new(expect: &str) -> ServerCheckCertResolve {
+    fn new(expected_sni: &str) -> ServerCheckCertResolve {
         ServerCheckCertResolve {
-            expected: expect.to_string()
+            expected_sni: expected_sni.to_string(),
+            expected_sigalgs: None,
         }
     }
 }
@@ -329,15 +331,23 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         -> Option<sign::CertifiedKey> {
         if let Some(got_dns_name) = server_name {
             let got: &str = got_dns_name.into();
-            if got != self.expected {
-                panic!("unexpected dns name (wanted '{}' got '{:?}')", &self.expected, got_dns_name);
+            if got != self.expected_sni {
+                panic!("unexpected dns name (wanted '{}' got '{:?}')",
+                       &self.expected_sni, got_dns_name);
             }
         } else {
-            panic!("dns name not provided (wanted '{}')", &self.expected);
+            panic!("dns name not provided (wanted '{}')", &self.expected_sni);
         }
 
         if sigschemes.len() == 0 {
             panic!("no signature schemes shared by client");
+        }
+
+        if let Some(expected_sigalgs) = &self.expected_sigalgs {
+            if expected_sigalgs != &sigschemes {
+                panic!("unexpected signature schemes (wanted {:?} got {:?})",
+                       self.expected_sigalgs, sigschemes);
+            }
         }
 
         None
@@ -358,6 +368,53 @@ fn server_cert_resolve_with_sni() {
         let err = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(err.is_err(), true);
     }
+}
+
+fn check_sigalgs_reduced_by_ciphersuite(kt: KeyType, suite: CipherSuite,
+                                        expected_sigalgs: Vec<SignatureScheme>) {
+    let mut client_config = make_client_config(kt);
+    client_config.ciphersuites = vec![ find_suite(suite) ];
+
+    let mut server_config = make_server_config(kt);
+
+    server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+        expected_sni: "sni-value".into(),
+        expected_sigalgs: Some(expected_sigalgs),
+    });
+
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("sni-value"));
+    let mut server = ServerSession::new(&Arc::new(server_config));
+
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err.is_err(), true);
+}
+
+#[test]
+fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
+    check_sigalgs_reduced_by_ciphersuite(
+        KeyType::RSA,
+        CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        vec![
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA256,
+        ]
+    );
+}
+
+#[test]
+fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
+    check_sigalgs_reduced_by_ciphersuite(
+        KeyType::ECDSA,
+        CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        vec![
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+        ]
+    );
 }
 
 struct ServerCheckNoSNI {}
