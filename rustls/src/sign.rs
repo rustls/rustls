@@ -1,5 +1,4 @@
 use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::util;
 use crate::key;
 use crate::error::TLSError;
 
@@ -188,8 +187,11 @@ impl RSASigningKey {
 
 impl SigningKey for RSASigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
-        util::first_in_both(ALL_RSA_SCHEMES, offered)
-            .map(|scheme| RSASigner::new(self.key.clone(), scheme))
+        ALL_RSA_SCHEMES
+            .iter()
+            .filter(|scheme| offered.contains(scheme))
+            .nth(0)
+            .map(|scheme| RSASigner::new(self.key.clone(), *scheme))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {

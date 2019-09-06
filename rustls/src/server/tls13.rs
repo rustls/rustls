@@ -31,7 +31,6 @@ use crate::verify;
 use crate::rand;
 use crate::sign;
 use crate::suites;
-use crate::util;
 #[cfg(feature = "logging")]
 use crate::log::{warn, trace, debug};
 use crate::error::TLSError;
@@ -490,11 +489,20 @@ impl CompleteClientHelloHandling {
             .collect();
 
         let supported_groups = suites::KeyExchange::supported_groups();
-        let chosen_group = util::first_in_both(supported_groups, &share_groups);
+        let chosen_group = supported_groups
+            .iter()
+            .filter(|group| share_groups.contains(group))
+            .nth(0)
+            .cloned();
+
         if chosen_group.is_none() {
             // We don't have a suitable key share.  Choose a suitable group and
             // send a HelloRetryRequest.
-            let retry_group_maybe = util::first_in_both(supported_groups, groups_ext);
+            let retry_group_maybe = supported_groups
+                .iter()
+                .filter(|group| groups_ext.contains(group))
+                .nth(0)
+                .cloned();
             self.handshake.transcript.add_message(chm);
 
             if let Some(group) = retry_group_maybe {
