@@ -19,7 +19,6 @@ use crate::session::SessionSecrets;
 use crate::server::{ServerSessionImpl, ServerConfig};
 use crate::suites;
 use crate::verify;
-use crate::util;
 use crate::rand;
 use crate::sign;
 #[cfg(feature = "logging")]
@@ -162,7 +161,10 @@ impl ExtensionProcessing {
                     .to_string()));
             }
 
-            sess.alpn_protocol = util::first_in_both(our_protocols, &their_proto_vecs);
+            sess.alpn_protocol = our_protocols.iter()
+                .filter(|protocol| their_proto_vecs.contains(protocol))
+                .nth(0)
+                .cloned();
             if let Some(ref selected_protocol) = sess.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts.push(ServerExtension::make_alpn(&[selected_protocol]));
@@ -741,12 +743,18 @@ impl State for ExpectClientHello {
             return Err(incompatible(sess, "no supported sig scheme"));
         }
 
-        let group = util::first_in_both(suites::KeyExchange::supported_groups(),
-                                        groups_ext.as_slice())
+        let group = suites::KeyExchange::supported_groups()
+            .iter()
+            .filter(|group| groups_ext.contains(group))
+            .nth(0)
+            .cloned()
             .ok_or_else(|| incompatible(sess, "no supported group"))?;
 
-        let ecpoint = util::first_in_both(ECPointFormatList::supported().as_slice(),
-                                          ecpoints_ext.as_slice())
+        let ecpoint = ECPointFormatList::supported()
+            .iter()
+            .filter(|format| ecpoints_ext.contains(format))
+            .nth(0)
+            .cloned()
             .ok_or_else(|| incompatible(sess, "no supported point format"))?;
 
         debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);

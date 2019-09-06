@@ -211,7 +211,6 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
-mod util;
 #[allow(missing_docs)]
 #[macro_use]
 mod msgs;
