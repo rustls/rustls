@@ -565,8 +565,7 @@ impl State for ExpectClientHello {
             sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_2);
         }
 
-        // Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
-        let default_sigschemes_ext = SupportedSignatureSchemes::default();
+        // --- Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
 
         // Extract and validate the SNI DNS name, if any, before giving it to
         // the cert resolver. In particular, if it is invalid then we should
@@ -586,15 +585,25 @@ impl State for ExpectClientHello {
             None => None,
         };
 
-        let sigschemes_ext = client_hello.get_sigalgs_extension()
-          .unwrap_or(&default_sigschemes_ext);
+        // We communicate to the upper layer what kind of key they should choose
+        // via the sigschemes value.  Clients tend to treat this extension
+        // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
+        // So: reduce the offered sigschemes to those compatible with the
+        // intersection of ciphersuites.
+        let mut common_suites = sess.config.ciphersuites.clone();
+        common_suites.retain(|scs| client_hello.cipher_suites.contains(&scs.suite));
+
+        let mut sigschemes_ext = client_hello.get_sigalgs_extension()
+            .cloned()
+            .unwrap_or_else(SupportedSignatureSchemes::default);
+        sigschemes_ext.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &common_suites));
 
         // Choose a certificate.
         let mut certkey = {
             let sni_ref = sni.as_ref().map(webpki::DNSName::as_ref);
             trace!("sni {:?}", sni_ref);
             trace!("sig schemes {:?}", sigschemes_ext);
-            let certkey = sess.config.cert_resolver.resolve(sni_ref, sigschemes_ext);
+            let certkey = sess.config.cert_resolver.resolve(sni_ref, &sigschemes_ext);
             certkey.ok_or_else(|| {
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no server certificate chain resolved".to_string())
@@ -726,7 +735,7 @@ impl State for ExpectClientHello {
 
         // Now we have chosen a ciphersuite, we can make kx decisions.
         let sigschemes = sess.common.get_suite_assert()
-            .resolve_sig_schemes(sigschemes_ext);
+            .resolve_sig_schemes(&sigschemes_ext);
 
         if sigschemes.is_empty() {
             return Err(incompatible(sess, "no supported sig scheme"));

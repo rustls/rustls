@@ -433,6 +433,15 @@ pub fn reduce_given_version(all: &[&'static SupportedCipherSuite],
         .collect()
 }
 
+/// Return true if `sigscheme` is usable by any of the given suites.
+pub fn compatible_sigscheme_for_suites(sigscheme: SignatureScheme,
+                                       common_suites: &[&'static SupportedCipherSuite]) -> bool {
+    let sigalg = sigscheme.sign();
+
+    common_suites.iter()
+        .any(|&suite| suite.sign == SignatureAlgorithm::Anonymous || suite.sign == sigalg)
+}
+
 #[cfg(test)]
 mod test {
     use crate::msgs::enums::CipherSuite;
