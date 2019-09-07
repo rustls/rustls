@@ -30,7 +30,7 @@ pub trait Signer : Send + Sync {
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and
-/// optional stapled OCSP response and/or SCT.
+/// optional stapled OCSP response and/or SCT list.
 #[derive(Clone)]
 pub struct CertifiedKey {
     /// The certificate chain.

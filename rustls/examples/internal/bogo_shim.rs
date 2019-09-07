@@ -217,8 +217,10 @@ struct FixedSignatureSchemeServerCertResolver {
 impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self,
                server_name: Option<webpki::DNSNameRef<'_>>,
-               sigschemes: &[rustls::SignatureScheme]) -> Option<rustls::sign::CertifiedKey> {
-        let mut certkey = self.resolver.resolve(server_name, sigschemes)?;
+               sigschemes: &[rustls::SignatureScheme],
+               alpn: Option<&[&[u8]]>
+               ) -> Option<rustls::sign::CertifiedKey> {
+        let mut certkey = self.resolver.resolve(server_name, sigschemes, alpn)?;
         certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,

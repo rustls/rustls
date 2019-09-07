@@ -96,13 +96,24 @@ pub trait ProducesTickets : Send + Sync {
 /// in server authentication.
 pub trait ResolvesServerCert : Send + Sync {
     /// Choose a certificate chain and matching key given any server DNS
-    /// name provided via SNI, and signature schemes.
+    /// name provided via SNI, any ALPN protocol names, and signature schemes
+    /// advertised by the client.
     ///
-    /// The certificate chain is returned as a vec of `Certificate`s,
-    /// the key is inside a `SigningKey`.
+    /// `server_name` is `None` if the client did not supply an SNI name.
+    ///
+    /// `sigschemes` is replaced with a standard-specified default if the client
+    /// omitted this extension.
+    ///
+    /// `alpn_protocols` is `None` if the client did not include an ALPN extension.
+    ///
+    /// Return a `CertifiedKey` to continue the handshake.  A `CertifiedKey`
+    /// binds together a signing key and a certificate chain.
+    ///
+    /// Return `None` to abort the handshake.
     fn resolve(&self,
                server_name: Option<webpki::DNSNameRef>,
-               sigschemes: &[SignatureScheme])
+               sigschemes: &[SignatureScheme],
+               alpn_protocols: Option<&[&[u8]]>)
                -> Option<sign::CertifiedKey>;
 }
 
