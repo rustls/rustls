@@ -310,43 +310,41 @@ fn client_close_notify() {
     }
 }
 
+#[derive(Default)]
 struct ServerCheckCertResolve {
-    expected_sni: String,
+    expected_sni: Option<String>,
     expected_sigalgs: Option<Vec<SignatureScheme>>,
-}
-
-impl ServerCheckCertResolve {
-    fn new(expected_sni: &str) -> ServerCheckCertResolve {
-        ServerCheckCertResolve {
-            expected_sni: expected_sni.to_string(),
-            expected_sigalgs: None,
-        }
-    }
+    expected_alpn: Option<Vec<Vec<u8>>>,
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
                server_name: Option<webpki::DNSNameRef<'_>>,
-               sigschemes: &[SignatureScheme])
+               sigschemes: &[SignatureScheme],
+               alpn: Option<&[&[u8]]>)
         -> Option<sign::CertifiedKey> {
-        if let Some(got_dns_name) = server_name {
-            let got: &str = got_dns_name.into();
-            if got != self.expected_sni {
-                panic!("unexpected dns name (wanted '{}' got '{:?}')",
-                       &self.expected_sni, got_dns_name);
-            }
-        } else {
-            panic!("dns name not provided (wanted '{}')", &self.expected_sni);
-        }
-
         if sigschemes.len() == 0 {
             panic!("no signature schemes shared by client");
+        }
+
+        if let Some(expected_sni) = &self.expected_sni {
+            let sni: &str = server_name.expect("sni unexpectedly absent").into();
+            assert_eq!(expected_sni, sni);
         }
 
         if let Some(expected_sigalgs) = &self.expected_sigalgs {
             if expected_sigalgs != &sigschemes {
                 panic!("unexpected signature schemes (wanted {:?} got {:?})",
                        self.expected_sigalgs, sigschemes);
+            }
+        }
+
+        if let Some(expected_alpn) = &self.expected_alpn {
+            let alpn = alpn.expect("alpn unexpectedly absent");
+            assert_eq!(alpn.len(), expected_alpn.len());
+
+            for (got, wanted) in alpn.iter().zip(expected_alpn.iter()) {
+                assert_eq!(got, &wanted.as_slice());
             }
         }
 
@@ -360,7 +358,10 @@ fn server_cert_resolve_with_sni() {
         let client_config = make_client_config(*kt);
         let mut server_config = make_server_config(*kt);
 
-        server_config.cert_resolver = Arc::new(ServerCheckCertResolve::new("the-value-from-sni"));
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_sni: Some("the-value-from-sni".into()),
+            ..Default::default()
+        });
 
         let mut client = ClientSession::new(&Arc::new(client_config), dns_name("the-value-from-sni"));
         let mut server = ServerSession::new(&Arc::new(server_config));
@@ -370,6 +371,27 @@ fn server_cert_resolve_with_sni() {
     }
 }
 
+#[test]
+fn server_cert_resolve_with_alpn() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        client_config.alpn_protocols = vec!["foo".into(), "bar".into()];
+
+        let mut server_config = make_server_config(*kt);
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_alpn: Some(vec![ b"foo".to_vec(), b"bar".to_vec() ]),
+            ..Default::default()
+        });
+
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("sni-value"));
+        let mut server = ServerSession::new(&Arc::new(server_config));
+
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert_eq!(err.is_err(), true);
+    }
+}
+
+
 fn check_sigalgs_reduced_by_ciphersuite(kt: KeyType, suite: CipherSuite,
                                         expected_sigalgs: Vec<SignatureScheme>) {
     let mut client_config = make_client_config(kt);
@@ -378,11 +400,11 @@ fn check_sigalgs_reduced_by_ciphersuite(kt: KeyType, suite: CipherSuite,
     let mut server_config = make_server_config(kt);
 
     server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
-        expected_sni: "sni-value".into(),
         expected_sigalgs: Some(expected_sigalgs),
+        ..Default::default()
     });
 
-    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("sni-value"));
+    let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
     let mut server = ServerSession::new(&Arc::new(server_config));
 
     let err = do_handshake_until_error(&mut client, &mut server);
@@ -422,7 +444,8 @@ struct ServerCheckNoSNI {}
 impl ResolvesServerCert for ServerCheckNoSNI {
     fn resolve(&self,
                server_name: Option<webpki::DNSNameRef<'_>>,
-               _sigschemes: &[SignatureScheme])
+               _sigschemes: &[SignatureScheme],
+               _alpn: Option<&[&[u8]]>)
         -> Option<sign::CertifiedKey> {
         assert!(server_name.is_none());
 

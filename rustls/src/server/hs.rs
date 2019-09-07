@@ -154,15 +154,15 @@ impl ExtensionProcessing {
         let our_protocols = &sess.config.alpn_protocols;
         let maybe_their_protocols = hello.get_alpn_extension();
         if let Some(their_protocols) = maybe_their_protocols {
-            let their_proto_vecs = their_protocols.to_vecs();
+            let their_protocols = their_protocols.to_slices();
 
-            if their_proto_vecs.iter().any(Vec::is_empty) {
+            if their_protocols.iter().any(|protocol| protocol.is_empty()) {
                 return Err(TLSError::PeerMisbehavedError("client offered empty ALPN protocol"
                     .to_string()));
             }
 
             sess.alpn_protocol = our_protocols.iter()
-                .filter(|protocol| their_proto_vecs.contains(protocol))
+                .filter(|protocol| their_protocols.contains(&protocol.as_slice()))
                 .nth(0)
                 .cloned();
             if let Some(ref selected_protocol) = sess.alpn_protocol {
@@ -600,12 +600,24 @@ impl State for ExpectClientHello {
             .unwrap_or_else(SupportedSignatureSchemes::default);
         sigschemes_ext.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &common_suites));
 
+        let alpn_protocols = client_hello.get_alpn_extension()
+            .map(|protos| protos.to_slices());
+
         // Choose a certificate.
         let mut certkey = {
             let sni_ref = sni.as_ref().map(webpki::DNSName::as_ref);
             trace!("sni {:?}", sni_ref);
             trace!("sig schemes {:?}", sigschemes_ext);
-            let certkey = sess.config.cert_resolver.resolve(sni_ref, &sigschemes_ext);
+            trace!("alpn protocols {:?}", alpn_protocols);
+
+            let alpn_slices = match alpn_protocols {
+                Some(ref vec) => Some(vec.as_slice()),
+                None => None,
+            };
+
+            let certkey = sess.config.cert_resolver.resolve(sni_ref,
+                                                            &sigschemes_ext,
+                                                            alpn_slices);
             certkey.ok_or_else(|| {
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no server certificate chain resolved".to_string())

@@ -333,7 +333,7 @@ pub type ProtocolNameList = VecU16OfPayloadU8;
 
 pub trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
-    fn to_vecs(&self) -> Vec<Vec<u8>>;
+    fn to_slices(&self) -> Vec<&[u8]>;
     fn as_single_slice(&self) -> Option<&[u8]>;
 }
 
@@ -348,12 +348,10 @@ impl ConvertProtocolNameList for ProtocolNameList {
         ret
     }
 
-    fn to_vecs(&self) -> Vec<Vec<u8>> {
-        let mut ret = Vec::new();
-        for proto in self {
-            ret.push(proto.0.clone());
-        }
-        ret
+    fn to_slices(&self) -> Vec<&[u8]> {
+        self.iter()
+            .map(|proto| -> &[u8] { &proto.0 })
+            .collect::<Vec<&[u8]>>()
     }
 
     fn as_single_slice(&self) -> Option<&[u8]> {
