@@ -21,6 +21,7 @@ use crate::suites;
 use crate::verify;
 use crate::rand;
 use crate::sign;
+use crate::server::client_hello::ClientHello;
 #[cfg(feature = "logging")]
 use crate::log::{trace, debug};
 use crate::error::TLSError;
@@ -615,9 +616,9 @@ impl State for ExpectClientHello {
                 None => None,
             };
 
-            let certkey = sess.config.cert_resolver.resolve(sni_ref,
-                                                            &sigschemes_ext,
-                                                            alpn_slices);
+            let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
+
+            let certkey = sess.config.cert_resolver.resolve(&client_hello);
             certkey.ok_or_else(|| {
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no server certificate chain resolved".to_string())

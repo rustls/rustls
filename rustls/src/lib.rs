@@ -277,6 +277,7 @@ pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
 pub use crate::vecbuf::{WriteV, WriteVAdapter};
+pub use crate::server::client_hello::ClientHello;
 
 /// Message signing interfaces and implementations.
 pub mod sign;

@@ -19,6 +19,7 @@ use rustls::TLSError;
 use rustls::sign;
 use rustls::{ALL_CIPHERSUITES, SupportedCipherSuite};
 use rustls::KeyLog;
+use rustls::ClientHello;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 #[cfg(feature = "quic")]
@@ -319,28 +320,26 @@ struct ServerCheckCertResolve {
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef<'_>>,
-               sigschemes: &[SignatureScheme],
-               alpn: Option<&[&[u8]]>)
+               client_hello: &ClientHello)
         -> Option<sign::CertifiedKey> {
-        if sigschemes.len() == 0 {
+        if client_hello.sigschemes().len() == 0 {
             panic!("no signature schemes shared by client");
         }
 
         if let Some(expected_sni) = &self.expected_sni {
-            let sni: &str = server_name.expect("sni unexpectedly absent").into();
+            let sni: &str = client_hello.server_name().expect("sni unexpectedly absent").into();
             assert_eq!(expected_sni, sni);
         }
 
         if let Some(expected_sigalgs) = &self.expected_sigalgs {
-            if expected_sigalgs != &sigschemes {
+            if expected_sigalgs != &client_hello.sigschemes() {
                 panic!("unexpected signature schemes (wanted {:?} got {:?})",
-                       self.expected_sigalgs, sigschemes);
+                       self.expected_sigalgs, client_hello.sigschemes());
             }
         }
 
         if let Some(expected_alpn) = &self.expected_alpn {
-            let alpn = alpn.expect("alpn unexpectedly absent");
+            let alpn = client_hello.alpn().expect("alpn unexpectedly absent");
             assert_eq!(alpn.len(), expected_alpn.len());
 
             for (got, wanted) in alpn.iter().zip(expected_alpn.iter()) {
@@ -443,11 +442,9 @@ struct ServerCheckNoSNI {}
 
 impl ResolvesServerCert for ServerCheckNoSNI {
     fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef<'_>>,
-               _sigschemes: &[SignatureScheme],
-               _alpn: Option<&[&[u8]]>)
+               client_hello: &ClientHello)
         -> Option<sign::CertifiedKey> {
-        assert!(server_name.is_none());
+        assert!(client_hello.server_name().is_none());
 
         None
     }

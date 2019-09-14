@@ -1,7 +1,7 @@
 use crate::session::{Session, SessionCommon};
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use crate::msgs::enums::{ContentType, SignatureScheme};
+use crate::msgs::enums::ContentType;
 use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::Message;
@@ -10,6 +10,7 @@ use crate::sign;
 use crate::verify;
 use crate::key;
 use crate::vecbuf::WriteV;
+use crate::server::client_hello::ClientHello;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 
@@ -25,6 +26,7 @@ mod tls12;
 mod tls13;
 mod common;
 pub mod handy;
+pub mod client_hello;
 
 /// A trait for the ability to store server session data.
 ///
@@ -111,9 +113,7 @@ pub trait ResolvesServerCert : Send + Sync {
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self,
-               server_name: Option<webpki::DNSNameRef>,
-               sigschemes: &[SignatureScheme],
-               alpn_protocols: Option<&[&[u8]]>)
+               client_hello: &ClientHello)
                -> Option<sign::CertifiedKey>;
 }
 
