@@ -14,17 +14,23 @@ impl<'a> ClientHello<'a> {
         ClientHello {server_name, sigschemes, alpn}
     }
 
-    /// Get the server name indicator
+    /// Get the server name indicator.
+    /// 
+    /// Returns `None` if the client did not supply a SNI.
     pub fn server_name(&self) -> Option<webpki::DNSNameRef> {
         self.server_name
     }
 
-    /// Get the compatible signature schemes
+    /// Get the compatible signature schemes.
+    /// 
+    /// Returns standard-specified default if the client omitted this extension.
     pub fn sigschemes(&self) -> &[SignatureScheme] {
         self.sigschemes
     }
 
-    /// Get the alpn
+    /// Get the alpn.
+    /// 
+    /// Returns `None` if the client did not include an ALPN extension
     pub fn alpn(&self) -> Option<&'a[&'a[u8]]> {
         self.alpn
     }
