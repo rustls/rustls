@@ -320,7 +320,7 @@ struct ServerCheckCertResolve {
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self,
-               client_hello: &ClientHello)
+               client_hello: ClientHello)
         -> Option<sign::CertifiedKey> {
         if client_hello.sigschemes().len() == 0 {
             panic!("no signature schemes shared by client");
@@ -442,7 +442,7 @@ struct ServerCheckNoSNI {}
 
 impl ResolvesServerCert for ServerCheckNoSNI {
     fn resolve(&self,
-               client_hello: &ClientHello)
+               client_hello: ClientHello)
         -> Option<sign::CertifiedKey> {
         assert!(client_hello.server_name().is_none());
 

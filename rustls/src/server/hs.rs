@@ -618,7 +618,7 @@ impl State for ExpectClientHello {
 
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
-            let certkey = sess.config.cert_resolver.resolve(&client_hello);
+            let certkey = sess.config.cert_resolver.resolve(client_hello);
             certkey.ok_or_else(|| {
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no server certificate chain resolved".to_string())

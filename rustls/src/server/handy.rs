@@ -96,7 +96,7 @@ pub struct FailResolveChain {}
 
 impl server::ResolvesServerCert for FailResolveChain {
     fn resolve(&self,
-               _client_hello: &ClientHello)
+               _client_hello: ClientHello)
                -> Option<sign::CertifiedKey> {
         None
     }
@@ -136,7 +136,7 @@ impl AlwaysResolvesChain {
 
 impl server::ResolvesServerCert for AlwaysResolvesChain {
     fn resolve(&self,
-               _client_hello: &ClientHello)
+               _client_hello: ClientHello)
                -> Option<sign::CertifiedKey> {
         Some(self.0.clone())
     }
@@ -170,7 +170,7 @@ impl ResolvesServerCertUsingSNI {
 }
 
 impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
-    fn resolve(&self, client_hello: &ClientHello)
+    fn resolve(&self, client_hello: ClientHello)
                -> Option<sign::CertifiedKey> {
         if let Some(name) = client_hello.server_name() {
             self.by_name.get(name.into())

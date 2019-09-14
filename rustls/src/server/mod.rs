@@ -113,7 +113,7 @@ pub trait ResolvesServerCert : Send + Sync {
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self,
-               client_hello: &ClientHello)
+               client_hello: ClientHello)
                -> Option<sign::CertifiedKey>;
 }
 
