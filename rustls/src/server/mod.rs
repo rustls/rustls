@@ -97,24 +97,11 @@ pub trait ProducesTickets : Send + Sync {
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
 pub trait ResolvesServerCert : Send + Sync {
-    /// Choose a certificate chain and matching key given any server DNS
-    /// name provided via SNI, any ALPN protocol names, and signature schemes
-    /// advertised by the client.
-    ///
-    /// `server_name` is `None` if the client did not supply an SNI name.
-    ///
-    /// `sigschemes` is replaced with a standard-specified default if the client
-    /// omitted this extension.
-    ///
-    /// `alpn_protocols` is `None` if the client did not include an ALPN extension.
-    ///
-    /// Return a `CertifiedKey` to continue the handshake.  A `CertifiedKey`
-    /// binds together a signing key and a certificate chain.
-    ///
+    /// Choose a certificate chain and matching key given simplified
+    /// ClientHello information.
+    /// 
     /// Return `None` to abort the handshake.
-    fn resolve(&self,
-               client_hello: ClientHello)
-               -> Option<sign::CertifiedKey>;
+    fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey>;
 }
 
 /// Common configuration for a set of server sessions.
