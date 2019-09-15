@@ -112,7 +112,7 @@ pub struct ClientHello<'a> {
 
 impl<'a> ClientHello<'a> {
     /// Creates a new ClientHello
-    pub fn new(server_name: Option<webpki::DNSNameRef<'a>>, sigschemes:  &'a [SignatureScheme],
+    fn new(server_name: Option<webpki::DNSNameRef<'a>>, sigschemes:  &'a [SignatureScheme],
     alpn: Option<&'a[&'a[u8]]>)->Self {
         ClientHello {server_name, sigschemes, alpn}
     }
