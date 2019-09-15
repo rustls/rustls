@@ -2,6 +2,7 @@ use crate::session::{Session, SessionCommon};
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use crate::msgs::enums::ContentType;
+use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::Message;
@@ -10,7 +11,6 @@ use crate::sign;
 use crate::verify;
 use crate::key;
 use crate::vecbuf::WriteV;
-use crate::server::client_hello::ClientHello;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 
@@ -26,7 +26,6 @@ mod tls12;
 mod tls13;
 mod common;
 pub mod handy;
-pub mod client_hello;
 
 /// A trait for the ability to store server session data.
 ///
@@ -102,6 +101,42 @@ pub trait ResolvesServerCert : Send + Sync {
     /// 
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey>;
+}
+
+/// A struct representing the received Client Hello
+pub struct ClientHello<'a> {
+    server_name: Option<webpki::DNSNameRef<'a>>,
+    sigschemes: &'a [SignatureScheme],
+    alpn: Option<&'a[&'a[u8]]>,
+}
+
+impl<'a> ClientHello<'a> {
+    /// Creates a new ClientHello
+    pub fn new(server_name: Option<webpki::DNSNameRef<'a>>, sigschemes:  &'a [SignatureScheme],
+    alpn: Option<&'a[&'a[u8]]>)->Self {
+        ClientHello {server_name, sigschemes, alpn}
+    }
+
+    /// Get the server name indicator.
+    /// 
+    /// Returns `None` if the client did not supply a SNI.
+    pub fn server_name(&self) -> Option<webpki::DNSNameRef> {
+        self.server_name
+    }
+
+    /// Get the compatible signature schemes.
+    /// 
+    /// Returns standard-specified default if the client omitted this extension.
+    pub fn sigschemes(&self) -> &[SignatureScheme] {
+        self.sigschemes
+    }
+
+    /// Get the alpn.
+    /// 
+    /// Returns `None` if the client did not include an ALPN extension
+    pub fn alpn(&self) -> Option<&'a[&'a[u8]]> {
+        self.alpn
+    }
 }
 
 /// Common configuration for a set of server sessions.

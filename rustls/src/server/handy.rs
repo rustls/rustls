@@ -3,7 +3,7 @@ use crate::key;
 use webpki;
 use crate::server;
 use crate::error::TLSError;
-use crate::server::client_hello::ClientHello;
+use crate::server::ClientHello;
 
 use std::collections;
 use std::sync::{Arc, Mutex};

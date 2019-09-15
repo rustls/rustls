@@ -16,12 +16,11 @@ use crate::msgs::handshake::CertificateStatus;
 use crate::msgs::codec::Codec;
 use crate::msgs::persist;
 use crate::session::SessionSecrets;
-use crate::server::{ServerSessionImpl, ServerConfig};
+use crate::server::{ServerSessionImpl, ServerConfig, ClientHello};
 use crate::suites;
 use crate::verify;
 use crate::rand;
 use crate::sign;
-use crate::server::client_hello::ClientHello;
 #[cfg(feature = "logging")]
 use crate::log::{trace, debug};
 use crate::error::TLSError;
