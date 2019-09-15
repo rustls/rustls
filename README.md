@@ -22,6 +22,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * Next release:
   - *Breaking API change*: ALPN protocols offered by the client are passed
     to the server certificate resolution trait (`ResolvesServerCert`).
+  - *Breaking API change*: The server certificate resolution trait now
+    takes a struct contain its arguments, so new data can be passed
+    to these functions without further breaking changes.
   - Signature schemes offered by the client are now filtered to those
     compatible with the client-offered ciphersuites.  Prior to this change
     it was likely that server key type switching would not work for clients
