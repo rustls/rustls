@@ -268,8 +268,7 @@ pub use crate::server::StoresServerSessions;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::{ServerConfig, ServerSession};
 pub use crate::server::handy::ResolvesServerCertUsingSNI;
-pub use crate::server::ResolvesServerCert;
-pub use crate::server::ProducesTickets;
+pub use crate::server::{ResolvesServerCert,ProducesTickets,ClientHello};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{NoClientAuth, AllowAnyAuthenticatedClient,
                  AllowAnyAnonymousOrAuthenticatedClient};
@@ -277,7 +276,6 @@ pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
 pub use crate::vecbuf::{WriteV, WriteVAdapter};
-pub use crate::server::client_hello::ClientHello;
 
 /// Message signing interfaces and implementations.
 pub mod sign;
