@@ -183,6 +183,7 @@ impl ExtensionProcessing {
                         && resume.version == sess.common.negotiated_version.unwrap()
                         && resume.cipher_suite == sess.common.get_suite_assert().suite
                         && resume.alpn.as_ref().map(|x| &x.0) == sess.alpn_protocol.as_ref()
+                        && !sess.reject_early_data
                     {
                         self.exts.push(ServerExtension::EarlyData);
                     } else {
