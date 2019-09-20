@@ -236,7 +236,9 @@ fn get_server_session_value_tls12(handshake: &HandshakeDetails,
         sess.get_sni(), version,
         scs.suite, secret,
         &sess.client_cert_chain,
-        sess.alpn_protocol.clone());
+        sess.alpn_protocol.clone(),
+        sess.resumption_data.clone(),
+    );
 
     if handshake.using_ems {
         v.set_extended_ms_used();

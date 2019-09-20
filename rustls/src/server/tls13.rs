@@ -569,6 +569,10 @@ impl CompleteClientHelloHandling {
             self.send_ticket = true;
         }
 
+        if let Some(ref resume) = resumedata {
+            sess.received_resumption_data = Some(resume.application_data.0.clone());
+        }
+
         let full_handshake = resumedata.is_none();
         self.handshake.transcript.add_message(chm);
         self.emit_server_hello(sess, &client_hello.session_id,
@@ -731,7 +735,9 @@ fn get_server_session_value(handshake: &mut HandshakeDetails,
         sess.get_sni(), version,
         scs.suite, secret,
         &sess.client_cert_chain,
-        sess.alpn_protocol.clone())
+        sess.alpn_protocol.clone(),
+        sess.resumption_data.clone(),
+    )
 }
 
 pub struct ExpectFinished {

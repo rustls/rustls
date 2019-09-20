@@ -35,7 +35,8 @@ fn serversessionvalue_is_debug() {
                                       CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                                       vec![1, 2, 3],
                                       &None,
-                                      None);
+                                      None,
+                                      vec![4, 5, 6]);
     println!("{:?}", ssv);
 }
 
@@ -47,6 +48,7 @@ fn serversessionvalue_no_sni() {
         0xc0, 0x23,
         0x03, 0x01, 0x02, 0x03,
         0x00, 0x00, 0x00,
+        0x00, 0x00,
     ];
     let mut rd = Reader::init(&bytes);
     let ssv = ServerSessionValue::read(&mut rd).unwrap();
@@ -61,6 +63,7 @@ fn serversessionvalue_with_cert() {
         0xc0, 0x23,
         0x03, 0x01, 0x02, 0x03,
         0x00,
+        0x00, 0x00,
         0x00, 0x00,
     ];
     let mut rd = Reader::init(&bytes);
