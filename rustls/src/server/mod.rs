@@ -302,6 +302,8 @@ pub struct ServerSessionImpl {
     sni: Option<webpki::DNSName>,
     pub alpn_protocol: Option<Vec<u8>>,
     pub quic_params: Option<Vec<u8>>,
+    pub received_resumption_data: Option<Vec<u8>>,
+    pub resumption_data: Vec<u8>,
     pub error: Option<TLSError>,
     pub state: Option<Box<dyn hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
@@ -322,6 +324,8 @@ impl ServerSessionImpl {
             sni: None,
             alpn_protocol: None,
             quic_params: None,
+            received_resumption_data: None,
+            resumption_data: Vec::new(),
             error: None,
             state: Some(Box::new(hs::ExpectClientHello::new(server_config, extra_exts))),
             client_cert_chain: None,
@@ -506,6 +510,28 @@ impl ServerSession {
     /// resumption.
     pub fn get_sni_hostname(&self)-> Option<&str> {
         self.imp.get_sni().map(|s| s.as_ref().into())
+    }
+
+    /// Application-controlled portion of the resumption ticket supplied by the client, if any.
+    ///
+    /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
+    ///
+    /// Returns `Some` iff a valid resumption ticket has been received from the client.
+    pub fn received_resumption_data(&self) -> Option<&[u8]> {
+        self.imp.received_resumption_data.as_ref().map(|x| &x[..])
+    }
+
+    /// Set the resumption data to embed in future resumption tickets supplied to the client.
+    ///
+    /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
+    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
+    /// resumption tickets are affected.
+    ///
+    /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
+    /// from the client is desired, encrypt the data separately.
+    pub fn set_resumption_data(&mut self, data: &[u8]) {
+        assert!(data.len() < 2usize.pow(15));
+        self.imp.resumption_data = data.into();
     }
 }
 

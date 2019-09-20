@@ -172,6 +172,7 @@ pub struct ServerSessionValue {
     pub extended_ms: bool,
     pub client_cert_chain: Option<CertificatePayload>,
     pub alpn: Option<PayloadU8>,
+    pub application_data: PayloadU16,
 }
 
 impl Codec for ServerSessionValue {
@@ -199,6 +200,7 @@ impl Codec for ServerSessionValue {
         } else {
             0u8.encode(bytes);
         }
+        self.application_data.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ServerSessionValue> {
@@ -227,6 +229,7 @@ impl Codec for ServerSessionValue {
         } else {
             None
         };
+        let application_data = PayloadU16::read(r)?;
 
         Some(ServerSessionValue {
             sni,
@@ -236,6 +239,7 @@ impl Codec for ServerSessionValue {
             extended_ms: ems == 1u8,
             client_cert_chain: ccert,
             alpn,
+            application_data,
         })
     }
 }
@@ -246,7 +250,8 @@ impl ServerSessionValue {
                cs: CipherSuite,
                ms: Vec<u8>,
                cert_chain: &Option<CertificatePayload>,
-               alpn: Option<Vec<u8>>)
+               alpn: Option<Vec<u8>>,
+               application_data: Vec<u8>)
                -> ServerSessionValue {
         ServerSessionValue {
             sni: sni.cloned(),
@@ -256,6 +261,7 @@ impl ServerSessionValue {
             extended_ms: false,
             client_cert_chain: cert_chain.clone(),
             alpn: alpn.map(PayloadU8::new),
+            application_data: PayloadU16::new(application_data),
         }
     }
 
