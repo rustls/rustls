@@ -307,6 +307,8 @@ pub struct ServerSessionImpl {
     pub error: Option<TLSError>,
     pub state: Option<Box<dyn hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
+    /// Whether to reject early data even if it would otherwise be accepted
+    pub reject_early_data: bool,
 }
 
 impl fmt::Debug for ServerSessionImpl {
@@ -329,6 +331,7 @@ impl ServerSessionImpl {
             error: None,
             state: Some(Box::new(hs::ExpectClientHello::new(server_config, extra_exts))),
             client_cert_chain: None,
+            reject_early_data: false,
         }
     }
 
@@ -532,6 +535,16 @@ impl ServerSession {
     pub fn set_resumption_data(&mut self, data: &[u8]) {
         assert!(data.len() < 2usize.pow(15));
         self.imp.resumption_data = data.into();
+    }
+
+    /// Explicitly discard early data, notifying the client
+    ///
+    /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
+    ///
+    /// Must be called while `is_handshaking` is true.
+    pub fn reject_early_data(&mut self) {
+        assert!(self.is_handshaking(), "cannot retroactively reject early data");
+        self.imp.reject_early_data = true;
     }
 }
 
