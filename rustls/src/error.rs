@@ -73,6 +73,9 @@ pub enum TLSError {
 
     /// The peer sent an oversized record/fragment.
     PeerSentOversizedRecord,
+
+    /// An incoming connection did not support any known application protocol.
+    NoApplicationProtocol,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -137,6 +140,7 @@ impl Error for TLSError {
             TLSError::InvalidDNSName(_) => "invalid DNS name",
             TLSError::HandshakeNotComplete => "handshake not complete",
             TLSError::PeerSentOversizedRecord => "peer sent excess record size",
+            TLSError::NoApplicationProtocol => "peer doesn't support any known protocol",
         }
     }
 }
@@ -172,7 +176,8 @@ mod tests {
                        TLSError::FailedToGetCurrentTime,
                        TLSError::InvalidDNSName("dns something".to_string()),
                        TLSError::HandshakeNotComplete,
-                       TLSError::PeerSentOversizedRecord];
+                       TLSError::PeerSentOversizedRecord,
+                       TLSError::NoApplicationProtocol];
 
         for err in all {
             println!("{:?}:", err);

@@ -168,6 +168,14 @@ impl ExtensionProcessing {
             if let Some(ref selected_protocol) = sess.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts.push(ServerExtension::make_alpn(&[selected_protocol]));
+            } else {
+                // For compatibility, strict ALPN validation is not employed unless targeting QUIC
+                #[cfg(feature = "quic")] {
+                    if sess.common.protocol == Protocol::Quic && !our_protocols.is_empty() {
+                        sess.common.send_fatal_alert(AlertDescription::NoApplicationProtocol);
+                        return Err(TLSError::NoApplicationProtocol);
+                    }
+                }
             }
         }
 
