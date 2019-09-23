@@ -178,22 +178,19 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
     }
 }
 
-/// TODO
+/// Something that resolves the client root to trust based on
+/// client-supplied server name (via SNI) for Client authentication
 pub struct ResolvesClientRootUsingSNI {
     by_name: collections::HashMap<webpki::DNSName, RootCertStore>,
 }
 
 impl ResolvesClientRootUsingSNI {
-    /// Create a new and empty (ie, knows no certificates) resolver.
+    /// Create a new and empty (ie, knows no root stores) resolver.
     pub fn new() -> ResolvesClientRootUsingSNI {
         ResolvesClientRootUsingSNI { by_name: collections::HashMap::new() }
     }
 
-    /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
-    ///
-    /// This function fails if `name` is not a valid DNS name, or if
-    /// it's not valid for the supplied certificate, or if the certificate
-    /// chain is syntactically faulty.
+    /// Add a new `RootStore` to be used for the given SNI `name`.
     pub fn add(&mut self, name: webpki::DNSName, root_cert_store: RootCertStore) -> Result<(), TLSError> {
         self.by_name.insert(name, root_cert_store);
         Ok(())
