@@ -48,16 +48,26 @@ impl hs::State for ExpectCertificate {
         let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
         self.handshake.transcript.add_message(&m);
 
-        if cert_chain.is_empty() &&
-           !sess.config.verifier.client_auth_mandatory() {
-            debug!("client auth requested but no certificate supplied");
-            self.handshake.transcript.abandon_client_auth();
-            return Ok(self.into_expect_tls12_client_kx(None));
+        // If we can't determine if the auth is mandatory, abort
+        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni()).ok_or_else(|| {
+                debug!("could not determine if client auth is mandatory based on SNI");
+                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
+                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+            })?;
+
+        if cert_chain.is_empty() {
+            if !mandatory {
+                debug!("client auth requested but no certificate supplied");
+                self.handshake.transcript.abandon_client_auth();
+                return Ok(self.into_expect_tls12_client_kx(None));
+            }
+            sess.common.send_fatal_alert(AlertDescription::CertificateRequired);
+            return Err(TLSError::NoCertificatesPresented);
         }
 
         trace!("certs {:?}", cert_chain);
 
-        sess.config.verifier.verify_client_cert(cert_chain)
+        sess.config.verifier.verify_client_cert(cert_chain, sess.get_sni())
             .or_else(|err| {
                      hs::incompatible(sess, "certificate invalid");
                      Err(err)

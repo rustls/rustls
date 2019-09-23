@@ -277,9 +277,9 @@ impl CompleteClientHelloHandling {
         Ok(())
     }
 
-    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSessionImpl) -> bool {
+    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSessionImpl) -> Result<bool, TLSError> {
         if !sess.config.verifier.offer_client_auth() {
-            return false;
+            return Ok(false);
         }
 
         let mut cr = CertificateRequestPayloadTLS13 {
@@ -290,7 +290,12 @@ impl CompleteClientHelloHandling {
         let schemes = verify::supported_verify_schemes();
         cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = sess.config.verifier.client_auth_root_subjects();
+        let names = sess.config.verifier.client_auth_root_subjects(sess.get_sni()).ok_or_else(|| {
+                debug!("could not determine root subjects based on SNI");
+                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
+                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+            })?;
+
         if !names.is_empty() {
             cr.extensions.push(CertReqExtension::AuthorityNames(names));
         }
@@ -307,7 +312,7 @@ impl CompleteClientHelloHandling {
         trace!("Sending CertificateRequest {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
-        true
+        Ok(true)
     }
 
     fn emit_certificate_tls13(&mut self,
@@ -586,7 +591,7 @@ impl CompleteClientHelloHandling {
         self.emit_encrypted_extensions(sess, &mut server_key, client_hello, resumedata.as_ref())?;
 
         let doing_client_auth = if full_handshake {
-            let client_auth = self.emit_certificate_req_tls13(sess);
+            let client_auth = self.emit_certificate_req_tls13(sess)?;
             self.emit_certificate_tls13(sess, &mut server_key);
             self.emit_certificate_verify_tls13(sess, &mut server_key, &sigschemes_ext)?;
             client_auth
@@ -649,8 +654,14 @@ impl hs::State for ExpectCertificate {
 
         let cert_chain = certp.convert();
 
+        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni()).ok_or_else(|| {
+                debug!("could not determine if client auth is mandatory based on SNI");
+                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
+                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+            })?;
+
         if cert_chain.is_empty() {
-            if !sess.config.verifier.client_auth_mandatory() {
+            if !mandatory {
                 debug!("client auth requested but no certificate supplied");
                 self.handshake.transcript.abandon_client_auth();
                 return Ok(self.into_expect_finished());
@@ -660,7 +671,7 @@ impl hs::State for ExpectCertificate {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        sess.config.get_verifier().verify_client_cert(&cert_chain)
+        sess.config.get_verifier().verify_client_cert(&cert_chain, sess.get_sni())
             .or_else(|err| {
                      hs::incompatible(sess, "certificate invalid");
                      Err(err)

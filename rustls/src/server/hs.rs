@@ -463,14 +463,18 @@ impl ExpectClientHello {
         Ok(kx)
     }
 
-    fn emit_certificate_req(&mut self, sess: &mut ServerSessionImpl) -> bool {
+    fn emit_certificate_req(&mut self, sess: &mut ServerSessionImpl) -> Result<bool, TLSError> {
         let client_auth = &sess.config.verifier;
 
         if !client_auth.offer_client_auth() {
-            return false;
+            return Ok(false);
         }
 
-        let names = client_auth.client_auth_root_subjects();
+        let names = client_auth.client_auth_root_subjects(sess.get_sni()).ok_or_else(|| {
+                debug!("could not determine root subjects based on SNI");
+                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
+                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+            })?;
 
         let cr = CertificateRequestPayload {
             certtypes: vec![ ClientCertificateType::RSASign,
@@ -491,7 +495,7 @@ impl ExpectClientHello {
         trace!("Sending CertificateRequest {:?}", m);
         self.handshake.transcript.add_message(&m);
         sess.common.send_msg(m, false);
-        true
+        Ok(true)
     }
 
     fn emit_server_hello_done(&mut self, sess: &mut ServerSessionImpl) {
@@ -799,7 +803,7 @@ impl State for ExpectClientHello {
         self.emit_certificate(sess, &mut certkey);
         self.emit_cert_status(sess, &mut certkey);
         let kx = self.emit_server_kx(sess, sigschemes, group, &mut certkey)?;
-        let doing_client_auth = self.emit_certificate_req(sess);
+        let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 
         if doing_client_auth {

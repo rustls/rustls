@@ -17,6 +17,9 @@ use rustls::internal::pemfile;
 use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
 
+#[cfg(feature = "dangerous_configuration")]
+use rustls::{ClientCertVerified, ClientCertVerifier, DistinguishedNames};
+
 use webpki;
 
 macro_rules! embed_files {
@@ -199,12 +202,17 @@ pub fn make_server_config(kt: KeyType) -> ServerConfig {
     cfg
 }
 
-pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
     let roots = kt.get_chain();
     let mut client_auth_roots = RootCertStore::empty();
     for root in roots {
         client_auth_roots.add(&root).unwrap();
     }
+    client_auth_roots
+}
+
+pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+    let client_auth_roots = get_client_root_store(kt);
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
     let mut cfg = ServerConfig::new(NoClientAuth::new());
@@ -287,6 +295,33 @@ impl Iterator for AllClientVersions {
             },
             _ => None
         }
+    }
+}
+
+#[cfg(feature = "dangerous_configuration")]
+pub struct MockClientVerifier {
+    pub verified: fn() -> Result<ClientCertVerified, TLSError>,
+    pub subjects: Option<DistinguishedNames>,
+    pub mandatory: Option<bool>,
+}
+
+#[cfg(feature = "dangerous_configuration")]
+impl ClientCertVerifier for MockClientVerifier {
+    fn client_auth_mandatory(&self, sni: Option<&webpki::DNSName>) -> Option<bool> {
+        // This is just an added 'test' to make sure we plumb through the SNI,
+        // although its valid for it to be None, its just our tests should (as of now) always provide it
+        assert!(sni.is_some());
+        self.mandatory
+    }
+
+    fn client_auth_root_subjects(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames> {
+        assert!(sni.is_some());
+        self.subjects.as_ref().cloned()
+    }
+
+    fn verify_client_cert(&self, _presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
+        assert!(sni.is_some());
+        (self.verified)()
     }
 }
 
