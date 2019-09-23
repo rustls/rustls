@@ -137,7 +137,7 @@ fn get_hostname_returns_none_for_other_sni_name_types() {
 
     assert_eq!(ext.get_type(), ExtensionType::ServerName);
     if let ClientExtension::ServerName(snr) = ext {
-        assert!(snr.get_hostname().is_none());
+        assert!(snr.get_hostname().is_empty());
     } else {
         unreachable!();
     }
@@ -163,7 +163,7 @@ fn can_roundtrip_multiname_sni() {
         ClientExtension::ServerName(req) => {
             assert_eq!(2, req.len());
 
-            let dns_name_str: &str = req.get_hostname().unwrap().into();
+            let dns_name_str: &str = req.get_hostname()[0].into();
             assert_eq!(dns_name_str, "hi");
 
             assert_eq!(req[0].typ, ServerNameType::HostName);
