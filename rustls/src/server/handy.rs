@@ -1,9 +1,10 @@
+use crate::anchors::RootCertStore;
 use crate::sign;
 use crate::key;
 use webpki;
 use crate::server;
+use crate::ClientHello;
 use crate::error::TLSError;
-use crate::server::ClientHello;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -176,6 +177,40 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
         }
     }
 }
+
+/// TODO
+pub struct ResolvesClientRootUsingSNI {
+    by_name: collections::HashMap<webpki::DNSName, RootCertStore>,
+}
+
+impl ResolvesClientRootUsingSNI {
+    /// Create a new and empty (ie, knows no certificates) resolver.
+    pub fn new() -> ResolvesClientRootUsingSNI {
+        ResolvesClientRootUsingSNI { by_name: collections::HashMap::new() }
+    }
+
+    /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
+    ///
+    /// This function fails if `name` is not a valid DNS name, or if
+    /// it's not valid for the supplied certificate, or if the certificate
+    /// chain is syntactically faulty.
+    pub fn add(&mut self, name: webpki::DNSName, root_cert_store: RootCertStore) -> Result<(), TLSError> {
+        self.by_name.insert(name, root_cert_store);
+        Ok(())
+    }
+}
+
+impl server::ResolvesClientRoot for ResolvesClientRootUsingSNI {
+    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<RootCertStore> {
+        if let Some(name) = sni {
+            self.by_name.get(name).cloned()
+        } else {
+            // This kind of resolver requires SNI
+            None
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod test {

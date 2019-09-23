@@ -269,11 +269,11 @@ pub use crate::client::ResolvesClientCert;
 pub use crate::server::StoresServerSessions;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::{ServerConfig, ServerSession};
-pub use crate::server::handy::ResolvesServerCertUsingSNI;
-pub use crate::server::{ResolvesServerCert,ProducesTickets,ClientHello};
+pub use crate::server::handy::{ResolvesServerCertUsingSNI, ResolvesClientRootUsingSNI};
+pub use crate::server::{ResolvesClientRoot, ResolvesServerCert,ProducesTickets,ClientHello};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{NoClientAuth, AllowAnyAuthenticatedClient,
-                 AllowAnyAnonymousOrAuthenticatedClient};
+                 AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClientForSNIResolvedRoot};
 pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};

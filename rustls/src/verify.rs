@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::key::Certificate;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::SCTList;
+use crate::server::ResolvesClientRoot;
 use crate::msgs::enums::SignatureScheme;
 use crate::error::TLSError;
 use crate::anchors::{DistinguishedNames, RootCertStore};
@@ -79,15 +80,23 @@ pub trait ClientCertVerifier : Send + Sync {
     /// Returns `true` to require a client certificate and `false` to make client
     /// authentication optional. Defaults to `self.offer_client_auth()`.
     fn client_auth_mandatory(&self) -> bool { self.offer_client_auth() }
+    fn client_auth_mandatory_sni(&self, sni: Option<&webpki::DNSName>) -> Option<bool> { Some(self.client_auth_mandatory()) }
 
     /// Returns the subject names of the client authentication trust anchors to
     /// share with the client when requesting client authentication.
     fn client_auth_root_subjects(&self) -> DistinguishedNames;
+    fn client_auth_root_subjects_sni(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames> {
+        Some(self.client_auth_root_subjects())
+    }
 
     /// Verify a certificate chain `presented_certs` is rooted in `roots`.
     /// Does no further checking of the certificate.
     fn verify_client_cert(&self,
                           presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
+    fn verify_client_cert_sni(&self,
+                          presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
+                              self.verify_client_cert(presented_certs)
+                          }
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
@@ -234,6 +243,50 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
     fn verify_client_cert(&self, presented_certs: &[Certificate])
             -> Result<ClientCertVerified, TLSError> {
         self.inner.verify_client_cert(presented_certs)
+    }
+}
+
+/// A `ClientCertVerifier` that will ensure that every client provides a certificate trusted
+/// by a root store resolved to based on the Server Name Indication (SNI) of the client's hello.
+///
+/// The resolver must be provided, implementing the `ResolvesClientRoot` trait.
+///
+/// If the client does not provide an SNI, or the resolver does not resolve to anything, then the connection
+/// is rejected.
+pub struct AllowAnyAuthenticatedClientForSNIResolvedRoot {
+    root_resolver: Arc<dyn ResolvesClientRoot>
+}
+
+impl AllowAnyAuthenticatedClientForSNIResolvedRoot {
+    /// Construct a new `AllowAnyAuthenticatedClientForSNIResolvedRoot`.
+    pub fn new(root_resolver: Arc<dyn ResolvesClientRoot>) -> Arc<dyn ClientCertVerifier> {
+        Arc::new(Self {
+            root_resolver,
+        })
+    }
+}
+
+impl ClientCertVerifier for AllowAnyAuthenticatedClientForSNIResolvedRoot {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+
+    fn client_auth_mandatory_sni(&self, sni: Option<&webpki::DNSName>) -> Option<bool> {
+        self.root_resolver.resolve(sni).map(|_root| true)
+    }
+
+    fn client_auth_root_subjects(&self) -> DistinguishedNames {
+        unreachable!()
+    }
+    fn client_auth_root_subjects_sni(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames> {
+        self.root_resolver.resolve(sni).map(|root| root.get_subjects())
+    }
+
+    fn verify_client_cert(&self, presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError> {
+        unreachable!()
+    }
+    fn verify_client_cert_sni(&self, presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
+        unimplemented!()
     }
 }
 
