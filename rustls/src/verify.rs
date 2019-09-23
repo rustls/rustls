@@ -286,7 +286,17 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClientForSNIResolvedRoot {
         unreachable!()
     }
     fn verify_client_cert_sni(&self, presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
-        unimplemented!()
+        let root = self.root_resolver.resolve(sni).ok_or_else(|| {
+            TLSError::General("no client certificate root resolved".to_string())
+        })?;
+
+        let (cert, chain, trustroots) = prepare(&root, presented_certs)?;
+        let now = try_now()?;
+        cert.verify_is_valid_tls_client_cert(
+                SUPPORTED_SIG_ALGS, &webpki::TLSClientTrustAnchors(&trustroots),
+                &chain, now)
+            .map_err(TLSError::WebPKIError)
+            .map(|_| ClientCertVerified::assertion())
     }
 }
 

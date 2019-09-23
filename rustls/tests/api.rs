@@ -564,35 +564,52 @@ fn client_auth_works() {
     }
 }
 
-// #[test]
-// fn client_root_sni_resolver_works() {
-//     let kt = KeyType::RSA;
-//     let mut root_resolver = rustls::ResolvesClientRootUsingSNI::new();
-//     root_resolver.add(dns_name("tobyisagood.dog"), rustls::RootCertStore::empty()).unwrap();
+#[test]
+fn client_root_sni_resolver_works() {
+    let kt = KeyType::RSA;
+    let mut root_resolver = rustls::ResolvesClientRootUsingSNI::new();
+    root_resolver.add(dns_name("localhost").to_owned(), common::get_client_root_store(kt)).unwrap();
 
-//     let signing_key = sign::RSASigningKey::new(&kt.get_key())
-//         .unwrap();
-//     let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
-//     root_resolver.add("localhost",
-//                  sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()))
-//         .unwrap();
+    let client_verifier = rustls::AllowAnyAuthenticatedClientForSNIResolvedRoot::new(Arc::new(root_resolver));
 
-//     let mut server_config = make_server_config(kt);
-//     server_config.cert_resolver = Arc::new(resolver);
-//     let server_config = Arc::new(server_config);
+    let mut server_config = ServerConfig::new(client_verifier);
+    server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
 
-//     let mut server1 = ServerSession::new(&server_config);
-//     let mut client1 = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("localhost"));
-//     let err = do_handshake_until_error(&mut client1, &mut server1);
-//     assert_eq!(err, Ok(()));
+    let server_config = Arc::new(server_config);
 
-//     let mut server2 = ServerSession::new(&server_config);
-//     let mut client2 = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("notlocalhost"));
-//     let err = do_handshake_until_error(&mut client2, &mut server2);
-//     assert_eq!(err,
-//                Err(TLSErrorFromPeer::Server(
-//                        TLSError::General("no server certificate chain resolved".into()))));
-// }
+    let mut server1 = ServerSession::new(&server_config);
+    let mut client1 = ClientSession::new(&Arc::new(make_client_config_with_auth(kt)), dns_name("localhost"));
+    let err = do_handshake_until_error(&mut client1, &mut server1);
+    assert_eq!(err, Ok(()));
+
+    let mut server2 = ServerSession::new(&server_config);
+    let mut client2 = ClientSession::new(&Arc::new(make_client_config_with_auth(kt)), dns_name("notlocalhost"));
+    let err = do_handshake_until_error(&mut client2, &mut server2);
+    assert_eq!(err,
+               Err(TLSErrorFromPeer::Server(
+                       TLSError::General("no client certificate root resolved".into()))));
+}
+
+
+#[test]
+fn client_root_sni_resolver_requires_auth() {
+    let kt = KeyType::RSA;
+    let mut root_resolver = rustls::ResolvesClientRootUsingSNI::new();
+    root_resolver.add(dns_name("localhost").to_owned(), common::get_client_root_store(kt)).unwrap();
+
+    let client_verifier = rustls::AllowAnyAuthenticatedClientForSNIResolvedRoot::new(Arc::new(root_resolver));
+
+    let mut server_config = ServerConfig::new(client_verifier);
+    server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+
+    let server_config = Arc::new(server_config);
+
+    let mut server1 = ServerSession::new(&server_config);
+    // make_client_config does NOT set up client auth..
+    let mut client1 = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("localhost"));
+    let err = do_handshake_until_error(&mut client1, &mut server1);
+    assert_eq!(err, Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+}
 
 #[test]
 fn client_error_is_sticky() {

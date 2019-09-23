@@ -167,12 +167,17 @@ pub fn make_server_config(kt: KeyType) -> ServerConfig {
     cfg
 }
 
-pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
     let roots = kt.get_chain();
     let mut client_auth_roots = RootCertStore::empty();
     for root in roots {
         client_auth_roots.add(&root).unwrap();
     }
+    client_auth_roots
+}
+
+pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+    let client_auth_roots = get_client_root_store(kt);
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
     let mut cfg = ServerConfig::new(NoClientAuth::new());
