@@ -314,18 +314,23 @@ impl Codec for ServerName {
 declare_u16_vec!(ServerNameRequest, ServerName);
 
 pub trait ConvertServerNameList {
-    fn get_hostname(&self) -> Option<webpki::DNSNameRef>;
+    fn get_hostname(&self) -> Vec<webpki::DNSNameRef>;
 }
 
 impl ConvertServerNameList for ServerNameRequest {
-    fn get_hostname(&self) -> Option<webpki::DNSNameRef> {
+    fn get_hostname(&self) -> Vec<webpki::DNSNameRef> {
+        let mut hostname = Vec::new();
+        if self.is_empty() {
+            return hostname;
+        }
+
         for name in self {
             if let ServerNamePayload::HostName(ref dns_name) = name.payload {
-                return Some(dns_name.as_ref());
+                hostname.push(dns_name.as_ref());
             }
         }
 
-        None
+        return hostname;
     }
 }
 
