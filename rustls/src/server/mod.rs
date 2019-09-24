@@ -109,7 +109,7 @@ pub trait ResolvesServerCert : Send + Sync {
 pub trait ResolvesClientRoot : Send + Sync {
     /// Choose whether to require client authentication and what root store to
     /// use when checking client crednetials, if any.
-    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<RootCertStore>;
+    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<&RootCertStore>;
 }
 
 /// A struct representing the received Client Hello

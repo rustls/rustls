@@ -198,9 +198,9 @@ impl ResolvesClientRootUsingSNI {
 }
 
 impl server::ResolvesClientRoot for ResolvesClientRootUsingSNI {
-    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<RootCertStore> {
+    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<&RootCertStore> {
         if let Some(name) = sni {
-            self.by_name.get(name).cloned()
+            self.by_name.get(name)
         } else {
             // This kind of resolver requires SNI
             None
