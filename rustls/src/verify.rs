@@ -84,7 +84,9 @@ pub trait ClientCertVerifier : Send + Sync {
 
     /// Returns the subject names of the client authentication trust anchors to
     /// share with the client when requesting client authentication.
-    fn client_auth_root_subjects(&self) -> DistinguishedNames;
+    fn client_auth_root_subjects(&self) -> DistinguishedNames {
+        unreachable!()
+    }
     fn client_auth_root_subjects_sni(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames> {
         Some(self.client_auth_root_subjects())
     }
@@ -92,7 +94,9 @@ pub trait ClientCertVerifier : Send + Sync {
     /// Verify a certificate chain `presented_certs` is rooted in `roots`.
     /// Does no further checking of the certificate.
     fn verify_client_cert(&self,
-                          presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
+                          presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError> {
+                              unreachable!()
+                          }
     fn verify_client_cert_sni(&self,
                           presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
                               self.verify_client_cert(presented_certs)
@@ -274,16 +278,8 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClientForSNIResolvedRoot {
     fn client_auth_mandatory_sni(&self, sni: Option<&webpki::DNSName>) -> Option<bool> {
         self.root_resolver.resolve(sni).map(|_root| true)
     }
-
-    fn client_auth_root_subjects(&self) -> DistinguishedNames {
-        unreachable!()
-    }
     fn client_auth_root_subjects_sni(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames> {
         self.root_resolver.resolve(sni).map(|root| root.get_subjects())
-    }
-
-    fn verify_client_cert(&self, presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError> {
-        unreachable!()
     }
     fn verify_client_cert_sni(&self, presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
         let root = self.root_resolver.resolve(sni).ok_or_else(|| {
