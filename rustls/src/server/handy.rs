@@ -181,7 +181,7 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
 /// Something that resolves the client root to trust based on
 /// client-supplied server name (via SNI) for Client authentication
 pub struct ResolvesClientRootUsingSNI {
-    by_name: collections::HashMap<webpki::DNSName, RootCertStore>,
+    by_name: collections::HashMap<webpki::DNSName, Arc<RootCertStore>>,
 }
 
 impl ResolvesClientRootUsingSNI {
@@ -192,15 +192,15 @@ impl ResolvesClientRootUsingSNI {
 
     /// Add a new `RootStore` to be used for the given SNI `name`.
     pub fn add(&mut self, name: webpki::DNSName, root_cert_store: RootCertStore) -> Result<(), TLSError> {
-        self.by_name.insert(name, root_cert_store);
+        self.by_name.insert(name, Arc::new(root_cert_store));
         Ok(())
     }
 }
 
 impl server::ResolvesClientRoot for ResolvesClientRootUsingSNI {
-    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<&RootCertStore> {
+    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<Arc<RootCertStore>> {
         if let Some(name) = sni {
-            self.by_name.get(name)
+            self.by_name.get(name).cloned()
         } else {
             // This kind of resolver requires SNI
             None
