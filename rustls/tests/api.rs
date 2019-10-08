@@ -1772,9 +1772,10 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
 }
 
-#[test]
 #[cfg(feature = "quic")]
-fn quic_handshake() {
+mod test_quic {
+    use super::*;
+
     // Returns the sender's next secrets to use, or the receiver's error.
     fn step(send: &mut dyn Session, recv: &mut dyn Session) -> Result<Option<quic::Secrets>, TLSError> {
         let mut buf = Vec::new();
@@ -1795,137 +1796,170 @@ fn quic_handshake() {
         Ok(secrets)
     }
 
-    fn equal_prk(x: &ring::hkdf::Prk, y: &ring::hkdf::Prk) -> bool {
-        let mut x_data = [0; 16];
-        let mut y_data = [0; 16];
-        let x_okm = x.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
-        x_okm.fill(&mut x_data[..]).unwrap();
-        let y_okm = y.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
-        y_okm.fill(&mut y_data[..]).unwrap();
-        x_data == y_data
-    }
+#[test]
+    fn test_quic_handshake() {
+        fn equal_prk(x: &ring::hkdf::Prk, y: &ring::hkdf::Prk) -> bool {
+            let mut x_data = [0; 16];
+            let mut y_data = [0; 16];
+            let x_okm = x.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
+            x_okm.fill(&mut x_data[..]).unwrap();
+            let y_okm = y.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
+            y_okm.fill(&mut y_data[..]).unwrap();
+            x_data == y_data
+        }
 
-    fn equal_secrets(x: &quic::Secrets, y: &quic::Secrets) -> bool {
-        equal_prk(&x.client, &y.client) && equal_prk(&x.server, &y.server)
-    }
+        fn equal_secrets(x: &quic::Secrets, y: &quic::Secrets) -> bool {
+            equal_prk(&x.client, &y.client) && equal_prk(&x.server, &y.server)
+        }
 
-    let kt = KeyType::RSA;
-    let mut client_config = make_client_config(kt);
-    client_config.versions = vec![ProtocolVersion::TLSv1_3];
-    client_config.enable_early_data = true;
-    let client_config = Arc::new(client_config);
-    let mut server_config = make_server_config(kt);
-    server_config.versions = vec![ProtocolVersion::TLSv1_3];
-    server_config.max_early_data_size = 0xffffffff;
-    server_config.alpn_protocols = vec!["foo".into()];
-    let server_config = Arc::new(server_config);
-    let client_params = &b"client params"[..];
-    let server_params = &b"server params"[..];
+        let kt = KeyType::RSA;
+        let mut client_config = make_client_config(kt);
+        client_config.versions = vec![ProtocolVersion::TLSv1_3];
+        client_config.enable_early_data = true;
+        let client_config = Arc::new(client_config);
+        let mut server_config = make_server_config(kt);
+        server_config.versions = vec![ProtocolVersion::TLSv1_3];
+        server_config.max_early_data_size = 0xffffffff;
+        server_config.alpn_protocols = vec!["foo".into()];
+        let server_config = Arc::new(server_config);
+        let client_params = &b"client params"[..];
+        let server_params = &b"server params"[..];
 
-    // full handshake
-    let mut client =
-        ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
-    let mut server = ServerSession::new_quic(&server_config, server_params.into());
-    let client_initial = step(&mut client, &mut server).unwrap();
-    assert!(client_initial.is_none());
-    assert!(client.get_early_secret().is_none());
-    assert_eq!(server.get_quic_transport_parameters(), Some(client_params));
-    let server_hs = step(&mut server, &mut client).unwrap().unwrap();
-    assert!(server.get_early_secret().is_none());
-    let client_hs = step(&mut client, &mut server).unwrap().unwrap();
-    assert!(equal_secrets(&server_hs, &client_hs));
-    assert!(client.is_handshaking());
-    let server_1rtt = step(&mut server, &mut client).unwrap().unwrap();
-    assert!(!client.is_handshaking());
-    assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
-    assert!(server.is_handshaking());
-    let client_1rtt = step(&mut client, &mut server).unwrap().unwrap();
-    assert!(!server.is_handshaking());
-    assert!(equal_secrets(&server_1rtt, &client_1rtt));
-    assert!(!equal_secrets(&server_hs, &server_1rtt));
-    assert!(step(&mut client, &mut server).unwrap().is_none());
-    assert!(step(&mut server, &mut client).unwrap().is_none());
-
-    // key update
-    let initial = quic::Secrets {
-        // Constant dummy values for reproducibility
-        client: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-            0xb8, 0x76, 0x77, 0x08, 0xf8, 0x77, 0x23, 0x58, 0xa6, 0xea, 0x9f, 0xc4, 0x3e, 0x4a,
-            0xdd, 0x2c, 0x96, 0x1b, 0x3f, 0x52, 0x87, 0xa6, 0xd1, 0x46, 0x7e, 0xe0, 0xae, 0xab,
-            0x33, 0x72, 0x4d, 0xbf,
-        ]),
-        server: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-            0x42, 0xdc, 0x97, 0x21, 0x40, 0xe0, 0xf2, 0xe3, 0x98, 0x45, 0xb7, 0x67, 0x61, 0x34,
-            0x39, 0xdc, 0x67, 0x58, 0xca, 0x43, 0x25, 0x9b, 0x87, 0x85, 0x06, 0x82, 0x4e, 0xb1,
-            0xe4, 0x38, 0xd8, 0x55,
-        ]),
-    };
-    let updated = client.update_secrets(&initial.client, &initial.server);
-    // The expected values will need to be updated if the negotiated hash function changes.
-    assert!(equal_prk(
-        &updated.client,
-        &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-            101, 250, 130, 179, 97, 208, 160, 166, 213, 90, 196, 212, 96, 49, 190, 24, 237, 225,
-            68, 97, 141, 123, 162, 108, 231, 21, 255, 184, 49, 245, 178, 148
-        ]))
-    );
-    assert!(equal_prk(
-        &updated.server,
-        &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-            171, 127, 244, 22, 119, 205, 252, 100, 179, 94, 91, 45, 99, 82, 236, 124, 44, 251, 63,
-            57, 94, 215, 175, 138, 178, 161, 97, 80, 51, 250, 107, 85
-        ]))
-    );
-
-    // 0-RTT handshake
-    let mut client =
-        ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
-    assert!(client.get_negotiated_ciphersuite().is_some());
-    let mut server = ServerSession::new_quic(&server_config, server_params.into());
-    step(&mut client, &mut server).unwrap();
-    assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
-    {
-        let client_early = client.get_early_secret().unwrap();
-        let server_early = server.get_early_secret().unwrap();
-        assert!(equal_prk(client_early, server_early));
-    }
-    step(&mut server, &mut client).unwrap().unwrap();
-    step(&mut client, &mut server).unwrap().unwrap();
-    step(&mut server, &mut client).unwrap().unwrap();
-    assert!(client.is_early_data_accepted());
-
-    // 0-RTT rejection
-    {
-        let mut client_config = (*client_config).clone();
-        client_config.alpn_protocols = vec!["foo".into()];
+        // full handshake
         let mut client =
-            ClientSession::new_quic(&Arc::new(client_config), dns_name("localhost"), client_params.into());
+            ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
+        let mut server = ServerSession::new_quic(&server_config, server_params.into());
+        let client_initial = step(&mut client, &mut server).unwrap();
+        assert!(client_initial.is_none());
+        assert!(client.get_early_secret().is_none());
+        assert_eq!(server.get_quic_transport_parameters(), Some(client_params));
+        let server_hs = step(&mut server, &mut client).unwrap().unwrap();
+        assert!(server.get_early_secret().is_none());
+        let client_hs = step(&mut client, &mut server).unwrap().unwrap();
+        assert!(equal_secrets(&server_hs, &client_hs));
+        assert!(client.is_handshaking());
+        let server_1rtt = step(&mut server, &mut client).unwrap().unwrap();
+        assert!(!client.is_handshaking());
+        assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
+        assert!(server.is_handshaking());
+        let client_1rtt = step(&mut client, &mut server).unwrap().unwrap();
+        assert!(!server.is_handshaking());
+        assert!(equal_secrets(&server_1rtt, &client_1rtt));
+        assert!(!equal_secrets(&server_hs, &server_1rtt));
+        assert!(step(&mut client, &mut server).unwrap().is_none());
+        assert!(step(&mut server, &mut client).unwrap().is_none());
+
+        // key update
+        let initial = quic::Secrets {
+            // Constant dummy values for reproducibility
+            client: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+                0xb8, 0x76, 0x77, 0x08, 0xf8, 0x77, 0x23, 0x58, 0xa6, 0xea, 0x9f, 0xc4, 0x3e, 0x4a,
+                0xdd, 0x2c, 0x96, 0x1b, 0x3f, 0x52, 0x87, 0xa6, 0xd1, 0x46, 0x7e, 0xe0, 0xae, 0xab,
+                0x33, 0x72, 0x4d, 0xbf,
+            ]),
+            server: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+                0x42, 0xdc, 0x97, 0x21, 0x40, 0xe0, 0xf2, 0xe3, 0x98, 0x45, 0xb7, 0x67, 0x61, 0x34,
+                0x39, 0xdc, 0x67, 0x58, 0xca, 0x43, 0x25, 0x9b, 0x87, 0x85, 0x06, 0x82, 0x4e, 0xb1,
+                0xe4, 0x38, 0xd8, 0x55,
+            ]),
+        };
+        let updated = client.update_secrets(&initial.client, &initial.server);
+        // The expected values will need to be updated if the negotiated hash function changes.
+        assert!(equal_prk(
+            &updated.client,
+            &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+                101, 250, 130, 179, 97, 208, 160, 166, 213, 90, 196, 212, 96, 49, 190, 24, 237, 225,
+                68, 97, 141, 123, 162, 108, 231, 21, 255, 184, 49, 245, 178, 148
+            ]))
+        );
+        assert!(equal_prk(
+            &updated.server,
+            &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
+                171, 127, 244, 22, 119, 205, 252, 100, 179, 94, 91, 45, 99, 82, 236, 124, 44, 251, 63,
+                57, 94, 215, 175, 138, 178, 161, 97, 80, 51, 250, 107, 85
+            ]))
+        );
+
+        // 0-RTT handshake
+        let mut client =
+            ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
+        assert!(client.get_negotiated_ciphersuite().is_some());
         let mut server = ServerSession::new_quic(&server_config, server_params.into());
         step(&mut client, &mut server).unwrap();
         assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
-        assert!(client.get_early_secret().is_some());
-        assert!(server.get_early_secret().is_none());
+        {
+            let client_early = client.get_early_secret().unwrap();
+            let server_early = server.get_early_secret().unwrap();
+            assert!(equal_prk(client_early, server_early));
+        }
         step(&mut server, &mut client).unwrap().unwrap();
         step(&mut client, &mut server).unwrap().unwrap();
         step(&mut server, &mut client).unwrap().unwrap();
-        assert!(!client.is_early_data_accepted());
+        assert!(client.is_early_data_accepted());
+
+        // 0-RTT rejection
+        {
+            let mut client_config = (*client_config).clone();
+            client_config.alpn_protocols = vec!["foo".into()];
+            let mut client =
+                ClientSession::new_quic(&Arc::new(client_config), dns_name("localhost"), client_params.into());
+            let mut server = ServerSession::new_quic(&server_config, server_params.into());
+            step(&mut client, &mut server).unwrap();
+            assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
+            assert!(client.get_early_secret().is_some());
+            assert!(server.get_early_secret().is_none());
+            step(&mut server, &mut client).unwrap().unwrap();
+            step(&mut client, &mut server).unwrap().unwrap();
+            step(&mut server, &mut client).unwrap().unwrap();
+            assert!(!client.is_early_data_accepted());
+        }
+
+        // failed handshake
+        let mut client = ClientSession::new_quic(
+            &client_config,
+            dns_name("example.com"),
+            client_params.into(),
+        );
+        let mut server = ServerSession::new_quic(&server_config, server_params.into());
+        step(&mut client, &mut server).unwrap();
+        step(&mut server, &mut client).unwrap().unwrap();
+        step(&mut server, &mut client).unwrap_err();
+        assert_eq!(
+            client.get_alert(),
+            Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
+        );
     }
 
-    // failed handshake
-    let mut client = ClientSession::new_quic(
-        &client_config,
-        dns_name("example.com"),
-        client_params.into(),
-    );
-    let mut server = ServerSession::new_quic(&server_config, server_params.into());
-    step(&mut client, &mut server).unwrap();
-    step(&mut server, &mut client).unwrap().unwrap();
-    step(&mut server, &mut client).unwrap_err();
-    assert_eq!(
-        client.get_alert(),
-        Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
-    );
-}
+#[test]
+    fn test_quic_rejects_missing_alpn() {
+        let client_params = &b"client params"[..];
+        let server_params = &b"server params"[..];
+
+        for &kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(kt);
+            client_config.versions = vec![ProtocolVersion::TLSv1_3];
+            client_config.alpn_protocols = vec!["bar".into()];
+            let client_config = Arc::new(client_config);
+
+            let mut server_config = make_server_config(kt);
+            server_config.versions = vec![ProtocolVersion::TLSv1_3];
+            server_config.alpn_protocols = vec!["foo".into()];
+            let server_config = Arc::new(server_config);
+
+            let mut client = ClientSession::new_quic(&client_config,
+                                                     dns_name("localhost"),
+                                                     client_params.into());
+            let mut server = ServerSession::new_quic(&server_config,
+                                                     server_params.into());
+
+            assert_eq!(step(&mut client, &mut server).unwrap_err(),
+                       TLSError::NoApplicationProtocol);
+
+            assert_eq!(server.get_alert(),
+                       Some(rustls::internal::msgs::enums::AlertDescription::NoApplicationProtocol));
+        }
+    }
+} // mod test_quic
 
 #[test]
 fn test_client_does_not_offer_sha1() {
