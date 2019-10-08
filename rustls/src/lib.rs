@@ -298,4 +298,5 @@ pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
     ClientCertVerifier, ClientCertVerified};
 #[cfg(feature = "dangerous_configuration")]
 pub use crate::client::danger::DangerousClientConfig;
-
+#[cfg(feature = "dangerous_configuration")]
+pub use crate::verify::danger::DangerousWebPKIVerifierPinnedDNS;

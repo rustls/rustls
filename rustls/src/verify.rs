@@ -100,20 +100,8 @@ impl ServerCertVerifier for WebPKIVerifier {
                           presented_certs: &[Certificate],
                           dns_name: webpki::DNSNameRef,
                           ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError> {
-        let (cert, chain, trustroots) = prepare(roots, presented_certs)?;
         let now = (self.time)()?;
-        let cert = cert.verify_is_valid_tls_server_cert(SUPPORTED_SIG_ALGS,
-                &webpki::TLSServerTrustAnchors(&trustroots), &chain, now)
-            .map_err(TLSError::WebPKIError)
-            .map(|_| cert)?;
-
-        if !ocsp_response.is_empty() {
-            debug!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
-        }
-
-        cert.verify_is_valid_for_dns_name(dns_name)
-            .map_err(TLSError::WebPKIError)
-            .map(|_| ServerCertVerified::assertion())
+        verify(roots, presented_certs, dns_name, ocsp_response, now)
     }
 }
 
@@ -121,6 +109,51 @@ impl WebPKIVerifier {
     pub fn new() -> WebPKIVerifier {
         WebPKIVerifier {
             time: try_now,
+        }
+    }
+}
+
+/// Container for unsafe APIs
+#[cfg(feature = "dangerous_configuration")]
+pub mod danger {
+    use crate::anchors::RootCertStore;
+    use crate::error::TLSError;
+    use crate::key::Certificate;
+    use crate::verify::ServerCertVerifier;
+    use webpki::DNSName;
+    /// Verifies the certificate is valid for root store and that the certificates
+    /// are valid for the pinned dns value
+    pub struct DangerousWebPKIVerifierPinnedDNS {
+        time: fn() -> Result<webpki::Time, TLSError>,
+        pinned_dns_name: DNSName,
+    }
+
+    impl DangerousWebPKIVerifierPinnedDNS {
+        /// Constructs a new verifier that checks the certs for DNS against the pinned value
+        pub fn new(pinned_dns_name: DNSName) -> DangerousWebPKIVerifierPinnedDNS {
+            DangerousWebPKIVerifierPinnedDNS {
+                time: super::try_now,
+                pinned_dns_name,
+            }
+        }
+    }
+
+    impl ServerCertVerifier for DangerousWebPKIVerifierPinnedDNS {
+        fn verify_server_cert(
+            &self,
+            roots: &RootCertStore,
+            presented_certs: &[Certificate],
+            _dns_name: webpki::DNSNameRef,
+            ocsp_response: &[u8],
+        ) -> Result<super::ServerCertVerified, TLSError> {
+            let now = (self.time)()?;
+            super::verify(
+                roots,
+                presented_certs,
+                self.pinned_dns_name.as_ref(),
+                ocsp_response,
+                now,
+            )
         }
     }
 }
@@ -153,6 +186,33 @@ fn prepare<'a, 'b>(roots: &'b RootCertStore, presented_certs: &'a [Certificate])
 fn try_now() -> Result<webpki::Time, TLSError> {
     webpki::Time::try_from(std::time::SystemTime::now())
         .map_err( |_ | TLSError::FailedToGetCurrentTime)
+}
+
+fn verify(
+    roots: &RootCertStore,
+    presented_certs: &[Certificate],
+    dns_name: webpki::DNSNameRef,
+    ocsp_response: &[u8],
+    now: webpki::Time,
+) -> Result<ServerCertVerified, TLSError> {
+    let (cert, chain, trustroots) = prepare(roots, presented_certs)?;
+    let cert = cert
+        .verify_is_valid_tls_server_cert(
+            SUPPORTED_SIG_ALGS,
+            &webpki::TLSServerTrustAnchors(&trustroots),
+            &chain,
+            now,
+        )
+        .map_err(TLSError::WebPKIError)
+        .map(|_| cert)?;
+
+    if !ocsp_response.is_empty() {
+        debug!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
+    }
+
+    cert.verify_is_valid_for_dns_name(dns_name)
+        .map_err(TLSError::WebPKIError)
+        .map(|_| ServerCertVerified::assertion())
 }
 
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
