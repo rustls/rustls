@@ -1,4 +1,3 @@
-use crate::anchors::RootCertStore;
 use crate::sign;
 use crate::key;
 use webpki;
@@ -177,37 +176,6 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
         }
     }
 }
-
-/// Something that resolves the client root to trust based on
-/// client-supplied server name (via SNI) for Client authentication
-pub struct ResolvesClientRootUsingSNI {
-    by_name: collections::HashMap<webpki::DNSName, Arc<RootCertStore>>,
-}
-
-impl ResolvesClientRootUsingSNI {
-    /// Create a new and empty (ie, knows no root stores) resolver.
-    pub fn new() -> ResolvesClientRootUsingSNI {
-        ResolvesClientRootUsingSNI { by_name: collections::HashMap::new() }
-    }
-
-    /// Add a new `RootStore` to be used for the given SNI `name`.
-    pub fn add(&mut self, name: webpki::DNSName, root_cert_store: RootCertStore) -> Result<(), TLSError> {
-        self.by_name.insert(name, Arc::new(root_cert_store));
-        Ok(())
-    }
-}
-
-impl server::ResolvesClientRoot for ResolvesClientRootUsingSNI {
-    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<Arc<RootCertStore>> {
-        if let Some(name) = sni {
-            self.by_name.get(name).cloned()
-        } else {
-            // This kind of resolver requires SNI
-            None
-        }
-    }
-}
-
 
 #[cfg(test)]
 mod test {

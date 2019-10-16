@@ -25,6 +25,9 @@ use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 #[cfg(feature = "quic")]
 use ring::hkdf;
 
+#[cfg(feature = "dangerous_configuration")]
+use rustls::ClientCertVerified;
+
 use webpki;
 
 #[allow(dead_code)]
@@ -564,52 +567,155 @@ fn client_auth_works() {
     }
 }
 
-#[test]
-fn client_root_sni_resolver_works() {
-    let kt = KeyType::RSA;
-    let mut root_resolver = rustls::ResolvesClientRootUsingSNI::new();
-    root_resolver.add(dns_name("localhost").to_owned(), common::get_client_root_store(kt)).unwrap();
+#[cfg(feature = "dangerous_configuration")]
+mod test_verifier {
+    use super::*;
+    use crate::common::MockClientVerifier;
 
-    let client_verifier = rustls::AllowAnyAuthenticatedClientForSNIResolvedRoot::new(Arc::new(root_resolver));
+    // Client is authorized!
+    fn ver_ok() -> Result<ClientCertVerified, TLSError> {
+        Ok(rustls::ClientCertVerified::assertion())
+    }
 
-    let mut server_config = ServerConfig::new(client_verifier);
-    server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+    // Use when we shouldn't even attempt verification
+    fn ver_unreachable() -> Result<ClientCertVerified, TLSError> {
+        unreachable!()
+    }
 
-    let server_config = Arc::new(server_config);
+    // Verifier that returns an error that we can expect
+    fn ver_err() -> Result<ClientCertVerified, TLSError> {
+        Err(TLSError::General("test err".to_string()))
+    }
 
-    let mut server1 = ServerSession::new(&server_config);
-    let mut client1 = ClientSession::new(&Arc::new(make_client_config_with_auth(kt)), dns_name("localhost"));
-    let err = do_handshake_until_error(&mut client1, &mut server1);
-    assert_eq!(err, Ok(()));
+    #[test]
+    // Happy path, we resolve to a root, it is verified OK, should be able to connect
+    fn client_verifier_works() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_ok,
+                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                mandatory: Some(true),
+            };
 
-    let mut server2 = ServerSession::new(&server_config);
-    let mut client2 = ClientSession::new(&Arc::new(make_client_config_with_auth(kt)), dns_name("notlocalhost"));
-    let err = do_handshake_until_error(&mut client2, &mut server2);
-    assert_eq!(err,
-               Err(TLSErrorFromPeer::Server(
-                       TLSError::General("no client certificate root resolved".into()))));
-}
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
 
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config_with_auth(*kt);
 
-#[test]
-fn client_root_sni_resolver_requires_auth() {
-    let kt = KeyType::RSA;
-    let mut root_resolver = rustls::ResolvesClientRootUsingSNI::new();
-    root_resolver.add(dns_name("localhost").to_owned(), common::get_client_root_store(kt)).unwrap();
+            for client_config in AllClientVersions::new(client_config) {
+                let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config.clone()),
+                                                                     &server_config);
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Ok(()));
+            }
+        }
+    }
 
-    let client_verifier = rustls::AllowAnyAuthenticatedClientForSNIResolvedRoot::new(Arc::new(root_resolver));
+    // Common case, we do not find a root store to resolve to
+    #[test]
+    fn client_verifier_no_root() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_ok,
+                subjects: None,
+                mandatory: Some(true),
+            };
 
-    let mut server_config = ServerConfig::new(client_verifier);
-    server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
 
-    let server_config = Arc::new(server_config);
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config_with_auth(*kt);
 
-    let mut server1 = ServerSession::new(&server_config);
-    // make_client_config does NOT set up client auth..
-    let mut client1 = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("localhost"));
-    let err = do_handshake_until_error(&mut client1, &mut server1);
-    assert_eq!(err, Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
-}
+            for client_config in AllClientVersions::new(client_config) {
+                let mut server = ServerSession::new(&server_config);
+                let mut client = ClientSession::new(&Arc::new(client_config), dns_name("notlocalhost"));
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Err(TLSErrorFromPeer::Server(
+                            TLSError::General("no client certificate root resolved".into()))));
+            }
+        }
+    }
+
+    // If we cannot resolve a root, we cannot decide if auth is mandatory
+    #[test]
+    fn client_verifier_no_auth_no_root() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_unreachable,
+                subjects: None,
+                mandatory: Some(true),
+            };
+
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config(*kt);
+
+            for client_config in AllClientVersions::new(client_config) {
+                let mut server = ServerSession::new(&server_config);
+                let mut client = ClientSession::new(&Arc::new(client_config), dns_name("notlocalhost"));
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Err(TLSErrorFromPeer::Server(
+                            TLSError::General("no client certificate root resolved".into()))));
+            }
+        }
+    }
+
+        // If we do have a root, we must do auth
+    #[test]
+    fn client_verifier_no_auth_yes_root() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_unreachable,
+                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                mandatory: Some(true),
+            };
+
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config(*kt);
+
+            for client_config in AllClientVersions::new(client_config) {
+                println!("Failing: {:?}", client_config.versions);
+                let mut server = ServerSession::new(&server_config);
+                let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+            }
+        }
+    }
+
+    #[test]
+    // Triple checks we propagate the TLSError through
+    fn client_verifier_fails_properly() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_err,
+                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                mandatory: Some(true),
+            };
+
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config_with_auth(*kt);
+
+            for client_config in AllClientVersions::new(client_config) {
+                let mut server = ServerSession::new(&server_config);
+                let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Err(TLSErrorFromPeer::Server(
+                            TLSError::General("test err".into()))));
+            }
+        }
+    }
+} // mod test_verifier
 
 #[test]
 fn client_error_is_sticky() {

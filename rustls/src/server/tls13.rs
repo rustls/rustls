@@ -290,7 +290,7 @@ impl CompleteClientHelloHandling {
         let schemes = verify::supported_verify_schemes();
         cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = sess.config.verifier.client_auth_root_subjects_sni(sess.get_sni()).ok_or_else(|| {
+        let names = sess.config.verifier.client_auth_root_subjects(sess.get_sni()).ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no client certificate root resolved".to_string())
@@ -654,7 +654,7 @@ impl hs::State for ExpectCertificate {
 
         let cert_chain = certp.convert();
 
-        let mandatory = sess.config.verifier.client_auth_mandatory_sni(sess.get_sni()).ok_or_else(|| {
+        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni()).ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 sess.common.send_fatal_alert(AlertDescription::AccessDenied);
                 TLSError::General("no client certificate root resolved".to_string())
@@ -671,7 +671,7 @@ impl hs::State for ExpectCertificate {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        sess.config.get_verifier().verify_client_cert_sni(&cert_chain, sess.get_sni())
+        sess.config.get_verifier().verify_client_cert(&cert_chain, sess.get_sni())
             .or_else(|err| {
                      hs::incompatible(sess, "certificate invalid");
                      Err(err)

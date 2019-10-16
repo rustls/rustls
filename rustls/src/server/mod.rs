@@ -1,4 +1,3 @@
-use crate::anchors::RootCertStore;
 use crate::session::{Session, SessionCommon};
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
@@ -102,14 +101,6 @@ pub trait ResolvesServerCert : Send + Sync {
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey>;
-}
-
-/// How to choose a root certificate to use as base of trust
-/// in client authentication
-pub trait ResolvesClientRoot : Send + Sync {
-    /// Choose whether to require client authentication and what root store to
-    /// use when checking client crednetials, if any.
-    fn resolve(&self, sni: Option<&webpki::DNSName>) -> Option<Arc<RootCertStore>>;
 }
 
 /// A struct representing the received Client Hello
