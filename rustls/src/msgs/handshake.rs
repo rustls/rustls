@@ -329,6 +329,55 @@ impl ConvertServerNameList for ServerNameRequest {
     }
 }
 
+// --- TLS 1.3 Encrypted SNI
+
+#[derive(Clone, Debug)]
+pub struct ClientEncryptedSNI {
+    cipher: CipherSuite,
+    key_share_entry: KeyShareEntry,
+    record_digest: PayloadU16,
+    encrypted_sni: PayloadU16,
+}
+
+impl ClientEncryptedSNI {
+    pub fn new(cipher: CipherSuite,
+               key_share_entry: KeyShareEntry,
+               record_digest: PayloadU16,
+               encrypted_sni: PayloadU16) -> ClientEncryptedSNI {
+        ClientEncryptedSNI {
+            cipher,
+            key_share_entry,
+            record_digest,
+            encrypted_sni
+        }
+    }
+}
+
+impl Codec for ClientEncryptedSNI {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cipher.encode(bytes);
+        self.key_share_entry.encode(bytes);
+        self.record_digest.encode(bytes);
+        self.encrypted_sni.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ClientEncryptedSNI> {
+        let cipher = CipherSuite::read(r)?;
+        let key_share_entry = KeyShareEntry::read(r)?;
+        let record_digest = PayloadU16::read(r)?;
+        let encrypted_sni = PayloadU16::read(r)?;
+
+        Some(ClientEncryptedSNI {
+            cipher,
+            key_share_entry,
+            record_digest,
+            encrypted_sni
+        })
+    }
+}
+
+declare_u16_vec!(ESNIRequest, ClientEncryptedSNI);
+
 pub type ProtocolNameList = VecU16OfPayloadU8;
 
 pub trait ConvertProtocolNameList {
@@ -557,6 +606,7 @@ pub enum ClientExtension {
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     EarlyData,
+    EncryptedServerName(ESNIRequest),
     Unknown(UnknownExtension),
 }
 
@@ -580,6 +630,7 @@ impl ClientExtension {
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
+            ClientExtension::EncryptedServerName(_) => ExtensionType::EncryptedServerName,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -608,6 +659,7 @@ impl Codec for ClientExtension {
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             ClientExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
+            ClientExtension::EncryptedServerName(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 

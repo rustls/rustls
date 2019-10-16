@@ -235,7 +235,8 @@ enum_builder! {
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
-        TransportParameters => 0xffa5
+        TransportParameters => 0xffa5,
+        EncryptedServerName => 0xffce
     }
 }
 
