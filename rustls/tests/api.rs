@@ -24,6 +24,7 @@ use rustls::ClientHello;
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 #[cfg(feature = "quic")]
 use ring::hkdf;
+use rustls::internal::msgs::enums::AlertDescription;
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::ClientCertVerified;
@@ -633,7 +634,7 @@ mod test_verifier {
                 let mut client = ClientSession::new(&Arc::new(client_config), dns_name("notlocalhost"));
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(err, Err(TLSErrorFromPeer::Server(
-                            TLSError::General("no client certificate root resolved".into()))));
+                            TLSError::AlertReceived(AlertDescription::UnrecognisedName))));
             }
         }
     }
@@ -659,7 +660,7 @@ mod test_verifier {
                 let mut client = ClientSession::new(&Arc::new(client_config), dns_name("notlocalhost"));
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(err, Err(TLSErrorFromPeer::Server(
-                            TLSError::General("no client certificate root resolved".into()))));
+                            TLSError::AlertReceived(AlertDescription::UnrecognisedName))));
             }
         }
     }
@@ -712,6 +713,33 @@ mod test_verifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(err, Err(TLSErrorFromPeer::Server(
                             TLSError::General("test err".into()))));
+            }
+        }
+    }
+
+
+    #[test]
+    // If a verifier returns a None on Mandatory-ness, then we error out
+    fn client_verifier_must_determine_client_auth_requirement_to_continue() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_ok,
+                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                mandatory: None,
+            };
+
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config_with_auth(*kt);
+
+            for client_config in AllClientVersions::new(client_config) {
+                let mut server = ServerSession::new(&server_config);
+                let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Err(TLSErrorFromPeer::Server(
+                            TLSError::AlertReceived(AlertDescription::UnrecognisedName))));
             }
         }
     }

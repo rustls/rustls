@@ -292,8 +292,8 @@ impl CompleteClientHelloHandling {
 
         let names = sess.config.verifier.client_auth_root_subjects(sess.get_sni()).ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
-                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
-                TLSError::General("no client certificate root resolved".to_string())
+                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
+                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
             })?;
 
         if !names.is_empty() {
@@ -656,8 +656,8 @@ impl hs::State for ExpectCertificate {
 
         let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni()).ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
-                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
-                TLSError::General("no client certificate root resolved".to_string())
+                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
+                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
             })?;
 
         if cert_chain.is_empty() {
