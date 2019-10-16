@@ -170,14 +170,14 @@ struct DummyClientAuth {
 impl rustls::ClientCertVerifier for DummyClientAuth {
     fn offer_client_auth(&self) -> bool { true }
 
-    fn client_auth_mandatory(&self) -> bool { self.mandatory }
+    fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> { Some(self.mandatory) }
 
-    fn client_auth_root_subjects(&self) -> rustls::DistinguishedNames {
-        rustls::DistinguishedNames::new()
+    fn client_auth_root_subjects(&self, _sni: Option<&webpki::DNSName>) -> Option<rustls::DistinguishedNames> {
+        Some(rustls::DistinguishedNames::new())
     }
 
     fn verify_client_cert(&self,
-                          _certs: &[rustls::Certificate]) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
+                          _certs: &[rustls::Certificate], _sni: Option<&webpki::DNSName>) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
         Ok(rustls::ClientCertVerified::assertion())
     }
 }
