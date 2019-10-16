@@ -295,7 +295,7 @@ mod quic {
 
 #[cfg(feature = "dangerous_configuration")]
 pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
-    ClientCertVerifier, ClientCertVerified};
+    ClientCertVerifier, ClientCertVerified, WebPKIVerifier};
 #[cfg(feature = "dangerous_configuration")]
 pub use crate::client::danger::DangerousClientConfig;
 

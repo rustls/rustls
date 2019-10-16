@@ -90,11 +90,18 @@ pub trait ClientCertVerifier : Send + Sync {
                           presented_certs: &[Certificate]) -> Result<ClientCertVerified, TLSError>;
 }
 
+/// Default `ServerCertVerifier`, see the trait impl for more information.
 pub struct WebPKIVerifier {
+    /// time provider
     pub time: fn() -> Result<webpki::Time, TLSError>,
 }
 
 impl ServerCertVerifier for WebPKIVerifier {
+    /// Will verify the certificate is valid in the following ways:
+    /// - Signed by a  trusted `RootCertStore` CA
+    /// - Not Expired
+    /// - Valid for DNS entry
+    /// - OCSP data is present
     fn verify_server_cert(&self,
                           roots: &RootCertStore,
                           presented_certs: &[Certificate],
@@ -118,6 +125,7 @@ impl ServerCertVerifier for WebPKIVerifier {
 }
 
 impl WebPKIVerifier {
+    /// Create a new `WebPKIVerifier`
     pub fn new() -> WebPKIVerifier {
         WebPKIVerifier {
             time: try_now,
