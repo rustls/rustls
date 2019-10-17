@@ -25,7 +25,7 @@ dangerous_configuration = []
 quic = []
 
 [dev-dependencies]
-env_logger = "0.6.1"
+env_logger = "0.7.1"
 log = "0.4.4"
 tempfile = "3.0"
 webpki-roots = "0.18.0"
