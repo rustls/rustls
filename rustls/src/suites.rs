@@ -373,6 +373,11 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
+pub static TLS13_CIPHERSUITES: [&'static SupportedCipherSuite; 3] =
+    [&TLS13_CHACHA20_POLY1305_SHA256,
+     &TLS13_AES_256_GCM_SHA384,
+     &TLS13_AES_128_GCM_SHA256];
+
 /// A list of all the cipher suites supported by rustls.
 pub static ALL_CIPHERSUITES: [&'static SupportedCipherSuite; 9] =
     [// TLS1.3 suites

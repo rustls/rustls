@@ -790,3 +790,12 @@ enum_builder! {
         OCSP => 0x01
     }
 }
+
+enum_builder! {
+    /// The `ESNI` protocol version.
+    @U16
+    EnumName: ESNIVersion;
+    EnumVal{
+        V1 => 0xff01
+    }
+}

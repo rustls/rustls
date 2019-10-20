@@ -2,7 +2,7 @@ use crate::msgs::enums::{ContentType, HandshakeType, ExtensionType};
 use crate::msgs::enums::{Compression, ProtocolVersion, AlertDescription};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
+use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload, ESNIRecord};
 use crate::msgs::handshake::{SessionID, Random};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
@@ -132,9 +132,11 @@ struct InitialState {
 }
 
 impl InitialState {
-    fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
+    fn new(host_name: webpki::DNSName,
+           esni_record: Option<ESNIRecord>,
+           extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
-            handshake: HandshakeDetails::new(host_name, extra_exts),
+            handshake: HandshakeDetails::new(host_name, esni_record, extra_exts),
         }
     }
 
@@ -149,8 +151,9 @@ impl InitialState {
 
 
 pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName,
+                       esni_record: Option<ESNIRecord>,
                        extra_exts: Vec<ClientExtension>) -> NextState {
-    InitialState::new(host_name, extra_exts)
+    InitialState::new(host_name, esni_record, extra_exts)
         .emit_initial_client_hello(sess)
 }
 
@@ -215,9 +218,14 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
+
     if sess.config.enable_sni {
-        exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
+        match &sess.config.encrypt_sni {
+            Some(esni) => exts.push(ClientExtension::make_esni(handshake.dns_name.as_ref(), &esni)),
+            None => exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()))
+        }
     }
+
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(suites::KeyExchange::supported_groups().to_vec()));
     exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes().to_vec()));

@@ -3,6 +3,7 @@ use crate::msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat}
 use crate::msgs::enums::{HashAlgorithm, SignatureAlgorithm, ServerNameType};
 use crate::msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use crate::msgs::enums::{ClientCertificateType, CertificateStatusType};
+use crate::msgs::enums::ESNIVersion;
 use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
@@ -17,7 +18,9 @@ use std::fmt;
 use std::io::Write;
 use std::collections;
 use std::mem;
+use ring::digest;
 use webpki;
+use crate::esni::ESNIHandshakeData;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -331,6 +334,89 @@ impl ConvertServerNameList for ServerNameRequest {
 
 // --- TLS 1.3 Encrypted SNI
 
+declare_u16_vec!(CipherSuites, CipherSuite);
+
+#[derive(Clone, Debug)]
+pub struct ESNIRecord {
+    pub version: ESNIVersion,
+    pub checksum: Vec<u8>,
+    pub checksum_valid: bool,
+    pub keys: KeyShareEntries,
+    pub cipher_suites: CipherSuites,
+    pub padded_length: u16,
+    pub not_before: u64,
+    pub not_after: u64,
+    pub extensions: PayloadU16,
+    pub bytes: Vec<u8>,
+}
+
+impl ESNIRecord {
+    pub fn is_checksum_valid(&self) -> bool {
+        self.checksum_valid
+    }
+}
+
+impl Codec for ESNIRecord {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.version.encode(bytes);
+        for byte in self.checksum.iter() {
+            byte.encode(bytes);
+        }
+        self.keys.encode(bytes);
+        self.cipher_suites.encode(bytes);
+        self.padded_length.encode(bytes);
+        self.not_before.encode(bytes);
+        self.not_after.encode(bytes);
+        self.extensions.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ESNIRecord> {
+        let first_bytes = r.take(6)?;
+        let version = ESNIVersion::read(&mut Reader::init(&first_bytes[0..2]))?;
+        let checksum: Vec<u8> = first_bytes[2..6].iter().cloned().collect();
+
+        // checksum
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(&first_bytes[0..2]);
+        ctx.update(&[0u8, 0u8, 0u8, 0u8]);
+        let rest = r.rest();
+        ctx.update(rest);
+        let digest = ctx.finish();
+        let checksum_valid = slice_eq(checksum.as_slice(), &digest.as_ref()[0..4]);
+
+        let mut bytes = Vec::with_capacity(first_bytes.len() + rest.len() );
+        bytes.extend_from_slice(first_bytes);
+        bytes.extend_from_slice(rest);
+        let tail_reader = &mut Reader::init(rest);
+        Some(ESNIRecord {
+            version,
+            checksum,
+            checksum_valid,
+            keys: KeyShareEntries::read(tail_reader)?,
+            cipher_suites: CipherSuites::read(tail_reader)?,
+            padded_length: u16::read(tail_reader)?,
+            not_before: u64::read(tail_reader)?,
+            not_after: u64::read(tail_reader)?,
+            extensions: PayloadU16::read(tail_reader)?,
+            bytes
+        })
+    }
+}
+
+fn slice_eq<'a, T: PartialEq>(a: &'a [T], b: &'a [T]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    for i in 0..a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+
+    true
+}
+
 #[derive(Clone, Debug)]
 pub struct ClientEncryptedSNI {
     cipher: CipherSuite,
@@ -372,6 +458,80 @@ impl Codec for ClientEncryptedSNI {
             key_share_entry,
             record_digest,
             encrypted_sni
+        })
+    }
+}
+
+pub struct ESNIContents {
+    pub record_digest: PayloadU16,
+    pub esni_key_share: KeyShareEntry,
+    pub client_hello_random: Random,
+}
+
+pub struct PaddedServerNameList {
+    pub sni: ServerName,
+    pub zeros: Vec<u8>,
+    pub padded_length: u16,
+}
+
+impl PaddedServerNameList {
+    pub fn new(sni: ServerName, padded_length: u16) -> PaddedServerNameList {
+        let mut output = Vec::new();
+        sni.encode(&output);
+        let length = padded_length - output.len() as u16;
+        PaddedServerNameList {
+            sni,
+            zeros: vec![0; length as usize],
+            padded_length,
+        }
+    }
+}
+
+impl Codec for PaddedServerNameList {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.sni.encode(bytes);
+        bytes.extend_from_slice(self.zeros.as_slice());
+    }
+
+    fn read(r: &mut Reader) -> Option<PaddedServerNameList> {
+        let count = r.left();
+        let sni = ServerName::read(r)?;
+        let sni_length = count - r.left();
+        let mut padding = Vec::with_capacity(r.left());
+        padding.extend_from_slice(r.rest());
+
+        for zero in padding.iter() {
+            if zero != 0 {
+                return None;
+            }
+        }
+
+        Some(PaddedServerNameList {
+            sni,
+            zeros: padding,
+            padded_length: (sni_length + padding.len()) as u16,
+        })
+    }
+}
+
+pub struct ClientESNIInner {
+    pub nonce: [u8; 16],
+    pub real_sni: PaddedServerNameList,
+}
+
+impl Codec for ClientESNIInner {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.nonce);
+        self.real_sni.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ClientESNIInner> {
+        let mut nonce =  [u8; 16];
+        nonce.clone_from_slice(r.take(16)?);
+
+        Some(ClientESNIInner {
+            nonce,
+            real_sni: PaddedServerNameList::read(r)?
         })
     }
 }
@@ -733,6 +893,16 @@ impl Codec for ClientExtension {
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
     pub fn make_sni(dns_name: webpki::DNSNameRef) -> ClientExtension {
+        let name = ServerName {
+            typ: ServerNameType::HostName,
+            payload: ServerNamePayload::HostName(dns_name.into()),
+        };
+
+        ClientExtension::ServerName(vec![ name ])
+    }
+
+    /// Make an ESNI request, encrypting `hostname` with the ESNIRecord
+    pub fn make_esni(dns_name: webpki::DNSNameRef, esni_record: &ESNIHandshakeData) -> ClientExtension {
         let name = ServerName {
             typ: ServerNameType::HostName,
             payload: ServerNamePayload::HostName(dns_name.into()),
