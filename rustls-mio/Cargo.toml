@@ -22,6 +22,7 @@ log = { version = "0.4.4", optional = true }
 rustls = { path = "../rustls" }
 sct = "0.6"
 webpki = "0.21.0"
+trust-dns-resolver = { version = "0.12.0", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 
 [dev-dependencies]
 ct-logs = "0.6"
@@ -46,6 +47,10 @@ path = "examples/tlsserver.rs"
 [[example]]
 name = "simpleclient"
 path = "examples/simpleclient.rs"
+
+[[example]]
+name = "esniclient"
+path = "examples/esniclient.rs"
 
 [[example]]
 name = "simple_0rtt_client"

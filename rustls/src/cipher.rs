@@ -251,7 +251,6 @@ impl Iv {
         Self(value)
     }
 
-    #[cfg(test)]
     pub(crate) fn value(&self) -> &[u8; 12] { &self.0 }
 }
 

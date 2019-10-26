@@ -82,10 +82,9 @@ fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, grou
 }
 
 pub fn choose_kx_groups(sess: &mut ClientSessionImpl,
-                        exts: &mut Vec<ClientExtension>,
                         hello: &mut ClientHelloDetails,
                         handshake: &mut HandshakeDetails,
-                        retryreq: Option<&HelloRetryRequest>) {
+                        retryreq: Option<&HelloRetryRequest>) -> Vec<KeyShareEntry> {
     // Choose our groups:
     // - if we've been asked via HelloRetryRequest for a specific
     //   one, do that.
@@ -115,7 +114,7 @@ pub fn choose_kx_groups(sess: &mut ClientSessionImpl,
         }
     }
 
-    exts.push(ClientExtension::KeyShare(key_shares));
+    key_shares
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a

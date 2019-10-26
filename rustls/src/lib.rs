@@ -237,7 +237,9 @@ mod client;
 mod key;
 mod bs_debug;
 mod keylog;
-mod esni;
+
+/// ESNI related functions
+pub mod esni;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.

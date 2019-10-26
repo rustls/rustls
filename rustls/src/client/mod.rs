@@ -6,7 +6,7 @@ use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::handshake::{ClientExtension, ESNIRecord};
+use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
 use crate::verify;
 use crate::anchors;
@@ -125,9 +125,11 @@ pub struct ClientConfig {
     /// The default is true.
     pub enable_sni: bool,
 
-    /// If present, encrypt the SNI. Only used if `enable_sni` is true, in which case
+    /// If true, encrypt the SNI. Only used if `enable_sni` is true, in which case
     /// the clear text SNI will not be sent.
-    pub encrypt_sni: Option<ESNIHandshakeData>,
+    ///
+    /// The default is false.
+    pub encrypt_sni: bool,
 
     /// How to verify the server certificate chain.
     verifier: Arc<dyn verify::ServerCertVerifier>,
@@ -165,7 +167,7 @@ impl ClientConfig {
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
             enable_sni: true,
-            encrypt_sni: None,
+            encrypt_sni: false,
             verifier: Arc::new(verify::WebPKIVerifier::new()),
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
@@ -403,8 +405,8 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hostname: webpki::DNSName, esni_record: Option<ESNIRecord>, extra_exts: Vec<ClientExtension>) {
-        self.state = Some(hs::start_handshake(self, hostname, esni_record, extra_exts));
+    pub fn start_handshake(&mut self, hostname: webpki::DNSName, esni: Option<ESNIHandshakeData>, extra_exts: Vec<ClientExtension>) {
+        self.state = Some(hs::start_handshake(self, hostname, esni, extra_exts));
     }
 
     pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
@@ -610,9 +612,9 @@ impl ClientSession {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to, and esni_keys are used to
     /// encrypt the hostname in the ClientHello.
-    pub fn new_with_esni(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef, esni_record: ESNIRecord) -> ClientSession {
+    pub fn new_with_esni(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef, esni: ESNIHandshakeData) -> ClientSession {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), Some(esni_record),vec![]);
+        imp.start_handshake(hostname.into(), Some(esni),vec![]);
         ClientSession { imp }
     }
 

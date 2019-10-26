@@ -10,6 +10,7 @@ use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 use crate::key;
+use crate::esni::*;
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -20,7 +21,6 @@ use std::collections;
 use std::mem;
 use ring::digest;
 use webpki;
-use crate::esni::ESNIHandshakeData;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -371,21 +371,20 @@ impl Codec for ESNIRecord {
     }
 
     fn read(r: &mut Reader) -> Option<ESNIRecord> {
-        let first_bytes = r.take(6)?;
-        let version = ESNIVersion::read(&mut Reader::init(&first_bytes[0..2]))?;
-        let checksum: Vec<u8> = first_bytes[2..6].iter().cloned().collect();
+        let version = ESNIVersion::read(r)?;
+        let checksum: Vec<u8> = u32::read(r)?.get_encoding();
 
         // checksum
         let mut ctx = digest::Context::new(&digest::SHA256);
-        ctx.update(&first_bytes[0..2]);
+        ctx.update(version.get_u16().get_encoding().as_slice());
         ctx.update(&[0u8, 0u8, 0u8, 0u8]);
         let rest = r.rest();
         ctx.update(rest);
         let digest = ctx.finish();
         let checksum_valid = slice_eq(checksum.as_slice(), &digest.as_ref()[0..4]);
 
-        let mut bytes = Vec::with_capacity(first_bytes.len() + rest.len() );
-        bytes.extend_from_slice(first_bytes);
+        let mut bytes = Vec::with_capacity(4 + rest.len() );
+        bytes.extend_from_slice(checksum.as_slice());
         bytes.extend_from_slice(rest);
         let tail_reader = &mut Reader::init(rest);
         Some(ESNIRecord {
@@ -419,19 +418,19 @@ fn slice_eq<'a, T: PartialEq>(a: &'a [T], b: &'a [T]) -> bool {
 
 #[derive(Clone, Debug)]
 pub struct ClientEncryptedSNI {
-    cipher: CipherSuite,
-    key_share_entry: KeyShareEntry,
-    record_digest: PayloadU16,
-    encrypted_sni: PayloadU16,
+    pub suite: CipherSuite,
+    pub key_share_entry: KeyShareEntry,
+    pub record_digest: PayloadU16,
+    pub encrypted_sni: PayloadU16,
 }
 
 impl ClientEncryptedSNI {
-    pub fn new(cipher: CipherSuite,
+    pub fn new(suite: CipherSuite,
                key_share_entry: KeyShareEntry,
                record_digest: PayloadU16,
                encrypted_sni: PayloadU16) -> ClientEncryptedSNI {
         ClientEncryptedSNI {
-            cipher,
+            suite,
             key_share_entry,
             record_digest,
             encrypted_sni
@@ -441,20 +440,20 @@ impl ClientEncryptedSNI {
 
 impl Codec for ClientEncryptedSNI {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.cipher.encode(bytes);
+        self.suite.encode(bytes);
         self.key_share_entry.encode(bytes);
         self.record_digest.encode(bytes);
         self.encrypted_sni.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ClientEncryptedSNI> {
-        let cipher = CipherSuite::read(r)?;
+        let suite = CipherSuite::read(r)?;
         let key_share_entry = KeyShareEntry::read(r)?;
         let record_digest = PayloadU16::read(r)?;
         let encrypted_sni = PayloadU16::read(r)?;
 
         Some(ClientEncryptedSNI {
-            cipher,
+            suite,
             key_share_entry,
             record_digest,
             encrypted_sni
@@ -462,12 +461,30 @@ impl Codec for ClientEncryptedSNI {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ESNIContents {
     pub record_digest: PayloadU16,
     pub esni_key_share: KeyShareEntry,
     pub client_hello_random: Random,
 }
 
+impl Codec for ESNIContents {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.record_digest.encode(bytes);
+        self.esni_key_share.encode(bytes);
+        self.client_hello_random.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ESNIContents> {
+        Some(ESNIContents {
+            record_digest: PayloadU16::read(r)?,
+            esni_key_share: KeyShareEntry::read(r)?,
+            client_hello_random: Random::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct PaddedServerNameList {
     pub sni: ServerName,
     pub zeros: Vec<u8>,
@@ -477,7 +494,7 @@ pub struct PaddedServerNameList {
 impl PaddedServerNameList {
     pub fn new(sni: ServerName, padded_length: u16) -> PaddedServerNameList {
         let mut output = Vec::new();
-        sni.encode(&output);
+        sni.encode(&mut output);
         let length = padded_length - output.len() as u16;
         PaddedServerNameList {
             sni,
@@ -499,9 +516,9 @@ impl Codec for PaddedServerNameList {
         let sni_length = count - r.left();
         let mut padding = Vec::with_capacity(r.left());
         padding.extend_from_slice(r.rest());
-
+        let len = padding.len();
         for zero in padding.iter() {
-            if zero != 0 {
+            if *zero != 0u8 {
                 return None;
             }
         }
@@ -509,11 +526,12 @@ impl Codec for PaddedServerNameList {
         Some(PaddedServerNameList {
             sni,
             zeros: padding,
-            padded_length: (sni_length + padding.len()) as u16,
+            padded_length: (sni_length + len) as u16,
         })
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ClientESNIInner {
     pub nonce: [u8; 16],
     pub real_sni: PaddedServerNameList,
@@ -526,7 +544,7 @@ impl Codec for ClientESNIInner {
     }
 
     fn read(r: &mut Reader) -> Option<ClientESNIInner> {
-        let mut nonce =  [u8; 16];
+        let mut nonce =  [0u8; 16];
         nonce.clone_from_slice(r.take(16)?);
 
         Some(ClientESNIInner {
@@ -846,6 +864,9 @@ impl Codec for ClientExtension {
             ExtensionType::ServerName => {
                 ClientExtension::ServerName(ServerNameRequest::read(&mut sub)?)
             }
+            ExtensionType::EncryptedServerName => {
+                ClientExtension::EncryptedServerName(ESNIRequest::read(&mut sub)?)
+            }
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
                     ClientExtension::SessionTicketOffer(Payload::read(&mut sub)?)
@@ -902,13 +923,11 @@ impl ClientExtension {
     }
 
     /// Make an ESNI request, encrypting `hostname` with the ESNIRecord
-    pub fn make_esni(dns_name: webpki::DNSNameRef, esni_record: &ESNIHandshakeData) -> ClientExtension {
-        let name = ServerName {
-            typ: ServerNameType::HostName,
-            payload: ServerNamePayload::HostName(dns_name.into()),
-        };
-
-        ClientExtension::ServerName(vec![ name ])
+    pub fn make_esni(dns_name: webpki::DNSNameRef,
+                     hs_data: &ESNIHandshakeData,
+                     key_share_bytes: Vec<u8>) -> Option<ClientExtension> {
+        let esni = compute_esni(dns_name, hs_data, key_share_bytes)?;
+        Some(ClientExtension::EncryptedServerName(vec![esni]))
     }
 }
 

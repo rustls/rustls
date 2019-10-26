@@ -2,7 +2,7 @@ use crate::msgs::enums::{ContentType, HandshakeType, ExtensionType};
 use crate::msgs::enums::{Compression, ProtocolVersion, AlertDescription};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload, ESNIRecord};
+use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload, ClientHelloPayload};
 use crate::msgs::handshake::{SessionID, Random};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
@@ -10,7 +10,7 @@ use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use crate::msgs::handshake::HelloRetryRequest;
 use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
 use crate::msgs::enums::{PSKKeyExchangeMode, ECPointFormat};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{Codec, Reader, encode_vec_u16};
 use crate::msgs::persist;
 use crate::client::ClientSessionImpl;
 use crate::session::SessionSecrets;
@@ -35,6 +35,7 @@ use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
 
 use webpki;
+use crate::esni::ESNIHandshakeData;
 
 macro_rules! extract_handshake(
   ( $m:expr, $t:path ) => (
@@ -133,10 +134,10 @@ struct InitialState {
 
 impl InitialState {
     fn new(host_name: webpki::DNSName,
-           esni_record: Option<ESNIRecord>,
+           esni: Option<ESNIHandshakeData>,
            extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
-            handshake: HandshakeDetails::new(host_name, esni_record, extra_exts),
+            handshake: HandshakeDetails::new(host_name, esni, extra_exts),
         }
     }
 
@@ -151,9 +152,9 @@ impl InitialState {
 
 
 pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName,
-                       esni_record: Option<ESNIRecord>,
+                       esni: Option<ESNIHandshakeData>,
                        extra_exts: Vec<ClientExtension>) -> NextState {
-    InitialState::new(host_name, esni_record, extra_exts)
+    InitialState::new(host_name, esni, extra_exts)
         .emit_initial_client_hello(sess)
 }
 
@@ -219,11 +220,35 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
 
-    if sess.config.enable_sni {
-        match &sess.config.encrypt_sni {
-            Some(esni) => exts.push(ClientExtension::make_esni(handshake.dns_name.as_ref(), &esni)),
-            None => exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()))
+    let keyshare_entries = if support_tls13 {
+        Some(tls13::choose_kx_groups(sess,  &mut hello, &mut handshake, retryreq))
+    } else {
+        None
+    };
+
+    if sess.config.enable_sni && sess.config.encrypt_sni {
+        if let Some(esni) = &handshake.esni {
+            if let Some(ks) = &keyshare_entries {
+                let mut ks_bytes=  Vec::new();
+                encode_vec_u16(&mut ks_bytes, ks);
+                let esni_ext = ClientExtension::make_esni(handshake.dns_name.as_ref(), esni, ks_bytes);
+                if let Some(ext) = esni_ext {
+                    println!("Pushing ESNI...");
+                    exts.push(ext);
+                }
+                    // TODO: what if ESNI fails?
+            }
         }
+
+        // TODO: what if ESNI is configured but there's no ESNI record?
+
+    } else if sess.config.enable_sni {
+        println!("REGULAR SNI...");
+        exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
+    }
+
+    if let Some(ks) = keyshare_entries {
+        exts.push(ClientExtension::KeyShare(ks));
     }
 
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
@@ -234,10 +259,6 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
 
     if sess.config.ct_logs.is_some() {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
-    }
-
-    if support_tls13 {
-        tls13::choose_kx_groups(sess, &mut exts, &mut hello, &mut handshake, retryreq);
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
