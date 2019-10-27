@@ -554,7 +554,7 @@ impl Codec for ClientESNIInner {
     }
 }
 
-declare_u16_vec!(ESNIRequest, ClientEncryptedSNI);
+// declare_u16_vec!(ESNIRequest, ClientEncryptedSNI);
 
 pub type ProtocolNameList = VecU16OfPayloadU8;
 
@@ -784,7 +784,7 @@ pub enum ClientExtension {
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     EarlyData,
-    EncryptedServerName(ESNIRequest),
+    EncryptedServerName(ClientEncryptedSNI),
     Unknown(UnknownExtension),
 }
 
@@ -865,7 +865,7 @@ impl Codec for ClientExtension {
                 ClientExtension::ServerName(ServerNameRequest::read(&mut sub)?)
             }
             ExtensionType::EncryptedServerName => {
-                ClientExtension::EncryptedServerName(ESNIRequest::read(&mut sub)?)
+                ClientExtension::EncryptedServerName(ClientEncryptedSNI::read(&mut sub)?)
             }
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
@@ -927,7 +927,7 @@ impl ClientExtension {
                      hs_data: &ESNIHandshakeData,
                      key_share_bytes: Vec<u8>) -> Option<ClientExtension> {
         let esni = compute_esni(dns_name, hs_data, key_share_bytes)?;
-        Some(ClientExtension::EncryptedServerName(vec![esni]))
+        Some(ClientExtension::EncryptedServerName(esni))
     }
 }
 

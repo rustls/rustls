@@ -221,7 +221,10 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
 
     let keyshare_entries = if support_tls13 {
-        Some(tls13::choose_kx_groups(sess,  &mut hello, &mut handshake, retryreq))
+        let ks = tls13::choose_kx_groups(sess,  &mut hello, &mut handshake, retryreq);
+        let ret = ks.clone();
+        exts.push(ClientExtension::KeyShare(ks));
+        Some(ret)
     } else {
         None
     };
@@ -235,6 +238,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                 if let Some(ext) = esni_ext {
                     println!("Pushing ESNI...");
                     exts.push(ext);
+                    //exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
                 }
                     // TODO: what if ESNI fails?
             }
@@ -247,9 +251,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
     }
 
-    if let Some(ks) = keyshare_entries {
-        exts.push(ClientExtension::KeyShare(ks));
-    }
+
 
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(suites::KeyExchange::supported_groups().to_vec()));
