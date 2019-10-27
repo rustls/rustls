@@ -16,6 +16,7 @@ use crate::log::trace;
 use webpki;
 
 use std::mem;
+use crate::esni::ESNIHandshakeData;
 
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
@@ -60,11 +61,14 @@ pub struct HandshakeDetails {
     pub session_id: SessionID,
     pub sent_tls13_fake_ccs: bool,
     pub dns_name: webpki::DNSName,
+    pub esni: Option<ESNIHandshakeData>,
     pub extra_exts: Vec<ClientExtension>,
 }
 
 impl HandshakeDetails {
-    pub fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> HandshakeDetails {
+    pub fn new(host_name: webpki::DNSName,
+               esni: Option<ESNIHandshakeData>,
+               extra_exts: Vec<ClientExtension>) -> HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
             transcript: hash_hs::HandshakeHash::new(),
@@ -74,6 +78,7 @@ impl HandshakeDetails {
             session_id: SessionID::empty(),
             sent_tls13_fake_ccs: false,
             dns_name: host_name,
+            esni,
             extra_exts,
         }
     }

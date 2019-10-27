@@ -3,12 +3,14 @@ use crate::msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat}
 use crate::msgs::enums::{HashAlgorithm, SignatureAlgorithm, ServerNameType};
 use crate::msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
 use crate::msgs::enums::{ClientCertificateType, CertificateStatusType};
+use crate::msgs::enums::ESNIVersion;
 use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 use crate::key;
+use crate::esni::*;
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -17,6 +19,7 @@ use std::fmt;
 use std::io::Write;
 use std::collections;
 use std::mem;
+use ring::digest;
 use webpki;
 
 macro_rules! declare_u8_vec(
@@ -329,6 +332,230 @@ impl ConvertServerNameList for ServerNameRequest {
     }
 }
 
+// --- TLS 1.3 Encrypted SNI
+
+declare_u16_vec!(CipherSuites, CipherSuite);
+
+#[derive(Clone, Debug)]
+pub struct ESNIRecord {
+    pub version: ESNIVersion,
+    pub checksum: Vec<u8>,
+    pub checksum_valid: bool,
+    pub keys: KeyShareEntries,
+    pub cipher_suites: CipherSuites,
+    pub padded_length: u16,
+    pub not_before: u64,
+    pub not_after: u64,
+    pub extensions: PayloadU16,
+    pub bytes: Vec<u8>,
+}
+
+impl ESNIRecord {
+    pub fn is_checksum_valid(&self) -> bool {
+        self.checksum_valid
+    }
+}
+
+impl Codec for ESNIRecord {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.version.encode(bytes);
+        for byte in self.checksum.iter() {
+            byte.encode(bytes);
+        }
+        self.keys.encode(bytes);
+        self.cipher_suites.encode(bytes);
+        self.padded_length.encode(bytes);
+        self.not_before.encode(bytes);
+        self.not_after.encode(bytes);
+        self.extensions.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ESNIRecord> {
+        let version = ESNIVersion::read(r)?;
+        let checksum: Vec<u8> = u32::read(r)?.get_encoding();
+
+        // checksum
+        let mut ctx = digest::Context::new(&digest::SHA256);
+        ctx.update(version.get_u16().get_encoding().as_slice());
+        ctx.update(&[0u8, 0u8, 0u8, 0u8]);
+        let rest = r.rest();
+        ctx.update(rest);
+        let digest = ctx.finish();
+        let checksum_valid = slice_eq(checksum.as_slice(), &digest.as_ref()[0..4]);
+
+        let mut bytes = Vec::with_capacity(4 + rest.len() );
+        bytes.extend_from_slice(checksum.as_slice());
+        bytes.extend_from_slice(rest);
+        let tail_reader = &mut Reader::init(rest);
+        Some(ESNIRecord {
+            version,
+            checksum,
+            checksum_valid,
+            keys: KeyShareEntries::read(tail_reader)?,
+            cipher_suites: CipherSuites::read(tail_reader)?,
+            padded_length: u16::read(tail_reader)?,
+            not_before: u64::read(tail_reader)?,
+            not_after: u64::read(tail_reader)?,
+            extensions: PayloadU16::read(tail_reader)?,
+            bytes
+        })
+    }
+}
+
+fn slice_eq<'a, T: PartialEq>(a: &'a [T], b: &'a [T]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    for i in 0..a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+
+    true
+}
+
+#[derive(Clone, Debug)]
+pub struct ClientEncryptedSNI {
+    pub suite: CipherSuite,
+    pub key_share_entry: KeyShareEntry,
+    pub record_digest: PayloadU16,
+    pub encrypted_sni: PayloadU16,
+}
+
+impl ClientEncryptedSNI {
+    pub fn new(suite: CipherSuite,
+               key_share_entry: KeyShareEntry,
+               record_digest: PayloadU16,
+               encrypted_sni: PayloadU16) -> ClientEncryptedSNI {
+        ClientEncryptedSNI {
+            suite,
+            key_share_entry,
+            record_digest,
+            encrypted_sni
+        }
+    }
+}
+
+impl Codec for ClientEncryptedSNI {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.suite.encode(bytes);
+        self.key_share_entry.encode(bytes);
+        self.record_digest.encode(bytes);
+        self.encrypted_sni.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ClientEncryptedSNI> {
+        let suite = CipherSuite::read(r)?;
+        let key_share_entry = KeyShareEntry::read(r)?;
+        let record_digest = PayloadU16::read(r)?;
+        let encrypted_sni = PayloadU16::read(r)?;
+
+        Some(ClientEncryptedSNI {
+            suite,
+            key_share_entry,
+            record_digest,
+            encrypted_sni
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ESNIContents {
+    pub record_digest: PayloadU16,
+    pub esni_key_share: KeyShareEntry,
+    pub client_hello_random: Random,
+}
+
+impl Codec for ESNIContents {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.record_digest.encode(bytes);
+        self.esni_key_share.encode(bytes);
+        self.client_hello_random.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ESNIContents> {
+        Some(ESNIContents {
+            record_digest: PayloadU16::read(r)?,
+            esni_key_share: KeyShareEntry::read(r)?,
+            client_hello_random: Random::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PaddedServerNameList {
+    pub sni: ServerName,
+    pub zeros: Vec<u8>,
+    pub padded_length: u16,
+}
+
+impl PaddedServerNameList {
+    pub fn new(sni: ServerName, padded_length: u16) -> PaddedServerNameList {
+        let mut output = Vec::new();
+        sni.encode(&mut output);
+        let length = padded_length - output.len() as u16;
+        PaddedServerNameList {
+            sni,
+            zeros: vec![0; length as usize],
+            padded_length,
+        }
+    }
+}
+
+impl Codec for PaddedServerNameList {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.sni.encode(bytes);
+        bytes.extend_from_slice(self.zeros.as_slice());
+    }
+
+    fn read(r: &mut Reader) -> Option<PaddedServerNameList> {
+        let count = r.left();
+        let sni = ServerName::read(r)?;
+        let sni_length = count - r.left();
+        let mut padding = Vec::with_capacity(r.left());
+        padding.extend_from_slice(r.rest());
+        let len = padding.len();
+        for zero in padding.iter() {
+            if *zero != 0u8 {
+                return None;
+            }
+        }
+
+        Some(PaddedServerNameList {
+            sni,
+            zeros: padding,
+            padded_length: (sni_length + len) as u16,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ClientESNIInner {
+    pub nonce: [u8; 16],
+    pub real_sni: PaddedServerNameList,
+}
+
+impl Codec for ClientESNIInner {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.nonce);
+        self.real_sni.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ClientESNIInner> {
+        let mut nonce =  [0u8; 16];
+        nonce.clone_from_slice(r.take(16)?);
+
+        Some(ClientESNIInner {
+            nonce,
+            real_sni: PaddedServerNameList::read(r)?
+        })
+    }
+}
+
+// declare_u16_vec!(ESNIRequest, ClientEncryptedSNI);
+
 pub type ProtocolNameList = VecU16OfPayloadU8;
 
 pub trait ConvertProtocolNameList {
@@ -557,6 +784,7 @@ pub enum ClientExtension {
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     EarlyData,
+    EncryptedServerName(ClientEncryptedSNI),
     Unknown(UnknownExtension),
 }
 
@@ -580,6 +808,7 @@ impl ClientExtension {
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
+            ClientExtension::EncryptedServerName(_) => ExtensionType::EncryptedServerName,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -608,6 +837,7 @@ impl Codec for ClientExtension {
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             ClientExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
+            ClientExtension::EncryptedServerName(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -633,6 +863,9 @@ impl Codec for ClientExtension {
             }
             ExtensionType::ServerName => {
                 ClientExtension::ServerName(ServerNameRequest::read(&mut sub)?)
+            }
+            ExtensionType::EncryptedServerName => {
+                ClientExtension::EncryptedServerName(ClientEncryptedSNI::read(&mut sub)?)
             }
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
@@ -687,6 +920,14 @@ impl ClientExtension {
         };
 
         ClientExtension::ServerName(vec![ name ])
+    }
+
+    /// Make an ESNI request, encrypting `hostname` with the ESNIRecord
+    pub fn make_esni(dns_name: webpki::DNSNameRef,
+                     hs_data: &ESNIHandshakeData,
+                     key_share_bytes: Vec<u8>) -> Option<ClientExtension> {
+        let esni = compute_esni(dns_name, hs_data, key_share_bytes)?;
+        Some(ClientExtension::EncryptedServerName(esni))
     }
 }
 

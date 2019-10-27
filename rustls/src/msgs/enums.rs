@@ -235,7 +235,8 @@ enum_builder! {
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
-        TransportParameters => 0xffa5
+        TransportParameters => 0xffa5,
+        EncryptedServerName => 0xffce
     }
 }
 
@@ -787,5 +788,14 @@ enum_builder! {
     EnumName: CertificateStatusType;
     EnumVal{
         OCSP => 0x01
+    }
+}
+
+enum_builder! {
+    /// The `ESNI` protocol version.
+    @U16
+    EnumName: ESNIVersion;
+    EnumVal{
+        V1 => 0xff01
     }
 }

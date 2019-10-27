@@ -4,6 +4,7 @@ use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Reader, Codec};
 use webpki::DNSNameRef;
 use crate::key::Certificate;
+use base64;
 
 use std::mem;
 
@@ -925,4 +926,16 @@ fn can_roundtrip_all_tls13_handshake_payloads() {
         println!("{:?}", hm);
         println!("{:?}", other);
     }
+}
+
+#[test]
+fn test_esni() {
+    // An ESNI record from Cloudflare
+    let base64_esni = "/wHdBX2/ACQAHQAg+Q5TFpKpR0O9dALVeNC9kDBfNwNBvzHma4VrZgMtKXwAAhMBAQQAAAAAXaSpkAAAAABdrJKQAAA=";
+    let bytes = base64::decode(&base64_esni).unwrap();
+    let record = ESNIRecord::read(&mut Reader::init(&bytes)).unwrap();
+    assert!(record.is_checksum_valid());
+    let mut output = Vec::new();
+    record.encode(&mut output);
+    assert_eq!(base64_esni, base64::encode(&output));
 }
