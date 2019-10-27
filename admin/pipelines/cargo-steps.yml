@@ -9,7 +9,9 @@ steps:
     env: { "RUST_BACKTRACE": "1" }
   - script: cargo build --no-default-features
     displayName: "cargo build (debug; no default features; no run)"
+    workingDirectory: rustls
   - script: cargo test --no-default-features --no-run
     displayName: "cargo test (debug; no default features; no run)"
+    workingDirectory: rustls
   - script: cargo test --release --no-run
     displayName: "cargo test (release; no run)"
