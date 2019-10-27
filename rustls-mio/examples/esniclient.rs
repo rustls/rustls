@@ -24,9 +24,7 @@ fn main() {
     let esni_bytes = resolve_esni(dns_config, opts, &addr);
     let esni_hs = rustls::esni::create_esni_handshake(&esni_bytes).unwrap();
 
-    let mut config = rustls::ClientConfig::default();
-    config.alpn_protocols = vec![b"http/1.1".to_vec()];
-    config.encrypt_sni = true;
+    let mut config = rustls::esni::create_esni_config();
     config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
 
