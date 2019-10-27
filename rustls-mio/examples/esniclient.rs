@@ -15,7 +15,7 @@ use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
 
 fn main() {
-    let domain = "only.esni.defo.ie";
+    let domain = "medium.com";
     println!("\nContacting {:?} over ESNI\n", domain);
 
     let dns_config = ResolverConfig::cloudflare_https();
@@ -25,16 +25,17 @@ fn main() {
     let esni_hs = rustls::esni::create_esni_handshake(&esni_bytes).unwrap();
 
     let mut config = rustls::ClientConfig::default();
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
     config.encrypt_sni = true;
     config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("defo.ie").unwrap();
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str("medium.com").unwrap();
     let mut sess = rustls::ClientSession::new_with_esni(&Arc::new(config), dns_name, esni_hs);
     let mut sock = TcpStream::connect(domain.to_owned() + ":443").unwrap();
     let mut tls = rustls::Stream::new(&mut sess, &mut sock);
     match tls.write(concat!("GET / HTTP/1.1\r\n",
-    "Host: only.esni.defo.ie\r\n",
+    "Host: medium.com\r\n",
     "Connection: close\r\n",
     "Accept-Encoding: identity\r\n",
     "\r\n")
@@ -49,7 +50,6 @@ fn main() {
     }
     let ciphersuite = tls.sess.get_negotiated_ciphersuite().unwrap();
     writeln!(&mut std::io::stderr(), "\n\nNegotiated ciphersuite: {:?}", ciphersuite.suite).unwrap();
-    writeln!(&mut std::io::stderr(), "\n\nReading the the stream is broken...").unwrap();
     let mut plaintext = Vec::new();
     match tls.read_to_end(&mut plaintext) {
         Ok(success) => {
