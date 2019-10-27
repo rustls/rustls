@@ -46,8 +46,6 @@ pub fn create_esni_config() -> ClientConfig {
 pub fn create_esni_handshake(record_bytes: &Vec<u8>) -> Option<ESNIHandshakeData> {
     let record = ESNIRecord::read(&mut Reader::init(&record_bytes))?;
 
-    println!("record {:?}", record);
-
     // Check whether the record is still valid
     let now = now()?;
 
@@ -133,9 +131,6 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
                                  ring::aead::Aad::from(key_share_bytes),
                                  &mut sni_bytes) {
         Ok(_) => {
-            println!("What's the suite? {:?}", hs_data.cipher_suite.suite);
-            println!("What's record digest? {:?}", hs_data.record_digest);
-            println!("what the group? {:?}", hs_data.peer_share.group);
             Some (ClientEncryptedSNI {
                 suite: hs_data.cipher_suite.suite,
                 key_share_entry: KeyShareEntry::new(hs_data.peer_share.group, exchange_result.pubkey.as_ref()),
