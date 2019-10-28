@@ -347,7 +347,6 @@ pub struct ESNIRecord {
     pub not_before: u64,
     pub not_after: u64,
     pub extensions: PayloadU16,
-    pub bytes: Vec<u8>,
 }
 
 impl ESNIRecord {
@@ -383,9 +382,6 @@ impl Codec for ESNIRecord {
         let digest = ctx.finish();
         let checksum_valid = slice_eq(checksum.as_slice(), &digest.as_ref()[0..4]);
 
-        let mut bytes = Vec::with_capacity(4 + rest.len() );
-        bytes.extend_from_slice(checksum.as_slice());
-        bytes.extend_from_slice(rest);
         let tail_reader = &mut Reader::init(rest);
         Some(ESNIRecord {
             version,
@@ -397,7 +393,6 @@ impl Codec for ESNIRecord {
             not_before: u64::read(tail_reader)?,
             not_after: u64::read(tail_reader)?,
             extensions: PayloadU16::read(tail_reader)?,
-            bytes
         })
     }
 }
