@@ -70,7 +70,7 @@ pub fn create_esni_handshake(record_bytes: &Vec<u8>) -> Option<ESNIHandshakeData
         None => return None,
     };
 
-    let digest = digest::digest(cipher_suite.get_hash(), &record.bytes.as_slice()[2..]);
+    let digest = digest::digest(cipher_suite.get_hash(), record_bytes);
     let bytes: Vec<u8> = Vec::from(digest.as_ref());
 
     Some(ESNIHandshakeData {
