@@ -554,8 +554,6 @@ impl Codec for ClientESNIInner {
     }
 }
 
-// declare_u16_vec!(ESNIRequest, ClientEncryptedSNI);
-
 pub type ProtocolNameList = VecU16OfPayloadU8;
 
 pub trait ConvertProtocolNameList {
