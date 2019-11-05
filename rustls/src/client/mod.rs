@@ -634,6 +634,11 @@ impl ClientSession {
     pub fn is_early_data_accepted(&self) -> bool {
         self.imp.early_data.is_accepted()
     }
+
+    /// Returns True if the client is enabled to send early data.
+    pub fn is_early_data_enabled(&self) -> bool {
+        self.imp.early_data.is_enabled()
+    }
 }
 
 impl Session for ClientSession {
