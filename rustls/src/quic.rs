@@ -128,12 +128,12 @@ fn update_secrets(this: &SessionCommon, client: &hkdf::Prk, server: &hkdf::Prk) 
     let client = key_schedule::hkdf_expand(
         client,
         hkdf_alg,
-        b"traffic upd",
+        b"quic ku",
         &[]);
     let server = key_schedule::hkdf_expand(
         server,
         hkdf_alg,
-        b"traffic upd",
+        b"quic ku",
         &[]);
 
     Secrets {
