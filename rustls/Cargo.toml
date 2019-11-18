@@ -17,6 +17,7 @@ log = { version = "0.4.4", optional = true }
 ring = "0.16.5"
 sct = "0.6.0"
 webpki = "0.21.0"
+hex-literal = "0.2.1"
 
 [features]
 default = ["logging"]
