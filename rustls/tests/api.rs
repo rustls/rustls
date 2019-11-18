@@ -1864,19 +1864,22 @@ mod test_quic {
             ]),
         };
         let updated = client.update_secrets(&initial.client, &initial.server);
-        // The expected values will need to be updated if the negotiated hash function changes.
+        // The expected values will need to be updated if the negotiated hash function changes. Pull the
+        // values from ring's `hmac::Key::construct` with a debugger.
         assert!(equal_prk(
             &updated.client,
             &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-                101, 250, 130, 179, 97, 208, 160, 166, 213, 90, 196, 212, 96, 49, 190, 24, 237, 225,
-                68, 97, 141, 123, 162, 108, 231, 21, 255, 184, 49, 245, 178, 148
+                0x42, 0xca, 0xc8, 0xc9, 0x1c, 0xd5, 0xeb, 0x40, 0x68, 0x2e, 0x43, 
+                0x2e, 0xdf, 0x2d, 0x2b, 0xe9, 0xf4, 0x1a, 0x52, 0xca, 0x6b, 0x22, 0xd8, 0xe6, 0xcd, 0xb1, 
+                0xe8, 0xac, 0xa9, 0x6, 0x1f, 0xce
             ]))
         );
         assert!(equal_prk(
             &updated.server,
             &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-                171, 127, 244, 22, 119, 205, 252, 100, 179, 94, 91, 45, 99, 82, 236, 124, 44, 251, 63,
-                57, 94, 215, 175, 138, 178, 161, 97, 80, 51, 250, 107, 85
+                0xeb, 0x7f, 0x5e, 0x2a, 0x12, 0x3f, 0x40, 0x7d, 0xb4, 0x99, 0xe3, 
+                0x61, 0xca, 0xe5, 0x90, 0xd4, 0xd9, 0x92, 0xe1, 0x4b, 0x7a, 0xce, 0x3, 0xc2, 0x44, 0xe0, 
+                0x42, 0x21, 0x15, 0xb6, 0xd3, 0x8a
             ]))
         );
 
