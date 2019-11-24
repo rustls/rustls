@@ -211,6 +211,9 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
+#[macro_use]
+extern crate hex_literal;
+
 #[allow(missing_docs)]
 #[macro_use]
 mod msgs;

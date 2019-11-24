@@ -15,10 +15,11 @@ use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
 
 fn main() {
-    let domain = "medium.com";
+    let domain = "canbe.esni.defo.ie";
     println!("\nContacting {:?} over ESNI\n", domain);
 
-    let dns_config = ResolverConfig::cloudflare_https();
+    //let dns_config = ResolverConfig::cloudflare_https();
+    let dns_config= ResolverConfig::default();
     let opts = ResolverOpts::default();
     let addr = Address::new(domain);
     let esni_bytes = resolve_esni(dns_config, opts, &addr);
@@ -28,12 +29,12 @@ fn main() {
     config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("medium.com").unwrap();
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str("canbe.esni.defo.ie").unwrap();
     let mut sess = rustls::ClientSession::new_with_esni(&Arc::new(config), dns_name, esni_hs);
-    let mut sock = TcpStream::connect(domain.to_owned() + ":443").unwrap();
+    let mut sock = TcpStream::connect(domain.to_owned() + ":8443").unwrap();
     let mut tls = rustls::Stream::new(&mut sess, &mut sock);
-    match tls.write(concat!("GET / HTTP/1.1\r\n",
-    "Host: medium.com\r\n",
+    match tls.write(concat!("GET /stats HTTP/1.1\r\n",
+    "Host: canbe.esni.defo.ie\r\n",
     "Connection: close\r\n",
     "Accept-Encoding: identity\r\n",
     "\r\n")
@@ -75,9 +76,7 @@ pub fn resolve_esni(config: ResolverConfig, opts: ResolverOpts, address: &Addres
         }
     }
 
-    let decoded = decode(&bytes).unwrap();
-
-    decoded
+    decode(&bytes).unwrap()
 }
 
 pub struct Address {

@@ -234,9 +234,8 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
             if let Some(ks) = &keyshare_entries {
                 let mut ks_bytes=  Vec::new();
                 encode_vec_u16(&mut ks_bytes, ks);
-                let esni_ext = ClientExtension::make_esni(handshake.dns_name.as_ref(), esni, ks_bytes);
+                let esni_ext = ClientExtension::make_esni(handshake.dns_name.as_ref(), esni, ks_bytes, &handshake.randoms);
                 if let Some(ext) = esni_ext {
-                    println!("Pushing ESNI...");
                     exts.push(ext);
                     //exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
                 }

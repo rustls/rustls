@@ -21,6 +21,7 @@ use std::collections;
 use std::mem;
 use ring::digest;
 use webpki;
+use crate::session::SessionRandoms;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -397,7 +398,7 @@ impl Codec for ESNIRecord {
     }
 }
 
-fn slice_eq<'a, T: PartialEq>(a: &'a [T], b: &'a [T]) -> bool {
+pub fn slice_eq<'a, T: PartialEq>(a: &'a [T], b: &'a [T]) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -481,13 +482,13 @@ impl Codec for ESNIContents {
 
 #[derive(Clone, Debug)]
 pub struct PaddedServerNameList {
-    pub sni: ServerName,
+    pub sni: ServerNameRequest,
     pub zeros: Vec<u8>,
     pub padded_length: u16,
 }
 
 impl PaddedServerNameList {
-    pub fn new(sni: ServerName, padded_length: u16) -> PaddedServerNameList {
+    pub fn new(sni: ServerNameRequest, padded_length: u16) -> PaddedServerNameList {
         let mut output = Vec::new();
         sni.encode(&mut output);
         let length = padded_length - output.len() as u16;
@@ -519,7 +520,7 @@ impl Codec for PaddedServerNameList {
         }
 
         Some(PaddedServerNameList {
-            sni,
+            sni: vec![sni],
             zeros: padding,
             padded_length: (sni_length + len) as u16,
         })
@@ -918,8 +919,9 @@ impl ClientExtension {
     /// Make an ESNI request, encrypting `hostname` with the ESNIRecord
     pub fn make_esni(dns_name: webpki::DNSNameRef,
                      hs_data: &ESNIHandshakeData,
-                     key_share_bytes: Vec<u8>) -> Option<ClientExtension> {
-        let esni = compute_esni(dns_name, hs_data, key_share_bytes)?;
+                     key_share_bytes: Vec<u8>,
+                     randoms: &SessionRandoms) -> Option<ClientExtension> {
+        let esni = compute_esni(dns_name, hs_data, key_share_bytes, randoms)?;
         Some(ClientExtension::EncryptedServerName(esni))
     }
 }
