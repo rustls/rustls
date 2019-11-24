@@ -482,13 +482,13 @@ impl Codec for ESNIContents {
 
 #[derive(Clone, Debug)]
 pub struct PaddedServerNameList {
-    pub sni: ServerName,
+    pub sni: ServerNameRequest,
     pub zeros: Vec<u8>,
     pub padded_length: u16,
 }
 
 impl PaddedServerNameList {
-    pub fn new(sni: ServerName, padded_length: u16) -> PaddedServerNameList {
+    pub fn new(sni: ServerNameRequest, padded_length: u16) -> PaddedServerNameList {
         let mut output = Vec::new();
         sni.encode(&mut output);
         let length = padded_length - output.len() as u16;
@@ -520,7 +520,7 @@ impl Codec for PaddedServerNameList {
         }
 
         Some(PaddedServerNameList {
-            sni,
+            sni: vec![sni],
             zeros: padding,
             padded_length: (sni_length + len) as u16,
         })

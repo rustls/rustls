@@ -11,7 +11,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ring::{digest, hkdf};
 use webpki;
 use crate::SupportedCipherSuite;
-use crate::key_schedule::hkdf_expand;
 use crate::msgs::base::PayloadU16;
 use ring::hkdf::{KeyType, Prk};
 use crate::cipher::{Iv, IvLen};
@@ -45,6 +44,7 @@ pub fn create_esni_config() -> ClientConfig {
 /// Creates a `ClientConfig` with defaults suitable for ESNI extension support.
 /// This creates a config that supports TLS 1.3 only.
 pub fn create_esni_handshake(record_bytes: &Vec<u8>) -> Option<ESNIHandshakeData> {
+    println!("ESNIKeys:{} {:02x?}", record_bytes.len(), record_bytes);
     let record = ESNIRecord::read(&mut Reader::init(&record_bytes))?;
 
     println!("record {:?}", record);
@@ -90,23 +90,7 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
                     key_share_bytes: Vec<u8>) -> Option<ClientEncryptedSNI> {
     let mut nonce = [0u8; 16];
     rand::fill_random(&mut nonce);
-    let name = ServerName {
-        typ: ServerNameType::HostName,
-        payload: ServerNamePayload::HostName(dns_name.into()),
-    };
-    let psnl = PaddedServerNameList::new(name, hs_data.padded_length);
-
-    let mut padded_bytes = Vec::new();
-    psnl.encode(&mut padded_bytes);
-    println!("padded length: {}", padded_bytes.len());
-
-
-    let client_esni_inner = ClientESNIInner {
-        nonce,
-        real_sni: psnl,
-    };
-    let mut sni_bytes = Vec::new();
-    client_esni_inner.encode(&mut sni_bytes);
+    let mut sni_bytes = compute_client_esni_inner(dns_name, hs_data.padded_length, nonce);
     println!("sni_bytes: {:02x?}, {}", sni_bytes, sni_bytes.len());
 
     println!("Client key share: {:?}", hs_data.peer_share);
@@ -114,6 +98,7 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
     hs_data.peer_share.clone().encode(&mut peer_bytes);
     println!("peer_bytes: {:02x?}, {}", peer_bytes, peer_bytes.len());
 
+    println!("dns_name: {:?}", dns_name);
     let key_exchange = match KeyExchange::start_ecdhe(hs_data.peer_share.group) {
         Some(ke) => ke,
         None => return None,
@@ -124,6 +109,8 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
 
     let keyex_Bytes =  key_exchange.pubkey.as_ref();
     println!("     key_exchange: {:02x?}, {}", keyex_Bytes, keyex_Bytes.len());
+    let payload = &hs_data.peer_share.payload;
+    println!("payload length: {:?}", payload);
     let exchange_result = key_exchange.complete(&hs_data.peer_share.payload.0)?;
     let mut result_bytes = exchange_result.pubkey.as_ref();
     println!("   Z result_bytes: {:02x?}, {}", result_bytes, result_bytes.len());
@@ -146,16 +133,15 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
     let mut contents_bytes = Vec::new();
     contents.encode(&mut contents_bytes);
     println!("ESNIContents encoded, {:02x?}, {}", contents_bytes, contents_bytes.len());
-    let digest = digest::digest(hs_data.cipher_suite.get_hash(), &contents_bytes);
-    let digest_bytes = digest.as_ref();
-    println!("   ESNIContents hash, {:02x?}, {}", digest_bytes, digest_bytes.len());
+    let hash = esni_hash(&contents_bytes, hs_data.cipher_suite.get_hash());
+    println!("   ESNIContents hash, {:02x?}, {}", hash, hash.len());
 
 
     let zx = zx(hs_data.cipher_suite.hkdf_algorithm, &exchange_result.premaster_secret);
 
-    let key = hkdf_expand(&zx, hs_data.cipher_suite.get_aead_alg(), b"esni key", digest.as_ref());
+    let key = hkdf_expand(&zx, hs_data.cipher_suite.get_aead_alg(), b"esni key", &hash);
     println!("Key {:?}", key);
-    let iv: Iv = hkdf_expand(&zx, IvLen, b"esni iv", digest.as_ref());
+    let iv: Iv = hkdf_expand(&zx, IvLen, b"esni iv", &hash);
     println!("Iv {:02x?}", iv.value());
 
 
@@ -178,10 +164,60 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
     }
 }
 
+fn compute_client_esni_inner(dns_name: webpki::DNSNameRef, length: u16, nonce: [u8; 16]) -> Vec<u8> {
+    let name = ServerName {
+        typ: ServerNameType::HostName,
+        payload: ServerNamePayload::HostName(dns_name.into()),
+    };
+    let psnl = PaddedServerNameList::new(vec![name], length);
+
+    let mut padded_bytes = Vec::new();
+    psnl.encode(&mut padded_bytes);
+
+    let client_esni_inner = ClientESNIInner {
+        nonce,
+        real_sni: psnl,
+    };
+    let mut sni_bytes = Vec::new();
+    client_esni_inner.encode(&mut sni_bytes);
+    sni_bytes
+}
+
+fn esni_hash(encoded_esni_contents: &Vec<u8>, algorithm: &'static ring::digest::Algorithm) -> Vec<u8> {
+    let digest = digest::digest(algorithm, &encoded_esni_contents);
+    digest.as_ref().to_vec()
+}
+
+fn hkdf_expand<T, L>(secret: &Prk, key_type: L, label: &[u8], context: &[u8]) -> T
+    where
+        T: for <'a> From<hkdf::Okm<'a, L>>,
+        L: KeyType,
+{
+    hkdf_expand_info(secret, key_type, label, context, |okm| okm.into())
+}
+
+fn hkdf_expand_info<F, T, L>(secret: &Prk, key_type: L, label: &[u8], context: &[u8], f: F)
+                             -> T
+    where
+        F: for<'b> FnOnce(hkdf::Okm<'b, L>) -> T,
+        L: KeyType
+{
+    const LABEL_PREFIX: &[u8] = b"tls13 ";
+
+    let output_len = u16::to_be_bytes(key_type.len() as u16);
+    let label_len = u8::to_be_bytes((LABEL_PREFIX.len() + label.len()) as u8);
+    let context_len = u8::to_be_bytes(context.len() as u8);
+
+    let info = &[&output_len[..], &label_len[..], LABEL_PREFIX, label, &context_len[..], context];
+    let okm = secret.expand(info, key_type).unwrap();
+
+    f(okm)
+}
+
 fn zx(algorithm: ring::hkdf::Algorithm, secret: &Vec<u8>) -> Prk {
     let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
     let zeroes = &zeroes[..algorithm.len()];
-    let salt = hkdf::Salt::new(algorithm, &zeroes);
+    let salt = hkdf::Salt::new(algorithm, &[]);
     salt.extract(secret)
 }
 
@@ -203,22 +239,170 @@ fn now() -> Option<u64> {
     }
 }
 
+struct ESNILen {
+    bytes: Vec<u8>
+}
+
+impl ESNILen {
+    fn new(suite: &SupportedCipherSuite) -> ESNILen {
+        ESNILen {
+            bytes: vec![0u8; suite.enc_key_len]
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::SupportedCipherSuite;
+    use super::hkdf_expand;
+    use crate::cipher::{Iv, IvLen};
+    use crate::esni::ESNILen;
+    use crate::msgs::handshake::ESNIRecord;
+    use crate::msgs::codec::{Codec, Reader};
+    use webpki;
+
+    #[test]
+    fn test_compute_client_esni_inner() {
+        let nonce = hex!("c0 2b f3 39 f8 95 58 ac c4 7c d1 c6 b1 ff a7 28");
+
+        let dns_name = webpki::DNSNameRef::try_from_ascii(b"canbe.esni.defo.ie").unwrap();
+
+        let expected = hex!("
+    c0 2b f3 39 f8 95 58 ac c4 7c d1 c6 b1 ff a7 28
+    00 15 00 00 12 63 61 6e 62 65 2e 65 73 6e 69 2e
+    64 65 66 6f 2e 69 65 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00");
+
+        let result = super::compute_client_esni_inner(dns_name, 260u16, nonce);
+       // assert_eq!(expected.len(), result.len());
+
+        println!("expected: {:02x?}, {}", expected.to_vec(), expected.len());
+        println!("  result: {:02x?}, {}", result, result.len());
+
+
+        assert!(crate::msgs::handshake::slice_eq(&expected, &result));
+    }
+
+    #[test]
+    fn test_hash() {
+        let esni_bytes = hex!("
+        00 20 3e 06 06 98 4c 3b a9 70 3a fb a7 a1 2d 75
+    29 5b 05 81 7d 75 8f 40 9b 51 00 c8 37 8e 9d 08
+    7e f1 00 1d 00 20 72 d8 3a 31 da 1c cd c7 e5 89
+    c1 c6 24 bd 7a 14 2d 90 de 7f 01 82 73 9d 25 14
+    c2 66 e1 97 23 5b 64 c0 c4 7c 5b c8 14 a0 a4 2b
+    0c 2f f4 23 51 00 10 f4 1d f4 c1 f4 3c 3e 89 c8
+    fe 87 25 d1 9f 00 ");
+
+        let expected = hex!("
+            21 5b ba fe a8 9e da 35 7b 7b 55 e4 6d 01 ac c8
+            94 94 b2 6e e6 55 08 0e 47 21 6a b2 3b 7d 25 f7
+        ");
+
+        let result = super::esni_hash(&esni_bytes.to_vec(), &ring::digest::SHA256);
+        assert!(crate::msgs::handshake::slice_eq(&expected, &result));
+    }
 
     #[test]
     fn test_zx() {
         let z_bytes = hex!("
-            97 1a 40 1c cb 08 be 7f 7b de f3 10 c7 9c 1d 36
-            45 bd 27 f6 34 ee 73 e6 5d 1b a0 ff 60 f8 3e 5e");
+            de cf 6a 8c 23 49 e1 8c db d8 48 49 7c 10 16 9a
+            77 66 fb 3f f4 8b 54 f7 bd 1f 15 14 74 e1 88 1c");
 
-        let zx_bytes = hex!("
-            51 98 ef 6a 9d bb af f8 44 42 ac 57 28 69 e6 63
-            60 ce 27 2d c4 30 82 5f 4e 2c eb a4 4e 42 05 0a
+        let hash = hex!("
+            a5 33 9b 1b a6 ae d2 7f 43 b9 91 5e 5e bc 8e 5a
+            af d9 fb 1d e2 b4 df 36 13 70 97 14 27 a1 61 25
         ");
 
+        let expected_iv = hex!("
+            07 d7 77 4c 69 be bd ad 1b 75 49 c7
+        ");
+
+        let aad_bytes = hex!("
+        00 69 00 1d 00 20 70 cb
+        7e ce 36 ab c1 b6 e1 92 6a 9a f2 08 d9 91 70 f1
+        98 7a aa 0f e3 9b f0 b3 c5 4d 79 00 a8 07 00 17
+        00 41 04 03 1d 6c 6c e6 f3 28 1f 6f f2 78 d5 5c
+        0f 5e f7 be 52 71 9f 7e c0 0e 6e 26 db 85 7b f9
+        e0 73 91 e6 b5 3e 06 7b ef c8 f8 b5 f0 46 16 c2
+        9f 0d 52 c3 6a 9e 41 2f 68 ce 7e ee d0 27 99 e5
+        28 aa 9e
+        ");
+
+        let plain_text = hex!("
+        4f b0 25 11 6b f7 4d f8 ce f3 0f 59 ce d9 d6 df
+    00 17 00 00 14 63 64 6e 6a 73 2e 63 6c 6f 75 64
+    66 6c 61 72 65 2e 63 6f 6d 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    00 00 00 00
+        ");
+
+        let expected = hex!("
+        28 0a 3d 56 cd 30 9d 68 ac 98 1b 41 bb fb 85 26
+    48 ef 1a 83 c8 aa bd 12 15 80 44 10 50 2f c0 3d
+    68 15 99 e0 47 6a 80 c2 e9 a0 df 86 16 7e a8 a4
+    37 8c 27 62 89 7e f8 60 4f 04 cf b5 ea 60 ed 99
+    51 59 70 a1 a5 ac b9 32 7d 35 86 e9 e2 01 d6 60
+    9d 8d de 81 03 69 13 dd 66 09 e9 18 76 f9 25 65
+    3d b7 ea 22 50 da 50 4d d8 74 31 5a 35 a2 29 7a
+    09 31 0a 45 4e b2 29 fd 72 40 04 93 3a e3 a6 7d
+    09 46 bb b5 8d e0 0f b5 12 e4 36 7d 38 32 3b b5
+    ee 99 6f ad 2c ea af 39 9f a1 dc c9 70 dc 2f ad
+    46 de 2a d6 8c 4e 3c e6 31 01 8a 97 f0 1f c9 3c
+    b8 c8 f1 45 02 c4 d7 3d ee b9 88 6f 53 cc 85 0b
+    69 ce 61 dc 30 c8 85 2d e1 d0 d3 d6 10 c2 32 04
+    0d 96 2d d5 4a a4 1f e2 bc a3 77 15 72 61 20 75
+    aa 9b 4a ee f7 25 cf 22 95 b9 77 88 48 f3 30 8e
+    a4 ab 3d b4 bd b4 e4 24 98 b7 ca 7e bf 26 ee 82
+    b5 b4 fd f2 f0 65 04 ea 4c 7c 75 25 24 b0 be 92
+    9a a2 b7 e4 82 5a 37 cf 08 3f 0e 9b 6c 89 27 b4
+    33 15 75 24
+        ");
+
+        //let expected = hex!("4a 44 bd 36 07 73 51 95 a6 27 cc 81 c9 a5 6c fe");
+
         let zx = super::zx(crate::suites::TLS13_AES_128_GCM_SHA256.hkdf_algorithm, &z_bytes.to_vec());
+        println!("{:?}", zx);
+        let aead_alg = crate::suites::TLS13_AES_128_GCM_SHA256.get_aead_alg();
+        let key :ring::aead::UnboundKey = hkdf_expand(&zx, aead_alg, b"esni key", hash.as_ref());
+
+        let iv: Iv = hkdf_expand(&zx, IvLen, b"esni iv", hash.as_ref());
+        println!("Iv {:02x?}", iv.value());
+        assert!(crate::msgs::handshake::slice_eq(&expected_iv, iv.value()));
+
+        let aad = ring::aead::Aad::from(aad_bytes.to_vec());
+        let mut sni_bytes = Vec::from(plain_text.to_vec());
+        let encrypted = super::encrypt(key, iv, aad, &mut sni_bytes).unwrap();
+        println!("{}, {:02x?}", encrypted.len(), encrypted);
+
+        assert!(crate::msgs::handshake::slice_eq(&expected, &encrypted));
     }
 
     #[test]
@@ -286,5 +470,24 @@ mod tests {
         println!("{}, {:02x?}", encrypted.len(), encrypted);
         assert_eq!(expected.len(), encrypted.len());
         assert!(crate::msgs::handshake::slice_eq(&expected, encrypted.as_slice()));
+    }
+
+    /// Generic newtype wrapper that lets us implement traits for externally-defined
+    /// types.
+    #[derive(Debug, PartialEq)]
+    struct My<T: core::fmt::Debug + PartialEq>(T);
+
+    impl ring::hkdf::KeyType for My<usize> {
+        fn len(&self) -> usize {
+            self.0
+        }
+    }
+
+    impl From<ring::hkdf::Okm<'_, My<usize>>> for My<Vec<u8>> {
+        fn from(okm: ring::hkdf::Okm<My<usize>>) -> Self {
+            let mut r = vec![0u8; okm.len().0];
+            okm.fill(&mut r).unwrap();
+            My(r)
+        }
     }
 }
