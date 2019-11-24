@@ -188,7 +188,6 @@ fn encrypt(unbound: UnboundKey, iv: Iv, aad: ring::aead::Aad<Vec<u8>>, sni_bytes
 
 #[cfg(test)]
 mod tests {
-    use crate::SupportedCipherSuite;
     use crate::key_schedule::hkdf_expand;
     use crate::cipher::{Iv, IvLen};
     use crate::msgs::handshake::ESNIRecord;
@@ -410,7 +409,7 @@ mod tests {
             d3 84 15
          ");
 
-        let mut plain_text = hex!("
+        let plain_text = hex!("
             ad 1b f4 b3 d3 14 59 48 59 9e be c8 56 42 4f 66
             00 15 00 00 12 63 61 6e 62 65 2e 65 73 6e 69 2e
             64 65 66 6f 2e 69 65 00 00 00 00 00 00 00 00 00
