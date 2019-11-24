@@ -211,9 +211,6 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
-#[macro_use]
-extern crate hex_literal;
-
 #[allow(missing_docs)]
 #[macro_use]
 mod msgs;
@@ -305,3 +302,6 @@ pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
 #[cfg(feature = "dangerous_configuration")]
 pub use crate::client::danger::DangerousClientConfig;
 
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
