@@ -383,7 +383,6 @@ impl Codec for ESNIRecord {
         let digest = ctx.finish();
         let checksum_valid = slice_eq(checksum.as_slice(), &digest.as_ref()[0..4]);
 
-        println!("rest: {:02x?}", rest);
         let tail_reader = &mut Reader::init(rest);
         Some(ESNIRecord {
             version,

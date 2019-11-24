@@ -23,8 +23,6 @@ fn main() {
     let opts = ResolverOpts::default();
     let addr = Address::new(domain);
     let esni_bytes = resolve_esni(dns_config, opts, &addr);
-    println!("esni_bytes: {:02x?}", esni_bytes);
-
     let esni_hs = rustls::esni::create_esni_handshake(&esni_bytes).unwrap();
 
     let mut config = rustls::esni::create_esni_config();
@@ -78,10 +76,7 @@ pub fn resolve_esni(config: ResolverConfig, opts: ResolverOpts, address: &Addres
         }
     }
 
-    let decoded = decode(&bytes).unwrap();
-
-    println!("hmm? {:?}", decoded);
-    decoded
+    decode(&bytes).unwrap()
 }
 
 pub struct Address {
