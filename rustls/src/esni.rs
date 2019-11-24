@@ -12,9 +12,9 @@ use ring::{digest, hkdf};
 use webpki;
 use crate::SupportedCipherSuite;
 use crate::msgs::base::PayloadU16;
-use ring::hkdf::{KeyType, Prk};
+use ring::hkdf::Prk;
 use crate::cipher::{Iv, IvLen};
-use ring::aead::{UnboundKey, Algorithm};
+use ring::aead::UnboundKey;
 use crate::session::SessionRandoms;
 use crate::key_schedule::hkdf_expand;
 
@@ -96,7 +96,6 @@ fn record_digest(algorithm: &'static ring::digest::Algorithm, bytes: &[u8]) -> V
 }
 
 /// Compute the encrypted SNI
-// TODO: this is big and messy, fix it up
 pub fn compute_esni(dns_name: webpki::DNSNameRef,
                     hs_data: &ESNIHandshakeData,
                     key_share_bytes: Vec<u8>,
@@ -112,7 +111,7 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
         None => return None,
     };
     let exchange_result = key_exchange.complete(&hs_data.peer_share.payload.0)?;
-    let mut contents_bytes = compute_esni_content(&hs_data, &exchange_result.pubkey.clone().as_ref().to_vec(), randoms.client);
+    let contents_bytes = compute_esni_content(&hs_data, &exchange_result.pubkey.clone().as_ref().to_vec(), randoms.client);
     let hash = esni_hash(&contents_bytes, hs_data.cipher_suite.get_hash());
 
     let zx = zx(hs_data.cipher_suite.hkdf_algorithm, &exchange_result.premaster_secret);
