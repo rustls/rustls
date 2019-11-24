@@ -15,6 +15,7 @@ use crate::msgs::base::PayloadU16;
 use ring::hkdf::{KeyType, Prk};
 use crate::cipher::{Iv, IvLen};
 use ring::aead::{UnboundKey, Algorithm};
+use crate::session::SessionRandoms;
 
 /// Data calculated for a client session from a DNS ESNI record.
 #[derive(Clone, Debug)]
@@ -72,22 +73,24 @@ pub fn create_esni_handshake(record_bytes: &Vec<u8>) -> Option<ESNIHandshakeData
         None => return None,
     };
 
-    let digest = digest::digest(cipher_suite.get_hash(), record_bytes);
-    let bytes: Vec<u8> = Vec::from(digest.as_ref());
-
     Some(ESNIHandshakeData {
         peer_share,
         cipher_suite,
         padded_length: record.padded_length,
-        record_digest: bytes,
+        record_digest: record_digest(cipher_suite.get_hash(), record_bytes),
     })
+}
+
+fn record_digest(algorithm: &'static ring::digest::Algorithm, bytes: &[u8]) -> Vec<u8> {
+    digest::digest(algorithm, bytes).as_ref().to_vec()
 }
 
 /// Compute the encrypted SNI
 // TODO: this is big and messy, fix it up
 pub fn compute_esni(dns_name: webpki::DNSNameRef,
                     hs_data: &ESNIHandshakeData,
-                    key_share_bytes: Vec<u8>) -> Option<ClientEncryptedSNI> {
+                    key_share_bytes: Vec<u8>,
+                    randoms: &SessionRandoms) -> Option<ClientEncryptedSNI> {
     let mut nonce = [0u8; 16];
     rand::fill_random(&mut nonce);
     let mut sni_bytes = compute_client_esni_inner(dns_name, hs_data.padded_length, nonce);
@@ -98,7 +101,6 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
     hs_data.peer_share.clone().encode(&mut peer_bytes);
     println!("peer_bytes: {:02x?}, {}", peer_bytes, peer_bytes.len());
 
-    println!("dns_name: {:?}", dns_name);
     let key_exchange = match KeyExchange::start_ecdhe(hs_data.peer_share.group) {
         Some(ke) => ke,
         None => return None,
@@ -119,20 +121,7 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
     println!("Z premaster_bytes: {:02x?}, {}", premaster_bytes, premaster_bytes.len());
 
 
-    let mut random = [0u8; 32];
-    rand::fill_random(&mut random);
-    let contents = ESNIContents {
-        record_digest: PayloadU16::new(hs_data.record_digest.clone()),
-        esni_key_share: KeyShareEntry {
-            group: hs_data.peer_share.group,
-            payload: PayloadU16(exchange_result.pubkey.clone().as_ref().to_vec())
-        },
-        client_hello_random: Random::from_slice(&random),
-    };
-
-    let mut contents_bytes = Vec::new();
-    contents.encode(&mut contents_bytes);
-    println!("ESNIContents encoded, {:02x?}, {}", contents_bytes, contents_bytes.len());
+    let mut contents_bytes = compute_esni_content(&hs_data, &exchange_result.pubkey.clone().as_ref().to_vec(), randoms.client);
     let hash = esni_hash(&contents_bytes, hs_data.cipher_suite.get_hash());
     println!("   ESNIContents hash, {:02x?}, {}", hash, hash.len());
 
@@ -162,6 +151,22 @@ pub fn compute_esni(dns_name: webpki::DNSNameRef,
         },
         _ => None
     }
+}
+
+fn compute_esni_content(hs_data: &ESNIHandshakeData, pubkey: &Vec<u8>, random: [u8; 32]) -> Vec<u8> {
+    let contents = ESNIContents {
+        record_digest: PayloadU16::new(hs_data.record_digest.clone()),
+        esni_key_share: KeyShareEntry {
+            group: hs_data.peer_share.group,
+            payload: PayloadU16(pubkey.to_vec())
+        },
+        client_hello_random: Random::from_slice(&random),
+    };
+
+    let mut contents_bytes = Vec::new();
+    contents.encode(&mut contents_bytes);
+    println!("ESNIContents encoded, {:02x?}, {}", contents_bytes, contents_bytes.len());
+    contents_bytes
 }
 
 fn compute_client_esni_inner(dns_name: webpki::DNSNameRef, length: u16, nonce: [u8; 16]) -> Vec<u8> {
@@ -262,6 +267,40 @@ mod tests {
     use webpki;
 
     #[test]
+    fn test_compute_esni_content() {
+        let esni_keys = hex!("ff 01 f3 92 e6 e7 00 24 00 1d 00 20 10 9f e6 de
+    ac e8 f6 2f 94 61 9c 1d 61 c9 a2 b9 2f 45 92 3d
+    aa 93 87 e4 e5 51 39 e7 da 26 2b 65 00 02 13 01
+    01 04 00 00 00 00 5d d9 f4 88 00 00 00 00 5d da
+    09 a0 00 00");
+
+        let random = hex!("
+            1a 2b 12 8a 1e 08 7e 12 68 b7 53 90 97 05 21 36
+            6f 1c 27 ce 43 1b f2 1c fb 6e 95 7f af 1a 67 67
+        ");
+
+
+        let hs_data = super::create_esni_handshake(&esni_keys).unwrap();
+    }
+
+    #[test]
+    fn test_record_digest() {
+        let esni_keys = hex!("ff 01 f3 92 e6 e7 00 24 00 1d 00 20 10 9f e6 de
+    ac e8 f6 2f 94 61 9c 1d 61 c9 a2 b9 2f 45 92 3d
+    aa 93 87 e4 e5 51 39 e7 da 26 2b 65 00 02 13 01
+    01 04 00 00 00 00 5d d9 f4 88 00 00 00 00 5d da
+    09 a0 00 00");
+
+        let expected = hex!("
+            3b d7 25 90 a7 58 68 16 46 c5 22 93 2a 1e b0 8d
+            0c e3 8c 2c 67 21 8e bf ab 88 90 04 49 cc 23 92
+        ");
+
+        let result = super::record_digest(&ring::digest::SHA256, &esni_keys);
+        assert!(crate::msgs::handshake::slice_eq(&expected, &result));
+    }
+
+    #[test]
     fn test_compute_client_esni_inner() {
         let nonce = hex!("c0 2b f3 39 f8 95 58 ac c4 7c d1 c6 b1 ff a7 28");
 
@@ -288,7 +327,7 @@ mod tests {
     00 00 00 00");
 
         let result = super::compute_client_esni_inner(dns_name, 260u16, nonce);
-       // assert_eq!(expected.len(), result.len());
+        assert_eq!(expected.len(), result.len());
 
         println!("expected: {:02x?}, {}", expected.to_vec(), expected.len());
         println!("  result: {:02x?}, {}", result, result.len());
@@ -385,8 +424,6 @@ mod tests {
     9a a2 b7 e4 82 5a 37 cf 08 3f 0e 9b 6c 89 27 b4
     33 15 75 24
         ");
-
-        //let expected = hex!("4a 44 bd 36 07 73 51 95 a6 27 cc 81 c9 a5 6c fe");
 
         let zx = super::zx(crate::suites::TLS13_AES_128_GCM_SHA256.hkdf_algorithm, &z_bytes.to_vec());
         println!("{:?}", zx);

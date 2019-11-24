@@ -21,6 +21,7 @@ use std::collections;
 use std::mem;
 use ring::digest;
 use webpki;
+use crate::session::SessionRandoms;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -919,8 +920,9 @@ impl ClientExtension {
     /// Make an ESNI request, encrypting `hostname` with the ESNIRecord
     pub fn make_esni(dns_name: webpki::DNSNameRef,
                      hs_data: &ESNIHandshakeData,
-                     key_share_bytes: Vec<u8>) -> Option<ClientExtension> {
-        let esni = compute_esni(dns_name, hs_data, key_share_bytes)?;
+                     key_share_bytes: Vec<u8>,
+                     randoms: &SessionRandoms) -> Option<ClientExtension> {
+        let esni = compute_esni(dns_name, hs_data, key_share_bytes, randoms)?;
         Some(ClientExtension::EncryptedServerName(esni))
     }
 }
