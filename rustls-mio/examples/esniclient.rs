@@ -15,11 +15,10 @@ use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
 
 fn main() {
-    let domain = "canbe.esni.defo.ie";
+    let domain = "opaque.website";
     println!("\nContacting {:?} over ESNI\n", domain);
 
-    //let dns_config = ResolverConfig::cloudflare_https();
-    let dns_config= ResolverConfig::default();
+    let dns_config = ResolverConfig::cloudflare_https();
     let opts = ResolverOpts::default();
     let addr = Address::new(domain);
     let esni_bytes = resolve_esni(dns_config, opts, &addr);
@@ -29,16 +28,18 @@ fn main() {
     config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("canbe.esni.defo.ie").unwrap();
+    let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain).unwrap();
     let mut sess = rustls::ClientSession::new_with_esni(&Arc::new(config), dns_name, esni_hs);
-    let mut sock = TcpStream::connect(domain.to_owned() + ":8443").unwrap();
+    let mut sock = TcpStream::connect(domain.to_owned() + ":443").unwrap();
     let mut tls = rustls::Stream::new(&mut sess, &mut sock);
-    match tls.write(concat!("GET /stats HTTP/1.1\r\n",
-    "Host: canbe.esni.defo.ie\r\n",
-    "Connection: close\r\n",
-    "Accept-Encoding: identity\r\n",
-    "\r\n")
-        .as_bytes()) {
+    let host_header = format!("Host: {}\r\n", domain);
+    let mut headers = String::new();
+    headers.push_str("GET / HTTP/1.1\r\n");
+    headers.push_str(host_header.as_str());
+    headers.push_str("Connection: close\r\n");
+    headers.push_str("Accept-Encoding: identity\r\n");
+    headers.push_str("\r\n");
+    match tls.write(headers.as_bytes()) {
         Ok(size) => {
             println!("Received: {} bytes", size);
         } ,

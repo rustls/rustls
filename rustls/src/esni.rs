@@ -279,11 +279,6 @@ mod tests {
 
         let result = super::compute_client_esni_inner(dns_name, 260u16, nonce);
         assert_eq!(expected.len(), result.len());
-
-        println!("expected: {:02x?}, {}", expected.to_vec(), expected.len());
-        println!("  result: {:02x?}, {}", result, result.len());
-
-
         assert!(crate::msgs::handshake::slice_eq(&expected, &result));
     }
 
