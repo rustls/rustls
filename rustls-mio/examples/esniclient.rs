@@ -15,7 +15,7 @@ use trust_dns_resolver::config::*;
 use trust_dns_resolver::Resolver;
 
 fn main() {
-    let domain = "opaque.website";
+    let domain = "canbe.esni.defo.ie";
     println!("\nContacting {:?} over ESNI\n", domain);
 
     let dns_config = ResolverConfig::cloudflare_https();
@@ -30,7 +30,7 @@ fn main() {
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain).unwrap();
     let mut sess = rustls::ClientSession::new_with_esni(&Arc::new(config), dns_name, esni_hs);
-    let mut sock = TcpStream::connect(domain.to_owned() + ":443").unwrap();
+    let mut sock = TcpStream::connect(domain.to_owned() + ":8443").unwrap();
     let mut tls = rustls::Stream::new(&mut sess, &mut sock);
     let host_header = format!("Host: {}\r\n", domain);
     let mut headers = String::new();
@@ -56,7 +56,10 @@ fn main() {
             println!("read bytes: {}", success);
         },
         Err(e) => {
+            stdout().write_all(&plaintext).unwrap();
+
             println!("failure to read the bytes: {:?}", e);
+
             return;
         }
     }
