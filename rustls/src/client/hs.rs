@@ -237,16 +237,15 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                 let esni_ext = ClientExtension::make_esni(handshake.dns_name.as_ref(), esni, ks_bytes, &handshake.randoms);
                 if let Some(ext) = esni_ext {
                     exts.push(ext);
-                    //exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
                 }
-                    // TODO: what if ESNI fails?
+
+                // TODO: what if ESNI fails?
             }
         }
 
         // TODO: what if ESNI is configured but there's no ESNI record?
 
     } else if sess.config.enable_sni {
-        println!("REGULAR SNI...");
         exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
     }
 

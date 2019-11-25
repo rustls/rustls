@@ -614,7 +614,7 @@ impl ClientSession {
     /// encrypt the hostname in the ClientHello.
     pub fn new_with_esni(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef, esni: ESNIHandshakeData) -> ClientSession {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), Some(esni),vec![]);
+        imp.start_handshake(hostname.into(), Some(esni), vec![]);
         ClientSession { imp }
     }
 
