@@ -172,7 +172,7 @@ impl CompleteClientHelloHandling {
         } else {
             key_schedule = KeySchedule::new_with_empty_secret(suite.hkdf_algorithm);
         }
-        key_schedule.input_secret(&kxr.premaster_secret);
+        key_schedule.input_secret(&kxr.shared_secret);
 
         let handshake_hash = self.handshake.transcript.get_current_hash();
         let write_key = key_schedule.derive_logged_secret(

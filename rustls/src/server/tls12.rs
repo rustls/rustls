@@ -121,11 +121,11 @@ impl hs::State for ExpectClientKX {
             SessionSecrets::new_ems(&self.handshake.randoms,
                                     &handshake_hash,
                                     hashalg,
-                                    &kxd.premaster_secret)
+                                    &kxd.shared_secret)
         } else {
             SessionSecrets::new(&self.handshake.randoms,
                                 hashalg,
-                                &kxd.premaster_secret)
+                                &kxd.shared_secret)
         };
         sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,

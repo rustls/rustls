@@ -22,10 +22,11 @@ pub enum BulkAlgorithm {
 }
 
 /// The result of a key exchange.  This has our public key,
-/// and the agreed premaster secret.
+/// and the agreed shared secret (also known as the "premaster secret"
+/// in TLS1.0-era protocols, and "Z" in TLS1.3).
 pub struct KeyExchangeResult {
     pub pubkey: ring::agreement::PublicKey,
-    pub premaster_secret: Vec<u8>,
+    pub shared_secret: Vec<u8>,
 }
 
 /// An in-progress key exchange.  This has the algorithm,
@@ -116,7 +117,7 @@ impl KeyExchange {
 
         Some(KeyExchangeResult {
             pubkey: self.pubkey,
-            premaster_secret: secret.unwrap(),
+            shared_secret: secret.unwrap(),
         })
     }
 }

@@ -542,11 +542,11 @@ impl hs::State for ExpectServerDone {
             SessionSecrets::new_ems(&st.handshake.randoms,
                                     &handshake_hash,
                                     hashalg,
-                                    &kxd.premaster_secret)
+                                    &kxd.shared_secret)
         } else {
             SessionSecrets::new(&st.handshake.randoms,
                                 hashalg,
-                                &kxd.premaster_secret)
+                                &kxd.shared_secret)
         };
         sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,

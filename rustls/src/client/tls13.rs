@@ -201,7 +201,7 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
                                                      .to_string()))?;
 
     save_kx_hint(sess, handshake.dns_name.as_ref(), their_key_share.group);
-    sess.common.get_mut_key_schedule().input_secret(&shared.premaster_secret);
+    sess.common.get_mut_key_schedule().input_secret(&shared.shared_secret);
 
     hs::check_aligned_handshake(sess)?;
 
