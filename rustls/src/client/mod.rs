@@ -505,7 +505,7 @@ impl ClientSessionImpl {
     }
 
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
-    /// that state expects, enforced via a `Expectation`.  Finally, we ask the handler
+    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
