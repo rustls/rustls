@@ -270,13 +270,11 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
     sess.common.send_msg(ccs, false);
 }
 
-fn emit_finished(handshake: &mut HandshakeDetails,
+fn emit_finished(secrets: &SessionSecrets,
+                 handshake: &mut HandshakeDetails,
                  sess: &mut ClientSessionImpl) {
     let vh = handshake.transcript.get_current_hash();
-    let verify_data = sess.common.secrets
-        .as_ref()
-        .unwrap()
-        .client_verify_data(&vh);
+    let verify_data = secrets.client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
     let f = Message {
@@ -412,9 +410,11 @@ struct ExpectServerDone {
 
 impl ExpectServerDone {
     fn into_expect_new_ticket(self,
-                                    certv: verify::ServerCertVerified,
-                                    sigv: verify::HandshakeSignatureValid) -> hs::NextState {
+                              secrets: SessionSecrets,
+                              certv: verify::ServerCertVerified,
+                              sigv: verify::HandshakeSignatureValid) -> hs::NextState {
         Box::new(ExpectNewTicket {
+            secrets,
             handshake: self.handshake,
             resuming: false,
             cert_verified: certv,
@@ -423,9 +423,11 @@ impl ExpectServerDone {
     }
 
     fn into_expect_ccs(self,
-                             certv: verify::ServerCertVerified,
-                             sigv: verify::HandshakeSignatureValid) -> hs::NextState {
+                       secrets: SessionSecrets,
+                       certv: verify::ServerCertVerified,
+                       sigv: verify::HandshakeSignatureValid) -> hs::NextState {
         Box::new(ExpectCCS {
+            secrets,
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
             resuming: false,
@@ -550,24 +552,25 @@ impl hs::State for ExpectServerDone {
         sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
-        sess.common.start_encryption_tls12(secrets);
+        sess.common.start_encryption_tls12(&secrets);
         sess.common
             .record_layer
             .start_encrypting();
 
         // 6.
-        emit_finished(&mut st.handshake, sess);
+        emit_finished(&secrets, &mut st.handshake, sess);
 
         if st.must_issue_new_ticket {
-            Ok(st.into_expect_new_ticket(certv, sigv))
+            Ok(st.into_expect_new_ticket(secrets, certv, sigv))
         } else {
-            Ok(st.into_expect_ccs(certv, sigv))
+            Ok(st.into_expect_ccs(secrets, certv, sigv))
         }
     }
 }
 
 // -- Waiting for their CCS --
 pub struct ExpectCCS {
+    pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
     pub ticket: ReceivedTicketDetails,
     pub resuming: bool,
@@ -578,6 +581,7 @@ pub struct ExpectCCS {
 impl ExpectCCS {
     fn into_expect_finished(self) -> hs::NextState {
         Box::new(ExpectFinished {
+            secrets: self.secrets,
             handshake: self.handshake,
             ticket: self.ticket,
             resuming: self.resuming,
@@ -613,6 +617,7 @@ impl hs::State for ExpectCCS {
 }
 
 pub struct ExpectNewTicket {
+    pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
@@ -622,6 +627,7 @@ pub struct ExpectNewTicket {
 impl ExpectNewTicket {
     fn into_expect_ccs(self, ticket: ReceivedTicketDetails) -> hs::NextState {
         Box::new(ExpectCCS {
+            secrets: self.secrets,
             handshake: self.handshake,
             ticket,
             resuming: self.resuming,
@@ -646,7 +652,8 @@ impl hs::State for ExpectNewTicket {
 }
 
 // -- Waiting for their finished --
-fn save_session(handshake: &mut HandshakeDetails,
+fn save_session(secrets: &SessionSecrets,
+                handshake: &mut HandshakeDetails,
                 recvd_ticket: &mut ReceivedTicketDetails,
                 sess: &mut ClientSessionImpl) {
     // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
@@ -664,7 +671,7 @@ fn save_session(handshake: &mut HandshakeDetails,
     let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
     let scs = sess.common.get_suite_assert();
-    let master_secret = sess.common.secrets.as_ref().unwrap().get_master_secret();
+    let master_secret = secrets.get_master_secret();
     let version = sess.get_protocol_version().unwrap();
     let mut value = persist::ClientSessionValue::new(version,
                                                      scs.suite,
@@ -691,6 +698,7 @@ fn save_session(handshake: &mut HandshakeDetails,
 struct ExpectFinished {
     handshake: HandshakeDetails,
     ticket: ReceivedTicketDetails,
+    secrets: SessionSecrets,
     resuming: bool,
     cert_verified: verify::ServerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
@@ -699,6 +707,7 @@ struct ExpectFinished {
 impl ExpectFinished {
     fn into_expect_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
         Box::new(ExpectTraffic {
+            secrets: self.secrets,
             _cert_verified: self.cert_verified,
             _sig_verified: self.sig_verified,
             _fin_verified: fin,
@@ -717,9 +726,7 @@ impl hs::State for ExpectFinished {
 
         // Work out what verify_data we expect.
         let vh = st.handshake.transcript.get_current_hash();
-        let expect_verify_data = sess.common.secrets
-            .as_ref()
-            .unwrap()
+        let expect_verify_data = st.secrets
             .server_verify_data(&vh);
 
         // Constant-time verification of this is relatively unimportant: they only
@@ -734,7 +741,8 @@ impl hs::State for ExpectFinished {
         // Hash this message too.
         st.handshake.transcript.add_message(&m);
 
-        save_session(&mut st.handshake,
+        save_session(&st.secrets,
+                     &mut st.handshake,
                      &mut st.ticket,
                      sess);
 
@@ -743,7 +751,7 @@ impl hs::State for ExpectFinished {
             sess.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&mut st.handshake, sess);
+            emit_finished(&st.secrets, &mut st.handshake, sess);
         }
 
         sess.common.start_traffic();
@@ -753,6 +761,7 @@ impl hs::State for ExpectFinished {
 
 // -- Traffic transit state --
 struct ExpectTraffic {
+    secrets: SessionSecrets,
     _cert_verified: verify::ServerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
@@ -766,5 +775,14 @@ impl hs::State for ExpectTraffic {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> hs::NextStateOrError {
         sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
         Ok(self)
+    }
+
+    fn export_keying_material(&self,
+                              _sess: &ClientSessionImpl,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        self.secrets.export_keying_material(output, label, context);
+        Ok(())
     }
 }

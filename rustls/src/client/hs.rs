@@ -67,6 +67,14 @@ pub type NextStateOrError = Result<NextState, TLSError>;
 pub trait State {
     fn check_message(&self, m: &Message) -> CheckResult;
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError;
+
+    fn export_keying_material(&self,
+                              _sess: &ClientSessionImpl,
+                              _output: &mut [u8],
+                              _label: &[u8],
+                              _context: Option<&[u8]>) -> Result<(), TLSError> {
+        Err(TLSError::HandshakeNotComplete)
+    }
 }
 
 pub fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
@@ -389,9 +397,11 @@ impl ExpectServerHello {
     }
 
     fn into_expect_tls12_new_ticket_resume(self,
+                                           secrets: SessionSecrets,
                                            certv: verify::ServerCertVerified,
                                            sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(tls12::ExpectNewTicket {
+            secrets,
             handshake: self.handshake,
             resuming: true,
             cert_verified: certv,
@@ -400,9 +410,11 @@ impl ExpectServerHello {
     }
 
     fn into_expect_tls12_ccs_resume(self,
+                                    secrets: SessionSecrets,
                                     certv: verify::ServerCertVerified,
                                     sigv: verify::HandshakeSignatureValid) -> NextState {
         Box::new(tls12::ExpectCCS {
+            secrets,
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
             resuming: true,
@@ -571,11 +583,9 @@ impl State for ExpectServerHello {
         }
 
         // See if we're successfully resuming.
-        let mut abbreviated_handshake = false;
         if let Some(ref resuming) = self.handshake.resuming_session {
             if resuming.session_id == self.handshake.session_id {
                 debug!("Server agreed to resume");
-                abbreviated_handshake = true;
 
                 // Is the server telling lies about the ciphersuite?
                 if resuming.cipher_suite != scs.unwrap().suite {
@@ -595,24 +605,22 @@ impl State for ExpectServerHello {
                 sess.config.key_log.log("CLIENT_RANDOM",
                                         &secrets.randoms.client,
                                         &secrets.master_secret);
-                sess.common.start_encryption_tls12(secrets);
+                sess.common.start_encryption_tls12(&secrets);
+
+                // Since we're resuming, we verified the certificate and
+                // proof of possession in the prior session.
+                let certv = verify::ServerCertVerified::assertion();
+                let sigv =  verify::HandshakeSignatureValid::assertion();
+
+                return if self.must_issue_new_ticket {
+                    Ok(self.into_expect_tls12_new_ticket_resume(secrets, certv, sigv))
+                } else {
+                    Ok(self.into_expect_tls12_ccs_resume(secrets, certv, sigv))
+                };
             }
         }
 
-        if abbreviated_handshake {
-            // Since we're resuming, we verified the certificate and
-            // proof of possession in the prior session.
-            let certv = verify::ServerCertVerified::assertion();
-            let sigv =  verify::HandshakeSignatureValid::assertion();
-
-            if self.must_issue_new_ticket {
-                Ok(self.into_expect_tls12_new_ticket_resume(certv, sigv))
-            } else {
-                Ok(self.into_expect_tls12_ccs_resume(certv, sigv))
-            }
-        } else {
-            Ok(self.into_expect_tls12_certificate())
-        }
+        Ok(self.into_expect_tls12_certificate())
     }
 }
 

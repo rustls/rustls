@@ -185,6 +185,7 @@
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code,
+          unused_must_use,
           unstable_features)]
 #![deny(trivial_casts,
         trivial_numeric_casts,

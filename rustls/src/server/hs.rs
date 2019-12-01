@@ -51,6 +51,14 @@ pub type NextStateOrError = Result<NextState, TLSError>;
 pub trait State {
     fn check_message(&self, m: &Message) -> CheckResult;
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError;
+
+    fn export_keying_material(&self,
+                              _sess: &ServerSessionImpl,
+                              _output: &mut [u8],
+                              _label: &[u8],
+                              _context: Option<&[u8]>) -> Result<(), TLSError> {
+        Err(TLSError::HandshakeNotComplete)
+    }
 }
 
 pub fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
@@ -299,8 +307,9 @@ impl ExpectClientHello {
         ech
     }
 
-    fn into_expect_tls12_ccs(self) -> NextState {
+    fn into_expect_tls12_ccs(self, secrets: SessionSecrets) -> NextState {
         Box::new(tls12::ExpectCCS {
+            secrets,
             handshake: self.handshake,
             resuming: true,
             send_ticket: self.send_ticket,
@@ -521,21 +530,21 @@ impl ExpectClientHello {
         sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
-        sess.common.start_encryption_tls12(secrets);
+        sess.common.start_encryption_tls12(&secrets);
         sess.client_cert_chain = resumedata.client_cert_chain;
 
         if self.send_ticket {
-            tls12::emit_ticket(&mut self.handshake, sess);
+            tls12::emit_ticket(&secrets, &mut self.handshake, sess);
         }
         tls12::emit_ccs(sess);
         sess.common
             .record_layer
             .start_encrypting();
-        tls12::emit_finished(&mut self.handshake, sess);
+        tls12::emit_finished(&secrets, &mut self.handshake, sess);
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
-        Ok(self.into_expect_tls12_ccs())
+        Ok(self.into_expect_tls12_ccs(secrets))
     }
 
 }

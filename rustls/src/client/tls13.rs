@@ -1017,6 +1017,14 @@ impl hs::State for ExpectTraffic {
 
         Ok(self)
     }
+
+    fn export_keying_material(&self,
+                              sess: &ClientSessionImpl,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        sess.common.get_key_schedule().export_keying_material(output, label, context)
+    }
 }
 
 #[cfg(feature = "quic")]

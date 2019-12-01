@@ -476,6 +476,16 @@ impl ServerSessionImpl {
         assert!(self.sni.is_none());
         self.sni = Some(value)
     }
+
+    fn export_keying_material(&self,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        self.state
+            .as_ref()
+            .ok_or_else(|| TLSError::HandshakeNotComplete)
+            .and_then(|st| st.export_keying_material(self, output, label, context))
+    }
 }
 
 /// This represents a single TLS server session.
@@ -602,7 +612,7 @@ impl Session for ServerSession {
                               output: &mut [u8],
                               label: &[u8],
                               context: Option<&[u8]>) -> Result<(), TLSError> {
-        self.imp.common.export_keying_material(output, label, context)
+        self.imp.export_keying_material(output, label, context)
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {

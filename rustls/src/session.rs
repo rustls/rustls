@@ -269,6 +269,7 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
     randoms
 }
 
+/// TLS1.2 per-session keying material
 pub struct SessionSecrets {
     pub randoms: SessionRandoms,
     hash: &'static ring::digest::Algorithm,
@@ -400,7 +401,6 @@ pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
     pub record_layer: record_layer::RecordLayer,
-    pub secrets: Option<SessionSecrets>,
     pub key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
     peer_eof: bool,
@@ -426,7 +426,6 @@ impl SessionCommon {
             is_client: client,
             record_layer: record_layer::RecordLayer::new(),
             suite: None,
-            secrets: None,
             key_schedule: None,
             peer_eof: false,
             traffic: false,
@@ -756,11 +755,10 @@ impl SessionCommon {
         Ok(len)
     }
 
-    pub fn start_encryption_tls12(&mut self, secrets: SessionSecrets) {
-        let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), &secrets);
+    pub fn start_encryption_tls12(&mut self, secrets: &SessionSecrets) {
+        let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), secrets);
         self.record_layer.prepare_message_encrypter(enc);
         self.record_layer.prepare_message_decrypter(dec);
-        self.secrets = Some(secrets);
     }
 
     pub fn send_warning_alert(&mut self, desc: AlertDescription) {
@@ -824,27 +822,6 @@ impl SessionCommon {
         }
 
         Ok(())
-    }
-
-    pub fn export_keying_material(&self,
-                                  output: &mut [u8],
-                                  label: &[u8],
-                                  context: Option<&[u8]>) -> Result<(), TLSError> {
-        if !self.traffic {
-            Err(TLSError::HandshakeNotComplete)
-        } else if self.is_tls13() {
-            self.key_schedule
-                .as_ref()
-                .unwrap()
-                .export_keying_material(output, label, context)
-        } else {
-            self.secrets
-                .as_ref()
-                .map(|sec| {
-                    sec.export_keying_material(output, label, context)
-                })
-                .ok_or_else(|| TLSError::HandshakeNotComplete)
-        }
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
