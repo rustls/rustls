@@ -215,7 +215,9 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
                                   &handshake.hash_at_client_recvd_server_hello,
                                   &*sess.config.key_log,
                                   &handshake.randoms.client);
-        sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+        sess.common
+            .record_layer
+            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.common.get_mut_key_schedule().current_client_traffic_secret = Some(write_key);
     }
 
@@ -224,7 +226,9 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
                               &handshake.hash_at_client_recvd_server_hello,
                               &*sess.config.key_log,
                               &handshake.randoms.client);
-    sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+    sess.common
+        .record_layer
+        .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
     sess.common.get_mut_key_schedule().current_server_traffic_secret = Some(read_key);
 
     #[cfg(feature = "quic")] {
@@ -404,7 +408,9 @@ impl hs::State for ExpectEncryptedExtensions {
                         &self.handshake.hash_at_client_recvd_server_hello,
                         &*sess.config.key_log,
                         &self.handshake.randoms.client);
-                sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+                sess.common
+                    .record_layer
+                    .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
                 sess.common.get_mut_key_schedule()
                     .current_client_traffic_secret = Some(write_key);
             }
@@ -850,7 +856,9 @@ impl hs::State for ExpectFinished {
                 &handshake_hash,
                 &*sess.config.key_log,
                 &st.handshake.randoms.client);
-        sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+        sess.common
+            .record_layer
+            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
         sess.common
             .get_mut_key_schedule()
             .current_server_traffic_secret = Some(read_key);
@@ -871,7 +879,9 @@ impl hs::State for ExpectFinished {
             emit_end_of_early_data_tls13(&mut st.handshake, sess);
             sess.common.early_traffic = false;
             sess.early_data.finished();
-            sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+            sess.common
+                .record_layer
+                .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
             sess.common.get_mut_key_schedule().current_client_traffic_secret = Some(write_key);
         }
 
@@ -896,12 +906,13 @@ impl hs::State for ExpectFinished {
                                   &handshake_hash,
                                   &*sess.config.key_log,
                                   &st.handshake.randoms.client);
-        sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+        sess.common
+            .record_layer
+            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
         sess.common
             .get_mut_key_schedule()
             .current_client_traffic_secret = Some(write_key);
 
-        sess.common.we_now_encrypting();
         sess.common.start_traffic();
 
         let st = st.into_expect_traffic(fin);

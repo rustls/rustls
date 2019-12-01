@@ -335,6 +335,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                                   &handshake.randoms.client);
         // Set early data encryption key
         sess.common
+            .record_layer
             .set_message_encrypter(cipher::new_tls13_write(resuming_suite, &client_early_traffic_secret));
 
         #[cfg(feature = "quic")]
@@ -345,7 +346,6 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         // Now the client can send encrypted early data
         sess.common.early_traffic = true;
         trace!("Starting early data traffic");
-        sess.common.we_now_encrypting();
     }
 
     let next = ExpectServerHello {

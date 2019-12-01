@@ -180,14 +180,18 @@ impl CompleteClientHelloHandling {
             &handshake_hash,
             &*sess.config.key_log,
             &self.handshake.randoms.client);
-        sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+        sess.common
+            .record_layer
+            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
 
         let read_key = key_schedule.derive_logged_secret(
             SecretKind::ClientHandshakeTrafficSecret,
             &handshake_hash,
             &*sess.config.key_log,
             &self.handshake.randoms.client);
-        sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+        sess.common
+            .record_layer
+            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
 
         #[cfg(feature = "quic")] {
             sess.common.quic.hs_secrets = Some(quic::Secrets {
@@ -414,7 +418,9 @@ impl CompleteClientHelloHandling {
                                   &*sess.config.key_log,
                                   &self.handshake.randoms.client);
         let suite = sess.common.get_suite_assert();
-        sess.common.set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+        sess.common
+            .record_layer
+            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
 
         #[cfg(feature = "quic")] {
             let read_key = sess.common.get_key_schedule()
@@ -862,7 +868,9 @@ impl hs::State for ExpectFinished {
 
         let suite = sess.common.get_suite_assert();
         hs::check_aligned_handshake(sess)?;
-        sess.common.set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+        sess.common
+            .record_layer
+            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
         sess.common
             .get_mut_key_schedule()
             .current_client_traffic_secret = Some(read_key);
@@ -875,7 +883,6 @@ impl hs::State for ExpectFinished {
             }
         }
 
-        sess.common.we_now_encrypting();
         sess.common.start_traffic();
 
         #[cfg(feature = "quic")] {

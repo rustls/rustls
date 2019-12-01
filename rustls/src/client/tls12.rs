@@ -268,7 +268,6 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
     };
 
     sess.common.send_msg(ccs, false);
-    sess.common.we_now_encrypting();
 }
 
 fn emit_finished(handshake: &mut HandshakeDetails,
@@ -552,6 +551,9 @@ impl hs::State for ExpectServerDone {
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
         sess.common.start_encryption_tls12(secrets);
+        sess.common
+            .record_layer
+            .start_encrypting();
 
         // 6.
         emit_finished(&mut st.handshake, sess);
@@ -602,7 +604,9 @@ impl hs::State for ExpectCCS {
         }
 
         // nb. msgs layer validates trivial contents of CCS
-        sess.common.peer_now_encrypting();
+        sess.common
+            .record_layer
+            .start_decrypting();
 
         Ok(self.into_expect_finished())
     }
@@ -736,10 +740,12 @@ impl hs::State for ExpectFinished {
 
         if st.resuming {
             emit_ccs(sess);
+            sess.common
+                .record_layer
+                .start_encrypting();
             emit_finished(&mut st.handshake, sess);
         }
 
-        sess.common.we_now_encrypting();
         sess.common.start_traffic();
         Ok(st.into_expect_traffic(fin))
     }

@@ -217,7 +217,9 @@ impl hs::State for ExpectCCS {
             });
         }
 
-        sess.common.peer_now_encrypting();
+        sess.common
+            .record_layer
+            .start_decrypting();
         Ok(self.into_expect_tls12_finished())
     }
 }
@@ -282,7 +284,6 @@ pub fn emit_ccs(sess: &mut ServerSessionImpl) {
     };
 
     sess.common.send_msg(m, false);
-    sess.common.we_now_encrypting();
 }
 
 pub fn emit_finished(handshake: &mut HandshakeDetails,
@@ -363,10 +364,12 @@ impl hs::State for ExpectFinished {
                             sess);
             }
             emit_ccs(sess);
+            sess.common
+                .record_layer
+                .start_encrypting();
             emit_finished(&mut self.handshake, sess);
         }
 
-        sess.common.we_now_encrypting();
         sess.common.start_traffic();
         Ok(self.into_expect_tls12_traffic(fin))
     }

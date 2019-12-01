@@ -367,7 +367,7 @@ impl ServerSessionImpl {
         }
 
         // Decrypt if demanded by current state.
-        if self.common.peer_encrypting {
+        if self.common.record_layer.is_decrypting() {
             let dm = self.common.decrypt_incoming(msg)?;
             msg = dm;
         }

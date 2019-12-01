@@ -220,6 +220,7 @@ mod hash_hs;
 mod vecbuf;
 mod prf;
 mod cipher;
+mod record_layer;
 mod key_schedule;
 mod session;
 mod stream;

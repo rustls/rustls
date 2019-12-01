@@ -10,13 +10,14 @@ use crate::msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLe
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::error::TLSError;
 use crate::suites::SupportedCipherSuite;
-use crate::cipher::{MessageDecrypter, MessageEncrypter, self};
+use crate::cipher;
 use crate::vecbuf::{ChunkVecBuffer, WriteV};
 use crate::key;
 use crate::key_schedule::{SecretKind, KeySchedule};
 use crate::prf;
 use crate::rand;
 use crate::quic;
+use crate::record_layer;
 #[cfg(feature = "logging")]
 use crate::log::{warn, debug, error};
 
@@ -389,8 +390,6 @@ impl SessionSecrets {
 }
 
 // --- Common (to client and server) session functions ---
-static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
-static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 
 enum Limit {
     Yes,
@@ -400,16 +399,11 @@ enum Limit {
 pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
-    message_encrypter: Box<dyn MessageEncrypter>,
-    message_decrypter: Box<dyn MessageDecrypter>,
+    pub record_layer: record_layer::RecordLayer,
     pub secrets: Option<SessionSecrets>,
     pub key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
-    write_seq: u64,
-    read_seq: u64,
     peer_eof: bool,
-    pub peer_encrypting: bool,
-    pub we_encrypting: bool,
     pub traffic: bool,
     pub early_traffic: bool,
     pub want_write_key_update: bool,
@@ -430,16 +424,11 @@ impl SessionCommon {
         SessionCommon {
             negotiated_version: None,
             is_client: client,
+            record_layer: record_layer::RecordLayer::new(),
             suite: None,
-            message_encrypter: MessageEncrypter::invalid(),
-            message_decrypter: MessageDecrypter::invalid(),
             secrets: None,
             key_schedule: None,
-            write_seq: 0,
-            read_seq: 0,
             peer_eof: false,
-            peer_encrypting: false,
-            we_encrypting: false,
             traffic: false,
             early_traffic: false,
             want_write_key_update: false,
@@ -496,18 +485,19 @@ impl SessionCommon {
         self.key_schedule = Some(ks);
     }
 
-    pub fn set_message_encrypter(&mut self,
-                                 cipher: Box<dyn MessageEncrypter>) {
-        self.message_encrypter = cipher;
-        self.write_seq = 0;
-        self.we_encrypting = true;
-    }
+    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TLSError> {
+        if self.record_layer.wants_close_before_decrypt() {
+            self.send_close_notify();
+        }
 
-    pub fn set_message_decrypter(&mut self,
-                                 cipher: Box<dyn MessageDecrypter>) {
-        self.message_decrypter = cipher;
-        self.read_seq = 0;
-        self.peer_encrypting = true;
+        let rc = self.record_layer.decrypt_incoming(encr);
+        match rc {
+            Err(TLSError::PeerSentOversizedRecord) => {
+                self.send_fatal_alert(AlertDescription::RecordOverflow);
+            }
+            _ => {}
+        };
+        rc
     }
 
     pub fn has_readable_plaintext(&self) -> bool {
@@ -517,31 +507,6 @@ impl SessionCommon {
     pub fn set_buffer_limit(&mut self, limit: usize) {
         self.sendable_plaintext.set_limit(limit);
         self.sendable_tls.set_limit(limit);
-    }
-
-    pub fn encrypt_outgoing(&mut self, plain: BorrowMessage) -> Message {
-        let seq = self.write_seq;
-        self.write_seq += 1;
-        self.message_encrypter.encrypt(plain, seq).unwrap()
-    }
-
-    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TLSError> {
-        // Perhaps if we send an alert well before their counter wraps, a
-        // buggy peer won't make a terrible mistake here?
-        // Note that there's no reason to refuse to decrypt: the security
-        // failure has already happened.
-        if self.read_seq == SEQ_SOFT_LIMIT {
-            self.send_close_notify();
-        }
-
-        let seq = self.read_seq;
-        self.read_seq += 1;
-        let ret = self.message_decrypter.decrypt(encr, seq);
-        if let Err(TLSError::PeerSentOversizedRecord) = ret {
-            self.send_fatal_alert(AlertDescription::RecordOverflow);
-        }
-
-        ret
     }
 
     pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {
@@ -589,7 +554,7 @@ impl SessionCommon {
 
         let write_key = self.get_key_schedule().derive_next(kind);
         let scs = self.get_suite_assert();
-        self.set_message_encrypter(cipher::new_tls13_write(scs, &write_key));
+        self.record_layer.set_message_encrypter(cipher::new_tls13_write(scs, &write_key));
 
         if self.is_client {
             self.get_mut_key_schedule().current_client_traffic_secret = Some(write_key);
@@ -646,17 +611,17 @@ impl SessionCommon {
     fn send_single_fragment(&mut self, m: BorrowMessage) {
         // Close connection once we start to run out of
         // sequence space.
-        if self.write_seq == SEQ_SOFT_LIMIT {
+        if self.record_layer.wants_close_before_encrypt() {
             self.send_close_notify();
         }
 
         // Refuse to wrap counter at all costs.  This
         // is basically untestable unfortunately.
-        if self.write_seq >= SEQ_HARD_LIMIT {
+        if self.record_layer.encrypt_exhausted() {
             return;
         }
 
-        let em = self.encrypt_outgoing(m);
+        let em = self.record_layer.encrypt_outgoing(m);
         self.queue_tls_message(em);
     }
 
@@ -693,7 +658,7 @@ impl SessionCommon {
 
     pub fn send_early_plaintext(&mut self, data: &[u8]) -> io::Result<usize> {
         debug_assert!(self.early_traffic);
-        debug_assert!(self.we_encrypting);
+        debug_assert!(self.record_layer.is_encrypting());
 
         if data.is_empty() {
             // Don't send empty fragments.
@@ -714,7 +679,7 @@ impl SessionCommon {
             return Ok(len);
         }
 
-        debug_assert!(self.we_encrypting);
+        debug_assert!(self.record_layer.is_encrypting());
 
         if data.is_empty() {
             // Don't send empty fragments.
@@ -793,17 +758,9 @@ impl SessionCommon {
 
     pub fn start_encryption_tls12(&mut self, secrets: SessionSecrets) {
         let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), &secrets);
-        self.message_encrypter = enc;
-        self.message_decrypter = dec;
+        self.record_layer.prepare_message_encrypter(enc);
+        self.record_layer.prepare_message_decrypter(dec);
         self.secrets = Some(secrets);
-    }
-
-    pub fn peer_now_encrypting(&mut self) {
-        self.peer_encrypting = true;
-    }
-
-    pub fn we_now_encrypting(&mut self) {
-        self.we_encrypting = true;
     }
 
     pub fn send_warning_alert(&mut self, desc: AlertDescription) {
@@ -814,8 +771,7 @@ impl SessionCommon {
     pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
         warn!("Sending fatal alert {:?}", desc);
         let m = Message::build_alert(AlertLevel::Fatal, desc);
-        let enc = self.we_encrypting;
-        self.send_msg(m, enc);
+        self.send_msg(m, self.record_layer.is_encrypting());
     }
 
     pub fn send_close_notify(&mut self) {
@@ -859,7 +815,7 @@ impl SessionCommon {
         let new_read_key = self.get_key_schedule()
             .derive_next(read_kind);
         let suite = self.get_suite_assert();
-        self.set_message_decrypter(cipher::new_tls13_read(suite, &new_read_key));
+        self.record_layer.set_message_decrypter(cipher::new_tls13_read(suite, &new_read_key));
 
         if read_kind == SecretKind::ServerApplicationTrafficSecret {
             self.get_mut_key_schedule().current_server_traffic_secret = Some(new_read_key);
@@ -893,8 +849,7 @@ impl SessionCommon {
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
         let m = Message::build_alert(AlertLevel::Warning, desc);
-        let enc = self.we_encrypting;
-        self.send_msg(m, enc);
+        self.send_msg(m, self.record_layer.is_encrypting());
     }
 }
 

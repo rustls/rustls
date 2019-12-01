@@ -528,6 +528,9 @@ impl ExpectClientHello {
             tls12::emit_ticket(&mut self.handshake, sess);
         }
         tls12::emit_ccs(sess);
+        sess.common
+            .record_layer
+            .start_encrypting();
         tls12::emit_finished(&mut self.handshake, sess);
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
