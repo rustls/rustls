@@ -398,7 +398,6 @@ impl hs::State for ExpectTraffic {
     }
 
     fn export_keying_material(&self,
-                              _sess: &ServerSessionImpl,
                               output: &mut [u8],
                               label: &[u8],
                               context: Option<&[u8]>) -> Result<(), TLSError> {

@@ -53,11 +53,13 @@ pub trait State {
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError;
 
     fn export_keying_material(&self,
-                              _sess: &ServerSessionImpl,
                               _output: &mut [u8],
                               _label: &[u8],
                               _context: Option<&[u8]>) -> Result<(), TLSError> {
         Err(TLSError::HandshakeNotComplete)
+    }
+
+    fn perhaps_write_key_update(&mut self, _sess: &mut ServerSessionImpl) {
     }
 }
 

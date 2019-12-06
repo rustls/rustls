@@ -7,13 +7,11 @@ use crate::msgs::hsjoiner::HandshakeJoiner;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLevel};
-use crate::msgs::enums::KeyUpdateRequest;
 use crate::error::TLSError;
 use crate::suites::SupportedCipherSuite;
 use crate::cipher;
 use crate::vecbuf::{ChunkVecBuffer, WriteV};
 use crate::key;
-use crate::key_schedule::{SecretKind, KeySchedule};
 use crate::prf;
 use crate::rand;
 use crate::quic;
@@ -401,12 +399,10 @@ pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
     pub record_layer: record_layer::RecordLayer,
-    pub key_schedule: Option<KeySchedule>,
     suite: Option<&'static SupportedCipherSuite>,
     peer_eof: bool,
     pub traffic: bool,
     pub early_traffic: bool,
-    pub want_write_key_update: bool,
     pub message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
@@ -426,11 +422,9 @@ impl SessionCommon {
             is_client: client,
             record_layer: record_layer::RecordLayer::new(),
             suite: None,
-            key_schedule: None,
             peer_eof: false,
             traffic: false,
             early_traffic: false,
-            want_write_key_update: false,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
             message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
@@ -470,18 +464,6 @@ impl SessionCommon {
             }
             _ => false
         }
-    }
-
-    pub fn get_mut_key_schedule(&mut self) -> &mut KeySchedule {
-        self.key_schedule.as_mut().unwrap()
-    }
-
-    pub fn get_key_schedule(&self) -> &KeySchedule {
-        self.key_schedule.as_ref().unwrap()
-    }
-
-    pub fn set_key_schedule(&mut self, ks: KeySchedule) {
-        self.key_schedule = Some(ks);
     }
 
     pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TLSError> {
@@ -539,36 +521,9 @@ impl SessionCommon {
         }
     }
 
-    fn do_write_key_update(&mut self) {
-        // TLS1.3 putting key update triggering here breaks layering
-        // between the handshake and record layer.
-        let kind = if self.is_client {
-            SecretKind::ClientApplicationTrafficSecret
-        } else {
-            SecretKind::ServerApplicationTrafficSecret
-        };
-
-        self.want_write_key_update = false;
-        self.send_msg_encrypt(Message::build_key_update_notify());
-
-        let write_key = self.get_key_schedule().derive_next(kind);
-        let scs = self.get_suite_assert();
-        self.record_layer.set_message_encrypter(cipher::new_tls13_write(scs, &write_key));
-
-        if self.is_client {
-            self.get_mut_key_schedule().current_client_traffic_secret = Some(write_key);
-        } else {
-            self.get_mut_key_schedule().current_server_traffic_secret = Some(write_key);
-        }
-    }
-
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     pub fn send_msg_encrypt(&mut self, m: Message) {
-        if self.want_write_key_update {
-            self.do_write_key_update();
-        }
-
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter.fragment(m, &mut plain_messages);
 
@@ -581,10 +536,6 @@ impl SessionCommon {
     fn send_appdata_encrypt(&mut self,
                             payload: &[u8],
                             limit: Limit) -> usize {
-        if self.want_write_key_update {
-            self.do_write_key_update();
-        }
-
         // Here, the limit on sendable_tls applies to encrypted data,
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
@@ -724,7 +675,7 @@ impl SessionCommon {
                                   "QUIC uses TLS for the cryptographic handshake only");
                     let mut bytes = Vec::new();
                     m.payload.encode(&mut bytes);
-                    self.quic.hs_queue.push_back((self.key_schedule.is_some(), bytes));
+                    self.quic.hs_queue.push_back((must_encrypt, bytes));
                 }
                 return;
             }
@@ -775,53 +726,6 @@ impl SessionCommon {
     pub fn send_close_notify(&mut self) {
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
-    }
-
-    pub fn process_key_update(&mut self,
-                              kur: KeyUpdateRequest,
-                              read_kind: SecretKind)
-                              -> Result<(), TLSError> {
-        #[cfg(feature = "quic")]
-        {
-            if let Protocol::Quic = self.protocol {
-                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
-                let msg = "KeyUpdate received in QUIC connection".to_string();
-                warn!("{}", msg);
-                return Err(TLSError::PeerMisbehavedError(msg));
-            }
-        }
-
-        // Mustn't be interleaved with other handshake messages.
-        if !self.handshake_joiner.is_empty() {
-            let msg = "KeyUpdate received at wrong time".to_string();
-            warn!("{}", msg);
-            return Err(TLSError::PeerMisbehavedError(msg));
-        }
-
-        match kur {
-            KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => {
-                self.want_write_key_update = true;
-            }
-            _ => {
-                self.send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
-            }
-        }
-
-        // Update our read-side keys.
-        let new_read_key = self.get_key_schedule()
-            .derive_next(read_kind);
-        let suite = self.get_suite_assert();
-        self.record_layer.set_message_decrypter(cipher::new_tls13_read(suite, &new_read_key));
-
-        if read_kind == SecretKind::ServerApplicationTrafficSecret {
-            self.get_mut_key_schedule().current_server_traffic_secret = Some(new_read_key);
-        } else {
-            self.get_mut_key_schedule().current_client_traffic_secret = Some(new_read_key);
-        }
-
-        Ok(())
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {

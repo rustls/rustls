@@ -484,7 +484,15 @@ impl ServerSessionImpl {
         self.state
             .as_ref()
             .ok_or_else(|| TLSError::HandshakeNotComplete)
-            .and_then(|st| st.export_keying_material(self, output, label, context))
+            .and_then(|st| st.export_keying_material(output, label, context))
+    }
+
+    fn send_some_plaintext(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut st = self.state.take();
+        st.as_mut()
+          .map(|st| st.perhaps_write_key_update(self));
+        self.state = st;
+        self.common.send_some_plaintext(buf)
     }
 }
 
@@ -640,7 +648,7 @@ impl io::Write for ServerSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.imp.common.send_some_plaintext(buf)
+        self.imp.send_some_plaintext(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
