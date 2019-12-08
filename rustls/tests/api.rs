@@ -1408,15 +1408,21 @@ struct KeyLogItem {
     secret: Vec<u8>,
 }
 
-struct KeyLogToVec(Mutex<Vec<KeyLogItem>>);
+struct KeyLogToVec {
+    label: &'static str,
+    items: Mutex<Vec<KeyLogItem>>,
+}
 
 impl KeyLogToVec {
-    fn new() -> Self {
-        KeyLogToVec(Mutex::new(vec![]))
+    fn new(who: &'static str) -> Self {
+        KeyLogToVec {
+            label: who,
+            items: Mutex::new(vec![]),
+        }
     }
 
     fn take(&self) -> Vec<KeyLogItem> {
-        mem::replace(&mut self.0.lock()
+        mem::replace(&mut self.items.lock()
                          .unwrap(),
                      vec![])
     }
@@ -1430,7 +1436,9 @@ impl KeyLog for KeyLogToVec {
             secret: secret.into()
         };
 
-        self.0.lock()
+        println!("key log {:?}: {:?}", self.label, value);
+
+        self.items.lock()
             .unwrap()
             .push(value);
     }
@@ -1438,8 +1446,8 @@ impl KeyLog for KeyLogToVec {
 
 #[test]
 fn key_log_for_tls12() {
-    let client_key_log = Arc::new(KeyLogToVec::new());
-    let server_key_log = Arc::new(KeyLogToVec::new());
+    let client_key_log = Arc::new(KeyLogToVec::new("client"));
+    let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
     let kt = KeyType::RSA;
     let mut client_config = make_client_config(kt);
@@ -1475,8 +1483,8 @@ fn key_log_for_tls12() {
 
 #[test]
 fn key_log_for_tls13() {
-    let client_key_log = Arc::new(KeyLogToVec::new());
-    let server_key_log = Arc::new(KeyLogToVec::new());
+    let client_key_log = Arc::new(KeyLogToVec::new("client"));
+    let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
     let kt = KeyType::RSA;
     let mut client_config = make_client_config(kt);
