@@ -64,9 +64,6 @@ pub enum TLSError {
     /// We failed to figure out what time it currently is.
     FailedToGetCurrentTime,
 
-    /// A syntactically-invalid DNS hostname was given.
-    InvalidDNSName(String),
-
     /// This function doesn't work until the TLS handshake
     /// is complete.
     HandshakeNotComplete,
@@ -137,7 +134,6 @@ impl Error for TLSError {
             TLSError::InvalidSCT(_) => "invalid certificate timestamp",
             TLSError::General(_) => "unexpected error", // (please file a bug),
             TLSError::FailedToGetCurrentTime => "failed to get current time",
-            TLSError::InvalidDNSName(_) => "invalid DNS name",
             TLSError::HandshakeNotComplete => "handshake not complete",
             TLSError::PeerSentOversizedRecord => "peer sent excess record size",
             TLSError::NoApplicationProtocol => "peer doesn't support any known protocol",
@@ -174,7 +170,6 @@ mod tests {
                        TLSError::InvalidSCT(sct::Error::MalformedSCT),
                        TLSError::General("undocumented error".to_string()),
                        TLSError::FailedToGetCurrentTime,
-                       TLSError::InvalidDNSName("dns something".to_string()),
                        TLSError::HandshakeNotComplete,
                        TLSError::PeerSentOversizedRecord,
                        TLSError::NoApplicationProtocol];
