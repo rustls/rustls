@@ -14,7 +14,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::persist;
 use crate::client::ClientSessionImpl;
 use crate::session::SessionSecrets;
-use crate::key_schedule::{KeySchedule, SecretKind};
+use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
 use crate::cipher;
 use crate::suites;
 use crate::verify;
@@ -166,7 +166,7 @@ pub fn start_handshake(sess: &mut ClientSessionImpl, host_name: webpki::DNSName,
 
 struct ExpectServerHello {
     handshake: HandshakeDetails,
-    early_key_schedule: Option<KeySchedule>,
+    early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     server_cert: ServerCertDetails,
     may_send_cert_status: bool,
@@ -344,9 +344,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         let client_early_traffic_secret = early_key_schedule
             .as_ref()
             .unwrap()
-            .derive_logged_secret(SecretKind::ClientEarlyTrafficSecret, &client_hello_hash,
-                                  &*sess.config.key_log,
-                                  &handshake.randoms.client);
+            .client_early_traffic_secret(&client_hello_hash,
+                                         &*sess.config.key_log,
+                                         &handshake.randoms.client);
         // Set early data encryption key
         sess.common
             .record_layer
@@ -396,7 +396,7 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl ExpectServerHello {
-    fn into_expect_tls13_encrypted_extensions(self, key_schedule: KeySchedule) -> NextState {
+    fn into_expect_tls13_encrypted_extensions(self, key_schedule: KeyScheduleHandshake) -> NextState {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
             key_schedule: key_schedule,
