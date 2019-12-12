@@ -1,9 +1,11 @@
-![Logo](https://raw.githubusercontent.com/ctz/rustls/master/admin/rustls-logo-web.png)
+<p align="center">
+  <img width="460" height="300" src="https://raw.githubusercontent.com/ctz/rustls/master/admin/rustls-logo-web.png">
+</p>
 
-Rustls is a modern TLS library written in Rust.  It's pronounced 'rustles'.
-It uses [*ring*](https://github.com/briansmith/ring) for cryptography
-and [libwebpki](https://github.com/briansmith/webpki) for certificate
+<p align="center">
+Rustls is a modern TLS library written in Rust.  It's pronounced 'rustles'. It uses <a href = "https://github.com/briansmith/ring"><em>ring</em></a> for cryptography and <a href = "https://github.com/briansmith/webpki">libwebpki</a> for certificate
 verification.
+</p>
 
 # Status
 Rustls is ready for use.  There are no major breaking interface changes
