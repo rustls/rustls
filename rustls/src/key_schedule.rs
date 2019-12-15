@@ -8,7 +8,7 @@ use crate::KeyLog;
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SecretKind {
+enum SecretKind {
     ResumptionPSKBinderKey,
     ClientEarlyTrafficSecret,
     ClientHandshakeTrafficSecret,
@@ -52,12 +52,9 @@ impl SecretKind {
 /// This is the TLS1.3 key schedule.  It stores the current secret and
 /// the type of hash.  This isn't used directly; but only through the
 /// typestates.
-pub struct KeySchedule {
+struct KeySchedule {
     current: hkdf::Prk,
     algorithm: ring::hkdf::Algorithm,
-    pub current_client_traffic_secret: Option<hkdf::Prk>,
-    pub current_server_traffic_secret: Option<hkdf::Prk>,
-    pub current_exporter_secret: Option<hkdf::Prk>,
 }
 
 // We express the state of a contained KeySchedule using these
@@ -260,9 +257,6 @@ impl KeySchedule {
         KeySchedule {
             current: salt.extract(secret),
             algorithm,
-            current_server_traffic_secret: None,
-            current_client_traffic_secret: None,
-            current_exporter_secret: None,
         }
     }
 
