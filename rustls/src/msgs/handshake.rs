@@ -989,7 +989,7 @@ impl ClientHelloPayload {
 
     pub fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
         self.get_psk_modes()
-            .and_then(|modes| Some(modes.contains(&mode)))
+            .map(|modes| modes.contains(&mode))
             .or(Some(false))
             .unwrap()
     }
@@ -1661,7 +1661,7 @@ impl Codec for ServerKeyExchangePayload {
     fn read(r: &mut Reader) -> Option<ServerKeyExchangePayload> {
         // read as Unknown, fully parse when we know the
         // KeyExchangeAlgorithm
-        Payload::read(r).and_then(|x| Some(ServerKeyExchangePayload::Unknown(x)))
+        Payload::read(r).map(ServerKeyExchangePayload::Unknown)
     }
 }
 
@@ -1673,7 +1673,7 @@ impl ServerKeyExchangePayload {
             let result = match *kxa {
                 KeyExchangeAlgorithm::ECDHE => {
                     ECDHEServerKeyExchange::read(&mut rd)
-                        .and_then(|x| Some(ServerKeyExchangePayload::ECDHE(x)))
+                        .map(ServerKeyExchangePayload::ECDHE)
                 }
                 _ => None,
             };

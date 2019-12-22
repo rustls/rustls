@@ -161,7 +161,7 @@ pub struct RSASigningKey {
     key: Arc<RsaKeyPair>,
 }
 
-static ALL_RSA_SCHEMES: &'static [SignatureScheme] = &[
+static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
      SignatureScheme::RSA_PSS_SHA512,
      SignatureScheme::RSA_PSS_SHA384,
      SignatureScheme::RSA_PSS_SHA256,

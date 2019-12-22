@@ -45,7 +45,7 @@ use ring::constant_time;
 use webpki;
 
 // Extensions we expect in plaintext in the ServerHello.
-static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
+static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
     ExtensionType::KeyShare,
     ExtensionType::PreSharedKey,
     ExtensionType::SupportedVersions,
@@ -53,7 +53,7 @@ static ALLOWED_PLAINTEXT_EXTS: &'static [ExtensionType] = &[
 
 // Only the intersection of things we offer, and those disallowed
 // in TLS1.3
-static DISALLOWED_TLS13_EXTS: &'static [ExtensionType] = &[
+static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
     ExtensionType::RenegotiationInfo,
@@ -813,8 +813,8 @@ impl ExpectFinished {
                            sig_verified: verify::HandshakeSignatureValid,
                            fin_verified: verify::FinishedMessageVerified) -> ExpectTraffic {
         ExpectTraffic {
-            handshake: handshake,
-            key_schedule: key_schedule,
+            handshake,
+            key_schedule,
             want_write_key_update: false,
             _cert_verified: cert_verified,
             _sig_verified: sig_verified,

@@ -133,10 +133,12 @@ impl WebPKIVerifier {
     }
 }
 
+type CertChainAndRoots<'a, 'b> = (webpki::EndEntityCert<'a>,
+                                  Vec<&'a [u8]>,
+                                  Vec<webpki::TrustAnchor<'b>>);
+
 fn prepare<'a, 'b>(roots: &'b RootCertStore, presented_certs: &'a [Certificate])
-                   -> Result<(webpki::EndEntityCert<'a>,
-                              Vec<&'a [u8]>,
-                              Vec<webpki::TrustAnchor<'b>>), TLSError> {
+                   -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
     if presented_certs.is_empty() {
         return Err(TLSError::NoCertificatesPresented);
     }

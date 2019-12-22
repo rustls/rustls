@@ -43,7 +43,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn sub(&mut self, len: usize) -> Option<Reader> {
-        self.take(len).and_then(|bytes| Some(Reader::init(bytes)))
+        self.take(len).map(Reader::init)
     }
 }
 

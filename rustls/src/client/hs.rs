@@ -399,7 +399,7 @@ impl ExpectServerHello {
     fn into_expect_tls13_encrypted_extensions(self, key_schedule: KeyScheduleHandshake) -> NextState {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
-            key_schedule: key_schedule,
+            key_schedule,
             server_cert: self.server_cert,
             hello: self.hello,
         })

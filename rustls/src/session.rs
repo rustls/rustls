@@ -472,12 +472,9 @@ impl SessionCommon {
         }
 
         let rc = self.record_layer.decrypt_incoming(encr);
-        match rc {
-            Err(TLSError::PeerSentOversizedRecord) => {
-                self.send_fatal_alert(AlertDescription::RecordOverflow);
-            }
-            _ => {}
-        };
+        if let Err(TLSError::PeerSentOversizedRecord) = rc {
+            self.send_fatal_alert(AlertDescription::RecordOverflow);
+        }
         rc
     }
 

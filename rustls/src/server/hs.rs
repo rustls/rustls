@@ -218,33 +218,32 @@ impl ExtensionProcessing {
             self.exts.push(ServerExtension::ServerNameAck);
         }
 
-        // Send status_request response if we have one.  This is not allowed
-        // if we're resuming, and is only triggered if we have an OCSP response
-        // to send.
-        if !for_resume &&
-           hello.find_extension(ExtensionType::StatusRequest).is_some() &&
-           server_key.is_some() &&
-           server_key.as_ref().unwrap().has_ocsp() {
-            self.send_cert_status = true;
+        if let Some(server_key) = server_key {
+            // Send status_request response if we have one.  This is not allowed
+            // if we're resuming, and is only triggered if we have an OCSP response
+            // to send.
+            if !for_resume &&
+               hello.find_extension(ExtensionType::StatusRequest).is_some() &&
+               server_key.has_ocsp() {
+                self.send_cert_status = true;
 
-            if !sess.common.is_tls13() {
-                // Only TLS1.2 sends confirmation in ServerHello
-                self.exts.push(ServerExtension::CertificateStatusAck);
+                if !sess.common.is_tls13() {
+                    // Only TLS1.2 sends confirmation in ServerHello
+                    self.exts.push(ServerExtension::CertificateStatusAck);
+                }
             }
-        }
 
-        if !for_resume &&
-           hello.find_extension(ExtensionType::SCT).is_some() &&
-           server_key.is_some() &&
-           server_key.as_ref().unwrap().has_sct_list() {
-            self.send_sct = true;
+            if !for_resume &&
+               hello.find_extension(ExtensionType::SCT).is_some() &&
+               server_key.has_sct_list() {
+                self.send_sct = true;
 
-            if !sess.common.is_tls13() {
-                let sct_list = server_key
-                    .unwrap()
-                    .take_sct_list()
-                    .unwrap();
-                self.exts.push(ServerExtension::make_sct(sct_list));
+                if !sess.common.is_tls13() {
+                    let sct_list = server_key
+                        .take_sct_list()
+                        .unwrap();
+                    self.exts.push(ServerExtension::make_sct(sct_list));
+                }
             }
         }
 
