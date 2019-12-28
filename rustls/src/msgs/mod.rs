@@ -12,6 +12,8 @@ pub mod ccs;
 pub mod message;
 #[cfg(feature="dtls")]
 pub mod dtls_message;
+#[cfg(feature="dtls")]
+pub mod cookie;
 
 pub mod persist;
 pub mod deframer;
