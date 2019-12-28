@@ -1,6 +1,8 @@
-use crate::cipher::{MessageEncrypter, MessageDecrypter};
-use crate::error::TLSError;
-use crate::msgs::message::{Message, BorrowMessage};
+use crate::{
+    cipher::{MessageDecrypter, MessageEncrypter},
+    error::TLSError,
+    msgs::message::{BorrowMessage, Message},
+};
 
 static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;

@@ -1,22 +1,22 @@
-use crate::msgs::enums::{ProtocolVersion, HandshakeType};
-use crate::msgs::enums::{CipherSuite, Compression, ExtensionType, ECPointFormat};
-use crate::msgs::enums::{HashAlgorithm, SignatureAlgorithm, ServerNameType};
-use crate::msgs::enums::{SignatureScheme, KeyUpdateRequest, NamedGroup};
-use crate::msgs::enums::{ClientCertificateType, CertificateStatusType};
-use crate::msgs::enums::ECCurveType;
-use crate::msgs::enums::PSKKeyExchangeMode;
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
-use crate::msgs::codec;
-use crate::msgs::codec::{Codec, Reader};
-use crate::key;
+use crate::{
+    key,
+    msgs::{
+        base::{Payload, PayloadU16, PayloadU24, PayloadU8},
+        codec,
+        codec::{Codec, Reader},
+        enums::{
+            CertificateStatusType, CipherSuite, ClientCertificateType, Compression, ECCurveType,
+            ECPointFormat, ExtensionType, HandshakeType, HashAlgorithm, KeyUpdateRequest,
+            NamedGroup, PSKKeyExchangeMode, ProtocolVersion, ServerNameType, SignatureAlgorithm,
+            SignatureScheme,
+        },
+    },
+};
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
 
-use std::fmt;
-use std::io::Write;
-use std::collections;
-use std::mem;
+use std::{collections, fmt, io::Write, mem};
 use webpki;
 
 macro_rules! declare_u8_vec(
@@ -58,10 +58,8 @@ declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 pub struct Random([u8; 32]);
 
 static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
-    0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11,
-    0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
-    0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e,
-    0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c,
+    0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11, 0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
+    0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e, 0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c,
 ]);
 
 static ZERO_RANDOM: Random = Random([0u8; 32]);
@@ -140,10 +138,7 @@ impl Codec for SessionID {
         let mut out = [0u8; 32];
         out[..len].clone_from_slice(&bytes[..len]);
 
-        Some(SessionID {
-            data: out,
-            len,
-        })
+        Some(SessionID { data: out, len })
     }
 }
 
@@ -188,10 +183,7 @@ impl UnknownExtension {
 
     fn read(typ: ExtensionType, r: &mut Reader) -> Option<UnknownExtension> {
         let payload = Payload::read(r)?;
-        Some(UnknownExtension {
-            typ,
-            payload,
-        })
+        Some(UnknownExtension { typ, payload })
     }
 }
 
@@ -219,23 +211,25 @@ pub trait DecomposedSignatureScheme {
 impl DecomposedSignatureScheme for SignatureScheme {
     fn sign(&self) -> SignatureAlgorithm {
         match *self {
-            SignatureScheme::RSA_PKCS1_SHA1 |
-                SignatureScheme::RSA_PKCS1_SHA256 |
-                SignatureScheme::RSA_PKCS1_SHA384 |
-                SignatureScheme::RSA_PKCS1_SHA512 |
-                SignatureScheme::RSA_PSS_SHA256 |
-                SignatureScheme::RSA_PSS_SHA384 |
-                SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
-            SignatureScheme::ECDSA_NISTP256_SHA256 |
-                SignatureScheme::ECDSA_NISTP384_SHA384 |
-                SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
+            SignatureScheme::RSA_PKCS1_SHA1
+            | SignatureScheme::RSA_PKCS1_SHA256
+            | SignatureScheme::RSA_PKCS1_SHA384
+            | SignatureScheme::RSA_PKCS1_SHA512
+            | SignatureScheme::RSA_PSS_SHA256
+            | SignatureScheme::RSA_PSS_SHA384
+            | SignatureScheme::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            SignatureScheme::ECDSA_NISTP256_SHA256
+            | SignatureScheme::ECDSA_NISTP384_SHA384
+            | SignatureScheme::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
             _ => SignatureAlgorithm::Unknown(0),
         }
     }
 
     fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme {
-        use crate::msgs::enums::SignatureAlgorithm::{RSA, ECDSA};
-        use crate::msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
+        use crate::msgs::enums::{
+            HashAlgorithm::{SHA1, SHA256, SHA384, SHA512},
+            SignatureAlgorithm::{ECDSA, RSA},
+        };
 
         match (alg, hash) {
             (RSA, SHA1) => SignatureScheme::RSA_PKCS1_SHA1,
@@ -278,7 +272,9 @@ impl ServerNamePayload {
 
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            ServerNamePayload::HostName(ref r) => ServerNamePayload::encode_hostname(r.as_ref(), bytes),
+            ServerNamePayload::HostName(ref r) => {
+                ServerNamePayload::encode_hostname(r.as_ref(), bytes)
+            }
             ServerNamePayload::Unknown(ref r) => r.encode(bytes),
         }
     }
@@ -304,10 +300,7 @@ impl Codec for ServerName {
             _ => ServerNamePayload::Unknown(Payload::read(r)?),
         };
 
-        Some(ServerName {
-            typ,
-            payload,
-        })
+        Some(ServerName { typ, payload })
     }
 }
 
@@ -389,10 +382,7 @@ impl Codec for KeyShareEntry {
         let group = NamedGroup::read(r)?;
         let payload = PayloadU16::read(r)?;
 
-        Some(KeyShareEntry {
-            group,
-            payload,
-        })
+        Some(KeyShareEntry { group, payload })
     }
 }
 
@@ -440,8 +430,8 @@ impl PresharedKeyOffer {
     /// Make a new one with one entry.
     pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> PresharedKeyOffer {
         PresharedKeyOffer {
-            identities: vec![ id ],
-            binders: vec![ PresharedKeyBinder::new(binder) ],
+            identities: vec![id],
+            binders: vec![PresharedKeyBinder::new(binder)],
         }
     }
 }
@@ -487,7 +477,7 @@ impl Codec for OCSPCertificateStatusRequest {
 #[derive(Clone, Debug)]
 pub enum CertificateStatusRequest {
     OCSP(OCSPCertificateStatusRequest),
-    Unknown((CertificateStatusType, Payload))
+    Unknown((CertificateStatusType, Payload)),
 }
 
 impl Codec for CertificateStatusRequest {
@@ -567,8 +557,9 @@ impl ClientExtension {
             ClientExtension::NamedGroups(_) => ExtensionType::EllipticCurves,
             ClientExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             ClientExtension::ServerName(_) => ExtensionType::ServerName,
-            ClientExtension::SessionTicketRequest |
-                ClientExtension::SessionTicketOffer(_) => ExtensionType::SessionTicket,
+            ClientExtension::SessionTicketRequest | ClientExtension::SessionTicketOffer(_) => {
+                ExtensionType::SessionTicket
+            }
             ClientExtension::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             ClientExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ClientExtension::KeyShare(_) => ExtensionType::KeyShare,
@@ -595,10 +586,10 @@ impl Codec for ClientExtension {
             ClientExtension::NamedGroups(ref r) => r.encode(&mut sub),
             ClientExtension::SignatureAlgorithms(ref r) => r.encode(&mut sub),
             ClientExtension::ServerName(ref r) => r.encode(&mut sub),
-            ClientExtension::SessionTicketRequest |
-                ClientExtension::ExtendedMasterSecretRequest |
-                ClientExtension::SignedCertificateTimestampRequest |
-                ClientExtension::EarlyData => (),
+            ClientExtension::SessionTicketRequest
+            | ClientExtension::ExtendedMasterSecretRequest
+            | ClientExtension::SignedCertificateTimestampRequest
+            | ClientExtension::EarlyData => (),
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
             ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
@@ -647,9 +638,7 @@ impl Codec for ClientExtension {
             ExtensionType::SupportedVersions => {
                 ClientExtension::SupportedVersions(ProtocolVersions::read(&mut sub)?)
             }
-            ExtensionType::KeyShare => {
-                ClientExtension::KeyShare(KeyShareEntries::read(&mut sub)?)
-            }
+            ExtensionType::KeyShare => ClientExtension::KeyShare(KeyShareEntries::read(&mut sub)?),
             ExtensionType::PSKKeyExchangeModes => {
                 ClientExtension::PresharedKeyModes(PSKKeyExchangeModes::read(&mut sub)?)
             }
@@ -670,9 +659,7 @@ impl Codec for ClientExtension {
             ExtensionType::TransportParameters => {
                 ClientExtension::TransportParameters(sub.rest().to_vec())
             }
-            ExtensionType::EarlyData if !sub.any_left() => {
-                ClientExtension::EarlyData
-            }
+            ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         })
     }
@@ -686,7 +673,7 @@ impl ClientExtension {
             payload: ServerNamePayload::HostName(dns_name.into()),
         };
 
-        ClientExtension::ServerName(vec![ name ])
+        ClientExtension::ServerName(vec![name])
     }
 }
 
@@ -736,11 +723,11 @@ impl Codec for ServerExtension {
         let mut sub: Vec<u8> = Vec::new();
         match *self {
             ServerExtension::ECPointFormats(ref r) => r.encode(&mut sub),
-            ServerExtension::ServerNameAck |
-                ServerExtension::SessionTicketAck |
-                ServerExtension::ExtendedMasterSecretAck |
-                ServerExtension::CertificateStatusAck |
-                ServerExtension::EarlyData => (),
+            ServerExtension::ServerNameAck
+            | ServerExtension::SessionTicketAck
+            | ServerExtension::ExtendedMasterSecretAck
+            | ServerExtension::CertificateStatusAck
+            | ServerExtension::EarlyData => (),
             ServerExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ServerExtension::Protocols(ref r) => r.encode(&mut sub),
             ServerExtension::KeyShare(ref r) => r.encode(&mut sub),
@@ -773,12 +760,8 @@ impl Codec for ServerExtension {
             ExtensionType::ALProtocolNegotiation => {
                 ServerExtension::Protocols(ProtocolNameList::read(&mut sub)?)
             }
-            ExtensionType::KeyShare => {
-                ServerExtension::KeyShare(KeyShareEntry::read(&mut sub)?)
-            }
-            ExtensionType::PreSharedKey => {
-                ServerExtension::PresharedKey(u16::read(&mut sub)?)
-            }
+            ExtensionType::KeyShare => ServerExtension::KeyShare(KeyShareEntry::read(&mut sub)?),
+            ExtensionType::PreSharedKey => ServerExtension::PresharedKey(u16::read(&mut sub)?),
             ExtensionType::ExtendedMasterSecret => ServerExtension::ExtendedMasterSecretAck,
             ExtensionType::SCT => {
                 let scts = SCTList::read(&mut sub)?;
@@ -807,8 +790,7 @@ impl ServerExtension {
     }
 
     pub fn make_sct(sctl: Vec<u8>) -> ServerExtension {
-        let scts = SCTList::read_bytes(&sctl)
-            .expect("invalid SCT list");
+        let scts = SCTList::read_bytes(&sctl).expect("invalid SCT list");
         ServerExtension::SignedCertificateTimestamp(scts)
     }
 }
@@ -994,7 +976,6 @@ impl ClientHelloPayload {
             .unwrap()
     }
 
-
     pub fn set_psk_binder(&mut self, binder: Vec<u8>) {
         let last_extension = self.extensions.last_mut().unwrap();
         if let ClientExtension::PresharedKey(ref mut offer) = *last_extension {
@@ -1053,12 +1034,8 @@ impl Codec for HelloRetryExtension {
         let mut sub = r.sub(len)?;
 
         Some(match typ {
-            ExtensionType::KeyShare => {
-                HelloRetryExtension::KeyShare(NamedGroup::read(&mut sub)?)
-            }
-            ExtensionType::Cookie => {
-                HelloRetryExtension::Cookie(PayloadU16::read(&mut sub)?)
-            }
+            ExtensionType::KeyShare => HelloRetryExtension::KeyShare(NamedGroup::read(&mut sub)?),
+            ExtensionType::Cookie => HelloRetryExtension::Cookie(PayloadU16::read(&mut sub)?),
             ExtensionType::SupportedVersions => {
                 HelloRetryExtension::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
@@ -1122,13 +1099,11 @@ impl HelloRetryRequest {
     }
 
     pub fn has_unknown_extension(&self) -> bool {
-        self.extensions
-            .iter()
-            .any(|ext| {
-                 ext.get_type() != ExtensionType::KeyShare &&
-                 ext.get_type() != ExtensionType::SupportedVersions &&
-                 ext.get_type() != ExtensionType::Cookie
-                 })
+        self.extensions.iter().any(|ext| {
+            ext.get_type() != ExtensionType::KeyShare
+                && ext.get_type() != ExtensionType::SupportedVersions
+                && ext.get_type() != ExtensionType::Cookie
+        })
     }
 
     fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
@@ -1294,22 +1269,21 @@ impl CertificateExtension {
     }
 
     pub fn make_sct(sct_list: Vec<u8>) -> CertificateExtension {
-        let sctl = SCTList::read_bytes(&sct_list)
-            .expect("invalid SCT list");
+        let sctl = SCTList::read_bytes(&sct_list).expect("invalid SCT list");
         CertificateExtension::SignedCertificateTimestamp(sctl)
     }
 
     pub fn get_cert_status(&self) -> Option<&Vec<u8>> {
         match *self {
             CertificateExtension::CertificateStatus(ref cs) => Some(&cs.ocsp_response.0),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn get_sct_list(&self) -> Option<&SCTList> {
         match *self {
             CertificateExtension::SignedCertificateTimestamp(ref sctl) => Some(sctl),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -1394,12 +1368,9 @@ impl CertificateEntry {
     }
 
     pub fn has_unknown_extension(&self) -> bool {
-        self.exts
-            .iter()
-            .any(|ext| {
-                 ext.get_type() != ExtensionType::StatusRequest &&
-                 ext.get_type() != ExtensionType::SCT
-                 })
+        self.exts.iter().any(|ext| {
+            ext.get_type() != ExtensionType::StatusRequest && ext.get_type() != ExtensionType::SCT
+        })
     }
 
     pub fn get_ocsp_response(&self) -> Option<&Vec<u8>> {
@@ -1476,14 +1447,16 @@ impl CertificatePayloadTLS13 {
     }
 
     pub fn get_end_entity_ocsp(&self) -> Vec<u8> {
-        self.entries.first()
+        self.entries
+            .first()
             .and_then(CertificateEntry::get_ocsp_response)
             .cloned()
-            .unwrap_or_else( Vec::new)
+            .unwrap_or_else(Vec::new)
     }
 
     pub fn get_end_entity_scts(&self) -> Option<SCTList> {
-        self.entries.first()
+        self.entries
+            .first()
             .and_then(CertificateEntry::get_scts)
             .cloned()
     }
@@ -1563,10 +1536,7 @@ impl Codec for DigitallySignedStruct {
         let scheme = SignatureScheme::read(r)?;
         let sig = PayloadU16::read(r)?;
 
-        Some(DigitallySignedStruct {
-            scheme,
-            sig,
-        })
+        Some(DigitallySignedStruct { scheme, sig })
     }
 }
 
@@ -1637,10 +1607,7 @@ impl Codec for ECDHEServerKeyExchange {
         let params = ServerECDHParams::read(r)?;
         let dss = DigitallySignedStruct::read(r)?;
 
-        Some(ECDHEServerKeyExchange {
-            params,
-            dss,
-        })
+        Some(ECDHEServerKeyExchange { params, dss })
     }
 }
 
@@ -1672,8 +1639,7 @@ impl ServerKeyExchangePayload {
 
             let result = match *kxa {
                 KeyExchangeAlgorithm::ECDHE => {
-                    ECDHEServerKeyExchange::read(&mut rd)
-                        .map(ServerKeyExchangePayload::ECDHE)
+                    ECDHEServerKeyExchange::read(&mut rd).map(ServerKeyExchangePayload::ECDHE)
                 }
                 _ => None,
             };
@@ -1959,9 +1925,7 @@ impl Codec for NewSessionTicketExtension {
 
         Some(match typ {
             ExtensionType::EarlyData => NewSessionTicketExtension::EarlyData(u32::read(&mut sub)?),
-            _ => {
-                NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?)
-            }
+            _ => NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         })
     }
 }
@@ -1978,10 +1942,12 @@ pub struct NewSessionTicketPayloadTLS13 {
 }
 
 impl NewSessionTicketPayloadTLS13 {
-    pub fn new(lifetime: u32,
-               age_add: u32,
-               nonce: Vec<u8>,
-               ticket: Vec<u8>) -> NewSessionTicketPayloadTLS13 {
+    pub fn new(
+        lifetime: u32,
+        age_add: u32,
+        nonce: Vec<u8>,
+        ticket: Vec<u8>,
+    ) -> NewSessionTicketPayloadTLS13 {
         NewSessionTicketPayloadTLS13 {
             lifetime,
             age_add,
@@ -1999,7 +1965,7 @@ impl NewSessionTicketPayloadTLS13 {
         let ext = self.find_extension(ExtensionType::EarlyData)?;
         match *ext {
             NewSessionTicketExtension::EarlyData(ref sz) => Some(*sz),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -2035,7 +2001,7 @@ impl Codec for NewSessionTicketPayloadTLS13 {
 /// Only supports OCSP
 #[derive(Debug)]
 pub struct CertificateStatus {
-    pub ocsp_response: PayloadU24
+    pub ocsp_response: PayloadU24,
 }
 
 impl Codec for CertificateStatus {
@@ -2048,19 +2014,19 @@ impl Codec for CertificateStatus {
         let typ = CertificateStatusType::read(r)?;
 
         match typ {
-            CertificateStatusType::OCSP => {
-                Some(CertificateStatus {
-                    ocsp_response: PayloadU24::read(r)?
-                })
-            }
-            _ => None
+            CertificateStatusType::OCSP => Some(CertificateStatus {
+                ocsp_response: PayloadU24::read(r)?,
+            }),
+            _ => None,
         }
     }
 }
 
 impl CertificateStatus {
     pub fn new(ocsp: Vec<u8>) -> CertificateStatus {
-        CertificateStatus { ocsp_response: PayloadU24::new(ocsp) }
+        CertificateStatus {
+            ocsp_response: PayloadU24::new(ocsp),
+        }
     }
 
     pub fn take_ocsp_response(&mut self) -> Vec<u8> {
@@ -2098,10 +2064,10 @@ pub enum HandshakePayload {
 impl HandshakePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            HandshakePayload::HelloRequest |
-                HandshakePayload::ServerHelloDone |
-                HandshakePayload::EarlyData |
-                HandshakePayload::EndOfEarlyData => {}
+            HandshakePayload::HelloRequest
+            | HandshakePayload::ServerHelloDone
+            | HandshakePayload::EarlyData
+            | HandshakePayload::EndOfEarlyData => {}
             HandshakePayload::ClientHello(ref x) => x.encode(bytes),
             HandshakePayload::ServerHello(ref x) => x.encode(bytes),
             HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
@@ -2140,7 +2106,8 @@ impl Codec for HandshakeMessagePayload {
         match self.typ {
             HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
             _ => self.typ,
-        }.encode(bytes);
+        }
+        .encode(bytes);
         codec::u24(sub.len() as u32).encode(bytes);
         bytes.append(&mut sub);
     }
@@ -2228,9 +2195,7 @@ impl HandshakeMessagePayload {
             HandshakeType::KeyUpdate => {
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
             }
-            HandshakeType::Finished => {
-                HandshakePayload::Finished(Payload::read(&mut sub)?)
-            }
+            HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)?),
             HandshakeType::CertificateStatus => {
                 HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
             }
@@ -2248,10 +2213,7 @@ impl HandshakeMessagePayload {
         if sub.any_left() {
             None
         } else {
-            Some(HandshakeMessagePayload {
-                typ,
-                payload,
-            })
+            Some(HandshakeMessagePayload { typ, payload })
         }
     }
 
@@ -2284,7 +2246,7 @@ impl HandshakeMessagePayload {
     pub fn build_handshake_hash(hash: &[u8]) -> HandshakeMessagePayload {
         HandshakeMessagePayload {
             typ: HandshakeType::MessageHash,
-            payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec()))
+            payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec())),
         }
     }
 }

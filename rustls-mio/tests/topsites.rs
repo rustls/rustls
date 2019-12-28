@@ -78,5 +78,4 @@ mod online {
     fn apple() {
         check("www.apple.com")
     }
-
 }

@@ -1,11 +1,11 @@
+use crate::{rand, server::ProducesTickets};
 
-use crate::server::ProducesTickets;
-use crate::rand;
-
-use std::mem;
-use std::sync::{Mutex, Arc};
-use std::time;
 use ring::aead;
+use std::{
+    mem,
+    sync::{Arc, Mutex},
+    time,
+};
 
 /// The timebase for expiring and rolling tickets and ticketing
 /// keys.  This is UNIX wall time in seconds.
@@ -31,12 +31,12 @@ impl AEADTicketer {
     /// and advertised `lifetime_seconds`.  Note that `lifetime_seconds`
     /// does not affect the lifetime of the key.  `key` must be the
     /// right length for `alg` or this will panic.
-    pub fn new_custom(alg: &'static aead::Algorithm,
-                      key: &[u8],
-                      lifetime_seconds: u32)
-                      -> AEADTicketer {
-        let key = aead::UnboundKey::new(alg, key)
-            .unwrap();
+    pub fn new_custom(
+        alg: &'static aead::Algorithm,
+        key: &[u8],
+        lifetime_seconds: u32,
+    ) -> AEADTicketer {
+        let key = aead::UnboundKey::new(alg, key).unwrap();
         AEADTicketer {
             alg,
             key: aead::LessSafeKey::new(key),
@@ -72,7 +72,8 @@ impl ProducesTickets for AEADTicketer {
             Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
         ciphertext.extend(&nonce_buf);
         ciphertext.extend(message);
-        self.key.seal_in_place_separate_tag(nonce,aad, &mut ciphertext[nonce_buf.len()..])
+        self.key
+            .seal_in_place_separate_tag(nonce, aad, &mut ciphertext[nonce_buf.len()..])
             .map(|tag| {
                 ciphertext.extend(tag.as_ref());
                 ciphertext
@@ -89,7 +90,8 @@ impl ProducesTickets for AEADTicketer {
             return None;
         }
 
-        let nonce = ring::aead::Nonce::try_assume_unique_for_key(&ciphertext[0..nonce_len]).unwrap();
+        let nonce =
+            ring::aead::Nonce::try_assume_unique_for_key(&ciphertext[0..nonce_len]).unwrap();
         let aad = ring::aead::Aad::empty();
 
         let mut out = Vec::new();
@@ -97,7 +99,9 @@ impl ProducesTickets for AEADTicketer {
 
         let plain_len = match self.key.open_in_place(nonce, aad, &mut out) {
             Ok(plaintext) => plaintext.len(),
-            Err(..) => { return None; }
+            Err(..) => {
+                return None;
+            }
         };
 
         out.truncate(plain_len);
@@ -125,9 +129,7 @@ impl TicketSwitcher {
     /// is used to generate new tickets.  Tickets are accepted for no
     /// longer than twice this duration.  `generator` produces a new
     /// `ProducesTickets` implementation.
-    pub fn new(lifetime: u32,
-               generator: fn() -> Box<dyn ProducesTickets>)
-               -> TicketSwitcher {
+    pub fn new(lifetime: u32, generator: fn() -> Box<dyn ProducesTickets>) -> TicketSwitcher {
         TicketSwitcher {
             generator,
             lifetime,
@@ -168,11 +170,7 @@ impl ProducesTickets for TicketSwitcher {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         self.maybe_roll();
 
-        self.state
-            .lock()
-            .unwrap()
-            .current
-            .encrypt(message)
+        self.state.lock().unwrap().current.encrypt(message)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
@@ -210,9 +208,7 @@ impl Ticketer {
 fn basic_pairwise_test() {
     let t = Ticketer::new();
     assert_eq!(true, t.enabled());
-    let cipher = t.encrypt(b"hello world")
-        .unwrap();
-    let plain = t.decrypt(&cipher)
-        .unwrap();
+    let cipher = t.encrypt(b"hello world").unwrap();
+    let plain = t.decrypt(&cipher).unwrap();
     assert_eq!(plain, b"hello world");
 }

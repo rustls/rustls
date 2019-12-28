@@ -1,8 +1,4 @@
-use std::io::Read;
-use std::io;
-use std::cmp;
-use std::collections::VecDeque;
-use std::convert;
+use std::{cmp, collections::VecDeque, convert, io, io::Read};
 
 /// This trait specifies rustls's precise requirements doing writes with
 /// vectored IO.
@@ -34,7 +30,10 @@ pub struct ChunkVecBuffer {
 
 impl ChunkVecBuffer {
     pub fn new() -> ChunkVecBuffer {
-        ChunkVecBuffer { chunks: VecDeque::new(), limit: 0 }
+        ChunkVecBuffer {
+            chunks: VecDeque::new(),
+            limit: 0,
+        }
     }
 
     /// Sets the upper limit on how many bytes this
@@ -69,7 +68,7 @@ impl ChunkVecBuffer {
         if self.limit == 0 {
             len
         } else {
-            let space =self.limit.saturating_sub(self.len());
+            let space = self.limit.saturating_sub(self.len());
             cmp::min(len, space)
         }
     }
@@ -143,7 +142,9 @@ impl ChunkVecBuffer {
         }
 
         let used = {
-            let chunks = self.chunks.iter()
+            let chunks = self
+                .chunks
+                .iter()
                 .map(convert::AsRef::as_ref)
                 .collect::<Vec<&[u8]>>();
 
@@ -183,8 +184,7 @@ mod test {
     use super::ChunkVecBuffer;
 
     #[test]
-    fn short_append_copy_with_limit()
-    {
+    fn short_append_copy_with_limit() {
         let mut cvb = ChunkVecBuffer::new();
         cvb.set_limit(12);
         assert_eq!(cvb.append_limited_copy(b"hello"), 5);
@@ -194,7 +194,6 @@ mod test {
 
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf).unwrap(), 12);
-        assert_eq!(buf.to_vec(),
-                   b"helloworldhe".to_vec());
+        assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
     }
 }

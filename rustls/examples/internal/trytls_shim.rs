@@ -4,18 +4,19 @@
 // See: https://github.com/HowNetWorks/trytls-rustls-stub
 //
 
-
 use webpki;
 use webpki_roots;
 
-use std::io::{Read, Write, BufReader};
-use std::net::TcpStream;
-use std::sync::Arc;
-use std::fs::File;
-use std::error::Error;
-use std::process;
-use std::env;
 use rustls::{ClientConfig, ClientSession, Session, TLSError};
+use std::{
+    env,
+    error::Error,
+    fs::File,
+    io::{BufReader, Read, Write},
+    net::TcpStream,
+    process,
+    sync::Arc,
+};
 
 enum Verdict {
     Accept,
@@ -26,7 +27,9 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Er
     let mut config = ClientConfig::new();
     match args.len() {
         3 => {
-            config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+            config
+                .root_store
+                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
         }
         4 => {
             let f = File::open(&args[3])?;
@@ -62,8 +65,9 @@ fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict,
 
             if let Err(err) = client.process_new_packets() {
                 return match err {
-                    TLSError::WebPKIError(_) |
-                    TLSError::AlertReceived(_) => Ok(Verdict::Reject(err)),
+                    TLSError::WebPKIError(_) | TLSError::AlertReceived(_) => {
+                        Ok(Verdict::Reject(err))
+                    }
                     _ => Err(From::from(format!("{:?}", err))),
                 };
             }

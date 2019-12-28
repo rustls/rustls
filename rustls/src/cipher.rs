@@ -1,23 +1,26 @@
+use crate::{
+    error::TLSError,
+    key_schedule::{derive_traffic_iv, derive_traffic_key},
+    msgs::{
+        codec,
+        codec::Codec,
+        enums::{ContentType, ProtocolVersion},
+        fragmenter::MAX_FRAGMENT_LEN,
+        message::{BorrowMessage, Message, MessagePayload},
+    },
+    session::SessionSecrets,
+    suites::{BulkAlgorithm, SupportedCipherSuite},
+};
 use ring::{aead, hkdf};
-use std::io::Write;
-use crate::msgs::codec;
-use crate::msgs::codec::Codec;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
-use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::error::TLSError;
-use crate::session::SessionSecrets;
-use crate::suites::{SupportedCipherSuite, BulkAlgorithm};
-use crate::key_schedule::{derive_traffic_key, derive_traffic_iv};
-use std::convert::TryInto;
+use std::{convert::TryInto, io::Write};
 
 /// Objects with this trait can decrypt TLS messages.
-pub trait MessageDecrypter : Send + Sync {
+pub trait MessageDecrypter: Send + Sync {
     fn decrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub trait MessageEncrypter : Send + Sync {
+pub trait MessageEncrypter: Send + Sync {
     fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TLSError>;
 }
 
@@ -36,10 +39,12 @@ impl dyn MessageDecrypter {
 pub type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
-fn make_tls12_aad(seq: u64,
-                  typ: ContentType,
-                  vers: ProtocolVersion,
-                  len: usize) -> ring::aead::Aad<[u8; TLS12_AAD_SIZE]> {
+fn make_tls12_aad(
+    seq: u64,
+    typ: ContentType,
+    vers: ProtocolVersion,
+    len: usize,
+) -> ring::aead::Aad<[u8; TLS12_AAD_SIZE]> {
     let mut out = [0; TLS12_AAD_SIZE];
     codec::put_u64(seq, &mut out[0..]);
     out[8] = typ.get_u8();
@@ -50,9 +55,10 @@ fn make_tls12_aad(seq: u64,
 
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
 /// and the session's `secrets`.
-pub fn new_tls12(scs: &'static SupportedCipherSuite,
-                 secrets: &SessionSecrets)
-                 -> MessageCipherPair {
+pub fn new_tls12(
+    scs: &'static SupportedCipherSuite,
+    secrets: &SessionSecrets,
+) -> MessageCipherPair {
     // Make a key block, and chop it up.
     // nb. we don't implement any ciphersuites with nonzero mac_key_len.
     let key_block = secrets.make_key_block(scs.key_block_len());
@@ -81,8 +87,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
     let aead_alg = scs.get_aead_alg();
 
     match scs.bulk {
-        BulkAlgorithm::AES_128_GCM |
-        BulkAlgorithm::AES_256_GCM => {
+        BulkAlgorithm::AES_128_GCM | BulkAlgorithm::AES_256_GCM => {
             // The GCM nonce is constructed from a 32-bit 'salt' derived
             // from the master-secret, and a 64-bit explicit part,
             // with no specified construction.  Thanks for that.
@@ -100,37 +105,41 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
                 iv
             };
 
-            (Box::new(GCMMessageDecrypter::new(aead_alg,
-                                               read_key,
-                                               read_iv)),
-             Box::new(GCMMessageEncrypter::new(aead_alg,
-                                               write_key,
-                                               write_iv)))
+            (
+                Box::new(GCMMessageDecrypter::new(aead_alg, read_key, read_iv)),
+                Box::new(GCMMessageEncrypter::new(aead_alg, write_key, write_iv)),
+            )
         }
 
         BulkAlgorithm::CHACHA20_POLY1305 => {
             let read_iv = Iv::new(read_iv.try_into().unwrap());
             let write_iv = Iv::new(write_iv.try_into().unwrap());
-            (Box::new(ChaCha20Poly1305MessageDecrypter::new(aead_alg,
-                                                            read_key,
-                                                            read_iv)),
-             Box::new(ChaCha20Poly1305MessageEncrypter::new(aead_alg,
-                                                            write_key,
-                                                            write_iv)))
+            (
+                Box::new(ChaCha20Poly1305MessageDecrypter::new(
+                    aead_alg, read_key, read_iv,
+                )),
+                Box::new(ChaCha20Poly1305MessageEncrypter::new(
+                    aead_alg, write_key, write_iv,
+                )),
+            )
         }
     }
 }
 
-pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
-                      secret: &hkdf::Prk) -> Box<dyn MessageDecrypter> {
+pub fn new_tls13_read(
+    scs: &'static SupportedCipherSuite,
+    secret: &hkdf::Prk,
+) -> Box<dyn MessageDecrypter> {
     let key = derive_traffic_key(secret, scs.get_aead_alg());
     let iv = derive_traffic_iv(secret);
 
     Box::new(TLS13MessageDecrypter::new(key, iv))
 }
 
-pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
-                       secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
+pub fn new_tls13_write(
+    scs: &'static SupportedCipherSuite,
+    secret: &hkdf::Prk,
+) -> Box<dyn MessageEncrypter> {
     let key = derive_traffic_key(secret, scs.get_aead_alg());
     let iv = derive_traffic_iv(secret);
 
@@ -154,8 +163,7 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GCMMessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
-        let payload = msg.take_opaque_payload()
-            .ok_or(TLSError::DecryptError)?;
+        let payload = msg.take_opaque_payload().ok_or(TLSError::DecryptError)?;
         let mut buf = payload.0;
 
         if buf.len() < GCM_OVERHEAD {
@@ -171,10 +179,9 @@ impl MessageDecrypter for GCMMessageDecrypter {
 
         let aad = make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD);
 
-        let plain_len = self.dec_key.open_within(nonce,
-                                                 aad,
-                                                 &mut buf,
-                                                 GCM_EXPLICIT_NONCE_LEN..)
+        let plain_len = self
+            .dec_key
+            .open_within(nonce, aad, &mut buf, GCM_EXPLICIT_NONCE_LEN..)
             .map_err(|_| TLSError::DecryptError)?
             .len();
 
@@ -202,7 +209,8 @@ impl MessageEncrypter for GCMMessageEncrypter {
         payload.extend_from_slice(&nonce.as_ref()[4..]);
         payload.extend_from_slice(&msg.payload);
 
-        self.enc_key.seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
+        self.enc_key
+            .seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
             .map(|tag| payload.extend(tag.as_ref()))
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
@@ -215,10 +223,8 @@ impl MessageEncrypter for GCMMessageEncrypter {
 }
 
 impl GCMMessageEncrypter {
-    fn new(alg: &'static aead::Algorithm, enc_key: &[u8], iv: Iv)
-           -> GCMMessageEncrypter {
-        let key = aead::UnboundKey::new(alg, enc_key)
-            .unwrap();
+    fn new(alg: &'static aead::Algorithm, enc_key: &[u8], iv: Iv) -> GCMMessageEncrypter {
+        let key = aead::UnboundKey::new(alg, enc_key).unwrap();
         GCMMessageEncrypter {
             enc_key: aead::LessSafeKey::new(key),
             iv,
@@ -227,11 +233,8 @@ impl GCMMessageEncrypter {
 }
 
 impl GCMMessageDecrypter {
-    fn new(alg: &'static aead::Algorithm,
-           dec_key: &[u8],
-           dec_iv: &[u8]) -> GCMMessageDecrypter {
-        let key = aead::UnboundKey::new(alg, dec_key)
-            .unwrap();
+    fn new(alg: &'static aead::Algorithm, dec_key: &[u8], dec_iv: &[u8]) -> GCMMessageDecrypter {
+        let key = aead::UnboundKey::new(alg, dec_key).unwrap();
         let mut ret = GCMMessageDecrypter {
             dec_key: aead::LessSafeKey::new(key),
             dec_salt: [0u8; 4],
@@ -252,13 +255,17 @@ impl Iv {
     }
 
     #[cfg(test)]
-    pub(crate) fn value(&self) -> &[u8; 12] { &self.0 }
+    pub(crate) fn value(&self) -> &[u8; 12] {
+        &self.0
+    }
 }
 
 pub(crate) struct IvLen;
 
 impl hkdf::KeyType for IvLen {
-    fn len(&self) -> usize { aead::NONCE_LEN }
+    fn len(&self) -> usize {
+        aead::NONCE_LEN
+    }
 }
 
 impl From<hkdf::Okm<'_, IvLen>> for Iv {
@@ -302,11 +309,11 @@ fn make_tls13_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
     aead::Nonce::assume_unique_for_key(nonce)
 }
 
-fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]>{
+fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]> {
     ring::aead::Aad::from([
         0x17, // ContentType::ApplicationData
-        0x3, // ProtocolVersion (major)
-        0x3, // ProtocolVersion (minor)
+        0x3,  // ProtocolVersion (major)
+        0x3,  // ProtocolVersion (minor)
         (len >> 8) as u8,
         len as u8,
     ])
@@ -322,7 +329,8 @@ impl MessageEncrypter for TLS13MessageEncrypter {
         let nonce = make_tls13_nonce(&self.iv, seq);
         let aad = make_tls13_aad(total_len);
 
-        self.enc_key.seal_in_place_append_tag(nonce, aad, &mut buf)
+        self.enc_key
+            .seal_in_place_append_tag(nonce, aad, &mut buf)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
@@ -335,8 +343,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
 
 impl MessageDecrypter for TLS13MessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
-        let payload = msg.take_opaque_payload()
-            .ok_or(TLSError::DecryptError)?;
+        let payload = msg.take_opaque_payload().ok_or(TLSError::DecryptError)?;
         let mut buf = payload.0;
 
         if buf.len() < self.dec_key.algorithm().tag_len() {
@@ -345,7 +352,9 @@ impl MessageDecrypter for TLS13MessageDecrypter {
 
         let nonce = make_tls13_nonce(&self.iv, seq);
         let aad = make_tls13_aad(buf.len());
-        let plain_len = self.dec_key.open_in_place(nonce, aad, &mut buf)
+        let plain_len = self
+            .dec_key
+            .open_in_place(nonce, aad, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
             .len();
 
@@ -408,11 +417,12 @@ pub struct ChaCha20Poly1305MessageDecrypter {
 }
 
 impl ChaCha20Poly1305MessageEncrypter {
-    fn new(alg: &'static aead::Algorithm,
-           enc_key: &[u8],
-           enc_iv: Iv) -> ChaCha20Poly1305MessageEncrypter {
-        let key = aead::UnboundKey::new(alg, enc_key)
-            .unwrap();
+    fn new(
+        alg: &'static aead::Algorithm,
+        enc_key: &[u8],
+        enc_iv: Iv,
+    ) -> ChaCha20Poly1305MessageEncrypter {
+        let key = aead::UnboundKey::new(alg, enc_key).unwrap();
         ChaCha20Poly1305MessageEncrypter {
             enc_key: aead::LessSafeKey::new(key),
             enc_offset: enc_iv,
@@ -421,11 +431,12 @@ impl ChaCha20Poly1305MessageEncrypter {
 }
 
 impl ChaCha20Poly1305MessageDecrypter {
-    fn new(alg: &'static aead::Algorithm,
-           dec_key: &[u8],
-           dec_iv: Iv) -> ChaCha20Poly1305MessageDecrypter {
-        let key = aead::UnboundKey::new(alg, dec_key)
-            .unwrap();
+    fn new(
+        alg: &'static aead::Algorithm,
+        dec_key: &[u8],
+        dec_iv: Iv,
+    ) -> ChaCha20Poly1305MessageDecrypter {
+        let key = aead::UnboundKey::new(alg, dec_key).unwrap();
         ChaCha20Poly1305MessageDecrypter {
             dec_key: aead::LessSafeKey::new(key),
             dec_offset: dec_iv,
@@ -437,8 +448,7 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
-        let payload = msg.take_opaque_payload()
-            .ok_or(TLSError::DecryptError)?;
+        let payload = msg.take_opaque_payload().ok_or(TLSError::DecryptError)?;
         let mut buf = payload.0;
 
         if buf.len() < CHACHAPOLY1305_OVERHEAD {
@@ -446,9 +456,16 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         let nonce = make_tls13_nonce(&self.dec_offset, seq);
-        let aad = make_tls12_aad(seq, msg.typ, msg.version, buf.len() - CHACHAPOLY1305_OVERHEAD);
+        let aad = make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version,
+            buf.len() - CHACHAPOLY1305_OVERHEAD,
+        );
 
-        let plain_len = self.dec_key.open_in_place(nonce, aad, &mut buf)
+        let plain_len = self
+            .dec_key
+            .open_in_place(nonce, aad, &mut buf)
             .map_err(|_| TLSError::DecryptError)?
             .len();
 
@@ -475,7 +492,8 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
 
-        self.enc_key.seal_in_place_append_tag(nonce, aad, &mut buf)
+        self.enc_key
+            .seal_in_place_append_tag(nonce, aad, &mut buf)
             .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
 
         Ok(Message {

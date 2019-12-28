@@ -15,3 +15,5 @@ steps:
     workingDirectory: rustls
   - script: cargo test --release --no-run
     displayName: "cargo test (release; no run)"
+  - script: cargo fmt --all -- --check
+    displayName: "cargo fmt (all; check)"

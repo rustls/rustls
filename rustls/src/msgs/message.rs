@@ -1,12 +1,11 @@
-
-use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::base::Payload;
-use crate::msgs::alert::AlertMessagePayload;
-use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::handshake::HandshakeMessagePayload;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::enums::{AlertLevel, AlertDescription};
-use crate::msgs::enums::HandshakeType;
+use crate::msgs::{
+    alert::AlertMessagePayload,
+    base::Payload,
+    ccs::ChangeCipherSpecPayload,
+    codec::{Codec, Reader},
+    enums::{AlertDescription, AlertLevel, ContentType, HandshakeType, ProtocolVersion},
+    handshake::HandshakeMessagePayload,
+};
 
 use std::mem;
 
@@ -28,10 +27,11 @@ impl MessagePayload {
         }
     }
 
-    pub fn decode_given_type(&self,
-                             typ: ContentType,
-                             vers: ProtocolVersion)
-                             -> Option<MessagePayload> {
+    pub fn decode_given_type(
+        &self,
+        typ: ContentType,
+        vers: ProtocolVersion,
+    ) -> Option<MessagePayload> {
         if let MessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
             let parsed = match typ {
@@ -49,7 +49,11 @@ impl MessagePayload {
                 _ => None,
             };
 
-            if r.any_left() { None } else { parsed }
+            if r.any_left() {
+                None
+            } else {
+                parsed
+            }
         } else {
             None
         }
@@ -213,14 +217,13 @@ impl<'a> Message {
             BorrowMessage {
                 typ: self.typ,
                 version: self.version,
-                payload: &p.0
+                payload: &p.0,
             }
         } else {
             unreachable!("to_borrowed must have opaque message");
         }
     }
 }
-
 
 /// A TLS frame, named TLSPlaintext in the standard.
 ///

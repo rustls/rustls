@@ -1,5 +1,7 @@
-use crate::msgs::enums::{AlertLevel, AlertDescription};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::{
+    codec::{Codec, Reader},
+    enums::{AlertDescription, AlertLevel},
+};
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {
@@ -17,10 +19,7 @@ impl Codec for AlertMessagePayload {
         let level = AlertLevel::read(r)?;
         let description = AlertDescription::read(r)?;
 
-        Some(AlertMessagePayload {
-            level,
-            description,
-        })
+        Some(AlertMessagePayload { level, description })
     }
 }
 

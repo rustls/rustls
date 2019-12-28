@@ -184,16 +184,15 @@
 //!
 
 // Require docs for public APIs, deny unsafe code, etc.
-#![forbid(unsafe_code,
-          unused_must_use,
-          unstable_features)]
-#![deny(trivial_casts,
-        trivial_numeric_casts,
-        missing_docs,
-        unused_import_braces,
-        unused_extern_crates,
-        unused_qualifications)]
-
+#![forbid(unsafe_code, unused_must_use, unstable_features)]
+#![deny(
+    trivial_casts,
+    trivial_numeric_casts,
+    missing_docs,
+    unused_import_braces,
+    unused_extern_crates,
+    unused_qualifications
+)]
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
 //   underneath.
@@ -215,37 +214,37 @@ mod log {
 #[allow(missing_docs)]
 #[macro_use]
 mod msgs;
-mod error;
-mod rand;
-mod hash_hs;
-mod vecbuf;
-mod prf;
+mod anchors;
+mod bs_debug;
 mod cipher;
-mod record_layer;
+mod client;
+mod error;
+mod handshake;
+mod hash_hs;
+mod key;
 mod key_schedule;
+mod keylog;
+mod pemfile;
+mod prf;
+mod rand;
+mod record_layer;
+mod server;
 mod session;
 mod stream;
-mod pemfile;
-mod x509;
-mod anchors;
+mod suites;
+mod ticketer;
+mod vecbuf;
 mod verify;
 #[cfg(test)]
 mod verifybench;
-mod handshake;
-mod suites;
-mod ticketer;
-mod server;
-mod client;
-mod key;
-mod bs_debug;
-mod keylog;
+mod x509;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
     /// Functions for parsing PEM files containing certificates/keys.
     pub mod pemfile {
-        pub use crate::pemfile::{certs, rsa_private_keys, pkcs8_private_keys};
+        pub use crate::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
     }
 
     /// Low-level TLS message parsing and encoding functions.
@@ -255,29 +254,28 @@ pub mod internal {
 }
 
 // The public interface is:
-pub use crate::msgs::enums::ProtocolVersion;
-pub use crate::msgs::enums::SignatureScheme;
-pub use crate::msgs::enums::CipherSuite;
-pub use crate::error::TLSError;
-pub use crate::session::Session;
-pub use crate::stream::{Stream, StreamOwned};
-pub use crate::anchors::{DistinguishedNames, RootCertStore};
-pub use crate::client::StoresClientSessions;
-pub use crate::client::handy::{NoClientSessionStorage, ClientSessionMemoryCache};
-pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
-pub use crate::client::ResolvesClientCert;
-pub use crate::server::StoresServerSessions;
-pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
-pub use crate::server::{ServerConfig, ServerSession};
-pub use crate::server::handy::ResolvesServerCertUsingSNI;
-pub use crate::server::{ResolvesServerCert,ProducesTickets,ClientHello};
-pub use crate::ticketer::Ticketer;
-pub use crate::verify::{NoClientAuth, AllowAnyAuthenticatedClient,
-                 AllowAnyAnonymousOrAuthenticatedClient};
-pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
-pub use crate::key::{Certificate, PrivateKey};
-pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
-pub use crate::vecbuf::{WriteV, WriteVAdapter};
+pub use crate::{
+    anchors::{DistinguishedNames, RootCertStore},
+    client::{
+        handy::{ClientSessionMemoryCache, NoClientSessionStorage},
+        ClientConfig, ClientSession, ResolvesClientCert, StoresClientSessions, WriteEarlyData,
+    },
+    error::TLSError,
+    key::{Certificate, PrivateKey},
+    keylog::{KeyLog, KeyLogFile, NoKeyLog},
+    msgs::enums::{CipherSuite, ProtocolVersion, SignatureScheme},
+    server::{
+        handy::{NoServerSessionStorage, ResolvesServerCertUsingSNI, ServerSessionMemoryCache},
+        ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig, ServerSession,
+        StoresServerSessions,
+    },
+    session::Session,
+    stream::{Stream, StreamOwned},
+    suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES},
+    ticketer::Ticketer,
+    vecbuf::{WriteV, WriteVAdapter},
+    verify::{AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth},
+};
 
 /// Message signing interfaces and implementations.
 pub mod sign;
@@ -296,8 +294,8 @@ mod quic {
 }
 
 #[cfg(feature = "dangerous_configuration")]
-pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
-    ClientCertVerifier, ClientCertVerified, WebPKIVerifier};
-#[cfg(feature = "dangerous_configuration")]
 pub use crate::client::danger::DangerousClientConfig;
-
+#[cfg(feature = "dangerous_configuration")]
+pub use crate::verify::{
+    ClientCertVerified, ClientCertVerifier, ServerCertVerified, ServerCertVerifier, WebPKIVerifier,
+};

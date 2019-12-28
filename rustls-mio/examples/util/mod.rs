@@ -1,10 +1,10 @@
+use rustls;
 use std::io;
 use vecio::Rawv;
-use rustls;
 
 /// This glues our `rustls::WriteV` trait to `vecio::Rawv`.
 pub struct WriteVAdapter<'a> {
-    rawv: &'a mut dyn Rawv
+    rawv: &'a mut dyn Rawv,
 }
 
 impl<'a> WriteVAdapter<'a> {

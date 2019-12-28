@@ -1,13 +1,13 @@
-use crate::msgs::handshake::SessionID;
-use crate::msgs::enums::{CipherSuite, ProtocolVersion};
-use crate::msgs::codec::{Reader, Codec};
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::base::{PayloadU8, PayloadU16};
+use crate::msgs::{
+    base::{PayloadU16, PayloadU8},
+    codec::{Codec, Reader},
+    enums::{CipherSuite, ProtocolVersion},
+    handshake::{CertificatePayload, SessionID},
+};
 
 use webpki;
 
-use std::mem;
-use std::cmp;
+use std::{cmp, mem};
 
 // These are the keys and values we store in session storage.
 
@@ -108,12 +108,13 @@ impl Codec for ClientSessionValue {
 static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 
 impl ClientSessionValue {
-    pub fn new(v: ProtocolVersion,
-               cs: CipherSuite,
-               sessid: &SessionID,
-               ticket: Vec<u8>,
-               ms: Vec<u8>)
-               -> ClientSessionValue {
+    pub fn new(
+        v: ProtocolVersion,
+        cs: CipherSuite,
+        sessid: &SessionID,
+        ticket: Vec<u8>,
+        ms: Vec<u8>,
+    ) -> ClientSessionValue {
         ClientSessionValue {
             version: v,
             cipher_suite: cs,
@@ -132,8 +133,7 @@ impl ClientSessionValue {
         self.extended_ms = true;
     }
 
-    pub fn set_times(&mut self, receipt_time_secs: u64,
-                     lifetime_secs: u32, age_add: u32) {
+    pub fn set_times(&mut self, receipt_time_secs: u64, lifetime_secs: u32, age_add: u32) {
         self.epoch = receipt_time_secs;
         self.lifetime = cmp::min(lifetime_secs, MAX_TICKET_LIFETIME);
         self.age_add = age_add;
@@ -207,8 +207,7 @@ impl Codec for ServerSessionValue {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
-            let dns_name = webpki::DNSNameRef::try_from_ascii(
-                &dns_name.0).ok()?;
+            let dns_name = webpki::DNSNameRef::try_from_ascii(&dns_name.0).ok()?;
             Some(dns_name.into())
         } else {
             None
@@ -245,14 +244,15 @@ impl Codec for ServerSessionValue {
 }
 
 impl ServerSessionValue {
-    pub fn new(sni: Option<&webpki::DNSName>,
-               v: ProtocolVersion,
-               cs: CipherSuite,
-               ms: Vec<u8>,
-               cert_chain: &Option<CertificatePayload>,
-               alpn: Option<Vec<u8>>,
-               application_data: Vec<u8>)
-               -> ServerSessionValue {
+    pub fn new(
+        sni: Option<&webpki::DNSName>,
+        v: ProtocolVersion,
+        cs: CipherSuite,
+        ms: Vec<u8>,
+        cert_chain: &Option<CertificatePayload>,
+        alpn: Option<Vec<u8>>,
+        application_data: Vec<u8>,
+    ) -> ServerSessionValue {
         ServerSessionValue {
             sni: sni.cloned(),
             version: v,

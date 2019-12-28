@@ -7,7 +7,7 @@
 mod common;
 
 mod online {
-    use super::common::{TlsClient, polite};
+    use super::common::{polite, TlsClient};
 
     fn connect(hostname: &str) -> TlsClient {
         TlsClient::new(hostname)

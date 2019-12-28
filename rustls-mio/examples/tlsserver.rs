@@ -1,16 +1,19 @@
 use std::sync::Arc;
 
-use mio;
-use mio::tcp::{TcpListener, TcpStream, Shutdown};
+use mio::{
+    self,
+    tcp::{Shutdown, TcpListener, TcpStream},
+};
 
 #[macro_use]
 extern crate log;
 
-use std::fs;
-use std::io;
-use std::net;
-use std::io::{Write, Read, BufReader};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fs, io,
+    io::{BufReader, Read, Write},
+    net,
+};
 
 #[macro_use]
 extern crate serde_derive;
@@ -21,8 +24,10 @@ use env_logger;
 
 use rustls;
 
-use rustls::{RootCertStore, Session, NoClientAuth, AllowAnyAuthenticatedClient,
-             AllowAnyAnonymousOrAuthenticatedClient};
+use rustls::{
+    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+    RootCertStore, Session,
+};
 
 mod util;
 
@@ -75,7 +80,8 @@ impl TlsServer {
                 let token = mio::Token(self.next_id);
                 self.next_id += 1;
 
-                self.connections.insert(token, Connection::new(socket, token, mode, tls_session));
+                self.connections
+                    .insert(token, Connection::new(socket, token, mode, tls_session));
                 self.connections[&token].register(poll);
                 true
             }
@@ -90,10 +96,7 @@ impl TlsServer {
         let token = event.token();
 
         if self.connections.contains_key(&token) {
-            self.connections
-                .get_mut(&token)
-                .unwrap()
-                .ready(poll, event);
+            self.connections.get_mut(&token).unwrap().ready(poll, event);
 
             if self.connections[&token].is_closed() {
                 self.connections.remove(&token);
@@ -146,11 +149,12 @@ fn try_read(r: io::Result<usize>) -> io::Result<Option<usize>> {
 }
 
 impl Connection {
-    fn new(socket: TcpStream,
-           token: mio::Token,
-           mode: ServerMode,
-           tls_session: rustls::ServerSession)
-           -> Connection {
+    fn new(
+        socket: TcpStream,
+        token: mio::Token,
+        mode: ServerMode,
+        tls_session: rustls::ServerSession,
+    ) -> Connection {
         let back = open_back(&mode);
         Connection {
             socket,
@@ -296,11 +300,10 @@ impl Connection {
     }
 
     fn send_http_response_once(&mut self) {
-        let response = b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
+        let response =
+            b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
-            self.tls_session
-                .write_all(response)
-                .unwrap();
+            self.tls_session.write_all(response).unwrap();
             self.sent_http_response = true;
             self.tls_session.send_close_notify();
         }
@@ -314,7 +317,8 @@ impl Connection {
     #[cfg(not(target_os = "windows"))]
     fn tls_write(&mut self) -> io::Result<usize> {
         use crate::util::WriteVAdapter;
-        self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket))
+        self.tls_session
+            .writev_tls(&mut WriteVAdapter::new(&mut self.socket))
     }
 
     fn do_tls_write_and_handle_error(&mut self) {
@@ -327,34 +331,42 @@ impl Connection {
     }
 
     fn register(&self, poll: &mut mio::Poll) {
-        poll.register(&self.socket,
-                      self.token,
-                      self.event_set(),
-                      mio::PollOpt::level() | mio::PollOpt::oneshot())
-            .unwrap();
+        poll.register(
+            &self.socket,
+            self.token,
+            self.event_set(),
+            mio::PollOpt::level() | mio::PollOpt::oneshot(),
+        )
+        .unwrap();
 
         if self.back.is_some() {
-            poll.register(self.back.as_ref().unwrap(),
-                          self.token,
-                          mio::Ready::readable(),
-                          mio::PollOpt::level() | mio::PollOpt::oneshot())
-                .unwrap();
+            poll.register(
+                self.back.as_ref().unwrap(),
+                self.token,
+                mio::Ready::readable(),
+                mio::PollOpt::level() | mio::PollOpt::oneshot(),
+            )
+            .unwrap();
         }
     }
 
     fn reregister(&self, poll: &mut mio::Poll) {
-        poll.reregister(&self.socket,
-                        self.token,
-                        self.event_set(),
-                        mio::PollOpt::level() | mio::PollOpt::oneshot())
-            .unwrap();
+        poll.reregister(
+            &self.socket,
+            self.token,
+            self.event_set(),
+            mio::PollOpt::level() | mio::PollOpt::oneshot(),
+        )
+        .unwrap();
 
         if self.back.is_some() {
-            poll.reregister(self.back.as_ref().unwrap(),
-                            self.token,
-                            mio::Ready::readable(),
-                            mio::PollOpt::level() | mio::PollOpt::oneshot())
-                .unwrap();
+            poll.reregister(
+                self.back.as_ref().unwrap(),
+                self.token,
+                mio::Ready::readable(),
+                mio::PollOpt::level() | mio::PollOpt::oneshot(),
+            )
+            .unwrap();
         }
     }
 
@@ -378,8 +390,7 @@ impl Connection {
     }
 }
 
-const USAGE: &'static str =
-    "
+const USAGE: &'static str = "
 Runs a TLS server on :PORT.  The default PORT is 443.
 
 `echo' mode means the server echoes received data on each connection.
@@ -484,7 +495,10 @@ fn lookup_versions(versions: &[String]) -> Vec<rustls::ProtocolVersion> {
         let version = match vname.as_ref() {
             "1.2" => rustls::ProtocolVersion::TLSv1_2,
             "1.3" => rustls::ProtocolVersion::TLSv1_3,
-            _ => panic!("cannot look up version '{}', valid are '1.2' and '1.3'", vname),
+            _ => panic!(
+                "cannot look up version '{}', valid are '1.2' and '1.3'",
+                vname
+            ),
         };
         out.push(version);
     }
@@ -500,16 +514,14 @@ fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
 
 fn load_private_key(filename: &str) -> rustls::PrivateKey {
     let rsa_keys = {
-        let keyfile = fs::File::open(filename)
-            .expect("cannot open private key file");
+        let keyfile = fs::File::open(filename).expect("cannot open private key file");
         let mut reader = BufReader::new(keyfile);
         rustls::internal::pemfile::rsa_private_keys(&mut reader)
             .expect("file contains invalid rsa private key")
     };
 
     let pkcs8_keys = {
-        let keyfile = fs::File::open(filename)
-            .expect("cannot open private key file");
+        let keyfile = fs::File::open(filename).expect("cannot open private key file");
         let mut reader = BufReader::new(keyfile);
         rustls::internal::pemfile::pkcs8_private_keys(&mut reader)
             .expect("file contains invalid pkcs8 private key (encrypted keys not supported)")
@@ -559,7 +571,8 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
     let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
     let ocsp = load_ocsp(&args.flag_ocsp);
-    config.set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
+    config
+        .set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
         .expect("bad certificates/private key");
 
     if !args.flag_suite.is_empty() {
@@ -578,10 +591,13 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         config.ticketer = rustls::Ticketer::new();
     }
 
-    config.set_protocols(&args.flag_proto
-        .iter()
-        .map(|proto| proto.as_bytes().to_vec())
-        .collect::<Vec<_>>()[..]);
+    config.set_protocols(
+        &args
+            .flag_proto
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect::<Vec<_>>()[..],
+    );
 
     Arc::new(config)
 }
@@ -596,9 +612,7 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
-            .init();
+        env_logger::Builder::new().parse_filters("trace").init();
     }
 
     let mut addr: net::SocketAddr = "0.0.0.0:443".parse().unwrap();
@@ -607,13 +621,14 @@ fn main() {
     let config = make_config(&args);
 
     let listener = TcpListener::bind(&addr).expect("cannot listen on port");
-    let mut poll = mio::Poll::new()
-        .unwrap();
-    poll.register(&listener,
-                  LISTENER,
-                  mio::Ready::readable(),
-                  mio::PollOpt::level())
-        .unwrap();
+    let mut poll = mio::Poll::new().unwrap();
+    poll.register(
+        &listener,
+        LISTENER,
+        mio::Ready::readable(),
+        mio::PollOpt::level(),
+    )
+    .unwrap();
 
     let mode = if args.cmd_echo {
         ServerMode::Echo
@@ -627,8 +642,7 @@ fn main() {
 
     let mut events = mio::Events::with_capacity(256);
     loop {
-        poll.poll(&mut events, None)
-            .unwrap();
+        poll.poll(&mut events, None).unwrap();
 
         for event in events.iter() {
             match event.token() {
@@ -637,7 +651,7 @@ fn main() {
                         break;
                     }
                 }
-                _ => tlsserv.conn_event(&mut poll, &event)
+                _ => tlsserv.conn_event(&mut poll, &event),
             }
         }
     }

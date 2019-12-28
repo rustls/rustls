@@ -1,36 +1,36 @@
-use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::{AlertDescription, HandshakeType};
-use crate::session::{Session, SessionCommon};
-use crate::keylog::{KeyLog, NoKeyLog};
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::handshake::ClientExtension;
-use crate::msgs::message::Message;
-use crate::verify;
-use crate::anchors;
-use crate::sign;
-use crate::error::TLSError;
-use crate::key;
-use crate::vecbuf::WriteV;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::{
+    anchors,
+    error::TLSError,
+    key,
+    keylog::{KeyLog, NoKeyLog},
+    msgs::{
+        enums::{
+            AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion,
+            SignatureScheme,
+        },
+        handshake::{CertificatePayload, ClientExtension},
+        message::Message,
+    },
+    session::{Session, SessionCommon},
+    sign,
+    suites::{SupportedCipherSuite, ALL_CIPHERSUITES},
+    vecbuf::WriteV,
+    verify,
+};
 
-use std::sync::Arc;
-use std::io;
-use std::fmt;
-use std::mem;
+use std::{fmt, io, mem, sync::Arc};
 
 use sct;
 use webpki;
 
 #[macro_use]
 mod hs;
-mod tls12;
-mod tls13;
 mod common;
 pub mod handy;
+mod tls12;
+mod tls13;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -43,7 +43,7 @@ pub mod handy;
 /// in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common
 /// choice.
-pub trait StoresClientSessions : Send + Sync {
+pub trait StoresClientSessions: Send + Sync {
     /// Stores a new `value` for `key`.  Returns `true`
     /// if the value was stored.
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
@@ -55,7 +55,7 @@ pub trait StoresClientSessions : Send + Sync {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert : Send + Sync {
+pub trait ResolvesClientCert: Send + Sync {
     /// With the server-supplied acceptable issuers in `acceptable_issuers`,
     /// the server's supported signature schemes in `sigschemes`,
     /// return a certificate chain and signing key to authenticate.
@@ -67,10 +67,11 @@ pub trait ResolvesClientCert : Send + Sync {
     /// Return None to continue the handshake without any client
     /// authentication.  The server may reject the handshake later
     /// if it requires authentication.
-    fn resolve(&self,
-               acceptable_issuers: &[&[u8]],
-               sigschemes: &[SignatureScheme])
-               -> Option<sign::CertifiedKey>;
+    fn resolve(
+        &self,
+        acceptable_issuers: &[&[u8]],
+        sigschemes: &[SignatureScheme],
+    ) -> Option<sign::CertifiedKey>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -139,7 +140,9 @@ pub struct ClientConfig {
 }
 
 impl Default for ClientConfig {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ClientConfig {
@@ -215,9 +218,11 @@ impl ClientConfig {
     ///
     /// `cert_chain` is a vector of DER-encoded certificates,
     /// `key_der` is a DER-encoded RSA or ECDSA private key.
-    pub fn set_single_client_cert(&mut self,
-                                  cert_chain: Vec<key::Certificate>,
-                                  key_der: key::PrivateKey) {
+    pub fn set_single_client_cert(
+        &mut self,
+        cert_chain: Vec<key::Certificate>,
+        key_der: key::PrivateKey,
+    ) {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der);
         self.client_auth_cert_resolver = Arc::new(resolver);
     }
@@ -235,19 +240,17 @@ impl ClientConfig {
 pub mod danger {
     use std::sync::Arc;
 
-    use super::ClientConfig;
-    use super::verify::ServerCertVerifier;
+    use super::{verify::ServerCertVerifier, ClientConfig};
 
     /// Accessor for dangerous configuration options.
     pub struct DangerousClientConfig<'a> {
         /// The underlying ClientConfig
-        pub cfg: &'a mut ClientConfig
+        pub cfg: &'a mut ClientConfig,
     }
 
     impl<'a> DangerousClientConfig<'a> {
         /// Overrides the default `ServerCertVerifier` with something else.
-        pub fn set_certificate_verifier(&mut self,
-                                        verifier: Arc<dyn ServerCertVerifier>) {
+        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
         }
     }
@@ -277,15 +280,15 @@ impl EarlyData {
 
     fn is_enabled(&self) -> bool {
         match self.state {
-            EarlyDataState::Ready | EarlyDataState::Accepted  => true,
-            _ => false
+            EarlyDataState::Ready | EarlyDataState::Accepted => true,
+            _ => false,
         }
     }
 
     fn is_accepted(&self) -> bool {
         match self.state {
             EarlyDataState::Accepted | EarlyDataState::AcceptedFinished => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -326,11 +329,10 @@ impl EarlyData {
                 };
 
                 Ok(take)
-            },
-            EarlyDataState::Rejected
-                | EarlyDataState::AcceptedFinished => {
+            }
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
                 Err(io::Error::from(io::ErrorKind::InvalidInput))
-            },
+            }
         }
     }
 
@@ -450,7 +452,8 @@ impl ClientSessionImpl {
         // TLS1.3: drop CCS at any time during handshaking
         if self.common.is_tls13()
             && msg.is_content_type(ContentType::ChangeCipherSpec)
-            && self.is_handshaking() {
+            && self.is_handshaking()
+        {
             trace!("Dropping CCS");
             return Ok(());
         }
@@ -468,9 +471,9 @@ impl ClientSessionImpl {
                 .handshake_joiner
                 .take_message(msg)
                 .ok_or_else(|| {
-                            self.common.send_fatal_alert(AlertDescription::DecodeError);
-                            TLSError::CorruptMessagePayload(ContentType::Handshake)
-                            })?;
+                    self.common.send_fatal_alert(AlertDescription::DecodeError);
+                    TLSError::CorruptMessagePayload(ContentType::Handshake)
+                })?;
             return self.process_new_handshake_messages();
         }
 
@@ -496,11 +499,13 @@ impl ClientSessionImpl {
     }
 
     fn queue_unexpected_alert(&mut self) {
-        self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+        self.common
+            .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     fn reject_renegotiation_attempt(&mut self) -> Result<(), TLSError> {
-        self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+        self.common
+            .send_warning_alert(AlertDescription::NoRenegotiation);
         Ok(())
     }
 
@@ -510,19 +515,18 @@ impl ClientSessionImpl {
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotation requests.  These can occur any time.
-        if msg.is_handshake_type(HandshakeType::HelloRequest) &&
-            !self.common.is_tls13() &&
-            !self.is_handshaking() {
+        if msg.is_handshake_type(HandshakeType::HelloRequest)
+            && !self.common.is_tls13()
+            && !self.is_handshaking()
+        {
             return self.reject_renegotiation_attempt();
         }
 
         let state = self.state.take().unwrap();
-        state
-            .check_message(&msg)
-            .map_err(|err| {
-                self.queue_unexpected_alert();
-                err
-            })?;
+        state.check_message(&msg).map_err(|err| {
+            self.queue_unexpected_alert();
+            err
+        })?;
         self.state = Some(state.handle(self, msg)?);
 
         Ok(())
@@ -576,16 +580,17 @@ impl ClientSessionImpl {
     }
 
     pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.early_data.check_write(data.len())
-            .and_then(|sz| {
-                self.common.send_early_plaintext(&data[..sz])
-            })
+        self.early_data
+            .check_write(data.len())
+            .and_then(|sz| self.common.send_early_plaintext(&data[..sz]))
     }
 
-    fn export_keying_material(&self,
-                              output: &mut [u8],
-                              label: &[u8],
-                              context: Option<&[u8]>) -> Result<(), TLSError> {
+    fn export_keying_material(
+        &self,
+        output: &mut [u8],
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<(), TLSError> {
         self.state
             .as_ref()
             .ok_or_else(|| TLSError::HandshakeNotComplete)
@@ -594,8 +599,7 @@ impl ClientSessionImpl {
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
+        st.as_mut().map(|st| st.perhaps_write_key_update(self));
         self.state = st;
 
         self.common.send_some_plaintext(buf)
@@ -705,17 +709,20 @@ impl Session for ClientSession {
         self.imp.get_protocol_version()
     }
 
-    fn export_keying_material(&self,
-                              output: &mut [u8],
-                              label: &[u8],
-                              context: Option<&[u8]>) -> Result<(), TLSError> {
+    fn export_keying_material(
+        &self,
+        output: &mut [u8],
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<(), TLSError> {
         self.imp.export_keying_material(output, label, context)
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.imp.get_negotiated_ciphersuite().or(self.imp.resumption_ciphersuite)
+        self.imp
+            .get_negotiated_ciphersuite()
+            .or(self.imp.resumption_ciphersuite)
     }
-
 }
 
 impl io::Read for ClientSession {

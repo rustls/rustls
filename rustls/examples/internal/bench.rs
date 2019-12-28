@@ -3,24 +3,20 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use std::time::{Duration, Instant};
-use std::sync::Arc;
-use std::fs;
-use std::io::{self, Write, Read};
-use std::env;
+use std::{
+    env, fs,
+    io::{self, Read, Write},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use rustls;
-use rustls::{ClientConfig, ClientSession};
-use rustls::{ServerConfig, ServerSession};
-use rustls::ServerSessionMemoryCache;
-use rustls::ClientSessionMemoryCache;
-use rustls::NoServerSessionStorage;
-use rustls::NoClientSessionStorage;
-use rustls::{NoClientAuth, RootCertStore, AllowAnyAuthenticatedClient};
-use rustls::Session;
-use rustls::Ticketer;
-use rustls::internal::pemfile;
-use rustls::internal::msgs::enums::SignatureAlgorithm;
+use rustls::{
+    self,
+    internal::{msgs::enums::SignatureAlgorithm, pemfile},
+    AllowAnyAuthenticatedClient, ClientConfig, ClientSession, ClientSessionMemoryCache,
+    NoClientAuth, NoClientSessionStorage, NoServerSessionStorage, RootCertStore, ServerConfig,
+    ServerSession, ServerSessionMemoryCache, Session, Ticketer,
+};
 
 use webpki;
 
@@ -29,8 +25,9 @@ fn duration_nanos(d: Duration) -> f64 {
 }
 
 fn _bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_test: Ftest)
-    where Fsetup: Fn() -> S,
-          Ftest: Fn(S)
+where
+    Fsetup: Fn() -> S,
+    Ftest: Fn(S),
 {
     let mut times = Vec::new();
 
@@ -46,7 +43,8 @@ fn _bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f
 }
 
 fn time<F>(mut f: F) -> f64
-    where F: FnMut()
+where
+    F: FnMut(),
 {
     let start = Instant::now();
     f();
@@ -120,7 +118,7 @@ impl Resumption {
 #[derive(PartialEq, Clone, Copy)]
 enum KeyType {
     RSA,
-    ECDSA
+    ECDSA,
 }
 
 impl KeyType {
@@ -140,37 +138,42 @@ impl KeyType {
     }
 
     fn get_chain(&self) -> Vec<rustls::Certificate> {
-        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("end.fullchain"))
-                                               .unwrap()))
-            .unwrap()
+        pemfile::certs(&mut io::BufReader::new(
+            fs::File::open(self.path_for("end.fullchain")).unwrap(),
+        ))
+        .unwrap()
     }
 
     fn get_key(&self) -> rustls::PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("end.key"))
-                                                            .unwrap()))
-                .unwrap()[0]
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("end.key")).unwrap(),
+        ))
+        .unwrap()[0]
             .clone()
     }
 
     fn get_client_chain(&self) -> Vec<rustls::Certificate> {
-        pemfile::certs(&mut io::BufReader::new(fs::File::open(self.path_for("client.fullchain"))
-                                               .unwrap()))
-            .unwrap()
+        pemfile::certs(&mut io::BufReader::new(
+            fs::File::open(self.path_for("client.fullchain")).unwrap(),
+        ))
+        .unwrap()
     }
 
     fn get_client_key(&self) -> rustls::PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(fs::File::open(self.path_for("client.key"))
-                                                            .unwrap()))
-                .unwrap()[0]
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("client.key")).unwrap(),
+        ))
+        .unwrap()[0]
             .clone()
     }
 }
 
-fn make_server_config(version: rustls::ProtocolVersion,
-                      suite: &'static rustls::SupportedCipherSuite,
-                      client_auth: ClientAuth,
-                      resume: Resumption)
-                      -> ServerConfig {
+fn make_server_config(
+    version: rustls::ProtocolVersion,
+    suite: &'static rustls::SupportedCipherSuite,
+    client_auth: ClientAuth,
+    resume: Resumption,
+) -> ServerConfig {
     let kt = KeyType::for_suite(suite);
     let client_auth = match client_auth {
         ClientAuth::Yes => {
@@ -180,10 +183,8 @@ fn make_server_config(version: rustls::ProtocolVersion,
                 client_auth_roots.add(&root).unwrap();
             }
             AllowAnyAuthenticatedClient::new(client_auth_roots)
-        },
-        ClientAuth::No => {
-            NoClientAuth::new()
         }
+        ClientAuth::No => NoClientAuth::new(),
     };
 
     let mut cfg = ServerConfig::new(client_auth);
@@ -204,11 +205,12 @@ fn make_server_config(version: rustls::ProtocolVersion,
     cfg
 }
 
-fn make_client_config(version: rustls::ProtocolVersion,
-                      suite: &'static rustls::SupportedCipherSuite,
-                      clientauth: ClientAuth,
-                      resume: Resumption)
-                      -> ClientConfig {
+fn make_client_config(
+    version: rustls::ProtocolVersion,
+    suite: &'static rustls::SupportedCipherSuite,
+    clientauth: ClientAuth,
+    resume: Resumption,
+) -> ClientConfig {
     let kt = KeyType::for_suite(suite);
     let mut cfg = ClientConfig::new();
     let mut rootbuf = io::BufReader::new(fs::File::open(kt.path_for("ca.cert")).unwrap());
@@ -234,16 +236,18 @@ fn make_client_config(version: rustls::ProtocolVersion,
 fn apply_work_multiplier(work: u64) -> u64 {
     let mul = match env::var("BENCH_MULTIPLIER") {
         Ok(val) => val.parse::<f64>().expect("invalid BENCH_MULTIPLIER value"),
-        Err(_) => 1.
+        Err(_) => 1.,
     };
 
     ((work as f64) * mul).round() as u64
 }
 
-fn bench_handshake(version: rustls::ProtocolVersion,
-                   suite: &'static rustls::SupportedCipherSuite,
-                   clientauth: ClientAuth,
-                   resume: Resumption) {
+fn bench_handshake(
+    version: rustls::ProtocolVersion,
+    suite: &'static rustls::SupportedCipherSuite,
+    clientauth: ClientAuth,
+    resume: Resumption,
+) {
     let client_config = Arc::new(make_client_config(version, suite, clientauth, resume));
     let server_config = Arc::new(make_server_config(version, suite, clientauth, resume));
 
@@ -278,26 +282,30 @@ fn bench_handshake(version: rustls::ProtocolVersion,
         });
     }
 
-    println!("handshakes\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
-             version,
-             suite.suite,
-             if clientauth == ClientAuth::Yes {
-                 "mutual"
-             } else {
-                 "server-auth"
-             },
-             resume.label(),
-             (rounds as f64) / client_time);
-    println!("handshakes\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
-             version,
-             suite.suite,
-             if clientauth == ClientAuth::Yes {
-                 "mutual"
-             } else {
-                 "server-auth"
-             },
-             resume.label(),
-             (rounds as f64) / server_time);
+    println!(
+        "handshakes\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
+        version,
+        suite.suite,
+        if clientauth == ClientAuth::Yes {
+            "mutual"
+        } else {
+            "server-auth"
+        },
+        resume.label(),
+        (rounds as f64) / client_time
+    );
+    println!(
+        "handshakes\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
+        version,
+        suite.suite,
+        if clientauth == ClientAuth::Yes {
+            "mutual"
+        } else {
+            "server-auth"
+        },
+        resume.label(),
+        (rounds as f64) / server_time
+    );
 }
 
 fn do_handshake_step(client: &mut ClientSession, server: &mut ServerSession) -> bool {
@@ -316,11 +324,23 @@ fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
     while do_handshake_step(client, server) {}
 }
 
-fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::SupportedCipherSuite,
-              plaintext_size: u64) {
-    let client_config =
-        Arc::new(make_client_config(version, suite, ClientAuth::No, Resumption::No));
-    let server_config = Arc::new(make_server_config(version, suite, ClientAuth::No, Resumption::No));
+fn bench_bulk(
+    version: rustls::ProtocolVersion,
+    suite: &'static rustls::SupportedCipherSuite,
+    plaintext_size: u64,
+) {
+    let client_config = Arc::new(make_client_config(
+        version,
+        suite,
+        ClientAuth::No,
+        Resumption::No,
+    ));
+    let server_config = Arc::new(make_server_config(
+        version,
+        suite,
+        ClientAuth::No,
+        Resumption::No,
+    ));
 
     if !suite.usable_for_version(version) {
         return;
@@ -335,13 +355,11 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
     let mut buf = Vec::new();
     buf.resize(plaintext_size as usize, 0u8);
 
-    let total_data = apply_work_multiplier(
-        if plaintext_size < 8192 {
-            64 * 1024 * 1024
-        } else {
-            1024 * 1024 * 1024
-        }
-    );
+    let total_data = apply_work_multiplier(if plaintext_size < 8192 {
+        64 * 1024 * 1024
+    } else {
+        1024 * 1024 * 1024
+    });
     let rounds = total_data / plaintext_size;
     let mut time_send = 0f64;
     let mut time_recv = 0f64;
@@ -354,29 +372,42 @@ fn bench_bulk(version: rustls::ProtocolVersion, suite: &'static rustls::Supporte
 
         time_recv += transfer(&mut server, &mut client);
 
-        time_recv += time(|| {
-            client.process_new_packets().unwrap()
-        });
+        time_recv += time(|| client.process_new_packets().unwrap());
         drain(&mut client, buf.len());
     }
 
     let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
-    println!("bulk\t{:?}\t{:?}\tsend\t{:.2}\tMB/s",
-             version,
-             suite.suite,
-             total_mbs / time_send);
-    println!("bulk\t{:?}\t{:?}\trecv\t{:.2}\tMB/s",
-             version,
-             suite.suite,
-             total_mbs / time_recv);
+    println!(
+        "bulk\t{:?}\t{:?}\tsend\t{:.2}\tMB/s",
+        version,
+        suite.suite,
+        total_mbs / time_send
+    );
+    println!(
+        "bulk\t{:?}\t{:?}\trecv\t{:.2}\tMB/s",
+        version,
+        suite.suite,
+        total_mbs / time_recv
+    );
 }
 
-fn bench_memory(version: rustls::ProtocolVersion,
-                suite: &'static rustls::SupportedCipherSuite,
-                session_count: u64) {
-    let client_config =
-        Arc::new(make_client_config(version, suite, ClientAuth::No, Resumption::No));
-    let server_config = Arc::new(make_server_config(version, suite, ClientAuth::No, Resumption::No));
+fn bench_memory(
+    version: rustls::ProtocolVersion,
+    suite: &'static rustls::SupportedCipherSuite,
+    session_count: u64,
+) {
+    let client_config = Arc::new(make_client_config(
+        version,
+        suite,
+        ClientAuth::No,
+        Resumption::No,
+    ));
+    let server_config = Arc::new(make_server_config(
+        version,
+        suite,
+        ClientAuth::No,
+        Resumption::No,
+    ));
 
     if !suite.usable_for_version(version) {
         return;
@@ -422,64 +453,73 @@ fn lookup_suite(name: &str) -> &'static rustls::SupportedCipherSuite {
 }
 
 fn selected_tests(mut args: env::Args) {
-    let mode = args.next()
-        .expect("first argument must be mode");
+    let mode = args.next().expect("first argument must be mode");
 
     match mode.as_ref() {
-        "bulk" => {
-            match args.next() {
-                Some(suite) => {
-                    let len = args.next()
-                        .map(|arg| arg.parse::<u64>()
-                             .expect("3rd arg must be plaintext size integer"))
-                        .unwrap_or(1048576);
-                    let suite = lookup_suite(&suite);
-                    bench_bulk(rustls::ProtocolVersion::TLSv1_3, suite, len);
-                    bench_bulk(rustls::ProtocolVersion::TLSv1_2, suite, len);
-                }
-                None => {
-                    panic!("bulk needs ciphersuite argument");
-                }
+        "bulk" => match args.next() {
+            Some(suite) => {
+                let len = args
+                    .next()
+                    .map(|arg| {
+                        arg.parse::<u64>()
+                            .expect("3rd arg must be plaintext size integer")
+                    })
+                    .unwrap_or(1048576);
+                let suite = lookup_suite(&suite);
+                bench_bulk(rustls::ProtocolVersion::TLSv1_3, suite, len);
+                bench_bulk(rustls::ProtocolVersion::TLSv1_2, suite, len);
             }
-        }
-
-        "handshake" | "handshake-resume" | "handshake-ticket" => {
-            match args.next() {
-                Some(suite) => {
-                    let suite = lookup_suite(&suite);
-                    let resume = if mode == "handshake" {
-                        Resumption::No
-                    } else if mode == "handshake-resume" {
-                        Resumption::SessionID
-                    } else {
-                        Resumption::Tickets
-                    };
-
-                    bench_handshake(rustls::ProtocolVersion::TLSv1_3, suite, ClientAuth::No, resume);
-                    bench_handshake(rustls::ProtocolVersion::TLSv1_2, suite, ClientAuth::No, resume);
-                }
-                None => {
-                    panic!("handshake* needs ciphersuite argument");
-                }
+            None => {
+                panic!("bulk needs ciphersuite argument");
             }
-        }
+        },
 
-        "memory" => {
-            match args.next() {
-                Some(suite) => {
-                    let count = args.next()
-                        .map(|arg| arg.parse::<u64>()
-                             .expect("3rd arg must be session count integer"))
-                        .unwrap_or(1000000);
-                    let suite = lookup_suite(&suite);
-                    bench_memory(rustls::ProtocolVersion::TLSv1_3, suite, count);
-                    bench_memory(rustls::ProtocolVersion::TLSv1_2, suite, count);
-                }
-                None => {
-                    panic!("memory needs ciphersuite argument");
-                }
+        "handshake" | "handshake-resume" | "handshake-ticket" => match args.next() {
+            Some(suite) => {
+                let suite = lookup_suite(&suite);
+                let resume = if mode == "handshake" {
+                    Resumption::No
+                } else if mode == "handshake-resume" {
+                    Resumption::SessionID
+                } else {
+                    Resumption::Tickets
+                };
+
+                bench_handshake(
+                    rustls::ProtocolVersion::TLSv1_3,
+                    suite,
+                    ClientAuth::No,
+                    resume,
+                );
+                bench_handshake(
+                    rustls::ProtocolVersion::TLSv1_2,
+                    suite,
+                    ClientAuth::No,
+                    resume,
+                );
             }
-        }
+            None => {
+                panic!("handshake* needs ciphersuite argument");
+            }
+        },
+
+        "memory" => match args.next() {
+            Some(suite) => {
+                let count = args
+                    .next()
+                    .map(|arg| {
+                        arg.parse::<u64>()
+                            .expect("3rd arg must be session count integer")
+                    })
+                    .unwrap_or(1000000);
+                let suite = lookup_suite(&suite);
+                bench_memory(rustls::ProtocolVersion::TLSv1_3, suite, count);
+                bench_memory(rustls::ProtocolVersion::TLSv1_2, suite, count);
+            }
+            None => {
+                panic!("memory needs ciphersuite argument");
+            }
+        },
 
         _ => {
             panic!("unsupported mode {:?}", mode);
@@ -488,7 +528,10 @@ fn selected_tests(mut args: env::Args) {
 }
 
 fn all_tests() {
-    for version in &[rustls::ProtocolVersion::TLSv1_3, rustls::ProtocolVersion::TLSv1_2] {
+    for version in &[
+        rustls::ProtocolVersion::TLSv1_3,
+        rustls::ProtocolVersion::TLSv1_2,
+    ] {
         for suite in &rustls::ALL_CIPHERSUITES {
             bench_bulk(*version, suite, 1024 * 1024);
             bench_handshake(*version, suite, ClientAuth::No, Resumption::No);

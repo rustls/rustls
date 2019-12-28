@@ -17,7 +17,8 @@ fn no_ecdhe() {
     }
     server.run();
 
-    server.client()
+    server
+        .client()
         .verbose()
         .fails()
         .expect_log("TLS alert received:")
@@ -33,7 +34,8 @@ fn tls11_only() {
     server.arg("-tls1_1");
     server.run();
 
-    server.client()
+    server
+        .client()
         .verbose()
         .fails()
         .expect_log("TLS alert received:")

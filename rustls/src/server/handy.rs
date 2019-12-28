@@ -1,12 +1,10 @@
-use crate::sign;
-use crate::key;
+use crate::{error::TLSError, key, server, server::ClientHello, sign};
 use webpki;
-use crate::server;
-use crate::error::TLSError;
-use crate::server::ClientHello;
 
-use std::collections;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections,
+    sync::{Arc, Mutex},
+};
 
 /// Something which never stores sessions.
 pub struct NoServerSessionStorage {}
@@ -53,23 +51,17 @@ impl ServerSessionMemoryCache {
 
 impl server::StoresServerSessions for ServerSessionMemoryCache {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache.lock()
-            .unwrap()
-            .insert(key, value);
+        self.cache.lock().unwrap().insert(key, value);
         self.limit_size();
         true
     }
 
     fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.lock()
-            .unwrap()
-            .get(key).cloned()
+        self.cache.lock().unwrap().get(key).cloned()
     }
 
     fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.lock()
-            .unwrap()
-            .remove(key)
+        self.cache.lock().unwrap().remove(key)
     }
 }
 
@@ -106,21 +98,28 @@ pub struct AlwaysResolvesChain(sign::CertifiedKey);
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
-    pub fn new(chain: Vec<key::Certificate>,
-               priv_key: &key::PrivateKey) -> Result<AlwaysResolvesChain, TLSError> {
+    pub fn new(
+        chain: Vec<key::Certificate>,
+        priv_key: &key::PrivateKey,
+    ) -> Result<AlwaysResolvesChain, TLSError> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| TLSError::General("invalid private key".into()))?;
-        Ok(AlwaysResolvesChain(sign::CertifiedKey::new(chain, Arc::new(key))))
+        Ok(AlwaysResolvesChain(sign::CertifiedKey::new(
+            chain,
+            Arc::new(key),
+        )))
     }
 
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
     ///
     /// If non-empty, the given OCSP response and SCTs are attached.
-    pub fn new_with_extras(chain: Vec<key::Certificate>,
-                           priv_key: &key::PrivateKey,
-                           ocsp: Vec<u8>,
-                           scts: Vec<u8>) -> Result<AlwaysResolvesChain, TLSError> {
+    pub fn new_with_extras(
+        chain: Vec<key::Certificate>,
+        priv_key: &key::PrivateKey,
+        ocsp: Vec<u8>,
+        scts: Vec<u8>,
+    ) -> Result<AlwaysResolvesChain, TLSError> {
         let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
@@ -147,7 +146,9 @@ pub struct ResolvesServerCertUsingSNI {
 impl ResolvesServerCertUsingSNI {
     /// Create a new and empty (ie, knows no certificates) resolver.
     pub fn new() -> ResolvesServerCertUsingSNI {
-        ResolvesServerCertUsingSNI { by_name: collections::HashMap::new() }
+        ResolvesServerCertUsingSNI {
+            by_name: collections::HashMap::new(),
+        }
     }
 
     /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
@@ -168,8 +169,7 @@ impl ResolvesServerCertUsingSNI {
 impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
         if let Some(name) = client_hello.server_name() {
-            self.by_name.get(name.into())
-                .cloned()
+            self.by_name.get(name.into()).cloned()
         } else {
             // This kind of resolver requires SNI
             None
@@ -229,11 +229,21 @@ mod test {
         assert_eq!(c.put(vec![0x09], vec![0x0a]), true);
 
         let mut count = 0;
-        if c.get(&[0x01]).is_some() { count += 1; }
-        if c.get(&[0x03]).is_some() { count += 1; }
-        if c.get(&[0x05]).is_some() { count += 1; }
-        if c.get(&[0x07]).is_some() { count += 1; }
-        if c.get(&[0x09]).is_some() { count += 1; }
+        if c.get(&[0x01]).is_some() {
+            count += 1;
+        }
+        if c.get(&[0x03]).is_some() {
+            count += 1;
+        }
+        if c.get(&[0x05]).is_some() {
+            count += 1;
+        }
+        if c.get(&[0x07]).is_some() {
+            count += 1;
+        }
+        if c.get(&[0x09]).is_some() {
+            count += 1;
+        }
 
         assert_eq!(count, 4);
     }
