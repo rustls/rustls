@@ -9,15 +9,6 @@ resources:
       name: crate-ci/resources
       endpoint: ctz
 
-job: rustfmt
-  pool:
-    vmImage: ubuntu-16.04
-  steps:
-    - template: ci/azure-install-rust.yml
-    - bash: rustup component add rustfmt
-      displayName: "Install rustfmt"
-    - bash: cargo fmt --all -- --check
-
 jobs:
 - template: az-pipeline/unstable/clippy.yml@templates
   parameters:
