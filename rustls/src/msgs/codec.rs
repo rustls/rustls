@@ -152,6 +152,31 @@ impl Codec for u32 {
     }
 }
 
+pub fn encode_u48(v: u64, bytes: &mut Vec<u8>) {
+    let mut b48 = [0u8; 6];
+    put_u48(v, &mut b48);
+    bytes.extend_from_slice(&b48);
+}
+
+pub fn put_u48(v: u64, bytes: &mut [u8]) {
+    bytes[0] = (v >> 40) as u8;
+    bytes[1] = (v >> 32) as u8;
+    bytes[2] = (v >> 24) as u8;
+    bytes[3] = (v >> 16) as u8;
+    bytes[4] = (v >> 8) as u8;
+    bytes[5] = v as u8;
+}
+
+pub fn decode_u48(bytes: &[u8]) -> Option<u64> {
+    Some(((bytes[0] as u64) << 40) | ((bytes[1] as u64) << 32) | ((bytes[2] as u64) << 24) |
+        ((bytes[3] as u64) << 16) | ((bytes[4] as u64) << 8) |
+        bytes[5] as u64)
+}
+
+pub fn read_u48(r: &mut Reader) -> Option<u64> {
+    r.take(6).and_then(decode_u48)
+}
+
 pub fn put_u64(v: u64, bytes: &mut [u8]) {
     bytes[0] = (v >> 56) as u8;
     bytes[1] = (v >> 48) as u8;

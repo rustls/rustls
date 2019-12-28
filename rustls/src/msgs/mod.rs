@@ -10,6 +10,9 @@ pub mod alert;
 pub mod handshake;
 pub mod ccs;
 pub mod message;
+#[cfg(feature="dtls")]
+pub mod dtls_message;
+
 pub mod persist;
 pub mod deframer;
 pub mod fragmenter;

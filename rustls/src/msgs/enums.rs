@@ -14,7 +14,10 @@ enum_builder! {
         TLSv1_0 => 0x0301,
         TLSv1_1 => 0x0302,
         TLSv1_2 => 0x0303,
-        TLSv1_3 => 0x0304
+        TLSv1_3 => 0x0304,
+        DTLSv1_0 => 0xFEFF,
+        DTLSv1_2 => 0xFEFD,
+        DTLSv1_3 => 0xFEFB,
     }
 }
 
@@ -107,6 +110,8 @@ enum_builder! {
         HelloRequest => 0x00,
         ClientHello => 0x01,
         ServerHello => 0x02,
+        #[cfg(feature="dtls")]
+        HelloVerifyRequest => 0x03,
         NewSessionTicket => 0x04,
         EndOfEarlyData => 0x05,
         HelloRetryRequest => 0x06,
