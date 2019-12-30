@@ -11,4 +11,5 @@ mkdir -p bogo
 cd bogo/
 tar -xzf ../runner.tar.gz
 patch -p1 < ../patches/testerrormap.diff
+patch -p1 < ../patches/go-1.13-breakage.diff
 go test -c

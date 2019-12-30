@@ -1,0 +1,27 @@
+Only in bogo/: bogo.test
+diff -ur bogo-orig/curve25519/doc.go bogo/curve25519/doc.go
+--- bogo-orig/curve25519/doc.go	2019-12-30 17:53:10.000000000 +0000
++++ bogo/curve25519/doc.go	2019-12-30 17:56:11.516140453 +0000
+@@ -4,7 +4,7 @@
+ 
+ // Package curve25519 provides an implementation of scalar multiplication on
+ // the elliptic curve known as curve25519. See http://cr.yp.to/ecdh.html
+-package curve25519 // import "golang.org/x/crypto/curve25519"
++package curve25519
+ 
+ // basePoint is the x coordinate of the generator of the curve.
+ var basePoint = [32]byte{9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+Only in bogo/: hrss
+Only in bogo/: mock_quic_transport.go
+diff -ur bogo-orig/poly1305/poly1305.go bogo/poly1305/poly1305.go
+--- bogo-orig/poly1305/poly1305.go	2019-12-30 17:53:10.000000000 +0000
++++ bogo/poly1305/poly1305.go	2019-12-30 17:57:49.538531940 +0000
+@@ -16,7 +16,7 @@
+ However, in this package AES isn't used and the one-time key is specified
+ directly.
+ */
+-package poly1305 // import "golang.org/x/crypto/poly1305"
++package poly1305
+ 
+ import "crypto/subtle"
+ 
