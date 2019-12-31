@@ -598,15 +598,14 @@ impl State for ExpectClientHello {
         // different way.
         let sni: Option<webpki::DNSName> = match client_hello.get_sni_extension() {
             Some(sni) => {
-                let hostnames = sni.get_hostname();
-                if hostnames.len() == 1 {
-                    Some(hostnames[0].into())
-                } else if hostnames.len() > 1 {
-                    return Err(decode_error(sess,
-                        "ClientHello SNI contains more than one hostnames."));
+                if sni.has_duplicate_names_for_type() {
+                    return Err(decode_error(sess, "ClientHello SNI contains duplicate name types"));
+                }
+
+                if let Some(hostname) = sni.get_single_hostname() {
+                    Some(hostname.into())
                 } else {
-                    return Err(illegal_param(sess,
-                        "ClientHello SNI did not contain a hostname."));
+                    return Err(illegal_param(sess, "ClientHello SNI did not contain a hostname"));
                 }
             },
             None => None,

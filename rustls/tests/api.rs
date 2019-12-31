@@ -2089,3 +2089,46 @@ fn session_types_are_not_huge() {
     assert_lt(mem::size_of::<ServerSession>(), 1600);
     assert_lt(mem::size_of::<ClientSession>(), 1600);
 }
+
+use rustls::internal::msgs::{message::Message, message::MessagePayload,
+    handshake::HandshakePayload, handshake::ClientExtension};
+
+#[test]
+fn test_server_rejects_duplicate_sni_names() {
+    fn duplicate_sni_payload(msg: &mut Message) {
+        if let MessagePayload::Handshake(hs) = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
+                for mut ext in ch.extensions.iter_mut() {
+                    if let ClientExtension::ServerName(snr) = &mut ext {
+                        snr.push(snr[0].clone());
+                    }
+                }
+            }
+        }
+    }
+
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+    transfer_altered(&mut client, duplicate_sni_payload, &mut server);
+    assert_eq!(server.process_new_packets(),
+               Err(TLSError::PeerMisbehavedError("ClientHello SNI contains duplicate name types".into())));
+}
+
+#[test]
+fn test_server_rejects_empty_sni_extension() {
+    fn empty_sni_payload(msg: &mut Message) {
+        if let MessagePayload::Handshake(hs) = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
+                for mut ext in ch.extensions.iter_mut() {
+                    if let ClientExtension::ServerName(snr) = &mut ext {
+                        snr.clear();
+                    }
+                }
+            }
+        }
+    }
+
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+    transfer_altered(&mut client, empty_sni_payload, &mut server);
+    assert_eq!(server.process_new_packets(),
+               Err(TLSError::PeerMisbehavedError("ClientHello SNI did not contain a hostname".into())));
+}

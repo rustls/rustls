@@ -123,7 +123,7 @@ fn can_roundtrip_other_sni_name_types() {
 }
 
 #[test]
-fn get_hostname_returns_none_for_other_sni_name_types() {
+fn get_single_hostname_returns_none_for_other_sni_name_types() {
     let bytes = [
         0, 0,
         0, 7,
@@ -137,7 +137,8 @@ fn get_hostname_returns_none_for_other_sni_name_types() {
 
     assert_eq!(ext.get_type(), ExtensionType::ServerName);
     if let ClientExtension::ServerName(snr) = ext {
-        assert!(snr.get_hostname().is_empty());
+        assert!(!snr.has_duplicate_names_for_type());
+        assert!(snr.get_single_hostname().is_none());
     } else {
         unreachable!();
     }
@@ -163,7 +164,9 @@ fn can_roundtrip_multiname_sni() {
         ClientExtension::ServerName(req) => {
             assert_eq!(2, req.len());
 
-            let dns_name_str: &str = req.get_hostname()[0].into();
+            assert!(req.has_duplicate_names_for_type());
+
+            let dns_name_str: &str = req.get_single_hostname().unwrap().into();
             assert_eq!(dns_name_str, "hi");
 
             assert_eq!(req[0].typ, ServerNameType::HostName);

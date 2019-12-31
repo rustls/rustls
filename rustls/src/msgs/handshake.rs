@@ -314,23 +314,36 @@ impl Codec for ServerName {
 declare_u16_vec!(ServerNameRequest, ServerName);
 
 pub trait ConvertServerNameList {
-    fn get_hostname(&self) -> Vec<webpki::DNSNameRef>;
+    fn has_duplicate_names_for_type(&self) -> bool;
+    fn get_single_hostname(&self) -> Option<webpki::DNSNameRef>;
 }
 
 impl ConvertServerNameList for ServerNameRequest {
-    fn get_hostname(&self) -> Vec<webpki::DNSNameRef> {
-        let mut hostname = Vec::new();
-        if self.is_empty() {
-            return hostname;
-        }
+    /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
+    fn has_duplicate_names_for_type(&self) -> bool {
+        let mut seen = collections::HashSet::new();
 
         for name in self {
-            if let ServerNamePayload::HostName(ref dns_name) = name.payload {
-                hostname.push(dns_name.as_ref());
+            if !seen.insert(name.typ.get_u8()) {
+                return true;
             }
         }
 
-        return hostname;
+        false
+    }
+
+    fn get_single_hostname(&self) -> Option<webpki::DNSNameRef> {
+        fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DNSNameRef> {
+            if let ServerNamePayload::HostName(ref dns) = name.payload {
+                Some(dns.as_ref())
+            } else {
+                None
+            }
+        }
+
+        self.iter()
+            .filter_map(only_dns_hostnames)
+            .nth(0)
     }
 }
 

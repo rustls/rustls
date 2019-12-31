@@ -15,6 +15,7 @@ use rustls::TLSError;
 use rustls::{Certificate, PrivateKey};
 use rustls::internal::pemfile;
 use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
+use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
 
 use webpki;
 
@@ -115,6 +116,37 @@ pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
             if sz == offs {
                 break;
             }
+        }
+    }
+
+    total
+}
+
+pub fn transfer_altered<F>(left: &mut dyn Session, filter: F, right: &mut dyn Session) -> usize
+    where F: Fn(&mut Message) {
+    let mut buf = [0u8; 262144];
+    let mut total = 0;
+
+    while left.wants_write() {
+        let sz = {
+            let into_buf: &mut dyn io::Write = &mut &mut buf[..];
+            left.write_tls(into_buf).unwrap()
+        };
+        total += sz;
+        if sz == 0 {
+            return total;
+        }
+
+        let mut reader = Reader::init(&buf[..sz]);
+        while reader.any_left() {
+            let mut message = Message::read(&mut reader)
+                .unwrap();
+            message.decode_payload();
+            filter(&mut message);
+            let message_enc = message.get_encoding();
+            let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
+            let len = right.read_tls(message_enc_reader).unwrap();
+            assert_eq!(len, message_enc.len());
         }
     }
 
