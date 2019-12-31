@@ -98,7 +98,7 @@ pub trait ProducesTickets : Send + Sync {
 pub trait ResolvesServerCert : Send + Sync {
     /// Choose a certificate chain and matching key given simplified
     /// ClientHello information.
-    ///
+    /// 
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey>;
 }
@@ -118,21 +118,21 @@ impl<'a> ClientHello<'a> {
     }
 
     /// Get the server name indicator.
-    ///
+    /// 
     /// Returns `None` if the client did not supply a SNI.
     pub fn server_name(&self) -> Option<webpki::DNSNameRef> {
         self.server_name
     }
 
     /// Get the compatible signature schemes.
-    ///
+    /// 
     /// Returns standard-specified default if the client omitted this extension.
     pub fn sigschemes(&self) -> &[SignatureScheme] {
         self.sigschemes
     }
 
     /// Get the alpn.
-    ///
+    /// 
     /// Returns `None` if the client did not include an ALPN extension
     pub fn alpn(&self) -> Option<&'a[&'a[u8]]> {
         self.alpn

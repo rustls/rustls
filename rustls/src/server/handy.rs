@@ -2,8 +2,8 @@ use crate::sign;
 use crate::key;
 use webpki;
 use crate::server;
-use crate::ClientHello;
 use crate::error::TLSError;
+use crate::server::ClientHello;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
