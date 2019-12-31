@@ -2132,3 +2132,26 @@ fn test_server_rejects_empty_sni_extension() {
     assert_eq!(server.process_new_packets(),
                Err(TLSError::PeerMisbehavedError("ClientHello SNI did not contain a hostname".into())));
 }
+
+#[test]
+fn test_server_rejects_clients_without_any_kx_group_overlap() {
+    fn different_kx_group(msg: &mut Message) {
+        if let MessagePayload::Handshake(hs) = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
+                for mut ext in ch.extensions.iter_mut() {
+                    if let ClientExtension::NamedGroups(ngs) = &mut ext {
+                        ngs.clear();
+                    }
+                    if let ClientExtension::KeyShare(ks) = &mut ext {
+                        ks.clear();
+                    }
+                }
+            }
+        }
+    }
+
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+    transfer_altered(&mut client, different_kx_group, &mut server);
+    assert_eq!(server.process_new_packets(),
+               Err(TLSError::PeerIncompatibleError("no kx group overlap with client".into())));
+}
