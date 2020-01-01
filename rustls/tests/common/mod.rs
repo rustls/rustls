@@ -343,6 +343,33 @@ pub fn do_handshake_until_error(client: &mut ClientSession,
     Ok(())
 }
 
+pub fn do_handshake_until_both_error(client: &mut ClientSession,
+                                     server: &mut ServerSession) -> Result<(), Vec<TLSErrorFromPeer>> {
+    match do_handshake_until_error(client, server) {
+        Err(server_err @ TLSErrorFromPeer::Server(_)) => {
+            let mut errors = vec![ server_err ];
+            transfer(server, client);
+            let client_err = client.process_new_packets()
+                .map_err(|err| TLSErrorFromPeer::Client(err))
+                .expect_err("client didn't produce error after server error");
+            errors.push(client_err);
+            Err(errors)
+        }
+
+        Err(client_err @ TLSErrorFromPeer::Client(_)) => {
+            let mut errors = vec![ client_err ];
+            transfer(client, server);
+            let server_err = server.process_new_packets()
+                .map_err(|err| TLSErrorFromPeer::Server(err))
+                .expect_err("server didn't produce error after client error");
+            errors.push(server_err);
+            Err(errors)
+        }
+
+        Ok(()) => Ok(())
+    }
+}
+
 pub fn dns_name(name: &'static str) -> webpki::DNSNameRef<'_> {
     webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
 }

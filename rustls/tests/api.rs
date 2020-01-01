@@ -24,7 +24,6 @@ use rustls::ClientHello;
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
 #[cfg(feature = "quic")]
 use ring::hkdf;
-use rustls::internal::msgs::enums::AlertDescription;
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::ClientCertVerified;
@@ -572,6 +571,7 @@ fn client_auth_works() {
 mod test_verifier {
     use super::*;
     use crate::common::MockClientVerifier;
+    use rustls::internal::msgs::enums::AlertDescription;
 
     // Client is authorized!
     fn ver_ok() -> Result<ClientCertVerified, TLSError> {
@@ -632,9 +632,12 @@ mod test_verifier {
             for client_config in AllClientVersions::new(client_config) {
                 let mut server = ServerSession::new(&server_config);
                 let mut client = ClientSession::new(&Arc::new(client_config), dns_name("notlocalhost"));
-                let err = do_handshake_until_error(&mut client, &mut server);
-                assert_eq!(err, Err(TLSErrorFromPeer::Server(
-                            TLSError::AlertReceived(AlertDescription::UnrecognisedName))));
+                let errs = do_handshake_until_both_error(&mut client, &mut server);
+                assert_eq!(errs,
+                           Err(vec![
+                              TLSErrorFromPeer::Server(TLSError::General("client rejected by client_auth_root_subjects".into())),
+                              TLSErrorFromPeer::Client(TLSError::AlertReceived(AlertDescription::AccessDenied))
+                           ]));
             }
         }
     }
@@ -658,9 +661,12 @@ mod test_verifier {
             for client_config in AllClientVersions::new(client_config) {
                 let mut server = ServerSession::new(&server_config);
                 let mut client = ClientSession::new(&Arc::new(client_config), dns_name("notlocalhost"));
-                let err = do_handshake_until_error(&mut client, &mut server);
-                assert_eq!(err, Err(TLSErrorFromPeer::Server(
-                            TLSError::AlertReceived(AlertDescription::UnrecognisedName))));
+                let errs = do_handshake_until_both_error(&mut client, &mut server);
+                assert_eq!(errs,
+                           Err(vec![
+                               TLSErrorFromPeer::Server(TLSError::General("client rejected by client_auth_root_subjects".into())),
+                               TLSErrorFromPeer::Client(TLSError::AlertReceived(AlertDescription::AccessDenied))
+                            ]));
             }
         }
     }
@@ -685,8 +691,12 @@ mod test_verifier {
                 println!("Failing: {:?}", client_config.versions);
                 let mut server = ServerSession::new(&server_config);
                 let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-                let err = do_handshake_until_error(&mut client, &mut server);
-                assert_eq!(err, Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented)));
+                let errs = do_handshake_until_both_error(&mut client, &mut server);
+                assert_eq!(errs,
+                           Err(vec![
+                               TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented),
+                               TLSErrorFromPeer::Client(TLSError::AlertReceived(AlertDescription::CertificateRequired))
+                           ]));
             }
         }
     }
@@ -737,9 +747,12 @@ mod test_verifier {
             for client_config in AllClientVersions::new(client_config) {
                 let mut server = ServerSession::new(&server_config);
                 let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
-                let err = do_handshake_until_error(&mut client, &mut server);
-                assert_eq!(err, Err(TLSErrorFromPeer::Server(
-                            TLSError::AlertReceived(AlertDescription::UnrecognisedName))));
+                let errs = do_handshake_until_both_error(&mut client, &mut server);
+                assert_eq!(errs,
+                           Err(vec![
+                               TLSErrorFromPeer::Server(TLSError::General("client rejected by client_auth_mandatory".into())),
+                               TLSErrorFromPeer::Client(TLSError::AlertReceived(AlertDescription::AccessDenied))
+                           ]));
             }
         }
     }

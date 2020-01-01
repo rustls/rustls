@@ -49,10 +49,11 @@ impl hs::State for ExpectCertificate {
         self.handshake.transcript.add_message(&m);
 
         // If we can't determine if the auth is mandatory, abort
-        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni()).ok_or_else(|| {
+        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni())
+            .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
-                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
-                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
+                TLSError::General("client rejected by client_auth_mandatory".into())
             })?;
 
         if cert_chain.is_empty() {

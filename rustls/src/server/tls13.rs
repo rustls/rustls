@@ -290,10 +290,11 @@ impl CompleteClientHelloHandling {
         let schemes = verify::supported_verify_schemes();
         cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = sess.config.verifier.client_auth_root_subjects(sess.get_sni()).ok_or_else(|| {
+        let names = sess.config.verifier.client_auth_root_subjects(sess.get_sni())
+            .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
-                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
-                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
+                TLSError::General("client rejected by client_auth_root_subjects".into())
             })?;
 
         if !names.is_empty() {
@@ -654,10 +655,11 @@ impl hs::State for ExpectCertificate {
 
         let cert_chain = certp.convert();
 
-        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni()).ok_or_else(|| {
+        let mandatory = sess.config.verifier.client_auth_mandatory(sess.get_sni())
+            .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
-                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
-                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
+                TLSError::General("client rejected by client_auth_mandatory".into())
             })?;
 
         if cert_chain.is_empty() {

@@ -78,20 +78,32 @@ pub trait ClientCertVerifier : Send + Sync {
     /// `false` to skip requesting a client certificate. Defaults to `true`.
     fn offer_client_auth(&self) -> bool { true }
 
-    /// Returns `true` to require a client certificate and `false` to make client
-    /// authentication optional. Defaults to `self.offer_client_auth()`.
+    /// Return `Some(true)` to require a client certificate and `Some(false)` to make
+    /// client authentication optional. Return `None` to abort the connection.
+    /// Defaults to `Some(self.offer_client_auth())`.
+    ///
+    /// `sni` is the server name quoted by the client in its ClientHello; it has
+    /// been validated as a proper DNS name but is otherwise untrusted.
     fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
         Some(self.offer_client_auth())
     }
 
     /// Returns the subject names of the client authentication trust anchors to
     /// share with the client when requesting client authentication.
+    ///
+    /// Return `None` to abort the connection.
+    ///
+    /// `sni` is the server name quoted by the client in its ClientHello; it has
+    /// been validated as a proper DNS name but is otherwise untrusted.
     fn client_auth_root_subjects(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames>;
 
-    /// Verify a certificate chain `presented_certs` is rooted in `roots` when the client indicates the `sni`.
-    /// Does no further checking of the certificate.
+    /// Verify a certificate chain. `presented_certs` is the certificate chain from the client.
+    ///
+    /// `sni` is the server name quoted by the client in its ClientHello; it has
+    /// been validated as a proper DNS name but is otherwise untrusted.
     fn verify_client_cert(&self,
-                          presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError>;
+                          presented_certs: &[Certificate],
+                          sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError>;
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.

@@ -470,10 +470,11 @@ impl ExpectClientHello {
             return Ok(false);
         }
 
-        let names = client_auth.client_auth_root_subjects(sess.get_sni()).ok_or_else(|| {
+        let names = client_auth.client_auth_root_subjects(sess.get_sni())
+            .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
-                sess.common.send_fatal_alert(AlertDescription::UnrecognisedName);
-                TLSError::AlertReceived(AlertDescription::UnrecognisedName)
+                sess.common.send_fatal_alert(AlertDescription::AccessDenied);
+                TLSError::General("client rejected by client_auth_root_subjects".into())
             })?;
 
         let cr = CertificateRequestPayload {
