@@ -87,58 +87,37 @@ impl fmt::Display for TLSError {
         match *self {
             TLSError::InappropriateMessage { ref expect_types, ref got_type } => {
                 write!(f,
-                       "{}: got {:?} when expecting {}",
-                       self.description(),
+                       "received unexpected message: got {:?} when expecting {}",
                        got_type,
                        join::<ContentType>(expect_types))
             }
             TLSError::InappropriateHandshakeMessage { ref expect_types, ref got_type } => {
                 write!(f,
-                       "{}: got {:?} when expecting {}",
-                       self.description(),
+                       "received unexpected handshake message: got {:?} when expecting {}",
                        got_type,
                        join::<HandshakeType>(expect_types))
             }
             TLSError::CorruptMessagePayload(ref typ) => {
-                write!(f, "{} of type {:?}", self.description(), typ)
+                write!(f, "received corrupt message of type {:?}", typ)
             }
-            TLSError::PeerIncompatibleError(ref why) |
-            TLSError::PeerMisbehavedError(ref why) => write!(f, "{}: {}", self.description(), why),
-            TLSError::AlertReceived(ref alert) => write!(f, "{}: {:?}", self.description(), alert),
-            TLSError::WebPKIError(ref err) => write!(f, "{}: {:?}", self.description(), err),
-            TLSError::CorruptMessage |
-            TLSError::NoCertificatesPresented |
-            TLSError::DecryptError |
-            TLSError::PeerSentOversizedRecord |
-            TLSError::HandshakeNotComplete => write!(f, "{}", self.description()),
-            _ => write!(f, "{}: {:?}", self.description(), self),
+            TLSError::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
+            TLSError::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
+            TLSError::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
+            TLSError::WebPKIError(ref err) => write!(f, "invalid certificate: {:?}", err),
+            TLSError::CorruptMessage => write!(f, "received corrupt message"),
+            TLSError::NoCertificatesPresented => write!(f, "peer sent no certificates"),
+            TLSError::DecryptError => write!(f, "cannot decrypt peer's message"),
+            TLSError::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
+            TLSError::HandshakeNotComplete => write!(f, "handshake not complete"),
+            TLSError::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            TLSError::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
+            TLSError::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            TLSError::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
 }
 
 impl Error for TLSError {
-    fn description(&self) -> &str {
-        match *self {
-            TLSError::InappropriateMessage { .. } => "received unexpected message",
-            TLSError::InappropriateHandshakeMessage { .. } => {
-                "received unexpected handshake message"
-            }
-            TLSError::CorruptMessage |
-                TLSError::CorruptMessagePayload(_) => "received corrupt message",
-            TLSError::NoCertificatesPresented => "peer sent no certificates",
-            TLSError::DecryptError => "cannot decrypt peer's message",
-            TLSError::PeerIncompatibleError(_) => "peer is incompatible",
-            TLSError::PeerMisbehavedError(_) => "peer misbehaved",
-            TLSError::AlertReceived(_) => "received fatal alert",
-            TLSError::WebPKIError(_) => "invalid certificate",
-            TLSError::InvalidSCT(_) => "invalid certificate timestamp",
-            TLSError::General(_) => "unexpected error", // (please file a bug),
-            TLSError::FailedToGetCurrentTime => "failed to get current time",
-            TLSError::HandshakeNotComplete => "handshake not complete",
-            TLSError::PeerSentOversizedRecord => "peer sent excess record size",
-            TLSError::NoApplicationProtocol => "peer doesn't support any known protocol",
-        }
-    }
 }
 
 #[cfg(test)]
@@ -146,7 +125,6 @@ mod tests {
     #[test]
     fn smoke() {
         use super::TLSError;
-        use std::error::Error;
         use crate::msgs::enums::{ContentType, HandshakeType, AlertDescription};
         use webpki;
         use sct;
@@ -176,7 +154,6 @@ mod tests {
 
         for err in all {
             println!("{:?}:", err);
-            println!("  desc '{}'", err.description());
             println!("  fmt '{}'", err);
         }
     }
