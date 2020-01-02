@@ -1,21 +1,27 @@
-use std::collections::VecDeque;
-use std::mem;
-use msgs::codec;
-use msgs::codec::{Codec, Reader};
-use msgs::base::Payload;
-use msgs::alert::AlertMessagePayload;
-use msgs::ccs::ChangeCipherSpecPayload;
-use msgs::handshake::HandshakeMessagePayload;
-use msgs::enums::{ContentType, ProtocolVersion};
-use msgs::enums::HandshakeType;
-use msgs::message::{BorrowMessage, Message, MessagePayload};
-use msgs::tls_message::{TLSBorrowMessage, TLSMessage, TLSMessagePayload};
-use crate::msgs::alert::AlertMessagePayload;
-use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::base::Payload;
-use crate::msgs::codec::{Reader, Codec};
-use crate::msgs::handshake::HandshakeMessagePayload;
+use crate::{
+    msgs::{
+        alert::AlertMessagePayload,
+        base::Payload,
+        ccs::ChangeCipherSpecPayload,
+        codec,
+        codec::{Codec, Reader},
+        handshake::HandshakeMessagePayload,
+    },
+    ProtocolVersion,
+};
+use msgs::{
+    alert::AlertMessagePayload,
+    base::Payload,
+    ccs::ChangeCipherSpecPayload,
+    codec,
+    codec::{Codec, Reader},
+    enums::{ContentType, HandshakeType, ProtocolVersion},
+    handshake::HandshakeMessagePayload,
+    message::{BorrowMessage, Message, MessagePayload},
+    tls_message::{TLSBorrowMessage, TLSMessage, TLSMessagePayload},
+};
 use regex::internal::Input;
+use std::{collections::VecDeque, mem};
 
 #[derive(Debug)]
 pub enum DTLSHandshakeFragment {
@@ -49,14 +55,17 @@ impl DTLSHandshakeFragment {
     pub fn fragment(self, max_frag: usize) -> VecDeque<Self> {
         let mut out = VecDeque::with_capacity(1);
         match self {
-            DTLSHandshakeFragment::Complete { message_seq, ref payload } => {
+            DTLSHandshakeFragment::Complete {
+                message_seq,
+                ref payload,
+            } => {
                 let mut buf = Vec::new();
                 payload.encode(&mut buf);
 
                 let mut offset = 0;
                 for chunk in buf.chunks(max_frag) {
                     let frag = DTLSHandshakeFragment::Fragment {
-                        typ:         payload.typ,
+                        typ: payload.typ,
                         message_seq: message_seq,
                         offset: offset,
                         total_len: buf.len(),
@@ -66,8 +75,8 @@ impl DTLSHandshakeFragment {
                     out.push_back(frag);
                     offset += chunk.len();
                 }
-            },
-            DTLSHandshakeFragment::Fragment {..} =>  out.push_back(self)
+            }
+            DTLSHandshakeFragment::Fragment { .. } => out.push_back(self),
         }
         out
     }
@@ -76,7 +85,10 @@ impl DTLSHandshakeFragment {
 impl Codec for DTLSHandshakeFragment {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            DTLSHandshakeFragment::Complete { message_seq, ref payload } => {
+            DTLSHandshakeFragment::Complete {
+                message_seq,
+                ref payload,
+            } => {
                 // We circumvent HandshakeMessagePayload's encode() and
                 // deal with its payload here directly.
                 let mut sub: Vec<u8> = Vec::new();
@@ -91,8 +103,14 @@ impl Codec for DTLSHandshakeFragment {
                 codec::encode_u24(offset, bytes);
                 codec::encode_u24(len, bytes);
                 bytes.append(&mut sub);
-            },
-            DTLSHandshakeFragment::Fragment { typ, message_seq, offset, total_len, ref payload } => {
+            }
+            DTLSHandshakeFragment::Fragment {
+                typ,
+                message_seq,
+                offset,
+                total_len,
+                ref payload,
+            } => {
                 // Encode payload to learn length
                 let mut sub: Vec<u8> = Vec::new();
                 payload.encode(&mut sub);
@@ -103,7 +121,7 @@ impl Codec for DTLSHandshakeFragment {
                 codec::encode_u24(offset as u32, bytes);
                 codec::encode_u24(total_len as u32, bytes);
                 bytes.append(&mut sub);
-            },
+            }
         }
     }
 
@@ -144,16 +162,17 @@ impl MessagePayload for DTLSMessagePayload {
         }
     }
 
-    fn decode_given_type(&self,
-                         typ: ContentType,
-                         _: ProtocolVersion)
-                         -> Option<DTLSMessagePayload> {
+    fn decode_given_type(
+        &self,
+        typ: ContentType,
+        _: ProtocolVersion,
+    ) -> Option<DTLSMessagePayload> {
         if let DTLSMessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
             let parsed = match typ {
-                ContentType::Alert => {
-                    Some(DTLSMessagePayload::Alert(try_ret!(AlertMessagePayload::read(&mut r))))
-                }
+                ContentType::Alert => Some(DTLSMessagePayload::Alert(try_ret!(
+                    AlertMessagePayload::read(&mut r)
+                ))),
                 ContentType::Handshake => {
                     let p = try_ret!(DTLSHandshakeFragment::read(&mut r));
                     Some(DTLSMessagePayload::Handshake(p))
@@ -165,7 +184,11 @@ impl MessagePayload for DTLSMessagePayload {
                 _ => None,
             };
 
-            if r.any_left() { None } else { parsed }
+            if r.any_left() {
+                None
+            } else {
+                parsed
+            }
         } else {
             None
         }

@@ -1,3 +1,5 @@
+use crate::msgs::codec::{Codec, Reader};
+
 #[derive(Copy)]
 pub struct Cookie {
     len: usize,

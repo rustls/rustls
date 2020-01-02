@@ -286,6 +286,10 @@ pub mod sign;
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
+#[cfg(feature = "dtls")]
+/// APIs for implementing DTLS
+pub mod dtls;
+
 #[cfg(not(feature = "quic"))]
 // If QUIC support is disabled, just define a private module with an empty
 // trait to allow Session having QuicExt as a trait bound.
