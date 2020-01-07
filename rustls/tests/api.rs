@@ -1358,16 +1358,41 @@ fn server_complete_io_for_handshake_ending_with_alert() {
                "which was received by client");
 }
 
+// #[test]
+// fn server_exposes_offered_sni() {
+//     let kt = KeyType::RSA;
+//     let mut client = ClientSession::new(&Arc::new(make_client_config(kt)),
+//                                         dns_name("asdfasdfasdfasdf.com"));
+//     let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
+
+//     assert_eq!(None, server.get_sni_hostname());
+//     do_handshake(&mut client, &mut server);
+//     assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+// }
+
+
 #[test]
-fn server_exposes_offered_sni() {
+fn saves_sni_when_sni_resolver_none() {
     let kt = KeyType::RSA;
-    let mut client = ClientSession::new(&Arc::new(make_client_config(kt)),
-                                        dns_name("second.testserver.com"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
+    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
+    let signing_key = sign::RSASigningKey::new(&kt.get_key())
+        .unwrap();
+    let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
+    resolver.add("localhost",
+                 sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()))
+        .unwrap();
+
+    let mut server_config = make_server_config(kt);
+    server_config.cert_resolver = Arc::new(resolver);
+    let server_config = Arc::new(server_config);
+
+    let mut server = ServerSession::new(&server_config);
+    let mut client = ClientSession::new(&Arc::new(make_client_config(kt)), dns_name("thisdoesNOTexist.com"));
 
     assert_eq!(None, server.get_sni_hostname());
-    do_handshake(&mut client, &mut server);
-    assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+    transfer(&mut client, &mut server);
+    assert_eq!(server.process_new_packets(), Err(TLSError::General("no server certificate chain resolved".to_string())));
+    assert_eq!(Some("thisdoesNOTexist.com"), server.get_sni_hostname());
 }
 
 #[test]
