@@ -307,3 +307,5 @@ pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::client::danger::DangerousClientConfig;
 
+/// This is the rustls manual.
+pub mod manual;

@@ -12,7 +12,7 @@ use std::mem;
 pub trait SigningKey : Send + Sync {
     /// Choose a `SignatureScheme` from those offered.
     ///
-    /// Expresses the choice something that implements `Signer`,
+    /// Expresses the choice by returning something that implements `Signer`,
     /// using the chosen scheme.
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
 

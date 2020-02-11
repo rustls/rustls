@@ -31,6 +31,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     compatible with the client-offered ciphersuites.  Prior to this change
     it was likely that server key type switching would not work for clients
     that offer signature schemes mismatched with their ciphersuites.
+  - Add manual with goal-oriented documentation, and rationale for design
+    decisions.
 * 0.16.0 (2019-08-10):
   - Optimisation of read path for polled non-blocking IO.
   - Correct an omission in TLS1.3 middlebox compatibility mode, causing
