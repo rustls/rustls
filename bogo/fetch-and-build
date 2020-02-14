@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -e
+set -ex
 
 # a known-good commit
 COMMIT=47a6f5b4bf4d7acd8d5f7d43cb9c94335cec1c60
