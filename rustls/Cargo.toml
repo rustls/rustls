@@ -48,3 +48,7 @@ path = "examples/internal/bench.rs"
 name = "benchmarks"
 path = "tests/benchmarks.rs"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -199,6 +199,9 @@
 //   underneath.
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::ptr_arg))]
 
+// Enable documentation for all features on docs.rs
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // log for logging (optional).
 #[cfg(feature = "logging")]
 use log;
@@ -283,6 +286,7 @@ pub use crate::vecbuf::{WriteV, WriteVAdapter};
 pub mod sign;
 
 #[cfg(feature = "quic")]
+#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
@@ -296,8 +300,10 @@ mod quic {
 }
 
 #[cfg(feature = "dangerous_configuration")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
     ClientCertVerifier, ClientCertVerified, WebPKIVerifier};
 #[cfg(feature = "dangerous_configuration")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::client::danger::DangerousClientConfig;
 
