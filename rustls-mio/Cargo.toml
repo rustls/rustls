@@ -1,14 +1,11 @@
 [package]
 name = "rustls-mio"
-version = "0.15.1"
+version = "0.0.1"
 edition = "2018"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
-readme = "README.md"
 description = "Rustls example code and tests that depend on mio."
-homepage = "https://github.com/ctz/rustls"
-repository = "https://github.com/ctz/rustls"
-categories = ["network-programming", "cryptography"]
+publish = false
 
 [features]
 default = ["logging"]

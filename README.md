@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
-* Next release:
+* 0.17.0 (2020-02-22):
   - *Breaking API change*: ALPN protocols offered by the client are passed
     to the server certificate resolution trait (`ResolvesServerCert`).
   - *Breaking API change*: The server certificate resolution trait now
