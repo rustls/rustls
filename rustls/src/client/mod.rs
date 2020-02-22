@@ -217,9 +217,10 @@ impl ClientConfig {
     /// `key_der` is a DER-encoded RSA or ECDSA private key.
     pub fn set_single_client_cert(&mut self,
                                   cert_chain: Vec<key::Certificate>,
-                                  key_der: key::PrivateKey) {
-        let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der);
+                                  key_der: key::PrivateKey) -> Result<(), TLSError> {
+        let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         self.client_auth_cert_resolver = Arc::new(resolver);
+        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires

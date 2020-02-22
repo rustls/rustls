@@ -2,6 +2,7 @@ use crate::msgs::enums::SignatureScheme;
 use crate::sign;
 use crate::key;
 use crate::client;
+use crate::error::TLSError;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -82,10 +83,10 @@ pub struct AlwaysResolvesClientCert(sign::CertifiedKey);
 
 impl AlwaysResolvesClientCert {
     pub fn new(chain: Vec<key::Certificate>,
-                   priv_key: &key::PrivateKey) -> AlwaysResolvesClientCert {
+                   priv_key: &key::PrivateKey) -> Result<AlwaysResolvesClientCert, TLSError> {
         let key = sign::any_supported_type(priv_key)
-            .expect("Invalid private key");
-        AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, Arc::new(key)))
+            .map_err(|_| TLSError::General("invalid private key".into()))?;
+        Ok(AlwaysResolvesClientCert(sign::CertifiedKey::new(chain, Arc::new(key))))
     }
 }
 

@@ -232,7 +232,8 @@ pub fn make_client_config(kt: KeyType) -> ClientConfig {
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
     let mut cfg = make_client_config(kt);
-    cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key());
+    cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key())
+        .unwrap();
     cfg
 }
 

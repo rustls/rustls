@@ -219,7 +219,8 @@ fn make_client_config(version: rustls::ProtocolVersion,
     cfg.versions.push(version);
 
     if clientauth == ClientAuth::Yes {
-        cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key());
+        cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key())
+            .unwrap();
     }
 
     if resume != Resumption::No {

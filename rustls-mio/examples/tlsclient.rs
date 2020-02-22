@@ -421,7 +421,8 @@ fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile
     let certs = load_certs(certsfile);
     let privkey = load_private_key(keyfile);
 
-    config.set_single_client_cert(certs, privkey);
+    config.set_single_client_cert(certs, privkey)
+        .expect("invalid certificate or private key");
 }
 
 #[cfg(feature = "dangerous_configuration")]

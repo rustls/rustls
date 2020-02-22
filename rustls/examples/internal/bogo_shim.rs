@@ -359,7 +359,8 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
         let key = load_key(&opts.key_file);
-        cfg.set_single_client_cert(cert, key);
+        cfg.set_single_client_cert(cert, key)
+            .unwrap();
     }
 
     if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {

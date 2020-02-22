@@ -33,6 +33,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     that offer signature schemes mismatched with their ciphersuites.
   - Add manual with goal-oriented documentation, and rationale for design
     decisions.
+  - *Breaking API change*: `AlwaysResolvesClientCert::new` is now fallible,
+    as is `ClientConfig::set_single_client_cert`.
 * 0.16.0 (2019-08-10):
   - Optimisation of read path for polled non-blocking IO.
   - Correct an omission in TLS1.3 middlebox compatibility mode, causing

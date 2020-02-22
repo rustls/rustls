@@ -232,7 +232,8 @@ fn client_can_get_server_cert() {
 fn server_can_get_client_cert() {
     for kt in ALL_KEY_TYPES.iter() {
         let mut client_config = make_client_config(*kt);
-        client_config.set_single_client_cert(kt.get_chain(), kt.get_key());
+        client_config.set_single_client_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
 
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
 
@@ -262,7 +263,8 @@ fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
 fn server_close_notify() {
     let kt = KeyType::RSA;
     let mut client_config = make_client_config(kt);
-    client_config.set_single_client_cert(kt.get_chain(), kt.get_key());
+    client_config.set_single_client_cert(kt.get_chain(), kt.get_key())
+        .unwrap();
 
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt));
 
@@ -290,7 +292,8 @@ fn server_close_notify() {
 fn client_close_notify() {
     let kt = KeyType::RSA;
     let mut client_config = make_client_config(kt);
-    client_config.set_single_client_cert(kt.get_chain(), kt.get_key());
+    client_config.set_single_client_cert(kt.get_chain(), kt.get_key())
+        .unwrap();
 
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt));
 
