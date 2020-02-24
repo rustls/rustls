@@ -116,7 +116,7 @@ rustls naturally does not support SSLv2, but most importantly does not support R
 
 [POODLE](https://www.openssl.org/~bodo/ssl-poodle.pdf) ([CVE-2014-3566](https://nvd.nist.gov/vuln/detail/CVE-2014-3566))
 is an attack against CBC mode ciphersuites in SSLv3.  This was possible in most cases because some clients willingly
-downgraded to SSLv3 after failed handshakes are later versions.
+downgraded to SSLv3 after failed handshakes for later versions.
 
 rustls does not support CBC mode ciphersuites, or SSLv3.  Note that rustls does not need to implement `TLS_FALLBACK_SCSV`
 introduced as a countermeasure because it contains no ability to downgrade to earlier protocol versions.
