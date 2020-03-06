@@ -49,6 +49,8 @@
     "*-AES256-SHA*": "",
     "*_WITH_AES_128_CBC_*": "",
     "*_WITH_AES_256_CBC_*": "",
+    "Basic-Server-Ed25519-*": "bogo tests against TLS1.2 max",
+    "Basic-Server-Ed25519": "bogo tests against TLS1.2 max",
     "*-ECDSA_SHA1-*": "no ecdsa-sha1",
     "*-Sign-RSA_PKCS1_SHA1-*": "no sha1",
     "*-VerifyDefault-RSA_PKCS1_SHA1-*": "no sha1",
