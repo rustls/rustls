@@ -194,6 +194,9 @@
     "ClientAuth-Sign-RSA-PKCS1-SHA256-TLS13": ":INCOMPATIBLE:",
     "ClientAuth-Sign-RSA-PKCS1-SHA384-TLS13": ":INCOMPATIBLE:",
     "ClientAuth-Sign-RSA-PKCS1-SHA512-TLS13": ":INCOMPATIBLE:",
+    "ServerAuth-Verify-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
+    "ServerAuth-Sign-Ed25519-TLS12": ":INCOMPATIBLE:",
+    "ServerAuth-InvalidSignature-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-EmptyProtocolName-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNServer-EmptyProtocolName-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-RejectUnknown-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -267,8 +270,10 @@
     "TLS13-HRR-InvalidCompressionMethod": ":BAD_HANDSHAKE_MSG:",
     "CertificateCipherMismatch-RSA": ":PEER_MISBEHAVIOUR:",
     "CertificateCipherMismatch-ECDSA": ":PEER_MISBEHAVIOUR:",
+    "CertificateCipherMismatch-Ed25519": ":PEER_MISBEHAVIOUR:",
     "ServerCipherFilter-RSA": ":INCOMPATIBLE:",
     "ServerCipherFilter-ECDSA": ":INCOMPATIBLE:",
+    "ServerCipherFilter-Ed25519": ":INCOMPATIBLE:",
     "SendServerHelloAsHelloRetryRequest": ":BAD_HANDSHAKE_MSG:",
     "TLS13-OnlyPadding": ":PEER_MISBEHAVIOUR:",
     "TLS13-EmptyRecords": ":PEER_MISBEHAVIOUR:",
@@ -292,7 +297,8 @@
     "SecondServerHelloWrongVersion-TLS13": ":INCOMPATIBLE:",
     "EarlyDataVersionDowngrade-Client-TLS13": ":WRONG_VERSION:",
     "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:"
+    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:",
+    "ServerAuth-Sign-Negotiate-Ed25519-TLS12": ":INCOMPATIBLE:"
   },
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
