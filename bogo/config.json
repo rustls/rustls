@@ -40,7 +40,7 @@
     "BadRSAClientKeyExchange-*": "",
     "SendClientVersion-RSA": "",
     "Basic-Server-RSA-*": "",
-    "Basic-Server-Ed25519": "bogo tests against TLS1.2 max",
+    "Basic-Server-Ed25519-*": "bogo tests against TLS1.2 max",
     "*-3DES-*": "",
     "*-AES128-SHA*": "",
     "*-AES256-SHA*": "",
