@@ -89,7 +89,9 @@
     "Draft-Downgrade-Server": "not implemented; TODO",
     "EarlyData-*ALPN*-*": "no alpn change in resumed sessions",
     "*EarlyKeyingMaterial-Client-*": "early exporter NYI",
-    "QUICTransportParams-*": "Bogo assumes this can be tested over TLS1.3 framing"
+    "QUICTransportParams-*": "Bogo assumes this can be tested over TLS1.3 framing",
+    "Ed25519DefaultDisable-NoAccept": "not implemented",
+    "Ed25519DefaultDisable-NoAdvertise": "not implemented"
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
