@@ -1,3 +1,6 @@
+#![deny(unused)]
+#![forbid(unused_must_use)]
+
 use webpki;
 use sct;
 use std;
@@ -12,6 +15,7 @@ use crate::anchors::{DistinguishedNames, RootCertStore};
 use crate::anchors::OwnedTrustAnchor;
 #[cfg(feature = "logging")]
 use crate::log::{warn, debug};
+mod x509;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
@@ -274,59 +278,25 @@ impl ClientCertVerifier for NoClientAuth {
     }
 }
 
-static ECDSA_SHA256: SignatureAlgorithms = &[
-    &webpki::ECDSA_P256_SHA256,
-    &webpki::ECDSA_P384_SHA256
-];
-
-static ECDSA_SHA384: SignatureAlgorithms = &[
-    &webpki::ECDSA_P256_SHA384,
-    &webpki::ECDSA_P384_SHA384
-];
-
-static RSA_SHA256: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA256];
-static RSA_SHA384: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA384];
-static RSA_SHA512: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA512];
-static RSA_PSS_SHA256: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY];
-static RSA_PSS_SHA384: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
-static RSA_PSS_SHA512: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
-
-fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSError> {
+fn convert_scheme(scheme: SignatureScheme) -> Result<(), TLSError> {
     match scheme {
         // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
-        SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
-        SignatureScheme::ECDSA_NISTP384_SHA384 => Ok(ECDSA_SHA384),
+        SignatureScheme::ECDSA_NISTP256_SHA256 |
+        SignatureScheme::ECDSA_NISTP384_SHA384 |
 
-        SignatureScheme::RSA_PKCS1_SHA256 => Ok(RSA_SHA256),
-        SignatureScheme::RSA_PKCS1_SHA384 => Ok(RSA_SHA384),
-        SignatureScheme::RSA_PKCS1_SHA512 => Ok(RSA_SHA512),
+        SignatureScheme::RSA_PKCS1_SHA256 |
+        SignatureScheme::RSA_PKCS1_SHA384 |
+        SignatureScheme::RSA_PKCS1_SHA512 |
 
-        SignatureScheme::RSA_PSS_SHA256 => Ok(RSA_PSS_SHA256),
-        SignatureScheme::RSA_PSS_SHA384 => Ok(RSA_PSS_SHA384),
-        SignatureScheme::RSA_PSS_SHA512 => Ok(RSA_PSS_SHA512),
+        SignatureScheme::RSA_PSS_SHA256 |
+        SignatureScheme::RSA_PSS_SHA384 |
+        SignatureScheme::RSA_PSS_SHA512 => Ok(()),
 
         _ => {
             let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
             Err(TLSError::PeerMisbehavedError(error_msg))
         }
     }
-}
-
-fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
-                            algs: SignatureAlgorithms,
-                            message: &[u8],
-                            sig: &[u8])
-                            -> Result<(), webpki::Error> {
-    // TLS doesn't itself give us enough info to map to a single webpki::SignatureAlgorithm.
-    // Therefore, convert_algs maps to several and we try them all.
-    for alg in algs {
-        match cert.verify_signature(alg, message, sig) {
-            Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
-            res => return res,
-        }
-    }
-
-    Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
 }
 
 /// Verify the signed `message` using the public key quoted in
@@ -338,26 +308,21 @@ pub fn verify_signed_struct(message: &[u8],
                             cert: &Certificate,
                             dss: &DigitallySignedStruct)
                             -> Result<HandshakeSignatureValid, TLSError> {
-
-    let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(TLSError::WebPKIError)?;
-
-    verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
+    convert_scheme(dss.scheme)?;
+    x509::verify_certificate_signature(&dss.sig.0, message, &cert.0, dss.scheme)
         .map_err(TLSError::WebPKIError)
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
-fn convert_alg_tls13(scheme: SignatureScheme)
-                     -> Result<&'static webpki::SignatureAlgorithm, TLSError> {
+fn convert_alg_tls13(scheme: SignatureScheme) -> Result<(), TLSError> {
     use crate::msgs::enums::SignatureScheme::*;
 
     match scheme {
-        ECDSA_NISTP256_SHA256 => Ok(&webpki::ECDSA_P256_SHA256),
-        ECDSA_NISTP384_SHA384 => Ok(&webpki::ECDSA_P384_SHA384),
-        RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
-        RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
-        RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
+        ECDSA_NISTP256_SHA256 |
+        ECDSA_NISTP384_SHA384 |
+        RSA_PSS_SHA256 |
+        RSA_PSS_SHA384 |
+        RSA_PSS_SHA512 => Ok(()),
         _ => {
             let error_msg = format!("received unsupported sig scheme {:?}", scheme);
             Err(TLSError::PeerMisbehavedError(error_msg))
@@ -370,17 +335,14 @@ pub fn verify_tls13(cert: &Certificate,
                     handshake_hash: &[u8],
                     context_string_with_0: &[u8])
                     -> Result<HandshakeSignatureValid, TLSError> {
-    let alg = convert_alg_tls13(dss.scheme)?;
+    convert_alg_tls13(dss.scheme)?;
 
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
     msg.extend_from_slice(context_string_with_0);
     msg.extend_from_slice(handshake_hash);
 
-    let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(TLSError::WebPKIError)?;
-
-    cert.verify_signature(alg, &msg, &dss.sig.0)
+    x509::verify_certificate_signature(&dss.sig.0, &msg, &cert.0, dss.scheme)
         .map_err(TLSError::WebPKIError)
         .map(|_| HandshakeSignatureValid::assertion())
 }

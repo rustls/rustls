@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::mem;
 use std::fmt;
 use std::env;
-use std::error::Error;
 use std::io::{self, Write, Read};
 
 use rustls;
@@ -1221,7 +1220,7 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
     assert!(rc.is_err());
     let err = rc.err().unwrap();
     assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
-    assert_eq!(err.description(), "oops");
+    assert_eq!(err.to_string(), "oops");
 }
 
 #[test]
