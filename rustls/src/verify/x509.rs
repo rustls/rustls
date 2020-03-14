@@ -1,4 +1,6 @@
-//! A non-validating X.509 certificate parser
+//! Validate signatures against X.509 certificates.
+//! The certificate is not validated except for extremely basic syntactic
+//! correctness.
 
 #![deny(
     exceeding_bitshifts,
@@ -68,6 +70,7 @@ fn parse_certificate(certificate: &[u8]) -> Result<untrusted::Input<'_>, Unspeci
             Ok((tbs, signature_algorithm))
         })?;
     tbs.read_all(Unspecified, |mut reader| {
+        // Any reasonable X.509 certificate will have extensions, which means version 3.
         if reader.read_bytes(5)?.as_slice_less_safe() != [160, 3, 2, 1, 2] {
             return Err(Unspecified);
         }
