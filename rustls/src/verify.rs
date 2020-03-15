@@ -309,7 +309,7 @@ pub fn verify_signed_struct(message: &[u8],
                             dss: &DigitallySignedStruct)
                             -> Result<HandshakeSignatureValid, TLSError> {
     convert_scheme(dss.scheme)?;
-    x509::verify_certificate_signature(&dss.sig.0, message, &cert.0, dss.scheme)
+    x509::verify_certificate_signature(&dss.sig.0, message, &cert.0, dss.scheme, false)
         .map_err(TLSError::WebPKIError)
         .map(|_| HandshakeSignatureValid::assertion())
 }
@@ -342,7 +342,7 @@ pub fn verify_tls13(cert: &Certificate,
     msg.extend_from_slice(context_string_with_0);
     msg.extend_from_slice(handshake_hash);
 
-    x509::verify_certificate_signature(&dss.sig.0, &msg, &cert.0, dss.scheme)
+    x509::verify_certificate_signature(&dss.sig.0, &msg, &cert.0, dss.scheme, true)
         .map_err(TLSError::WebPKIError)
         .map(|_| HandshakeSignatureValid::assertion())
 }

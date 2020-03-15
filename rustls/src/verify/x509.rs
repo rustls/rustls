@@ -53,8 +53,8 @@ use crate::SignatureScheme;
 use ring::{error::Unspecified, io::der, signature};
 use webpki::Error;
 
-/// Extracts the subject public key info from a certificate
-fn parse_certificate(certificate: &[u8]) -> Result<untrusted::Input<'_>, Unspecified> {
+/// Extracts the algorithm id and public key from a certificate
+fn parse_certificate(certificate: &[u8]) -> Result<(&[u8], &[u8]), Unspecified> {
     let (tbs, signature_algorithm) = untrusted::Input::from(certificate)
         .read_all(Unspecified, |mut reader| {
             der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)
@@ -69,7 +69,7 @@ fn parse_certificate(certificate: &[u8]) -> Result<untrusted::Input<'_>, Unspeci
             der::bit_string_with_no_unused_bits(&mut reader)?;
             Ok((tbs, signature_algorithm))
         })?;
-    tbs.read_all(Unspecified, |mut reader| {
+    let spki = tbs.read_all(Unspecified, |mut reader| {
         // Any reasonable X.509 certificate will have extensions, which means version 3.
         if reader.read_bytes(5)?.as_slice_less_safe() != [160, 3, 2, 1, 2] {
             return Err(Unspecified);
@@ -94,11 +94,7 @@ fn parse_certificate(certificate: &[u8]) -> Result<untrusted::Input<'_>, Unspeci
         // We require extensions, as any use case we can think of needs them.
         der::expect_tag_and_get_value(&mut reader, der::Tag::ContextSpecificConstructed3)?;
         Ok(spki)
-    })
-}
-
-/// Parse a SubjectPublicKeyInfo into a “stripped” AlgorithmId and public key
-fn parse_spki(spki: untrusted::Input<'_>) -> Result<(&[u8], &[u8]), Unspecified> {
+    })?;
     spki.read_all(Unspecified, |mut reader| {
         let stripped_algid = der::expect_tag_and_get_value(&mut reader, der::Tag::Sequence)?;
         let pkey = der::bit_string_with_no_unused_bits(&mut reader)?;
@@ -109,38 +105,21 @@ fn parse_spki(spki: untrusted::Input<'_>) -> Result<(&[u8], &[u8]), Unspecified>
     })
 }
 
-/// Verify a signature, SPKI, message, and scheme.
-fn verify_spki_signature(
-    signature: &[u8],
-    message: &[u8],
-    spki: untrusted::Input<'_>,
-    scheme: SignatureScheme,
-) -> Result<(), Error> {
-    let (stripped_algid, pkey) = parse_spki(spki).map_err(|Unspecified| Error::BadDER)?;
-    verify_stripped_algid_signature(signature, message, stripped_algid, pkey, scheme)
-}
-
 /// Verify that `signature` was made by signing `message` with the private key
 /// corresponding to the public key for `certificate`, using `scheme`.
+///
+/// If `reject_ecdsa_curve_hash_mismatch` is true, reject deprecated signatures
+/// made with hashes that don’t match the public key. This is required by
+/// TLS1.3, but has no security impact.
 pub(crate) fn verify_certificate_signature(
     signature: &[u8],
     message: &[u8],
     certificate: &[u8],
     scheme: SignatureScheme,
+    reject_ecdsa_curve_hash_mismatch: bool,
 ) -> Result<(), Error> {
-    let spki = parse_certificate(certificate).map_err(|Unspecified| Error::BadDER)?;
-    verify_spki_signature(signature, message, spki, scheme)
-}
-
-/// Verify a signature and signature scheme against a public key, message, and
-/// “stripped” AlgorithmId
-fn verify_stripped_algid_signature(
-    signature: &[u8],
-    message: &[u8],
-    stripped_algid: &[u8],
-    pkey: &[u8],
-    scheme: SignatureScheme,
-) -> Result<(), Error> {
+    let (stripped_algid, pkey) =
+        parse_certificate(certificate).map_err(|Unspecified| Error::BadDER)?;
     let algorithm: &dyn signature::VerificationAlgorithm = match (scheme, stripped_algid) {
         (SignatureScheme::RSA_PKCS1_SHA256, include_bytes!("data/alg-rsa-encryption.der")) => {
             &signature::RSA_PKCS1_2048_8192_SHA256
@@ -157,16 +136,26 @@ fn verify_stripped_algid_signature(
         (SignatureScheme::ECDSA_NISTP384_SHA384, include_bytes!("data/alg-ecdsa-p384.der")) => {
             &signature::ECDSA_P384_SHA384_ASN1
         }
-        (SignatureScheme::ECDSA_NISTP384_SHA384, include_bytes!("data/alg-ecdsa-p256.der")) => {
+        (SignatureScheme::ECDSA_NISTP384_SHA384, include_bytes!("data/alg-ecdsa-p256.der"))
+            if !reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::ECDSA_P256_SHA384_ASN1
         }
-        (SignatureScheme::ECDSA_NISTP256_SHA256, include_bytes!("data/alg-ecdsa-p384.der")) => {
+        (SignatureScheme::ECDSA_NISTP256_SHA256, include_bytes!("data/alg-ecdsa-p384.der"))
+            if !reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::ECDSA_P384_SHA256_ASN1
         }
         (SignatureScheme::ED25519, include_bytes!("data/alg-ed25519.der")) => &signature::ED25519,
-        (SignatureScheme::RSA_PSS_SHA256, include_bytes!("data/alg-rsa-encryption.der")) => &signature::RSA_PSS_2048_8192_SHA256,
-        (SignatureScheme::RSA_PSS_SHA384, include_bytes!("data/alg-rsa-encryption.der")) => &signature::RSA_PSS_2048_8192_SHA384,
-        (SignatureScheme::RSA_PSS_SHA512, include_bytes!("data/alg-rsa-encryption.der")) => &signature::RSA_PSS_2048_8192_SHA512,
+        (SignatureScheme::RSA_PSS_SHA256, include_bytes!("data/alg-rsa-encryption.der")) => {
+            &signature::RSA_PSS_2048_8192_SHA256
+        }
+        (SignatureScheme::RSA_PSS_SHA384, include_bytes!("data/alg-rsa-encryption.der")) => {
+            &signature::RSA_PSS_2048_8192_SHA384
+        }
+        (SignatureScheme::RSA_PSS_SHA512, include_bytes!("data/alg-rsa-encryption.der")) => {
+            &signature::RSA_PSS_2048_8192_SHA512
+        }
         _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
     };
     signature::UnparsedPublicKey::new(algorithm, pkey)
