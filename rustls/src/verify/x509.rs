@@ -121,13 +121,19 @@ pub(crate) fn verify_certificate_signature(
     let (stripped_algid, pkey) =
         parse_certificate(certificate).map_err(|Unspecified| Error::BadDER)?;
     let algorithm: &dyn signature::VerificationAlgorithm = match (scheme, stripped_algid) {
-        (SignatureScheme::RSA_PKCS1_SHA256, include_bytes!("data/alg-rsa-encryption.der")) => {
+        (SignatureScheme::RSA_PKCS1_SHA256, include_bytes!("data/alg-rsa-encryption.der"))
+            if !reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::RSA_PKCS1_2048_8192_SHA256
         }
-        (SignatureScheme::RSA_PKCS1_SHA384, include_bytes!("data/alg-rsa-encryption.der")) => {
+        (SignatureScheme::RSA_PKCS1_SHA384, include_bytes!("data/alg-rsa-encryption.der"))
+            if !reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::RSA_PKCS1_2048_8192_SHA384
         }
-        (SignatureScheme::RSA_PKCS1_SHA512, include_bytes!("data/alg-rsa-encryption.der")) => {
+        (SignatureScheme::RSA_PKCS1_SHA512, include_bytes!("data/alg-rsa-encryption.der"))
+            if !reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::RSA_PKCS1_2048_8192_SHA512
         }
         (SignatureScheme::ECDSA_NISTP256_SHA256, include_bytes!("data/alg-ecdsa-p256.der")) => {
@@ -147,13 +153,19 @@ pub(crate) fn verify_certificate_signature(
             &signature::ECDSA_P384_SHA256_ASN1
         }
         (SignatureScheme::ED25519, include_bytes!("data/alg-ed25519.der")) => &signature::ED25519,
-        (SignatureScheme::RSA_PSS_SHA256, include_bytes!("data/alg-rsa-encryption.der")) => {
+        (SignatureScheme::RSA_PSS_SHA256, include_bytes!("data/alg-rsa-encryption.der"))
+            if reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::RSA_PSS_2048_8192_SHA256
         }
-        (SignatureScheme::RSA_PSS_SHA384, include_bytes!("data/alg-rsa-encryption.der")) => {
+        (SignatureScheme::RSA_PSS_SHA384, include_bytes!("data/alg-rsa-encryption.der"))
+            if reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::RSA_PSS_2048_8192_SHA384
         }
-        (SignatureScheme::RSA_PSS_SHA512, include_bytes!("data/alg-rsa-encryption.der")) => {
+        (SignatureScheme::RSA_PSS_SHA512, include_bytes!("data/alg-rsa-encryption.der"))
+            if reject_ecdsa_curve_hash_mismatch =>
+        {
             &signature::RSA_PSS_2048_8192_SHA512
         }
         _ => return Err(Error::UnsupportedSignatureAlgorithmForPublicKey),
