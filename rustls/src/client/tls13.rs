@@ -595,10 +595,11 @@ impl hs::State for ExpectCertificateVerify {
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        let sigv = verify::verify_tls13(&self.server_cert.cert_chain[0],
-                                        cert_verify,
-                                        &handshake_hash,
-                                        b"TLS 1.3, server CertificateVerify\x00")
+        let sigv = sess.config
+            .get_verifier()
+            .verify_tls13_signature(&verify::construct_tls13_server_verify_message(&handshake_hash),
+                                    &self.server_cert.cert_chain[0],
+                                    cert_verify)
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 3. Verify any included SCTs.
@@ -734,10 +735,9 @@ fn emit_certverify_tls13(handshake: &mut HandshakeDetails,
         return Ok(());
     }
 
-    let mut message = Vec::new();
-    message.resize(64, 0x20u8);
-    message.extend_from_slice(b"TLS 1.3, client CertificateVerify\x00");
-    message.extend_from_slice(&handshake.transcript.get_current_hash());
+    let message = verify::construct_tls13_client_verify_message(
+        &handshake.transcript.get_current_hash()
+    );
 
     let signer = client_auth.signer.take().unwrap();
     let scheme = signer.get_scheme();

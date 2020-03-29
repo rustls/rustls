@@ -60,7 +60,8 @@ impl ClientCertVerified {
     pub fn assertion() -> Self { Self { 0: () } }
 }
 
-/// Something that can verify a server certificate chain
+/// Something that can verify a server certificate chain, and verify
+/// signatures made by certificates.
 pub trait ServerCertVerifier : Send + Sync {
     /// Verify a the certificate chain `presented_certs` against the roots
     /// configured in `roots`.  Make sure that `dns_name` is quoted by
@@ -70,6 +71,64 @@ pub trait ServerCertVerifier : Send + Sync {
                           presented_certs: &[Certificate],
                           dns_name: webpki::DNSNameRef,
                           ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError>;
+
+    /// Verify a signature allegedly by the given server certificate.
+    ///
+    /// `message` is not hashed, and needs hashing during the verification.
+    /// The signature and algorithm are within `dss`.  `cert` contains the
+    /// public key to use.
+    ///
+    /// `cert` is the same certificate that was previously validated by a
+    /// call to `verify_server_cert`.
+    ///
+    /// If and only if the signature is valid, return HandshakeSignatureValid.
+    /// Otherwise, return an error -- rustls will send an alert and abort the
+    /// connection.
+    ///
+    /// This method is only called for TLS1.2 handshakes.  Note that, in TLS1.2,
+    /// SignatureSchemes such as `SignatureScheme::ECDSA_NISTP256_SHA256` are not
+    /// in fact bound to the specific curve implied in their name.
+    ///
+    /// This trait method has a default implementation that uses webpki to verify
+    /// the signature.
+    fn verify_tls12_signature(&self,
+                              message: &[u8],
+                              cert: &Certificate,
+                              dss: &DigitallySignedStruct)
+        -> Result<HandshakeSignatureValid, TLSError> {
+        verify_signed_struct(message, cert, dss)
+    }
+
+
+    /// Verify a signature allegedly by the given server certificate.
+    ///
+    /// This method is only called for TLS1.3 handshakes.
+    ///
+    /// This method is very similar to `verify_tls12_signature`: but note the
+    /// tighter ECDSA SignatureScheme semantics -- eg `SignatureScheme::ECDSA_NISTP256_SHA256`
+    /// must only validate signatures using public keys on the right curve --
+    /// rustls does not enforce this requirement for you.
+    ///
+    /// This trait method has a default implementation that uses webpki to verify
+    /// the signature.
+    fn verify_tls13_signature(&self,
+                              message: &[u8],
+                              cert: &Certificate,
+                              dss: &DigitallySignedStruct)
+        -> Result<HandshakeSignatureValid, TLSError> {
+        verify_tls13(message, cert, dss)
+    }
+
+    /// Return the list of SignatureSchemes that this verifier will handle,
+    /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
+    ///
+    /// This should be in priority order, with the most preferred first.
+    ///
+    /// This trait mehod has a default implementation that reflects the schemes
+    /// supported by webpki.
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        WebPKIVerifier::verification_schemes()
+    }
 }
 
 /// Something that can verify a client certificate chain
@@ -104,12 +163,64 @@ pub trait ClientCertVerifier : Send + Sync {
     fn verify_client_cert(&self,
                           presented_certs: &[Certificate],
                           sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError>;
-}
 
-/// Default `ServerCertVerifier`, see the trait impl for more information.
-pub struct WebPKIVerifier {
-    /// time provider
-    pub time: fn() -> Result<webpki::Time, TLSError>,
+    /// Verify a signature allegedly by the given server certificate.
+    ///
+    /// `message` is not hashed, and needs hashing during the verification.
+    /// The signature and algorithm are within `dss`.  `cert` contains the
+    /// public key to use.
+    ///
+    /// `cert` is the same certificate that was previously validated by a
+    /// call to `verify_server_cert`.
+    ///
+    /// If and only if the signature is valid, return HandshakeSignatureValid.
+    /// Otherwise, return an error -- rustls will send an alert and abort the
+    /// connection.
+    ///
+    /// This method is only called for TLS1.2 handshakes.  Note that, in TLS1.2,
+    /// SignatureSchemes such as `SignatureScheme::ECDSA_NISTP256_SHA256` are not
+    /// in fact bound to the specific curve implied in their name.
+    ///
+    /// This trait method has a default implementation that uses webpki to verify
+    /// the signature.
+    fn verify_tls12_signature(&self,
+                              message: &[u8],
+                              cert: &Certificate,
+                              dss: &DigitallySignedStruct)
+        -> Result<HandshakeSignatureValid, TLSError> {
+        verify_signed_struct(message, cert, dss)
+    }
+
+
+    /// Verify a signature allegedly by the given server certificate.
+    ///
+    /// This method is only called for TLS1.3 handshakes.
+    ///
+    /// This method is very similar to `verify_tls12_signature`: but note the
+    /// tighter ECDSA SignatureScheme semantics -- eg `SignatureScheme::ECDSA_NISTP256_SHA256`
+    /// must only validate signatures using public keys on the right curve --
+    /// rustls does not enforce this requirement for you.
+    ///
+    /// This trait method has a default implementation that uses webpki to verify
+    /// the signature.
+    fn verify_tls13_signature(&self,
+                              message: &[u8],
+                              cert: &Certificate,
+                              dss: &DigitallySignedStruct)
+        -> Result<HandshakeSignatureValid, TLSError> {
+        verify_tls13(message, cert, dss)
+    }
+
+    /// Return the list of SignatureSchemes that this verifier will handle,
+    /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
+    ///
+    /// This should be in priority order, with the most preferred first.
+    ///
+    /// This trait mehod has a default implementation that reflects the schemes
+    /// supported by webpki.
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        WebPKIVerifier::verification_schemes()
+    }
 }
 
 impl ServerCertVerifier for WebPKIVerifier {
@@ -140,12 +251,33 @@ impl ServerCertVerifier for WebPKIVerifier {
     }
 }
 
+/// Default `ServerCertVerifier`, see the trait impl for more information.
+pub struct WebPKIVerifier {
+    /// time provider
+    pub time: fn() -> Result<webpki::Time, TLSError>,
+}
+
 impl WebPKIVerifier {
     /// Create a new `WebPKIVerifier`
     pub fn new() -> WebPKIVerifier {
         WebPKIVerifier {
             time: try_now,
         }
+    }
+
+    fn verification_schemes() -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
+
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA256,
+        ]
     }
 }
 
@@ -329,16 +461,10 @@ fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
     Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
 }
 
-/// Verify the signed `message` using the public key quoted in
-/// `cert` and algorithm and signature in `dss`.
-///
-/// `cert` MUST have been authenticated before using this function,
-/// typically using `verify_cert`.
-pub fn verify_signed_struct(message: &[u8],
-                            cert: &Certificate,
-                            dss: &DigitallySignedStruct)
-                            -> Result<HandshakeSignatureValid, TLSError> {
-
+fn verify_signed_struct(message: &[u8],
+                        cert: &Certificate,
+                        dss: &DigitallySignedStruct)
+                        -> Result<HandshakeSignatureValid, TLSError> {
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::from(&cert.0)
         .map_err(TLSError::WebPKIError)?;
@@ -365,17 +491,33 @@ fn convert_alg_tls13(scheme: SignatureScheme)
     }
 }
 
-pub fn verify_tls13(cert: &Certificate,
-                    dss: &DigitallySignedStruct,
-                    handshake_hash: &[u8],
-                    context_string_with_0: &[u8])
-                    -> Result<HandshakeSignatureValid, TLSError> {
-    let alg = convert_alg_tls13(dss.scheme)?;
+/// Constructs the signature message specified in section 4.4.3 of RFC8446.
+pub fn construct_tls13_client_verify_message(handshake_hash: &[u8]) -> Vec<u8> {
+    construct_tls13_verify_message(handshake_hash,
+                                   b"TLS 1.3, client CertificateVerify\x00")
+}
 
+/// Constructs the signature message specified in section 4.4.3 of RFC8446.
+pub fn construct_tls13_server_verify_message(handshake_hash: &[u8]) -> Vec<u8> {
+    construct_tls13_verify_message(handshake_hash,
+                                   b"TLS 1.3, server CertificateVerify\x00")
+}
+
+fn construct_tls13_verify_message(handshake_hash: &[u8],
+                                  context_string_with_0: &[u8]) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
     msg.extend_from_slice(context_string_with_0);
     msg.extend_from_slice(handshake_hash);
+    msg
+}
+
+fn verify_tls13(msg: &[u8],
+                cert: &Certificate,
+                dss: &DigitallySignedStruct)
+                -> Result<HandshakeSignatureValid, TLSError> {
+    let alg = convert_alg_tls13(dss.scheme)?;
+
 
     let cert = webpki::EndEntityCert::from(&cert.0)
         .map_err(TLSError::WebPKIError)?;
@@ -427,19 +569,4 @@ pub fn verify_scts(cert: &Certificate,
     }
 
     Ok(())
-}
-
-pub fn supported_verify_schemes() -> &'static [SignatureScheme] {
-    &[
-        SignatureScheme::ECDSA_NISTP384_SHA384,
-        SignatureScheme::ECDSA_NISTP256_SHA256,
-
-        SignatureScheme::RSA_PSS_SHA512,
-        SignatureScheme::RSA_PSS_SHA384,
-        SignatureScheme::RSA_PSS_SHA256,
-
-        SignatureScheme::RSA_PKCS1_SHA512,
-        SignatureScheme::RSA_PKCS1_SHA384,
-        SignatureScheme::RSA_PKCS1_SHA256,
-    ]
 }

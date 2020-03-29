@@ -231,7 +231,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     }
     exts.push(ClientExtension::ECPointFormats(ECPointFormatList::supported()));
     exts.push(ClientExtension::NamedGroups(suites::KeyExchange::supported_groups().to_vec()));
-    exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes().to_vec()));
+    exts.push(ClientExtension::SignatureAlgorithms(sess.config.get_verifier().supported_verify_schemes()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
 

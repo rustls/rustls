@@ -287,7 +287,8 @@ impl CompleteClientHelloHandling {
             extensions: Vec::new(),
         };
 
-        let schemes = verify::supported_verify_schemes();
+        let schemes = sess.config.get_verifier()
+            .supported_verify_schemes();
         cr.extensions.push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
         let names = sess.config.verifier.client_auth_root_subjects(sess.get_sni())
@@ -367,10 +368,9 @@ impl CompleteClientHelloHandling {
                                      server_key: &mut sign::CertifiedKey,
                                      schemes: &[SignatureScheme])
                                      -> Result<(), TLSError> {
-        let mut message = Vec::new();
-        message.resize(64, 0x20u8);
-        message.extend_from_slice(b"TLS 1.3, server CertificateVerify\x00");
-        message.extend_from_slice(&self.handshake.transcript.get_current_hash());
+        let message = verify::construct_tls13_server_verify_message(
+            &self.handshake.transcript.get_current_hash()
+        );
 
         let signing_key = &server_key.key;
         let signer = signing_key.choose_scheme(schemes)
@@ -712,11 +712,13 @@ impl hs::State for ExpectCertificateVerify {
             let handshake_hash = self.handshake.transcript.get_current_hash();
             self.handshake.transcript.abandon_client_auth();
             let certs = &self.client_cert.cert_chain;
+            let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
-            verify::verify_tls13(&certs[0],
-                                 sig,
-                                 &handshake_hash,
-                                 b"TLS 1.3, client CertificateVerify\x00")
+            sess.config
+                .get_verifier()
+                .verify_tls13_signature(&msg,
+                                        &certs[0],
+                                        sig)
         };
 
         if let Err(e) = rc {

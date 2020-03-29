@@ -503,9 +503,11 @@ impl hs::State for ExpectServerDone {
                 return Err(TLSError::PeerMisbehavedError(error_message));
             }
 
-            verify::verify_signed_struct(&message,
-                                         &st.server_cert.cert_chain[0],
-                                         sig)
+            sess.config
+                .get_verifier()
+                .verify_tls12_signature(&message,
+                                        &st.server_cert.cert_chain[0],
+                                        sig)
                 .map_err(|err| hs::send_cert_error_alert(sess, err))?
         };
         sess.server_cert_chain = st.server_cert.take_chain();

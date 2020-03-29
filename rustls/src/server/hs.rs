@@ -18,7 +18,6 @@ use crate::msgs::persist;
 use crate::session::SessionSecrets;
 use crate::server::{ServerSessionImpl, ServerConfig, ClientHello};
 use crate::suites;
-use crate::verify;
 use crate::rand;
 use crate::sign;
 #[cfg(feature = "logging")]
@@ -464,11 +463,13 @@ impl ExpectClientHello {
     }
 
     fn emit_certificate_req(&mut self, sess: &mut ServerSessionImpl) -> Result<bool, TLSError> {
-        let client_auth = &sess.config.verifier;
+        let client_auth = sess.config.get_verifier();
 
         if !client_auth.offer_client_auth() {
             return Ok(false);
         }
+
+        let verify_schemes = client_auth.supported_verify_schemes();
 
         let names = client_auth.client_auth_root_subjects(sess.get_sni())
             .ok_or_else(|| {
@@ -480,7 +481,7 @@ impl ExpectClientHello {
         let cr = CertificateRequestPayload {
             certtypes: vec![ ClientCertificateType::RSASign,
                          ClientCertificateType::ECDSASign ],
-            sigschemes: verify::supported_verify_schemes().to_vec(),
+            sigschemes: verify_schemes,
             canames: names,
         };
 
