@@ -713,10 +713,11 @@ impl hs::State for ExpectCertificateVerify {
             self.handshake.transcript.abandon_client_auth();
             let certs = &self.client_cert.cert_chain;
 
-            verify::verify_tls13(&certs[0],
-                                 sig,
-                                 &handshake_hash,
-                                 b"TLS 1.3, client CertificateVerify\x00")
+            verify::verify_tls13_server(&certs[0],
+                                        sig,
+                                        &handshake_hash,
+                                        b"TLS 1.3, client CertificateVerify\x00",
+                                        sess.config.get_verifier())
         };
 
         if let Err(e) = rc {

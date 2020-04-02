@@ -183,7 +183,7 @@ impl hs::State for ExpectCertificateVerify {
             let handshake_msgs = self.handshake.transcript.take_handshake_buf();
             let certs = &self.client_cert.cert_chain;
 
-            verify::verify_signed_struct(&handshake_msgs, &certs[0], sig)
+            verify::verify_tls12_signature(&handshake_msgs, &certs[0], sig.scheme, &sig.sig.0)
         };
 
         if let Err(e) = rc {

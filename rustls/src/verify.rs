@@ -10,6 +10,7 @@ use crate::msgs::enums::SignatureScheme;
 use crate::error::TLSError;
 use crate::anchors::{DistinguishedNames, RootCertStore};
 use crate::anchors::OwnedTrustAnchor;
+use crate::ProtocolVersion;
 #[cfg(feature = "logging")]
 use crate::log::{warn, debug};
 
@@ -60,6 +61,29 @@ impl ClientCertVerified {
     pub fn assertion() -> Self { Self { 0: () } }
 }
 
+fn verify_certificate_signature(scheme: SignatureScheme,
+                                version: ProtocolVersion,
+                                cert: &Certificate,
+                                msg: &[u8],
+                                signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
+    match version {
+        crate::ProtocolVersion::TLSv1_2 => {
+            verify_tls12_signature(msg, cert, scheme, signature)
+        }
+        crate::ProtocolVersion::TLSv1_3 => {
+            let signature_alg = convert_alg_tls13(scheme)?;
+            let cert = webpki::EndEntityCert::from(&cert.0)
+                .map_err(TLSError::WebPKIError)?;
+
+            cert.verify_signature(signature_alg, &msg, signature)
+                .map_err(TLSError::WebPKIError)
+                .map(|_| HandshakeSignatureValid::assertion())
+        }
+        _ => panic!("other versions of TLS rejected earlier"),
+    }
+}
+
+
 /// Something that can verify a server certificate chain
 pub trait ServerCertVerifier : Send + Sync {
     /// Verify a the certificate chain `presented_certs` against the roots
@@ -70,10 +94,26 @@ pub trait ServerCertVerifier : Send + Sync {
                           presented_certs: &[Certificate],
                           dns_name: webpki::DNSNameRef,
                           ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError>;
+
+    /// Verify a signature against a certificate. `cert` is the certificate from the client.
+    ///
+    /// This function will only be called after [`ServerCertVerifier::verify_client_cert`] has
+    /// been called on the same [`Certificate`] and returned `Ok`. Feel free to `panic!` if
+    /// [`ServerCertVerifier::verify_client_cert`] would have rejected `certificate` no matter what
+    /// the SNI is. You can also `panic!` if you get a value for `version` that you rejected in your
+    /// configuration.
+    fn verify_certificate_signature(&self,
+                                        scheme: SignatureScheme,
+                                        version: ProtocolVersion,
+                                        cert: &Certificate,
+                                        msg: &[u8],
+                                        signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
+        verify_certificate_signature(scheme, version, cert, msg, signature)
+    }
 }
 
 /// Something that can verify a client certificate chain
-pub trait ClientCertVerifier : Send + Sync {
+pub trait ClientCertVerifier: Send + Sync {
     /// Returns `true` to enable the server to request a client certificate and
     /// `false` to skip requesting a client certificate. Defaults to `true`.
     fn offer_client_auth(&self) -> bool { true }
@@ -104,6 +144,22 @@ pub trait ClientCertVerifier : Send + Sync {
     fn verify_client_cert(&self,
                           presented_certs: &[Certificate],
                           sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError>;
+
+    /// Verify a signature against a certificate. `cert` is the certificate from the client.
+    ///
+    /// This function will only be called after [`ClientCertVerifier::verify_client_cert`] has
+    /// been called on the same [`Certificate`] and returned `Ok`. Feel free to `panic!` if
+    /// [`ClientCertVerifier::verify_client_cert`] would have rejected `certificate` no matter what
+    /// the SNI is. You can also `panic!` if you get a value for `version` that you rejected in your
+    /// configuration.
+    fn verify_certificate_signature(&self,
+                                        scheme: SignatureScheme,
+                                        version: ProtocolVersion,
+                                        cert: &Certificate,
+                                        msg: &[u8],
+                                        signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
+        verify_certificate_signature(scheme, version, cert, msg, signature)
+    }
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
@@ -329,21 +385,25 @@ fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
     Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
 }
 
+pub trait SignatureVerifier {
+
+}
+
 /// Verify the signed `message` using the public key quoted in
 /// `cert` and algorithm and signature in `dss`.
 ///
 /// `cert` MUST have been authenticated before using this function,
 /// typically using `verify_cert`.
-pub fn verify_signed_struct(message: &[u8],
+pub fn verify_tls12_signature(message: &[u8],
                             cert: &Certificate,
-                            dss: &DigitallySignedStruct)
+                            scheme: SignatureScheme,
+                            signature: &[u8])
                             -> Result<HandshakeSignatureValid, TLSError> {
-
-    let possible_algs = convert_scheme(dss.scheme)?;
+    let possible_algs = convert_scheme(scheme)?;
     let cert = webpki::EndEntityCert::from(&cert.0)
         .map_err(TLSError::WebPKIError)?;
 
-    verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
+    verify_sig_using_any_alg(&cert, possible_algs, message, signature)
         .map_err(TLSError::WebPKIError)
         .map(|_| HandshakeSignatureValid::assertion())
 }
@@ -365,24 +425,30 @@ fn convert_alg_tls13(scheme: SignatureScheme)
     }
 }
 
-pub fn verify_tls13(cert: &Certificate,
-                    dss: &DigitallySignedStruct,
-                    handshake_hash: &[u8],
-                    context_string_with_0: &[u8])
-                    -> Result<HandshakeSignatureValid, TLSError> {
-    let alg = convert_alg_tls13(dss.scheme)?;
-
+pub fn verify_tls13_client(cert: &Certificate,
+                           dss: &DigitallySignedStruct,
+                           handshake_hash: &[u8],
+                           context_string_with_0: &[u8],
+                           verifier: &dyn ServerCertVerifier)
+                           -> Result<HandshakeSignatureValid, TLSError> {
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
     msg.extend_from_slice(context_string_with_0);
     msg.extend_from_slice(handshake_hash);
+    verifier.verify_certificate_signature(dss.scheme, ProtocolVersion::TLSv1_3, cert, &msg, &dss.sig.0)
+}
 
-    let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(TLSError::WebPKIError)?;
-
-    cert.verify_signature(alg, &msg, &dss.sig.0)
-        .map_err(TLSError::WebPKIError)
-        .map(|_| HandshakeSignatureValid::assertion())
+pub fn verify_tls13_server(cert: &Certificate,
+                           dss: &DigitallySignedStruct,
+                           handshake_hash: &[u8],
+                           context_string_with_0: &[u8],
+                           verifier: &dyn ClientCertVerifier)
+                           -> Result<HandshakeSignatureValid, TLSError> {
+    let mut msg = Vec::new();
+    msg.resize(64, 0x20u8);
+    msg.extend_from_slice(context_string_with_0);
+    msg.extend_from_slice(handshake_hash);
+    verifier.verify_certificate_signature(dss.scheme, ProtocolVersion::TLSv1_3, cert, &msg, &dss.sig.0)
 }
 
 fn unix_time_millis() -> Result<u64, TLSError> {

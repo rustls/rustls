@@ -19,10 +19,11 @@ sct = "0.6.0"
 webpki = "0.21.0"
 
 [features]
-default = ["logging"]
+default = ["logging", "builtin_validation"]
 logging = ["log"]
 dangerous_configuration = []
 quic = []
+builtin_validation = []
 
 [dev-dependencies]
 env_logger = "0.7.1"

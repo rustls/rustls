@@ -585,8 +585,7 @@ impl hs::State for ExpectCertificateVerify {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        let certv = sess.config
-            .get_verifier()
+        let certv = sess.config.get_verifier()
             .verify_server_cert(&sess.config.root_store,
                                 &self.server_cert.cert_chain,
                                 self.handshake.dns_name.as_ref(),
@@ -595,10 +594,11 @@ impl hs::State for ExpectCertificateVerify {
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.handshake.transcript.get_current_hash();
-        let sigv = verify::verify_tls13(&self.server_cert.cert_chain[0],
+        let sigv = verify::verify_tls13_client(&self.server_cert.cert_chain[0],
                                         cert_verify,
                                         &handshake_hash,
-                                        b"TLS 1.3, server CertificateVerify\x00")
+                                        b"TLS 1.3, server CertificateVerify\x00",
+                                        sess.config.get_verifier())
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 3. Verify any included SCTs.
