@@ -9,6 +9,7 @@ use crate::msgs::handshake::SCTList;
 use crate::msgs::enums::SignatureScheme;
 use crate::error::TLSError;
 use crate::anchors::{DistinguishedNames, RootCertStore};
+#[cfg(feature = "builtin_verifier")]
 use crate::anchors::OwnedTrustAnchor;
 use crate::ProtocolVersion;
 #[cfg(feature = "logging")]
@@ -18,6 +19,7 @@ type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
 /// order.
+#[cfg(feature = "builtin_verifier")]
 static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
     &webpki::ECDSA_P256_SHA256,
     &webpki::ECDSA_P256_SHA384,
@@ -61,6 +63,7 @@ impl ClientCertVerified {
     pub fn assertion() -> Self { Self { 0: () } }
 }
 
+#[cfg(feature = "builtin_verifier")]
 fn verify_certificate_signature(scheme: SignatureScheme,
                                 version: ProtocolVersion,
                                 cert: &Certificate,
@@ -95,6 +98,7 @@ pub trait ServerCertVerifier : Send + Sync {
                           dns_name: webpki::DNSNameRef,
                           ocsp_response: &[u8]) -> Result<ServerCertVerified, TLSError>;
 
+    #[cfg(feature = "builtin_verifier")]
     /// Verify a signature against a certificate. `cert` is the certificate from the client.
     ///
     /// This function will only be called after [`ServerCertVerifier::verify_client_cert`] has
@@ -103,13 +107,28 @@ pub trait ServerCertVerifier : Send + Sync {
     /// the SNI is. You can also `panic!` if you get a value for `version` that you rejected in your
     /// configuration.
     fn verify_certificate_signature(&self,
-                                        scheme: SignatureScheme,
-                                        version: ProtocolVersion,
-                                        cert: &Certificate,
-                                        msg: &[u8],
-                                        signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
+                                    scheme: SignatureScheme,
+                                    version: ProtocolVersion,
+                                    cert: &Certificate,
+                                    msg: &[u8],
+                                    signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
         verify_certificate_signature(scheme, version, cert, msg, signature)
     }
+
+    #[cfg(not(feature = "builtin_verifier"))]
+    /// Verify a signature against a certificate. `cert` is the certificate from the client.
+    ///
+    /// This function will only be called after [`ServerCertVerifier::verify_client_cert`] has
+    /// been called on the same [`Certificate`] and returned `Ok`. Feel free to `panic!` if
+    /// [`ServerCertVerifier::verify_client_cert`] would have rejected `certificate` no matter what
+    /// the SNI is. You can also `panic!` if you get a value for `version` that you rejected in your
+    /// configuration.
+    fn verify_certificate_signature(&self,
+                                    scheme: SignatureScheme,
+                                    version: ProtocolVersion,
+                                    cert: &Certificate,
+                                    msg: &[u8],
+                                    signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError>;
 }
 
 /// Something that can verify a client certificate chain
@@ -145,6 +164,7 @@ pub trait ClientCertVerifier: Send + Sync {
                           presented_certs: &[Certificate],
                           sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError>;
 
+    #[cfg(feature = "builtin_verifier")]
     /// Verify a signature against a certificate. `cert` is the certificate from the client.
     ///
     /// This function will only be called after [`ClientCertVerifier::verify_client_cert`] has
@@ -153,21 +173,38 @@ pub trait ClientCertVerifier: Send + Sync {
     /// the SNI is. You can also `panic!` if you get a value for `version` that you rejected in your
     /// configuration.
     fn verify_certificate_signature(&self,
-                                        scheme: SignatureScheme,
-                                        version: ProtocolVersion,
-                                        cert: &Certificate,
-                                        msg: &[u8],
-                                        signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
+                                    scheme: SignatureScheme,
+                                    version: ProtocolVersion,
+                                    cert: &Certificate,
+                                    msg: &[u8],
+                                    signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError> {
         verify_certificate_signature(scheme, version, cert, msg, signature)
     }
+
+    #[cfg(not(feature = "builtin_verifier"))]
+    /// Verify a signature against a certificate. `cert` is the certificate from the client.
+    ///
+    /// This function will only be called after [`ClientCertVerifier::verify_client_cert`] has
+    /// been called on the same [`Certificate`] and returned `Ok`. Feel free to `panic!` if
+    /// [`ClientCertVerifier::verify_client_cert`] would have rejected `certificate` no matter what
+    /// the SNI is. You can also `panic!` if you get a value for `version` that you rejected in your
+    /// configuration.
+    fn verify_certificate_signature(&self,
+                                    scheme: SignatureScheme,
+                                    version: ProtocolVersion,
+                                    cert: &Certificate,
+                                    msg: &[u8],
+                                    signature: &[u8]) -> Result<HandshakeSignatureValid, TLSError>;
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
+#[cfg(feature = "builtin_verifier")]
 pub struct WebPKIVerifier {
     /// time provider
     pub time: fn() -> Result<webpki::Time, TLSError>,
 }
 
+#[cfg(feature = "builtin_verifier")]
 impl ServerCertVerifier for WebPKIVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a  trusted `RootCertStore` CA
@@ -196,6 +233,7 @@ impl ServerCertVerifier for WebPKIVerifier {
     }
 }
 
+#[cfg(feature = "builtin_verifier")]
 impl WebPKIVerifier {
     /// Create a new `WebPKIVerifier`
     pub fn new() -> WebPKIVerifier {
@@ -205,10 +243,12 @@ impl WebPKIVerifier {
     }
 }
 
+#[cfg(feature = "builtin_verifier")]
 type CertChainAndRoots<'a, 'b> = (webpki::EndEntityCert<'a>,
                                   Vec<&'a [u8]>,
                                   Vec<webpki::TrustAnchor<'b>>);
 
+#[cfg(feature = "builtin_verifier")]
 fn prepare<'a, 'b>(roots: &'b RootCertStore, presented_certs: &'a [Certificate])
                    -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
     if presented_certs.is_empty() {
@@ -232,6 +272,7 @@ fn prepare<'a, 'b>(roots: &'b RootCertStore, presented_certs: &'a [Certificate])
     Ok((cert, chain, trustroots))
 }
 
+#[cfg(feature = "builtin_verifier")]
 fn try_now() -> Result<webpki::Time, TLSError> {
     webpki::Time::try_from(std::time::SystemTime::now())
         .map_err( |_ | TLSError::FailedToGetCurrentTime)
@@ -239,10 +280,12 @@ fn try_now() -> Result<webpki::Time, TLSError> {
 
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
 /// certificate, without any name checking.
+#[cfg(feature = "builtin_verifier")]
 pub struct AllowAnyAuthenticatedClient {
     roots: RootCertStore,
 }
 
+#[cfg(feature = "builtin_verifier")]
 impl AllowAnyAuthenticatedClient {
     /// Construct a new `AllowAnyAuthenticatedClient`.
     ///
@@ -252,6 +295,7 @@ impl AllowAnyAuthenticatedClient {
     }
 }
 
+#[cfg(feature = "builtin_verifier")]
 impl ClientCertVerifier for AllowAnyAuthenticatedClient {
     fn offer_client_auth(&self) -> bool { true }
 
@@ -279,10 +323,12 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
 /// Client authentication will be requested during the TLS handshake. If the
 /// client offers a certificate then this acts like
 /// `AllowAnyAuthenticatedClient`, otherwise this acts like `NoClientAuth`.
+#[cfg(feature = "builtin_verifier")]
 pub struct AllowAnyAnonymousOrAuthenticatedClient {
     inner: AllowAnyAuthenticatedClient,
 }
 
+#[cfg(feature = "builtin_verifier")]
 impl AllowAnyAnonymousOrAuthenticatedClient {
     /// Construct a new `AllowAnyAnonymousOrAuthenticatedClient`.
     ///
@@ -294,6 +340,7 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
     }
 }
 
+#[cfg(feature = "builtin_verifier")]
 impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
     fn offer_client_auth(&self) -> bool { self.inner.offer_client_auth() }
 
@@ -327,6 +374,12 @@ impl ClientCertVerifier for NoClientAuth {
     fn verify_client_cert(&self,_presented_certs: &[Certificate], _sni: Option<&webpki::DNSName>)
                           -> Result<ClientCertVerified, TLSError> {
         unimplemented!();
+    }
+
+    fn verify_certificate_signature(&self, _scheme: SignatureScheme, _version: ProtocolVersion,
+                                    _cert: &Certificate, _msg: &[u8], _signature: &[u8])
+                                    -> Result<HandshakeSignatureValid, TLSError> {
+        unimplemented!()
     }
 }
 
@@ -385,10 +438,6 @@ fn verify_sig_using_any_alg(cert: &webpki::EndEntityCert,
     Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
 }
 
-pub trait SignatureVerifier {
-
-}
-
 /// Verify the signed `message` using the public key quoted in
 /// `cert` and algorithm and signature in `dss`.
 ///
@@ -408,6 +457,7 @@ pub fn verify_tls12_signature(message: &[u8],
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
+#[cfg(feature = "builtin_verifier")]
 fn convert_alg_tls13(scheme: SignatureScheme)
                      -> Result<&'static webpki::SignatureAlgorithm, TLSError> {
     use crate::msgs::enums::SignatureScheme::*;

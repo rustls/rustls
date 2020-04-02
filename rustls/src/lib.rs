@@ -275,8 +275,9 @@ pub use crate::server::{ServerConfig, ServerSession};
 pub use crate::server::handy::ResolvesServerCertUsingSNI;
 pub use crate::server::{ResolvesServerCert,ProducesTickets,ClientHello};
 pub use crate::ticketer::Ticketer;
-pub use crate::verify::{NoClientAuth, AllowAnyAuthenticatedClient,
-                 AllowAnyAnonymousOrAuthenticatedClient};
+pub use crate::verify::NoClientAuth;
+#[cfg(feature = "builtin_verifier")]
+pub use crate::verify::{AllowAnyAuthenticatedClient, AllowAnyAnonymousOrAuthenticatedClient};
 pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
@@ -302,7 +303,9 @@ mod quic {
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
-    ClientCertVerifier, ClientCertVerified, WebPKIVerifier};
+    ClientCertVerifier, ClientCertVerified};
+#[cfg(all(feature = "dangerous_configuration", feature = "builtin_verifier"))]
+pub use crate::verify::WebPKIVerifier;
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::client::danger::DangerousClientConfig;

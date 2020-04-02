@@ -9,13 +9,13 @@ publish = false
 
 [features]
 default = ["logging"]
-logging = ["log"]
+logging = ["log", "rustls/logging"]
 dangerous_configuration = ["rustls/dangerous_configuration"]
 quic = ["rustls/quic"]
 
 [dependencies]
 log = { version = "0.4.4", optional = true }
-rustls = { path = "../rustls" }
+rustls = { path = "../rustls", features = ["builtin_verifier"], default_features = false }
 sct = "0.6"
 webpki = "0.21.0"
 
