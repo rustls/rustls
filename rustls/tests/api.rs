@@ -1,4 +1,5 @@
-// Assorted public API tests.
+//! Assorted public API tests.
+#![cfg(feature = "builtin_verifier")]
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};

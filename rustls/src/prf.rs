@@ -33,7 +33,8 @@ fn p(out: &mut [u8], hashalg: &'static digest::Algorithm, secret: &[u8], seed: &
     while offs < out.len() {
         // P_hash[i] = HMAC_hash(secret, A(i) + seed)
         let p_term = concat_sign(&hmac_key, current_a.as_ref(), seed);
-        offs += out[offs..].as_mut().write(p_term.as_ref()).unwrap();
+        let mut odd: &mut [u8] = out[offs..].as_mut();
+        offs += odd.write(p_term.as_ref()).unwrap();
 
         // A(i+1) = HMAC_hash(secret, A(i))
         current_a = hmac::sign(&hmac_key, current_a.as_ref());

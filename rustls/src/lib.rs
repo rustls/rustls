@@ -89,6 +89,7 @@
 //! and use it for all connections made by that process.
 //!
 //! ```
+//! # #[cfg(feature = "builtin_verifier")]
 //! let mut config = rustls::ClientConfig::new();
 //! ```
 //!
@@ -107,10 +108,12 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
+//! # #[cfg(feature = "builtin_verifier")] {
 //! # let mut config = rustls::ClientConfig::new();
 //! let rc_config = Arc::new(config);
 //! let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
 //! let mut client = rustls::ClientSession::new(&rc_config, example_com);
+//! # }
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields

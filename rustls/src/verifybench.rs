@@ -3,6 +3,7 @@
 //
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
+#![cfg(feature = "builtin_verifier")]
 
 use std::time::{Duration, Instant};
 

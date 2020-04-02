@@ -1,5 +1,6 @@
-/// Microbenchmarks go here.  Larger benchmarks of (eg.) protocol
-/// performance go in examples/internal/bench.rs.
+//! Microbenchmarks go here.  Larger benchmarks of (eg.) protocol
+//! performance go in examples/internal/bench.rs.
+#![cfg(feature = "builtin_verifier")]
 
 use criterion::Criterion;
 use criterion::criterion_group;

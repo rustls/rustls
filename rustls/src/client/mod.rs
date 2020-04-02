@@ -1,8 +1,12 @@
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::session::{Session, SessionCommon};
-use crate::keylog::{KeyLog, NoKeyLog};
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::keylog::KeyLog;
+#[cfg(feature = "builtin_verifier")]
+use crate::keylog::NoKeyLog;
+use crate::suites::SupportedCipherSuite;
+#[cfg(feature = "builtin_verifier")]
+use crate::suites::ALL_CIPHERSUITES;
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
