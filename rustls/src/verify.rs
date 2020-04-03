@@ -34,17 +34,23 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
     &webpki::RSA_PKCS1_3072_8192_SHA384
 ];
 
-/// Marker types.  These are used to bind the fact some verification
-/// (certificate chain or handshake signature) has taken place into
-/// protocol states.  We use this to have the compiler check that there
-/// are no 'goto fail'-style elisions of important checks before we
-/// reach the traffic stage.
-///
-/// These types are public, but cannot be directly constructed.  This
-/// means their origins can be precisely determined by looking
-/// for their `assertion` constructors.
+// Marker types.  These are used to bind the fact some verification
+// (certificate chain or handshake signature) has taken place into
+// protocol states.  We use this to have the compiler check that there
+// are no 'goto fail'-style elisions of important checks before we
+// reach the traffic stage.
+//
+// These types are public, but cannot be directly constructed.  This
+// means their origins can be precisely determined by looking
+// for their `assertion` constructors.
+
+/// Zero-sized marker type representing verification of a signature against a
+/// certificate.
 pub struct HandshakeSignatureValid(());
-impl HandshakeSignatureValid { pub fn assertion() -> Self { Self { 0: () } } }
+impl HandshakeSignatureValid {
+    /// Make a `HandshakeSignatureValid`
+    pub fn assertion() -> Self { Self { 0: () } }
+}
 
 pub struct FinishedMessageVerified(());
 impl FinishedMessageVerified { pub fn assertion() -> Self { Self { 0: () } } }

@@ -280,7 +280,11 @@ pub use crate::server::{ResolvesServerCert,ProducesTickets,ClientHello};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::NoClientAuth;
 #[cfg(feature = "builtin_verifier")]
-pub use crate::verify::{AllowAnyAuthenticatedClient, AllowAnyAnonymousOrAuthenticatedClient};
+pub use crate::verify::{
+    AllowAnyAuthenticatedClient,
+    AllowAnyAnonymousOrAuthenticatedClient,
+    HandshakeSignatureValid,
+};
 pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
