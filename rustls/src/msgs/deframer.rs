@@ -146,13 +146,9 @@ impl MessageDeframer {
              * +----------+----------+----------+
              * 0          ^ self.used
              */
-            let used_after = self.used - taken;
 
-            for i in 0..used_after {
-                self.buf[i] = self.buf[i + taken];
-            }
-
-            self.used = used_after;
+            self.buf.copy_within(taken..self.used, 0);
+            self.used = self.used - taken;
         } else if taken == self.used {
             self.used = 0;
         }
