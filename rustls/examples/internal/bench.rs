@@ -59,8 +59,17 @@ fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> f64 {
     let mut buf = [0u8; 262144];
     let mut read_time = 0f64;
 
-    while left.wants_write() {
-        let sz = left.write_tls(&mut buf.as_mut()).unwrap();
+    loop {
+        let mut sz = 0;
+
+        while left.wants_write() {
+            let written = left.write_tls(&mut buf[sz..].as_mut()).unwrap();
+            if written == 0 {
+                break;
+            }
+
+            sz += written;
+        }
 
         if sz == 0 {
             return read_time;
@@ -77,8 +86,6 @@ fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> f64 {
             }
         }
     }
-
-    read_time
 }
 
 fn drain(d: &mut dyn Session, expect_len: usize) {
