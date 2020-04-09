@@ -8,6 +8,7 @@ use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{ProtocolNameList, ConvertProtocolNameList};
 use crate::msgs::handshake::HelloRetryRequest;
+use crate::msgs::handshake::GreaseExt;
 use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
 use crate::msgs::enums::{PSKKeyExchangeMode, ECPointFormat};
 use crate::msgs::codec::{Codec, Reader};
@@ -234,6 +235,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes().to_vec()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
+    exts.push(ClientExtension::Grease(GreaseExt));
 
     if sess.config.ct_logs.is_some() {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);

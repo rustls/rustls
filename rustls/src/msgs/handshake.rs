@@ -575,7 +575,20 @@ pub enum ClientExtension {
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     EarlyData,
+    Grease(GreaseExt),
     Unknown(UnknownExtension),
+}
+
+#[derive(Clone, Debug)]
+pub struct GreaseExt;
+
+impl Codec for GreaseExt {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+    }
+
+    fn read(r: &mut Reader) -> Option<Self> {
+        None
+    }
 }
 
 impl ClientExtension {
@@ -598,6 +611,7 @@ impl ClientExtension {
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
+            ClientExtension::Grease(_) => ExtensionType::Grease,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -626,6 +640,7 @@ impl Codec for ClientExtension {
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             ClientExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
+            ClientExtension::Grease(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
