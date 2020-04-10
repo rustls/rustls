@@ -302,7 +302,8 @@ mod quic {
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::verify::{ServerCertVerifier, ServerCertVerified,
-    ClientCertVerifier, ClientCertVerified, WebPKIVerifier};
+    ClientCertVerifier, ClientCertVerified, HandshakeSignatureValid,
+    WebPKIVerifier};
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::client::danger::DangerousClientConfig;

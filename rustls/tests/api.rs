@@ -571,10 +571,11 @@ fn client_auth_works() {
 }
 
 #[cfg(feature = "dangerous_configuration")]
-mod test_verifier {
+mod test_clientverifier {
     use super::*;
     use crate::common::MockClientVerifier;
     use rustls::internal::msgs::enums::AlertDescription;
+    use rustls::internal::msgs::enums::ContentType;
 
     // Client is authorized!
     fn ver_ok() -> Result<ClientCertVerified, TLSError> {
@@ -599,6 +600,7 @@ mod test_verifier {
                 verified: ver_ok,
                 subjects: Some(get_client_root_store(*kt).get_subjects()),
                 mandatory: Some(true),
+                offered_schemes: None,
             };
 
             let mut server_config = ServerConfig::new(Arc::new(client_verifier));
@@ -616,6 +618,32 @@ mod test_verifier {
         }
     }
 
+    // Server offers no verification schemes
+    #[test]
+    fn client_verifier_no_schemes() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let client_verifier = MockClientVerifier {
+                verified: ver_ok,
+                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                mandatory: Some(true),
+                offered_schemes: Some(vec![]),
+            };
+
+            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
+            server_config.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+
+            let server_config = Arc::new(server_config);
+            let client_config = make_client_config_with_auth(*kt);
+
+            for client_config in AllClientVersions::new(client_config) {
+                let (mut client, mut server) = make_pair_for_arc_configs(&Arc::new(client_config.clone()),
+                                                                     &server_config);
+                let err = do_handshake_until_error(&mut client, &mut server);
+                assert_eq!(err, Err(TLSErrorFromPeer::Client(TLSError::CorruptMessagePayload(ContentType::Handshake))));
+            }
+        }
+    }
+
     // Common case, we do not find a root store to resolve to
     #[test]
     fn client_verifier_no_root() {
@@ -624,6 +652,7 @@ mod test_verifier {
                 verified: ver_ok,
                 subjects: None,
                 mandatory: Some(true),
+                offered_schemes: None,
             };
 
             let mut server_config = ServerConfig::new(Arc::new(client_verifier));
@@ -653,6 +682,7 @@ mod test_verifier {
                 verified: ver_unreachable,
                 subjects: None,
                 mandatory: Some(true),
+                offered_schemes: None,
             };
 
             let mut server_config = ServerConfig::new(Arc::new(client_verifier));
@@ -682,6 +712,7 @@ mod test_verifier {
                 verified: ver_unreachable,
                 subjects: Some(get_client_root_store(*kt).get_subjects()),
                 mandatory: Some(true),
+                offered_schemes: None,
             };
 
             let mut server_config = ServerConfig::new(Arc::new(client_verifier));
@@ -712,6 +743,7 @@ mod test_verifier {
                 verified: ver_err,
                 subjects: Some(get_client_root_store(*kt).get_subjects()),
                 mandatory: Some(true),
+                offered_schemes: None,
             };
 
             let mut server_config = ServerConfig::new(Arc::new(client_verifier));
@@ -739,6 +771,7 @@ mod test_verifier {
                 verified: ver_ok,
                 subjects: Some(get_client_root_store(*kt).get_subjects()),
                 mandatory: None,
+                offered_schemes: None,
             };
 
             let mut server_config = ServerConfig::new(Arc::new(client_verifier));
@@ -759,7 +792,7 @@ mod test_verifier {
             }
         }
     }
-} // mod test_verifier
+} // mod test_clientverifier
 
 #[test]
 fn client_error_is_sticky() {

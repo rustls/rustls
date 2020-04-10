@@ -41,7 +41,10 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
 /// means their origins can be precisely determined by looking
 /// for their `assertion` constructors.
 pub struct HandshakeSignatureValid(());
-impl HandshakeSignatureValid { pub fn assertion() -> Self { Self { 0: () } } }
+impl HandshakeSignatureValid {
+    /// Make a `HandshakeSignatureValid`
+    pub fn assertion() -> Self { Self { 0: () } }
+}
 
 pub struct FinishedMessageVerified(());
 impl FinishedMessageVerified { pub fn assertion() -> Self { Self { 0: () } } }
@@ -265,7 +268,9 @@ impl WebPKIVerifier {
         }
     }
 
-    fn verification_schemes() -> Vec<SignatureScheme> {
+    /// Returns the signature verification methods supported by
+    /// webpki.
+    pub fn verification_schemes() -> Vec<SignatureScheme> {
         vec![
             SignatureScheme::ECDSA_NISTP384_SHA384,
             SignatureScheme::ECDSA_NISTP256_SHA256,

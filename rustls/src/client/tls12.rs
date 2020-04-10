@@ -342,9 +342,12 @@ impl hs::State for ExpectCertificateRequest {
             sess.config.client_auth_cert_resolver.resolve(&canames, &certreq.sigschemes);
 
         if let Some(mut certkey) = maybe_certkey {
-            debug!("Attempting client auth");
             let maybe_signer = certkey.key.choose_scheme(&certreq.sigschemes);
-            client_auth.cert = Some(certkey.take_cert());
+
+            if let Some(_) = &maybe_signer {
+                debug!("Attempting client auth");
+                client_auth.cert = Some(certkey.take_cert());
+            }
             client_auth.signer = maybe_signer;
         } else {
             debug!("Client auth requested but no cert/sigscheme available");

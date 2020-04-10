@@ -1798,11 +1798,16 @@ impl Codec for CertificateRequestPayload {
         let sigschemes = SupportedSignatureSchemes::read(r)?;
         let canames = DistinguishedNames::read(r)?;
 
-        Some(CertificateRequestPayload {
-            certtypes,
-            sigschemes,
-            canames,
-        })
+        if sigschemes.is_empty() {
+            warn!("meaningless CertificateRequest message");
+            None
+        } else {
+            Some(CertificateRequestPayload {
+                certtypes,
+                sigschemes,
+                canames,
+            })
+        }
     }
 }
 

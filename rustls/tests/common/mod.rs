@@ -18,7 +18,13 @@ use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
 
 #[cfg(feature = "dangerous_configuration")]
-use rustls::{ClientCertVerified, ClientCertVerifier, DistinguishedNames};
+use rustls::{
+    ClientCertVerified,
+    ClientCertVerifier,
+    DistinguishedNames,
+    SignatureScheme,
+    WebPKIVerifier
+};
 
 use webpki;
 
@@ -304,6 +310,7 @@ pub struct MockClientVerifier {
     pub verified: fn() -> Result<ClientCertVerified, TLSError>,
     pub subjects: Option<DistinguishedNames>,
     pub mandatory: Option<bool>,
+    pub offered_schemes: Option<Vec<SignatureScheme>>,
 }
 
 #[cfg(feature = "dangerous_configuration")]
@@ -323,6 +330,14 @@ impl ClientCertVerifier for MockClientVerifier {
     fn verify_client_cert(&self, _presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
         assert!(sni.is_some());
         (self.verified)()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        if let Some(schemes) = &self.offered_schemes {
+            schemes.clone()
+        } else {
+            WebPKIVerifier::verification_schemes()
+        }
     }
 }
 
