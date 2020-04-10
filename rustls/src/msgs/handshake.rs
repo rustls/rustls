@@ -8,6 +8,7 @@ use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
+use crate::rand;
 use crate::key;
 
 #[cfg(feature = "logging")]
@@ -580,10 +581,23 @@ pub enum ClientExtension {
 }
 
 #[derive(Clone, Debug)]
-pub struct GreaseExt;
+pub struct GreaseExt {
+    inner: [u8; 4],
+}
+
+impl GreaseExt {
+    pub fn new() -> Self {
+        let mut arr = [0u8; 4];
+        rand::fill_random(&mut arr);
+        GreaseExt {
+            inner: arr,
+        }
+    }
+}
 
 impl Codec for GreaseExt {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.inner);
     }
 
     fn read(r: &mut Reader) -> Option<Self> {

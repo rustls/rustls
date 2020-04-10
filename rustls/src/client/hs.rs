@@ -235,7 +235,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::SignatureAlgorithms(verify::supported_verify_schemes().to_vec()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
-    exts.push(ClientExtension::Grease(GreaseExt));
+    exts.push(ClientExtension::Grease(GreaseExt::new()));
 
     if sess.config.ct_logs.is_some() {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
