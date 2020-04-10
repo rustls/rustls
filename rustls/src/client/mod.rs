@@ -136,6 +136,12 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    /// Whether to send TLS GREASE extensions in the TLS handshake
+    /// (RFC 8701).
+    ///
+    /// The default is false.
+    pub enable_tls_grease: bool,
 }
 
 impl Default for ClientConfig {
@@ -163,6 +169,7 @@ impl ClientConfig {
             verifier: Arc::new(verify::WebPKIVerifier::new()),
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
+            enable_tls_grease: false,
         }
     }
 
