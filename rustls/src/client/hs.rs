@@ -86,7 +86,8 @@ pub fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TLSError {
 
 pub fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TLSError> {
     if !sess.common.handshake_joiner.is_empty() {
-        Err(illegal_param(sess, "keys changed with pending hs fragment"))
+        sess.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+        Err(TLSError::PeerMisbehavedError("key epoch or handshake flight with pending fragment".to_string()))
     } else {
         Ok(())
     }
@@ -647,6 +648,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let hrr = extract_handshake!(m, HandshakePayload::HelloRetryRequest).unwrap();
         trace!("Got HRR {:?}", hrr);
+
+        check_aligned_handshake(sess)?;
 
         let has_cookie = hrr.get_cookie().is_some();
         let req_group = hrr.get_requested_key_share_group();

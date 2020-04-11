@@ -12,7 +12,7 @@ use crate::session::SessionSecrets;
 use crate::server::ServerSessionImpl;
 use crate::verify;
 #[cfg(feature = "logging")]
-use crate::log::{warn, trace, debug};
+use crate::log::{trace, debug};
 use crate::error::TLSError;
 use crate::handshake::{check_handshake_message, check_message};
 
@@ -228,13 +228,7 @@ impl hs::State for ExpectCCS {
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, _m: Message) -> hs::NextStateOrError {
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        if !sess.common.handshake_joiner.is_empty() {
-            warn!("CCS received interleaved with fragmented handshake");
-            return Err(TLSError::InappropriateMessage {
-                expect_types: vec![ ContentType::Handshake ],
-                got_type: ContentType::ChangeCipherSpec,
-            });
-        }
+        hs::check_aligned_handshake(sess)?;
 
         sess.common
             .record_layer
@@ -347,6 +341,8 @@ impl hs::State for ExpectFinished {
 
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
+
+        hs::check_aligned_handshake(sess)?;
 
         let vh = self.handshake.transcript.get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);

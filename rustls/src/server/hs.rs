@@ -124,7 +124,8 @@ fn same_dns_name_or_both_none(a: Option<&webpki::DNSName>,
 // which is illegal.  Not mentioned in RFC.
 pub fn check_aligned_handshake(sess: &mut ServerSessionImpl) -> Result<(), TLSError> {
     if !sess.common.handshake_joiner.is_empty() {
-        Err(illegal_param(sess, "keys changed with pending hs fragment"))
+        sess.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+        Err(TLSError::PeerMisbehavedError("key epoch or handshake flight with pending fragment".to_string()))
     } else {
         Ok(())
     }
@@ -576,6 +577,9 @@ impl State for ExpectClientHello {
         if client_hello.has_duplicate_extension() {
             return Err(decode_error(sess, "client sent duplicate extensions"));
         }
+
+        // No handshake messages should follow this one in this flight.
+        check_aligned_handshake(sess)?;
 
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.get_versions_extension();

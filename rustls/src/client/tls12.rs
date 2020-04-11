@@ -449,6 +449,8 @@ impl hs::State for ExpectServerDone {
         let mut st = *self;
         st.handshake.transcript.add_message(&m);
 
+        hs::check_aligned_handshake(sess)?;
+
         debug!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.handshake.dns_name);
 
@@ -604,13 +606,7 @@ impl hs::State for ExpectCCS {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, _m: Message) -> hs::NextStateOrError {
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        if !sess.common.handshake_joiner.is_empty() {
-            warn!("CCS received interleaved with fragmented handshake");
-            return Err(TLSError::InappropriateMessage {
-                expect_types: vec![ ContentType::Handshake ],
-                got_type: ContentType::ChangeCipherSpec,
-            });
-        }
+        hs::check_aligned_handshake(sess)?;
 
         // nb. msgs layer validates trivial contents of CCS
         sess.common
@@ -728,6 +724,8 @@ impl hs::State for ExpectFinished {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
+
+        hs::check_aligned_handshake(sess)?;
 
         // Work out what verify_data we expect.
         let vh = st.handshake.transcript.get_current_hash();
