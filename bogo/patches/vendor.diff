@@ -1,0 +1,38 @@
+diff -u bogo-orig/chacha20_poly1305.go bogo/chacha20_poly1305.go
+--- bogo-orig/chacha20_poly1305.go	2020-04-11 11:09:43.000000000 +0100
++++ bogo/chacha20_poly1305.go	2020-04-11 11:10:59.526200057 +0100
+@@ -20,7 +20,7 @@
+ 	"encoding/binary"
+ 	"errors"
+ 
+-	"boringssl.googlesource.com/boringssl/ssl/test/runner/poly1305"
++	"./poly1305"
+ )
+ 
+ // See RFC 7539.
+diff -u bogo-orig/key_agreement.go bogo/key_agreement.go
+--- bogo-orig/key_agreement.go	2020-04-11 11:09:43.000000000 +0100
++++ bogo/key_agreement.go	2020-04-11 11:10:38.096679513 +0100
+@@ -17,8 +17,8 @@
+ 	"io"
+ 	"math/big"
+ 
+-	"boringssl.googlesource.com/boringssl/ssl/test/runner/curve25519"
+-	"boringssl.googlesource.com/boringssl/ssl/test/runner/hrss"
++	"./curve25519"
++	"./hrss"
+ )
+ 
+ type keyType int
+diff -u bogo-orig/runner.go bogo/runner.go
+--- bogo-orig/runner.go	2020-04-11 11:09:43.000000000 +0100
++++ bogo/runner.go	2020-04-11 11:11:50.662973209 +0100
+@@ -46,7 +46,7 @@
+ 	"syscall"
+ 	"time"
+ 
+-	"boringssl.googlesource.com/boringssl/util/testresult"
++	"./testresult"
+ )
+ 
+ var (
