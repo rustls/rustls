@@ -21,6 +21,12 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history:
 
+* Next release:
+  - Allow custom certificate validation implementations to also
+    handle handshake signature computation.  This allows uses in non-web
+    contexts, where `webpki` is not likely to process the certificates
+    in use.  Thanks to @DemiMarie-parity.
+  - Performance improvements.  Thanks to @nviennot.
 * 0.17.0 (2020-02-22):
   - *Breaking API change*: ALPN protocols offered by the client are passed
     to the server certificate resolution trait (`ResolvesServerCert`).
