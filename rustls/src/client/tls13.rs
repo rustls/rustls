@@ -177,13 +177,17 @@ pub fn start_handshake_traffic(sess: &mut ClientSessionImpl,
         if let Some(ref resuming) = handshake.resuming_session {
             let resume_from_suite = sess.find_cipher_suite(resuming.cipher_suite).unwrap();
             if !resume_from_suite.can_resume_to(suite) {
-                return Err(TLSError::PeerMisbehavedError("server resuming incompatible suite"
-                    .to_string()));
+                return Err(hs::illegal_param(sess, "server resuming incompatible suite"));
+            }
+
+            // If the server varies the suite here, we will have encrypted early data with
+            // the wrong suite.
+            if sess.early_data.is_enabled() && resume_from_suite != suite {
+                return Err(hs::illegal_param(sess, "server varied suite with early data"));
             }
 
             if selected_psk != 0 {
-                return Err(TLSError::PeerMisbehavedError("server selected invalid psk"
-                    .to_string()));
+                return Err(hs::illegal_param(sess, "server selected invalid psk"));
             }
 
             debug!("Resuming using PSK");
