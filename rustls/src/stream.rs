@@ -1,4 +1,4 @@
-use std::io::{Read, Write, Result};
+use std::io::{IoSlice, Read, Write, Result};
 use crate::session::Session;
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
@@ -59,6 +59,19 @@ impl<'a, S, T> Write for Stream<'a, S, T> where S: 'a + Session, T: 'a + Read + 
         self.complete_prior_io()?;
 
         let len = self.sess.write(buf)?;
+
+        // Try to write the underlying transport here, but don't let
+        // any errors mask the fact we've consumed `len` bytes.
+        // Callers will learn of permanent errors on the next call.
+        let _ = self.sess.complete_io(self.sock);
+
+        Ok(len)
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
+        self.complete_prior_io()?;
+
+        let len = self.sess.write_vectored(bufs)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.

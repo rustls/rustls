@@ -17,7 +17,7 @@ use crate::log::trace;
 use webpki;
 
 use std::sync::Arc;
-use std::io;
+use std::io::{self, IoSlice};
 use std::fmt;
 
 #[macro_use]
@@ -650,6 +650,14 @@ impl io::Write for ServerSession {
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.imp.send_some_plaintext(buf)
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        let mut sz = 0;
+        for buf in bufs {
+            sz += self.imp.send_some_plaintext(buf)?;
+        }
+        Ok(sz)
     }
 
     fn flush(&mut self) -> io::Result<()> {
