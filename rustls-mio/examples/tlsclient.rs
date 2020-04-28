@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::process;
 
 use mio;
-use mio::tcp::TcpStream;
+use mio::net::TcpStream;
 
 use std::net::SocketAddr;
 use std::str;
@@ -40,16 +40,14 @@ struct TlsClient {
 }
 
 impl TlsClient {
-    fn ready(&mut self,
-             poll: &mut mio::Poll,
-             ev: &mio::Event) {
+    fn ready(&mut self, ev: &mio::event::Event) {
         assert_eq!(ev.token(), CLIENT);
 
-        if ev.readiness().is_readable() {
+        if ev.is_readable() {
             self.do_read();
         }
 
-        if ev.readiness().is_writable() {
+        if ev.is_writable() {
             self.do_write();
         }
 
@@ -57,8 +55,6 @@ impl TlsClient {
             println!("Connection closed");
             process::exit(if self.clean_closure { 0 } else { 1 });
         }
-
-        self.reregister(poll);
     }
 }
 
@@ -161,34 +157,24 @@ impl TlsClient {
         self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket)).unwrap();
     }
 
-    fn register(&self, poll: &mut mio::Poll) {
-        poll.register(&self.socket,
-                      CLIENT,
-                      self.ready_interest(),
-                      mio::PollOpt::level() | mio::PollOpt::oneshot())
-            .unwrap();
-    }
-
-    fn reregister(&self, poll: &mut mio::Poll) {
-        poll.reregister(&self.socket,
-                        CLIENT,
-                        self.ready_interest(),
-                        mio::PollOpt::level() | mio::PollOpt::oneshot())
-            .unwrap();
+    fn register(&mut self, poll: &mut mio::Poll) {
+        let registry = poll.registry();
+        let interest = self.ready_interest();
+        registry.register(&mut self.socket, CLIENT, interest).unwrap();
     }
 
     // Use wants_read/wants_write to register for different mio-level
     // IO readiness events.
-    fn ready_interest(&self) -> mio::Ready {
+    fn ready_interest(&self) -> mio::Interest {
         let rd = self.tls_session.wants_read();
         let wr = self.tls_session.wants_write();
 
         if rd && wr {
-            mio::Ready::readable() | mio::Ready::writable()
+            mio::Interest::READABLE | mio::Interest::WRITABLE
         } else if wr {
-            mio::Ready::writable()
+            mio::Interest::WRITABLE
         } else {
-            mio::Ready::readable()
+            mio::Interest::READABLE
         }
     }
 
@@ -539,7 +525,7 @@ fn main() {
 
     let config = make_config(&args);
 
-    let sock = TcpStream::connect(&addr).unwrap();
+    let sock = TcpStream::connect(addr).unwrap();
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(&args.arg_hostname).unwrap();
     let mut tlsclient = TlsClient::new(sock, dns_name, config);
 
@@ -563,7 +549,7 @@ fn main() {
             .unwrap();
 
         for ev in events.iter() {
-            tlsclient.ready(&mut poll, &ev);
+            tlsclient.ready(&ev);
         }
     }
 }
