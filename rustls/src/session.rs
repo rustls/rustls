@@ -742,6 +742,8 @@ pub(crate) struct Quic {
     pub early_secret: Option<ring::hkdf::Prk>,
     pub hs_secrets: Option<quic::Secrets>,
     pub traffic_secrets: Option<quic::Secrets>,
+    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
+    pub returned_traffic_keys: bool,
 }
 
 #[cfg(feature = "quic")]
@@ -754,6 +756,7 @@ impl Quic {
             early_secret: None,
             hs_secrets: None,
             traffic_secrets: None,
+            returned_traffic_keys: false,
         }
     }
 }
