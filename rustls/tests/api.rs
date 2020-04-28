@@ -22,8 +22,6 @@ use rustls::KeyLog;
 use rustls::ClientHello;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, QuicExt, ClientQuicExt, ServerQuicExt};
-#[cfg(feature = "quic")]
-use ring::hkdf;
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::ClientCertVerified;
@@ -2015,7 +2013,7 @@ mod test_quic {
     use super::*;
 
     // Returns the sender's next secrets to use, or the receiver's error.
-    fn step(send: &mut dyn Session, recv: &mut dyn Session) -> Result<Option<quic::Secrets>, TLSError> {
+    fn step(send: &mut dyn Session, recv: &mut dyn Session) -> Result<Option<quic::Keys>, TLSError> {
         let mut buf = Vec::new();
         let secrets = loop {
             let prev = buf.len();
@@ -2036,18 +2034,13 @@ mod test_quic {
 
 #[test]
     fn test_quic_handshake() {
-        fn equal_prk(x: &ring::hkdf::Prk, y: &ring::hkdf::Prk) -> bool {
-            let mut x_data = [0; 16];
-            let mut y_data = [0; 16];
-            let x_okm = x.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
-            x_okm.fill(&mut x_data[..]).unwrap();
-            let y_okm = y.expand(&[b"info"], &ring::aead::quic::AES_128).unwrap();
-            y_okm.fill(&mut y_data[..]).unwrap();
-            x_data == y_data
+        fn equal_dir_keys(x: &quic::DirectionalKeys, y: &quic::DirectionalKeys) -> bool {
+            // Check that these two sets of keys are equal. The quic module's unit tests validate
+            // that the IV and the keys are consistent, so we can just check the IV here.
+            x.packet.iv.nonce_for(42).as_ref() == y.packet.iv.nonce_for(42).as_ref()
         }
-
-        fn equal_secrets(x: &quic::Secrets, y: &quic::Secrets) -> bool {
-            equal_prk(&x.client, &y.client) && equal_prk(&x.server, &y.server)
+        fn compatible_keys(x: &quic::Keys, y: &quic::Keys) -> bool {
+            equal_dir_keys(&x.local, &y.remote) && equal_dir_keys(&x.remote, &y.local)
         }
 
         let kt = KeyType::RSA;
@@ -2069,12 +2062,12 @@ mod test_quic {
         let mut server = ServerSession::new_quic(&server_config, server_params.into());
         let client_initial = step(&mut client, &mut server).unwrap();
         assert!(client_initial.is_none());
-        assert!(client.get_early_secret().is_none());
+        assert!(client.get_0rtt_keys().is_none());
         assert_eq!(server.get_quic_transport_parameters(), Some(client_params));
         let server_hs = step(&mut server, &mut client).unwrap().unwrap();
-        assert!(server.get_early_secret().is_none());
+        assert!(server.get_0rtt_keys().is_none());
         let client_hs = step(&mut client, &mut server).unwrap().unwrap();
-        assert!(equal_secrets(&server_hs, &client_hs));
+        assert!(compatible_keys(&server_hs, &client_hs));
         assert!(client.is_handshaking());
         let server_1rtt = step(&mut server, &mut client).unwrap().unwrap();
         assert!(!client.is_handshaking());
@@ -2082,44 +2075,10 @@ mod test_quic {
         assert!(server.is_handshaking());
         let client_1rtt = step(&mut client, &mut server).unwrap().unwrap();
         assert!(!server.is_handshaking());
-        assert!(equal_secrets(&server_1rtt, &client_1rtt));
-        assert!(!equal_secrets(&server_hs, &server_1rtt));
+        assert!(compatible_keys(&server_1rtt, &client_1rtt));
+        assert!(!compatible_keys(&server_hs, &server_1rtt));
         assert!(step(&mut client, &mut server).unwrap().is_none());
         assert!(step(&mut server, &mut client).unwrap().is_none());
-
-        // key update
-        let initial = quic::Secrets {
-            // Constant dummy values for reproducibility
-            client: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-                0xb8, 0x76, 0x77, 0x08, 0xf8, 0x77, 0x23, 0x58, 0xa6, 0xea, 0x9f, 0xc4, 0x3e, 0x4a,
-                0xdd, 0x2c, 0x96, 0x1b, 0x3f, 0x52, 0x87, 0xa6, 0xd1, 0x46, 0x7e, 0xe0, 0xae, 0xab,
-                0x33, 0x72, 0x4d, 0xbf,
-            ]),
-            server: hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-                0x42, 0xdc, 0x97, 0x21, 0x40, 0xe0, 0xf2, 0xe3, 0x98, 0x45, 0xb7, 0x67, 0x61, 0x34,
-                0x39, 0xdc, 0x67, 0x58, 0xca, 0x43, 0x25, 0x9b, 0x87, 0x85, 0x06, 0x82, 0x4e, 0xb1,
-                0xe4, 0x38, 0xd8, 0x55,
-            ]),
-        };
-        let updated = client.update_secrets(&initial.client, &initial.server);
-        // The expected values will need to be updated if the negotiated hash function changes. Pull the
-        // values from ring's `hmac::Key::construct` with a debugger.
-        assert!(equal_prk(
-            &updated.client,
-            &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-                0x42, 0xca, 0xc8, 0xc9, 0x1c, 0xd5, 0xeb, 0x40, 0x68, 0x2e, 0x43, 
-                0x2e, 0xdf, 0x2d, 0x2b, 0xe9, 0xf4, 0x1a, 0x52, 0xca, 0x6b, 0x22, 0xd8, 0xe6, 0xcd, 0xb1, 
-                0xe8, 0xac, 0xa9, 0x6, 0x1f, 0xce
-            ]))
-        );
-        assert!(equal_prk(
-            &updated.server,
-            &hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, &[
-                0xeb, 0x7f, 0x5e, 0x2a, 0x12, 0x3f, 0x40, 0x7d, 0xb4, 0x99, 0xe3, 
-                0x61, 0xca, 0xe5, 0x90, 0xd4, 0xd9, 0x92, 0xe1, 0x4b, 0x7a, 0xce, 0x3, 0xc2, 0x44, 0xe0, 
-                0x42, 0x21, 0x15, 0xb6, 0xd3, 0x8a
-            ]))
-        );
 
         // 0-RTT handshake
         let mut client =
@@ -2129,9 +2088,9 @@ mod test_quic {
         step(&mut client, &mut server).unwrap();
         assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
         {
-            let client_early = client.get_early_secret().unwrap();
-            let server_early = server.get_early_secret().unwrap();
-            assert!(equal_prk(client_early, server_early));
+            let client_early = client.get_0rtt_keys().unwrap();
+            let server_early = server.get_0rtt_keys().unwrap();
+            assert!(equal_dir_keys(&client_early, &server_early));
         }
         step(&mut server, &mut client).unwrap().unwrap();
         step(&mut client, &mut server).unwrap().unwrap();
@@ -2142,13 +2101,16 @@ mod test_quic {
         {
             let mut client_config = (*client_config).clone();
             client_config.alpn_protocols = vec!["foo".into()];
-            let mut client =
-                ClientSession::new_quic(&Arc::new(client_config), dns_name("localhost"), client_params.into());
+            let mut client = ClientSession::new_quic(
+                &Arc::new(client_config),
+                dns_name("localhost"),
+                client_params.into(),
+            );
             let mut server = ServerSession::new_quic(&server_config, server_params.into());
             step(&mut client, &mut server).unwrap();
             assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
-            assert!(client.get_early_secret().is_some());
-            assert!(server.get_early_secret().is_none());
+            assert!(client.get_0rtt_keys().is_some());
+            assert!(server.get_0rtt_keys().is_none());
             step(&mut server, &mut client).unwrap().unwrap();
             step(&mut client, &mut server).unwrap().unwrap();
             step(&mut server, &mut client).unwrap().unwrap();
@@ -2164,7 +2126,7 @@ mod test_quic {
         let mut server = ServerSession::new_quic(&server_config, server_params.into());
         step(&mut client, &mut server).unwrap();
         step(&mut server, &mut client).unwrap().unwrap();
-        step(&mut server, &mut client).unwrap_err();
+        assert!(step(&mut server, &mut client).is_err());
         assert_eq!(
             client.get_alert(),
             Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
@@ -2193,7 +2155,7 @@ mod test_quic {
             let mut server = ServerSession::new_quic(&server_config,
                                                      server_params.into());
 
-            assert_eq!(step(&mut client, &mut server).unwrap_err(),
+            assert_eq!(step(&mut client, &mut server).err().unwrap(),
                        TLSError::NoApplicationProtocol);
 
             assert_eq!(server.get_alert(),
