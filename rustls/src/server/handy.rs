@@ -181,6 +181,8 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
 mod test {
     use super::*;
     use crate::StoresServerSessions;
+    use crate::server::ProducesTickets;
+    use crate::server::ResolvesServerCert;
 
     #[test]
     fn test_noserversessionstorage_drops_put() {
@@ -195,6 +197,14 @@ mod test {
         assert_eq!(c.get(&[]), None);
         assert_eq!(c.get(&[0x01]), None);
         assert_eq!(c.get(&[0x02]), None);
+    }
+
+    #[test]
+    fn test_noserversessionstorage_denies_takes() {
+        let c = NoServerSessionStorage {};
+        assert_eq!(c.take(&[]), None);
+        assert_eq!(c.take(&[0x01]), None);
+        assert_eq!(c.take(&[0x02]), None);
     }
 
     #[test]
@@ -236,5 +246,33 @@ mod test {
         if c.get(&[0x09]).is_some() { count += 1; }
 
         assert_eq!(count, 4);
+    }
+
+    #[test]
+    fn test_neverproducestickets_does_nothing() {
+        let npt = NeverProducesTickets {};
+        assert_eq!(false, npt.enabled());
+        assert_eq!(0, npt.get_lifetime());
+        assert_eq!(None, npt.encrypt(&[]));
+        assert_eq!(None, npt.decrypt(&[]));
+    }
+
+    #[test]
+    fn test_failresolvechain_does_nothing() {
+        let frc = FailResolveChain {};
+        assert!(frc.resolve(ClientHello::new(None, &[], None)).is_none());
+    }
+
+    #[test]
+    fn test_resolvesservercertusingsni_requires_sni() {
+        let rscsni = ResolvesServerCertUsingSNI::new();
+        assert!(rscsni.resolve(ClientHello::new(None, &[], None)).is_none());
+    }
+
+    #[test]
+    fn test_resolvesservercertusingsni_handles_unknown_name() {
+        let rscsni = ResolvesServerCertUsingSNI::new();
+        let name = webpki::DNSNameRef::try_from_ascii_str("hello.com").unwrap();
+        assert!(rscsni.resolve(ClientHello::new(Some(name), &[], None)).is_none());
     }
 }

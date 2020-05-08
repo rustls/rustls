@@ -145,31 +145,16 @@ mod tests {
 
     #[test]
     fn stream_can_be_created_for_session_and_tcpstream() {
-        fn _foo<'a>(sess: &'a mut dyn Session, sock: &'a mut TcpStream) -> Stream<'a, dyn Session, TcpStream> {
-            Stream {
-                sess,
-                sock,
-            }
-        }
+        type _Test<'a> = Stream<'a, dyn Session, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        fn _foo(sess: ClientSession, sock: TcpStream) -> StreamOwned<ClientSession, TcpStream> {
-            StreamOwned {
-                sess,
-                sock,
-            }
-        }
+        type _Test = StreamOwned<ClientSession, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        fn _foo(sess: ServerSession, sock: TcpStream) -> StreamOwned<ServerSession, TcpStream> {
-            StreamOwned {
-                sess,
-                sock,
-            }
-        }
+        type _Test = StreamOwned<ServerSession, TcpStream>;
     }
 }
