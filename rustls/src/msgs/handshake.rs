@@ -301,7 +301,7 @@ impl Codec for ServerName {
 
         let payload = match typ {
             ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
-            _ => ServerNamePayload::Unknown(Payload::read(r)?),
+            _ => ServerNamePayload::Unknown(Payload::read(r).unwrap()),
         };
 
         Some(ServerName {
@@ -654,7 +654,8 @@ impl Codec for ClientExtension {
             }
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
-                    ClientExtension::SessionTicketOffer(Payload::read(&mut sub)?)
+                    let contents = Payload::read(&mut sub).unwrap();
+                    ClientExtension::SessionTicketOffer(contents)
                 } else {
                     ClientExtension::SessionTicketRequest
                 }
@@ -2224,7 +2225,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::ServerHelloDone
             }
             HandshakeType::ClientKeyExchange => {
-                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub)?)
+                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub).unwrap())
             }
             HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
                 let p = CertificateRequestPayloadTLS13::read(&mut sub)?;
@@ -2252,7 +2253,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
             }
             HandshakeType::Finished => {
-                HandshakePayload::Finished(Payload::read(&mut sub)?)
+                HandshakePayload::Finished(Payload::read(&mut sub).unwrap())
             }
             HandshakeType::CertificateStatus => {
                 HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
@@ -2265,7 +2266,7 @@ impl HandshakeMessagePayload {
                 // not legal on wire
                 return None;
             }
-            _ => HandshakePayload::Unknown(Payload::read(&mut sub)?),
+            _ => HandshakePayload::Unknown(Payload::read(&mut sub).unwrap()),
         };
 
         if sub.any_left() {
