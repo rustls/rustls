@@ -67,8 +67,7 @@ struct KeyLogFileInner {
 }
 
 impl KeyLogFileInner {
-    fn new() -> Self {
-        let var = env::var("SSLKEYLOGFILE");
+    fn new(var: Result<String, env::VarError>) -> Self {
         let path = match var {
             Ok(ref s) => Path::new(s),
             Err(env::VarError::NotUnicode(ref s)) => Path::new(s),
@@ -87,7 +86,7 @@ impl KeyLogFileInner {
             .open(path) {
             Ok(f) => Some(f),
             Err(e) => {
-                warn!("unable to create key log file '{:?}': {}", path, e);
+                warn!("unable to create key log file {:?}: {}", path, e);
                 None
             }
         };
@@ -132,7 +131,8 @@ impl KeyLogFile {
     /// Makes a new `KeyLogFile`.  The environment variable is
     /// inspected and the named file is opened during this call.
     pub fn new() -> Self {
-        KeyLogFile(Mutex::new(KeyLogFileInner::new()))
+        let var = env::var("SSLKEYLOGFILE");
+        KeyLogFile(Mutex::new(KeyLogFileInner::new(var)))
     }
 }
 
@@ -150,3 +150,39 @@ impl KeyLog for KeyLogFile {
     }
 }
 
+#[cfg(all(test, target_os="linux"))]
+mod test {
+    use super::*;
+
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn test_env_var_is_not_unicode() {
+        init();
+        let mut inner = KeyLogFileInner::new(Err(env::VarError::NotUnicode("/tmp/keylogfileinnertest".into())));
+        assert!(inner.try_write("label", b"random", b"secret").is_ok());
+    }
+
+    #[test]
+    fn test_env_var_is_not_set() {
+        init();
+        let mut inner = KeyLogFileInner::new(Err(env::VarError::NotPresent));
+        assert!(inner.try_write("label", b"random", b"secret").is_ok());
+    }
+
+    #[test]
+    fn test_env_var_cannot_be_opened() {
+        init();
+        let mut inner = KeyLogFileInner::new(Ok("/dev/does-not-exist".into()));
+        assert!(inner.try_write("label", b"random", b"secret").is_ok());
+    }
+
+    #[test]
+    fn test_env_var_cannot_be_written() {
+        init();
+        let mut inner = KeyLogFileInner::new(Ok("/dev/full".into()));
+        assert!(inner.try_write("label", b"random", b"secret").is_err());
+    }
+}
