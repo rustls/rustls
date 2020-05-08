@@ -1,7 +1,7 @@
 use super::handshake::*;
 use super::enums::*;
 use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
-use super::codec::{Reader, Codec};
+use super::codec::{Reader, Codec, put_u16};
 use webpki::DNSNameRef;
 use crate::key::Certificate;
 
@@ -409,6 +409,38 @@ fn client_has_duplicate_extensions_works() {
     assert!(!chp.has_duplicate_extension());
 }
 
+#[test]
+fn test_truncated_client_extension_is_detected() {
+    let chp = get_sample_clienthellopayload();
+
+    for ext in &chp.extensions {
+        let mut enc = ext.get_encoding();
+        println!("testing {:?} enc {:?}", ext, enc);
+
+        // "outer" truncation, ie, where the extension-level length is longer than
+        // the input
+        for l in 0..enc.len() {
+            assert!(ClientExtension::read_bytes(&enc[..l]).is_none());
+        }
+
+        // these extension types don't have any internal encoding that rustls validates:
+        match ext.get_type() {
+            ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
+                continue;
+            }
+            _ => {}
+        };
+
+        // "inner" truncation, where the extension-level length agrees with the input
+        // length, but isn't long enough for the type of extension
+        for l in 0..(enc.len()-4) {
+            put_u16(l as u16, &mut enc[2..]);
+            println!("  encoding {:?} len {:?}", enc, l);
+            assert!(ClientExtension::read_bytes(&enc).is_none());
+        }
+    }
+}
+
 fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
     let mut chp = get_sample_clienthellopayload();
     let ext = chp.find_extension(typ).unwrap().clone();
@@ -488,6 +520,38 @@ fn client_get_psk_modes() {
                                  |chp| chp.get_psk_modes().is_some());
 }
 
+#[test]
+fn test_truncated_helloretry_extension_is_detected() {
+    let hrr = get_sample_helloretryrequest();
+
+    for ext in &hrr.extensions {
+        let mut enc = ext.get_encoding();
+        println!("testing {:?} enc {:?}", ext, enc);
+
+        // "outer" truncation, ie, where the extension-level length is longer than
+        // the input
+        for l in 0..enc.len() {
+            assert!(HelloRetryExtension::read_bytes(&enc[..l]).is_none());
+        }
+
+        // these extension types don't have any internal encoding that rustls validates:
+        match ext.get_type() {
+            ExtensionType::Unknown(_) => {
+                continue;
+            }
+            _ => {}
+        };
+
+        // "inner" truncation, where the extension-level length agrees with the input
+        // length, but isn't long enough for the type of extension
+        for l in 0..(enc.len()-4) {
+            put_u16(l as u16, &mut enc[2..]);
+            println!("  encoding {:?} len {:?}", enc, l);
+            assert!(HelloRetryExtension::read_bytes(&enc).is_none());
+        }
+    }
+}
+
 fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
     let mut hrr = get_sample_helloretryrequest();
     let mut exts = mem::replace(&mut hrr.extensions, vec![]);
@@ -523,6 +587,38 @@ fn helloretry_get_cookie() {
 fn helloretry_get_supported_versions() {
     test_helloretry_extension_getter(ExtensionType::SupportedVersions,
                                      |hrr| hrr.get_supported_versions().is_some());
+}
+
+#[test]
+fn test_truncated_server_extension_is_detected() {
+    let shp = get_sample_serverhellopayload();
+
+    for ext in &shp.extensions {
+        let mut enc = ext.get_encoding();
+        println!("testing {:?} enc {:?}", ext, enc);
+
+        // "outer" truncation, ie, where the extension-level length is longer than
+        // the input
+        for l in 0..enc.len() {
+            assert!(ServerExtension::read_bytes(&enc[..l]).is_none());
+        }
+
+        // these extension types don't have any internal encoding that rustls validates:
+        match ext.get_type() {
+            ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
+                continue;
+            }
+            _ => {}
+        };
+
+        // "inner" truncation, where the extension-level length agrees with the input
+        // length, but isn't long enough for the type of extension
+        for l in 0..(enc.len()-4) {
+            put_u16(l as u16, &mut enc[2..]);
+            println!("  encoding {:?} len {:?}", enc, l);
+            assert!(ServerExtension::read_bytes(&enc).is_none());
+        }
+    }
 }
 
 fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPayload) -> bool) {

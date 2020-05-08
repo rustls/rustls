@@ -4,7 +4,7 @@ import os
 import glob
 import subprocess
 
-LLVM_PATH = glob.glob('/usr/lib/llvm-3.8/lib/clang/3.8.[0-9]/lib/linux/')[0]
+LLVM_PATH = glob.glob('/usr/lib/llvm-3.*/lib/clang/3.*.[0-9]/lib/linux/')[0]
 COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Cpasses=insert-gcov-profiling -Cpanic=abort -Zpanic-abort-tests -L%s -lclang_rt.profile-x86_64' % LLVM_PATH
 LCOVOPTS = '--gcov-tool ./admin/llvm-gcov --rc lcov_excl_line=assert'.split()
 
