@@ -23,12 +23,6 @@ impl Payload {
     pub fn empty() -> Payload {
         Payload::new(Vec::new())
     }
-
-    pub fn from_slice(data: &[u8]) -> Payload {
-        let mut v = Vec::with_capacity(data.len());
-        v.extend_from_slice(data);
-        Payload(v)
-    }
 }
 
 impl Codec for key::Certificate {
@@ -52,10 +46,6 @@ pub struct PayloadU24(pub Vec<u8>);
 impl PayloadU24 {
     pub fn new(bytes: Vec<u8>) -> PayloadU24 {
         PayloadU24(bytes)
-    }
-
-    pub fn empty() -> PayloadU24 {
-        PayloadU24::new(Vec::new())
     }
 }
 
