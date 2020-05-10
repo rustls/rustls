@@ -157,10 +157,14 @@ impl TlsClient {
         self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket)).unwrap();
     }
 
-    fn register(&mut self, poll: &mut mio::Poll) {
-        let registry = poll.registry();
+    fn register(&mut self, registry: &mio::Registry) {
         let interest = self.ready_interest();
         registry.register(&mut self.socket, CLIENT, interest).unwrap();
+    }
+
+    fn reregister(&mut self, registry: &mio::Registry) {
+        let interest = self.ready_interest();
+        registry.reregister(&mut self.socket, CLIENT, interest).unwrap();
     }
 
     // Use wants_read/wants_write to register for different mio-level
@@ -542,7 +546,7 @@ fn main() {
     let mut poll = mio::Poll::new()
         .unwrap();
     let mut events = mio::Events::with_capacity(32);
-    tlsclient.register(&mut poll);
+    tlsclient.register(poll.registry());
 
     loop {
         poll.poll(&mut events, None)
@@ -550,6 +554,7 @@ fn main() {
 
         for ev in events.iter() {
             tlsclient.ready(&ev);
+            tlsclient.reregister(poll.registry());
         }
     }
 }

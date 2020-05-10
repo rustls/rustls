@@ -64,7 +64,7 @@ impl TlsServer {
         }
     }
 
-    fn accept(&mut self, poll: &mut mio::Poll) -> bool {
+    fn accept(&mut self, registry: &mio::Registry) -> bool {
         match self.server.accept() {
             Ok((socket, addr)) => {
                 debug!("Accepting new connection from {:?}", addr);
@@ -76,7 +76,7 @@ impl TlsServer {
                 self.next_id += 1;
 
                 let mut connection = Connection::new(socket, token, mode, tls_session);
-                connection.register(poll);
+                connection.register(registry);
                 self.connections.insert(token, connection);
                 true
             }
@@ -87,14 +87,14 @@ impl TlsServer {
         }
     }
 
-    fn conn_event(&mut self, poll: &mut mio::Poll, event: &mio::event::Event) {
+    fn conn_event(&mut self, registry: &mio::Registry, event: &mio::event::Event) {
         let token = event.token();
 
         if self.connections.contains_key(&token) {
             self.connections
                 .get_mut(&token)
                 .unwrap()
-                .ready(poll, event);
+                .ready(registry, event);
 
             if self.connections[&token].is_closed() {
                 self.connections.remove(&token);
@@ -166,7 +166,7 @@ impl Connection {
     }
 
     /// We're a connection, and we have something to do.
-    fn ready(&mut self, poll: &mut mio::Poll, ev: &mio::event::Event) {
+    fn ready(&mut self, registry: &mio::Registry, ev: &mio::event::Event) {
         // If we're readable: read some TLS.  Then
         // see if that yielded new plaintext.  Then
         // see if the backend is readable too.
@@ -184,7 +184,9 @@ impl Connection {
             let _ = self.socket.shutdown(net::Shutdown::Both);
             self.close_back();
             self.closed = true;
-            self.deregister(poll);
+            self.deregister(registry);
+        } else {
+            self.reregister(registry);
         }
     }
 
@@ -326,8 +328,7 @@ impl Connection {
         }
     }
 
-    fn register(&mut self, poll: &mut mio::Poll) {
-        let registry = poll.registry();
+    fn register(&mut self, registry: &mio::Registry) {
         let event_set = self.event_set();
         registry.register(&mut self.socket,
                           self.token,
@@ -342,8 +343,15 @@ impl Connection {
         }
     }
 
-    fn deregister(&mut self, poll: &mut mio::Poll) {
-        let registry = poll.registry();
+    fn reregister(&mut self, registry: &mio::Registry) {
+        let event_set = self.event_set();
+        registry.reregister(&mut self.socket,
+                            self.token,
+                            event_set)
+            .unwrap();
+    }
+
+    fn deregister(&mut self, registry: &mio::Registry) {
         registry.deregister(&mut self.socket)
             .unwrap();
 
@@ -627,11 +635,11 @@ fn main() {
         for event in events.iter() {
             match event.token() {
                 LISTENER => {
-                    if !tlsserv.accept(&mut poll) {
+                    if !tlsserv.accept(poll.registry()) {
                         break;
                     }
                 }
-                _ => tlsserv.conn_event(&mut poll, &event)
+                _ => tlsserv.conn_event(poll.registry(), &event)
             }
         }
     }
