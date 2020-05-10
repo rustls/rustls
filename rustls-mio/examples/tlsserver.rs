@@ -64,25 +64,27 @@ impl TlsServer {
         }
     }
 
-    fn accept(&mut self, registry: &mio::Registry) -> bool {
-        match self.server.accept() {
-            Ok((socket, addr)) => {
-                debug!("Accepting new connection from {:?}", addr);
+    fn accept(&mut self, registry: &mio::Registry) -> Result<(), io::Error> {
+        loop {
+            match self.server.accept() {
+                Ok((socket, addr)) => {
+                    debug!("Accepting new connection from {:?}", addr);
 
-                let tls_session = rustls::ServerSession::new(&self.tls_config);
-                let mode = self.mode.clone();
+                    let tls_session = rustls::ServerSession::new(&self.tls_config);
+                    let mode = self.mode.clone();
 
-                let token = mio::Token(self.next_id);
-                self.next_id += 1;
+                    let token = mio::Token(self.next_id);
+                    self.next_id += 1;
 
-                let mut connection = Connection::new(socket, token, mode, tls_session);
-                connection.register(registry);
-                self.connections.insert(token, connection);
-                true
-            }
-            Err(e) => {
-                println!("encountered error while accepting connection; err={:?}", e);
-                false
+                    let mut connection = Connection::new(socket, token, mode, tls_session);
+                    connection.register(registry);
+                    self.connections.insert(token, connection);
+                }
+                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(err) => {
+                    println!("encountered error while accepting connection; err={:?}", err);
+                    return Err(err);
+                }
             }
         }
     }
@@ -635,9 +637,8 @@ fn main() {
         for event in events.iter() {
             match event.token() {
                 LISTENER => {
-                    if !tlsserv.accept(poll.registry()) {
-                        break;
-                    }
+                    tlsserv.accept(poll.registry())
+                        .expect("error accepting socket");
                 }
                 _ => tlsserv.conn_event(poll.registry(), &event)
             }
