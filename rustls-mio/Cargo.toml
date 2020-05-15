@@ -28,7 +28,6 @@ regex = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 tempfile = "3.0"
-vecio = "0.1"
 webpki-roots = "0.19"
 
 [[example]]

@@ -28,6 +28,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - Performance improvements.  Thanks to @nviennot.
   - Fixed client authentication being unduly rejected by client when server
     uses the superseded certificate_types field of CertificateRequest.
+  - *Breaking API change*: The writev_tls API has been removed, in favour
+    of using vectored IO support now offered by std::io::Write.
 * 0.17.0 (2020-02-22):
   - *Breaking API change*: ALPN protocols offered by the client are passed
     to the server certificate resolution trait (`ResolvesServerCert`).

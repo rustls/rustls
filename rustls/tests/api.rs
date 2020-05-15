@@ -6,7 +6,7 @@ use std::mem;
 use std::fmt;
 use std::env;
 use std::error::Error;
-use std::io::{self, Write, Read};
+use std::io::{self, Write, Read, IoSlice};
 
 use rustls;
 
@@ -843,6 +843,23 @@ fn server_respects_buffer_limit_pre_handshake() {
 }
 
 #[test]
+fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+
+    server.set_buffer_limit(32);
+
+    assert_eq!(server.write_vectored(&[IoSlice::new(b"01234567890123456789"),
+                                       IoSlice::new(b"01234567890123456789")]).unwrap(),
+               32);
+
+    do_handshake(&mut client, &mut server);
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    check_read(&mut client, b"01234567890123456789012345678901");
+}
+
+#[test]
 fn server_respects_buffer_limit_post_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
@@ -876,6 +893,23 @@ fn client_respects_buffer_limit_pre_handshake() {
 }
 
 #[test]
+fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
+    let (mut client, mut server) = make_pair(KeyType::RSA);
+
+    client.set_buffer_limit(32);
+
+    assert_eq!(client.write_vectored(&[IoSlice::new(b"01234567890123456789"),
+                                       IoSlice::new(b"01234567890123456789")]).unwrap(),
+               32);
+
+    do_handshake(&mut client, &mut server);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    check_read(&mut server, b"01234567890123456789012345678901");
+}
+
+#[test]
 fn client_respects_buffer_limit_post_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
@@ -894,7 +928,6 @@ fn client_respects_buffer_limit_post_handshake() {
 struct OtherSession<'a> {
     sess: &'a mut dyn Session,
     pub reads: usize,
-    pub writes: usize,
     pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
     pub short_writes: bool,
@@ -906,7 +939,6 @@ impl<'a> OtherSession<'a> {
         OtherSession {
             sess,
             reads: 0,
-            writes: 0,
             writevs: vec![],
             fail_ok: false,
             short_writes: false,
@@ -929,27 +961,15 @@ impl<'a> io::Read for OtherSession<'a> {
 }
 
 impl<'a> io::Write for OtherSession<'a> {
-    fn write(&mut self, mut b: &[u8]) -> io::Result<usize> {
-        self.writes += 1;
-        let l = self.sess.read_tls(b.by_ref())?;
-        let rc = self.sess.process_new_packets();
-
-        if !self.fail_ok {
-            rc.unwrap();
-        } else if rc.is_err() {
-            self.last_error = rc.err();
-        }
-
-        Ok(l)
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        unreachable!()
     }
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
-}
 
-impl<'a> rustls::WriteV for OtherSession<'a> {
-    fn writev(&mut self, b: &[&[u8]]) -> io::Result<usize> {
+    fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
         let mut total = 0;
         let mut lengths = vec![];
         for bytes in b {
@@ -1012,7 +1032,8 @@ fn client_complete_io_for_write() {
             let mut pipe = OtherSession::new(&mut server);
             let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            assert_eq!(pipe.writes, 2);
+            println!("{:?}", pipe.writevs);
+            assert_eq!(pipe.writevs, vec![ vec![ 42, 42 ] ]);
         }
         check_read(&mut server, b"0123456789012345678901234567890123456789");
     }
@@ -1071,7 +1092,7 @@ fn server_complete_io_for_write() {
             let mut pipe = OtherSession::new(&mut client);
             let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            assert_eq!(pipe.writes, 2);
+            assert_eq!(pipe.writevs, vec![ vec![ 42, 42 ] ]);
         }
         check_read(&mut client, b"0123456789012345678901234567890123456789");
     }
@@ -1774,7 +1795,7 @@ fn vectored_write_for_server_appdata() {
     server.write(b"01234567890123456789").unwrap();
     {
         let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.writev_tls(&mut pipe).unwrap();
+        let wrlen = server.write_tls(&mut pipe).unwrap();
         assert_eq!(84, wrlen);
         assert_eq!(pipe.writevs, vec![vec![42, 42]]);
     }
@@ -1790,7 +1811,7 @@ fn vectored_write_for_client_appdata() {
     client.write(b"01234567890123456789").unwrap();
     {
         let mut pipe = OtherSession::new(&mut server);
-        let wrlen = client.writev_tls(&mut pipe).unwrap();
+        let wrlen = client.write_tls(&mut pipe).unwrap();
         assert_eq!(84, wrlen);
         assert_eq!(pipe.writevs, vec![vec![42, 42]]);
     }
@@ -1808,7 +1829,7 @@ fn vectored_write_for_server_handshake() {
     server.process_new_packets().unwrap();
     {
         let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.writev_tls(&mut pipe).unwrap();
+        let wrlen = server.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 4000); // its pretty big (contains cert chain)
         assert_eq!(pipe.writevs.len(), 1); // only one writev
@@ -1820,7 +1841,7 @@ fn vectored_write_for_server_handshake() {
     server.process_new_packets().unwrap();
     {
         let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.writev_tls(&mut pipe).unwrap();
+        let wrlen = server.write_tls(&mut pipe).unwrap();
         assert_eq!(wrlen, 177);
         assert_eq!(pipe.writevs, vec![vec![103, 42, 32]]);
     }
@@ -1838,7 +1859,7 @@ fn vectored_write_for_client_handshake() {
     client.write(b"0123456789").unwrap();
     {
         let mut pipe = OtherSession::new(&mut server);
-        let wrlen = client.writev_tls(&mut pipe).unwrap();
+        let wrlen = client.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 200); // just the client hello
         assert_eq!(pipe.writevs.len(), 1); // only one writev
@@ -1850,7 +1871,7 @@ fn vectored_write_for_client_handshake() {
 
     {
         let mut pipe = OtherSession::new(&mut server);
-        let wrlen = client.writev_tls(&mut pipe).unwrap();
+        let wrlen = client.write_tls(&mut pipe).unwrap();
         assert_eq!(wrlen, 138);
         // CCS, finished, then two application datas
         assert_eq!(pipe.writevs, vec![vec![6, 58, 42, 32]]);
@@ -1873,12 +1894,12 @@ fn vectored_write_with_slow_client() {
     {
         let mut pipe = OtherSession::new(&mut client);
         pipe.short_writes = true;
-        let wrlen = server.writev_tls(&mut pipe).unwrap() +
-            server.writev_tls(&mut pipe).unwrap() +
-            server.writev_tls(&mut pipe).unwrap() +
-            server.writev_tls(&mut pipe).unwrap() +
-            server.writev_tls(&mut pipe).unwrap() +
-            server.writev_tls(&mut pipe).unwrap();
+        let wrlen = server.write_tls(&mut pipe).unwrap() +
+            server.write_tls(&mut pipe).unwrap() +
+            server.write_tls(&mut pipe).unwrap() +
+            server.write_tls(&mut pipe).unwrap() +
+            server.write_tls(&mut pipe).unwrap() +
+            server.write_tls(&mut pipe).unwrap();
         assert_eq!(42, wrlen);
         assert_eq!(pipe.writevs, vec![vec![21], vec![10], vec![5], vec![3], vec![3]]);
     }
@@ -2201,21 +2222,30 @@ fn test_client_does_not_offer_sha1() {
 
 #[test]
 fn test_client_mtu_reduction() {
-    fn collect_write_lengths(client: &mut ClientSession) -> Vec<usize> {
-        let mut r = Vec::new();
-        let mut buf = [0u8; 128];
+    struct CollectWrites {
+        writevs: Vec<Vec<usize>>,
+    }
 
-        loop {
-            let sz = client.write_tls(&mut buf.as_mut())
-                .unwrap();
-            r.push(sz);
-            assert!(sz <= 64);
-            if sz < 64 {
-                break;
-            }
+    impl io::Write for CollectWrites {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> { panic!() }
+        fn flush(&mut self) -> io::Result<()> { panic!() }
+        fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
+            let writes = b.iter()
+                .map(|slice| slice.len())
+                .collect::<Vec<usize>>();
+            let len = writes.iter().sum();
+            self.writevs.push(writes);
+            Ok(len)
         }
+    }
 
-        r
+    fn collect_write_lengths(client: &mut ClientSession) -> Vec<usize> {
+        let mut collector = CollectWrites { writevs: vec![] };
+
+        client.write_tls(&mut collector)
+            .unwrap();
+        assert_eq!(collector.writevs.len(), 1);
+        collector.writevs[0].clone()
     }
 
     for kt in ALL_KEY_TYPES.iter() {
@@ -2224,6 +2254,7 @@ fn test_client_mtu_reduction() {
 
         let mut client = ClientSession::new(&Arc::new(client_config), dns_name("localhost"));
         let writes = collect_write_lengths(&mut client);
+        println!("writes at mtu=64: {:?}", writes);
         assert!(writes.iter().all(|x| *x <= 64));
         assert!(writes.len() > 1);
     }

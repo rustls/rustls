@@ -10,7 +10,7 @@ use crate::msgs::enums::{ContentType, ProtocolVersion, AlertDescription, AlertLe
 use crate::error::TLSError;
 use crate::suites::SupportedCipherSuite;
 use crate::cipher;
-use crate::vecbuf::{ChunkVecBuffer, WriteV};
+use crate::vecbuf::ChunkVecBuffer;
 use crate::key;
 use crate::prf;
 use crate::rand;
@@ -51,11 +51,6 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     ///
     /// [`wants_write`]: #tymethod.wants_write
     fn write_tls(&mut self, wr: &mut dyn Write) -> Result<usize, io::Error>;
-
-    /// Like `write_tls`, but writes potentially many records in one
-    /// go via `wr`; a `rustls::WriteV`.  This function has the same semantics
-    /// as `write_tls` otherwise.
-    fn writev_tls(&mut self, wr: &mut dyn WriteV) -> Result<usize, io::Error>;
 
     /// Processes any new packets read by a previous call to `read_tls`.
     /// Errors from this function relate to TLS protocol errors, and
@@ -589,10 +584,6 @@ impl SessionCommon {
 
     pub fn write_tls(&mut self, wr: &mut dyn Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
-    }
-
-    pub fn writev_tls(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
-        self.sendable_tls.writev_to(wr)
     }
 
     /// Send plaintext application data, fragmenting and

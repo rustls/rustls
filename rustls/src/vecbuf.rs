@@ -2,26 +2,6 @@ use std::io::Read;
 use std::io;
 use std::cmp;
 use std::collections::VecDeque;
-use std::convert;
-
-/// This trait specifies rustls's precise requirements doing writes with
-/// vectored IO.
-///
-/// The purpose of vectored IO is to pass contigious output in many blocks
-/// to the kernel without either coalescing it in user-mode (by allocating
-/// and copying) or making many system calls.
-///
-/// We don't directly use types from the vecio crate because the traits
-/// don't compose well: the most useful trait (`Rawv`) is hard to test
-/// with (it can't be implemented without an FD) and implies a readable
-/// source too.  You will have to write a trivial adaptor struct which
-/// glues either `vecio::Rawv` or `vecio::Writev` to this trait.  See
-/// the rustls examples.
-pub trait WriteV {
-    /// Writes as much data from `vbytes` as possible, returning
-    /// the number of bytes written.
-    fn writev(&mut self, vbytes: &[&[u8]]) -> io::Result<usize>;
-}
 
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
@@ -132,49 +112,11 @@ impl ChunkVecBuffer {
             return Ok(0);
         }
 
-        let used = wr.write(&self.chunks[0])?;
+        let used = wr.write_vectored(&self.chunks.iter()
+                                     .map(|ch| io::IoSlice::new(ch))
+                                     .collect::<Vec<io::IoSlice>>())?;
         self.consume(used);
         Ok(used)
-    }
-
-    pub fn writev_to(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
-        if self.is_empty() {
-            return Ok(0);
-        }
-
-        let used = {
-            let chunks = self.chunks.iter()
-                .map(convert::AsRef::as_ref)
-                .collect::<Vec<&[u8]>>();
-
-            wr.writev(&chunks)?
-        };
-        self.consume(used);
-        Ok(used)
-    }
-}
-
-/// This is a simple wrapper around an object
-/// which implements `std::io::Write` in order to autoimplement `WriteV`.
-/// It uses the `write_vectored` method from `std::io::Write` in order
-/// to do this.
-pub struct WriteVAdapter<T: io::Write>(T);
-
-impl<T: io::Write> WriteVAdapter<T> {
-    /// build an adapter from a Write object
-    pub fn new(inner: T) -> Self {
-        WriteVAdapter(inner)
-    }
-}
-
-impl<T: io::Write> WriteV for WriteVAdapter<T> {
-    fn writev(&mut self, buffers: &[&[u8]]) -> io::Result<usize> {
-        self.0.write_vectored(
-            &buffers
-                .iter()
-                .map(|b| io::IoSlice::new(b))
-                .collect::<Vec<io::IoSlice>>(),
-        )
     }
 }
 

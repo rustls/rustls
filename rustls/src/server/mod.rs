@@ -10,7 +10,6 @@ use crate::error::TLSError;
 use crate::sign;
 use crate::verify;
 use crate::key;
-use crate::vecbuf::WriteV;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 
@@ -575,10 +574,6 @@ impl Session for ServerSession {
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.imp.common.write_tls(wr)
-    }
-
-    fn writev_tls(&mut self, wr: &mut dyn WriteV) -> io::Result<usize> {
-        self.imp.common.writev_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<(), TLSError> {

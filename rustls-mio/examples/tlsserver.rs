@@ -24,8 +24,6 @@ use rustls;
 use rustls::{RootCertStore, Session, NoClientAuth, AllowAnyAuthenticatedClient,
              AllowAnyAnonymousOrAuthenticatedClient};
 
-mod util;
-
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
 
@@ -310,15 +308,8 @@ impl Connection {
         }
     }
 
-    #[cfg(target_os = "windows")]
     fn tls_write(&mut self) -> io::Result<usize> {
         self.tls_session.write_tls(&mut self.socket)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    fn tls_write(&mut self) -> io::Result<usize> {
-        use crate::util::WriteVAdapter;
-        self.tls_session.writev_tls(&mut WriteVAdapter::new(&mut self.socket))
     }
 
     fn do_tls_write_and_handle_error(&mut self) {
