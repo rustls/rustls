@@ -6,7 +6,6 @@ use crate::msgs::handshake::{HandshakePayload, HandshakeMessagePayload};
 use crate::msgs::handshake::DecomposedSignatureScheme;
 use crate::msgs::handshake::ServerKeyExchangePayload;
 use crate::msgs::handshake::DigitallySignedStruct;
-use crate::msgs::enums::ClientCertificateType;
 use crate::msgs::codec::Codec;
 use crate::msgs::persist;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -16,7 +15,7 @@ use crate::suites;
 use crate::verify;
 use crate::ticketer;
 #[cfg(feature = "logging")]
-use crate::log::{debug, trace, warn};
+use crate::log::{debug, trace};
 use crate::error::TLSError;
 use crate::handshake::{check_message, check_handshake_message};
 
@@ -326,13 +325,9 @@ impl hs::State for ExpectCertificateRequest {
 
         // The RFC jovially describes the design here as 'somewhat complicated'
         // and 'somewhat underspecified'.  So thanks for that.
-
-        // We only support RSA signing at the moment.  If you don't support that,
-        // we're not doing client auth.
-        if !certreq.certtypes.contains(&ClientCertificateType::RSASign) {
-            warn!("Server asked for client auth but without RSASign");
-            return Ok(self.into_expect_server_done(client_auth));
-        }
+        //
+        // We ignore certreq.certtypes as a result, since the information it contains
+        // is entirely duplicated in certreq.sigschemes.
 
         let canames = certreq.canames
             .iter()
