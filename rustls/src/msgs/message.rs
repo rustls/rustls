@@ -78,21 +78,24 @@ pub struct Message {
     pub payload: MessagePayload,
 }
 
+impl Message {
+    /// This is the maximum on-the-wire size of a TLSCiphertext.
+    /// That's 2^14 payload bytes, a header, and a 2KB allowance
+    /// for ciphertext overheads.
+    const MAX_PAYLOAD: u16 = 16384 + 2048;
+
+    /// Content type, version and size.
+    const HEADER_SIZE: u16 = 1 + 2 + 2;
+
+    /// Maximum on-wire message size.
+    pub const MAX_WIRE_SIZE: usize = (Message::MAX_PAYLOAD + Message::HEADER_SIZE) as usize;
+}
+
 impl Codec for Message {
     fn read(r: &mut Reader) -> Option<Message> {
-        let typ = ContentType::read(r)?;
-        let version = ProtocolVersion::read(r)?;
-        let len = u16::read(r)?;
-
-        let mut sub = r.sub(len as usize)?;
-        let payload = Payload::read(&mut sub)?;
-
-        Some(Message {
-            typ,
-            version,
-            payload: MessagePayload::Opaque(payload),
-        })
-    }
+        Message::read_with_detailed_error(r)
+            .ok()
+   }
 
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.typ.encode(bytes);
@@ -102,31 +105,55 @@ impl Codec for Message {
     }
 }
 
-impl Message {
-    /// Do some *very* lax checks on the header, and return
-    /// None if it looks really broken.  Otherwise, return
-    /// the length field.
-    pub fn check_header(bytes: &[u8]) -> Option<usize> {
-        let mut rd = Reader::init(bytes);
+#[derive(Debug)]
+pub enum MessageError {
+    TooShortForHeader,
+    TooShortForLength,
+    IllegalLength,
+    IllegalContentType,
+    IllegalProtocolVersion,
+}
 
-        let typ = ContentType::read(&mut rd)?;
-        let version = ProtocolVersion::read(&mut rd)?;
-        let len = u16::read(&mut rd)?;
+impl Message {
+    /// Like Message::read(), but allows the important distinction between:
+    /// this message might be valid if we read more data; and this message will
+    /// never be valid.
+    pub fn read_with_detailed_error(r: &mut Reader) -> Result<Message, MessageError> {
+        let typ = ContentType::read(r)
+            .ok_or(MessageError::TooShortForHeader)?;
+        let version = ProtocolVersion::read(r)
+            .ok_or(MessageError::TooShortForHeader)?;
+        let len = u16::read(r)
+            .ok_or(MessageError::TooShortForHeader)?;
+
+        // Reject oversize messages
+        if len >= Message::MAX_PAYLOAD {
+            return Err(MessageError::IllegalLength);
+        }
 
         // Don't accept any new content-types.
         if let ContentType::Unknown(_) = typ {
-            return None;
+            return Err(MessageError::IllegalContentType);
         }
 
         // Accept only versions 0x03XX for any XX.
         match version {
             ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
-                return None;
+                return Err(MessageError::IllegalProtocolVersion);
             }
             _ => (),
         };
 
-        Some(len as usize)
+        let mut sub = r.sub(len as usize)
+            .ok_or(MessageError::TooShortForLength)?;
+        let payload = Payload::read(&mut sub)
+            .unwrap();
+
+        Ok(Message {
+            typ,
+            version,
+            payload: MessagePayload::Opaque(payload),
+        })
     }
 
     pub fn is_content_type(&self, typ: ContentType) -> bool {
