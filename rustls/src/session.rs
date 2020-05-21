@@ -721,6 +721,15 @@ impl SessionCommon {
         let m = Message::build_alert(AlertLevel::Warning, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
     }
+
+    pub fn is_quic(&self) -> bool {
+        #[cfg(feature = "quic")]
+        {
+            self.protocol == Protocol::Quic
+        }
+        #[cfg(not(feature = "quic"))]
+        false
+    }
 }
 
 

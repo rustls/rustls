@@ -205,7 +205,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         (resuming.session_id, resuming.ticket.0.clone(), resuming.version)
     } else {
         debug!("Not resuming any session");
-        if handshake.session_id.is_empty() {
+        if handshake.session_id.is_empty() && !sess.common.is_quic() {
             handshake.session_id = random_sessionid();
         }
         (handshake.session_id, Vec::new(), ProtocolVersion::Unknown(0))
