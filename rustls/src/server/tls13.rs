@@ -211,9 +211,7 @@ impl CompleteClientHelloHandling {
 
     fn emit_fake_ccs(&mut self,
                      sess: &mut ServerSessionImpl) {
-        #[cfg(feature = "quic")] {
-            if let Protocol::Quic = sess.common.protocol { return; }
-        }
+        if sess.common.is_quic() { return; }
         let m = Message {
             typ: ContentType::ChangeCipherSpec,
             version: ProtocolVersion::TLSv1_2,

@@ -25,10 +25,7 @@ use crate::log::{debug, trace};
 use crate::error::TLSError;
 use crate::handshake::check_handshake_message;
 #[cfg(feature = "quic")]
-use crate::{
-    msgs::base::PayloadU16,
-    session::Protocol
-};
+use crate::msgs::base::PayloadU16;
 
 use crate::client::common::{ServerCertDetails, HandshakeDetails};
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
@@ -112,7 +109,7 @@ fn find_session(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef)
             None
         } else {
             #[cfg(feature = "quic")] {
-                if sess.common.protocol == Protocol::Quic {
+                if sess.common.is_quic() {
                     let params = PayloadU16::read(&mut reader)?;
                     sess.common.quic.params = Some(params.0);
                 }
