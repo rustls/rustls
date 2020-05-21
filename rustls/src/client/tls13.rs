@@ -305,9 +305,7 @@ pub fn prepare_resumption(sess: &mut ClientSessionImpl,
 }
 
 pub fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
-    #[cfg(feature = "quic")] {
-        if let Protocol::Quic = sess.common.protocol { return; }
-    }
+    if sess.common.is_quic() { return; }
 
     if hs.sent_tls13_fake_ccs {
         return;
@@ -784,10 +782,7 @@ fn emit_finished_tls13(handshake: &mut HandshakeDetails,
 
 fn emit_end_of_early_data_tls13(handshake: &mut HandshakeDetails,
                                 sess: &mut ClientSessionImpl) {
-    #[cfg(feature = "quic")]
-    {
-        if let Protocol::Quic = sess.common.protocol { return; }
-    }
+    if sess.common.is_quic() { return; }
 
     let m = Message {
         typ: ContentType::Handshake,
