@@ -398,6 +398,7 @@ pub struct SessionCommon {
     peer_eof: bool,
     pub traffic: bool,
     pub early_traffic: bool,
+    sent_fatal_alert: bool,
     pub message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
@@ -420,6 +421,7 @@ impl SessionCommon {
             peer_eof: false,
             traffic: false,
             early_traffic: false,
+            sent_fatal_alert: false,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
             message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
@@ -708,8 +710,10 @@ impl SessionCommon {
 
     pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
         warn!("Sending fatal alert {:?}", desc);
+        debug_assert!(!self.sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
+        self.sent_fatal_alert = true;
     }
 
     pub fn send_close_notify(&mut self) {
