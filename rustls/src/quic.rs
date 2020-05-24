@@ -288,7 +288,7 @@ fn next_1rtt_keys(this: &mut SessionCommon) -> PacketKeySet {
 
     let next = next_1rtt_secrets(hkdf_alg, secrets);
 
-    let (local, remote) = secrets.local_remote(this.is_client);
+    let (local, remote) = next.local_remote(this.is_client);
     let keys = PacketKeySet {
         local: PacketKey::new(this.get_suite_assert(), local),
         remote: PacketKey::new(this.get_suite_assert(), remote),
