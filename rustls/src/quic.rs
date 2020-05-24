@@ -157,7 +157,7 @@ impl PacketKey {
         Self {
             key: aead::LessSafeKey::new(hkdf_expand(
                 secret,
-                suite.get_aead_alg(),
+                suite.aead_algorithm,
                 b"quic key",
                 &[],
             )),
