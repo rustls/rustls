@@ -86,7 +86,7 @@ impl HandshakeHash {
                 let buf = hs.get_encoding();
                 self.update_raw(&buf);
             }
-            _ => unreachable!(),
+            _ => {},
         };
         self
     }

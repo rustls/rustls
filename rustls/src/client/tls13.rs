@@ -10,6 +10,7 @@ use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::{CertificatePayloadTLS13, CertificateEntry};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::persist;
@@ -29,7 +30,7 @@ use crate::ticketer;
 #[cfg(feature = "logging")]
 use crate::log::{debug, warn};
 use crate::error::TLSError;
-use crate::handshake::{check_message, check_handshake_message};
+use crate::check::check_message;
 #[cfg(feature = "quic")]
 use crate::{
     quic,
@@ -377,16 +378,12 @@ impl ExpectEncryptedExtensions {
 }
 
 impl hs::State for ExpectEncryptedExtensions {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_handshake_message(m, &[HandshakeType::EncryptedExtensions])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        let exts = extract_handshake!(m, HandshakePayload::EncryptedExtensions).unwrap();
+        let exts = require_handshake_msg!(m, HandshakeType::EncryptedExtensions, HandshakePayload::EncryptedExtensions)?;
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
         self.handshake.transcript.add_message(&m);
 
-        validate_encrypted_extensions(sess, &self.hello, exts)?;
+        validate_encrypted_extensions(sess, &self.hello, &exts)?;
         hs::process_alpn_protocol(sess, exts.get_alpn_protocol())?;
 
         #[cfg(feature = "quic")] {
@@ -451,12 +448,8 @@ impl ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_handshake_message(m, &[HandshakeType::Certificate])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        let cert_chain = extract_handshake!(m, HandshakePayload::CertificateTLS13).unwrap();
+        let cert_chain = require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::CertificateTLS13)?;
         self.handshake.transcript.add_message(&m);
 
         // This is only non-empty for client auth.
@@ -519,13 +512,10 @@ impl ExpectCertificateOrCertReq {
 }
 
 impl hs::State for ExpectCertificateOrCertReq {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_handshake_message(m,
-                                &[HandshakeType::Certificate,
-                                  HandshakeType::CertificateRequest])
-    }
-
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+        check_message(&m,
+                      &[ContentType::Handshake],
+                      &[HandshakeType::Certificate, HandshakeType::CertificateRequest])?;
         if m.is_handshake_type(HandshakeType::Certificate) {
             self.into_expect_certificate().handle(sess, m)
         } else {
@@ -573,12 +563,8 @@ fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSErro
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_handshake_message(m, &[HandshakeType::CertificateVerify])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        let cert_verify = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
+        let cert_verify = require_handshake_msg!(m, HandshakeType::CertificateVerify, HandshakePayload::CertificateVerify)?;
 
         debug!("Server cert is {:?}", self.server_cert.cert_chain);
 
@@ -601,7 +587,7 @@ impl hs::State for ExpectCertificateVerify {
             .get_verifier()
             .verify_tls13_signature(&verify::construct_tls13_server_verify_message(&handshake_hash),
                                     &self.server_cert.cert_chain[0],
-                                    cert_verify)
+                                    &cert_verify)
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 3. Verify any included SCTs.
@@ -642,12 +628,8 @@ impl ExpectCertificateRequest {
 }
 
 impl hs::State for ExpectCertificateRequest {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_handshake_message(m, &[HandshakeType::CertificateRequest])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        let certreq = &extract_handshake!(m, HandshakePayload::CertificateRequestTLS13).unwrap();
+        let certreq = &require_handshake_msg!(m, HandshakeType::CertificateRequest, HandshakePayload::CertificateRequestTLS13)?;
         self.handshake.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
 
@@ -823,13 +805,9 @@ impl ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_handshake_message(m, &[HandshakeType::Finished])
-    }
-
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
-        let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
+        let finished = require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
         let handshake_hash = st.handshake.transcript.get_current_hash();
         let expect_verify_data = st.key_schedule.sign_server_finish(&handshake_hash);
@@ -942,8 +920,7 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_new_ticket_tls13(&mut self, sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
-        let nst = extract_handshake!(m, HandshakePayload::NewSessionTicketTLS13).unwrap();
+    fn handle_new_ticket_tls13(&mut self, sess: &mut ClientSessionImpl, nst: &NewSessionTicketPayloadTLS13) -> Result<(), TLSError> {
         let handshake_hash = self.handshake.transcript.get_current_hash();
         let secret = self.key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
@@ -989,9 +966,7 @@ impl ExpectTraffic {
         Ok(())
     }
 
-    fn handle_key_update(&mut self, sess: &mut ClientSessionImpl, m: Message) -> Result<(), TLSError> {
-        let kur = extract_handshake!(m, HandshakePayload::KeyUpdate).unwrap();
-
+    fn handle_key_update(&mut self, sess: &mut ClientSessionImpl, kur: &KeyUpdateRequest) -> Result<(), TLSError> {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = sess.common.protocol {
@@ -1026,19 +1001,17 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn check_message(&self, m: &Message) -> Result<(), TLSError> {
-        check_message(m,
-                      &[ContentType::ApplicationData, ContentType::Handshake],
-                      &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> hs::NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
             sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
-        } else if m.is_handshake_type(HandshakeType::NewSessionTicket) {
-            self.handle_new_ticket_tls13(sess, m)?;
-        } else if m.is_handshake_type(HandshakeType::KeyUpdate) {
-            self.handle_key_update(sess, m)?;
+        } else if let Ok(ref new_ticket) = require_handshake_msg!(m, HandshakeType::NewSessionTicket, HandshakePayload::NewSessionTicketTLS13) {
+            self.handle_new_ticket_tls13(sess, new_ticket)?;
+        } else if let Ok(ref key_update) = require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate) {
+            self.handle_key_update(sess, key_update)?;
+        } else {
+            check_message(&m,
+                          &[ContentType::ApplicationData, ContentType::Handshake],
+                          &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate])?;
         }
 
         Ok(self)
@@ -1068,12 +1041,9 @@ pub struct ExpectQUICTraffic(ExpectTraffic);
 
 #[cfg(feature = "quic")]
 impl hs::State for ExpectQUICTraffic {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_message(m, &[ContentType::Handshake], &[HandshakeType::NewSessionTicket])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
-        self.0.handle_new_ticket_tls13(sess, m)?;
+        let nst = require_handshake_msg!(m, HandshakeType::NewSessionTicket, HandshakePayload::NewSessionTicketTLS13)?;
+        self.0.handle_new_ticket_tls13(sess, nst)?;
         Ok(self)
     }
 }

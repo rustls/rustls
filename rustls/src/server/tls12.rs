@@ -14,7 +14,7 @@ use crate::verify;
 #[cfg(feature = "logging")]
 use crate::log::{trace, debug};
 use crate::error::TLSError;
-use crate::handshake::{check_handshake_message, check_message};
+use crate::check::check_message;
 
 use crate::server::common::{HandshakeDetails, ServerKXDetails, ClientCertDetails};
 use crate::server::hs;
@@ -40,12 +40,8 @@ impl ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_handshake_message(m, &[HandshakeType::Certificate])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
-        let cert_chain = extract_handshake!(m, HandshakePayload::Certificate).unwrap();
+        let cert_chain = require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
         self.handshake.transcript.add_message(&m);
 
         // If we can't determine if the auth is mandatory, abort
@@ -108,12 +104,8 @@ impl ExpectClientKX {
 }
 
 impl hs::State for ExpectClientKX {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_handshake_message(m, &[HandshakeType::ClientKeyExchange])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
-        let client_kx = extract_handshake!(m, HandshakePayload::ClientKeyExchange).unwrap();
+        let client_kx = require_handshake_msg!(m, HandshakeType::ClientKeyExchange, HandshakePayload::ClientKeyExchange)?;
         self.handshake.transcript.add_message(&m);
 
         // Complete key agreement, and set up encryption with the
@@ -173,13 +165,9 @@ impl ExpectCertificateVerify {
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_handshake_message(m, &[HandshakeType::CertificateVerify])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
         let rc = {
-            let sig = extract_handshake!(m, HandshakePayload::CertificateVerify).unwrap();
+            let sig = require_handshake_msg!(m, HandshakeType::CertificateVerify, HandshakePayload::CertificateVerify)?;
             let handshake_msgs = self.handshake.transcript.take_handshake_buf();
             let certs = &self.client_cert.cert_chain;
 
@@ -221,11 +209,9 @@ impl ExpectCCS {
 }
 
 impl hs::State for ExpectCCS {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_message(m, &[ContentType::ChangeCipherSpec], &[])
-    }
+    fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
+        check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
-    fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, _m: Message) -> hs::NextStateOrError {
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
         hs::check_aligned_handshake(sess)?;
@@ -335,12 +321,8 @@ impl ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_handshake_message(m, &[HandshakeType::Finished])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
-        let finished = extract_handshake!(m, HandshakePayload::Finished).unwrap();
+        let finished = require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
         hs::check_aligned_handshake(sess)?;
 
@@ -397,11 +379,8 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn check_message(&self, m: &Message) -> hs::CheckResult {
-        check_message(m, &[ContentType::ApplicationData], &[])
-    }
-
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, mut m: Message) -> hs::NextStateOrError {
+        check_message(&m, &[ContentType::ApplicationData], &[])?;
         sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
         Ok(self)
     }

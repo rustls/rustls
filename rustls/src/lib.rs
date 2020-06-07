@@ -234,7 +234,8 @@ mod anchors;
 mod verify;
 #[cfg(test)]
 mod verifybench;
-mod handshake;
+#[macro_use]
+mod check;
 mod suites;
 mod ticketer;
 mod server;

@@ -405,6 +405,17 @@ impl ServerSessionImpl {
         self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
+    fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
+        match rc {
+            Err(TLSError::InappropriateMessage { .. }) |
+            Err(TLSError::InappropriateHandshakeMessage { .. }) => {
+                self.queue_unexpected_alert();
+            }
+            _ => {}
+        };
+        rc
+    }
+
     pub fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
         if self.common.traffic && !self.common.is_tls13() &&
            msg.is_handshake_type(HandshakeType::ClientHello) {
@@ -412,11 +423,10 @@ impl ServerSessionImpl {
             return Ok(());
         }
 
-        let st = self.state.take().unwrap();
-        st.check_message(&msg)
-            .map_err(|err| { self.queue_unexpected_alert(); err })?;
-
-        self.state = Some(st.handle(self, msg)?);
+        let state = self.state.take().unwrap();
+        let maybe_next_state = state.handle(self, msg);
+        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
+        self.state = Some(next_state);
 
         Ok(())
     }

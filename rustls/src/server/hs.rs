@@ -23,7 +23,6 @@ use crate::sign;
 #[cfg(feature = "logging")]
 use crate::log::{trace, debug};
 use crate::error::TLSError;
-use crate::handshake::check_handshake_message;
 use webpki;
 #[cfg(feature = "quic")]
 use crate::session::Protocol;
@@ -31,24 +30,10 @@ use crate::session::Protocol;
 use crate::server::common::{HandshakeDetails, ServerKXDetails};
 use crate::server::{tls12, tls13};
 
-macro_rules! extract_handshake(
-  ( $m:expr, $t:path ) => (
-    match $m.payload {
-      MessagePayload::Handshake(ref hsp) => match hsp.payload {
-        $t(ref hm) => Some(hm),
-        _ => None
-      },
-      _ => None
-    }
-  )
-);
-
-pub type CheckResult = Result<(), TLSError>;
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TLSError>;
 
 pub trait State {
-    fn check_message(&self, m: &Message) -> CheckResult;
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError;
 
     fn export_keying_material(&self,
@@ -558,12 +543,8 @@ impl ExpectClientHello {
 }
 
 impl State for ExpectClientHello {
-    fn check_message(&self, m: &Message) -> CheckResult {
-        check_handshake_message(m, &[HandshakeType::ClientHello])
-    }
-
     fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError {
-        let client_hello = extract_handshake!(m, HandshakePayload::ClientHello).unwrap();
+        let client_hello = require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
         let tls13_enabled = sess.config.supports_version(ProtocolVersion::TLSv1_3);
         let tls12_enabled = sess.config.supports_version(ProtocolVersion::TLSv1_2);
         trace!("we got a clienthello {:?}", client_hello);
