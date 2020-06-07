@@ -105,7 +105,6 @@ impl Codec for Message {
     }
 }
 
-#[derive(Debug)]
 pub enum MessageError {
     TooShortForHeader,
     TooShortForLength,
@@ -162,10 +161,6 @@ impl Message {
 
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
         // Bit of a layering violation, but OK.
-        if !self.is_content_type(ContentType::Handshake) {
-            return false;
-        }
-
         if let MessagePayload::Handshake(ref hsp) = self.payload {
             hsp.typ == hstyp
         } else {
@@ -257,7 +252,6 @@ impl<'a> Message {
 ///
 /// This type also cannot decode its internals and
 /// is not a `Codec` type, only `Message` can do that.
-#[derive(Debug)]
 pub struct BorrowMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
