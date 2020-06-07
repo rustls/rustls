@@ -241,4 +241,40 @@ mod tests {
 
         pop_eq(&expect, &mut hj);
     }
+
+    #[test]
+    fn test_rejoins_then_rejects_giant_certs() {
+        let mut hj = HandshakeJoiner::new();
+        let msg = Message {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::new_opaque(b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec()),
+        };
+
+        assert_eq!(hj.want_message(&msg), true);
+        assert_eq!(hj.take_message(msg), Some(0));
+        assert_eq!(hj.is_empty(), false);
+
+        for _i in 0..8191 {
+            let msg = Message {
+                typ: ContentType::Handshake,
+                version: ProtocolVersion::TLSv1_2,
+                payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            };
+
+            assert_eq!(hj.want_message(&msg), true);
+            assert_eq!(hj.take_message(msg), Some(0));
+            assert_eq!(hj.is_empty(), false);
+        }
+
+        // final 6 bytes
+        let msg = Message {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06".to_vec()),
+        };
+
+        assert_eq!(hj.want_message(&msg), true);
+        assert_eq!(hj.take_message(msg), None);
+    }
 }
