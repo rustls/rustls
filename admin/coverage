@@ -19,7 +19,7 @@ def cleanup():
     sh("rm -rf *.gcda *.gcno")
 
 def run(which):
-    exe = filter(lambda x: '.d' not in x, glob.glob('target/debug/' + which + '-*'))[0]
+    exe = filter(lambda x: '.d' not in x, glob.glob('target/debug/deps/' + which + '-*'))[0]
     sh('./' + exe)
 
 def cargo():
