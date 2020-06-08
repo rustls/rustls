@@ -1273,7 +1273,6 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
     assert!(rc.is_err());
     let err = rc.err().unwrap();
     assert_eq!(err.kind(), io::ErrorKind::WouldBlock);
-    assert_eq!(err.description(), "oops");
 }
 
 #[test]
