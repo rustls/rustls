@@ -14,6 +14,8 @@ fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
         bytes.insert(0, 0x82u8);
         bytes.insert(1, ((len >> 8) & 0xff) as u8);
         bytes.insert(2, (len & 0xff) as u8);
+    } else {
+        assert!(len <= 0xffff, "excessively long x.509 name");
     }
 }
 
@@ -59,4 +61,14 @@ fn test_large() {
     wrap_in_sequence(&mut val);
     assert_eq!(vec![0x30, 0x82, 0x12, 0x34, 0x12, 0x12],
                val[..6].to_vec());
+}
+
+#[test]
+fn test_huge() {
+    let mut val = Vec::new();
+    val.resize(0xffff, 0x12);
+    wrap_in_sequence(&mut val);
+    assert_eq!(vec![0x30, 0x82, 0xff, 0xff, 0x12, 0x12],
+               val[..6].to_vec());
+    assert_eq!(val.len(), 0xffff + 4);
 }
