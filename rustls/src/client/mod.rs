@@ -29,6 +29,7 @@ mod hs;
 mod tls12;
 mod tls13;
 mod common;
+pub mod grease;
 pub mod handy;
 
 /// A trait for the ability to store client session data.
@@ -84,6 +85,9 @@ pub trait ResolvesClientCert : Send + Sync {
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
     pub ciphersuites: Vec<&'static SupportedCipherSuite>,
+
+    /// Configurable GREASE implementation.
+    pub grease: Arc<dyn grease::GreaseGenerator>,
 
     /// Collection of root certificates.
     pub root_store: anchors::RootCertStore,
@@ -150,6 +154,7 @@ impl ClientConfig {
     pub fn new() -> ClientConfig {
         ClientConfig {
             ciphersuites: ALL_CIPHERSUITES.to_vec(),
+            grease: Arc::new(grease::DefaultGreaseGenerator::default()),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
             session_persistence: handy::ClientSessionMemoryCache::new(32),
@@ -402,7 +407,8 @@ impl ClientSessionImpl {
     }
 
     pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
-        let mut ret = Vec::new();
+        // Initialize cipher suites with GREASE values based on the configured implementation.
+        let mut ret = self.config.grease.cipher_suites();
 
         for cs in &self.config.ciphersuites {
             ret.push(cs.suite);
