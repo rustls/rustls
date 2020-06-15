@@ -18,14 +18,13 @@ fn generate_grease_cipher_suite() -> CipherSuite {
 #[cfg(not(feature = "grease"))]
 pub type DefaultGreaseGenerator = NoGrease;
 #[cfg(feature = "grease")]
-pub type DefaultGreaseGenerator = SingleGreaseEntry;
+pub type DefaultGreaseGenerator = BoringGrease;
 
 /// Abstracts over multiple implementations of RFC8701, allowing these implementations to be
 /// configured by the user.
 pub trait GreaseGenerator: Send + Sync {
-    /// Generate the initial ciphers of the ClientHello cipher list, choosing zero or more GREASE
-    /// ciphers for inclusion.
-    fn cipher_suites(&self) -> Vec<CipherSuite>;
+    /// Add zero or more GREASE ciphers to the list of cipher suites, returning the updated list.
+    fn cipher_suites(&self, ciphers: Vec<CipherSuite>) -> Vec<CipherSuite>;
 }
 
 /// Do not add any GREASE values. Using this implementation effectively disables GREASE.
@@ -33,17 +32,46 @@ pub trait GreaseGenerator: Send + Sync {
 pub struct NoGrease {}
 
 impl GreaseGenerator for NoGrease {
-    fn cipher_suites(&self) -> Vec<CipherSuite> {
-        Vec::new()
+    fn cipher_suites(&self, ciphers: Vec<CipherSuite>) -> Vec<CipherSuite> {
+        ciphers
     }
 }
 
-/// Prepend a single GREASE value before all other entries.
+/// Mimics BoringSSL's GREASE implementation choices.
 #[derive(Clone, Default)]
-pub struct SingleGreaseEntry {}
+pub struct BoringGrease {}
 
-impl GreaseGenerator for SingleGreaseEntry {
-    fn cipher_suites(&self) -> Vec<CipherSuite> {
-        vec![generate_grease_cipher_suite()]
+impl GreaseGenerator for BoringGrease {
+    /// Insert a single GREASE cipher value at the start of the cipher suites list.
+    fn cipher_suites(&self, mut ciphers: Vec<CipherSuite>) -> Vec<CipherSuite> {
+        ciphers.insert(0, generate_grease_cipher_suite());
+        ciphers
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_grease_does_not_modify_ciphers() {
+        let ciphers = vec![CipherSuite::TLS_NULL_WITH_NULL_NULL];
+        let grease = NoGrease::default();
+        assert_eq!(grease.cipher_suites(ciphers.clone()), ciphers);
+    }
+
+    #[test]
+    fn boring_grease_prepends_one_cipher() {
+        let ciphers = vec![CipherSuite::TLS_NULL_WITH_NULL_NULL];
+        let grease = BoringGrease::default();
+
+        let modified_ciphers = grease.cipher_suites(ciphers.clone());
+        assert_eq!(modified_ciphers.len(), 2);
+        assert!(if let CipherSuite::Unknown(_) = modified_ciphers[0] {
+            true
+        } else {
+            false
+        });
+        assert_eq!(modified_ciphers[1], ciphers[0]);
     }
 }
