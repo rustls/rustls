@@ -26,13 +26,13 @@ pub type DefaultGreaseGenerator = BoringGrease;
 /// configured by the user.
 pub trait GreaseGenerator: Send + Sync {
     /// Add zero or more GREASE ciphers to the list of cipher suites, returning the updated list.
-    fn cipher_suites(&self, ciphers: Vec<CipherSuite>) -> Vec<CipherSuite>;
+    fn cipher_suites(&self, ciphers: &mut Vec<CipherSuite>);
 
     /// Add zero or more GREASE ciphers to the list of cipher values, returning the updated list.
     ///
     /// Implementations must preserve the property that the PSK extension is in the final position
     /// of the list. This extension is required to always be last.
-    fn client_extensions(&self, extensions: Vec<ClientExtension>) -> Vec<ClientExtension>;
+    fn client_extensions(&self, extensions: &mut Vec<ClientExtension>);
 }
 
 /// Do not add any GREASE values. Using this implementation effectively disables GREASE.
@@ -40,12 +40,12 @@ pub trait GreaseGenerator: Send + Sync {
 pub struct NoGrease {}
 
 impl GreaseGenerator for NoGrease {
-    fn cipher_suites(&self, ciphers: Vec<CipherSuite>) -> Vec<CipherSuite> {
-        ciphers
+    fn cipher_suites(&self, _ciphers: &mut Vec<CipherSuite>) {
+        // Leave `ciphers` unchanged.
     }
 
-    fn client_extensions(&self, extensions: Vec<ClientExtension>) -> Vec<ClientExtension> {
-        extensions
+    fn client_extensions(&self, _extensions: &mut Vec<ClientExtension>) {
+        // Leave `extensions` unchanged.
     }
 }
 
@@ -55,16 +55,15 @@ pub struct BoringGrease {}
 
 impl GreaseGenerator for BoringGrease {
     /// Insert a single GREASE cipher value at the start of the cipher suites list.
-    fn cipher_suites(&self, mut ciphers: Vec<CipherSuite>) -> Vec<CipherSuite> {
+    fn cipher_suites(&self, ciphers: &mut Vec<CipherSuite>) {
         ciphers.insert(0, CipherSuite::Unknown(generate_grease_value()));
-        ciphers
     }
 
     /// Insert an empty GREASE extension at the start of the extensions list. Insert a non-empty
     /// GREASE extension at the end of the extensions list.
     ///
     /// The chosen values of this implementation are not uniformly random.
-    fn client_extensions(&self, mut extensions: Vec<ClientExtension>) -> Vec<ClientExtension> {
+    fn client_extensions(&self, extensions: &mut Vec<ClientExtension>) {
         let ext1 = generate_grease_value();
         let mut ext2 = generate_grease_value();
 
@@ -93,8 +92,6 @@ impl GreaseGenerator for BoringGrease {
         } else {
             extensions.push(non_empty_extension)
         }
-
-        extensions
     }
 }
 
@@ -105,49 +102,54 @@ mod tests {
 
     #[test]
     fn no_grease_does_not_modify_ciphers() {
-        let ciphers = vec![CipherSuite::TLS_NULL_WITH_NULL_NULL];
+        let mut ciphers = vec![CipherSuite::TLS_NULL_WITH_NULL_NULL];
         let grease = NoGrease::default();
-        assert_eq!(grease.cipher_suites(ciphers.clone()), ciphers);
+
+        grease.cipher_suites(&mut ciphers);
+        assert_eq!(ciphers.len(), 1);
+        assert_eq!(ciphers[0], CipherSuite::TLS_NULL_WITH_NULL_NULL);
     }
 
     #[test]
     fn boring_grease_prepends_one_cipher() {
-        let ciphers = vec![CipherSuite::TLS_NULL_WITH_NULL_NULL];
+        let mut ciphers = vec![CipherSuite::TLS_NULL_WITH_NULL_NULL];
         let grease = BoringGrease::default();
 
-        let modified_ciphers = grease.cipher_suites(ciphers.clone());
-        assert_eq!(modified_ciphers.len(), 2);
-        assert!(if let CipherSuite::Unknown(_) = modified_ciphers[0] {
+        grease.cipher_suites(&mut ciphers);
+        assert_eq!(ciphers.len(), 2);
+        assert!(if let CipherSuite::Unknown(_) = ciphers[0] {
             true
         } else {
             false
         });
-        assert_eq!(modified_ciphers[1], ciphers[0]);
+        assert_eq!(ciphers[1], CipherSuite::TLS_NULL_WITH_NULL_NULL);
     }
 
     #[test]
     fn no_grease_does_not_modify_extensions() {
-        let extensions = vec![ClientExtension::EarlyData];
+        let mut extensions = vec![ClientExtension::EarlyData];
         let grease = NoGrease::default();
-        assert_eq!(grease.client_extensions(extensions.clone()).len(), 1);
+
+        grease.client_extensions(&mut extensions);
+        assert_eq!(extensions.len(), 1);
     }
 
     #[test]
     fn boring_grease_prepends_empty_ext_appends_nonempty_ext() {
-        let extensions = vec![ClientExtension::EarlyData];
+        let mut extensions = vec![ClientExtension::EarlyData];
         let grease = BoringGrease::default();
 
-        let modified_extensions = grease.client_extensions(extensions.clone());
-        assert_eq!(modified_extensions.len(), 3);
+        grease.client_extensions(&mut extensions);
+        assert_eq!(extensions.len(), 3);
         assert!(
-            if let ClientExtension::Unknown(_) = modified_extensions[0] {
+            if let ClientExtension::Unknown(_) = extensions[0] {
                 true
             } else {
                 false
             }
         );
         assert!(
-            if let ClientExtension::Unknown(_) = modified_extensions[2] {
+            if let ClientExtension::Unknown(_) = extensions[2] {
                 true
             } else {
                 false
@@ -157,7 +159,7 @@ mod tests {
 
     #[test]
     fn boring_grease_preserves_psk_placement() {
-        let extensions = vec![
+        let mut extensions = vec![
             ClientExtension::EarlyData,
             ClientExtension::PresharedKey(PresharedKeyOffer {
                 identities: PresharedKeyIdentities::default(),
@@ -166,29 +168,29 @@ mod tests {
         ];
         let grease = BoringGrease::default();
 
-        let modified_extensions = grease.client_extensions(extensions.clone());
-        assert_eq!(modified_extensions.len(), 4);
+        grease.client_extensions(&mut extensions);
+        assert_eq!(extensions.len(), 4);
         assert!(
-            if let ClientExtension::Unknown(_) = modified_extensions[0] {
+            if let ClientExtension::Unknown(_) = extensions[0] {
                 true
             } else {
                 false
             }
         );
-        assert!(if let ClientExtension::EarlyData = modified_extensions[1] {
+        assert!(if let ClientExtension::EarlyData = extensions[1] {
             true
         } else {
             false
         });
         assert!(
-            if let ClientExtension::Unknown(_) = modified_extensions[2] {
+            if let ClientExtension::Unknown(_) = extensions[2] {
                 true
             } else {
                 false
             }
         );
         assert!(
-            if let ClientExtension::PresharedKey(_) = modified_extensions[3] {
+            if let ClientExtension::PresharedKey(_) = extensions[3] {
                 true
             } else {
                 false

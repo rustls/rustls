@@ -416,7 +416,7 @@ impl ClientSessionImpl {
         // We don't do renegotation at all, in fact.
         ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
-        let ret = self.config.grease.cipher_suites(ret);
+        self.config.grease.cipher_suites(&mut ret);
 
         ret
     }
