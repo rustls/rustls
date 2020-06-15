@@ -257,6 +257,9 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         false
     };
 
+    // Insert GREASE values into extensions list
+    exts = sess.config.grease.client_extensions(exts);
+
     // Note what extensions we sent.
     hello.sent_extensions = exts.iter()
         .map(ClientExtension::get_type)
