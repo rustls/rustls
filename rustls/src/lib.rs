@@ -282,6 +282,21 @@ pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
 
+/// All defined ciphersuites appear in this module.
+///
+/// ALL_CIPHERSUITES is provided an array of all of these values.
+pub mod ciphersuite {
+    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
+    pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+    pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+    pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
+    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
+    pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
+    pub use crate::suites::TLS13_AES_256_GCM_SHA384;
+    pub use crate::suites::TLS13_AES_128_GCM_SHA256;
+}
+
 /// Message signing interfaces and implementations.
 pub mod sign;
 

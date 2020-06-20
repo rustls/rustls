@@ -264,6 +264,7 @@ impl SupportedCipherSuite {
     }
 }
 
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite {
         suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -277,6 +278,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     };
 
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite {
         suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -290,6 +292,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     };
 
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -302,6 +305,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -314,6 +318,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
 };
 
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -326,6 +331,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
@@ -338,6 +344,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
 };
 
+/// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
@@ -350,6 +357,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
 };
 
+/// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
 pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::BulkOnly,
@@ -362,6 +370,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
 };
 
+/// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
 pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
