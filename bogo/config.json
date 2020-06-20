@@ -49,8 +49,9 @@
     "*-AES256-SHA*": "",
     "*_WITH_AES_128_CBC_*": "",
     "*_WITH_AES_256_CBC_*": "",
-    "Basic-Server-Ed25519-*": "bogo tests against TLS1.2 max",
-    "Basic-Server-Ed25519": "bogo tests against TLS1.2 max",
+    "Server-Verify-Ed25519-TLS12": "ed25519 not supported for tls1.2",
+    "Client-Verify-Ed25519-TLS12": "",
+    "Basic-Server-Ed25519-TLS-*": "",
     "*-ECDSA_SHA1-*": "no ecdsa-sha1",
     "*-Sign-RSA_PKCS1_SHA1-*": "no sha1",
     "*-VerifyDefault-RSA_PKCS1_SHA1-*": "no sha1",
@@ -113,6 +114,10 @@
     "QUICTransportParams-*": "Bogo assumes this can be tested over TLS1.3 framing",
     "Ed25519DefaultDisable-NoAccept": "not implemented (ed25519 accepted by default)",
     "Ed25519DefaultDisable-NoAdvertise": "not implemented (ed25519 advertised by default)",
+    "Server-VerifyDefault-Ed25519-TLS13": "ed25519 accepted by default",
+    "Server-VerifyDefault-Ed25519-TLS12": "",
+    "Client-VerifyDefault-Ed25519-TLS13": "",
+    "Client-VerifyDefault-Ed25519-TLS12": "",
     "*-QUIC-*" :"",
     "QUIC-*": "",
     "*-QUIC": ""
@@ -224,7 +229,8 @@
     "Client-Sign-RSA_PKCS1_SHA512-TLS13": ":INCOMPATIBLE:",
     "Server-Verify-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
     "Server-Sign-Ed25519-TLS12": ":INCOMPATIBLE:",
-    "ServerAuth-InvalidSignature-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
+    "Client-InvalidSignature-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
+    "Client-VerifyDefault-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-EmptyProtocolName-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNServer-EmptyProtocolName-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-RejectUnknown-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -364,7 +370,7 @@
     "EarlyDataVersionDowngrade-Client-TLS13": ":WRONG_VERSION:",
     "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "ServerAuth-Sign-Negotiate-Ed25519-TLS12": ":INCOMPATIBLE:"
+    "Server-Sign-Negotiate-Ed25519-TLS12": ":INCOMPATIBLE:"
   },
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
