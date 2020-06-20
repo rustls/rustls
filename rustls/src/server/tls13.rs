@@ -464,7 +464,6 @@ impl CompleteClientHelloHandling {
 
     pub fn handle_client_hello(mut self,
                                sess: &mut ServerSessionImpl,
-                               sni: Option<webpki::DNSName>,
                                mut server_key: sign::CertifiedKey,
                                chm: &Message) -> hs::NextStateOrError {
         let client_hello = require_handshake_msg!(chm, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
@@ -523,8 +522,6 @@ impl CompleteClientHelloHandling {
 
             return Err(hs::incompatible(sess, "no kx group overlap with client"));
         }
-
-        hs::save_sni(sess, sni);
 
         let chosen_group = chosen_group.unwrap();
         let chosen_share = shares_ext.iter()

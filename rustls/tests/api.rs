@@ -1414,13 +1414,51 @@ fn server_complete_io_for_handshake_ending_with_alert() {
 #[test]
 fn server_exposes_offered_sni() {
     let kt = KeyType::RSA;
-    let mut client = ClientSession::new(&Arc::new(make_client_config(kt)),
-                                        dns_name("second.testserver.com"));
-    let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
+    for client_config in AllClientVersions::new(make_client_config(kt)) {
+        let mut client = ClientSession::new(&Arc::new(client_config),
+                                            dns_name("second.testserver.com"));
+        let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
 
-    assert_eq!(None, server.get_sni_hostname());
-    do_handshake(&mut client, &mut server);
-    assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+        assert_eq!(None, server.get_sni_hostname());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+    }
+}
+
+#[test]
+fn server_exposes_offered_sni_smashed_to_lowercase() {
+    // webpki actually does this for us in its DNSName type
+    let kt = KeyType::RSA;
+    for client_config in AllClientVersions::new(make_client_config(kt)) {
+        let mut client = ClientSession::new(&Arc::new(client_config),
+                                            dns_name("SECOND.TESTServer.com"));
+        let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
+
+        assert_eq!(None, server.get_sni_hostname());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+    }
+}
+
+#[test]
+fn server_exposes_offered_sni_even_if_resolver_fails() {
+    let kt = KeyType::RSA;
+    let resolver = rustls::ResolvesServerCertUsingSNI::new();
+
+    let mut server_config = make_server_config(kt);
+    server_config.cert_resolver = Arc::new(resolver);
+    let server_config = Arc::new(server_config);
+
+    for client_config in AllClientVersions::new(make_client_config(kt)) {
+        let mut server = ServerSession::new(&server_config);
+        let mut client = ClientSession::new(&Arc::new(client_config),
+                                            dns_name("thisdoesNOTexist.com"));
+
+        assert_eq!(None, server.get_sni_hostname());
+        transfer(&mut client, &mut server);
+        assert_eq!(server.process_new_packets(), Err(TLSError::General("no server certificate chain resolved".to_string())));
+        assert_eq!(Some("thisdoesnotexist.com"), server.get_sni_hostname());
+    }
 }
 
 #[test]

@@ -602,6 +602,11 @@ impl State for ExpectClientHello {
             None => None,
         };
 
+        if !self.done_retry {
+            // save only the first SNI
+            save_sni(sess, sni.clone());
+        }
+
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
@@ -674,11 +679,10 @@ impl State for ExpectClientHello {
 
         if sess.common.is_tls13() {
             return self.into_complete_tls13_client_hello_handling()
-                .handle_client_hello(sess, sni, certkey, &m);
+                .handle_client_hello(sess, certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
-        save_sni(sess, sni.clone());
         self.handshake.transcript.add_message(&m);
 
         if client_hello.ems_support_offered() {
