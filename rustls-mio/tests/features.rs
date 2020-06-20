@@ -130,7 +130,7 @@ fn client_auth_by_client_with_ecdsa_suite() {
 fn client_auth_by_client_with_eddsa_suite() {
     let test_ca = common::new_test_ca();
 
-    let mut server = OpenSSLServer::new_eddsa(test_ca.path(), 9025);
+    let mut server = OpenSSLServer::new_eddsa(test_ca.path(), 9026);
     server.arg("-verify").arg("0")
           .arg("-tls1_3");
     server.run();
