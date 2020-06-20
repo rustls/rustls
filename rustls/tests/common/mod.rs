@@ -1,9 +1,5 @@
-use std::fs::{self, File};
-use std::str;
-use tempfile;
-
 use std::sync::Arc;
-use std::io::{self, Write};
+use std::io;
 
 use rustls;
 
@@ -46,20 +42,6 @@ macro_rules! embed_files {
                 )+
                 _ => panic!("unknown keytype {} with path {}", keytype, path),
             }
-        }
-
-        pub fn new_test_ca() -> tempfile::TempDir {
-            let dir = tempfile::TempDir::new().unwrap();
-
-            fs::create_dir(dir.path().join("ecdsa")).unwrap();
-            fs::create_dir(dir.path().join("rsa")).unwrap();
-
-            $(
-                let mut f = File::create(dir.path().join($keytype).join($path)).unwrap();
-                f.write($name).unwrap();
-            )+
-
-            dir
         }
     }
 }

@@ -11,7 +11,25 @@ use std::time;
 
 use regex;
 use self::regex::Regex;
-use tempfile;
+
+use ring::rand::SecureRandom;
+
+pub struct DeleteFilesOnDrop {
+    path: PathBuf,
+}
+
+impl DeleteFilesOnDrop {
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+
+impl Drop for DeleteFilesOnDrop {
+    fn drop(&mut self) {
+        fs::remove_dir_all(&self.path)
+            .unwrap();
+    }
+}
 
 macro_rules! embed_files {
     (
@@ -33,18 +51,30 @@ macro_rules! embed_files {
             }
         }
 
-        pub fn new_test_ca() -> tempfile::TempDir {
-            let dir = tempfile::TempDir::new().unwrap();
+        pub fn new_test_ca() -> DeleteFilesOnDrop {
+            let mut rand = [0u8; 4];
+            ring::rand::SystemRandom::new()
+                .fill(&mut rand)
+                .unwrap();
 
-            fs::create_dir(dir.path().join("ecdsa")).unwrap();
-            fs::create_dir(dir.path().join("rsa")).unwrap();
+            let dir = env::temp_dir()
+                .join(format!("rustls-{:02x}{:02x}{:02x}{:02x}",
+                              rand[0], rand[1], rand[2], rand[3]));
+            let deleter = DeleteFilesOnDrop {
+                path: dir,
+            };
+
+            fs::create_dir(&deleter.path).unwrap();
+            fs::create_dir(deleter.path.join("ecdsa")).unwrap();
+            fs::create_dir(deleter.path.join("rsa")).unwrap();
 
             $(
-                let mut f = File::create(dir.path().join($keytype).join($path)).unwrap();
+                let filename = deleter.path.join($keytype).join($path);
+                let mut f = File::create(&filename).unwrap();
                 f.write($name).unwrap();
             )+
 
-            dir
+            deleter
         }
     }
 }
