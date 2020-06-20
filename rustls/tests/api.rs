@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::mem;
 use std::fmt;
 use std::env;
-use std::error::Error;
 use std::io::{self, Write, Read, IoSlice};
 
 use rustls;
