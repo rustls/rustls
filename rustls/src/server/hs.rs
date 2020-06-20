@@ -601,7 +601,11 @@ impl State for ExpectClientHello {
             },
             None => None,
         };
-        save_sni(sess, sni.clone());
+
+        if !self.done_retry {
+            // save only the first SNI
+            save_sni(sess, sni.clone());
+        }
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
