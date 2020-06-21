@@ -6,11 +6,11 @@
 //! ## Current features
 //!
 //! * TLS1.2 and TLS1.3.
-//! * ECDSA or RSA server authentication by clients.
-//! * ECDSA or RSA server authentication by servers.
+//! * ECDSA, Ed25519 or RSA server authentication by clients.
+//! * ECDSA, Ed25519 or RSA server authentication by servers.
 //! * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
 //! * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
-//! * Chacha20Poly1305 bulk encryption.
+//! * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
 //! * ALPN support.
 //! * SNI support.
 //! * Tunable MTU to make TLS messages match size of underlying transport.
@@ -281,6 +281,21 @@ pub use crate::verify::{NoClientAuth, AllowAnyAuthenticatedClient,
 pub use crate::suites::{ALL_CIPHERSUITES, BulkAlgorithm, SupportedCipherSuite};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, NoKeyLog, KeyLogFile};
+
+/// All defined ciphersuites appear in this module.
+///
+/// ALL_CIPHERSUITES is provided an array of all of these values.
+pub mod ciphersuite {
+    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
+    pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+    pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+    pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
+    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+    pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
+    pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
+    pub use crate::suites::TLS13_AES_256_GCM_SHA384;
+    pub use crate::suites::TLS13_AES_128_GCM_SHA256;
+}
 
 /// Message signing interfaces and implementations.
 pub mod sign;

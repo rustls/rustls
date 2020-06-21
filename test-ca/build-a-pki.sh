@@ -2,8 +2,8 @@
 
 set -xe
 
-rm -rf rsa/ ecdsa/
-mkdir -p rsa/ ecdsa/
+rm -rf rsa/ ecdsa/ eddsa/
+mkdir -p rsa/ ecdsa/ eddsa/
 
 openssl req -nodes \
           -x509 \
@@ -88,7 +88,54 @@ openssl req -nodes \
           -days 2000 \
           -subj "/CN=ponytown client"
 
-for kt in rsa ecdsa ; do
+# eddsa
+
+# TODO: add support for Ed448
+# openssl genpkey -algorithm Ed448 -out eddsa/ca.key
+openssl genpkey -algorithm Ed25519 -out eddsa/ca.key
+
+openssl req -nodes \
+          -x509 \
+          -key eddsa/ca.key \
+          -out eddsa/ca.cert \
+          -sha256 \
+          -batch \
+          -days 3650 \
+          -subj "/CN=ponytown EdDSA CA"
+
+openssl genpkey -algorithm Ed25519 -out eddsa/inter.key
+
+openssl req -nodes \
+          -new \
+          -key eddsa/inter.key \
+          -out eddsa/inter.req \
+          -sha256 \
+          -batch \
+          -subj "/CN=ponytown EdDSA level 2 intermediate"
+
+openssl genpkey -algorithm Ed25519 -out eddsa/end.key
+
+openssl req -nodes \
+          -new \
+          -key eddsa/end.key \
+          -out eddsa/end.req \
+          -sha256 \
+          -batch \
+          -subj "/CN=testserver.com"
+
+# TODO: add support for Ed448
+# openssl genpkey -algorithm Ed448 -out eddsa/client.key
+openssl genpkey -algorithm Ed25519 -out eddsa/client.key
+
+openssl req -nodes \
+          -new \
+          -key eddsa/client.key \
+          -out eddsa/client.req \
+          -sha256 \
+          -batch \
+          -subj "/CN=ponytown client"
+
+for kt in rsa ecdsa eddsa ; do
   openssl x509 -req \
             -in $kt/inter.req \
             -out $kt/inter.cert \

@@ -3,7 +3,7 @@ steps:
     displayName: "download and build lcov"
   - script: rustup install stable
     displayName: "install stable rust/cargo"
-  - script: sudo apt-get install llvm llvm-3.8 libclang-common-3.8-dev llvm-3.8-dev
+  - script: sudo apt-get install llvm llvm-7 libclang-common-7-dev llvm-7-dev
     displayName: "install llvm"
   - script: admin/coverage
     displayName: "measure coverage"

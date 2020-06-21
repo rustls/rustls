@@ -15,7 +15,7 @@ jobs:
     rustup_toolchain: ${{ variables.clippy_toolchain }}
 - job: Windows
   pool:
-    vmImage: vs2017-win2016
+    vmImage: windows-2019
   steps:
     - template: admin/pipelines/rustup.yml
     - template: admin/pipelines/cargo-steps.yml
@@ -29,7 +29,7 @@ jobs:
     - template: admin/pipelines/bench.yml
 - job: Linux
   pool:
-    vmImage: ubuntu-16.04
+    vmImage: ubuntu-18.04
   strategy:
     matrix:
       stable:
@@ -41,6 +41,7 @@ jobs:
       minimum:
         rustup_toolchain: ${{ variables.minimum_toolchain }}
   steps:
+    - template: admin/pipelines/ubuntu.yml
     - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: $(rustup_toolchain)
@@ -52,8 +53,9 @@ jobs:
 # and stable rust toolchains
 - job: Coverage
   pool:
-    vmImage: ubuntu-16.04
+    vmImage: ubuntu-18.04
   steps:
+    - template: admin/pipelines/ubuntu.yml
     - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: nightly
@@ -63,8 +65,9 @@ jobs:
 # do in fact build.
 - job: MinimalVersions
   pool:
-    vmImage: ubuntu-16.04
+    vmImage: ubuntu-18.04
   steps:
+    - template: admin/pipelines/ubuntu.yml
     - template: admin/pipelines/rustup.yml
       parameters:
         rustup_toolchain: nightly

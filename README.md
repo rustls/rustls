@@ -30,6 +30,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     uses the superseded certificate_types field of CertificateRequest.
   - *Breaking API change*: The writev_tls API has been removed, in favour
     of using vectored IO support now offered by std::io::Write.
+  - Added ed25519 support for authentication; thanks to @potatosalad.
 * 0.17.0 (2020-02-22):
   - *Breaking API change*: ALPN protocols offered by the client are passed
     to the server certificate resolution trait (`ResolvesServerCert`).
@@ -111,8 +112,8 @@ obsolete cryptography.
 ## Current features
 
 * TLS1.2 and TLS1.3.
-* ECDSA or RSA server authentication by clients.
-* ECDSA or RSA server authentication by servers.
+* ECDSA, Ed25519 or RSA server authentication by clients.
+* ECDSA, Ed25519 or RSA server authentication by servers.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
 * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
