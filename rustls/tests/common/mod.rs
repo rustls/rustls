@@ -66,6 +66,23 @@ embed_files! {
     (ECDSA_NISTP256_PEM, "ecdsa", "nistp256.pem");
     (ECDSA_NISTP384_PEM, "ecdsa", "nistp384.pem");
 
+    (EDDSA_CA_CERT, "eddsa", "ca.cert");
+    (EDDSA_CA_DER, "eddsa", "ca.der");
+    (EDDSA_CA_KEY, "eddsa", "ca.key");
+    (EDDSA_CLIENT_CERT, "eddsa", "client.cert");
+    (EDDSA_CLIENT_CHAIN, "eddsa", "client.chain");
+    (EDDSA_CLIENT_FULLCHAIN, "eddsa", "client.fullchain");
+    (EDDSA_CLIENT_KEY, "eddsa", "client.key");
+    (EDDSA_CLIENT_REQ, "eddsa", "client.req");
+    (EDDSA_END_CERT, "eddsa", "end.cert");
+    (EDDSA_END_CHAIN, "eddsa", "end.chain");
+    (EDDSA_END_FULLCHAIN, "eddsa", "end.fullchain");
+    (EDDSA_END_KEY, "eddsa", "end.key");
+    (EDDSA_END_REQ, "eddsa", "end.req");
+    (EDDSA_INTER_CERT, "eddsa", "inter.cert");
+    (EDDSA_INTER_KEY, "eddsa", "inter.key");
+    (EDDSA_INTER_REQ, "eddsa", "inter.req");
+
     (RSA_CA_CERT, "rsa", "ca.cert");
     (RSA_CA_DER, "rsa", "ca.der");
     (RSA_CA_KEY, "rsa", "ca.key");
@@ -144,19 +161,25 @@ pub fn transfer_altered<F>(left: &mut dyn Session, filter: F, right: &mut dyn Se
     total
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum KeyType {
     RSA,
-    ECDSA
+    ECDSA,
+    ED25519,
 }
 
-pub static ALL_KEY_TYPES: [KeyType; 2] = [ KeyType::RSA, KeyType::ECDSA ];
+pub static ALL_KEY_TYPES: [KeyType; 3] = [
+    KeyType::RSA,
+    KeyType::ECDSA,
+    KeyType::ED25519,
+];
 
 impl KeyType {
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
             KeyType::RSA => bytes_for("rsa", part),
             KeyType::ECDSA => bytes_for("ecdsa", part),
+            KeyType::ED25519 => bytes_for("eddsa", part),
         }
     }
 
