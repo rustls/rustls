@@ -27,7 +27,7 @@ quic = []
 [dev-dependencies]
 env_logger = "0.7.1"
 log = "0.4.4"
-webpki-roots = "0.19.0"
+webpki-roots = "0.20"
 criterion = "0.3.0"
 
 [[example]]
