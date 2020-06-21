@@ -201,8 +201,26 @@ impl ServerConfig {
     /// default, requiring client authentication, requires additional
     /// configuration that we cannot provide reasonable defaults for.
     pub fn new(client_cert_verifier: Arc<dyn verify::ClientCertVerifier>) -> ServerConfig {
+        ServerConfig::with_ciphersuites(client_cert_verifier, &ALL_CIPHERSUITES)
+    }
+
+    /// Make a `ServerConfig` with a custom set of ciphersuites,
+    /// no keys/certificates, and no ALPN protocols.  Session resumption
+    /// is enabled by storing up to 256 recent sessions in memory. Tickets are
+    /// disabled.
+    ///
+    /// Publicly-available web servers on the internet generally don't do client
+    /// authentication; for this use case, `client_cert_verifier` should be a
+    /// `NoClientAuth`. Otherwise, use `AllowAnyAuthenticatedClient` or another
+    /// implementation to enforce client authentication.
+    ///
+    /// We don't provide a default for `client_cert_verifier` because the safest
+    /// default, requiring client authentication, requires additional
+    /// configuration that we cannot provide reasonable defaults for.
+    pub fn with_ciphersuites(client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
+                             ciphersuites: &[&'static SupportedCipherSuite]) -> ServerConfig {
         ServerConfig {
-            ciphersuites: ALL_CIPHERSUITES.to_vec(),
+            ciphersuites: ciphersuites.to_vec(),
             ignore_client_order: false,
             mtu: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
