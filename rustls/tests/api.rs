@@ -435,6 +435,7 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
         vec![
             SignatureScheme::ECDSA_NISTP384_SHA384,
             SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ED25519,
         ]
     );
 }

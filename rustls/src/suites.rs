@@ -140,8 +140,11 @@ pub struct SupportedCipherSuite {
     /// How to do hashing.
     pub hash: HashAlgorithm,
 
-    /// How to sign messages.
-    pub sign: SignatureAlgorithm,
+    /// How to sign messages for authentication.
+    ///
+    /// This is not present for TLS1.3, because authentication is orthogonal
+    /// to the ciphersuite concept there.
+    pub sign: Option<&'static [SignatureScheme]>,
 
     /// Encryption key length, for the bulk algorithm.
     pub enc_key_len: usize,
@@ -198,27 +201,14 @@ impl SupportedCipherSuite {
     pub fn resolve_sig_schemes(&self,
                               offered: &[SignatureScheme])
                               -> Vec<SignatureScheme> {
-        let mut our_preference = vec![
-            // Prefer the designated hash algorithm of this suite, for
-            // security level consistency.
-            SignatureScheme::make(self.sign, self.hash),
-
-            // Then prefer the right sign algorithm, with the best hashes
-            // first.
-            SignatureScheme::make(self.sign, HashAlgorithm::SHA512),
-            SignatureScheme::make(self.sign, HashAlgorithm::SHA384),
-            SignatureScheme::make(self.sign, HashAlgorithm::SHA256)
-        ];
-
-        // For RSA, support PSS too
-        if self.sign == SignatureAlgorithm::RSA {
-            our_preference.push(SignatureScheme::RSA_PSS_SHA512);
-            our_preference.push(SignatureScheme::RSA_PSS_SHA384);
-            our_preference.push(SignatureScheme::RSA_PSS_SHA256);
+        if let Some(our_preference) = self.sign {
+            our_preference.iter()
+                .filter(|pref| offered.contains(pref))
+                .cloned()
+                .collect()
+        } else {
+            vec![]
         }
-
-        our_preference.retain(|pref| offered.contains(pref));
-        our_preference
     }
 
     /// Which AEAD algorithm to use for this suite.
@@ -239,9 +229,18 @@ impl SupportedCipherSuite {
     /// Return true if this suite is usable for TLS `version`.
     pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         match version {
-            ProtocolVersion::TLSv1_3 => self.sign == SignatureAlgorithm::Anonymous,
-            ProtocolVersion::TLSv1_2 => self.sign != SignatureAlgorithm::Anonymous,
+            ProtocolVersion::TLSv1_3 => self.sign.is_none(),
+            ProtocolVersion::TLSv1_2 => self.sign.is_some(),
             _ => false,
+        }
+    }
+
+    /// Return true if this suite is usable for a key only offering `sigalg`
+    /// signatures.  This resolves to true for all TLS1.3 suites.
+    pub fn usable_for_sigalg(&self, sigalg: SignatureAlgorithm) -> bool {
+        match self.sign {
+            None => true, // no constraint expressed by ciphersuite (eg, TLS1.3)
+            Some(schemes) => schemes.iter().any(|scheme| scheme.sign() == sigalg),
         }
     }
 
@@ -264,39 +263,53 @@ impl SupportedCipherSuite {
     }
 }
 
+static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
+    SignatureScheme::ED25519,
+    SignatureScheme::ECDSA_NISTP521_SHA512,
+    SignatureScheme::ECDSA_NISTP384_SHA384,
+    SignatureScheme::ECDSA_NISTP256_SHA256,
+];
+
+static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
+    SignatureScheme::RSA_PSS_SHA512,
+    SignatureScheme::RSA_PSS_SHA384,
+    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PKCS1_SHA512,
+    SignatureScheme::RSA_PKCS1_SHA384,
+    SignatureScheme::RSA_PKCS1_SHA256,
+];
+
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
-pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite {
-        suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: SignatureAlgorithm::ECDSA,
-        bulk: BulkAlgorithm::CHACHA20_POLY1305,
-        hash: HashAlgorithm::SHA256,
-        enc_key_len: 32,
-        fixed_iv_len: 12,
-        explicit_nonce_len: 0,
-        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
-    };
+pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
+    suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    kx: KeyExchangeAlgorithm::ECDHE,
+    sign: Some(TLS12_ECDSA_SCHEMES),
+    bulk: BulkAlgorithm::CHACHA20_POLY1305,
+    hash: HashAlgorithm::SHA256,
+    enc_key_len: 32,
+    fixed_iv_len: 12,
+    explicit_nonce_len: 0,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+};
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite {
-        suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: SignatureAlgorithm::RSA,
-        bulk: BulkAlgorithm::CHACHA20_POLY1305,
-        hash: HashAlgorithm::SHA256,
-        enc_key_len: 32,
-        fixed_iv_len: 12,
-        explicit_nonce_len: 0,
-        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
-    };
+pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
+    suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    kx: KeyExchangeAlgorithm::ECDHE,
+    sign: Some(TLS12_RSA_SCHEMES),
+    bulk: BulkAlgorithm::CHACHA20_POLY1305,
+    hash: HashAlgorithm::SHA256,
+    enc_key_len: 32,
+    fixed_iv_len: 12,
+    explicit_nonce_len: 0,
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+};
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
-    sign: SignatureAlgorithm::RSA,
+    sign: Some(TLS12_RSA_SCHEMES),
     bulk: BulkAlgorithm::AES_128_GCM,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 16,
@@ -309,7 +322,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
-    sign: SignatureAlgorithm::RSA,
+    sign: Some(TLS12_RSA_SCHEMES),
     bulk: BulkAlgorithm::AES_256_GCM,
     hash: HashAlgorithm::SHA384,
     enc_key_len: 32,
@@ -322,7 +335,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
-    sign: SignatureAlgorithm::ECDSA,
+    sign: Some(TLS12_ECDSA_SCHEMES),
     bulk: BulkAlgorithm::AES_128_GCM,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 16,
@@ -335,7 +348,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
-    sign: SignatureAlgorithm::ECDSA,
+    sign: Some(TLS12_ECDSA_SCHEMES),
     bulk: BulkAlgorithm::AES_256_GCM,
     hash: HashAlgorithm::SHA384,
     enc_key_len: 32,
@@ -348,7 +361,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
-    sign: SignatureAlgorithm::Anonymous,
+    sign: None,
     bulk: BulkAlgorithm::CHACHA20_POLY1305,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 32,
@@ -361,7 +374,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
 pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::BulkOnly,
-    sign: SignatureAlgorithm::Anonymous,
+    sign: None,
     bulk: BulkAlgorithm::AES_256_GCM,
     hash: HashAlgorithm::SHA384,
     enc_key_len: 32,
@@ -374,7 +387,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
 pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
     suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
-    sign: SignatureAlgorithm::Anonymous,
+    sign: None,
     bulk: BulkAlgorithm::AES_128_GCM,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 16,
@@ -428,7 +441,7 @@ pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite],
                            sigalg: SignatureAlgorithm)
                            -> Vec<&'static SupportedCipherSuite> {
     all.iter()
-        .filter(|&&suite| suite.sign == SignatureAlgorithm::Anonymous || suite.sign == sigalg)
+        .filter(|&&suite| suite.usable_for_sigalg(sigalg))
         .cloned()
         .collect()
 }
@@ -448,9 +461,8 @@ pub fn reduce_given_version(all: &[&'static SupportedCipherSuite],
 pub fn compatible_sigscheme_for_suites(sigscheme: SignatureScheme,
                                        common_suites: &[&'static SupportedCipherSuite]) -> bool {
     let sigalg = sigscheme.sign();
-
     common_suites.iter()
-        .any(|&suite| suite.sign == SignatureAlgorithm::Anonymous || suite.sign == sigalg)
+        .any(|&suite| suite.usable_for_sigalg(sigalg))
 }
 
 #[cfg(test)]

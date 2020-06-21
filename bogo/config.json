@@ -49,9 +49,6 @@
     "*-AES256-SHA*": "",
     "*_WITH_AES_128_CBC_*": "",
     "*_WITH_AES_256_CBC_*": "",
-    "Server-Verify-Ed25519-TLS12": "ed25519 not supported for tls1.2",
-    "Client-Verify-Ed25519-TLS12": "",
-    "Basic-Server-Ed25519-TLS-*": "",
     "*-ECDSA_SHA1-*": "no ecdsa-sha1",
     "*-Sign-RSA_PKCS1_SHA1-*": "no sha1",
     "*-VerifyDefault-RSA_PKCS1_SHA1-*": "no sha1",
@@ -227,10 +224,6 @@
     "Client-Sign-RSA_PKCS1_SHA256-TLS13": ":INCOMPATIBLE:",
     "Client-Sign-RSA_PKCS1_SHA384-TLS13": ":INCOMPATIBLE:",
     "Client-Sign-RSA_PKCS1_SHA512-TLS13": ":INCOMPATIBLE:",
-    "Server-Verify-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
-    "Server-Sign-Ed25519-TLS12": ":INCOMPATIBLE:",
-    "Client-InvalidSignature-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
-    "Client-VerifyDefault-Ed25519-TLS12": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-EmptyProtocolName-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNServer-EmptyProtocolName-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-RejectUnknown-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -369,8 +362,7 @@
     "EarlyData-CipherMismatch-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyDataVersionDowngrade-Client-TLS13": ":WRONG_VERSION:",
     "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "Server-Sign-Negotiate-Ed25519-TLS12": ":INCOMPATIBLE:"
+    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:"
   },
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
