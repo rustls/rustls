@@ -4,8 +4,10 @@ use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::msgs::handshake::DecomposedSignatureScheme;
 use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 use crate::msgs::codec::{Reader, Codec};
+use crate::cipher;
 
 use ring;
+use std::fmt;
 
 /// Bulk symmetric encryption scheme used by a cipher suite.
 #[allow(non_camel_case_types)]
@@ -126,7 +128,6 @@ impl KeyExchange {
 ///
 /// All possible instances of this class are provided by the library in
 /// the `ALL_CIPHERSUITES` array.
-#[derive(Debug)]
 pub struct SupportedCipherSuite {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
@@ -162,11 +163,29 @@ pub struct SupportedCipherSuite {
     pub explicit_nonce_len: usize,
 
     pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
+    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
+    pub(crate) build_tls12_encrypter: Option<cipher::BuildTLS12Encrypter>,
+    pub(crate) build_tls12_decrypter: Option<cipher::BuildTLS12Decrypter>,
 }
 
 impl PartialEq for SupportedCipherSuite {
     fn eq(&self, other: &SupportedCipherSuite) -> bool {
         self.suite == other.suite
+    }
+}
+
+impl fmt::Debug for SupportedCipherSuite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SupportedCipherSuite")
+            .field("suite", &self.suite)
+            .field("kx", &self.kx)
+            .field("bulk", &self.bulk)
+            .field("hash", &self.hash)
+            .field("sign", &self.sign)
+            .field("enc_key_len", &self.enc_key_len)
+            .field("fixed_iv_len", &self.fixed_iv_len)
+            .field("explicit_nonce_len", &self.explicit_nonce_len)
+            .finish()
     }
 }
 
@@ -211,15 +230,6 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Which AEAD algorithm to use for this suite.
-    pub fn get_aead_alg(&self) -> &'static ring::aead::Algorithm {
-        match self.bulk {
-            BulkAlgorithm::AES_128_GCM => &ring::aead::AES_128_GCM,
-            BulkAlgorithm::AES_256_GCM => &ring::aead::AES_256_GCM,
-            BulkAlgorithm::CHACHA20_POLY1305 => &ring::aead::CHACHA20_POLY1305,
-        }
-    }
-
     /// Length of key block that needs to be output by the key
     /// derivation phase for this suite.
     pub fn key_block_len(&self) -> usize {
@@ -229,8 +239,8 @@ impl SupportedCipherSuite {
     /// Return true if this suite is usable for TLS `version`.
     pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         match version {
-            ProtocolVersion::TLSv1_3 => self.sign.is_none(),
-            ProtocolVersion::TLSv1_2 => self.sign.is_some(),
+            ProtocolVersion::TLSv1_3 => self.build_tls12_encrypter.is_none(),
+            ProtocolVersion::TLSv1_2 => self.build_tls12_encrypter.is_some(),
             _ => false,
         }
     }
@@ -290,6 +300,9 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+    build_tls12_encrypter: Some(cipher::build_tls12_chacha_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_chacha_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
@@ -303,6 +316,9 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = S
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+    build_tls12_encrypter: Some(cipher::build_tls12_chacha_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_chacha_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -316,6 +332,9 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    aead_algorithm: &ring::aead::AES_128_GCM,
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_128_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_128_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
@@ -329,6 +348,9 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
+    aead_algorithm: &ring::aead::AES_256_GCM,
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_256_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_256_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -342,6 +364,9 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    aead_algorithm: &ring::aead::AES_128_GCM,
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_128_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_128_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -355,6 +380,9 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
+    aead_algorithm: &ring::aead::AES_256_GCM,
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_256_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_256_decrypter),
 };
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
@@ -368,6 +396,9 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+    build_tls12_encrypter: None,
+    build_tls12_decrypter: None,
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
@@ -381,6 +412,9 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
+    aead_algorithm: &ring::aead::AES_256_GCM,
+    build_tls12_encrypter: None,
+    build_tls12_decrypter: None,
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
@@ -394,6 +428,9 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    aead_algorithm: &ring::aead::AES_128_GCM,
+    build_tls12_encrypter: None,
+    build_tls12_decrypter: None,
 };
 
 /// A list of all the cipher suites supported by rustls.

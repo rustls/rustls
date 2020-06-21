@@ -7,9 +7,8 @@ use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::error::TLSError;
 use crate::session::SessionSecrets;
-use crate::suites::{SupportedCipherSuite, BulkAlgorithm};
+use crate::suites::SupportedCipherSuite;
 use crate::key_schedule::{derive_traffic_key, derive_traffic_iv};
-use std::convert::TryInto;
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter : Send + Sync {
@@ -48,6 +47,56 @@ fn make_tls12_aad(seq: u64,
     ring::aead::Aad::from(out)
 }
 
+fn make_tls12_gcm_nonce(write_iv: &[u8], explicit: &[u8]) -> Iv {
+    debug_assert_eq!(write_iv.len(), 4);
+    debug_assert_eq!(explicit.len(), 8);
+
+    // The GCM nonce is constructed from a 32-bit 'salt' derived
+    // from the master-secret, and a 64-bit explicit part,
+    // with no specified construction.  Thanks for that.
+    //
+    // We use the same construction as TLS1.3/ChaCha20Poly1305:
+    // a starting point extracted from the key block, xored with
+    // the sequence number.
+    let mut iv = Iv(Default::default());
+    iv.0[..4].copy_from_slice(write_iv);
+    iv.0[4..].copy_from_slice(explicit);
+    iv
+}
+
+pub type BuildTLS12Decrypter = fn(&[u8], &[u8]) -> Box<dyn MessageDecrypter>;
+pub type BuildTLS12Encrypter = fn(&[u8], &[u8], &[u8]) -> Box<dyn MessageEncrypter>;
+
+pub fn build_tls12_gcm_128_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    Box::new(GCMMessageDecrypter::new(&aead::AES_128_GCM, key, iv))
+}
+
+pub fn build_tls12_gcm_128_encrypter(key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter> {
+    let nonce = make_tls12_gcm_nonce(iv, extra);
+    Box::new(GCMMessageEncrypter::new(&aead::AES_128_GCM, key, nonce))
+}
+
+pub fn build_tls12_gcm_256_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    Box::new(GCMMessageDecrypter::new(&aead::AES_256_GCM, key, iv))
+}
+
+pub fn build_tls12_gcm_256_encrypter(key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter> {
+    let nonce = make_tls12_gcm_nonce(iv, extra);
+    Box::new(GCMMessageEncrypter::new(&aead::AES_256_GCM, key, nonce))
+}
+
+pub fn build_tls12_chacha_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    Box::new(ChaCha20Poly1305MessageDecrypter::new(&aead::CHACHA20_POLY1305,
+                                                   key,
+                                                   Iv::copy(iv)))
+}
+
+pub fn build_tls12_chacha_encrypter(key: &[u8], iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+     Box::new(ChaCha20Poly1305MessageEncrypter::new(&aead::CHACHA20_POLY1305,
+                                                    key,
+                                                    Iv::copy(iv)))
+}
+
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
 /// and the session's `secrets`.
 pub fn new_tls12(scs: &'static SupportedCipherSuite,
@@ -65,6 +114,7 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
     let client_write_iv = &key_block[offs..offs + scs.fixed_iv_len];
     offs += scs.fixed_iv_len;
     let server_write_iv = &key_block[offs..offs + scs.fixed_iv_len];
+    offs += scs.fixed_iv_len;
 
     let (write_key, write_iv) = if secrets.randoms.we_are_client {
         (client_write_key, client_write_iv)
@@ -78,52 +128,15 @@ pub fn new_tls12(scs: &'static SupportedCipherSuite,
         (client_write_key, client_write_iv)
     };
 
-    let aead_alg = scs.get_aead_alg();
-
-    match scs.bulk {
-        BulkAlgorithm::AES_128_GCM |
-        BulkAlgorithm::AES_256_GCM => {
-            // The GCM nonce is constructed from a 32-bit 'salt' derived
-            // from the master-secret, and a 64-bit explicit part,
-            // with no specified construction.  Thanks for that.
-            //
-            // We use the same construction as TLS1.3/ChaCha20Poly1305:
-            // a starting point extracted from the key block, xored with
-            // the sequence number.
-            let write_iv = {
-                offs += scs.fixed_iv_len;
-                let explicit_nonce_offs = &key_block[offs..offs + scs.explicit_nonce_len];
-
-                let mut iv = Iv(Default::default());
-                iv.0[..scs.fixed_iv_len].copy_from_slice(write_iv);
-                iv.0[scs.fixed_iv_len..].copy_from_slice(&explicit_nonce_offs);
-                iv
-            };
-
-            (Box::new(GCMMessageDecrypter::new(aead_alg,
-                                               read_key,
-                                               read_iv)),
-             Box::new(GCMMessageEncrypter::new(aead_alg,
-                                               write_key,
-                                               write_iv)))
-        }
-
-        BulkAlgorithm::CHACHA20_POLY1305 => {
-            let read_iv = Iv::new(read_iv.try_into().unwrap());
-            let write_iv = Iv::new(write_iv.try_into().unwrap());
-            (Box::new(ChaCha20Poly1305MessageDecrypter::new(aead_alg,
-                                                            read_key,
-                                                            read_iv)),
-             Box::new(ChaCha20Poly1305MessageEncrypter::new(aead_alg,
-                                                            write_key,
-                                                            write_iv)))
-        }
-    }
+    (
+        scs.build_tls12_decrypter.unwrap()(read_key, read_iv),
+        scs.build_tls12_encrypter.unwrap()(write_key, write_iv, &key_block[offs..])
+    )
 }
 
 pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
                       secret: &hkdf::Prk) -> Box<dyn MessageDecrypter> {
-    let key = derive_traffic_key(secret, scs.get_aead_alg());
+    let key = derive_traffic_key(secret, scs.aead_algorithm);
     let iv = derive_traffic_iv(secret);
 
     Box::new(TLS13MessageDecrypter::new(key, iv))
@@ -131,7 +144,7 @@ pub fn new_tls13_read(scs: &'static SupportedCipherSuite,
 
 pub fn new_tls13_write(scs: &'static SupportedCipherSuite,
                        secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
-    let key = derive_traffic_key(secret, scs.get_aead_alg());
+    let key = derive_traffic_key(secret, scs.aead_algorithm);
     let iv = derive_traffic_iv(secret);
 
     Box::new(TLS13MessageEncrypter::new(key, iv))
@@ -249,6 +262,13 @@ pub(crate) struct Iv([u8; ring::aead::NONCE_LEN]);
 impl Iv {
     pub(crate) fn new(value: [u8; ring::aead::NONCE_LEN]) -> Self {
         Self(value)
+    }
+
+    fn copy(value: &[u8]) -> Self {
+        debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
+        let mut iv = Iv::new(Default::default());
+        iv.0.copy_from_slice(value);
+        iv
     }
 
     #[cfg(test)]
