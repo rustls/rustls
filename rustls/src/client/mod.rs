@@ -148,8 +148,17 @@ impl ClientConfig {
     /// The default session persistence provider stores up to 32
     /// items in memory.
     pub fn new() -> ClientConfig {
+        ClientConfig::with_ciphersuites(&ALL_CIPHERSUITES)
+    }
+
+    /// Make a `ClientConfig` with a custom set of ciphersuites,
+    /// no root certificates, no ALPN protocols, and no client auth.
+    ///
+    /// The default session persistence provider stores up to 32
+    /// items in memory.
+    pub fn with_ciphersuites(ciphersuites: &[&'static SupportedCipherSuite]) -> ClientConfig {
         ClientConfig {
-            ciphersuites: ALL_CIPHERSUITES.to_vec(),
+            ciphersuites: ciphersuites.to_vec(),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
             session_persistence: handy::ClientSessionMemoryCache::new(32),
