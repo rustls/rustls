@@ -12,7 +12,7 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-base64 = "=0.12.1"
+base64 = "0.12.3"
 log = { version = "0.4.4", optional = true }
 ring = "0.16.11"
 sct = "0.6.0"
