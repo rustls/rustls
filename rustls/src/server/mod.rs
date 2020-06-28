@@ -653,8 +653,18 @@ impl Session for ServerSession {
 }
 
 impl io::Read for ServerSession {
-    /// Obtain plaintext data received from the peer over
-    /// this TLS connection.
+    /// Obtain plaintext data received from the peer over this TLS connection.
+    ///
+    /// If the peer closes the TLS session cleanly, this fails with an error of
+    /// kind ErrorKind::ConnectionAborted once all the pending data has been read.
+    /// No further data can be received on that connection, so the underlying TCP
+    /// connection should closed too.
+    ///
+    /// Note that support close notify varies in peer TLS libraries: many do not
+    /// support it and uncleanly close the TCP connection (this might be
+    /// vulnerable to truncation attacks depending on the application protocol).
+    /// This means applications using rustls must both handle ErrorKind::ConnectionAborted
+    /// from this function, *and* unexpected closure of the underlying TCP connection.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.imp.common.read(buf)
     }
