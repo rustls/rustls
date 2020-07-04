@@ -3,11 +3,11 @@
 ## Current features
 
 * TLS1.2 and TLS1.3.
-* ECDSA or RSA server authentication by clients.
-* ECDSA or RSA server authentication by servers.
+* ECDSA, Ed25519 or RSA server authentication by clients.
+* ECDSA, Ed25519 or RSA server authentication by servers.
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
-* Chacha20Poly1305 bulk encryption.
+* ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
 * ALPN support.
 * SNI support.
 * Tunable MTU to make TLS messages match size of underlying transport.

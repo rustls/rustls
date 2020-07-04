@@ -21,6 +21,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Release history:
 
 * Next release:
+  - Planned: removal of unused signature verifcation schemes at link-time.
+  - Planned: removal of PEM parsing to a separate crate.
+* 0.18.0 (2020-07-04):
   - Allow custom certificate validation implementations to also
     handle handshake signature computation.  This allows uses in non-web
     contexts, where `webpki` is not likely to process the certificates
@@ -31,6 +34,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - *Breaking API change*: The writev_tls API has been removed, in favour
     of using vectored IO support now offered by std::io::Write.
   - Added ed25519 support for authentication; thanks to @potatosalad.
+  - Support removal of unused ciphersuites at link-time.  To use this,
+    call `ClientConfig::with_ciphersuites` instead of `ClientConfig::new`.
 * 0.17.0 (2020-02-22):
   - *Breaking API change*: ALPN protocols offered by the client are passed
     to the server certificate resolution trait (`ResolvesServerCert`).
