@@ -1,0 +1,106 @@
+on: [push, pull_request]i
+name: rustls
+
+jobs:
+  build:
+    name: Build+test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # test a bunch of toolchains on ubuntu
+        rust:
+          - stable
+          - beta
+          - nightly
+          - 1.39.0 # our MSRV
+        os: [ubuntu-18.04]
+        # but only stable on macos/windows (slower platforms)
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install ${{ matrix.rust }} toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          override: true
+
+      - name: cargo build (debug; default fatures)
+        run: cargo build
+
+      - name: cargo test (debug; default fatures)
+        run: cargo test
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: cargo test (debug; all fatures)
+        run: cargo test --all-features
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: cargo build (debug; no default features)
+        run: cargo build --no-default-features
+        working-directory: rustls
+
+      - name: cargo test (debug; no default fatures; no run)
+        run: cargo test --no-default-features --no-run
+        working-directory: rustls
+
+      - name: cargo test (release; no run)
+        run: cargo test --release --no-run
+
+  coverage:
+    name: Measure coverage
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          default: true
+
+      - name: Install golang toolchain
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.14"
+
+      - name: Install dependencies
+        run: sudo apt-get install llvm llvm-7 libclang-common-7-dev llvm-7-dev
+
+      - name: Build lcov
+        run: admin/build-lcov
+
+      - name: Measure coverage
+        run: admin/coverage
+
+      - name: Report to codecov.io
+        uses: codecov/codecov-action@v1
+        with:
+          file: final.info
+          fail_ci_if_error: true
+
+  minver:
+    name: Check minimum versions
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          default: true
+
+      - name: cargo test (debug; all features; -Z minimal-versions)
+        run: cargo -Z minimal-versions test --all-features
