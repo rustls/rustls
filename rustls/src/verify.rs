@@ -11,7 +11,7 @@ use crate::error::TLSError;
 use crate::anchors::{DistinguishedNames, RootCertStore};
 use crate::anchors::OwnedTrustAnchor;
 #[cfg(feature = "logging")]
-use crate::log::{warn, debug};
+use crate::log::{warn, debug, trace};
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
@@ -246,7 +246,7 @@ impl ServerCertVerifier for WebPKIVerifier {
             .map(|_| cert)?;
 
         if !ocsp_response.is_empty() {
-            debug!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
+            trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
         cert.verify_is_valid_for_dns_name(dns_name)

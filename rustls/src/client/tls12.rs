@@ -88,7 +88,7 @@ impl hs::State for ExpectCertificateStatus {
         let mut status = require_handshake_msg_mut!(m, HandshakeType::CertificateStatus, HandshakePayload::CertificateStatus)?;
 
         self.server_cert.ocsp_response = status.take_ocsp_response();
-        debug!("Server stapled OCSP response is {:?}", self.server_cert.ocsp_response);
+        trace!("Server stapled OCSP response is {:?}", self.server_cert.ocsp_response);
         Ok(self.into_expect_server_kx())
     }
 }
