@@ -566,7 +566,7 @@ impl hs::State for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(m, HandshakeType::CertificateVerify, HandshakePayload::CertificateVerify)?;
 
-        debug!("Server cert is {:?}", self.server_cert.cert_chain);
+        trace!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
         if self.server_cert.cert_chain.is_empty() {
