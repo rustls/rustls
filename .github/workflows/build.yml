@@ -1,4 +1,4 @@
-on: [push, pull_request]i
+on: [push, pull_request]
 name: rustls
 
 jobs:
