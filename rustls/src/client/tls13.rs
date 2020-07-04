@@ -28,7 +28,7 @@ use crate::sign;
 use crate::suites;
 use crate::ticketer;
 #[cfg(feature = "logging")]
-use crate::log::{debug, warn};
+use crate::log::{debug, warn, trace};
 use crate::error::TLSError;
 use crate::check::check_message;
 #[cfg(feature = "quic")]
