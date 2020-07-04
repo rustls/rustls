@@ -418,7 +418,7 @@ impl hs::State for ExpectServerDone {
 
         hs::check_aligned_handshake(sess)?;
 
-        debug!("Server cert is {:?}", st.server_cert.cert_chain);
+        trace!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.handshake.dns_name);
 
         // 1. Verify the cert chain.
