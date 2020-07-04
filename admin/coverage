@@ -22,13 +22,8 @@ def run(which):
     exe = filter(lambda x: '.d' not in x, glob.glob('target/debug/deps/' + which + '-*'))[0]
     sh('./' + exe)
 
-def cargo():
-    # run stable cargo, because nightly is oft-broken
-    out = subprocess.check_output(['rustup', 'run', 'stable', 'rustup', 'which', 'cargo'])
-    return out.strip()
-
 def rustc(*args):
-    exe = [cargo(), 'rustc', '--all-features'] + list(args)
+    exe = ['cargo', 'rustc', '--all-features'] + list(args)
     env = dict(os.environ)
     env.update(RUSTC_WRAPPER = './admin/coverage-rustc',
                COVERAGE_OPTIONS = COVERAGE_OPTIONS,
