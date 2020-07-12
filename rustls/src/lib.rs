@@ -54,6 +54,13 @@
 //! There are plenty of other libraries that provide these features should you
 //! need them.
 //!
+//! ### Platform support
+//!
+//! Rustls uses [`ring`](https://crates.io/crates/ring) for implementing the
+//! cryptography in TLS. As a result, rustls only runs on platforms
+//! [supported by `ring`](https://github.com/briansmith/ring#online-automated-testing).
+//! At the time of writing this means x86, x86-64, armv7, and aarch64.
+//!
 //! ## Design Overview
 //! ### Rustls does not take care of network IO
 //! It doesn't make or accept TCP connections, or do DNS, or read or write files.
