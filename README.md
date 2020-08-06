@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Release history:
 
 * Next release:
-  - Planned: removal of unused signature verifcation schemes at link-time.
+  - Planned: removal of unused signature verification schemes at link-time.
   - Planned: removal of PEM parsing to a separate crate.
 * 0.18.1 (2020-08-16):
   - Fix DoS vulnerability in TLS1.3 "Middlebox Compatibility Mode" CCS handling.
