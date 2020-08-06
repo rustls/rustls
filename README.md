@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Release history:
 
 * Next release:
-  - Planned: removal of unused signature verifcation schemes at link-time.
+  - Planned: removal of unused signature verification schemes at link-time.
   - Planned: removal of PEM parsing to a separate crate.
 * 0.18.0 (2020-07-04):
   - Allow custom certificate validation implementations to also
