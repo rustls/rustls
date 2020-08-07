@@ -46,6 +46,7 @@ impl TlsClient {
         }
     }
 
+    /// Handles events sent to the TlsClient by mio::Poll
     fn ready(&mut self, ev: &mio::event::Event) {
         assert_eq!(ev.token(), CLIENT);
 
@@ -128,18 +129,20 @@ impl TlsClient {
         self.tls_session.write_tls(&mut self.socket).unwrap();
     }
 
+    /// Registers self as a 'listener' in mio::Registry
     fn register(&mut self, registry: &mio::Registry) {
         let interest = self.event_set();
         registry.register(&mut self.socket, CLIENT, interest).unwrap();
     }
 
+    /// Reregisters self as a 'listener' in mio::Registry.
     fn reregister(&mut self, registry: &mio::Registry) {
         let interest = self.event_set();
         registry.reregister(&mut self.socket, CLIENT, interest).unwrap();
     }
 
-    // Use wants_read/wants_write to register for different mio-level
-    // IO readiness events.
+    /// Use wants_read/wants_write to register for different mio-level
+    /// IO readiness events.
     fn event_set(&self) -> mio::Interest {
         let rd = self.tls_session.wants_read();
         let wr = self.tls_session.wants_write();
