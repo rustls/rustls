@@ -37,6 +37,15 @@ struct TlsClient {
 }
 
 impl TlsClient {
+    fn new(sock: TcpStream, hostname: webpki::DNSNameRef<'_>, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
+        TlsClient {
+            socket: sock,
+            closing: false,
+            clean_closure: false,
+            tls_session: rustls::ClientSession::new(&cfg, hostname),
+        }
+    }
+
     fn ready(&mut self, ev: &mio::event::Event) {
         assert_eq!(ev.token(), CLIENT);
 
@@ -51,34 +60,6 @@ impl TlsClient {
         if self.is_closed() {
             println!("Connection closed");
             process::exit(if self.clean_closure { 0 } else { 1 });
-        }
-    }
-}
-
-/// We implement `io::Write` and pass through to the TLS session
-impl io::Write for TlsClient {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.tls_session.write(bytes)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.tls_session.flush()
-    }
-}
-
-impl io::Read for TlsClient {
-    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.tls_session.read(bytes)
-    }
-}
-
-impl TlsClient {
-    fn new(sock: TcpStream, hostname: webpki::DNSNameRef<'_>, cfg: Arc<rustls::ClientConfig>) -> TlsClient {
-        TlsClient {
-            socket: sock,
-            closing: false,
-            clean_closure: false,
-            tls_session: rustls::ClientSession::new(&cfg, hostname),
         }
     }
 
@@ -148,18 +129,18 @@ impl TlsClient {
     }
 
     fn register(&mut self, registry: &mio::Registry) {
-        let interest = self.ready_interest();
+        let interest = self.event_set();
         registry.register(&mut self.socket, CLIENT, interest).unwrap();
     }
 
     fn reregister(&mut self, registry: &mio::Registry) {
-        let interest = self.ready_interest();
+        let interest = self.event_set();
         registry.reregister(&mut self.socket, CLIENT, interest).unwrap();
     }
 
     // Use wants_read/wants_write to register for different mio-level
     // IO readiness events.
-    fn ready_interest(&self) -> mio::Interest {
+    fn event_set(&self) -> mio::Interest {
         let rd = self.tls_session.wants_read();
         let wr = self.tls_session.wants_write();
 
@@ -546,5 +527,21 @@ fn main() {
             tlsclient.ready(&ev);
             tlsclient.reregister(poll.registry());
         }
+    }
+}
+
+impl io::Write for TlsClient {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.tls_session.write(bytes)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.tls_session.flush()
+    }
+}
+
+impl io::Read for TlsClient {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        self.tls_session.read(bytes)
     }
 }
