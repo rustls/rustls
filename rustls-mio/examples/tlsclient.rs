@@ -160,6 +160,21 @@ impl TlsClient {
         self.closing
     }
 }
+impl io::Write for TlsClient {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.tls_session.write(bytes)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.tls_session.flush()
+    }
+}
+
+impl io::Read for TlsClient {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        self.tls_session.read(bytes)
+    }
+}
 
 /// This is an example cache for client session data.
 /// It optionally dumps cached data to a file, but otherwise
@@ -530,21 +545,5 @@ fn main() {
             tlsclient.ready(&ev);
             tlsclient.reregister(poll.registry());
         }
-    }
-}
-
-impl io::Write for TlsClient {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.tls_session.write(bytes)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.tls_session.flush()
-    }
-}
-
-impl io::Read for TlsClient {
-    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.tls_session.read(bytes)
     }
 }
