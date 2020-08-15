@@ -390,6 +390,16 @@ enum Limit {
     No
 }
 
+/// For TLS1.3 middlebox compatibility mode, how to handle
+/// a received ChangeCipherSpec message.
+pub enum MiddleboxCCS {
+    /// process the message as normal
+    Process,
+
+    /// just ignore it
+    Drop,
+}
+
 pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
@@ -399,6 +409,7 @@ pub struct SessionCommon {
     pub traffic: bool,
     pub early_traffic: bool,
     sent_fatal_alert: bool,
+    received_middlebox_ccs: bool,
     pub message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
@@ -422,6 +433,7 @@ impl SessionCommon {
             traffic: false,
             early_traffic: false,
             sent_fatal_alert: false,
+            received_middlebox_ccs: false,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
             message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
@@ -460,6 +472,26 @@ impl SessionCommon {
                 true
             }
             _ => false
+        }
+    }
+
+    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, TLSError> {
+        // pass message to handshake state machine if any of these are true:
+        // - TLS1.2 (where it's part of the state machine),
+        // - prior to determining the version (it's illegal as a first message)
+        // - if it's not a CCS at all
+        // - if we've finished the handshake
+        if !self.is_tls13() ||
+           !msg.is_content_type(ContentType::ChangeCipherSpec) ||
+           self.traffic {
+            return Ok(MiddleboxCCS::Process);
+        }
+
+        if self.received_middlebox_ccs {
+            Err(TLSError::PeerMisbehavedError("illegal middlebox CCS received".into()))
+        } else {
+            self.received_middlebox_ccs = true;
+            Ok(MiddleboxCCS::Drop)
         }
     }
 

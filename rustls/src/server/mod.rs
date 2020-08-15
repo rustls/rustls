@@ -1,4 +1,4 @@
-use crate::session::{Session, SessionCommon};
+use crate::session::{Session, SessionCommon, MiddleboxCCS};
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use crate::msgs::enums::ContentType;
@@ -377,9 +377,7 @@ impl ServerSessionImpl {
 
     pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
         // TLS1.3: drop CCS at any time during handshaking
-        if self.common.is_tls13()
-            && msg.is_content_type(ContentType::ChangeCipherSpec)
-            && self.is_handshaking() {
+        if let MiddleboxCCS::Drop = self.common.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
             return Ok(());
         }
