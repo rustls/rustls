@@ -23,6 +23,11 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * Next release:
   - Planned: removal of unused signature verifcation schemes at link-time.
   - Planned: removal of PEM parsing to a separate crate.
+* 0.18.1 (2020-08-16):
+  - Fix DoS vulnerability in TLS1.3 "Middlebox Compatibility Mode" CCS handling.
+    This is thought to be quite minor -- see
+    [this commit message](https://github.com/ctz/rustls/commit/e51bf92afcd9dfbd5f4e8154b847aa5cc380913c)
+    for a full discussion.
 * 0.18.0 (2020-07-04):
   - Allow custom certificate validation implementations to also
     handle handshake signature computation.  This allows uses in non-web
