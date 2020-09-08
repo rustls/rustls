@@ -2220,6 +2220,21 @@ mod test_quic {
                        Some(rustls::internal::msgs::enums::AlertDescription::NoApplicationProtocol));
         }
     }
+
+#[test]
+    fn test_quic_exporter() {
+        for  &kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(kt);
+            client_config.versions = vec![ProtocolVersion::TLSv1_3];
+            client_config.alpn_protocols = vec!["bar".into()];
+
+            let mut server_config = make_server_config(kt);
+            server_config.versions = vec![ProtocolVersion::TLSv1_3];
+            server_config.alpn_protocols = vec!["foo".into()];
+
+            do_exporter_test(client_config, server_config);
+        }
+    }
 } // mod test_quic
 
 #[test]

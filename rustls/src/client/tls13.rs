@@ -1046,4 +1046,11 @@ impl hs::State for ExpectQUICTraffic {
         self.0.handle_new_ticket_tls13(sess, nst)?;
         Ok(self)
     }
+
+    fn export_keying_material(&self,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        self.0.export_keying_material(output, label, context)
+    }
 }

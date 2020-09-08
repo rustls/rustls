@@ -883,7 +883,10 @@ impl hs::State for ExpectFinished {
 
         #[cfg(feature = "quic")] {
             if sess.common.protocol == Protocol::Quic {
-                return Ok(Box::new(ExpectQUICTraffic { _fin_verified: fin }));
+                return Ok(Box::new(ExpectQUICTraffic {
+                    key_schedule: key_schedule_traffic,
+                    _fin_verified: fin,
+                }));
             }
         }
 
@@ -973,6 +976,7 @@ impl hs::State for ExpectTraffic {
 
 #[cfg(feature = "quic")]
 pub struct ExpectQUICTraffic {
+    key_schedule: KeyScheduleTraffic,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
@@ -982,5 +986,12 @@ impl hs::State for ExpectQUICTraffic {
         // reject all messages
         check_message(&m, &[], &[])?;
         unreachable!();
+    }
+
+    fn export_keying_material(&self,
+                              output: &mut [u8],
+                              label: &[u8],
+                              context: Option<&[u8]>) -> Result<(), TLSError> {
+        self.key_schedule.export_keying_material(output, label, context)
     }
 }
