@@ -19,7 +19,8 @@ pub struct OwnedTrustAnchor {
 }
 
 impl OwnedTrustAnchor {
-    fn from_trust_anchor(t: &webpki::TrustAnchor) -> OwnedTrustAnchor {
+    /// Copy a `webpki::TrustAnchor` into owned memory
+    pub fn from_trust_anchor(t: &webpki::TrustAnchor) -> OwnedTrustAnchor {
         OwnedTrustAnchor {
             subject: t.subject.to_vec(),
             spki: t.spki.to_vec(),
@@ -27,6 +28,7 @@ impl OwnedTrustAnchor {
         }
     }
 
+    /// Get a `webpki::TrustAnchor` by borrowing the owned elements.
     pub fn to_trust_anchor(&self) -> webpki::TrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
@@ -35,6 +37,18 @@ impl OwnedTrustAnchor {
                 .as_ref()
                 .map(Vec::as_slice),
         }
+    }
+}
+
+impl From<webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
+    fn from(t: webpki::TrustAnchor) -> OwnedTrustAnchor {
+        Self::from_trust_anchor(&t)
+    }
+}
+
+impl<'a> Into<webpki::TrustAnchor<'a>> for &'a OwnedTrustAnchor {
+    fn into(self) -> webpki::TrustAnchor<'a> {
+        self.to_trust_anchor()
     }
 }
 
