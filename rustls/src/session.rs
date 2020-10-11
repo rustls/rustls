@@ -89,6 +89,11 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
 
     /// Retrieves the certificate chain used by the peer to authenticate.
     ///
+    /// The order of the certificate chain is as it appears in the TLS
+    /// protocol: the first certificate relates to the peer, the
+    /// second certifies the first, the third certifies the second, and
+    /// so on.
+    ///
     /// For clients, this is the certificate chain of the server.
     ///
     /// For servers, this is the certificate chain of the client,
