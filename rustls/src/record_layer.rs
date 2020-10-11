@@ -55,7 +55,7 @@ impl RecordLayer {
     }
 
     /// Prepare to use the given `MessageDecrypter` for future message decryption.
-    /// It is not use duntil you call `start_decrypting`.
+    /// It is not used until you call `start_decrypting`.
     pub fn prepare_message_decrypter(&mut self, cipher: Box<dyn MessageDecrypter>) {
         self.message_decrypter = cipher;
         self.read_seq = 0;
