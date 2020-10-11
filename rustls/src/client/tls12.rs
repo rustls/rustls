@@ -638,7 +638,8 @@ fn save_session(secrets: &SessionSecrets,
                                                      scs.suite,
                                                      &handshake.session_id,
                                                      ticket,
-                                                     master_secret);
+                                                     master_secret,
+                                                     &sess.server_cert_chain);
     value.set_times(ticketer::timebase(),
                     recvd_ticket.new_ticket_lifetime,
                     0);

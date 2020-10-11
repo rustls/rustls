@@ -62,6 +62,7 @@ pub struct ClientSessionValue {
     pub age_add: u32,
     pub extended_ms: bool,
     pub max_early_data_size: u32,
+    pub server_cert_chain: CertificatePayload,
 }
 
 impl Codec for ClientSessionValue {
@@ -76,6 +77,7 @@ impl Codec for ClientSessionValue {
         self.age_add.encode(bytes);
         (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
         self.max_early_data_size.encode(bytes);
+        self.server_cert_chain.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
@@ -89,6 +91,7 @@ impl Codec for ClientSessionValue {
         let age_add = u32::read(r)?;
         let extended_ms = u8::read(r)?;
         let max_early_data_size = u32::read(r)?;
+        let server_cert_chain = CertificatePayload::read(r)?;
 
         Some(ClientSessionValue {
             version: v,
@@ -101,6 +104,7 @@ impl Codec for ClientSessionValue {
             age_add,
             extended_ms: extended_ms == 1u8,
             max_early_data_size,
+            server_cert_chain,
         })
     }
 }
@@ -112,7 +116,8 @@ impl ClientSessionValue {
                cs: CipherSuite,
                sessid: &SessionID,
                ticket: Vec<u8>,
-               ms: Vec<u8>)
+               ms: Vec<u8>,
+               server_cert_chain: &CertificatePayload)
                -> ClientSessionValue {
         ClientSessionValue {
             version: v,
@@ -125,6 +130,7 @@ impl ClientSessionValue {
             age_add: 0,
             extended_ms: false,
             max_early_data_size: 0,
+            server_cert_chain: server_cert_chain.clone(),
         }
     }
 

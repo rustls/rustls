@@ -2,6 +2,7 @@ use super::persist::*;
 use super::handshake::*;
 use super::enums::*;
 use super::codec::{Reader, Codec};
+use crate::key::Certificate;
 use webpki::DNSNameRef;
 
 #[test]
@@ -24,7 +25,8 @@ fn clientsessionvalue_is_debug() {
                                       CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                                       &SessionID::new(&[1u8]),
                                       vec![],
-                                      vec![1, 2, 3]);
+                                      vec![1, 2, 3],
+                                      &vec![ Certificate(b"abc".to_vec()), Certificate(b"def".to_vec()) ]);
     println!("{:?}", csv);
 }
 

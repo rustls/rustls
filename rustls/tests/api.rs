@@ -226,6 +226,26 @@ fn client_can_get_server_cert() {
 }
 
 #[test]
+fn client_can_get_server_cert_after_resumption() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let server_config = make_server_config(*kt);
+        for client_config in AllClientVersions::new(make_client_config(*kt)) {
+            let (mut client, mut server) = make_pair_for_configs(client_config.clone(), server_config.clone());
+            do_handshake(&mut client, &mut server);
+
+            let original_certs = client.get_peer_certificates();
+
+            let (mut client, mut server) = make_pair_for_configs(client_config.clone(), server_config.clone());
+            do_handshake(&mut client, &mut server);
+
+            let resumed_certs = client.get_peer_certificates();
+
+            assert_eq!(original_certs, resumed_certs);
+        }
+    }
+}
+
+#[test]
 fn server_can_get_client_cert() {
     for kt in ALL_KEY_TYPES.iter() {
         let mut client_config = make_client_config(*kt);
@@ -244,6 +264,32 @@ fn server_can_get_client_cert() {
         }
     }
 }
+
+#[test]
+fn server_can_get_client_cert_after_resumption() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let mut client_config = make_client_config(*kt);
+        client_config.set_single_client_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
+
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
+
+        for client_config in AllClientVersions::new(client_config) {
+            let client_config = Arc::new(client_config);
+            let (mut client, mut server) = make_pair_for_arc_configs(&client_config,
+                                                                     &server_config);
+            do_handshake(&mut client, &mut server);
+            let original_certs = server.get_peer_certificates();
+
+            let (mut client, mut server) = make_pair_for_arc_configs(&client_config,
+                                                                     &server_config);
+            do_handshake(&mut client, &mut server);
+            let resumed_certs= server.get_peer_certificates();
+            assert_eq!(original_certs, resumed_certs);
+        }
+    }
+}
+
 
 fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
     let mut buf = Vec::new();
@@ -2007,6 +2053,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.puts(), 1);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
+    assert_eq!(client.get_peer_certificates().map(|certs| certs.len()), Some(3));
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -2016,6 +2063,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.puts(), 2);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 1);
+    assert_eq!(client.get_peer_certificates().map(|certs| certs.len()), Some(3));
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -2025,6 +2073,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.puts(), 3);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 2);
+    assert_eq!(client.get_peer_certificates().map(|certs| certs.len()), Some(3));
 }
 
 #[test]
@@ -2046,6 +2095,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.puts(), 0);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
+    assert_eq!(client.get_peer_certificates().map(|certs| certs.len()), Some(3));
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -2055,6 +2105,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.puts(), 0);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
+    assert_eq!(client.get_peer_certificates().map(|certs| certs.len()), Some(3));
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -2064,6 +2115,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.puts(), 0);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
+    assert_eq!(client.get_peer_certificates().map(|certs| certs.len()), Some(3));
 }
 
 #[cfg(feature = "quic")]
