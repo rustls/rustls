@@ -592,6 +592,7 @@ impl State for ExpectServerHello {
 
                 // Since we're resuming, we verified the certificate and
                 // proof of possession in the prior session.
+                sess.server_cert_chain = resuming.server_cert_chain.clone();
                 let certv = verify::ServerCertVerified::assertion();
                 let sigv =  verify::HandshakeSignatureValid::assertion();
 

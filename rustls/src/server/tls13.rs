@@ -574,6 +574,7 @@ impl CompleteClientHelloHandling {
 
         if let Some(ref resume) = resumedata {
             sess.received_resumption_data = Some(resume.application_data.0.clone());
+            sess.client_cert_chain = resume.client_cert_chain.clone();
         }
 
         let full_handshake = resumedata.is_none();

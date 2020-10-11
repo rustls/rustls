@@ -569,12 +569,9 @@ impl ClientSessionImpl {
             return None;
         }
 
-        let mut r = Vec::new();
-        for cert in &self.server_cert_chain {
-            r.push(cert.clone());
-        }
-
-        Some(r)
+        Some(self.server_cert_chain.iter()
+             .cloned()
+             .collect())
     }
 
     pub fn get_alpn_protocol(&self) -> Option<&[u8]> {

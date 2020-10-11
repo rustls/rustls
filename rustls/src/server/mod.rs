@@ -471,14 +471,8 @@ impl ServerSessionImpl {
     }
 
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        let certs = self.client_cert_chain.as_ref()?;
-        let mut r = Vec::new();
-
-        for cert in certs {
-            r.push(cert.clone());
-        }
-
-        Some(r)
+        self.client_cert_chain.as_ref()
+            .map(|chain| chain.iter().cloned().collect())
     }
 
     pub fn get_alpn_protocol(&self) -> Option<&[u8]> {

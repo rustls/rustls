@@ -393,7 +393,7 @@ impl hs::State for ExpectEncryptedExtensions {
             }
         }
 
-        if self.handshake.resuming_session.is_some() {
+        if let Some(resuming_session) = &self.handshake.resuming_session {
             let was_early_traffic = sess.common.early_traffic;
             if was_early_traffic {
                 if exts.early_data_extension_offered() {
@@ -416,6 +416,11 @@ impl hs::State for ExpectEncryptedExtensions {
                     .record_layer
                     .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
             }
+
+            sess.server_cert_chain = resuming_session.server_cert_chain.clone();
+
+            // We *don't* reverify the certificate chain here: resumption is a
+            // continuation of the previous session in terms of security policy.
             let certv = verify::ServerCertVerified::assertion();
             let sigv =  verify::HandshakeSignatureValid::assertion();
             Ok(self.into_expect_finished_resume(certv, sigv))
@@ -929,7 +934,8 @@ impl ExpectTraffic {
                                                          sess.common.get_suite_assert().suite,
                                                          &SessionID::empty(),
                                                          nst.ticket.0.clone(),
-                                                         secret);
+                                                         secret,
+                                                         &sess.server_cert_chain);
         value.set_times(ticketer::timebase(),
                         nst.lifetime,
                         nst.age_add);
