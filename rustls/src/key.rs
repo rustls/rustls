@@ -5,8 +5,9 @@ use std::fmt;
 /// The private key must be DER-encoded ASN.1 in either
 /// PKCS#8 or PKCS#1 format.
 ///
-/// `rustls::pemfile::pkcs8_private_keys` or `rustls::pemfile::rsa_private_keys`
-/// could be used to extract private keys from a PEM file in these formats.
+/// `rustls::pemfile::pkcs8_private_keys`, `rustls::pemfile::rsa_private_keys`
+/// or `rustls::pemfile::ec_private_keys` could be used to extract private
+/// keys from a PEM file in these formats.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PrivateKey(pub Vec<u8>);
 

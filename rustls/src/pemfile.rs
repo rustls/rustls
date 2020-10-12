@@ -64,6 +64,15 @@ pub fn rsa_private_keys(rd: &mut dyn io::BufRead) -> Result<Vec<key::PrivateKey>
             &|v| key::PrivateKey(v))
 }
 
+/// Extract all ECDSA private keys from rd, and return a vec of `key::PrivateKey`s
+/// containing the der-format contents.
+pub fn ec_private_keys(rd: &mut dyn io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {
+    extract(rd,
+            "-----BEGIN EC PRIVATE KEY-----",
+            "-----END EC PRIVATE KEY-----",
+            &|v| key::PrivateKey(v))
+}
+
 /// Extract all PKCS8-encoded private keys from rd, and return a vec of
 /// `key::PrivateKey`s containing the der-format contents.
 pub fn pkcs8_private_keys(rd: &mut dyn io::BufRead) -> Result<Vec<key::PrivateKey>, ()> {

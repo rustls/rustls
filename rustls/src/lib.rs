@@ -256,7 +256,7 @@ mod keylog;
 pub mod internal {
     /// Functions for parsing PEM files containing certificates/keys.
     pub mod pemfile {
-        pub use crate::pemfile::{certs, rsa_private_keys, pkcs8_private_keys};
+        pub use crate::pemfile::{certs, rsa_private_keys, ec_private_keys, pkcs8_private_keys};
     }
 
     /// Low-level TLS message parsing and encoding functions.
