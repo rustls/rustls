@@ -511,8 +511,19 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
             .expect("file contains invalid pkcs8 private key (encrypted keys not supported)")
     };
 
-    // prefer to load pkcs8 keys
-    if !pkcs8_keys.is_empty() {
+    let ec_keys = {
+        let keyfile = fs::File::open(filename)
+            .expect("cannot open private key file");
+        let mut reader = BufReader::new(keyfile);
+        rustls::internal::pemfile::ec_private_keys(&mut reader)
+            .expect("file contains invalid ec private key")
+    };
+
+    // prefer to load ec keys
+    if !ec_keys.is_empty() {
+        ec_keys[0].clone()
+    // then prefer to load pkcs8 keys
+    } else if !pkcs8_keys.is_empty() {
         pkcs8_keys[0].clone()
     } else {
         assert!(!rsa_keys.is_empty());
