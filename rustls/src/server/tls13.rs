@@ -564,7 +564,7 @@ impl CompleteClientHelloHandling {
         }
 
         if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
-            warn!("Resumption ignored, DHE_KE not offered");
+            debug!("Client unwilling to resume, DHE_KE not offered");
             self.send_ticket = false;
             chosen_psk_index = None;
             resumedata = None;
