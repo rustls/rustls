@@ -360,7 +360,7 @@ pub fn process_alpn_protocol(sess: &mut ClientSessionImpl,
         !sess.config.alpn_protocols.contains(sess.alpn_protocol.as_ref().unwrap()) {
         return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
     }
-    debug!("ALPN protocol is {:?}", sess.alpn_protocol);
+    debug!("ALPN protocol is {:?}", sess.alpn_protocol.as_ref().map(|us| std::str::from_utf8(us).unwrap_or("")));
     Ok(())
 }
 
