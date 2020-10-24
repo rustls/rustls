@@ -361,10 +361,11 @@ pub fn process_alpn_protocol(sess: &mut ClientSessionImpl,
         return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
     }
     debug!(
-        "ALPN protocol is {:?}",
+        "ALPN protocol is {:?} ({:?})",
         sess.alpn_protocol
             .as_ref()
-            .map(|us| String::from_utf8_lossy(us))
+            .map(|us| String::from_utf8_lossy(us)),
+        sess.alpn_protocol
     );
     Ok(())
 }
