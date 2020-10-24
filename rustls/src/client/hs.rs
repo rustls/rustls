@@ -364,7 +364,7 @@ pub fn process_alpn_protocol(sess: &mut ClientSessionImpl,
         "ALPN protocol is {:?}",
         sess.alpn_protocol
             .as_ref()
-            .map(|us| std::str::from_utf8(us).unwrap_or(""))
+            .map(|us| String::from_utf8_lossy(us))
     );
     Ok(())
 }
