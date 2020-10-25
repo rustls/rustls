@@ -61,6 +61,12 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
+      - name: Install LLVM11
+        run: |
+          curl https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo apt-add-repository -y 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main'
+          sudo apt-get install -y clang-11
+
       - name: Install rust toolchain
         uses: actions-rs/toolchain@v1
         with:

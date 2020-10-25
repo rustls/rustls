@@ -1,25 +1,27 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import os
 import glob
 import subprocess
 
-LLVM_PATH = glob.glob('/usr/lib/llvm-[37]*/lib/clang/*/lib/linux/')[0]
-COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Cpasses=insert-gcov-profiling -Cpanic=abort -Zpanic-abort-tests -L%s -lclang_rt.profile-x86_64' % LLVM_PATH
+COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Zprofile -Cpanic=abort -Zpanic-abort-tests -Zinstrument-coverage'
 LCOVOPTS = '--gcov-tool ./admin/llvm-gcov --rc lcov_excl_line=assert'.split()
+
+def check_call(*args, **kwargs):
+    subprocess.check_call(*args, **kwargs)
 
 def lcov_exe(*args):
     return ['lcov'] + LCOVOPTS + list(args)
 
 def sh(cmd):
-    subprocess.check_call(cmd, shell = True)
+    check_call(cmd, shell = True)
 
 def cleanup():
     sh('cargo clean')
     sh("rm -rf *.gcda *.gcno")
 
 def run(which):
-    exe = filter(lambda x: '.d' not in x, glob.glob('target/debug/deps/' + which + '-*'))[0]
+    exe = filter(lambda x: '.' not in x, glob.glob('target/debug/deps/' + which + '-*'))[0]
     sh('./' + exe)
 
 def rustc(*args):
@@ -28,11 +30,11 @@ def rustc(*args):
     env.update(RUSTC_WRAPPER = './admin/coverage-rustc',
                COVERAGE_OPTIONS = COVERAGE_OPTIONS,
                CARGO_INCREMENTAL = '0')
-    subprocess.check_call(exe, env = env)
+    check_call(exe, env = env)
 
 def lcov(outfile):
     exe = lcov_exe('--capture', '--directory', '.', '--base-directory', '.', '-o', outfile)
-    subprocess.check_call(exe)
+    check_call(exe)
     return outfile
 
 def merge(outfile, infiles):
@@ -42,16 +44,16 @@ def merge(outfile, infiles):
         arg.append(i)
     arg.append('-o')
     arg.append(outfile)
-    subprocess.check_call(lcov_exe(*arg))
+    check_call(lcov_exe(*arg))
 
 def remove(outfile, infile, pattern):
-    subprocess.check_call(lcov_exe('--remove', infile, os.getcwd() + pattern, '-o', outfile))
+    check_call(lcov_exe('--remove', infile, os.getcwd() + pattern, '-o', outfile))
 
 def extract(outfile, infile):
-    subprocess.check_call(lcov_exe('--extract', infile, os.getcwd() + '/rustls/src/*', '-o', outfile))
+    check_call(lcov_exe('--extract', infile, os.getcwd() + '/rustls/src/*', '-o', outfile))
 
 def genhtml(outdir, infile):
-    subprocess.check_call(['genhtml', '--branch-coverage', '--demangle-cpp', '--legend',
+    check_call(['genhtml', '--branch-coverage', '--demangle-cpp', '--legend',
         infile, '-o', outdir, '--ignore-errors', 'source'])
 
 all_infos = []
