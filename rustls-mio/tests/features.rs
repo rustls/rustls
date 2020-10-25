@@ -28,14 +28,14 @@ fn alpn_offer() {
     // Basic workingness.
     server.client()
         .proto(b"breakfast")
-        .expect_log("ALPN protocol is Some\\(\\[98, 114, 101, 97, 107, 102, 97, 115, 116\\]\\)")
+        .expect_log("ALPN protocol is Some\\(b\"breakfast\"\\)")
         .go();
 
     // Client preference has little effect (we're testing openssl here really)
     server.client()
         .proto(b"edgware")
         .proto(b"ponytown")
-        .expect_log("ALPN protocol is Some\\(\\[112, 111, 110, 121, 116, 111, 119, 110\\]\\)")
+        .expect_log("ALPN protocol is Some\\(b\"ponytown\"\\)")
         .go();
 
     server.kill();
