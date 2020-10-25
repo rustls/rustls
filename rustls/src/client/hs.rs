@@ -21,6 +21,8 @@ use crate::verify;
 use crate::rand;
 use crate::ticketer;
 #[cfg(feature = "logging")]
+use crate::bs_debug;
+#[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::check::check_message;
 use crate::error::TLSError;
@@ -361,11 +363,10 @@ pub fn process_alpn_protocol(sess: &mut ClientSessionImpl,
         return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
     }
     debug!(
-        "ALPN protocol is {:?} ({:?})",
+        "ALPN protocol is {:?}",
         sess.alpn_protocol
             .as_ref()
-            .map(|us| String::from_utf8_lossy(us)),
-        sess.alpn_protocol
+            .map(|v| bs_debug::BsDebug(&v))
     );
     Ok(())
 }
