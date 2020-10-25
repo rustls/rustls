@@ -30,15 +30,15 @@ jobs:
           toolchain: ${{ matrix.rust }}
           override: true
 
-      - name: cargo build (debug; default fatures)
+      - name: cargo build (debug; default features)
         run: cargo build
 
-      - name: cargo test (debug; default fatures)
+      - name: cargo test (debug; default features)
         run: cargo test
         env:
           RUST_BACKTRACE: 1
 
-      - name: cargo test (debug; all fatures)
+      - name: cargo test (debug; all features)
         run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
@@ -47,7 +47,7 @@ jobs:
         run: cargo build --no-default-features
         working-directory: rustls
 
-      - name: cargo test (debug; no default fatures; no run)
+      - name: cargo test (debug; no default features; no run)
         run: cargo test --no-default-features --no-run
         working-directory: rustls
 
