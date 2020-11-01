@@ -37,6 +37,6 @@ fn tls11_only() {
         .verbose()
         .fails()
         .expect_log("TLS alert received:")
-        .expect(r"TLS error: AlertReceived\((HandshakeFailure|ProtocolVersion)\)")
+        .expect(r"TLS error: AlertReceived\((HandshakeFailure|ProtocolVersion|InternalError)\)")
         .go();
 }
