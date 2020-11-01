@@ -12,7 +12,8 @@ fn partial_chain() {
     let mut server = OpenSSLServer::new_rsa(test_ca.path(), 3000);
     server.partial_chain();
     server.run();
-    server.client()
+    server
+        .client()
         .verbose()
         .expect("Ciphers common between both SSL end points:")
         .go();
