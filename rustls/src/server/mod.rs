@@ -102,6 +102,24 @@ pub trait ResolvesServerCert : Send + Sync {
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey>;
 }
 
+impl<T> ResolvesServerCert for Box<T>
+where
+    T: ResolvesServerCert,
+{
+    fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
+        self.as_ref().resolve(client_hello)
+    }
+}
+
+impl<T> ResolvesServerCert for Arc<T>
+where
+    T: ResolvesServerCert,
+{
+    fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
+        self.as_ref().resolve(client_hello)
+    }
+}
+
 /// A struct representing the received Client Hello
 pub struct ClientHello<'a> {
     server_name: Option<webpki::DNSNameRef<'a>>,
