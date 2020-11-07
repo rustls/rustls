@@ -589,7 +589,7 @@ impl ClientSessionImpl {
     pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.early_data.check_write(data.len())
             .and_then(|sz| {
-                self.common.send_early_plaintext(&data[..sz])
+                Ok(self.common.send_early_plaintext(&data[..sz]))
             })
     }
 
@@ -603,7 +603,7 @@ impl ClientSessionImpl {
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
-    fn send_some_plaintext(&mut self, buf: &[u8]) -> io::Result<usize> {
+    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
         st.as_mut()
             .map(|st| st.perhaps_write_key_update(self));
@@ -755,13 +755,13 @@ impl io::Write for ClientSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.imp.send_some_plaintext(buf)
+        Ok(self.imp.send_some_plaintext(buf))
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         let mut sz = 0;
         for buf in bufs {
-            sz += self.imp.send_some_plaintext(buf)?;
+            sz += self.imp.send_some_plaintext(buf);
         }
         Ok(sz)
     }

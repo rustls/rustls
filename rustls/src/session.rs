@@ -630,23 +630,28 @@ impl SessionCommon {
     ///
     /// If internal buffers are too small, this function will not accept
     /// all the data.
-    pub fn send_some_plaintext(&mut self, data: &[u8]) -> io::Result<usize> {
+    pub fn send_some_plaintext(&mut self, data: &[u8]) -> usize {
         self.send_plain(data, Limit::Yes)
     }
 
-    pub fn send_early_plaintext(&mut self, data: &[u8]) -> io::Result<usize> {
+    pub fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.early_traffic);
         debug_assert!(self.record_layer.is_encrypting());
 
         if data.is_empty() {
             // Don't send empty fragments.
-            return Ok(0);
+            return 0;
         }
 
-        Ok(self.send_appdata_encrypt(data, Limit::Yes))
+        self.send_appdata_encrypt(data, Limit::Yes)
     }
 
-    fn send_plain(&mut self, data: &[u8], limit: Limit) -> io::Result<usize> {
+    /// Encrypt and send some plaintext `data`.  `limit` controls
+    /// whether the per-session buffer limits apply.
+    ///
+    /// Returns the number of bytes written from `data`: this might
+    /// be less than `data.len()` if buffer limits were exceeded.
+    fn send_plain(&mut self, data: &[u8], limit: Limit) -> usize {
         if !self.traffic {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
@@ -654,17 +659,17 @@ impl SessionCommon {
                 Limit::Yes => self.sendable_plaintext.append_limited_copy(data),
                 Limit::No => self.sendable_plaintext.append(data.to_vec())
             };
-            return Ok(len);
+            return len;
         }
 
         debug_assert!(self.record_layer.is_encrypting());
 
         if data.is_empty() {
             // Don't send empty fragments.
-            return Ok(0);
+            return 0;
         }
 
-        Ok(self.send_appdata_encrypt(data, limit))
+        self.send_appdata_encrypt(data, limit)
     }
 
     pub fn start_traffic(&mut self) {
@@ -681,8 +686,7 @@ impl SessionCommon {
 
         while !self.sendable_plaintext.is_empty() {
             let buf = self.sendable_plaintext.take_one();
-            self.send_plain(&buf, Limit::No)
-                .unwrap();
+            self.send_plain(&buf, Limit::No);
         }
     }
 
