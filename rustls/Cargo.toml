@@ -1,6 +1,6 @@
 [package]
 name = "rustls"
-version = "0.18.1"
+version = "0.19.0"
 edition = "2018"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
@@ -27,7 +27,7 @@ quic = []
 [dev-dependencies]
 env_logger = "0.8.2"
 log = "0.4.4"
-webpki-roots = "0.20"
+webpki-roots = "0.21"
 criterion = "0.3.0"
 
 [[example]]

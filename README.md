@@ -21,12 +21,13 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Release history:
 
 * Next release:
+  - Planned: removal of unused signature verification schemes at link-time.
+  - Planned: removal of PEM parsing to a separate crate.
+* 0.19.0 (2020-11-22):
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.
   - Fix bug: fully qualified hostnames should have had their trailing dot
     stripped when quoted in the SNI extension.
-  - Planned: removal of unused signature verification schemes at link-time.
-  - Planned: removal of PEM parsing to a separate crate.
 * 0.18.1 (2020-08-16):
   - Fix DoS vulnerability in TLS1.3 "Middlebox Compatibility Mode" CCS handling.
     This is thought to be quite minor -- see
