@@ -23,6 +23,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * Next release:
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.
+  - Fix bug: fully qualified hostnames should have had their trailing dot
+    stripped when quoted in the SNI extension.
   - Planned: removal of unused signature verification schemes at link-time.
   - Planned: removal of PEM parsing to a separate crate.
 * 0.18.1 (2020-08-16):

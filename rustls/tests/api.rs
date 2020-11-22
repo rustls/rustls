@@ -437,6 +437,25 @@ fn server_cert_resolve_with_alpn() {
     }
 }
 
+#[test]
+fn client_trims_terminating_dot() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+        let mut server_config = make_server_config(*kt);
+
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_sni: Some("some-host.com".into()),
+            ..Default::default()
+        });
+
+        let mut client = ClientSession::new(&Arc::new(client_config), dns_name("some-host.com."));
+        let mut server = ServerSession::new(&Arc::new(server_config));
+
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert_eq!(err.is_err(), true);
+    }
+}
+
 
 fn check_sigalgs_reduced_by_ciphersuite(kt: KeyType, suite: CipherSuite,
                                         expected_sigalgs: Vec<SignatureScheme>) {
