@@ -697,12 +697,28 @@ impl Codec for ClientExtension {
     }
 }
 
+fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DNSNameRef) -> webpki::DNSName {
+    let dns_name_str: &str = dns_name.into();
+
+    // RFC6066: "The hostname is represented as a byte string using
+    // ASCII encoding without a trailing dot"
+    if dns_name_str.ends_with('.') {
+        let trimmed = &dns_name_str[0..dns_name_str.len()-1];
+        webpki::DNSNameRef::try_from_ascii_str(trimmed)
+            .unwrap()
+            .to_owned()
+    } else {
+        dns_name.to_owned()
+    }
+}
+
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
     pub fn make_sni(dns_name: webpki::DNSNameRef) -> ClientExtension {
         let name = ServerName {
             typ: ServerNameType::HostName,
-            payload: ServerNamePayload::HostName(dns_name.into()),
+            payload: ServerNamePayload::HostName(
+                trim_hostname_trailing_dot_for_sni(dns_name)),
         };
 
         ClientExtension::ServerName(vec![ name ])
