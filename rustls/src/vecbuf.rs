@@ -1,7 +1,7 @@
-use std::io::Read;
-use std::io;
 use std::cmp;
 use std::collections::VecDeque;
+use std::io;
+use std::io::Read;
 
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
@@ -14,7 +14,10 @@ pub struct ChunkVecBuffer {
 
 impl ChunkVecBuffer {
     pub fn new() -> ChunkVecBuffer {
-        ChunkVecBuffer { chunks: VecDeque::new(), limit: 0 }
+        ChunkVecBuffer {
+            chunks: VecDeque::new(),
+            limit: 0,
+        }
     }
 
     /// Sets the upper limit on how many bytes this
@@ -49,7 +52,7 @@ impl ChunkVecBuffer {
         if self.limit == 0 {
             len
         } else {
-            let space =self.limit.saturating_sub(self.len());
+            let space = self.limit.saturating_sub(self.len());
             cmp::min(len, space)
         }
     }
@@ -85,7 +88,9 @@ impl ChunkVecBuffer {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
-            let used = self.chunks[0].as_slice().read(&mut buf[offs..])?;
+            let used = self.chunks[0]
+                .as_slice()
+                .read(&mut buf[offs..])?;
 
             self.consume(used);
             offs += used;
@@ -112,9 +117,13 @@ impl ChunkVecBuffer {
             return Ok(0);
         }
 
-        let used = wr.write_vectored(&self.chunks.iter()
-                                     .map(|ch| io::IoSlice::new(ch))
-                                     .collect::<Vec<io::IoSlice>>())?;
+        let used = wr.write_vectored(
+            &self
+                .chunks
+                .iter()
+                .map(|ch| io::IoSlice::new(ch))
+                .collect::<Vec<io::IoSlice>>(),
+        )?;
         self.consume(used);
         Ok(used)
     }
@@ -125,8 +134,7 @@ mod test {
     use super::ChunkVecBuffer;
 
     #[test]
-    fn short_append_copy_with_limit()
-    {
+    fn short_append_copy_with_limit() {
         let mut cvb = ChunkVecBuffer::new();
         cvb.set_limit(12);
         assert_eq!(cvb.append_limited_copy(b"hello"), 5);
@@ -136,7 +144,6 @@ mod test {
 
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf).unwrap(), 12);
-        assert_eq!(buf.to_vec(),
-                   b"helloworldhe".to_vec());
+        assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
     }
 }

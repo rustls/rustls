@@ -1,25 +1,21 @@
-use std::sync::Arc;
 use std::io;
+use std::sync::Arc;
 
 use rustls;
 
+use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
+use rustls::internal::pemfile;
+use rustls::ProtocolVersion;
+use rustls::Session;
+use rustls::TLSError;
+use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
+use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
-use rustls::Session;
-use rustls::ProtocolVersion;
-use rustls::TLSError;
-use rustls::{Certificate, PrivateKey};
-use rustls::internal::pemfile;
-use rustls::{RootCertStore, NoClientAuth, AllowAnyAuthenticatedClient};
-use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::{
-    ClientCertVerified,
-    ClientCertVerifier,
-    DistinguishedNames,
-    SignatureScheme,
-    WebPKIVerifier
+    ClientCertVerified, ClientCertVerifier, DistinguishedNames, SignatureScheme, WebPKIVerifier,
 };
 
 use webpki;
@@ -131,7 +127,9 @@ pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
 }
 
 pub fn transfer_altered<F>(left: &mut dyn Session, filter: F, right: &mut dyn Session) -> usize
-    where F: Fn(&mut Message) {
+where
+    F: Fn(&mut Message),
+{
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -147,13 +145,14 @@ pub fn transfer_altered<F>(left: &mut dyn Session, filter: F, right: &mut dyn Se
 
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
-            let mut message = Message::read(&mut reader)
-                .unwrap();
+            let mut message = Message::read(&mut reader).unwrap();
             message.decode_payload();
             filter(&mut message);
             let message_enc = message.get_encoding();
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
-            let len = right.read_tls(message_enc_reader).unwrap();
+            let len = right
+                .read_tls(message_enc_reader)
+                .unwrap();
             assert_eq!(len, message_enc.len());
         }
     }
@@ -168,11 +167,7 @@ pub enum KeyType {
     ED25519,
 }
 
-pub static ALL_KEY_TYPES: [KeyType; 3] = [
-    KeyType::RSA,
-    KeyType::ECDSA,
-    KeyType::ED25519,
-];
+pub static ALL_KEY_TYPES: [KeyType; 3] = [KeyType::RSA, KeyType::ECDSA, KeyType::ED25519];
 
 impl KeyType {
     fn bytes_for(&self, part: &str) -> &'static [u8] {
@@ -184,31 +179,29 @@ impl KeyType {
     }
 
     pub fn get_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain")))
-            .unwrap()
+        pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain"))).unwrap()
     }
 
     pub fn get_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key")))
-                .unwrap()[0]
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key"))).unwrap()[0]
             .clone()
     }
 
     fn get_client_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
-            .unwrap()
+        pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain"))).unwrap()
     }
 
     fn get_client_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key")))
-                .unwrap()[0]
-            .clone()
+        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key"))).unwrap()
+            [0]
+        .clone()
     }
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
     let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+    cfg.set_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap();
 
     cfg
 }
@@ -228,7 +221,8 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
     let mut cfg = ServerConfig::new(NoClientAuth::new());
     cfg.set_client_certificate_verifier(client_auth);
-    cfg.set_single_cert(kt.get_chain(), kt.get_key()).unwrap();
+    cfg.set_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap();
 
     cfg
 }
@@ -236,7 +230,9 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut cfg = ClientConfig::new();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
-    cfg.root_store.add_pem_file(&mut rootbuf).unwrap();
+    cfg.root_store
+        .add_pem_file(&mut rootbuf)
+        .unwrap();
 
     cfg
 }
@@ -249,21 +245,23 @@ pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
 }
 
 pub fn make_pair(kt: KeyType) -> (ClientSession, ServerSession) {
-    make_pair_for_configs(make_client_config(kt),
-                          make_server_config(kt))
+    make_pair_for_configs(make_client_config(kt), make_server_config(kt))
 }
 
-pub fn make_pair_for_configs(client_config: ClientConfig,
-                             server_config: ServerConfig) -> (ClientSession, ServerSession) {
-    make_pair_for_arc_configs(&Arc::new(client_config),
-                              &Arc::new(server_config))
+pub fn make_pair_for_configs(
+    client_config: ClientConfig,
+    server_config: ServerConfig,
+) -> (ClientSession, ServerSession) {
+    make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
-pub fn make_pair_for_arc_configs(client_config: &Arc<ClientConfig>,
-                                 server_config: &Arc<ServerConfig>) -> (ClientSession, ServerSession) {
+pub fn make_pair_for_arc_configs(
+    client_config: &Arc<ClientConfig>,
+    server_config: &Arc<ServerConfig>,
+) -> (ClientSession, ServerSession) {
     (
         ClientSession::new(client_config, dns_name("localhost")),
-        ServerSession::new(server_config)
+        ServerSession::new(server_config),
     )
 }
 
@@ -285,7 +283,10 @@ pub struct AllClientVersions {
 
 impl AllClientVersions {
     pub fn new(client_config: ClientConfig) -> AllClientVersions {
-        AllClientVersions { client_config, index: 0 }
+        AllClientVersions {
+            client_config,
+            index: 0,
+        }
     }
 }
 
@@ -300,12 +301,12 @@ impl Iterator for AllClientVersions {
             1 => {
                 config.versions = vec![ProtocolVersion::TLSv1_2];
                 Some(config)
-            },
+            }
             2 => {
                 config.versions = vec![ProtocolVersion::TLSv1_3];
                 Some(config)
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
 }
@@ -327,12 +328,19 @@ impl ClientCertVerifier for MockClientVerifier {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(&self, sni: Option<&webpki::DNSName>) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(
+        &self,
+        sni: Option<&webpki::DNSName>,
+    ) -> Option<DistinguishedNames> {
         assert!(sni.is_some());
         self.subjects.as_ref().cloned()
     }
 
-    fn verify_client_cert(&self, _presented_certs: &[Certificate], sni: Option<&webpki::DNSName>) -> Result<ClientCertVerified, TLSError> {
+    fn verify_client_cert(
+        &self,
+        _presented_certs: &[Certificate],
+        sni: Option<&webpki::DNSName>,
+    ) -> Result<ClientCertVerified, TLSError> {
         assert!(sni.is_some());
         (self.verified)()
     }
@@ -347,30 +355,39 @@ impl ClientCertVerifier for MockClientVerifier {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum TLSErrorFromPeer { Client(TLSError), Server(TLSError) }
+pub enum TLSErrorFromPeer {
+    Client(TLSError),
+    Server(TLSError),
+}
 
-pub fn do_handshake_until_error(client: &mut ClientSession,
-                                server: &mut ServerSession)
-                               -> Result<(), TLSErrorFromPeer> {
+pub fn do_handshake_until_error(
+    client: &mut ClientSession,
+    server: &mut ServerSession,
+) -> Result<(), TLSErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
-        server.process_new_packets()
+        server
+            .process_new_packets()
             .map_err(|err| TLSErrorFromPeer::Server(err))?;
         transfer(server, client);
-        client.process_new_packets()
+        client
+            .process_new_packets()
             .map_err(|err| TLSErrorFromPeer::Client(err))?;
     }
 
     Ok(())
 }
 
-pub fn do_handshake_until_both_error(client: &mut ClientSession,
-                                     server: &mut ServerSession) -> Result<(), Vec<TLSErrorFromPeer>> {
+pub fn do_handshake_until_both_error(
+    client: &mut ClientSession,
+    server: &mut ServerSession,
+) -> Result<(), Vec<TLSErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
         Err(server_err @ TLSErrorFromPeer::Server(_)) => {
-            let mut errors = vec![ server_err ];
+            let mut errors = vec![server_err];
             transfer(server, client);
-            let client_err = client.process_new_packets()
+            let client_err = client
+                .process_new_packets()
                 .map_err(|err| TLSErrorFromPeer::Client(err))
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
@@ -378,16 +395,17 @@ pub fn do_handshake_until_both_error(client: &mut ClientSession,
         }
 
         Err(client_err @ TLSErrorFromPeer::Client(_)) => {
-            let mut errors = vec![ client_err ];
+            let mut errors = vec![client_err];
             transfer(client, server);
-            let server_err = server.process_new_packets()
+            let server_err = server
+                .process_new_packets()
                 .map_err(|err| TLSErrorFromPeer::Server(err))
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
             Err(errors)
         }
 
-        Ok(()) => Ok(())
+        Ok(()) => Ok(()),
     }
 }
 
@@ -396,7 +414,7 @@ pub fn dns_name(name: &'static str) -> webpki::DNSNameRef<'_> {
 }
 
 pub struct FailsReads {
-    errkind: io::ErrorKind
+    errkind: io::ErrorKind,
 }
 
 impl FailsReads {

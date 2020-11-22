@@ -33,7 +33,10 @@ fn p(out: &mut [u8], hashalg: &'static digest::Algorithm, secret: &[u8], seed: &
     while offs < out.len() {
         // P_hash[i] = HMAC_hash(secret, A(i) + seed)
         let p_term = concat_sign(&hmac_key, current_a.as_ref(), seed);
-        offs += out[offs..].as_mut().write(p_term.as_ref()).unwrap();
+        offs += out[offs..]
+            .as_mut()
+            .write(p_term.as_ref())
+            .unwrap();
 
         // A(i+1) = HMAC_hash(secret, A(i))
         current_a = hmac::sign(&hmac_key, current_a.as_ref());
@@ -47,11 +50,13 @@ fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
     ret
 }
 
-pub fn prf(out: &mut [u8],
-           hashalg: &'static digest::Algorithm,
-           secret: &[u8],
-           label: &[u8],
-           seed: &[u8]) {
+pub fn prf(
+    out: &mut [u8],
+    hashalg: &'static digest::Algorithm,
+    secret: &[u8],
+    label: &[u8],
+    seed: &[u8],
+) {
     let joined_seed = concat(label, seed);
     p(out, hashalg, secret, &joined_seed);
 }

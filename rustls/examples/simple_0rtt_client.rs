@@ -3,10 +3,10 @@ use std::sync::Arc;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
+use env_logger;
 use rustls;
 use webpki;
 use webpki_roots;
-use env_logger;
 
 fn start_session(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain_name).unwrap();
@@ -26,24 +26,28 @@ fn start_session(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     // will yield Some(WriteEarlyData) and WriteEarlyData implements
     // io::Write.  Use this to send the request.
     if let Some(mut early_data) = sess.early_data() {
-        early_data.write(request.as_bytes())
+        early_data
+            .write(request.as_bytes())
             .unwrap();
     }
 
     let mut stream = rustls::Stream::new(&mut sess, &mut sock);
 
     // Complete handshake.
-    stream.flush()
-        .unwrap();
+    stream.flush().unwrap();
 
     // If we didn't send early data, or the server didn't accept it,
     // then send the request as normal.
     if !stream.sess.is_early_data_accepted() {
-        stream.write_all(request.as_bytes()).unwrap();
+        stream
+            .write_all(request.as_bytes())
+            .unwrap();
     }
 
     let mut plaintext = Vec::new();
-    stream.read_to_end(&mut plaintext).unwrap();
+    stream
+        .read_to_end(&mut plaintext)
+        .unwrap();
     stdout().write_all(&plaintext).unwrap();
 }
 

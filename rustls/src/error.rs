@@ -1,8 +1,8 @@
-use std::fmt;
-use std::error::Error;
-use crate::msgs::enums::{ContentType, HandshakeType, AlertDescription};
-use webpki;
+use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use sct;
+use std::error::Error;
+use std::fmt;
+use webpki;
 
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
@@ -76,7 +76,8 @@ pub enum TLSError {
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
-    items.iter()
+    items
+        .iter()
         .map(|x| format!("{:?}", x))
         .collect::<Vec<String>>()
         .join(" or ")
@@ -85,18 +86,24 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
 impl fmt::Display for TLSError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TLSError::InappropriateMessage { ref expect_types, ref got_type } => {
-                write!(f,
-                       "received unexpected message: got {:?} when expecting {}",
-                       got_type,
-                       join::<ContentType>(expect_types))
-            }
-            TLSError::InappropriateHandshakeMessage { ref expect_types, ref got_type } => {
-                write!(f,
-                       "received unexpected handshake message: got {:?} when expecting {}",
-                       got_type,
-                       join::<HandshakeType>(expect_types))
-            }
+            TLSError::InappropriateMessage {
+                ref expect_types,
+                ref got_type,
+            } => write!(
+                f,
+                "received unexpected message: got {:?} when expecting {}",
+                got_type,
+                join::<ContentType>(expect_types)
+            ),
+            TLSError::InappropriateHandshakeMessage {
+                ref expect_types,
+                ref got_type,
+            } => write!(
+                f,
+                "received unexpected handshake message: got {:?} when expecting {}",
+                got_type,
+                join::<HandshakeType>(expect_types)
+            ),
             TLSError::CorruptMessagePayload(ref typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
@@ -117,40 +124,41 @@ impl fmt::Display for TLSError {
     }
 }
 
-impl Error for TLSError {
-}
+impl Error for TLSError {}
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn smoke() {
         use super::TLSError;
-        use crate::msgs::enums::{ContentType, HandshakeType, AlertDescription};
-        use webpki;
+        use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
+        use webpki;
 
-        let all = vec![TLSError::InappropriateMessage {
-                           expect_types: vec![ContentType::Alert],
-                           got_type: ContentType::Handshake,
-                       },
-                       TLSError::InappropriateHandshakeMessage {
-                           expect_types: vec![HandshakeType::ClientHello, HandshakeType::Finished],
-                           got_type: HandshakeType::ServerHello,
-                       },
-                       TLSError::CorruptMessage,
-                       TLSError::CorruptMessagePayload(ContentType::Alert),
-                       TLSError::NoCertificatesPresented,
-                       TLSError::DecryptError,
-                       TLSError::PeerIncompatibleError("no tls1.2".to_string()),
-                       TLSError::PeerMisbehavedError("inconsistent something".to_string()),
-                       TLSError::AlertReceived(AlertDescription::ExportRestriction),
-                       TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
-                       TLSError::InvalidSCT(sct::Error::MalformedSCT),
-                       TLSError::General("undocumented error".to_string()),
-                       TLSError::FailedToGetCurrentTime,
-                       TLSError::HandshakeNotComplete,
-                       TLSError::PeerSentOversizedRecord,
-                       TLSError::NoApplicationProtocol];
+        let all = vec![
+            TLSError::InappropriateMessage {
+                expect_types: vec![ContentType::Alert],
+                got_type: ContentType::Handshake,
+            },
+            TLSError::InappropriateHandshakeMessage {
+                expect_types: vec![HandshakeType::ClientHello, HandshakeType::Finished],
+                got_type: HandshakeType::ServerHello,
+            },
+            TLSError::CorruptMessage,
+            TLSError::CorruptMessagePayload(ContentType::Alert),
+            TLSError::NoCertificatesPresented,
+            TLSError::DecryptError,
+            TLSError::PeerIncompatibleError("no tls1.2".to_string()),
+            TLSError::PeerMisbehavedError("inconsistent something".to_string()),
+            TLSError::AlertReceived(AlertDescription::ExportRestriction),
+            TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
+            TLSError::InvalidSCT(sct::Error::MalformedSCT),
+            TLSError::General("undocumented error".to_string()),
+            TLSError::FailedToGetCurrentTime,
+            TLSError::HandshakeNotComplete,
+            TLSError::PeerSentOversizedRecord,
+            TLSError::NoApplicationProtocol,
+        ];
 
         for err in all {
             println!("{:?}:", err);

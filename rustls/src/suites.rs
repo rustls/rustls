@@ -1,10 +1,10 @@
+use crate::cipher;
+use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
 use crate::msgs::enums::{NamedGroup, ProtocolVersion};
-use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::msgs::handshake::DecomposedSignatureScheme;
+use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
-use crate::msgs::codec::{Reader, Codec};
-use crate::cipher;
 
 use ring;
 use std::fmt;
@@ -41,8 +41,9 @@ pub struct KeyExchange {
 }
 
 impl KeyExchange {
-    pub fn named_group_to_ecdh_alg(group: NamedGroup)
-                                   -> Option<&'static ring::agreement::Algorithm> {
+    pub fn named_group_to_ecdh_alg(
+        group: NamedGroup,
+    ) -> Option<&'static ring::agreement::Algorithm> {
         match group {
             NamedGroup::X25519 => Some(&ring::agreement::X25519),
             NamedGroup::secp256r1 => Some(&ring::agreement::ECDH_P256),
@@ -56,7 +57,7 @@ impl KeyExchange {
         &[
             NamedGroup::X25519,
             NamedGroup::secp384r1,
-            NamedGroup::secp256r1
+            NamedGroup::secp256r1,
         ]
     }
 
@@ -84,7 +85,8 @@ impl KeyExchange {
     }
 
     pub fn check_client_params(&self, kx_params: &[u8]) -> bool {
-        self.decode_client_params(kx_params).is_some()
+        self.decode_client_params(kx_params)
+            .is_some()
     }
 
     fn decode_client_params(&self, kx_params: &[u8]) -> Option<ClientECDHParams> {
@@ -104,14 +106,11 @@ impl KeyExchange {
 
     pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
         let peer_key = ring::agreement::UnparsedPublicKey::new(self.alg, peer);
-        let secret = ring::agreement::agree_ephemeral(self.privkey,
-                                                      &peer_key,
-                                                      (),
-                                                      |v| {
-                                                          let mut r = Vec::new();
-                                                          r.extend_from_slice(v);
-                                                          Ok(r)
-                                                      });
+        let secret = ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), |v| {
+            let mut r = Vec::new();
+            r.extend_from_slice(v);
+            Ok(r)
+        });
 
         if secret.is_err() {
             return None;
@@ -192,7 +191,9 @@ impl fmt::Debug for SupportedCipherSuite {
 impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
-        self.hkdf_algorithm.hmac_algorithm().digest_algorithm()
+        self.hkdf_algorithm
+            .hmac_algorithm()
+            .digest_algorithm()
     }
 
     /// We have parameters and a verified public key in `kx_params`.
@@ -217,11 +218,10 @@ impl SupportedCipherSuite {
     /// Resolve the set of supported `SignatureScheme`s from the
     /// offered `SupportedSignatureSchemes`.  If we return an empty
     /// set, the handshake terminates.
-    pub fn resolve_sig_schemes(&self,
-                              offered: &[SignatureScheme])
-                              -> Vec<SignatureScheme> {
+    pub fn resolve_sig_schemes(&self, offered: &[SignatureScheme]) -> Vec<SignatureScheme> {
         if let Some(our_preference) = self.sign {
-            our_preference.iter()
+            our_preference
+                .iter()
                 .filter(|pref| offered.contains(pref))
                 .cloned()
                 .collect()
@@ -250,19 +250,23 @@ impl SupportedCipherSuite {
     pub fn usable_for_sigalg(&self, sigalg: SignatureAlgorithm) -> bool {
         match self.sign {
             None => true, // no constraint expressed by ciphersuite (eg, TLS1.3)
-            Some(schemes) => schemes.iter().any(|scheme| scheme.sign() == sigalg),
+            Some(schemes) => schemes
+                .iter()
+                .any(|scheme| scheme.sign() == sigalg),
         }
     }
 
     /// Can a session using suite self resume using suite new_suite?
     pub fn can_resume_to(&self, new_suite: &SupportedCipherSuite) -> bool {
-        if self.usable_for_version(ProtocolVersion::TLSv1_3) &&
-            new_suite.usable_for_version(ProtocolVersion::TLSv1_3) {
+        if self.usable_for_version(ProtocolVersion::TLSv1_3)
+            && new_suite.usable_for_version(ProtocolVersion::TLSv1_3)
+        {
             // TLS1.3 actually specifies requirements here: suites are compatible
             // for resumption if they have the same KDF hash
             self.hash == new_suite.hash
-        } else if self.usable_for_version(ProtocolVersion::TLSv1_2) &&
-            new_suite.usable_for_version(ProtocolVersion::TLSv1_2) {
+        } else if self.usable_for_version(ProtocolVersion::TLSv1_2)
+            && new_suite.usable_for_version(ProtocolVersion::TLSv1_2)
+        {
             // Previous versions don't specify any constraint, so we don't
             // resume between suites to avoid bad interactions.
             self.suite == new_suite.suite
@@ -290,36 +294,38 @@ static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
 ];
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
-pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
-    suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-    kx: KeyExchangeAlgorithm::ECDHE,
-    sign: Some(TLS12_ECDSA_SCHEMES),
-    bulk: BulkAlgorithm::CHACHA20_POLY1305,
-    hash: HashAlgorithm::SHA256,
-    enc_key_len: 32,
-    fixed_iv_len: 12,
-    explicit_nonce_len: 0,
-    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
-    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
-    build_tls12_encrypter: Some(cipher::build_tls12_chacha_encrypter),
-    build_tls12_decrypter: Some(cipher::build_tls12_chacha_decrypter),
-};
+pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite {
+        suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: Some(TLS12_ECDSA_SCHEMES),
+        bulk: BulkAlgorithm::CHACHA20_POLY1305,
+        hash: HashAlgorithm::SHA256,
+        enc_key_len: 32,
+        fixed_iv_len: 12,
+        explicit_nonce_len: 0,
+        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        build_tls12_encrypter: Some(cipher::build_tls12_chacha_encrypter),
+        build_tls12_decrypter: Some(cipher::build_tls12_chacha_decrypter),
+    };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCipherSuite {
-    suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    kx: KeyExchangeAlgorithm::ECDHE,
-    sign: Some(TLS12_RSA_SCHEMES),
-    bulk: BulkAlgorithm::CHACHA20_POLY1305,
-    hash: HashAlgorithm::SHA256,
-    enc_key_len: 32,
-    fixed_iv_len: 12,
-    explicit_nonce_len: 0,
-    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
-    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
-    build_tls12_encrypter: Some(cipher::build_tls12_chacha_encrypter),
-    build_tls12_decrypter: Some(cipher::build_tls12_chacha_decrypter),
-};
+pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite {
+        suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: Some(TLS12_RSA_SCHEMES),
+        bulk: BulkAlgorithm::CHACHA20_POLY1305,
+        hash: HashAlgorithm::SHA256,
+        enc_key_len: 32,
+        fixed_iv_len: 12,
+        explicit_nonce_len: 0,
+        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        build_tls12_encrypter: Some(cipher::build_tls12_chacha_encrypter),
+        build_tls12_decrypter: Some(cipher::build_tls12_chacha_decrypter),
+    };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite {
@@ -439,22 +445,25 @@ pub static ALL_CIPHERSUITES: [&SupportedCipherSuite; 9] = [
     &TLS13_CHACHA20_POLY1305_SHA256,
     &TLS13_AES_256_GCM_SHA384,
     &TLS13_AES_128_GCM_SHA256,
-
     // TLS1.2 suites
     &TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
     &TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 ];
 
 // These both O(N^2)!
-pub fn choose_ciphersuite_preferring_client(client_suites: &[CipherSuite],
-                                            server_suites: &[&'static SupportedCipherSuite])
-                                            -> Option<&'static SupportedCipherSuite> {
+pub fn choose_ciphersuite_preferring_client(
+    client_suites: &[CipherSuite],
+    server_suites: &[&'static SupportedCipherSuite],
+) -> Option<&'static SupportedCipherSuite> {
     for client_suite in client_suites {
-        if let Some(selected) = server_suites.iter().find(|x| *client_suite == x.suite) {
+        if let Some(selected) = server_suites
+            .iter()
+            .find(|x| *client_suite == x.suite)
+        {
             return Some(*selected);
         }
     }
@@ -462,10 +471,14 @@ pub fn choose_ciphersuite_preferring_client(client_suites: &[CipherSuite],
     None
 }
 
-pub fn choose_ciphersuite_preferring_server(client_suites: &[CipherSuite],
-                                            server_suites: &[&'static SupportedCipherSuite])
-                                            -> Option<&'static SupportedCipherSuite> {
-    if let Some(selected) = server_suites.iter().find(|x| client_suites.contains(&x.suite)) {
+pub fn choose_ciphersuite_preferring_server(
+    client_suites: &[CipherSuite],
+    server_suites: &[&'static SupportedCipherSuite],
+) -> Option<&'static SupportedCipherSuite> {
+    if let Some(selected) = server_suites
+        .iter()
+        .find(|x| client_suites.contains(&x.suite))
+    {
         return Some(*selected);
     }
 
@@ -474,9 +487,10 @@ pub fn choose_ciphersuite_preferring_server(client_suites: &[CipherSuite],
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with `SignatureAlgorithm` `sigalg` removed.
-pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite],
-                           sigalg: SignatureAlgorithm)
-                           -> Vec<&'static SupportedCipherSuite> {
+pub fn reduce_given_sigalg(
+    all: &[&'static SupportedCipherSuite],
+    sigalg: SignatureAlgorithm,
+) -> Vec<&'static SupportedCipherSuite> {
     all.iter()
         .filter(|&&suite| suite.usable_for_sigalg(sigalg))
         .cloned()
@@ -485,9 +499,10 @@ pub fn reduce_given_sigalg(all: &[&'static SupportedCipherSuite],
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with the chosen `version` removed.
-pub fn reduce_given_version(all: &[&'static SupportedCipherSuite],
-                            version: ProtocolVersion)
-                            -> Vec<&'static SupportedCipherSuite> {
+pub fn reduce_given_version(
+    all: &[&'static SupportedCipherSuite],
+    version: ProtocolVersion,
+) -> Vec<&'static SupportedCipherSuite> {
     all.iter()
         .filter(|&&suite| suite.usable_for_version(version))
         .cloned()
@@ -495,10 +510,13 @@ pub fn reduce_given_version(all: &[&'static SupportedCipherSuite],
 }
 
 /// Return true if `sigscheme` is usable by any of the given suites.
-pub fn compatible_sigscheme_for_suites(sigscheme: SignatureScheme,
-                                       common_suites: &[&'static SupportedCipherSuite]) -> bool {
+pub fn compatible_sigscheme_for_suites(
+    sigscheme: SignatureScheme,
+    common_suites: &[&'static SupportedCipherSuite],
+) -> bool {
     let sigalg = sigscheme.sign();
-    common_suites.iter()
+    common_suites
+        .iter()
         .any(|&suite| suite.usable_for_sigalg(sigalg))
 }
 
@@ -509,32 +527,50 @@ mod test {
 
     #[test]
     fn test_client_pref() {
-        let client = vec![CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                          CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384];
-        let server = vec![&TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-                          &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+        let client = vec![
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        ];
+        let server = vec![
+            &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        ];
         let chosen = choose_ciphersuite_preferring_client(&client, &server);
         assert!(chosen.is_some());
-        assert_eq!(chosen.unwrap(),
-                   &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
+        assert_eq!(chosen.unwrap(), &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256);
     }
 
     #[test]
     fn test_server_pref() {
-        let client = vec![CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                          CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384];
-        let server = vec![&TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-                          &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256];
+        let client = vec![
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        ];
+        let server = vec![
+            &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        ];
         let chosen = choose_ciphersuite_preferring_server(&client, &server);
         assert!(chosen.is_some());
-        assert_eq!(chosen.unwrap(),
-                   &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384);
+        assert_eq!(chosen.unwrap(), &TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384);
     }
 
     #[test]
     fn test_pref_fails() {
-        assert!(choose_ciphersuite_preferring_client(&[CipherSuite::TLS_NULL_WITH_NULL_NULL], &ALL_CIPHERSUITES).is_none());
-        assert!(choose_ciphersuite_preferring_server(&[CipherSuite::TLS_NULL_WITH_NULL_NULL], &ALL_CIPHERSUITES).is_none());
+        assert!(
+            choose_ciphersuite_preferring_client(
+                &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
+                &ALL_CIPHERSUITES
+            )
+            .is_none()
+        );
+        assert!(
+            choose_ciphersuite_preferring_server(
+                &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
+                &ALL_CIPHERSUITES
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -571,9 +607,17 @@ mod test {
     fn test_can_resume_to() {
         assert!(TLS13_CHACHA20_POLY1305_SHA256.can_resume_to(&TLS13_AES_128_GCM_SHA256));
         assert!(!TLS13_CHACHA20_POLY1305_SHA256.can_resume_to(&TLS13_AES_256_GCM_SHA384));
-        assert!(!TLS13_CHACHA20_POLY1305_SHA256.can_resume_to(&TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256));
-        assert!(!TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.can_resume_to(&TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256));
-        assert!(TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.can_resume_to(&TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256));
+        assert!(
+            !TLS13_CHACHA20_POLY1305_SHA256
+                .can_resume_to(&TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)
+        );
+        assert!(
+            !TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+                .can_resume_to(&TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)
+        );
+        assert!(
+            TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+                .can_resume_to(&TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256)
+        );
     }
-
 }

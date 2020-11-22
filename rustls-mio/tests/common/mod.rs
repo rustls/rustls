@@ -9,8 +9,8 @@ use std::str;
 use std::thread;
 use std::time;
 
-use regex;
 use self::regex::Regex;
+use regex;
 
 use ring::rand::SecureRandom;
 
@@ -26,8 +26,7 @@ impl DeleteFilesOnDrop {
 
 impl Drop for DeleteFilesOnDrop {
     fn drop(&mut self) {
-        fs::remove_dir_all(&self.path)
-            .unwrap();
+        fs::remove_dir_all(&self.path).unwrap();
     }
 }
 
@@ -172,10 +171,12 @@ fn unused_port(mut port: u16) -> u16 {
 pub fn skipped(why: &str) {
     use std::io;
     let mut stdout = io::stdout();
-    write!(&mut stdout,
-           "[  SKIPPED  ]        because: {}\n -- UNTESTED: ",
-           why)
-        .unwrap();
+    write!(
+        &mut stdout,
+        "[  SKIPPED  ]        because: {}\n -- UNTESTED: ",
+        why
+    )
+    .unwrap();
 }
 
 pub fn tlsserver_find() -> &'static str {
@@ -321,7 +322,8 @@ impl TlsClient {
     }
 
     pub fn expect(&mut self, expect: &str) -> &mut TlsClient {
-        self.expect_output.push(expect.to_string());
+        self.expect_output
+            .push(expect.to_string());
         self
     }
 
@@ -378,17 +380,35 @@ impl TlsClient {
 
         if self.cafile.is_some() {
             args.push("--cafile");
-            args.push(self.cafile.as_ref().unwrap().to_str().unwrap());
+            args.push(
+                self.cafile
+                    .as_ref()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            );
         }
 
         if self.client_auth_key.is_some() {
             args.push("--auth-key");
-            args.push(self.client_auth_key.as_ref().unwrap().to_str().unwrap());
+            args.push(
+                self.client_auth_key
+                    .as_ref()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            );
         }
 
         if self.client_auth_certs.is_some() {
             args.push("--auth-certs");
-            args.push(self.client_auth_certs.as_ref().unwrap().to_str().unwrap());
+            args.push(
+                self.client_auth_certs
+                    .as_ref()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            );
         }
 
         for suite in &self.suites {
@@ -527,7 +547,8 @@ impl OpenSSLServer {
                 .stderr(process::Stdio::null());
         }
 
-        let child = subp.spawn()
+        let child = subp
+            .spawn()
             .expect("cannot run openssl server");
 
         let port_up = wait_for_port(self.port);
@@ -542,7 +563,11 @@ impl OpenSSLServer {
     }
 
     pub fn kill(&mut self) {
-        self.child.as_mut().unwrap().kill().unwrap();
+        self.child
+            .as_mut()
+            .unwrap()
+            .kill()
+            .unwrap();
         self.child = None;
     }
 
@@ -592,7 +617,9 @@ impl TlsServer {
             http: false,
             echo: false,
             key: test_ca.join(keytype).join("end.key"),
-            certs: test_ca.join(keytype).join("end.fullchain"),
+            certs: test_ca
+                .join(keytype)
+                .join("end.fullchain"),
             cafile: test_ca.join(keytype).join("ca.cert"),
             verbose: false,
             suites: Vec::new(),
@@ -722,7 +749,11 @@ impl TlsServer {
     }
 
     pub fn kill(&mut self) {
-        self.child.as_mut().unwrap().kill().unwrap();
+        self.child
+            .as_mut()
+            .unwrap()
+            .kill()
+            .unwrap();
         self.child = None;
     }
 
@@ -777,7 +808,8 @@ impl OpenSSLClient {
     }
 
     pub fn expect(&mut self, expect: &str) -> &mut Self {
-        self.expect_output.push(expect.to_string());
+        self.expect_output
+            .push(expect.to_string());
         self
     }
 
@@ -806,7 +838,8 @@ impl OpenSSLClient {
             .arg(&self.cafile)
             .args(&extra_args);
 
-        let output = subp.output()
+        let output = subp
+            .output()
             .unwrap_or_else(|e| panic!("failed to execute: {}", e));
 
         let stdout_str = unsafe { String::from_utf8_unchecked(output.stdout.clone()) };

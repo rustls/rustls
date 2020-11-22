@@ -1,11 +1,11 @@
 use webpki;
 
-pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
-use crate::pemfile;
-use crate::x509;
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
+pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
+use crate::pemfile;
+use crate::x509;
 use std::io;
 
 /// This is like a `webpki::TrustAnchor`, except it owns
@@ -33,7 +33,8 @@ impl OwnedTrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
             spki: &self.spki,
-            name_constraints: self.name_constraints
+            name_constraints: self
+                .name_constraints
                 .as_ref()
                 .map(Vec::as_slice),
         }
@@ -101,11 +102,13 @@ impl RootCertStore {
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
     /// fail.
-    pub fn add_server_trust_anchors(&mut self,
-                                    &webpki::TLSServerTrustAnchors(anchors):
-                                        &webpki::TLSServerTrustAnchors) {
+    pub fn add_server_trust_anchors(
+        &mut self,
+        &webpki::TLSServerTrustAnchors(anchors): &webpki::TLSServerTrustAnchors,
+    ) {
         for ta in anchors {
-            self.roots.push(OwnedTrustAnchor::from_trust_anchor(ta));
+            self.roots
+                .push(OwnedTrustAnchor::from_trust_anchor(ta));
         }
     }
 
@@ -136,9 +139,10 @@ impl RootCertStore {
             }
         }
 
-        debug!("add_pem_file processed {} valid and {} invalid certs",
-              valid_count,
-              invalid_count);
+        debug!(
+            "add_pem_file processed {} valid and {} invalid certs",
+            valid_count, invalid_count
+        );
 
         Ok((valid_count, invalid_count))
     }
