@@ -91,8 +91,7 @@ pub fn put_u16(v: u16, out: &mut [u8]) {
 }
 
 pub fn decode_u16(bytes: &[u8]) -> Option<u16> {
-    Some((u16::from(bytes[0]) << 8) |
-         u16::from(bytes[1]))
+    Some((u16::from(bytes[0]) << 8) | u16::from(bytes[1]))
 }
 
 impl Codec for u16 {
@@ -114,9 +113,9 @@ pub struct u24(pub u32);
 
 impl u24 {
     pub fn decode(bytes: &[u8]) -> Option<u24> {
-        Some(u24((u32::from(bytes[0]) << 16) |
-                 (u32::from(bytes[1]) << 8) |
-                 u32::from(bytes[2])))
+        Some(u24((u32::from(bytes[0]) << 16)
+            | (u32::from(bytes[1]) << 8)
+            | u32::from(bytes[2])))
     }
 }
 
@@ -133,10 +132,12 @@ impl Codec for u24 {
 }
 
 pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
-    Some((u32::from(bytes[0]) << 24) |
-         (u32::from(bytes[1]) << 16) |
-         (u32::from(bytes[2]) << 8) |
-         u32::from(bytes[3]))
+    Some(
+        (u32::from(bytes[0]) << 24)
+            | (u32::from(bytes[1]) << 16)
+            | (u32::from(bytes[2]) << 8)
+            | u32::from(bytes[3]),
+    )
 }
 
 impl Codec for u32 {
@@ -164,14 +165,16 @@ pub fn put_u64(v: u64, bytes: &mut [u8]) {
 }
 
 pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
-    Some((u64::from(bytes[0]) << 56) |
-         (u64::from(bytes[1]) << 48) |
-         (u64::from(bytes[2]) << 40) |
-         (u64::from(bytes[3]) << 32) |
-         (u64::from(bytes[4]) << 24) |
-         (u64::from(bytes[5]) << 16) |
-         (u64::from(bytes[6]) << 8) |
-         u64::from(bytes[7]))
+    Some(
+        (u64::from(bytes[0]) << 56)
+            | (u64::from(bytes[1]) << 48)
+            | (u64::from(bytes[2]) << 40)
+            | (u64::from(bytes[3]) << 32)
+            | (u64::from(bytes[4]) << 24)
+            | (u64::from(bytes[5]) << 16)
+            | (u64::from(bytes[6]) << 8)
+            | u64::from(bytes[7]),
+    )
 }
 
 impl Codec for u64 {

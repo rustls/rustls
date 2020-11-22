@@ -64,19 +64,29 @@ pub trait QuicExt {
 
 impl QuicExt for ClientSession {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.imp.common.quic.params.as_ref().map(|v| v.as_ref())
+        self.imp
+            .common
+            .quic
+            .params
+            .as_ref()
+            .map(|v| v.as_ref())
     }
 
     fn get_0rtt_keys(&self) -> Option<DirectionalKeys> {
         Some(DirectionalKeys::new(
             self.imp.resumption_ciphersuite?,
-            self.imp.common.quic.early_secret.as_ref()?,
+            self.imp
+                .common
+                .quic
+                .early_secret
+                .as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
         read_hs(&mut self.imp.common, plaintext)?;
-        self.imp.process_new_handshake_messages()
+        self.imp
+            .process_new_handshake_messages()
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
@@ -94,19 +104,29 @@ impl QuicExt for ClientSession {
 
 impl QuicExt for ServerSession {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.imp.common.quic.params.as_ref().map(|v| v.as_ref())
+        self.imp
+            .common
+            .quic
+            .params
+            .as_ref()
+            .map(|v| v.as_ref())
     }
 
     fn get_0rtt_keys(&self) -> Option<DirectionalKeys> {
         Some(DirectionalKeys::new(
             self.imp.common.get_suite()?,
-            self.imp.common.quic.early_secret.as_ref()?,
+            self.imp
+                .common
+                .quic
+                .early_secret
+                .as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
         read_hs(&mut self.imp.common, plaintext)?;
-        self.imp.process_new_handshake_messages()
+        self.imp
+            .process_new_handshake_messages()
     }
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
         write_hs(&mut self.imp.common, buf)
@@ -431,20 +451,36 @@ mod test {
 
         const SERVER_MASK: [u8; 5] = [0x38, 0x16, 0x8a, 0x0c, 0x25];
         assert_eq!(
-            server_keys.local.header.new_mask(SAMPLE).unwrap(),
+            server_keys
+                .local
+                .header
+                .new_mask(SAMPLE)
+                .unwrap(),
             SERVER_MASK
         );
         assert_eq!(
-            client_keys.remote.header.new_mask(SAMPLE).unwrap(),
+            client_keys
+                .remote
+                .header
+                .new_mask(SAMPLE)
+                .unwrap(),
             SERVER_MASK
         );
         const CLIENT_MASK: [u8; 5] = [0xae, 0x96, 0x2e, 0x67, 0xec];
         assert_eq!(
-            server_keys.remote.header.new_mask(SAMPLE).unwrap(),
+            server_keys
+                .remote
+                .header
+                .new_mask(SAMPLE)
+                .unwrap(),
             CLIENT_MASK
         );
         assert_eq!(
-            client_keys.local.header.new_mask(SAMPLE).unwrap(),
+            client_keys
+                .local
+                .header
+                .new_mask(SAMPLE)
+                .unwrap(),
             CLIENT_MASK
         );
 
@@ -457,7 +493,11 @@ mod test {
             0x0d, 0x00, 0x00, 0x00, 0x00, 0x18, 0x41, 0x0a, 0x02, 0x00, 0x00, 0x56,
         ];
         let mut payload = PLAINTEXT;
-        let server_nonce = server_keys.local.packet.iv.nonce_for(PACKET_NUMBER);
+        let server_nonce = server_keys
+            .local
+            .packet
+            .iv
+            .nonce_for(PACKET_NUMBER);
         let tag = server_keys
             .local
             .packet
@@ -466,7 +506,9 @@ mod test {
             .unwrap();
         assert_eq!(
             payload,
-            [0x0d, 0x91, 0x96, 0x31, 0xc0, 0xeb, 0x84, 0xf2, 0x88, 0x59, 0xfe, 0xc0]
+            [
+                0x0d, 0x91, 0x96, 0x31, 0xc0, 0xeb, 0x84, 0xf2, 0x88, 0x59, 0xfe, 0xc0
+            ]
         );
         assert_eq!(
             tag.as_ref(),
@@ -478,7 +520,11 @@ mod test {
 
         let aad = aead::Aad::from(AAD);
         let mut payload = PLAINTEXT;
-        let client_nonce = client_keys.local.packet.iv.nonce_for(PACKET_NUMBER);
+        let client_nonce = client_keys
+            .local
+            .packet
+            .iv
+            .nonce_for(PACKET_NUMBER);
         let tag = client_keys
             .local
             .packet
@@ -487,7 +533,9 @@ mod test {
             .unwrap();
         assert_eq!(
             payload,
-            [0x89, 0x6c, 0x66, 0x91, 0xe0, 0x9f, 0x47, 0x7a, 0x91, 0x42, 0xa4, 0x46]
+            [
+                0x89, 0x6c, 0x66, 0x91, 0xe0, 0x9f, 0x47, 0x7a, 0x91, 0x42, 0xa4, 0x46
+            ]
         );
         assert_eq!(
             tag.as_ref(),
@@ -503,9 +551,13 @@ mod test {
         fn equal_prk(x: &hkdf::Prk, y: &hkdf::Prk) -> bool {
             let mut x_data = [0; 16];
             let mut y_data = [0; 16];
-            let x_okm = x.expand(&[b"info"], &aead::quic::AES_128).unwrap();
+            let x_okm = x
+                .expand(&[b"info"], &aead::quic::AES_128)
+                .unwrap();
             x_okm.fill(&mut x_data[..]).unwrap();
-            let y_okm = y.expand(&[b"info"], &aead::quic::AES_128).unwrap();
+            let y_okm = y
+                .expand(&[b"info"], &aead::quic::AES_128)
+                .unwrap();
             y_okm.fill(&mut y_data[..]).unwrap();
             x_data == y_data
         }

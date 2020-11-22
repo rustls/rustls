@@ -1,35 +1,35 @@
-use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::{AlertDescription, HandshakeType};
-use crate::session::{Session, SessionCommon, MiddleboxCCS};
-use crate::keylog::{KeyLog, NoKeyLog};
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::handshake::ClientExtension;
-use crate::msgs::message::Message;
-use crate::verify;
 use crate::anchors;
-use crate::sign;
 use crate::error::TLSError;
 use crate::key;
+use crate::keylog::{KeyLog, NoKeyLog};
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::enums::CipherSuite;
+use crate::msgs::enums::SignatureScheme;
+use crate::msgs::enums::{AlertDescription, HandshakeType};
+use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::handshake::CertificatePayload;
+use crate::msgs::handshake::ClientExtension;
+use crate::msgs::message::Message;
+use crate::session::{MiddleboxCCS, Session, SessionCommon};
+use crate::sign;
+use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::verify;
 
-use std::sync::Arc;
-use std::io::{self, IoSlice};
 use std::fmt;
+use std::io::{self, IoSlice};
 use std::mem;
+use std::sync::Arc;
 
 use sct;
 use webpki;
 
 #[macro_use]
 mod hs;
-mod tls12;
-mod tls13;
 mod common;
 pub mod handy;
+mod tls12;
+mod tls13;
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -42,7 +42,7 @@ pub mod handy;
 /// in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common
 /// choice.
-pub trait StoresClientSessions : Send + Sync {
+pub trait StoresClientSessions: Send + Sync {
     /// Stores a new `value` for `key`.  Returns `true`
     /// if the value was stored.
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
@@ -54,7 +54,7 @@ pub trait StoresClientSessions : Send + Sync {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert : Send + Sync {
+pub trait ResolvesClientCert: Send + Sync {
     /// With the server-supplied acceptable issuers in `acceptable_issuers`,
     /// the server's supported signature schemes in `sigschemes`,
     /// return a certificate chain and signing key to authenticate.
@@ -66,10 +66,11 @@ pub trait ResolvesClientCert : Send + Sync {
     /// Return None to continue the handshake without any client
     /// authentication.  The server may reject the handshake later
     /// if it requires authentication.
-    fn resolve(&self,
-               acceptable_issuers: &[&[u8]],
-               sigschemes: &[SignatureScheme])
-               -> Option<sign::CertifiedKey>;
+    fn resolve(
+        &self,
+        acceptable_issuers: &[&[u8]],
+        sigschemes: &[SignatureScheme],
+    ) -> Option<sign::CertifiedKey>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
@@ -138,7 +139,9 @@ pub struct ClientConfig {
 }
 
 impl Default for ClientConfig {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ClientConfig {
@@ -179,7 +182,11 @@ impl ClientConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(&v) && self.ciphersuites.iter().any(|cs| cs.usable_for_version(v))
+        self.versions.contains(&v)
+            && self
+                .ciphersuites
+                .iter()
+                .any(|cs| cs.usable_for_version(v))
     }
 
     #[doc(hidden)]
@@ -193,7 +200,8 @@ impl ClientConfig {
     /// preferred, the last is the least preferred.
     pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
         self.alpn_protocols.clear();
-        self.alpn_protocols.extend_from_slice(protocols);
+        self.alpn_protocols
+            .extend_from_slice(protocols);
     }
 
     /// Sets persistence layer to `persist`.
@@ -223,9 +231,11 @@ impl ClientConfig {
     ///
     /// `cert_chain` is a vector of DER-encoded certificates,
     /// `key_der` is a DER-encoded RSA or ECDSA private key.
-    pub fn set_single_client_cert(&mut self,
-                                  cert_chain: Vec<key::Certificate>,
-                                  key_der: key::PrivateKey) -> Result<(), TLSError> {
+    pub fn set_single_client_cert(
+        &mut self,
+        cert_chain: Vec<key::Certificate>,
+        key_der: key::PrivateKey,
+    ) -> Result<(), TLSError> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         self.client_auth_cert_resolver = Arc::new(resolver);
         Ok(())
@@ -244,19 +254,18 @@ impl ClientConfig {
 pub mod danger {
     use std::sync::Arc;
 
-    use super::ClientConfig;
     use super::verify::ServerCertVerifier;
+    use super::ClientConfig;
 
     /// Accessor for dangerous configuration options.
     pub struct DangerousClientConfig<'a> {
         /// The underlying ClientConfig
-        pub cfg: &'a mut ClientConfig
+        pub cfg: &'a mut ClientConfig,
     }
 
     impl<'a> DangerousClientConfig<'a> {
         /// Overrides the default `ServerCertVerifier` with something else.
-        pub fn set_certificate_verifier(&mut self,
-                                        verifier: Arc<dyn ServerCertVerifier>) {
+        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
         }
     }
@@ -286,15 +295,15 @@ impl EarlyData {
 
     fn is_enabled(&self) -> bool {
         match self.state {
-            EarlyDataState::Ready | EarlyDataState::Accepted  => true,
-            _ => false
+            EarlyDataState::Ready | EarlyDataState::Accepted => true,
+            _ => false,
         }
     }
 
     fn is_accepted(&self) -> bool {
         match self.state {
             EarlyDataState::Accepted | EarlyDataState::AcceptedFinished => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -335,11 +344,10 @@ impl EarlyData {
                 };
 
                 Ok(take)
-            },
-            EarlyDataState::Rejected
-                | EarlyDataState::AcceptedFinished => {
+            }
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
                 Err(io::Error::from(io::ErrorKind::InvalidInput))
-            },
+            }
         }
     }
 
@@ -388,7 +396,8 @@ pub struct ClientSessionImpl {
 
 impl fmt::Debug for ClientSessionImpl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientSessionImpl").finish()
+        f.debug_struct("ClientSessionImpl")
+            .finish()
     }
 }
 
@@ -470,14 +479,19 @@ impl ClientSessionImpl {
 
         // For handshake messages, we need to join them before parsing
         // and processing.
-        if self.common.handshake_joiner.want_message(&msg) {
+        if self
+            .common
+            .handshake_joiner
+            .want_message(&msg)
+        {
             self.common
                 .handshake_joiner
                 .take_message(msg)
                 .ok_or_else(|| {
-                            self.common.send_fatal_alert(AlertDescription::DecodeError);
-                            TLSError::CorruptMessagePayload(ContentType::Handshake)
-                            })?;
+                    self.common
+                        .send_fatal_alert(AlertDescription::DecodeError);
+                    TLSError::CorruptMessagePayload(ContentType::Handshake)
+                })?;
             return self.process_new_handshake_messages();
         }
 
@@ -495,7 +509,12 @@ impl ClientSessionImpl {
     }
 
     pub fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
-        while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
+        while let Some(msg) = self
+            .common
+            .handshake_joiner
+            .frames
+            .pop_front()
+        {
             self.process_main_protocol(msg)?;
         }
 
@@ -503,18 +522,20 @@ impl ClientSessionImpl {
     }
 
     fn reject_renegotiation_attempt(&mut self) -> Result<(), TLSError> {
-        self.common.send_warning_alert(AlertDescription::NoRenegotiation);
+        self.common
+            .send_warning_alert(AlertDescription::NoRenegotiation);
         Ok(())
     }
 
     fn queue_unexpected_alert(&mut self) {
-        self.common.send_fatal_alert(AlertDescription::UnexpectedMessage);
+        self.common
+            .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
         match rc {
-            Err(TLSError::InappropriateMessage { .. }) |
-            Err(TLSError::InappropriateHandshakeMessage { .. }) => {
+            Err(TLSError::InappropriateMessage { .. })
+            | Err(TLSError::InappropriateHandshakeMessage { .. }) => {
                 self.queue_unexpected_alert();
             }
             _ => {}
@@ -528,9 +549,10 @@ impl ClientSessionImpl {
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotation requests.  These can occur any time.
-        if msg.is_handshake_type(HandshakeType::HelloRequest) &&
-            !self.common.is_tls13() &&
-            !self.is_handshaking() {
+        if msg.is_handshake_type(HandshakeType::HelloRequest)
+            && !self.common.is_tls13()
+            && !self.is_handshaking()
+        {
             return self.reject_renegotiation_attempt();
         }
 
@@ -551,7 +573,12 @@ impl ClientSessionImpl {
             return Err(TLSError::CorruptMessage);
         }
 
-        while let Some(msg) = self.common.message_deframer.frames.pop_front() {
+        while let Some(msg) = self
+            .common
+            .message_deframer
+            .frames
+            .pop_front()
+        {
             match self.process_msg(msg) {
                 Ok(_) => {}
                 Err(err) => {
@@ -569,13 +596,18 @@ impl ClientSessionImpl {
             return None;
         }
 
-        Some(self.server_cert_chain.iter()
-             .cloned()
-             .collect())
+        Some(
+            self.server_cert_chain
+                .iter()
+                .cloned()
+                .collect(),
+        )
     }
 
     pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol.as_ref().map(AsRef::as_ref)
+        self.alpn_protocol
+            .as_ref()
+            .map(AsRef::as_ref)
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
@@ -587,16 +619,21 @@ impl ClientSessionImpl {
     }
 
     pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.early_data.check_write(data.len())
+        self.early_data
+            .check_write(data.len())
             .and_then(|sz| {
-                Ok(self.common.send_early_plaintext(&data[..sz]))
+                Ok(self
+                    .common
+                    .send_early_plaintext(&data[..sz]))
             })
     }
 
-    fn export_keying_material(&self,
-                              output: &mut [u8],
-                              label: &[u8],
-                              context: Option<&[u8]>) -> Result<(), TLSError> {
+    fn export_keying_material(
+        &self,
+        output: &mut [u8],
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<(), TLSError> {
         self.state
             .as_ref()
             .ok_or_else(|| TLSError::HandshakeNotComplete)
@@ -712,17 +749,21 @@ impl Session for ClientSession {
         self.imp.get_protocol_version()
     }
 
-    fn export_keying_material(&self,
-                              output: &mut [u8],
-                              label: &[u8],
-                              context: Option<&[u8]>) -> Result<(), TLSError> {
-        self.imp.export_keying_material(output, label, context)
+    fn export_keying_material(
+        &self,
+        output: &mut [u8],
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<(), TLSError> {
+        self.imp
+            .export_keying_material(output, label, context)
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.imp.get_negotiated_ciphersuite().or(self.imp.resumption_ciphersuite)
+        self.imp
+            .get_negotiated_ciphersuite()
+            .or(self.imp.resumption_ciphersuite)
     }
-
 }
 
 impl io::Read for ClientSession {

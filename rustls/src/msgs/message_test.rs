@@ -1,11 +1,7 @@
-use super::codec::Reader;
 use super::codec::Codec;
+use super::codec::Reader;
+use super::enums::{AlertDescription, AlertLevel, HandshakeType};
 use super::message::Message;
-use super::enums::{
-    AlertDescription,
-    AlertLevel,
-    HandshakeType
-};
 
 use std::fs;
 use std::io::Read;
@@ -30,8 +26,7 @@ fn test_read_fuzz_corpus() {
         f.read_to_end(&mut bytes).unwrap();
 
         let mut rd = Reader::init(&bytes);
-        let msg = Message::read(&mut rd)
-            .unwrap();
+        let msg = Message::read(&mut rd).unwrap();
         println!("{:?}", msg);
         assert_eq!(bytes.to_vec(), msg.get_encoding());
     }
@@ -60,8 +55,7 @@ fn can_read_safari_client_hello() {
         \x79\x2f\x33\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\x00\x0b\x00\x02\
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
     let mut rd = Reader::init(bytes);
-    let mut m = Message::read(&mut rd)
-        .unwrap();
+    let mut m = Message::read(&mut rd).unwrap();
     println!("m = {:?}", m);
     assert_eq!(m.decode_payload(), false);
 }
@@ -86,7 +80,7 @@ fn construct_all_types() {
         &b"\x15\x03\x04\x00\x02\x01\x16"[..],
         &b"\x16\x03\x04\x00\x05\x18\x00\x00\x01\x00"[..],
         &b"\x17\x03\x04\x00\x04\x11\x22\x33\x44"[..],
-        &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..]
+        &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
     ];
     for bytes in samples.iter() {
         let mut m = Message::read_bytes(bytes).unwrap();

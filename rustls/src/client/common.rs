@@ -1,18 +1,18 @@
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::handshake::DigitallySignedStruct;
-use crate::msgs::handshake::SessionID;
-use crate::msgs::handshake::SCTList;
-use crate::msgs::handshake::ServerExtension;
-use crate::msgs::handshake::ClientExtension;
-use crate::msgs::persist;
-use crate::msgs::enums::ExtensionType;
-use crate::msgs::enums::NamedGroup;
-use crate::session::SessionRandoms;
 use crate::hash_hs;
-use crate::sign;
-use crate::suites;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::enums::ExtensionType;
+use crate::msgs::enums::NamedGroup;
+use crate::msgs::handshake::CertificatePayload;
+use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::handshake::SCTList;
+use crate::msgs::handshake::ServerExtension;
+use crate::msgs::handshake::SessionID;
+use crate::msgs::persist;
+use crate::session::SessionRandoms;
+use crate::sign;
+use crate::suites;
 use webpki;
 
 use std::mem;
@@ -99,30 +99,34 @@ impl ClientHelloDetails {
     }
 
     pub fn find_key_share(&mut self, group: NamedGroup) -> Option<suites::KeyExchange> {
-        self.offered_key_shares.iter()
+        self.offered_key_shares
+            .iter()
             .position(|s| s.group == group)
             .map(|idx| self.offered_key_shares.remove(idx))
     }
 
-    pub fn find_key_share_and_discard_others(&mut self, group: NamedGroup)
-            -> Option<suites::KeyExchange> {
+    pub fn find_key_share_and_discard_others(
+        &mut self,
+        group: NamedGroup,
+    ) -> Option<suites::KeyExchange> {
         match self.find_key_share(group) {
             Some(group) => {
                 self.offered_key_shares.clear();
                 Some(group)
             }
-            None => {
-                None
-            }
+            None => None,
         }
     }
 
-    pub fn server_sent_unsolicited_extensions(&self,
-                                              received_exts: &[ServerExtension],
-                                              allowed_unsolicited: &[ExtensionType]) -> bool {
+    pub fn server_sent_unsolicited_extensions(
+        &self,
+        received_exts: &[ServerExtension],
+        allowed_unsolicited: &[ExtensionType],
+    ) -> bool {
         for ext in received_exts {
             let ext_type = ext.get_type();
-            if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type) {
+            if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type)
+            {
                 trace!("Unsolicited extension {:?}", ext_type);
                 return true;
             }

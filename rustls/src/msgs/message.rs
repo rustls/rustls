@@ -1,12 +1,11 @@
-
-use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::base::Payload;
 use crate::msgs::alert::AlertMessagePayload;
+use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::handshake::HandshakeMessagePayload;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::enums::{AlertLevel, AlertDescription};
+use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::HandshakeType;
+use crate::msgs::enums::{AlertDescription, AlertLevel};
+use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::handshake::HandshakeMessagePayload;
 
 use std::mem;
 
@@ -28,10 +27,11 @@ impl MessagePayload {
         }
     }
 
-    pub fn decode_given_type(&self,
-                             typ: ContentType,
-                             vers: ProtocolVersion)
-                             -> Option<MessagePayload> {
+    pub fn decode_given_type(
+        &self,
+        typ: ContentType,
+        vers: ProtocolVersion,
+    ) -> Option<MessagePayload> {
         if let MessagePayload::Opaque(ref payload) = *self {
             let mut r = Reader::init(&payload.0);
             let parsed = match typ {
@@ -93,9 +93,8 @@ impl Message {
 
 impl Codec for Message {
     fn read(r: &mut Reader) -> Option<Message> {
-        Message::read_with_detailed_error(r)
-            .ok()
-   }
+        Message::read_with_detailed_error(r).ok()
+    }
 
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.typ.encode(bytes);
@@ -118,12 +117,9 @@ impl Message {
     /// this message might be valid if we read more data; and this message will
     /// never be valid.
     pub fn read_with_detailed_error(r: &mut Reader) -> Result<Message, MessageError> {
-        let typ = ContentType::read(r)
-            .ok_or(MessageError::TooShortForHeader)?;
-        let version = ProtocolVersion::read(r)
-            .ok_or(MessageError::TooShortForHeader)?;
-        let len = u16::read(r)
-            .ok_or(MessageError::TooShortForHeader)?;
+        let typ = ContentType::read(r).ok_or(MessageError::TooShortForHeader)?;
+        let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
+        let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
 
         // Reject oversize messages
         if len >= Message::MAX_PAYLOAD {
@@ -140,13 +136,13 @@ impl Message {
             ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
                 return Err(MessageError::IllegalProtocolVersion);
             }
-            _ => (),
+            _ => {}
         };
 
-        let mut sub = r.sub(len as usize)
+        let mut sub = r
+            .sub(len as usize)
             .ok_or(MessageError::TooShortForLength)?;
-        let payload = Payload::read(&mut sub)
-            .unwrap();
+        let payload = Payload::read(&mut sub).unwrap();
 
         Ok(Message {
             typ,
@@ -174,7 +170,10 @@ impl Message {
             return true;
         }
 
-        if let Some(x) = self.payload.decode_given_type(self.typ, self.version) {
+        if let Some(x) = self
+            .payload
+            .decode_given_type(self.typ, self.version)
+        {
             self.payload = x;
             true
         } else {
@@ -183,7 +182,10 @@ impl Message {
     }
 
     pub fn take_payload(self) -> Vec<u8> {
-        self.into_opaque().take_opaque_payload().unwrap().0
+        self.into_opaque()
+            .take_opaque_payload()
+            .unwrap()
+            .0
     }
 
     pub fn take_opaque_payload(&mut self) -> Option<Payload> {
@@ -235,14 +237,13 @@ impl<'a> Message {
             BorrowMessage {
                 typ: self.typ,
                 version: self.version,
-                payload: &p.0
+                payload: &p.0,
             }
         } else {
             unreachable!("to_borrowed must have opaque message");
         }
     }
 }
-
 
 /// A TLS frame, named TLSPlaintext in the standard.
 ///

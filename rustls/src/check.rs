@@ -1,8 +1,8 @@
-use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::message::{Message, MessagePayload};
 use crate::error::TLSError;
 #[cfg(feature = "logging")]
 use crate::log::warn;
+use crate::msgs::enums::{ContentType, HandshakeType};
+use crate::msgs::message::{Message, MessagePayload};
 
 /// For a Message $m, and a HandshakePayload enum member $payload_type,
 /// return Ok(payload) if $m is both a handshake message and one that
@@ -46,13 +46,16 @@ macro_rules! require_handshake_msg_mut(
 /// - the type of m does not appear in `content_types`.
 /// - if m is a handshake message, the handshake message type does
 ///   not appear in `handshake_types`.
-pub fn check_message(m: &Message,
-                     content_types: &[ContentType],
-                     handshake_types: &[HandshakeType]) -> Result<(), TLSError> {
+pub fn check_message(
+    m: &Message,
+    content_types: &[ContentType],
+    handshake_types: &[HandshakeType],
+) -> Result<(), TLSError> {
     if !content_types.contains(&m.typ) {
-        warn!("Received a {:?} message while expecting {:?}",
-              m.typ,
-              content_types);
+        warn!(
+            "Received a {:?} message while expecting {:?}",
+            m.typ, content_types
+        );
         return Err(TLSError::InappropriateMessage {
             expect_types: content_types.to_vec(),
             got_type: m.typ,
@@ -61,9 +64,10 @@ pub fn check_message(m: &Message,
 
     if let MessagePayload::Handshake(ref hsp) = m.payload {
         if !handshake_types.is_empty() && !handshake_types.contains(&hsp.typ) {
-            warn!("Received a {:?} handshake message while expecting {:?}",
-                  hsp.typ,
-                  handshake_types);
+            warn!(
+                "Received a {:?} handshake message while expecting {:?}",
+                hsp.typ, handshake_types
+            );
             return Err(TLSError::InappropriateHandshakeMessage {
                 expect_types: handshake_types.to_vec(),
                 got_type: hsp.typ,

@@ -1,10 +1,9 @@
-
 use std::collections::VecDeque;
 
 use crate::msgs::codec;
-use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
+use crate::msgs::message::{Message, MessagePayload};
 
 const HEADER_SIZE: usize = 1 + 3;
 
@@ -21,7 +20,9 @@ pub struct HandshakeJoiner {
 }
 
 impl Default for HandshakeJoiner {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HandshakeJoiner {
@@ -55,7 +56,8 @@ impl HandshakeJoiner {
         // lost information!
         let payload = msg.take_opaque_payload().unwrap();
 
-        self.buf.extend_from_slice(&payload.0[..]);
+        self.buf
+            .extend_from_slice(&payload.0[..]);
 
         let mut count = 0;
         while self.buf_contains_message() {
@@ -73,8 +75,12 @@ impl HandshakeJoiner {
     /// enough to contain a header, and that header has a length which falls
     /// within `buf`.
     fn buf_contains_message(&self) -> bool {
-        self.buf.len() >= HEADER_SIZE &&
-        self.buf.len() >= (codec::u24::decode(&self.buf[1..4]).unwrap().0 as usize) + HEADER_SIZE
+        self.buf.len() >= HEADER_SIZE
+            && self.buf.len()
+                >= (codec::u24::decode(&self.buf[1..4])
+                    .unwrap()
+                    .0 as usize)
+                    + HEADER_SIZE
     }
 
     /// Take a TLS handshake payload off the front of `buf`, and put it onto
@@ -107,10 +113,10 @@ impl HandshakeJoiner {
 #[cfg(test)]
 mod tests {
     use super::HandshakeJoiner;
-    use crate::msgs::enums::{ProtocolVersion, ContentType, HandshakeType};
+    use crate::msgs::base::Payload;
+    use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
     use crate::msgs::message::{Message, MessagePayload};
-    use crate::msgs::base::Payload;
 
     #[test]
     fn want() {
@@ -211,7 +217,9 @@ mod tests {
         msg = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec()),
+            payload: MessagePayload::new_opaque(
+                b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec(),
+            ),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -248,7 +256,9 @@ mod tests {
         let msg = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec()),
+            payload: MessagePayload::new_opaque(
+                b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec(),
+            ),
         };
 
         assert_eq!(hj.want_message(&msg), true);

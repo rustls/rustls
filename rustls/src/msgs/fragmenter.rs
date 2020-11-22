@@ -1,7 +1,6 @@
-
-use std::collections::VecDeque;
-use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
 use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
+use std::collections::VecDeque;
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -17,7 +16,9 @@ impl MessageFragmenter {
     /// 10 byte packets).
     pub fn new(max_fragment_len: usize) -> MessageFragmenter {
         debug_assert!(max_fragment_len <= MAX_FRAGMENT_LEN);
-        MessageFragmenter { max_frag: max_fragment_len }
+        MessageFragmenter {
+            max_frag: max_fragment_len,
+        }
     }
 
     /// Take the Message `msg` and re-fragment it into new
@@ -39,7 +40,7 @@ impl MessageFragmenter {
             let m = Message {
                 typ,
                 version,
-                payload: MessagePayload::new_opaque(chunk.to_vec())
+                payload: MessagePayload::new_opaque(chunk.to_vec()),
             };
             out.push_back(m);
         }
@@ -47,16 +48,18 @@ impl MessageFragmenter {
 
     /// Enqueue borrowed fragments of (version, typ, payload) which
     /// are no longer than max_frag onto the `out` deque.
-    pub fn fragment_borrow<'a>(&self,
-                               typ: ContentType,
-                               version: ProtocolVersion,
-                               payload: &'a [u8],
-                               out: &mut VecDeque<BorrowMessage<'a>>) {
+    pub fn fragment_borrow<'a>(
+        &self,
+        typ: ContentType,
+        version: ProtocolVersion,
+        payload: &'a [u8],
+        out: &mut VecDeque<BorrowMessage<'a>>,
+    ) {
         for chunk in payload.chunks(self.max_frag) {
             let cm = BorrowMessage {
                 typ,
                 version,
-                payload: chunk
+                payload: chunk,
             };
             out.push_back(cm);
         }
@@ -66,16 +69,18 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::msgs::message::{MessagePayload, Message};
-    use crate::msgs::enums::{ContentType, ProtocolVersion};
     use crate::msgs::codec::Codec;
+    use crate::msgs::enums::{ContentType, ProtocolVersion};
+    use crate::msgs::message::{Message, MessagePayload};
     use std::collections::VecDeque;
 
-    fn msg_eq(mm: Option<Message>,
-              total_len: usize,
-              typ: &ContentType,
-              version: &ProtocolVersion,
-              bytes: &[u8]) {
+    fn msg_eq(
+        mm: Option<Message>,
+        total_len: usize,
+        typ: &ContentType,
+        version: &ProtocolVersion,
+        bytes: &[u8],
+    ) {
         let mut m = mm.unwrap();
 
         let mut buf = Vec::new();
@@ -101,21 +106,27 @@ mod tests {
         let frag = MessageFragmenter::new(3);
         let mut q = VecDeque::new();
         frag.fragment(m, &mut q);
-        msg_eq(q.pop_front(),
-               PACKET_OVERHEAD + 3,
-               &typ,
-               &version,
-               b"\x01\x02\x03");
-        msg_eq(q.pop_front(),
-               PACKET_OVERHEAD + 3,
-               &typ,
-               &version,
-               b"\x04\x05\x06");
-        msg_eq(q.pop_front(),
-               PACKET_OVERHEAD + 2,
-               &typ,
-               &version,
-               b"\x07\x08");
+        msg_eq(
+            q.pop_front(),
+            PACKET_OVERHEAD + 3,
+            &typ,
+            &version,
+            b"\x01\x02\x03",
+        );
+        msg_eq(
+            q.pop_front(),
+            PACKET_OVERHEAD + 3,
+            &typ,
+            &version,
+            b"\x04\x05\x06",
+        );
+        msg_eq(
+            q.pop_front(),
+            PACKET_OVERHEAD + 2,
+            &typ,
+            &version,
+            b"\x07\x08",
+        );
         assert_eq!(q.len(), 0);
     }
 
@@ -130,11 +141,13 @@ mod tests {
         let frag = MessageFragmenter::new(8);
         let mut q = VecDeque::new();
         frag.fragment(m, &mut q);
-        msg_eq(q.pop_front(),
-               PACKET_OVERHEAD + 8,
-               &ContentType::Handshake,
-               &ProtocolVersion::TLSv1_2,
-               b"\x01\x02\x03\x04\x05\x06\x07\x08");
+        msg_eq(
+            q.pop_front(),
+            PACKET_OVERHEAD + 8,
+            &ContentType::Handshake,
+            &ProtocolVersion::TLSv1_2,
+            b"\x01\x02\x03\x04\x05\x06\x07\x08",
+        );
         assert_eq!(q.len(), 0);
     }
 }
