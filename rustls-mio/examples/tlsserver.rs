@@ -573,8 +573,11 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         NoClientAuth::new()
     };
 
-    let mut config = rustls::ServerConfig::new(client_auth);
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    let suites = if !args.flag_suite.is_empty() {
+        lookup_suites(&args.flag_suite)
+    } else {
+        rustls::ALL_CIPHERSUITES.to_vec()
+    };
 
     let certs = load_certs(
         args.flag_certs
@@ -587,33 +590,33 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
             .expect("--key option missing"),
     );
     let ocsp = load_ocsp(&args.flag_ocsp);
-    config
-        .set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
+
+    let mut config = rustls::ServerConfigBuilder::new()
+        .with_cipher_suites(&suites)
+        .with_safe_default_kx_groups()
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
         .expect("bad certificates/private key");
 
-    if !args.flag_suite.is_empty() {
-        config.cipher_suites = lookup_suites(&args.flag_suite);
-    }
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if !args.flag_protover.is_empty() {
         config.versions = lookup_versions(&args.flag_protover);
     }
 
     if args.flag_resumption {
-        config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
+        config.session_storage = rustls::ServerSessionMemoryCache::new(256);
     }
 
     if args.flag_tickets {
         config.ticketer = rustls::Ticketer::new().unwrap();
     }
 
-    config.set_protocols(
-        &args
-            .flag_proto
-            .iter()
-            .map(|proto| proto.as_bytes().to_vec())
-            .collect::<Vec<_>>()[..],
-    );
+    config.alpn_protocols = args
+        .flag_proto
+        .iter()
+        .map(|proto| proto.as_bytes().to_vec())
+        .collect::<Vec<_>>();
 
     Arc::new(config)
 }

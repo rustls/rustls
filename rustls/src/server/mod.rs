@@ -1,15 +1,15 @@
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
 use crate::key;
-use crate::keylog::{KeyLog, NoKeyLog};
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
+use crate::keylog::KeyLog;
+use crate::kx::SupportedKxGroup;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::ServerExtension;
 use crate::sign;
-use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
+use crate::suites::SupportedCipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, quic};
@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 #[macro_use]
 mod hs;
+pub mod builder;
 mod common;
 pub mod handy;
 mod tls12;
@@ -148,6 +149,8 @@ impl<'a> ClientHello<'a> {
 ///
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
+///
+/// Create one of these via `ServerConfigBuilder`.
 #[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
@@ -198,57 +201,6 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// Make a `ServerConfig` with a default set of ciphersuites,
-    /// no keys/certificates, and no ALPN protocols.  Session resumption
-    /// is enabled by storing up to 256 recent sessions in memory. Tickets are
-    /// disabled.
-    ///
-    /// Publicly-available web servers on the internet generally don't do client
-    /// authentication; for this use case, `client_cert_verifier` should be a
-    /// `NoClientAuth`. Otherwise, use `AllowAnyAuthenticatedClient` or another
-    /// implementation to enforce client authentication.
-    ///
-    /// We don't provide a default for `client_cert_verifier` because the safest
-    /// default, requiring client authentication, requires additional
-    /// configuration that we cannot provide reasonable defaults for.
-    pub fn new(client_cert_verifier: Arc<dyn verify::ClientCertVerifier>) -> ServerConfig {
-        ServerConfig::with_cipher_suites(client_cert_verifier, DEFAULT_CIPHERSUITES)
-    }
-
-    /// Make a `ServerConfig` with a custom set of ciphersuites,
-    /// no keys/certificates, and no ALPN protocols.  Session resumption
-    /// is enabled by storing up to 256 recent sessions in memory. Tickets are
-    /// disabled.
-    ///
-    /// Publicly-available web servers on the internet generally don't do client
-    /// authentication; for this use case, `client_cert_verifier` should be a
-    /// `NoClientAuth`. Otherwise, use `AllowAnyAuthenticatedClient` or another
-    /// implementation to enforce client authentication.
-    ///
-    /// We don't provide a default for `client_cert_verifier` because the safest
-    /// default, requiring client authentication, requires additional
-    /// configuration that we cannot provide reasonable defaults for.
-    pub fn with_cipher_suites(
-        client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
-        cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> ServerConfig {
-        ServerConfig {
-            cipher_suites: cipher_suites.to_vec(),
-            kx_groups: ALL_KX_GROUPS.to_vec(),
-            ignore_client_order: false,
-            mtu: None,
-            session_storage: handy::ServerSessionMemoryCache::new(256),
-            ticketer: Arc::new(handy::NeverProducesTickets {}),
-            alpn_protocols: Vec::new(),
-            cert_resolver: Arc::new(handy::FailResolveChain {}),
-            versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
-            verifier: client_cert_verifier,
-            key_log: Arc::new(NoKeyLog {}),
-            #[cfg(feature = "quic")]
-            max_early_data_size: 0,
-        }
-    }
-
     #[doc(hidden)]
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
@@ -264,77 +216,6 @@ impl ServerConfig {
     #[doc(hidden)]
     pub fn get_verifier(&self) -> &dyn verify::ClientCertVerifier {
         self.verifier.as_ref()
-    }
-
-    /// Sets the session persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Arc<dyn StoresServerSessions + Send + Sync>) {
-        self.session_storage = persist;
-    }
-
-    /// Sets a single certificate chain and matching private key.  This
-    /// certificate and key is used for all subsequent connections,
-    /// irrespective of things like SNI hostname.
-    ///
-    /// Note that the end-entity certificate must have the
-    /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
-    /// extension to describe, e.g., the valid DNS name. The `commonName` field is
-    /// disregarded.
-    ///
-    /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
-    ///
-    /// This function fails if `key_der` is invalid.
-    pub fn set_single_cert(
-        &mut self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
-    ) -> Result<(), Error> {
-        let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
-        self.cert_resolver = Arc::new(resolver);
-        Ok(())
-    }
-
-    /// Sets a single certificate chain, matching private key and OCSP
-    /// response.  This certificate and key is used for all subsequent
-    /// connections, irrespective of things like SNI hostname.
-    ///
-    /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
-    /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
-    /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
-    /// and is ignored if empty.
-    ///
-    /// This function fails if `key_der` is invalid.
-    pub fn set_single_cert_with_ocsp_and_sct(
-        &mut self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
-        ocsp: Vec<u8>,
-        scts: Vec<u8>,
-    ) -> Result<(), Error> {
-        let resolver =
-            handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp, scts)?;
-        self.cert_resolver = Arc::new(resolver);
-        Ok(())
-    }
-
-    /// Set the ALPN protocol list to the given protocol names.
-    /// Overwrites any existing configured protocols.
-    ///
-    /// The first element in the `protocols` list is the most
-    /// preferred, the last is the least preferred.
-    pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
-        self.alpn_protocols.clear();
-        self.alpn_protocols
-            .extend_from_slice(protocols);
-    }
-
-    /// Overrides the default `ClientCertVerifier` with something else.
-    pub fn set_client_certificate_verifier(
-        &mut self,
-        verifier: Arc<dyn verify::ClientCertVerifier>,
-    ) {
-        self.verifier = verifier;
     }
 }
 
