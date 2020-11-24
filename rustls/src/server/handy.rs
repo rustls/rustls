@@ -81,15 +81,6 @@ impl server::ProducesTickets for NeverProducesTickets {
     }
 }
 
-/// Something which never resolves a certificate.
-pub struct FailResolveChain {}
-
-impl server::ResolvesServerCert for FailResolveChain {
-    fn resolve(&self, _client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
-        None
-    }
-}
-
 /// Something which always resolves to the same cert chain.
 pub struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
@@ -259,15 +250,6 @@ mod test {
         assert_eq!(0, npt.lifetime());
         assert_eq!(None, npt.encrypt(&[]));
         assert_eq!(None, npt.decrypt(&[]));
-    }
-
-    #[test]
-    fn test_failresolvechain_does_nothing() {
-        let frc = FailResolveChain {};
-        assert!(
-            frc.resolve(ClientHello::new(None, &[], None))
-                .is_none()
-        );
     }
 
     #[test]

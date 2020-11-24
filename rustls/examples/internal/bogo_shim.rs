@@ -336,21 +336,33 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
             rustls::NoClientAuth::new()
         };
 
-    let mut cfg = rustls::ServerConfig::new(client_auth);
-    let persist = rustls::ServerSessionMemoryCache::new(32);
-    cfg.set_persistence(persist);
-
-    cfg.mtu = opts.mtu;
-
     let cert = load_cert(&opts.cert_file);
     let key = load_key(&opts.key_file);
-    cfg.set_single_cert_with_ocsp_and_sct(
-        cert.clone(),
-        key,
-        opts.server_ocsp_response.clone(),
-        opts.server_sct_list.clone(),
-    )
-    .unwrap();
+
+    let kx_groups = if let Some(curves) = &opts.curves {
+        curves
+            .iter()
+            .map(|curveid| lookup_kx_group(*curveid))
+            .collect()
+    } else {
+        rustls::ALL_KX_GROUPS.to_vec()
+    };
+
+    let mut cfg = rustls::ServerConfigBuilder::new()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(&kx_groups)
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert_with_ocsp_and_sct(
+            cert.clone(),
+            key,
+            opts.server_ocsp_response.clone(),
+            opts.server_sct_list.clone(),
+        )
+        .unwrap();
+
+    cfg.session_storage = rustls::ServerSessionMemoryCache::new(32);
+    cfg.mtu = opts.mtu;
+
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
         cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
@@ -362,17 +374,15 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     if opts.tickets {
         cfg.ticketer = rustls::Ticketer::new().unwrap();
     } else if opts.resumes == 0 {
-        cfg.set_persistence(Arc::new(rustls::NoServerSessionStorage {}));
+        cfg.session_storage = Arc::new(rustls::NoServerSessionStorage {});
     }
 
     if !opts.protocols.is_empty() {
-        cfg.set_protocols(
-            &opts
-                .protocols
-                .iter()
-                .map(|proto| proto.as_bytes().to_vec())
-                .collect::<Vec<_>>()[..],
-        );
+        cfg.alpn_protocols = opts
+            .protocols
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect::<Vec<_>>();
     }
 
     cfg.versions.clear();
@@ -387,12 +397,6 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
             .push(ProtocolVersion::TLSv1_3);
     }
 
-    if let Some(curves) = &opts.curves {
-        cfg.kx_groups = curves
-            .iter()
-            .map(|curveid| lookup_kx_group(*curveid))
-            .collect();
-    }
 
     Arc::new(cfg)
 }
@@ -1116,12 +1120,8 @@ fn main() {
         exec(&opts, sess, i);
 
         if opts.resume_with_tickets_disabled {
-            server_cfg = {
-                let mut newcfg = server_cfg.unwrap();
-                let default = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-                Arc::make_mut(&mut newcfg).ticketer = default.ticketer.clone();
-                Some(newcfg)
-            };
+            opts.tickets = false;
+            server_cfg = Some(make_server_cfg(&opts));
         }
     }
 }

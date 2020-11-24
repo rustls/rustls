@@ -9,11 +9,11 @@ use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage};
 use rustls::Connection;
 use rustls::Error;
-use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
+use rustls::{AllowAnyAuthenticatedClient, RootCertStore};
 use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ProtocolVersion, DEFAULT_CIPHERSUITES};
-use rustls::{ServerConfig, ServerConnection};
+use rustls::{ServerConfig, ServerConfigBuilder, ServerConnection};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::{
@@ -222,11 +222,10 @@ impl KeyType {
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
-
-    cfg
+    ServerConfigBuilder::with_safe_default_crypto()
+        .with_no_client_auth()
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap()
 }
 
 pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
@@ -242,12 +241,11 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
     let client_auth_roots = get_client_root_store(kt);
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
-    let mut cfg = ServerConfig::new(NoClientAuth::new());
-    cfg.set_client_certificate_verifier(client_auth);
-    cfg.set_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
 
-    cfg
+    ServerConfigBuilder::with_safe_default_crypto()
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap()
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {

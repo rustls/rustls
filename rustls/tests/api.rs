@@ -26,7 +26,7 @@ use rustls::{Stream, StreamOwned};
 use rustls::{SupportedCipherSuite, ALL_CIPHERSUITES};
 
 #[cfg(feature = "dangerous_configuration")]
-use rustls::ClientCertVerified;
+use rustls::{ClientCertVerified, ServerConfigBuilder};
 
 use webpki;
 
@@ -749,9 +749,9 @@ mod test_clientverifier {
                 offered_schemes: None,
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);
@@ -777,9 +777,9 @@ mod test_clientverifier {
                 offered_schemes: Some(vec![]),
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);
@@ -810,9 +810,9 @@ mod test_clientverifier {
                 offered_schemes: None,
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);
@@ -848,9 +848,9 @@ mod test_clientverifier {
                 offered_schemes: None,
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);
@@ -886,9 +886,9 @@ mod test_clientverifier {
                 offered_schemes: None,
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);
@@ -924,9 +924,9 @@ mod test_clientverifier {
                 offered_schemes: None,
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);
@@ -956,9 +956,9 @@ mod test_clientverifier {
                 offered_schemes: None,
             };
 
-            let mut server_config = ServerConfig::new(Arc::new(client_verifier));
-            server_config
-                .set_single_cert(kt.get_chain(), kt.get_key())
+            let server_config = ServerConfigBuilder::with_safe_default_crypto()
+                .with_client_cert_verifier(Arc::new(client_verifier))
+                .with_single_cert(kt.get_chain(), kt.get_key())
                 .unwrap();
 
             let server_config = Arc::new(server_config);

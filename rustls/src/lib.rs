@@ -299,6 +299,10 @@ pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
+pub use crate::server::builder::{
+    ServerConfigBuilder, ServerConfigBuilderWithClientAuth, ServerConfigBuilderWithKxGroups,
+    ServerConfigBuilderWithSuites,
+};
 pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::StoresServerSessions;
