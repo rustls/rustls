@@ -6,7 +6,7 @@
 set -xe
 
 if [ ! -e ../target/debug/examples/bogo_shim ] ; then
-  cargo test --no-run --features dangerous_configuration,quic
+  (cd ../rustls && cargo build --example bogo_shim --features dangerous_configuration,quic)
 fi
 
 if [ ! -e bogo/ ] ; then
@@ -17,7 +17,7 @@ fi
 # Best effort on OS-X
 case $OSTYPE in darwin*) set +e ;; esac
 
-( cd bogo && ./bogo.test -shim-path ../../target/debug/examples/bogo_shim \
-     -shim-config ../config.json \
+( cd bogo/ssl/test/runner && ./runner.test -shim-path ../../../../../target/debug/examples/bogo_shim \
+     -shim-config ../../../../config.json \
      -pipe -allow-unimplemented )
 true

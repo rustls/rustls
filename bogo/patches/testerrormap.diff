@@ -1,6 +1,6 @@
-diff -u original/runner.go bogo/runner.go
---- original/runner.go	2018-09-13 21:07:29.000000000 +0100
-+++ bogo/runner.go	2019-01-20 11:51:00.705040230 +0000
+diff -u original/ssl/test/runner/runner.go bogo/ssl/test/runner/runner.go
+--- original/ssl/test/runner/runner.go	2018-09-13 21:07:29.000000000 +0100
++++ bogo/ssl/test/runner/runner.go	2019-01-20 11:51:00.705040230 +0000
 @@ -84,6 +84,14 @@
  	// like “SSL_ERROR_NO_CYPHER_OVERLAP”.
  	ErrorMap map[string]string
