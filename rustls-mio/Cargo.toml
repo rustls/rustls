@@ -17,7 +17,7 @@ quic = ["rustls/quic"]
 log = { version = "0.4.4", optional = true }
 rustls = { path = "../rustls" }
 sct = "0.6"
-webpki = "0.21.0"
+webpki = "0.21.4"
 
 [dev-dependencies]
 ct-logs = "0.8"
@@ -28,7 +28,7 @@ regex = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 webpki-roots = "0.21"
-ring = "0.16.0"
+ring = "0.16.9"
 
 [[example]]
 name = "tlsclient"
