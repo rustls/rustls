@@ -1,19 +1,23 @@
-#!/bin/sh
+#!/bin/bash
 
 set -ex
 
+mkdir bogo
+pushd bogo
+
+git init
+git config core.sparsecheckout 1
+cat << EOF > .git/info/sparse-checkout
+go.mod
+ssl/test/runner
+util/testresult
+EOF
+
 # a known-good commit
 COMMIT=47a6f5b4bf4d7acd8d5f7d43cb9c94335cec1c60
-
-rm -f runner.tar.gz testresult.tar.gz
-wget https://boringssl.googlesource.com/boringssl/+archive/$COMMIT/ssl/test/runner.tar.gz
-wget https://boringssl.googlesource.com/boringssl/+archive/$COMMIT/util/testresult.tar.gz
-mkdir -p bogo
-cd bogo/
-mkdir -p testresult
-tar -xzf ../runner.tar.gz
-( cd testresult && tar -xzf ../../testresult.tar.gz )
+git fetch --depth=1 https://boringssl.googlesource.com/boringssl $COMMIT
+git checkout $COMMIT
 patch -p1 < ../patches/testerrormap.diff
-patch -p1 < ../patches/go-1.13-breakage.diff
-patch -p1 < ../patches/vendor.diff
-go test -c
+(cd ssl/test/runner && go test -c)
+
+popd
