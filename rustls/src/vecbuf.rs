@@ -190,8 +190,8 @@ impl ChunkVecBuffer {
         for (iov, chunk) in bufs.iter_mut().zip(self.chunks.iter()) {
             *iov = io::IoSlice::new(&chunk);
         }
-
-        let used = wr.write_vectored(&bufs[..self.chunks.len()])?;
+        let len = cmp::min(bufs.len(), self.chunks.len());
+        let used = wr.write_vectored(&bufs[..len])?;
         self.consume(used);
         Ok(used)
     }
