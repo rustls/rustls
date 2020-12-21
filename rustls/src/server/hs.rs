@@ -260,8 +260,6 @@ impl ExtensionProcessing {
             }
         }
 
-        if !sess.common.is_tls13() {}
-
         self.exts
             .extend(handshake.extra_exts.iter().cloned());
 
