@@ -23,8 +23,8 @@ Some ideas and guidelines for contributions:
   for feedback or to hand-over.
 - Prefer not to reference github issue or PR numbers in commits.
 - Try to keep code formatting commits separate from functional commits.
-- See [`.travis.yml`](.travis.yml) for how to run the various test
-  suites, and how to make coverage measurements.
+- See [`.github/workflows/build.yml`](.github/workflows/build.yml) for
+  how to run the various test suites, and how to make coverage measurements.
 - I run `cargo outdated` prior to major releases; but PRs to update specific
   dependencies are welcome.
 
