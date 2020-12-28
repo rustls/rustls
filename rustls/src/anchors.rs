@@ -4,9 +4,7 @@ use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
-use crate::pemfile;
 use crate::x509;
-use std::io;
 
 /// This is like a `webpki::TrustAnchor`, except it owns
 /// rather than borrows its memory.  That prevents lifetimes
@@ -112,27 +110,23 @@ impl RootCertStore {
         }
     }
 
-    /// Parse a PEM file and add all certificates found inside.
-    /// Errors are non-specific; they may be io errors in `rd` and
-    /// PEM format errors, but not certificate validity errors.
+    /// Parse the given DER-encoded certificates and add all that can be parsed
+    /// in a best-effort fashion.
     ///
     /// This is because large collections of root certificates often
-    /// include ancient or syntactically invalid certificates.  CAs
-    /// are competent like that.
+    /// include ancient or syntactically invalid certificates.
     ///
-    /// Returns the number of certificates added, and the number
-    /// which were extracted from the PEM but ultimately unsuitable.
-    pub fn add_pem_file(&mut self, rd: &mut dyn io::BufRead) -> Result<(usize, usize), ()> {
-        let ders = pemfile::certs(rd)?;
+    /// Returns the number of certificates added, and the number that were ignored.
+    pub fn add_parsable_certificates(&mut self, der_certs: &Vec<Vec<u8>>) -> (usize, usize) {
         let mut valid_count = 0;
         let mut invalid_count = 0;
 
-        for der in ders {
+        for der_cert in der_certs {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match self.add(&der) {
+            match self.add(&key::Certificate(der_cert.clone())) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
-                    trace!("invalid cert der {:?}", der);
+                    trace!("invalid cert der {:?}", der_cert);
                     debug!("certificate parsing failed: {:?}", err);
                     invalid_count += 1
                 }
@@ -140,10 +134,10 @@ impl RootCertStore {
         }
 
         debug!(
-            "add_pem_file processed {} valid and {} invalid certs",
+            "add_parsable_certificates processed {} valid and {} invalid certs",
             valid_count, invalid_count
         );
 
-        Ok((valid_count, invalid_count))
+        (valid_count, invalid_count)
     }
 }

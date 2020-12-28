@@ -408,15 +408,26 @@ fn lookup_versions(versions: &[String]) -> Vec<rustls::ProtocolVersion> {
 fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
-    rustls::internal::pemfile::certs(&mut reader).unwrap()
+    rustls_pemfile::certs(&mut reader).unwrap()
+        .iter()
+        .map(|v| rustls::Certificate(v.clone()))
+        .collect()
 }
 
 fn load_private_key(filename: &str) -> rustls::PrivateKey {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
-    let keys = rustls::internal::pemfile::rsa_private_keys(&mut reader).unwrap();
-    assert!(keys.len() == 1);
-    keys[0].clone()
+
+    loop {
+        match rustls_pemfile::read_one(&mut reader).expect("cannot parse private key .pem file") {
+            Some(rustls_pemfile::Item::RSAKey(key)) => return rustls::PrivateKey(key),
+            Some(rustls_pemfile::Item::PKCS8Key(key)) => return rustls::PrivateKey(key),
+            None => break,
+            _ => {}
+        }
+    }
+
+    panic!("no keys found in {:?} (encrypted keys not supported)", filename);
 }
 
 fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile: &str) {
@@ -483,8 +494,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         let mut reader = BufReader::new(certfile);
         config
             .root_store
-            .add_pem_file(&mut reader)
-            .unwrap();
+            .add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
     } else {
         config
             .root_store

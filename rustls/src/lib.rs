@@ -228,7 +228,6 @@ mod cipher;
 mod error;
 mod hash_hs;
 mod key_schedule;
-mod pemfile;
 mod prf;
 mod rand;
 mod record_layer;
@@ -252,11 +251,6 @@ mod ticketer;
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
 pub mod internal {
-    /// Functions for parsing PEM files containing certificates/keys.
-    pub mod pemfile {
-        pub use crate::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
-    }
-
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub use crate::msgs::*;

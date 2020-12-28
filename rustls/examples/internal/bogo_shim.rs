@@ -139,15 +139,19 @@ impl Options {
 fn load_cert(filename: &str) -> Vec<rustls::Certificate> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
-    rustls::internal::pemfile::certs(&mut reader).unwrap()
+    rustls_pemfile::certs(&mut reader)
+        .unwrap()
+        .iter()
+        .map(|v| rustls::Certificate(v.clone()))
+        .collect()
 }
 
 fn load_key(filename: &str) -> rustls::PrivateKey {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
-    let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut reader).unwrap();
+    let keys = rustls_pemfile::pkcs8_private_keys(&mut reader).unwrap();
     assert!(keys.len() == 1);
-    keys[0].clone()
+    rustls::PrivateKey(keys[0].clone())
 }
 
 fn split_protocols(protos: &str) -> Vec<String> {

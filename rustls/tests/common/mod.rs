@@ -2,9 +2,9 @@ use std::io;
 use std::sync::Arc;
 
 use rustls;
+use rustls_pemfile;
 
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
-use rustls::internal::pemfile;
 use rustls::ProtocolVersion;
 use rustls::Session;
 use rustls::TLSError;
@@ -179,22 +179,28 @@ impl KeyType {
     }
 
     pub fn get_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain"))).unwrap()
+        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain"))).unwrap()
+            .iter()
+            .map(|v| Certificate(v.clone()))
+            .collect()
     }
 
     pub fn get_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key"))).unwrap()[0]
-            .clone()
+        PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key"))).unwrap()[0]
+            .clone())
     }
 
     fn get_client_chain(&self) -> Vec<Certificate> {
-        pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain"))).unwrap()
+        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain"))).unwrap()
+            .iter()
+            .map(|v| Certificate(v.clone()))
+            .collect()
     }
 
     fn get_client_key(&self) -> PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key"))).unwrap()
+        PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key"))).unwrap()
             [0]
-        .clone()
+        .clone())
     }
 }
 
@@ -231,8 +237,7 @@ pub fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut cfg = ClientConfig::new();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     cfg.root_store
-        .add_pem_file(&mut rootbuf)
-        .unwrap();
+        .add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
     cfg
 }
