@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustls;
-use rustls::internal::pemfile;
 use rustls::ClientSessionMemoryCache;
 use rustls::NoClientSessionStorage;
 use rustls::NoServerSessionStorage;
@@ -21,6 +20,7 @@ use rustls::Ticketer;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
 use rustls::{ClientConfig, ClientSession};
 use rustls::{ServerConfig, ServerSession};
+use rustls_pemfile;
 
 use webpki;
 
@@ -230,33 +230,39 @@ impl KeyType {
     }
 
     fn get_chain(&self) -> Vec<rustls::Certificate> {
-        pemfile::certs(&mut io::BufReader::new(
+        rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("end.fullchain")).unwrap(),
         ))
         .unwrap()
+        .iter()
+        .map(|v| rustls::Certificate(v.clone()))
+        .collect()
     }
 
     fn get_key(&self) -> rustls::PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+        rustls::PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
             fs::File::open(self.path_for("end.key")).unwrap(),
         ))
         .unwrap()[0]
-            .clone()
+            .clone())
     }
 
     fn get_client_chain(&self) -> Vec<rustls::Certificate> {
-        pemfile::certs(&mut io::BufReader::new(
+        rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("client.fullchain")).unwrap(),
         ))
         .unwrap()
+        .iter()
+        .map(|v| rustls::Certificate(v.clone()))
+        .collect()
     }
 
     fn get_client_key(&self) -> rustls::PrivateKey {
-        pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+        rustls::PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
             fs::File::open(self.path_for("client.key")).unwrap(),
         ))
         .unwrap()[0]
-            .clone()
+            .clone())
     }
 }
 
@@ -307,8 +313,7 @@ fn make_client_config(
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
     cfg.root_store
-        .add_pem_file(&mut rootbuf)
-        .unwrap();
+        .add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
     cfg.ciphersuites.clear();
     cfg.ciphersuites
         .push(params.ciphersuite);

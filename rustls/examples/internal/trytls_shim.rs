@@ -31,14 +31,9 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Er
         }
         4 => {
             let f = File::open(&args[3])?;
-            let mut f = BufReader::new(f);
-            if config
+            config
                 .root_store
-                .add_pem_file(&mut f)
-                .is_err()
-            {
-                return Err(From::from("Could not load PEM data"));
-            }
+                .add_parsable_certificates(&rustls_pemfile::certs(&mut BufReader::new(f)).unwrap());
         }
         _ => {
             return Err(From::from("Incorrect number of arguments"));
