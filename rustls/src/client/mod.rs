@@ -667,7 +667,7 @@ impl ClientSession {
         ClientSession { imp }
     }
 
-    /// Returns an `io::Write` implementor you can write bytes to
+    /// Returns an `io::Write` implementer you can write bytes to
     /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
     ///
     /// This returns None in many circumstances when the capability to
