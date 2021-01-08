@@ -426,7 +426,7 @@ impl ClientSessionImpl {
             ret.push(cs.suite);
         }
 
-        // We don't do renegotation at all, in fact.
+        // We don't do renegotiation at all, in fact.
         ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         ret
@@ -548,7 +548,7 @@ impl ClientSessionImpl {
     /// to handle the message.
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotation requests.  These can occur any time.
+        // renegotiation requests.  These can occur any time.
         if msg.is_handshake_type(HandshakeType::HelloRequest)
             && !self.common.is_tls13()
             && !self.is_handshaking()
