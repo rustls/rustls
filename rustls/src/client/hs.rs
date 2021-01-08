@@ -854,7 +854,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .transcript
             .add_message(&m);
 
-        // Early data is not alllowed after HelloRetryrequest
+        // Early data is not allowed after HelloRetryrequest
         if sess.early_data.is_enabled() {
             sess.early_data.rejected();
         }
