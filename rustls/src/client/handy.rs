@@ -7,7 +7,7 @@ use crate::sign;
 use std::collections;
 use std::sync::{Arc, Mutex};
 
-/// An implementor of `StoresClientSessions` which does nothing.
+/// An implementer of `StoresClientSessions` which does nothing.
 pub struct NoClientSessionStorage {}
 
 impl client::StoresClientSessions for NoClientSessionStorage {
@@ -20,7 +20,7 @@ impl client::StoresClientSessions for NoClientSessionStorage {
     }
 }
 
-/// An implementor of `StoresClientSessions` that stores everything
+/// An implementer of `StoresClientSessions` that stores everything
 /// in memory.  It enforces a limit on the number of entries
 /// to bound memory usage.
 pub struct ClientSessionMemoryCache {

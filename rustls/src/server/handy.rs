@@ -23,7 +23,7 @@ impl server::StoresServerSessions for NoServerSessionStorage {
     }
 }
 
-/// An implementor of `StoresServerSessions` that stores everything
+/// An implementer of `StoresServerSessions` that stores everything
 /// in memory.  If enforces a limit on the number of stored sessions
 /// to bound memory usage.
 pub struct ServerSessionMemoryCache {
