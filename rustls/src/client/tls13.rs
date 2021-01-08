@@ -160,7 +160,7 @@ pub fn fill_in_psk_binder(
         .transcript
         .get_hash_given(suite_hash, &binder_plaintext);
 
-    // Run a fake key_schedule to simulate what the server will do if it choses
+    // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
     let key_schedule = KeyScheduleEarly::new(hkdf_alg, &resuming.master_secret.0);
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
