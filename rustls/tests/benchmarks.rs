@@ -1,6 +1,6 @@
 use criterion::criterion_group;
 use criterion::criterion_main;
-/// Microbenchmarks go here.  Larger benchmarks of (eg.) protocol
+/// Microbenchmarks go here.  Larger benchmarks of (e.g..) protocol
 /// performance go in examples/internal/bench.rs.
 use criterion::Criterion;
 

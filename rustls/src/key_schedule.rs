@@ -64,7 +64,7 @@ struct KeySchedule {
 
 // We express the state of a contained KeySchedule using these
 // typestates.  This means we can write code that cannot accidentally
-// (eg) encrypt application data using a KeySchedule solely constructed
+// (e.g.) encrypt application data using a KeySchedule solely constructed
 // with an empty or trivial secret, or extract the wrong kind of secrets
 // at a given point.
 

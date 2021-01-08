@@ -96,7 +96,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - Introduce client-side support for 0-RTT data in TLS1.3.
   - Fix a bug in rustls::Stream for non-blocking transports.
   - Move TLS1.3 support from draft 23 to final RFC8446 version.
-  - Don't offer (eg) TLS1.3 if no TLS1.3 suites are configured.
+  - Don't offer (e.g.) TLS1.3 if no TLS1.3 suites are configured.
   - Support stateful resumption in TLS1.3.  Stateless resumption
     was previously supported, but is not the default configuration.
   - *Breaking API change*: `generate()` removed from `StoresServerSessions` trait.
