@@ -249,7 +249,7 @@ impl SupportedCipherSuite {
     /// signatures.  This resolves to true for all TLS1.3 suites.
     pub fn usable_for_sigalg(&self, sigalg: SignatureAlgorithm) -> bool {
         match self.sign {
-            None => true, // no constraint expressed by ciphersuite (eg, TLS1.3)
+            None => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
             Some(schemes) => schemes
                 .iter()
                 .any(|scheme| scheme.sign() == sigalg),

@@ -130,7 +130,7 @@ GCM is a typical nonce-based AEAD: it requires a unique (but not necessarily unp
 with a given key.  The design specified by RFC5288 left two-thirds of the nonce construction up to implementations:
 
 - wasting 8 bytes per TLS ciphertext,
-- meaning correct operation cannot be tested for (eg, in protocol-level test vectors).
+- meaning correct operation cannot be tested for (e.g., in protocol-level test vectors).
 
 There were no trade-offs here: TLS has a 64-bit sequence number that is not allowed to wrap and would make an ideal nonce.
 
