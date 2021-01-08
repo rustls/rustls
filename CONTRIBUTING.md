@@ -46,7 +46,7 @@ If you're *looking* for security bugs, this crate is set up for
 - Features involving additions to the public API should have (at least)
   API-level tests (see [`tests/api.rs`](tests/api.rs)).
 - Protocol additions should have some coverage -- consider enabling
-  corresponding tests in the bogo suite, or writing some adhoc tests.
+  corresponding tests in the bogo suite, or writing some ad hoc tests.
 
 PRs which cause test failures or a significant coverage decrease
 are unlikely to be accepted.
