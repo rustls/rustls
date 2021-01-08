@@ -142,7 +142,7 @@ pub trait ServerCertVerifier: Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     ///
-    /// This trait mehod has a default implementation that reflects the schemes
+    /// This trait method has a default implementation that reflects the schemes
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         WebPKIVerifier::verification_schemes()
@@ -243,7 +243,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     ///
-    /// This trait mehod has a default implementation that reflects the schemes
+    /// This trait method has a default implementation that reflects the schemes
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         WebPKIVerifier::verification_schemes()
