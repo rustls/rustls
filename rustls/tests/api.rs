@@ -1929,7 +1929,7 @@ fn find_suite(suite: CipherSuite) -> &'static SupportedCipherSuite {
         }
     }
 
-    panic!("find_suite given unsuppported suite");
+    panic!("find_suite given unsupported suite");
 }
 
 static TEST_CIPHERSUITES: [(ProtocolVersion, KeyType, CipherSuite); 9] = [
