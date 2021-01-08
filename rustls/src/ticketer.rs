@@ -144,7 +144,7 @@ impl TicketSwitcher {
     }
 
     /// If it's time, demote the `current` ticketer to `previous` (so it
-    /// does no new encryptions but can do decryptions) and make a fresh
+    /// does no new encryptions but can do decryption) and make a fresh
     /// `current` ticketer.
     ///
     /// Calling this regularly will ensure timely key erasure.  Otherwise,
