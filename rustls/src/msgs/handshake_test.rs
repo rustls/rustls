@@ -413,7 +413,7 @@ fn test_truncated_client_extension_is_detected() {
         let mut enc = ext.get_encoding();
         println!("testing {:?} enc {:?}", ext, enc);
 
-        // "outer" truncation, ie, where the extension-level length is longer than
+        // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
             assert!(ClientExtension::read_bytes(&enc[..l]).is_none());
@@ -532,7 +532,7 @@ fn test_truncated_helloretry_extension_is_detected() {
         let mut enc = ext.get_encoding();
         println!("testing {:?} enc {:?}", ext, enc);
 
-        // "outer" truncation, ie, where the extension-level length is longer than
+        // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
             assert!(HelloRetryExtension::read_bytes(&enc[..l]).is_none());
@@ -601,7 +601,7 @@ fn test_truncated_server_extension_is_detected() {
         let mut enc = ext.get_encoding();
         println!("testing {:?} enc {:?}", ext, enc);
 
-        // "outer" truncation, ie, where the extension-level length is longer than
+        // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
             assert!(ServerExtension::read_bytes(&enc[..l]).is_none());

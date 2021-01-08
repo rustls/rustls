@@ -166,7 +166,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     ///
     /// This function will block if `io` blocks.
     ///
-    /// Errors from TLS record handling (ie, from `process_new_packets()`)
+    /// Errors from TLS record handling (i.e., from `process_new_packets()`)
     /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
     fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
     where
@@ -641,7 +641,7 @@ impl SessionCommon {
         self.queue_tls_message(em);
     }
 
-    /// Are we done? ie, have we processed all received messages,
+    /// Are we done? i.e., have we processed all received messages,
     /// and received a close_notify to indicate that no new messages
     /// will arrive?
     pub fn connection_at_eof(&self) -> bool {
