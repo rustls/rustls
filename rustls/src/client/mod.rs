@@ -16,6 +16,9 @@ use crate::sign;
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use crate::verify;
 
+use crate::certificate::compression::CertificateCompressionConfig;
+use crate::msgs::enums::CertificateCompressionAlgorithm;
+
 use std::fmt;
 use std::io::{self, IoSlice};
 use std::mem;
@@ -102,6 +105,13 @@ pub struct ClientConfig {
     /// How to decide what client auth certificate/keys to use.
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
 
+    /// Certificate compression algorithms.
+    /// If None, certificate compression won't be enabled
+    pub certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
+
+    /// Certificate compression configuration
+    pub certificate_compression_config: CertificateCompressionConfig,
+
     /// Whether to support RFC5077 tickets.  You must provide a working
     /// `session_persistence` member for this to have any meaningful
     /// effect.
@@ -167,6 +177,8 @@ impl ClientConfig {
             session_persistence: handy::ClientSessionMemoryCache::new(32),
             mtu: None,
             client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
+            certificate_compression_algorithms: None,
+            certificate_compression_config: CertificateCompressionConfig::default(),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,

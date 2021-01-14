@@ -1,7 +1,8 @@
-use crate::key;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::enums::CertificateCompressionAlgorithm;
+use crate::msgs::enums::ContentType;
 use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
@@ -9,11 +10,20 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType}
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
+use crate::{key, TLSError};
+
+use crate::certificate::compression::{
+    brotli::{BrotliCompress, BrotliDecompress},
+    zlib::{ZlibCompress, ZlibDecompress},
+    zstd::{ZstdCompress, ZstdDecompress},
+    CertificateCompressionConfig, CertificateCompressor, CertificateDecompressor,
+};
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
 
 use std::collections;
+use std::convert::TryFrom;
 use std::fmt;
 use std::io::Write;
 use std::mem;
@@ -543,6 +553,10 @@ pub type SCTList = VecU16OfPayloadU16;
 declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 declare_u16_vec!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
+declare_u8_vec!(
+    CertificateCompressionAlgorithms,
+    CertificateCompressionAlgorithm
+);
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
@@ -563,6 +577,7 @@ pub enum ClientExtension {
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     EarlyData,
+    CompressCertificate(CertificateCompressionAlgorithms),
     Unknown(UnknownExtension),
 }
 
@@ -587,6 +602,7 @@ impl ClientExtension {
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
+            ClientExtension::CompressCertificate(_) => ExtensionType::CompressCertificate,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -615,6 +631,7 @@ impl Codec for ClientExtension {
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             ClientExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
+            ClientExtension::CompressCertificate(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -670,6 +687,9 @@ impl Codec for ClientExtension {
                 let csr = CertificateStatusRequest::read(&mut sub)?;
                 ClientExtension::CertificateStatusRequest(csr)
             }
+            ExtensionType::CompressCertificate => ClientExtension::CompressCertificate(
+                CertificateCompressionAlgorithms::read(&mut sub)?,
+            ),
             ExtensionType::SCT if !sub.any_left() => {
                 ClientExtension::SignedCertificateTimestampRequest
             }
@@ -956,6 +976,14 @@ impl ClientHelloPayload {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
             ClientExtension::KeyShare(ref shares) => Some(shares),
+            _ => None,
+        }
+    }
+
+    pub fn get_compress_certificate_extension(&self) -> Option<&CertificateCompressionAlgorithms> {
+        let ext = self.find_extension(ExtensionType::CompressCertificate)?;
+        match *ext {
+            ClientExtension::CompressCertificate(ref algorithms) => Some(algorithms),
             _ => None,
         }
     }
@@ -1427,6 +1455,121 @@ impl CertificateEntry {
 }
 
 #[derive(Debug)]
+pub struct CompressedCertificatePayload {
+    pub algorithm: CertificateCompressionAlgorithm,
+    pub uncompressed_length: codec::u24,
+    pub compressed_certificate_message: PayloadU24,
+}
+
+impl Codec for CompressedCertificatePayload {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.algorithm.encode(bytes);
+        self.uncompressed_length.encode(bytes);
+        self.compressed_certificate_message
+            .encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<CompressedCertificatePayload> {
+        Some(CompressedCertificatePayload {
+            algorithm: CertificateCompressionAlgorithm::read(r)?,
+            uncompressed_length: codec::u24::read(r)?,
+            compressed_certificate_message: PayloadU24::read(r)?,
+        })
+    }
+}
+
+impl CompressedCertificatePayload {
+    pub fn compress_with(
+        certificate: CertificatePayloadTLS13,
+        algorithm: CertificateCompressionAlgorithm,
+        config: &CertificateCompressionConfig,
+    ) -> Result<Self, TLSError> {
+        let mut input = Vec::new();
+        certificate.encode(&mut input);
+
+        let input_len = input.len();
+
+        let mut compressor: Box<dyn CertificateCompressor<Writer = Vec<u8>>> = match algorithm {
+            CertificateCompressionAlgorithm::Zlib => {
+                Box::new(ZlibCompress::new(Vec::new(), &config.zlib))
+            }
+            CertificateCompressionAlgorithm::Brotli => {
+                Box::new(BrotliCompress::new(Vec::new(), &config.brotli))
+            }
+            CertificateCompressionAlgorithm::Zstd => Box::new(
+                ZstdCompress::new(Vec::new(), &config.zstd)
+                    .map_err(|_e| TLSError::FailedCertificateCompression)?,
+            ),
+            CertificateCompressionAlgorithm::Unknown(_) => {
+                return Err(TLSError::FailedCertificateCompression);
+            }
+        };
+
+        compressor
+            .write_all(&input)
+            .map_err(|_e| TLSError::FailedCertificateCompression)?;
+
+        let output = compressor
+            .finish()
+            .map_err(|_e| TLSError::FailedCertificateCompression)?;
+
+        Ok(CompressedCertificatePayload {
+            algorithm,
+            uncompressed_length: codec::u24(input_len as u32),
+            compressed_certificate_message: PayloadU24::new(output),
+        })
+    }
+
+    pub fn decompress(
+        &self,
+        config: &CertificateCompressionConfig,
+    ) -> Result<Option<CertificatePayloadTLS13>, TLSError> {
+        let input = &self.compressed_certificate_message.0;
+
+        let uncompressed_length = usize::try_from(self.uncompressed_length.0).map_err(|_e| {
+            TLSError::General(format!(
+                "Failed to convert uncompressed_lenth {} to usize",
+                self.uncompressed_length.0
+            ))
+        })?;
+
+        let mut decompressor: Box<dyn CertificateDecompressor<Writer = Vec<u8>>> = {
+            let buf = Vec::with_capacity(uncompressed_length);
+            match self.algorithm {
+                CertificateCompressionAlgorithm::Zlib => Box::new(ZlibDecompress::new(buf)),
+                CertificateCompressionAlgorithm::Brotli => {
+                    Box::new(BrotliDecompress::new(buf, &config.brotli))
+                }
+                CertificateCompressionAlgorithm::Zstd => Box::new(
+                    ZstdDecompress::new(buf)
+                        .map_err(|_e| TLSError::FailedCertificateDecompression)?,
+                ),
+                CertificateCompressionAlgorithm::Unknown(_) => {
+                    return Ok(None);
+                }
+            }
+        };
+
+        decompressor
+            .write_all(&input)
+            .map_err(|_e| TLSError::FailedCertificateDecompression)?;
+
+        let output = decompressor
+            .finish()
+            .map_err(|_e| TLSError::FailedCertificateDecompression)?;
+
+        if output.len() != uncompressed_length {
+            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+        }
+
+        match CertificatePayloadTLS13::read_bytes(&output) {
+            Some(v) => Ok(Some(v)),
+            None => Err(TLSError::CorruptMessagePayload(ContentType::Handshake)),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct CertificatePayloadTLS13 {
     pub context: PayloadU8,
     pub entries: Vec<CertificateEntry>,
@@ -1452,6 +1595,14 @@ impl CertificatePayloadTLS13 {
             context: PayloadU8::empty(),
             entries,
         }
+    }
+
+    pub fn compress_with(
+        self,
+        algorithm: CertificateCompressionAlgorithm,
+        config: &CertificateCompressionConfig,
+    ) -> Result<CompressedCertificatePayload, TLSError> {
+        CompressedCertificatePayload::compress_with(self, algorithm, config)
     }
 
     pub fn any_entry_has_duplicate_extension(&self) -> bool {
@@ -2093,6 +2244,7 @@ pub enum HandshakePayload {
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificatePayload),
     CertificateTLS13(CertificatePayloadTLS13),
+    CompressedCertificate(CompressedCertificatePayload),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateRequestTLS13(CertificateRequestPayloadTLS13),
@@ -2123,6 +2275,7 @@ impl HandshakePayload {
             HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
             HandshakePayload::Certificate(ref x) => x.encode(bytes),
             HandshakePayload::CertificateTLS13(ref x) => x.encode(bytes),
+            HandshakePayload::CompressedCertificate(ref x) => x.encode(bytes),
             HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
             HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
             HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
@@ -2203,6 +2356,10 @@ impl HandshakeMessagePayload {
             HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
                 let p = CertificatePayloadTLS13::read(&mut sub)?;
                 HandshakePayload::CertificateTLS13(p)
+            }
+            HandshakeType::CompressedCertificate if vers == ProtocolVersion::TLSv1_3 => {
+                let p = CompressedCertificatePayload::read(&mut sub)?;
+                HandshakePayload::CompressedCertificate(p)
             }
             HandshakeType::Certificate => {
                 HandshakePayload::Certificate(CertificatePayload::read(&mut sub)?)

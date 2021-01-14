@@ -533,11 +533,42 @@ impl hs::State for ExpectCertificate {
         sess: &mut ClientSessionImpl,
         m: Message,
     ) -> hs::NextStateOrError {
-        let cert_chain = require_handshake_msg!(
-            m,
-            HandshakeType::Certificate,
-            HandshakePayload::CertificateTLS13
-        )?;
+        let decompressed_cert_chain = if m.is_handshake_type(HandshakeType::CompressedCertificate) {
+            let compressed_cert_chain = require_handshake_msg!(
+                m,
+                HandshakeType::CompressedCertificate,
+                HandshakePayload::CompressedCertificate
+            )?;
+
+            self.handshake
+                .certificate_compression_algorithm = Some(compressed_cert_chain.algorithm);
+
+            let cert_chain = compressed_cert_chain.decompress(
+                &sess
+                    .config
+                    .certificate_compression_config,
+            );
+
+            if cert_chain.is_err() {
+                sess.common
+                    .send_fatal_alert(AlertDescription::BadCertificate);
+            }
+
+            cert_chain?
+        } else {
+            None
+        };
+
+        let cert_chain = if let Some(cert_chain) = decompressed_cert_chain.as_ref() {
+            cert_chain
+        } else {
+            require_handshake_msg!(
+                m,
+                HandshakeType::Certificate,
+                HandshakePayload::CertificateTLS13
+            )?
+        };
+
         self.handshake
             .transcript
             .add_message(&m);
@@ -613,10 +644,13 @@ impl hs::State for ExpectCertificateOrCertReq {
             &[ContentType::Handshake],
             &[
                 HandshakeType::Certificate,
+                HandshakeType::CompressedCertificate,
                 HandshakeType::CertificateRequest,
             ],
         )?;
-        if m.is_handshake_type(HandshakeType::Certificate) {
+        if m.is_handshake_type(HandshakeType::Certificate)
+            || m.is_handshake_type(HandshakeType::CompressedCertificate)
+        {
             self.into_expect_certificate()
                 .handle(sess, m)
         } else {
@@ -829,7 +863,7 @@ fn emit_certificate_tls13(
     handshake: &mut HandshakeDetails,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
-) {
+) -> Result<(), TLSError> {
     let context = client_auth
         .auth_context
         .take()
@@ -848,16 +882,38 @@ fn emit_certificate_tls13(
         }
     }
 
+
+    let payload = if let Some(certificate_compression_algorithm) =
+        handshake.certificate_compression_algorithm
+    {
+        MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CompressedCertificate,
+            payload: HandshakePayload::CompressedCertificate(
+                cert_payload.compress_with(
+                    certificate_compression_algorithm,
+                    &sess
+                        .config
+                        .certificate_compression_config,
+                )?,
+            ),
+        })
+    } else {
+        MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTLS13(cert_payload),
+        })
+    };
+
     let m = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTLS13(cert_payload),
-        }),
+        payload,
     };
+
     handshake.transcript.add_message(&m);
     sess.common.send_msg(m, true);
+
+    Ok(())
 }
 
 fn emit_certverify_tls13(
@@ -1018,7 +1074,7 @@ impl hs::State for ExpectFinished {
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
         if st.client_auth.is_some() {
-            emit_certificate_tls13(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess);
+            emit_certificate_tls13(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess)?;
             emit_certverify_tls13(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess)?;
         }
 

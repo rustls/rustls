@@ -64,6 +64,12 @@ pub enum TLSError {
     /// We failed to figure out what time it currently is.
     FailedToGetCurrentTime,
 
+    /// We failed to perform certificate decompression
+    FailedCertificateDecompression,
+
+    /// We failed to perform certificate compression
+    FailedCertificateCompression,
+
     /// This function doesn't work until the TLS handshake
     /// is complete.
     HandshakeNotComplete,
@@ -119,6 +125,12 @@ impl fmt::Display for TLSError {
             TLSError::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
             TLSError::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             TLSError::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            TLSError::FailedCertificateDecompression => {
+                write!(f, "failed to decompress certificate")
+            }
+            TLSError::FailedCertificateCompression => {
+                write!(f, "failed to compress certificate")
+            }
             TLSError::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }

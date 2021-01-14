@@ -19,6 +19,7 @@
 //! * TLS1.2 resumption via tickets (RFC5077).
 //! * TLS1.3 resumption via tickets or session storage.
 //! * TLS1.3 0-RTT data for clients.
+//! * TLS1.3 certificate compression.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //! * Extended master secret support (RFC7627).
@@ -241,6 +242,7 @@ mod x509;
 #[macro_use]
 mod check;
 mod bs_debug;
+mod certificate;
 mod client;
 mod key;
 mod keylog;
@@ -259,6 +261,9 @@ pub mod internal {
 
 // The public interface is:
 pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
+pub use crate::certificate::compression::{
+    brotli::BrotliParams, zlib::ZlibParams, zstd::ZstdParams, CertificateCompressionConfig,
+};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
@@ -266,6 +271,7 @@ pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
 pub use crate::error::TLSError;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
+pub use crate::msgs::enums::CertificateCompressionAlgorithm;
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;

@@ -15,6 +15,8 @@ use crate::sign;
 use crate::suites;
 use webpki;
 
+use crate::msgs::enums::CertificateCompressionAlgorithm;
+
 use std::mem;
 
 pub struct ServerCertDetails {
@@ -61,6 +63,7 @@ pub struct HandshakeDetails {
     pub sent_tls13_fake_ccs: bool,
     pub dns_name: webpki::DNSName,
     pub extra_exts: Vec<ClientExtension>,
+    pub certificate_compression_algorithm: Option<CertificateCompressionAlgorithm>,
 }
 
 impl HandshakeDetails {
@@ -75,6 +78,7 @@ impl HandshakeDetails {
             sent_tls13_fake_ccs: false,
             dns_name: host_name,
             extra_exts,
+            certificate_compression_algorithm: None,
         }
     }
 }
