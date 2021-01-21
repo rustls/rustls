@@ -53,9 +53,16 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     fn write_tls(&mut self, wr: &mut dyn Write) -> Result<usize, io::Error>;
 
     /// Processes any new packets read by a previous call to `read_tls`.
+    ///
     /// Errors from this function relate to TLS protocol errors, and
     /// are fatal to the session.  Future calls after an error will do
-    /// no new work and will return the same error.
+    /// no new work and will return the same error. After an error is
+    /// received from process_new_packets, you should not call read_tls
+    /// any more (it will fill up buffers to no purpose). However, you
+    /// may call the other methods on the session, including write,
+    /// send_close_notify, and write_tls. Most likely you will want to
+    /// call write_tls to send any alerts queued by the error and then
+    /// close the connection.
     ///
     /// Success from this function can mean new plaintext is available:
     /// obtain it using `read`.
