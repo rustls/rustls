@@ -3,7 +3,6 @@ use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::enums::CertificateCompressionAlgorithm;
 use crate::msgs::enums::ContentType;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
@@ -14,7 +13,11 @@ use crate::sign;
 use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
 use crate::verify;
 
-use crate::certificate::compression::CertificateCompressionConfig;
+#[cfg(feature = "certificate_compression")]
+use crate::{
+    certificate::compression::CertificateCompressionConfig,
+    msgs::enums::CertificateCompressionAlgorithm,
+};
 
 use webpki;
 
@@ -176,9 +179,11 @@ pub struct ServerConfig {
 
     /// Certificate compression algorithms.
     /// If None, certificate compression won't be enabled
+    #[cfg(feature = "certificate_compression")]
     pub certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
 
     /// Certificate compression configuration
+    #[cfg(feature = "certificate_compression")]
     pub certificate_compression_config: CertificateCompressionConfig,
 
     /// Protocol names we support, most preferred first.
@@ -245,7 +250,9 @@ impl ServerConfig {
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
             cert_resolver: Arc::new(handy::FailResolveChain {}),
+            #[cfg(feature = "certificate_compression")]
             certificate_compression_algorithms: None,
+            #[cfg(feature = "certificate_compression")]
             certificate_compression_config: CertificateCompressionConfig::default(),
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             verifier: client_cert_verifier,

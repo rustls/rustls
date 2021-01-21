@@ -1,6 +1,7 @@
 use crate::hash_hs;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::enums::CertificateCompressionAlgorithm;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::CertificatePayload;
@@ -14,8 +15,6 @@ use crate::session::SessionRandoms;
 use crate::sign;
 use crate::suites;
 use webpki;
-
-use crate::msgs::enums::CertificateCompressionAlgorithm;
 
 use std::mem;
 

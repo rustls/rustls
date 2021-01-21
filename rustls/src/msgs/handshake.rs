@@ -1,8 +1,8 @@
+use crate::key;
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::CertificateCompressionAlgorithm;
-use crate::msgs::enums::ContentType;
 use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
@@ -10,20 +10,26 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType}
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
-use crate::{key, TLSError};
 
-use crate::certificate::compression::{
-    brotli::{BrotliCompress, BrotliDecompress},
-    zlib::{ZlibCompress, ZlibDecompress},
-    zstd::{ZstdCompress, ZstdDecompress},
-    CertificateCompressionConfig, CertificateCompressor, CertificateDecompressor,
+#[cfg(feature = "certificate_compression")]
+use {
+    crate::{
+        certificate::compression::{
+            brotli::{BrotliCompress, BrotliDecompress},
+            zlib::{ZlibCompress, ZlibDecompress},
+            zstd::{ZstdCompress, ZstdDecompress},
+            CertificateCompressionConfig, CertificateCompressor, CertificateDecompressor,
+        },
+        msgs::enums::ContentType,
+        TLSError,
+    },
+    std::convert::TryFrom,
 };
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
 
 use std::collections;
-use std::convert::TryFrom;
 use std::fmt;
 use std::io::Write;
 use std::mem;
@@ -1479,6 +1485,7 @@ impl Codec for CompressedCertificatePayload {
 }
 
 impl CompressedCertificatePayload {
+    #[cfg(feature = "certificate_compression")]
     pub fn compress_with(
         certificate: CertificatePayloadTLS13,
         algorithm: CertificateCompressionAlgorithm,
@@ -1520,6 +1527,7 @@ impl CompressedCertificatePayload {
         })
     }
 
+    #[cfg(feature = "certificate_compression")]
     pub fn decompress(
         &self,
         config: &CertificateCompressionConfig,
@@ -1597,6 +1605,7 @@ impl CertificatePayloadTLS13 {
         }
     }
 
+    #[cfg(feature = "certificate_compression")]
     pub fn compress_with(
         self,
         algorithm: CertificateCompressionAlgorithm,

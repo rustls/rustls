@@ -190,6 +190,10 @@
 //!   details of these.  You will only need this if you're writing a QUIC
 //!   implementation.
 //!
+//! - `compressed_certificates`: this feature enables TLS certificate compression
+//!   (RFC8879). This can reduce the amount of data transmitted by compressing
+//!   certificates during the handshake.
+//!
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use, unstable_features)]
@@ -261,9 +265,6 @@ pub mod internal {
 
 // The public interface is:
 pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
-pub use crate::certificate::compression::{
-    brotli::BrotliParams, zlib::ZlibParams, zstd::ZstdParams, CertificateCompressionConfig,
-};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
@@ -271,7 +272,6 @@ pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
 pub use crate::error::TLSError;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
-pub use crate::msgs::enums::CertificateCompressionAlgorithm;
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
@@ -286,6 +286,13 @@ pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+};
+#[cfg(feature = "certificate_compression")]
+pub use crate::{
+    certificate::compression::{
+        brotli::BrotliParams, zlib::ZlibParams, zstd::ZstdParams, CertificateCompressionConfig,
+    },
+    msgs::enums::CertificateCompressionAlgorithm,
 };
 
 /// All defined ciphersuites appear in this module.

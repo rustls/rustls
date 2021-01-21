@@ -12,6 +12,7 @@ default = ["logging"]
 logging = ["log"]
 dangerous_configuration = ["rustls/dangerous_configuration"]
 quic = ["rustls/quic"]
+certificate_compression = ["rustls/certificate_compression"]
 
 [dependencies]
 log = { version = "0.4.4", optional = true }

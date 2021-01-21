@@ -10,6 +10,7 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
+#[cfg(feature = "certificate_compression")]
 use crate::msgs::enums::CertificateCompressionAlgorithm;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, SignatureScheme};
@@ -36,15 +37,14 @@ use crate::msgs::handshake::SessionID;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
+use crate::server::common::{ClientCertDetails, HandshakeDetails};
+use crate::server::hs;
 use crate::server::ServerSessionImpl;
 use crate::sign;
 use crate::suites;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{msgs::handshake::NewSessionTicketExtension, quic, session::Protocol};
-
-use crate::server::common::{ClientCertDetails, HandshakeDetails};
-use crate::server::hs;
 
 use ring::constant_time;
 
@@ -364,7 +364,9 @@ impl CompleteClientHelloHandling {
         &mut self,
         sess: &mut ServerSessionImpl,
         server_key: &mut sign::CertifiedKey,
-        certificate_compression_algorithm: Option<&CertificateCompressionAlgorithm>,
+        #[cfg(feature = "certificate_compression")] certificate_compression_algorithm: Option<
+            &CertificateCompressionAlgorithm,
+        >,
     ) -> Result<(), TLSError> {
         let mut cert_entries = vec![];
         for cert in server_key.take_cert() {
@@ -399,6 +401,8 @@ impl CompleteClientHelloHandling {
         }
 
         let cert_body = CertificatePayloadTLS13::new(cert_entries);
+
+        #[cfg(feature = "certificate_compression")]
         let payload =
             if let Some(certificate_compression_algorithm) = certificate_compression_algorithm {
                 MessagePayload::Handshake(HandshakeMessagePayload {
@@ -418,6 +422,12 @@ impl CompleteClientHelloHandling {
                     payload: HandshakePayload::CertificateTLS13(cert_body),
                 })
             };
+
+        #[cfg(not(feature = "certificate_compression"))]
+        let payload = MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTLS13(cert_body),
+        });
 
         let c = Message {
             typ: ContentType::Handshake,
@@ -693,6 +703,7 @@ impl CompleteClientHelloHandling {
             sess.client_cert_chain = resume.client_cert_chain.clone();
         }
 
+        #[cfg(feature = "certificate_compression")]
         let cert_compression_algo = if let (Some(c_algorithms), Some(s_algorithms)) = (
             client_hello
                 .get_compress_certificate_extension()
@@ -730,7 +741,13 @@ impl CompleteClientHelloHandling {
 
         let doing_client_auth = if full_handshake {
             let client_auth = self.emit_certificate_req_tls13(sess)?;
+
+            #[cfg(feature = "certificate_compression")]
             self.emit_certificate_tls13(sess, &mut server_key, cert_compression_algo)?;
+
+            #[cfg(not(feature = "certificate_compression"))]
+            self.emit_certificate_tls13(sess, &mut server_key)?;
+
             self.emit_certificate_verify_tls13(sess, &mut server_key, &sigschemes_ext)?;
             client_auth
         } else {
@@ -779,6 +796,7 @@ impl hs::State for ExpectCertificate {
         sess: &mut ServerSessionImpl,
         m: Message,
     ) -> hs::NextStateOrError {
+        #[cfg(feature = "certificate_compression")]
         let decompressed_certp = if m.is_handshake_type(HandshakeType::CompressedCertificate) {
             let compressed_cert_chain = require_handshake_msg!(
                 m,
@@ -802,6 +820,7 @@ impl hs::State for ExpectCertificate {
             None
         };
 
+        #[cfg(feature = "certificate_compression")]
         let certp = if let Some(certp) = decompressed_certp.as_ref() {
             certp
         } else {
@@ -811,6 +830,13 @@ impl hs::State for ExpectCertificate {
                 HandshakePayload::CertificateTLS13
             )?
         };
+
+        #[cfg(not(feature = "certificate_compression"))]
+        let certp = require_handshake_msg!(
+            m,
+            HandshakeType::Certificate,
+            HandshakePayload::CertificateTLS13
+        )?;
 
         self.handshake
             .transcript

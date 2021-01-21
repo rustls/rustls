@@ -16,15 +16,16 @@ log = { version = "0.4.4", optional = true }
 ring = "0.16.19"
 sct = "0.6.0"
 webpki = "0.21.4"
-brotli = "3.3.0"
-flate2 = "1.0"
-zstd = "0.6"
+brotli = { version = "3.3.0", optional = true }
+flate2 = { version = "1.0", optional = true }
+zstd = { version = "0.6", optional = true }
 
 [features]
 default = ["logging"]
 logging = ["log"]
 dangerous_configuration = []
 quic = []
+certificate_compression = ['brotli', 'flate2', 'zstd']
 
 [dev-dependencies]
 env_logger = "0.8.2"
