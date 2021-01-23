@@ -4,10 +4,9 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::anchors;
-use crate::error::TLSError;
 use crate::key;
 use crate::verify;
 use crate::verify::ServerCertVerifier;
@@ -36,11 +35,11 @@ where
     println!("{}: min {:?}us", name, times.iter().min().unwrap() / 1000);
 }
 
-fn fixed_time() -> Result<webpki::Time, TLSError> {
-    Ok(webpki::Time::from_seconds_since_unix_epoch(1500000000))
+fn fixed_time() -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_secs(1500000000)
 }
 
-static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier { time: fixed_time };
+static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier;
 
 #[test]
 fn test_reddit_cert() {
@@ -49,13 +48,14 @@ fn test_reddit_cert() {
     let chain = [cert0, cert1];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(reddit)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("reddit.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -68,13 +68,14 @@ fn test_github_cert() {
     let chain = [cert0, cert1];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(github)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("github.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -88,13 +89,14 @@ fn test_arstechnica_cert() {
     let chain = [cert0, cert1, cert2];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(arstechnica)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("arstechnica.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -108,13 +110,14 @@ fn test_servo_cert() {
     let chain = [cert0, cert1, cert2];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(servo)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("servo.org").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -127,13 +130,14 @@ fn test_twitter_cert() {
     let chain = [cert0, cert1];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(twitter)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("twitter.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -146,13 +150,14 @@ fn test_wikipedia_cert() {
     let chain = [cert0, cert1];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(wikipedia)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("wikipedia.org").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -166,13 +171,14 @@ fn test_google_cert() {
     let chain = [cert0, cert1, cert2];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(google)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.google.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -186,13 +192,14 @@ fn test_hn_cert() {
     let chain = [cert0, cert1, cert2];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(hn)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("news.ycombinator.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -205,13 +212,14 @@ fn test_stackoverflow_cert() {
     let chain = [cert0, cert1];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(stackoverflow)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("stackoverflow.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -224,13 +232,14 @@ fn test_duckduckgo_cert() {
     let chain = [cert0, cert1];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(duckduckgo)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("duckduckgo.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -244,13 +253,14 @@ fn test_rustlang_cert() {
     let chain = [cert0, cert1, cert2];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(rustlang)",
         || (),
         |_| {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str("www.rust-lang.org").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );
@@ -264,6 +274,7 @@ fn test_wapo_cert() {
     let chain = [cert0, cert1, cert2];
     let mut anchors = anchors::RootCertStore::empty();
     anchors.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let now = fixed_time();
     bench(
         100,
         "verify_server_cert(wapo)",
@@ -271,7 +282,7 @@ fn test_wapo_cert() {
         |_| {
             let dns_name =
                 webpki::DNSNameRef::try_from_ascii_str("www.washingtonpost.com").unwrap();
-            V.verify_server_cert(&anchors, &chain[..], dns_name, &[])
+            V.verify_server_cert(&anchors, &chain[..], dns_name, &[], now)
                 .unwrap();
         },
     );

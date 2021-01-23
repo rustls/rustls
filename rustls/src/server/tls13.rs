@@ -785,9 +785,10 @@ impl hs::State for ExpectCertificate {
             return Err(TLSError::NoCertificatesPresented);
         }
 
+        let now = std::time::SystemTime::now();
         sess.config
             .get_verifier()
-            .verify_client_cert(&cert_chain, sess.get_sni())
+            .verify_client_cert(&cert_chain, sess.get_sni(), now)
             .or_else(|err| {
                 hs::incompatible(sess, "certificate invalid");
                 Err(err)

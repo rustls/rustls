@@ -688,6 +688,7 @@ impl hs::State for ExpectCertificateVerify {
             return Err(TLSError::NoCertificatesPresented);
         }
 
+        let now = std::time::SystemTime::now();
         let certv = sess
             .config
             .get_verifier()
@@ -696,6 +697,7 @@ impl hs::State for ExpectCertificateVerify {
                 &self.server_cert.cert_chain,
                 self.handshake.dns_name.as_ref(),
                 &self.server_cert.ocsp_response,
+                now,
             )
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
@@ -717,7 +719,7 @@ impl hs::State for ExpectCertificateVerify {
         // 3. Verify any included SCTs.
         match (self.server_cert.scts.as_ref(), sess.config.ct_logs) {
             (Some(scts), Some(logs)) => {
-                verify::verify_scts(&self.server_cert.cert_chain[0], scts, logs)?;
+                verify::verify_scts(&self.server_cert.cert_chain[0], now, scts, logs)?;
             }
             (_, _) => {}
         }

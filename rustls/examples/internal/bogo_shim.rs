@@ -23,6 +23,7 @@ use std::net;
 use std::ops::{Deref, DerefMut};
 use std::process;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 static BOGO_NACK: i32 = 89;
 
@@ -192,6 +193,7 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         &self,
         _certs: &[rustls::Certificate],
         _sni: Option<&webpki::DNSName>,
+        _now: SystemTime,
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
         Ok(rustls::ClientCertVerified::assertion())
     }
@@ -206,6 +208,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
         _certs: &[rustls::Certificate],
         _hostname: webpki::DNSNameRef<'_>,
         _ocsp: &[u8],
+        _now: SystemTime,
     ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
         Ok(rustls::ServerCertVerified::assertion())
     }

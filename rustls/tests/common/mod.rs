@@ -345,6 +345,7 @@ impl ClientCertVerifier for MockClientVerifier {
         &self,
         _presented_certs: &[Certificate],
         sni: Option<&webpki::DNSName>,
+        _now: std::time::SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         assert!(sni.is_some());
         (self.verified)()
