@@ -13,7 +13,7 @@ use crate::msgs::handshake::NewSessionTicketPayload;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerSessionImpl;
-use crate::session::SessionSecrets;
+use crate::session::{SessionRandoms, SessionSecrets};
 use crate::verify;
 
 use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKXDetails};
@@ -24,6 +24,7 @@ use ring::constant_time;
 // --- Process client's Certificate for client auth ---
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
+    pub randoms: SessionRandoms,
     pub server_kx: ServerKXDetails,
     pub send_ticket: bool,
 }
@@ -32,6 +33,7 @@ impl ExpectCertificate {
     fn into_expect_tls12_client_kx(self, cert: Option<ClientCertDetails>) -> hs::NextState {
         Box::new(ExpectClientKX {
             handshake: self.handshake,
+            randoms: self.randoms,
             server_kx: self.server_kx,
             client_cert: cert,
             send_ticket: self.send_ticket,
@@ -96,6 +98,7 @@ impl hs::State for ExpectCertificate {
 // --- Process client's KeyExchange ---
 pub struct ExpectClientKX {
     pub handshake: HandshakeDetails,
+    pub randoms: SessionRandoms,
     pub server_kx: ServerKXDetails,
     pub client_cert: Option<ClientCertDetails>,
     pub send_ticket: bool,
@@ -135,13 +138,13 @@ impl hs::State for ExpectClientKX {
                 .transcript
                 .get_current_hash();
             SessionSecrets::new_ems(
-                &self.handshake.randoms,
+                &self.randoms,
                 &handshake_hash,
                 suite,
                 &kxd.shared_secret,
             )
         } else {
-            SessionSecrets::new(&self.handshake.randoms, suite, &kxd.shared_secret)
+            SessionSecrets::new(&self.randoms, suite, &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",

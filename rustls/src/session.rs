@@ -234,26 +234,26 @@ pub struct SessionRandoms {
 static TLS12_DOWNGRADE_SENTINEL: &[u8] = &[0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 impl SessionRandoms {
-    pub fn for_server() -> SessionRandoms {
+    pub fn for_server() -> Result<SessionRandoms, rand::GetRandomFailed> {
         let mut ret = SessionRandoms {
             we_are_client: false,
             client: [0u8; 32],
             server: [0u8; 32],
         };
 
-        rand::fill_random(&mut ret.server);
-        ret
+        rand::fill_random(&mut ret.server)?;
+        Ok(ret)
     }
 
-    pub fn for_client() -> SessionRandoms {
+    pub fn for_client() -> Result<SessionRandoms, rand::GetRandomFailed> {
         let mut ret = SessionRandoms {
             we_are_client: true,
             client: [0u8; 32],
             server: [0u8; 32],
         };
 
-        rand::fill_random(&mut ret.client);
-        ret
+        rand::fill_random(&mut ret.client)?;
+        Ok(ret)
     }
 
     pub fn set_tls12_downgrade_marker(&mut self) {
