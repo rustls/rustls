@@ -599,7 +599,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     }
 
     if args.flag_tickets {
-        config.ticketer = rustls::Ticketer::new();
+        config.ticketer = rustls::Ticketer::new().unwrap();
     }
 
     config.set_protocols(

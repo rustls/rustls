@@ -36,6 +36,7 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerSessionImpl;
+use crate::session::SessionRandoms;
 use crate::sign;
 use crate::kx;
 use crate::verify;
@@ -49,6 +50,7 @@ use ring::constant_time;
 
 pub struct CompleteClientHelloHandling {
     pub handshake: HandshakeDetails,
+    pub randoms: SessionRandoms,
     pub done_retry: bool,
     pub send_ticket: bool,
 }
@@ -93,6 +95,7 @@ impl CompleteClientHelloHandling {
     ) -> hs::NextState {
         Box::new(ExpectCertificate {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule,
             send_ticket: self.send_ticket,
         })
@@ -104,6 +107,7 @@ impl CompleteClientHelloHandling {
     ) -> hs::NextState {
         Box::new(ExpectFinished {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule,
             send_ticket: self.send_ticket,
         })
@@ -141,7 +145,7 @@ impl CompleteClientHelloHandling {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&self.handshake.randoms.server),
+                    random: Random::from_slice(&self.randoms.server),
                     session_id: *session_id,
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
@@ -175,7 +179,7 @@ impl CompleteClientHelloHandling {
                         .client_early_traffic_secret(
                             &client_hello_hash,
                             &*sess.config.key_log,
-                            &self.handshake.randoms.client,
+                            &self.randoms.client,
                         );
                     // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
                     // before the application can see.
@@ -195,7 +199,7 @@ impl CompleteClientHelloHandling {
         let write_key = key_schedule.server_handshake_traffic_secret(
             &handshake_hash,
             &*sess.config.key_log,
-            &self.handshake.randoms.client,
+            &self.randoms.client,
         );
         sess.common
             .record_layer
@@ -204,7 +208,7 @@ impl CompleteClientHelloHandling {
         let read_key = key_schedule.client_handshake_traffic_secret(
             &handshake_hash,
             &*sess.config.key_log,
-            &self.handshake.randoms.client,
+            &self.randoms.client,
         );
         sess.common
             .record_layer
@@ -476,7 +480,7 @@ impl CompleteClientHelloHandling {
         let write_key = key_schedule_traffic.server_application_traffic_secret(
             &hash_at_server_fin,
             &*sess.config.key_log,
-            &self.handshake.randoms.client,
+            &self.randoms.client,
         );
         sess.common
             .record_layer
@@ -485,13 +489,13 @@ impl CompleteClientHelloHandling {
         key_schedule_traffic.exporter_master_secret(
             &hash_at_server_fin,
             &*sess.config.key_log,
-            &self.handshake.randoms.client,
+            &self.randoms.client,
         );
 
         let _read_key = key_schedule_traffic.client_application_traffic_secret(
             &hash_at_server_fin,
             &*sess.config.key_log,
-            &self.handshake.randoms.client,
+            &self.randoms.client,
         );
 
         #[cfg(feature = "quic")]
@@ -688,6 +692,7 @@ impl CompleteClientHelloHandling {
 
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
+    pub randoms: SessionRandoms,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     pub send_ticket: bool,
 }
@@ -696,6 +701,7 @@ impl ExpectCertificate {
     fn into_expect_finished(self) -> hs::NextState {
         Box::new(ExpectFinished {
             key_schedule: self.key_schedule,
+            randoms: self.randoms,
             handshake: self.handshake,
             send_ticket: self.send_ticket,
         })
@@ -704,6 +710,7 @@ impl ExpectCertificate {
     fn into_expect_certificate_verify(self, cert: ClientCertDetails) -> hs::NextState {
         Box::new(ExpectCertificateVerify {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_cert: cert,
             send_ticket: self.send_ticket,
@@ -778,6 +785,7 @@ impl hs::State for ExpectCertificate {
 
 pub struct ExpectCertificateVerify {
     handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     client_cert: ClientCertDetails,
     send_ticket: bool,
@@ -788,6 +796,7 @@ impl ExpectCertificateVerify {
         Box::new(ExpectFinished {
             key_schedule: self.key_schedule,
             handshake: self.handshake,
+            randoms: self.randoms,
             send_ticket: self.send_ticket,
         })
     }
@@ -863,6 +872,7 @@ fn get_server_session_value(
 
 pub struct ExpectFinished {
     pub handshake: HandshakeDetails,
+    pub randoms: SessionRandoms,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     pub send_ticket: bool,
 }
@@ -883,32 +893,32 @@ impl ExpectFinished {
         handshake: &mut HandshakeDetails,
         sess: &mut ServerSessionImpl,
         key_schedule: &KeyScheduleTraffic,
-    ) {
-        let nonce = rand::random_vec(32);
+    ) -> Result<(), rand::GetRandomFailed> {
+        let nonce = rand::random_vec(32)?;
         let plain = get_server_session_value(handshake, key_schedule, sess, &nonce).get_encoding();
 
         let stateless = sess.config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
             let ticket = match sess.config.ticketer.encrypt(&plain) {
                 Some(t) => t,
-                None => return,
+                None => return Ok(()),
             };
             (ticket, sess.config.ticketer.get_lifetime())
         } else {
-            let id = rand::random_vec(32);
+            let id = rand::random_vec(32)?;
             let stored = sess
                 .config
                 .session_storage
                 .put(id.clone(), plain);
             if !stored {
                 trace!("resumption not available; not issuing ticket");
-                return;
+                return Ok(());
             }
             let stateful_lifetime = 24 * 60 * 60; // this is a bit of a punt
             (id, stateful_lifetime)
         };
 
-        let age_add = rand::random_u32();
+        let age_add = rand::random_u32()?; // nb, we don't do 0-RTT data, so whatever
         #[allow(unused_mut)]
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
         #[cfg(feature = "quic")]
@@ -933,6 +943,7 @@ impl ExpectFinished {
         trace!("sending new ticket {:?} (stateless: {})", m, stateless);
         handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
+        Ok(())
     }
 }
 
@@ -978,7 +989,7 @@ impl hs::State for ExpectFinished {
             .client_application_traffic_secret(
                 self.handshake.hash_at_server_fin.as_ref().unwrap(),
                 &*sess.config.key_log,
-                &self.handshake.randoms.client,
+                &self.randoms.client,
             );
         sess.common
             .record_layer
@@ -987,7 +998,7 @@ impl hs::State for ExpectFinished {
         let key_schedule_traffic = self.key_schedule.into_traffic();
 
         if self.send_ticket {
-            Self::emit_ticket(&mut self.handshake, sess, &key_schedule_traffic);
+            Self::emit_ticket(&mut self.handshake, sess, &key_schedule_traffic)?;
         }
 
         sess.common.start_traffic();

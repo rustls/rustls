@@ -291,7 +291,7 @@ fn make_server_config(
     if resume == Resumption::SessionID {
         cfg.set_persistence(ServerSessionMemoryCache::new(128));
     } else if resume == Resumption::Tickets {
-        cfg.ticketer = Ticketer::new();
+        cfg.ticketer = Ticketer::new().unwrap();
     } else {
         cfg.set_persistence(Arc::new(NoServerSessionStorage {}));
     }

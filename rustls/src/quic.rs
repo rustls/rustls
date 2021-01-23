@@ -349,7 +349,7 @@ pub trait ClientQuicExt {
         };
         let mut imp = ClientSessionImpl::new(config);
         imp.common.protocol = Protocol::Quic;
-        imp.start_handshake(hostname.into(), vec![ext]);
+        imp.start_handshake(hostname.into(), vec![ext]).unwrap();
         ClientSession { imp }
     }
 }

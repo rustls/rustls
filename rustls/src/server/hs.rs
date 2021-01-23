@@ -1,4 +1,5 @@
 use crate::error::TLSError;
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::codec::Codec;
@@ -22,10 +23,9 @@ use crate::rand;
 use crate::server::{ClientHello, ServerConfig, ServerSessionImpl};
 #[cfg(feature = "quic")]
 use crate::session::Protocol;
-use crate::session::SessionSecrets;
+use crate::session::{SessionRandoms, SessionSecrets};
 use crate::sign;
 use crate::suites;
-use crate::kx;
 use webpki;
 
 use crate::server::common::{HandshakeDetails, ServerKXDetails};
@@ -91,7 +91,7 @@ pub fn can_resume(
             || (resumedata.extended_ms && !handshake.using_ems))
         && same_dns_name_or_both_none(resumedata.sni.as_ref(), sess.sni.as_ref())
     {
-        return Some(resumedata)
+        return Some(resumedata);
     }
 
     None
@@ -245,12 +245,17 @@ impl ExtensionProcessing {
             if !for_resume
                 && hello
                     .find_extension(ExtensionType::SCT)
-                    .is_some() {
+                    .is_some()
+            {
                 if !sess.common.is_tls13() {
                     // Take the SCT list, if any, so we don't send it later,
                     // and put it in the legacy extension.
-                    server_key.take_sct_list().map(|sct_list| self.exts
-                        .push(ServerExtension::make_sct(sct_list)));
+                    server_key
+                        .take_sct_list()
+                        .map(|sct_list| {
+                            self.exts
+                                .push(ServerExtension::make_sct(sct_list))
+                        });
                 }
             } else {
                 // Throw away any SCT list so we don't send it later.
@@ -343,25 +348,39 @@ impl ExpectClientHello {
         })
     }
 
-    fn into_complete_tls13_client_hello_handling(self) -> tls13::CompleteClientHelloHandling {
+    fn into_complete_tls13_client_hello_handling(
+        self,
+        randoms: SessionRandoms,
+    ) -> tls13::CompleteClientHelloHandling {
         tls13::CompleteClientHelloHandling {
             handshake: self.handshake,
+            randoms,
             done_retry: self.done_retry,
             send_ticket: self.send_ticket,
         }
     }
 
-    fn into_expect_tls12_certificate(self, kx: kx::KeyExchange) -> NextState {
+    fn into_expect_tls12_certificate(
+        self,
+        randoms: SessionRandoms,
+        kx: kx::KeyExchange,
+    ) -> NextState {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
+            randoms,
             server_kx: ServerKXDetails::new(kx),
             send_ticket: self.send_ticket,
         })
     }
 
-    fn into_expect_tls12_client_kx(self, kx: kx::KeyExchange) -> NextState {
+    fn into_expect_tls12_client_kx(
+        self,
+        randoms: SessionRandoms,
+        kx: kx::KeyExchange,
+    ) -> NextState {
         Box::new(tls12::ExpectClientKX {
             handshake: self.handshake,
+            randoms,
             server_kx: ServerKXDetails::new(kx),
             client_cert: None,
             send_ticket: self.send_ticket,
@@ -374,6 +393,7 @@ impl ExpectClientHello {
         server_key: Option<&mut sign::CertifiedKey>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
+        randoms: &SessionRandoms,
     ) -> Result<(), TLSError> {
         let mut ep = ExtensionProcessing::new();
         ep.process_common(sess, server_key, hello, resumedata, &self.handshake)?;
@@ -388,7 +408,7 @@ impl ExpectClientHello {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&self.handshake.randoms.server),
+                    random: Random::from_slice(&randoms.server),
                     session_id: self.handshake.session_id,
                     cipher_suite: sess.common.get_suite_assert().suite,
                     compression_method: Compression::Null,
@@ -432,10 +452,10 @@ impl ExpectClientHello {
         sess: &mut ServerSessionImpl,
         server_certkey: &mut sign::CertifiedKey,
     ) {
-       let ocsp = match server_certkey.take_ocsp() {
-           Some(ocsp) => ocsp,
-           None => return,
-       };
+        let ocsp = match server_certkey.take_ocsp() {
+            Some(ocsp) => ocsp,
+            None => return,
+        };
 
         let st = CertificateStatus::new(ocsp);
 
@@ -460,14 +480,15 @@ impl ExpectClientHello {
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
         server_certkey: &mut sign::CertifiedKey,
+        randoms: &SessionRandoms,
     ) -> Result<kx::KeyExchange, TLSError> {
         let kx = kx::KeyExchange::start(skxg)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
         let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();
-        msg.extend(&self.handshake.randoms.client);
-        msg.extend(&self.handshake.randoms.server);
+        msg.extend(&randoms.client);
+        msg.extend(&randoms.server);
         secdh.encode(&mut msg);
 
         let signing_key = &server_certkey.key;
@@ -565,6 +586,7 @@ impl ExpectClientHello {
         sni: Option<&webpki::DNSName>,
         id: &SessionID,
         resumedata: persist::ServerSessionValue,
+        randoms: &SessionRandoms,
     ) -> NextStateOrError {
         debug!("Resuming session");
 
@@ -573,16 +595,10 @@ impl ExpectClientHello {
         }
 
         self.handshake.session_id = *id;
-        self.emit_server_hello(sess, None, client_hello, Some(&resumedata))?;
+        self.emit_server_hello(sess, None, client_hello, Some(&resumedata), randoms)?;
 
-        let suite = sess
-            .common
-            .get_suite_assert();
-        let secrets = SessionSecrets::new_resume(
-            &self.handshake.randoms,
-            suite,
-            &resumedata.master_secret.0,
-        );
+        let suite = sess.common.get_suite_assert();
+        let secrets = SessionSecrets::new_resume(&randoms, suite, &resumedata.master_secret.0);
         sess.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
@@ -725,7 +741,9 @@ impl State for ExpectClientHello {
             trace!("sig schemes {:?}", sigschemes_ext);
             trace!("alpn protocols {:?}", alpn_protocols);
 
-            let alpn_slices = alpn_protocols.as_ref().map(|vec| vec.as_slice());
+            let alpn_slices = alpn_protocols
+                .as_ref()
+                .map(|vec| vec.as_slice());
 
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
@@ -782,13 +800,14 @@ impl State for ExpectClientHello {
         }
 
         // Save their Random.
+        let mut randoms = SessionRandoms::for_server()?;
         client_hello
             .random
-            .write_slice(&mut self.handshake.randoms.client);
+            .write_slice(&mut randoms.client);
 
         if sess.common.is_tls13() {
             return self
-                .into_complete_tls13_client_hello_handling()
+                .into_complete_tls13_client_hello_handling(randoms)
                 .handle_client_hello(ciphersuite, sess, certkey, &m);
         }
 
@@ -821,9 +840,7 @@ impl State for ExpectClientHello {
 
         // -- If TLS1.3 is enabled, signal the downgrade in the server random
         if tls13_enabled {
-            self.handshake
-                .randoms
-                .set_tls12_downgrade_marker();
+            randoms.set_tls12_downgrade_marker();
         }
 
         // -- Check for resumption --
@@ -858,6 +875,7 @@ impl State for ExpectClientHello {
                         sni.as_ref(),
                         &client_hello.session_id,
                         resume,
+                        &randoms,
                     );
                 } else {
                     debug!("Ticket didn't decrypt");
@@ -869,7 +887,7 @@ impl State for ExpectClientHello {
         // allocate a session ID.
         if self.handshake.session_id.is_empty() && !ticket_received {
             let mut bytes = [0u8; 32];
-            rand::fill_random(&mut bytes);
+            rand::fill_random(&mut bytes)?;
             self.handshake.session_id = SessionID::new(&bytes);
         }
 
@@ -889,6 +907,7 @@ impl State for ExpectClientHello {
                     sni.as_ref(),
                     &client_hello.session_id,
                     resume,
+                    &randoms,
                 );
             }
         }
@@ -903,7 +922,9 @@ impl State for ExpectClientHello {
             return Err(incompatible(sess, "no supported sig scheme"));
         }
 
-        let group = sess.config.kx_groups
+        let group = sess
+            .config
+            .kx_groups
             .iter()
             .find(|skxg| groups_ext.contains(&skxg.name))
             .cloned()
@@ -917,17 +938,17 @@ impl State for ExpectClientHello {
 
         debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-        self.emit_server_hello(sess, Some(&mut certkey), client_hello, None)?;
+        self.emit_server_hello(sess, Some(&mut certkey), client_hello, None, &randoms)?;
         self.emit_certificate(sess, &mut certkey);
         self.emit_cert_status(sess, &mut certkey);
-        let kx = self.emit_server_kx(sess, sigschemes, group, &mut certkey)?;
+        let kx = self.emit_server_kx(sess, sigschemes, group, &mut certkey, &randoms)?;
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 
         if doing_client_auth {
-            Ok(self.into_expect_tls12_certificate(kx))
+            Ok(self.into_expect_tls12_certificate(randoms, kx))
         } else {
-            Ok(self.into_expect_tls12_client_kx(kx))
+            Ok(self.into_expect_tls12_client_kx(randoms, kx))
         }
     }
 }

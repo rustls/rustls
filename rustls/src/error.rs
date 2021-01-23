@@ -1,4 +1,5 @@
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::rand;
 use sct;
 use std::error::Error;
 use std::fmt;
@@ -92,6 +93,9 @@ pub enum TLSError {
     /// We failed to figure out what time it currently is.
     FailedToGetCurrentTime,
 
+    /// We failed to acquire random bytes from the system.
+    FailedToGetRandomBytes,
+
     /// This function doesn't work until the TLS handshake
     /// is complete.
     HandshakeNotComplete,
@@ -147,12 +151,19 @@ impl fmt::Display for TLSError {
             TLSError::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
             TLSError::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             TLSError::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            TLSError::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             TLSError::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
 }
 
 impl Error for TLSError {}
+
+impl From<rand::GetRandomFailed> for TLSError {
+    fn from(_: rand::GetRandomFailed) -> Self {
+        Self::FailedToGetRandomBytes
+    }
+}
 
 #[cfg(test)]
 mod tests {

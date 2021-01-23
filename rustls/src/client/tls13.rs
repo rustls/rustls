@@ -24,6 +24,7 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID}
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::session::SessionRandoms;
 use crate::sign;
 use crate::kx;
 use crate::ticketer;
@@ -178,6 +179,7 @@ pub fn start_handshake_traffic(
     server_hello: &ServerHelloPayload,
     handshake: &mut HandshakeDetails,
     hello: &mut ClientHelloDetails,
+    randoms: &SessionRandoms,
 ) -> Result<(KeyScheduleHandshake, Digest), TLSError> {
     let their_key_share = server_hello
         .get_key_share()
@@ -249,7 +251,7 @@ pub fn start_handshake_traffic(
         let write_key = key_schedule.client_handshake_traffic_secret(
             &hash_at_client_recvd_server_hello,
             &*sess.config.key_log,
-            &handshake.randoms.client,
+            &randoms.client,
         );
         sess.common
             .record_layer
@@ -262,7 +264,7 @@ pub fn start_handshake_traffic(
     let read_key = key_schedule.server_handshake_traffic_secret(
         &hash_at_client_recvd_server_hello,
         &*sess.config.key_log,
-        &handshake.randoms.client,
+        &randoms.client,
     );
     sess.common
         .record_layer
@@ -275,7 +277,7 @@ pub fn start_handshake_traffic(
             key_schedule.client_handshake_traffic_secret(
                 &hash_at_client_recvd_server_hello,
                 &*sess.config.key_log,
-                &handshake.randoms.client,
+                &randoms.client,
             )
         } else {
             _maybe_write_key.unwrap()
@@ -387,6 +389,7 @@ fn validate_encrypted_extensions(
 
 pub struct ExpectEncryptedExtensions {
     pub handshake: HandshakeDetails,
+    pub randoms: SessionRandoms,
     pub key_schedule: KeyScheduleHandshake,
     pub hello: ClientHelloDetails,
     pub hash_at_client_recvd_server_hello: Digest,
@@ -400,6 +403,7 @@ impl ExpectEncryptedExtensions {
     ) -> hs::NextState {
         Box::new(ExpectFinished {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_auth: None,
             cert_verified: certv,
@@ -411,6 +415,7 @@ impl ExpectEncryptedExtensions {
     fn into_expect_certificate_or_certreq(self) -> hs::NextState {
         Box::new(ExpectCertificateOrCertReq {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
@@ -463,7 +468,7 @@ impl hs::State for ExpectEncryptedExtensions {
                     .client_handshake_traffic_secret(
                         &self.hash_at_client_recvd_server_hello,
                         &*sess.config.key_log,
-                        &self.handshake.randoms.client,
+                        &self.randoms.client,
                     );
                 sess.common
                     .record_layer
@@ -491,6 +496,7 @@ impl hs::State for ExpectEncryptedExtensions {
 
 struct ExpectCertificate {
     handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     hash_at_client_recvd_server_hello: Digest,
@@ -500,6 +506,7 @@ impl ExpectCertificate {
     fn into_expect_certificate_verify(self, server_cert: ServerCertDetails) -> hs::NextState {
         Box::new(ExpectCertificateVerify {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             server_cert,
             client_auth: self.client_auth,
@@ -565,6 +572,7 @@ impl hs::State for ExpectCertificate {
 
 struct ExpectCertificateOrCertReq {
     handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
     hash_at_client_recvd_server_hello: Digest,
 }
@@ -573,6 +581,7 @@ impl ExpectCertificateOrCertReq {
     fn into_expect_certificate(self) -> hs::NextState {
         Box::new(ExpectCertificate {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_auth: None,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
@@ -582,6 +591,7 @@ impl ExpectCertificateOrCertReq {
     fn into_expect_certificate_req(self) -> hs::NextState {
         Box::new(ExpectCertificateRequest {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
@@ -611,6 +621,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
     handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
@@ -625,6 +636,7 @@ impl ExpectCertificateVerify {
     ) -> hs::NextState {
         Box::new(ExpectFinished {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
             cert_verified: certv,
@@ -724,6 +736,7 @@ impl hs::State for ExpectCertificateVerify {
 // in TLS1.3.
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
     hash_at_client_recvd_server_hello: Digest,
 }
@@ -732,6 +745,7 @@ impl ExpectCertificateRequest {
     fn into_expect_certificate(self, client_auth: ClientAuthDetails) -> hs::NextState {
         Box::new(ExpectCertificate {
             handshake: self.handshake,
+            randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_auth: Some(client_auth),
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
@@ -924,6 +938,7 @@ fn emit_end_of_early_data_tls13(handshake: &mut HandshakeDetails, sess: &mut Cli
 
 struct ExpectFinished {
     handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     cert_verified: verify::ServerCertVerified,
@@ -980,7 +995,7 @@ impl hs::State for ExpectFinished {
                 .client_handshake_traffic_secret(
                     &st.hash_at_client_recvd_server_hello,
                     &*sess.config.key_log,
-                    &st.handshake.randoms.client,
+                    &st.randoms.client,
                 );
             Some(key)
         } else {
@@ -1024,7 +1039,7 @@ impl hs::State for ExpectFinished {
         let read_key = key_schedule_finished.server_application_traffic_secret(
             &hash_after_handshake,
             &*sess.config.key_log,
-            &st.handshake.randoms.client,
+            &st.randoms.client,
         );
         sess.common
             .record_layer
@@ -1033,13 +1048,13 @@ impl hs::State for ExpectFinished {
         key_schedule_finished.exporter_master_secret(
             &hash_after_handshake,
             &*sess.config.key_log,
-            &st.handshake.randoms.client,
+            &st.randoms.client,
         );
 
         let write_key = key_schedule_finished.client_application_traffic_secret(
             &hash_after_handshake,
             &*sess.config.key_log,
-            &st.handshake.randoms.client,
+            &st.randoms.client,
         );
         sess.common
             .record_layer
