@@ -171,7 +171,7 @@ impl ClientConfig {
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
             enable_sni: true,
-            verifier: Arc::new(verify::WebPKIVerifier::new()),
+            verifier: Arc::new(verify::WebPKIVerifier),
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
         }

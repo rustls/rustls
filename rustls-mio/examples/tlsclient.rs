@@ -453,6 +453,7 @@ mod danger {
             _presented_certs: &[rustls::Certificate],
             _dns_name: webpki::DNSNameRef<'_>,
             _ocsp: &[u8],
+            _now: std::time::SystemTime,
         ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
             Ok(rustls::ServerCertVerified::assertion())
         }

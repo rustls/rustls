@@ -1,6 +1,7 @@
 use sct;
 use std;
 use std::sync::Arc;
+use std::time::SystemTime;
 use webpki;
 
 use crate::anchors::OwnedTrustAnchor;
@@ -86,6 +87,7 @@ pub trait ServerCertVerifier: Send + Sync {
         presented_certs: &[Certificate],
         dns_name: webpki::DNSNameRef,
         ocsp_response: &[u8],
+        now: SystemTime,
     ) -> Result<ServerCertVerified, TLSError>;
 
     /// Verify a signature allegedly by the given server certificate.
@@ -187,6 +189,7 @@ pub trait ClientCertVerifier: Send + Sync {
         &self,
         presented_certs: &[Certificate],
         sni: Option<&webpki::DNSName>,
+        now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError>;
 
     /// Verify a signature allegedly by the given server certificate.
@@ -262,9 +265,12 @@ impl ServerCertVerifier for WebPKIVerifier {
         presented_certs: &[Certificate],
         dns_name: webpki::DNSNameRef,
         ocsp_response: &[u8],
+        now: SystemTime,
     ) -> Result<ServerCertVerified, TLSError> {
         let (cert, chain, trustroots) = prepare(roots, presented_certs)?;
-        let now = (self.time)()?;
+        let now = webpki::Time::try_from(now)
+            .map_err(|_| TLSError::FailedToGetCurrentTime)?;
+
         let cert = cert
             .verify_is_valid_tls_server_cert(
                 SUPPORTED_SIG_ALGS,
@@ -286,17 +292,9 @@ impl ServerCertVerifier for WebPKIVerifier {
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
-pub struct WebPKIVerifier {
-    /// time provider
-    pub time: fn() -> Result<webpki::Time, TLSError>,
-}
+pub struct WebPKIVerifier;
 
 impl WebPKIVerifier {
-    /// Create a new `WebPKIVerifier`
-    pub fn new() -> WebPKIVerifier {
-        WebPKIVerifier { time: try_now }
-    }
-
     /// Returns the signature verification methods supported by
     /// webpki.
     pub fn verification_schemes() -> Vec<SignatureScheme> {
@@ -346,11 +344,6 @@ fn prepare<'a, 'b>(
     Ok((cert, chain, trustroots))
 }
 
-fn try_now() -> Result<webpki::Time, TLSError> {
-    webpki::Time::try_from(std::time::SystemTime::now())
-        .map_err(|_| TLSError::FailedToGetCurrentTime)
-}
-
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
 /// certificate, without any name checking.
 pub struct AllowAnyAuthenticatedClient {
@@ -386,9 +379,11 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         presented_certs: &[Certificate],
         _sni: Option<&webpki::DNSName>,
+        now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         let (cert, chain, trustroots) = prepare(&self.roots, presented_certs)?;
-        let now = try_now()?;
+        let now = webpki::Time::try_from(now)
+            .map_err(|_| TLSError::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
             &webpki::TLSClientTrustAnchors(&trustroots),
@@ -442,9 +437,10 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         presented_certs: &[Certificate],
         sni: Option<&webpki::DNSName>,
+        now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         self.inner
-            .verify_client_cert(presented_certs, sni)
+            .verify_client_cert(presented_certs, sni, now)
     }
 }
 
@@ -474,6 +470,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _presented_certs: &[Certificate],
         _sni: Option<&webpki::DNSName>,
+        _now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         unimplemented!();
     }
@@ -600,8 +597,8 @@ fn verify_tls13(
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
-fn unix_time_millis() -> Result<u64, TLSError> {
-    std::time::SystemTime::now()
+fn unix_time_millis(now: SystemTime) -> Result<u64, TLSError> {
+    now
         .duration_since(std::time::UNIX_EPOCH)
         .map(|dur| dur.as_secs())
         .map_err(|_| TLSError::FailedToGetCurrentTime)
@@ -611,9 +608,9 @@ fn unix_time_millis() -> Result<u64, TLSError> {
         })
 }
 
-pub fn verify_scts(cert: &Certificate, scts: &SCTList, logs: &[&sct::Log]) -> Result<(), TLSError> {
+pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[&sct::Log]) -> Result<(), TLSError> {
     let mut valid_scts = 0;
-    let now = unix_time_millis()?;
+    let now = unix_time_millis(now)?;
     let mut last_sct_error = None;
 
     for sct in scts {
