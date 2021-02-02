@@ -16,8 +16,8 @@ impl Codec for Payload {
 }
 
 impl Payload {
-    pub fn new(bytes: Vec<u8>) -> Payload {
-        Payload(bytes)
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Payload {
+        Payload(bytes.into())
     }
 
     pub fn empty() -> Payload {
