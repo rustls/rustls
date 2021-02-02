@@ -1,19 +1,6 @@
-use ring::digest;
 use ring::hmac;
 
 use std::io::Write;
-
-fn convert_digest_to_hmac_alg(hash: &'static digest::Algorithm) -> hmac::Algorithm {
-    if hash == &digest::SHA256 {
-        hmac::HMAC_SHA256
-    } else if hash == &digest::SHA384 {
-        hmac::HMAC_SHA384
-    } else if hash == &digest::SHA512 {
-        hmac::HMAC_SHA512
-    } else {
-        panic!("bad digest for prf");
-    }
-}
 
 fn concat_sign(key: &hmac::Key, a: &[u8], b: &[u8]) -> hmac::Tag {
     let mut ctx = hmac::Context::with_key(key);
@@ -22,8 +9,8 @@ fn concat_sign(key: &hmac::Key, a: &[u8], b: &[u8]) -> hmac::Tag {
     ctx.sign()
 }
 
-fn p(out: &mut [u8], hashalg: &'static digest::Algorithm, secret: &[u8], seed: &[u8]) {
-    let hmac_key = hmac::Key::new(convert_digest_to_hmac_alg(hashalg), secret);
+fn p(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], seed: &[u8]) {
+    let hmac_key = hmac::Key::new(alg, secret);
 
     // A(1)
     let mut current_a = hmac::sign(&hmac_key, seed);
@@ -52,18 +39,18 @@ fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
 
 pub fn prf(
     out: &mut [u8],
-    hashalg: &'static digest::Algorithm,
+    alg: hmac::Algorithm,
     secret: &[u8],
     label: &[u8],
     seed: &[u8],
 ) {
     let joined_seed = concat(label, seed);
-    p(out, hashalg, secret, &joined_seed);
+    p(out, alg, secret, &joined_seed);
 }
 
 #[cfg(test)]
 mod tests {
-    use ring::digest::{SHA256, SHA512};
+    use ring::hmac::{HMAC_SHA256, HMAC_SHA512};
 
     #[test]
     fn check_sha256() {
@@ -73,7 +60,7 @@ mod tests {
         let expect = include_bytes!("testdata/prf-result.1.bin");
         let mut output = [0u8; 100];
 
-        super::prf(&mut output, &SHA256, secret, label, seed);
+        super::prf(&mut output, HMAC_SHA256, secret, label, seed);
         assert_eq!(expect.len(), output.len());
         assert_eq!(expect.to_vec(), output.to_vec());
     }
@@ -86,7 +73,7 @@ mod tests {
         let expect = include_bytes!("testdata/prf-result.2.bin");
         let mut output = [0u8; 196];
 
-        super::prf(&mut output, &SHA512, secret, label, seed);
+        super::prf(&mut output, HMAC_SHA512, secret, label, seed);
         assert_eq!(expect.len(), output.len());
         assert_eq!(expect.to_vec(), output.to_vec());
     }

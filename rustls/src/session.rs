@@ -21,6 +21,7 @@ use std::io::{Read, Write};
 
 use std::collections::VecDeque;
 use std::io;
+use ring::hmac;
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
@@ -287,26 +288,26 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
 /// TLS1.2 per-session keying material
 pub struct SessionSecrets {
     pub randoms: SessionRandoms,
-    hash: &'static ring::digest::Algorithm,
+    hmac_alg: hmac::Algorithm,
     pub master_secret: [u8; 48],
 }
 
 impl SessionSecrets {
     pub fn new(
         randoms: &SessionRandoms,
-        hashalg: &'static ring::digest::Algorithm,
+        hmac_alg: hmac::Algorithm,
         pms: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
             randoms: randoms.clone(),
-            hash: hashalg,
+            hmac_alg,
             master_secret: [0u8; 48],
         };
 
         let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
         prf::prf(
             &mut ret.master_secret,
-            ret.hash,
+            ret.hmac_alg,
             pms,
             b"master secret",
             &randoms,
@@ -317,18 +318,18 @@ impl SessionSecrets {
     pub fn new_ems(
         randoms: &SessionRandoms,
         hs_hash: &[u8],
-        hashalg: &'static ring::digest::Algorithm,
+        hmac_alg: hmac::Algorithm,
         pms: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
             randoms: randoms.clone(),
-            hash: hashalg,
+            hmac_alg,
             master_secret: [0u8; 48],
         };
 
         prf::prf(
             &mut ret.master_secret,
-            ret.hash,
+            ret.hmac_alg,
             pms,
             b"extended master secret",
             hs_hash,
@@ -338,12 +339,12 @@ impl SessionSecrets {
 
     pub fn new_resume(
         randoms: &SessionRandoms,
-        hashalg: &'static ring::digest::Algorithm,
+        hmac_alg: hmac::Algorithm,
         master_secret: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
             randoms: randoms.clone(),
-            hash: hashalg,
+            hmac_alg,
             master_secret: [0u8; 48],
         };
         ret.master_secret
@@ -362,7 +363,7 @@ impl SessionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.hash,
+            self.hmac_alg,
             &self.master_secret,
             b"key expansion",
             &randoms,
@@ -383,7 +384,7 @@ impl SessionSecrets {
 
         prf::prf(
             &mut out,
-            self.hash,
+            self.hmac_alg,
             &self.master_secret,
             label,
             handshake_hash,
@@ -409,7 +410,7 @@ impl SessionSecrets {
             randoms.extend_from_slice(context);
         }
 
-        prf::prf(output, self.hash, &self.master_secret, label, &randoms)
+        prf::prf(output, self.hmac_alg, &self.master_secret, label, &randoms)
     }
 }
 

@@ -717,7 +717,7 @@ impl State for ExpectServerHello {
 
                 let secrets = SessionSecrets::new_resume(
                     &self.handshake.randoms,
-                    scs.unwrap().get_hash(),
+                    scs.unwrap().hmac_algorithm(),
                     &resuming.master_secret.0,
                 );
                 sess.config.key_log.log(

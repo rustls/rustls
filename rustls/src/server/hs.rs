@@ -588,13 +588,13 @@ impl ExpectClientHello {
         self.handshake.session_id = *id;
         self.emit_server_hello(sess, None, client_hello, Some(&resumedata))?;
 
-        let hashalg = sess
+        let hmac_alg = sess
             .common
             .get_suite_assert()
-            .get_hash();
+            .hmac_algorithm();
         let secrets = SessionSecrets::new_resume(
             &self.handshake.randoms,
-            hashalg,
+            hmac_alg,
             &resumedata.master_secret.0,
         );
         sess.config.key_log.log(
