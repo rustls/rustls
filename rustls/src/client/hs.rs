@@ -126,12 +126,14 @@ fn random_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
 
 struct InitialState {
     handshake: HandshakeDetails,
+    extra_exts: Vec<ClientExtension>,
 }
 
 impl InitialState {
     fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
-            handshake: HandshakeDetails::new(host_name, extra_exts),
+            handshake: HandshakeDetails::new(host_name),
+            extra_exts,
         }
     }
 
@@ -146,7 +148,7 @@ impl InitialState {
                 .set_client_auth_enabled();
         }
         let hello_details = ClientHelloDetails::new();
-        emit_client_hello_for_retry(sess, self.handshake, hello_details, None)
+        emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts)
     }
 }
 
@@ -167,7 +169,10 @@ struct ExpectServerHello {
     must_issue_new_ticket: bool,
 }
 
-struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
+struct ExpectServerHelloOrHelloRetryRequest {
+    next: ExpectServerHello,
+    extra_exts: Vec<ClientExtension>,
+}
 
 pub fn compatible_suite(
     sess: &ClientSessionImpl,
@@ -184,6 +189,7 @@ fn emit_client_hello_for_retry(
     mut handshake: HandshakeDetails,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
+    extra_exts: Vec<ClientExtension>,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     handshake.resuming_session = find_session(sess, handshake.dns_name.as_ref());
@@ -283,7 +289,7 @@ fn emit_client_hello_for_retry(
     }
 
     // Extra extensions must be placed before the PSK extension
-    exts.extend(handshake.extra_exts.iter().cloned());
+    exts.extend(extra_exts.iter().cloned());
 
     let fill_in_binder = if support_tls13
         && sess.config.enable_tickets
@@ -402,7 +408,7 @@ fn emit_client_hello_for_retry(
     };
 
     if support_tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest(next))
+        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
     }
@@ -740,7 +746,7 @@ impl State for ExpectServerHello {
 
 impl ExpectServerHelloOrHelloRetryRequest {
     fn into_expect_server_hello(self) -> NextState {
-        Box::new(self.0)
+        Box::new(self.next)
     }
 
     fn handle_hello_retry_request(
@@ -764,7 +770,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // retry of a group we already sent.
         if !has_cookie
             && req_group
-                .map(|g| self.0.hello.has_key_share(g))
+                .map(|g| self.next.hello.has_key_share(g))
                 .unwrap_or(false)
         {
             return Err(illegal_param(sess, "server requested hrr with our group"));
@@ -833,15 +839,15 @@ impl ExpectServerHelloOrHelloRetryRequest {
         sess.common.set_suite(cs);
 
         // This is the draft19 change where the transcript became a tree
-        self.0
+        self.next
             .handshake
             .transcript
             .start_hash(cs.get_hash());
-        self.0
+        self.next
             .handshake
             .transcript
             .rollup_for_hrr();
-        self.0
+        self.next
             .handshake
             .transcript
             .add_message(&m);
@@ -853,9 +859,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         Ok(emit_client_hello_for_retry(
             sess,
-            self.0.handshake,
-            self.0.hello,
+            self.next.handshake,
+            self.next.hello,
             Some(&hrr),
+            self.extra_exts,
         ))
     }
 }
