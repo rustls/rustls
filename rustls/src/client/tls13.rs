@@ -301,55 +301,45 @@ pub fn prepare_resumption(
     exts: &mut Vec<ClientExtension>,
     doing_retry: bool,
 ) -> bool {
-    let resuming_suite = handshake
-        .resuming_session
-        .as_ref()
-        .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite));
-
-    if hs::compatible_suite(sess, resuming_suite) {
-        sess.resumption_ciphersuite = resuming_suite;
-        // The EarlyData extension MUST be supplied together with the
-        // PreSharedKey extension.
-        let max_early_data_size = handshake
-            .resuming_session
-            .as_ref()
-            .map_or(0, |resume| resume.max_early_data_size);
-        if sess.config.enable_early_data && max_early_data_size > 0 && !doing_retry {
-            sess.early_data
-                .enable(max_early_data_size as usize);
-            exts.push(ClientExtension::EarlyData);
+    let resuming_session = match handshake.resuming_session.as_ref() {
+        Some(resuming_session) => resuming_session,
+        None => {
+            return false;
         }
+    };
 
-        // Finally, and only for TLS1.3 with a ticket resumption, include a binder
-        // for our ticket.  This must go last.
-        //
-        // Include an empty binder. It gets filled in below because it depends on
-        // the message it's contained in (!!!).
-        let (obfuscated_ticket_age, suite) = {
-            let resuming = handshake
-                .resuming_session
-                .as_ref()
-                .unwrap();
-            (
-                resuming.get_obfuscated_ticket_age(ticketer::timebase()),
-                resuming.cipher_suite,
-            )
-        };
+    let resuming_suite = match sess.find_cipher_suite(resuming_session.cipher_suite) {
+        Some(resuming_suite) if hs::compatible_suite(sess, resuming_suite) => resuming_suite,
+        _ => {
+            return false;
+        }
+    };
 
-        let binder_len = sess
-            .find_cipher_suite(suite)
-            .unwrap()
-            .get_hash()
-            .output_len;
-        let binder = vec![0u8; binder_len];
-
-        let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
-        let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
-        exts.push(ClientExtension::PresharedKey(psk_ext));
-        true
-    } else {
-        false
+    sess.resumption_ciphersuite = Some(resuming_suite);
+    // The EarlyData extension MUST be supplied together with the
+    // PreSharedKey extension.
+    let max_early_data_size = resuming_session.max_early_data_size;
+    if sess.config.enable_early_data && max_early_data_size > 0 && !doing_retry {
+        sess.early_data
+            .enable(max_early_data_size as usize);
+        exts.push(ClientExtension::EarlyData);
     }
+
+    // Finally, and only for TLS1.3 with a ticket resumption, include a binder
+    // for our ticket.  This must go last.
+    //
+    // Include an empty binder. It gets filled in below because it depends on
+    // the message it's contained in (!!!).
+    let obfuscated_ticket_age= resuming_session.get_obfuscated_ticket_age(ticketer::timebase());
+
+    let binder_len = resuming_suite.get_hash().output_len;
+    let binder = vec![0u8; binder_len];
+
+    let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
+    let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
+    exts.push(ClientExtension::PresharedKey(psk_ext));
+
+    true
 }
 
 pub fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
