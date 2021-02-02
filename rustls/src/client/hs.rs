@@ -585,18 +585,16 @@ impl State for ExpectServerHello {
             }
         }
 
-        let scs = sess.find_cipher_suite(server_hello.cipher_suite);
-
-        if scs.is_none() {
-            sess.common
-                .send_fatal_alert(AlertDescription::HandshakeFailure);
-            return Err(TLSError::PeerMisbehavedError(
-                "server chose non-offered ciphersuite".to_string(),
-            ));
-        }
+        let scs = sess.find_cipher_suite(server_hello.cipher_suite)
+            .ok_or_else(|| {
+                sess.common
+                    .send_fatal_alert(AlertDescription::HandshakeFailure);
+                TLSError::PeerMisbehavedError(
+                    "server chose non-offered ciphersuite".to_string())
+            })?;
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
-        if !sess.common.set_suite(scs.unwrap()) {
+        if !sess.common.set_suite(scs) {
             return Err(illegal_param(sess, "server varied selected ciphersuite"));
         }
 
@@ -704,7 +702,7 @@ impl State for ExpectServerHello {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
-                if resuming.cipher_suite != scs.unwrap().suite {
+                if resuming.cipher_suite != scs.suite {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
                     return Err(TLSError::PeerMisbehavedError(error_msg));
                 }
@@ -717,7 +715,7 @@ impl State for ExpectServerHello {
 
                 let secrets = SessionSecrets::new_resume(
                     &self.handshake.randoms,
-                    scs.unwrap().get_hash(),
+                    scs.get_hash(),
                     &resuming.master_secret.0,
                 );
                 sess.config.key_log.log(
