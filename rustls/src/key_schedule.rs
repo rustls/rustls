@@ -4,7 +4,7 @@ use crate::msgs::base::PayloadU8;
 use crate::KeyLog;
 /// Key schedule maintenance for TLS1.3
 use ring::{
-    aead, digest,
+    aead, digest::{self, Digest},
     hkdf::{self, KeyType as _},
     hmac,
 };
@@ -82,19 +82,19 @@ impl KeyScheduleEarly {
 
     pub fn client_early_traffic_secret(
         &self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) -> hkdf::Prk {
         self.ks.derive_logged_secret(
             SecretKind::ClientEarlyTrafficSecret,
-            hs_hash,
+            hs_hash.as_ref(),
             key_log,
             client_random,
         )
     }
 
-    pub fn resumption_psk_binder_key_and_sign_verify_data(&self, hs_hash: &[u8]) -> Vec<u8> {
+    pub fn resumption_psk_binder_key_and_sign_verify_data(&self, hs_hash: &Digest) -> Vec<u8> {
         let resumption_psk_binder_key = self
             .ks
             .derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
@@ -145,13 +145,14 @@ pub struct KeyScheduleHandshake {
 impl KeyScheduleHandshake {
     pub fn client_handshake_traffic_secret(
         &mut self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) -> hkdf::Prk {
+        // Use an empty handshake hash for the initial handshake.
         let secret = self.ks.derive_logged_secret(
             SecretKind::ClientHandshakeTrafficSecret,
-            hs_hash,
+            hs_hash.as_ref(),
             key_log,
             client_random,
         );
@@ -161,13 +162,13 @@ impl KeyScheduleHandshake {
 
     pub fn server_handshake_traffic_secret(
         &mut self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) -> hkdf::Prk {
         let secret = self.ks.derive_logged_secret(
             SecretKind::ServerHandshakeTrafficSecret,
-            hs_hash,
+            hs_hash.as_ref(),
             key_log,
             client_random,
         );
@@ -175,7 +176,7 @@ impl KeyScheduleHandshake {
         secret
     }
 
-    pub fn sign_server_finish(&self, hs_hash: &[u8]) -> Vec<u8> {
+    pub fn sign_server_finish(&self, hs_hash: &Digest) -> Vec<u8> {
         self.ks.sign_finish(
             self.current_server_traffic_secret
                 .as_ref()
@@ -211,20 +212,20 @@ pub struct KeyScheduleTrafficWithClientFinishedPending {
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
-    pub fn sign_client_finish(&self, hs_hash: &[u8]) -> Vec<u8> {
+    pub fn sign_client_finish(&self, hs_hash: &Digest) -> Vec<u8> {
         self.ks
             .sign_finish(&self.handshake_client_traffic_secret, hs_hash)
     }
 
     pub fn server_application_traffic_secret(
         &mut self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) -> hkdf::Prk {
         let secret = self.ks.derive_logged_secret(
             SecretKind::ServerApplicationTrafficSecret,
-            hs_hash,
+            hs_hash.as_ref(),
             key_log,
             client_random,
         );
@@ -234,13 +235,13 @@ impl KeyScheduleTrafficWithClientFinishedPending {
 
     pub fn client_application_traffic_secret(
         &mut self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) -> hkdf::Prk {
         let secret = self.ks.derive_logged_secret(
             SecretKind::ClientApplicationTrafficSecret,
-            hs_hash,
+            hs_hash.as_ref(),
             key_log,
             client_random,
         );
@@ -250,13 +251,13 @@ impl KeyScheduleTrafficWithClientFinishedPending {
 
     pub fn exporter_master_secret(
         &mut self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) {
         let secret = self.ks.derive_logged_secret(
             SecretKind::ExporterMasterSecret,
-            hs_hash,
+            hs_hash.as_ref(),
             key_log,
             client_random,
         );
@@ -305,13 +306,13 @@ impl KeyScheduleTraffic {
 
     pub fn resumption_master_secret_and_derive_ticket_psk(
         &self,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         nonce: &[u8],
     ) -> Vec<u8> {
         let resumption_master_secret = self.ks.derive(
             self.ks.algorithm(),
             SecretKind::ResumptionMasterSecret,
-            hs_hash,
+            hs_hash.as_ref(),
         );
         self.ks
             .derive_ticket_psk(&resumption_master_secret, nonce)
@@ -367,7 +368,7 @@ impl KeySchedule {
         T: for<'a> From<hkdf::Okm<'a, L>>,
         L: hkdf::KeyType,
     {
-        hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash)
+        hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash.as_ref())
     }
 
     fn derive_logged_secret(
@@ -407,16 +408,16 @@ impl KeySchedule {
 
     /// Sign the finished message consisting of `hs_hash` using a current
     /// traffic secret.
-    fn sign_finish(&self, base_key: &hkdf::Prk, hs_hash: &[u8]) -> Vec<u8> {
+    fn sign_finish(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> Vec<u8> {
         self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
-    fn sign_verify_data(&self, base_key: &hkdf::Prk, hs_hash: &[u8]) -> Vec<u8> {
+    fn sign_verify_data(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> Vec<u8> {
         let hmac_alg = self.algorithm.hmac_algorithm();
         let hmac_key = hkdf_expand(base_key, hmac_alg, b"finished", &[]);
-        hmac::sign(&hmac_key, hs_hash)
+        hmac::sign(&hmac_key, hs_hash.as_ref())
             .as_ref()
             .to_vec()
     }

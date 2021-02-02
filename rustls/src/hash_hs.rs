@@ -106,7 +106,7 @@ impl HandshakeHash {
 
     /// Get the hash value if we were to hash `extra` too,
     /// using hash function `hash`.
-    pub fn get_hash_given(&self, hash: &'static digest::Algorithm, extra: &[u8]) -> Vec<u8> {
+    pub fn get_hash_given(&self, hash: &'static digest::Algorithm, extra: &[u8]) -> digest::Digest {
         let mut ctx = if self.ctx.is_none() {
             let mut ctx = digest::Context::new(hash);
             ctx.update(&self.buffer);
@@ -116,10 +116,7 @@ impl HandshakeHash {
         };
 
         ctx.update(extra);
-        let hash = ctx.finish();
-        let mut ret = Vec::new();
-        ret.extend_from_slice(hash.as_ref());
-        ret
+        ctx.finish()
     }
 
     /// Take the current hash value, and encapsulate it in a
@@ -135,16 +132,13 @@ impl HandshakeHash {
     }
 
     /// Get the current hash value.
-    pub fn get_current_hash(&self) -> Vec<u8> {
-        let hash = self
+    pub fn get_current_hash(&self) -> digest::Digest {
+        self
             .ctx
             .as_ref()
             .unwrap()
             .clone()
-            .finish();
-        let mut ret = Vec::new();
-        ret.extend_from_slice(hash.as_ref());
-        ret
+            .finish()
     }
 
     /// Takes this object's buffer containing all handshake messages
@@ -170,6 +164,7 @@ mod test {
         assert_eq!(hh.buffer.len(), 0);
         hh.update_raw(b"world");
         let h = hh.get_current_hash();
+        let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
         assert_eq!(h[2], 0x18);
@@ -187,6 +182,7 @@ mod test {
         hh.update_raw(b"world");
         assert_eq!(hh.buffer.len(), 10);
         let h = hh.get_current_hash();
+        let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
         assert_eq!(h[2], 0x18);
@@ -208,6 +204,7 @@ mod test {
         hh.update_raw(b"world");
         assert_eq!(hh.buffer.len(), 0);
         let h = hh.get_current_hash();
+        let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
         assert_eq!(h[2], 0x18);

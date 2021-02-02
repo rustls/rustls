@@ -21,6 +21,7 @@ use std::io::{Read, Write};
 
 use std::collections::VecDeque;
 use std::io;
+use ring::digest::Digest;
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
@@ -316,7 +317,7 @@ impl SessionSecrets {
 
     pub fn new_ems(
         randoms: &SessionRandoms,
-        hs_hash: &[u8],
+        hs_hash: &Digest,
         hashalg: &'static ring::digest::Algorithm,
         pms: &[u8],
     ) -> SessionSecrets {
@@ -331,7 +332,7 @@ impl SessionSecrets {
             ret.hash,
             pms,
             b"extended master secret",
-            hs_hash,
+            hs_hash.as_ref(),
         );
         ret
     }
@@ -377,7 +378,7 @@ impl SessionSecrets {
         ret
     }
 
-    pub fn make_verify_data(&self, handshake_hash: &[u8], label: &[u8]) -> Vec<u8> {
+    pub fn make_verify_data(&self, handshake_hash: &Digest, label: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         out.resize(12, 0u8);
 
@@ -386,16 +387,16 @@ impl SessionSecrets {
             self.hash,
             &self.master_secret,
             label,
-            handshake_hash,
+            handshake_hash.as_ref(),
         );
         out
     }
 
-    pub fn client_verify_data(&self, handshake_hash: &[u8]) -> Vec<u8> {
+    pub fn client_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"client finished")
     }
 
-    pub fn server_verify_data(&self, handshake_hash: &[u8]) -> Vec<u8> {
+    pub fn server_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"server finished")
     }
 
