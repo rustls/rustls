@@ -15,10 +15,7 @@ use std::mem;
 /// This is disabled in cases where client auth is not possible.
 pub struct HandshakeHash {
     /// None before we know what hash function we're using
-    alg: Option<&'static digest::Algorithm>,
-
-    /// None before we know what hash function we're using
-    ctx: Option<digest::Context>,
+    ctx: Option<(&'static digest::Algorithm, digest::Context)>,
 
     /// true if we need to keep all messages
     client_auth_enabled: bool,
@@ -30,7 +27,6 @@ pub struct HandshakeHash {
 impl HandshakeHash {
     pub fn new() -> HandshakeHash {
         HandshakeHash {
-            alg: None,
             ctx: None,
             client_auth_enabled: false,
             buffer: Vec::new(),
@@ -53,9 +49,9 @@ impl HandshakeHash {
 
     /// We now know what hash function the verify_data will use.
     pub fn start_hash(&mut self, alg: &'static digest::Algorithm) -> bool {
-        match self.alg {
+        match self.ctx {
             None => {}
-            Some(started) => {
+            Some((started, _)) => {
                 if started != alg {
                     // hash type is changing
                     warn!("altered hash to HandshakeHash::start_hash");
@@ -65,12 +61,10 @@ impl HandshakeHash {
                 return true;
             }
         }
-        self.alg = Some(alg);
-        debug_assert!(self.ctx.is_none());
 
         let mut ctx = digest::Context::new(alg);
         ctx.update(&self.buffer);
-        self.ctx = Some(ctx);
+        self.ctx = Some((alg, ctx));
 
         // Discard buffer if we don't need it now.
         if !self.client_auth_enabled {
@@ -93,7 +87,7 @@ impl HandshakeHash {
 
     /// Hash or buffer a byte slice.
     fn update_raw(&mut self, buf: &[u8]) -> &mut Self {
-        if let Some(ctx) = &mut self.ctx {
+        if let Some((_, ctx)) = &mut self.ctx {
             ctx.update(buf);
         }
 
@@ -108,7 +102,7 @@ impl HandshakeHash {
     /// using hash function `hash`.
     pub fn get_hash_given(&self, hash: &'static digest::Algorithm, extra: &[u8]) -> Vec<u8> {
         let mut ctx = match &self.ctx {
-            Some(ctx) => ctx.clone(),
+            Some((_, ctx)) => ctx.clone(),
             None => {
                 let mut ctx = digest::Context::new(hash);
                 ctx.update(&self.buffer);
@@ -127,22 +121,20 @@ impl HandshakeHash {
     /// 'handshake_hash' handshake message.  Start this hash
     /// again, with that message at the front.
     pub fn rollup_for_hrr(&mut self) {
-        let old_hash = self.ctx.take().unwrap().finish();
+        let (alg, ctx) = self.ctx.as_mut().unwrap();
+
+        let ctx = mem::replace(ctx, digest::Context::new(alg));
+        let old_hash = ctx.finish();
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
-        self.ctx = Some(digest::Context::new(self.alg.unwrap()));
         self.update_raw(&old_handshake_hash_msg.get_encoding());
     }
 
     /// Get the current hash value.
     pub fn get_current_hash(&self) -> Vec<u8> {
-        let hash = self
-            .ctx
-            .as_ref()
-            .unwrap()
-            .clone()
-            .finish();
+        let ctx = self.ctx.as_ref().unwrap().1.clone();
+        let hash = ctx.finish();
         let mut ret = Vec::new();
         ret.extend_from_slice(hash.as_ref());
         ret
