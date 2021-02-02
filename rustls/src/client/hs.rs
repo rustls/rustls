@@ -171,17 +171,11 @@ struct ExpectServerHelloOrHelloRetryRequest(ExpectServerHello);
 
 pub fn compatible_suite(
     sess: &ClientSessionImpl,
-    resuming_suite: Option<&suites::SupportedCipherSuite>,
+    resuming_suite: &suites::SupportedCipherSuite,
 ) -> bool {
-    match resuming_suite {
-        Some(resuming_suite) => {
-            if let Some(suite) = sess.common.get_suite() {
-                suite.can_resume_to(&resuming_suite)
-            } else {
-                true
-            }
-        }
-        None => false,
+    match sess.common.get_suite() {
+        Some(suite) => suite.can_resume_to(&resuming_suite),
+        None => true
     }
 }
 
