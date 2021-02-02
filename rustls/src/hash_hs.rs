@@ -93,8 +93,8 @@ impl HandshakeHash {
 
     /// Hash or buffer a byte slice.
     fn update_raw(&mut self, buf: &[u8]) -> &mut Self {
-        if self.ctx.is_some() {
-            self.ctx.as_mut().unwrap().update(buf);
+        if let Some(ctx) = &mut self.ctx {
+            ctx.update(buf);
         }
 
         if self.ctx.is_none() || self.client_auth_enabled {
@@ -107,12 +107,13 @@ impl HandshakeHash {
     /// Get the hash value if we were to hash `extra` too,
     /// using hash function `hash`.
     pub fn get_hash_given(&self, hash: &'static digest::Algorithm, extra: &[u8]) -> Vec<u8> {
-        let mut ctx = if self.ctx.is_none() {
-            let mut ctx = digest::Context::new(hash);
-            ctx.update(&self.buffer);
-            ctx
-        } else {
-            self.ctx.as_ref().unwrap().clone()
+        let mut ctx = match &self.ctx {
+            Some(ctx) => ctx.clone(),
+            None => {
+                let mut ctx = digest::Context::new(hash);
+                ctx.update(&self.buffer);
+                ctx
+            }
         };
 
         ctx.update(extra);
