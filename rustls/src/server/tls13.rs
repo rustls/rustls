@@ -478,10 +478,11 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&m);
-        self.handshake.hash_at_server_fin = self
+        let hash_at_server_fin = self
             .handshake
             .transcript
             .get_current_hash();
+        self.handshake.hash_at_server_fin = Some(hash_at_server_fin);
         sess.common.send_msg(m, true);
 
         // Now move to application data keys.  Read key change is deferred until
@@ -489,7 +490,7 @@ impl CompleteClientHelloHandling {
         let mut key_schedule_traffic = key_schedule.into_traffic_with_client_finished_pending();
         let suite = sess.common.get_suite_assert();
         let write_key = key_schedule_traffic.server_application_traffic_secret(
-            &self.handshake.hash_at_server_fin,
+            &hash_at_server_fin,
             &*sess.config.key_log,
             &self.handshake.randoms.client,
         );
@@ -498,13 +499,13 @@ impl CompleteClientHelloHandling {
             .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
 
         key_schedule_traffic.exporter_master_secret(
-            &self.handshake.hash_at_server_fin,
+            &hash_at_server_fin,
             &*sess.config.key_log,
             &self.handshake.randoms.client,
         );
 
         let _read_key = key_schedule_traffic.client_application_traffic_secret(
-            &self.handshake.hash_at_server_fin,
+            &hash_at_server_fin,
             &*sess.config.key_log,
             &self.handshake.randoms.client,
         );
@@ -1032,7 +1033,7 @@ impl hs::State for ExpectFinished {
         let read_key = self
             .key_schedule
             .client_application_traffic_secret(
-                &self.handshake.hash_at_server_fin,
+                self.handshake.hash_at_server_fin.as_ref().unwrap(),
                 &*sess.config.key_log,
                 &self.handshake.randoms.client,
             );

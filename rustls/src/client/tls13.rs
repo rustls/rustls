@@ -247,12 +247,13 @@ pub fn start_handshake_traffic(
     // the two halves will have different record layer protections.  Disallow this.
     hs::check_aligned_handshake(sess)?;
 
-    handshake.hash_at_client_recvd_server_hello = handshake.transcript.get_current_hash();
+    let hash_at_client_recvd_server_hello = handshake.transcript.get_current_hash();
+    handshake.hash_at_client_recvd_server_hello = Some(hash_at_client_recvd_server_hello);
 
     let _maybe_write_key = if !sess.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
         let write_key = key_schedule.client_handshake_traffic_secret(
-            &handshake.hash_at_client_recvd_server_hello,
+            &hash_at_client_recvd_server_hello,
             &*sess.config.key_log,
             &handshake.randoms.client,
         );
@@ -265,7 +266,7 @@ pub fn start_handshake_traffic(
     };
 
     let read_key = key_schedule.server_handshake_traffic_secret(
-        &handshake.hash_at_client_recvd_server_hello,
+        &hash_at_client_recvd_server_hello,
         &*sess.config.key_log,
         &handshake.randoms.client,
     );
@@ -278,7 +279,7 @@ pub fn start_handshake_traffic(
         let write_key = if sess.early_data.is_enabled() {
             // Traffic secret wasn't computed and stored above, so do it here.
             key_schedule.client_handshake_traffic_secret(
-                &handshake.hash_at_client_recvd_server_hello,
+                &hash_at_client_recvd_server_hello,
                 &*sess.config.key_log,
                 &handshake.randoms.client,
             )
@@ -469,9 +470,11 @@ impl hs::State for ExpectEncryptedExtensions {
                 let write_key = self
                     .key_schedule
                     .client_handshake_traffic_secret(
-                        &self
+                        self
                             .handshake
-                            .hash_at_client_recvd_server_hello,
+                            .hash_at_client_recvd_server_hello
+                            .as_ref()
+                            .unwrap(),
                         &*sess.config.key_log,
                         &self.handshake.randoms.client,
                     );
@@ -979,8 +982,8 @@ impl hs::State for ExpectFinished {
             let key = st
                 .key_schedule
                 .client_handshake_traffic_secret(
-                    &st.handshake
-                        .hash_at_client_recvd_server_hello,
+                    st.handshake
+                        .hash_at_client_recvd_server_hello.as_ref().unwrap(),
                     &*sess.config.key_log,
                     &st.handshake.randoms.client,
                 );

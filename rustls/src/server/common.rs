@@ -5,10 +5,11 @@ use crate::session::SessionRandoms;
 use crate::suites;
 
 use std::mem;
+use ring::digest;
 
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
-    pub hash_at_server_fin: Vec<u8>,
+    pub hash_at_server_fin: Option<digest::Digest>,
     pub session_id: SessionID,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
@@ -19,7 +20,7 @@ impl HandshakeDetails {
     pub fn new(extra_exts: Vec<ServerExtension>) -> HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
-            hash_at_server_fin: Vec::new(),
+            hash_at_server_fin: None,
             session_id: SessionID::empty(),
             randoms: SessionRandoms::for_server(),
             using_ems: false,
