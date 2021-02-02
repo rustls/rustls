@@ -191,9 +191,13 @@ impl fmt::Debug for SupportedCipherSuite {
 impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
+        self.hmac_algorithm()
+            .digest_algorithm()
+    }
+
+    pub(crate) fn hmac_algorithm(&self) -> ring::hmac::Algorithm {
         self.hkdf_algorithm
             .hmac_algorithm()
-            .digest_algorithm()
     }
 
     /// We have parameters and a verified public key in `kx_params`.

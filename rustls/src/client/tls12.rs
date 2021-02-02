@@ -604,19 +604,19 @@ impl hs::State for ExpectServerDone {
         emit_ccs(sess);
 
         // 5e. Now commit secrets.
-        let hashalg = sess
+        let hmac_alg = sess
             .common
             .get_suite_assert()
-            .get_hash();
+            .hmac_algorithm();
         let secrets = if st.handshake.using_ems {
             SessionSecrets::new_ems(
                 &st.handshake.randoms,
                 &handshake_hash,
-                hashalg,
+                hmac_alg,
                 &kxd.shared_secret,
             )
         } else {
-            SessionSecrets::new(&st.handshake.randoms, hashalg, &kxd.shared_secret)
+            SessionSecrets::new(&st.handshake.randoms, hmac_alg, &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",
