@@ -166,7 +166,7 @@ pub fn fill_in_psk_binder(
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
     if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
-        ch.set_psk_binder(real_binder);
+        ch.set_psk_binder(real_binder.as_ref());
     };
 
     key_schedule
@@ -894,7 +894,7 @@ fn emit_finished_tls13(
 ) {
     let handshake_hash = handshake.transcript.get_current_hash();
     let verify_data = key_schedule.sign_client_finish(&handshake_hash);
-    let verify_data_payload = Payload::new(verify_data);
+    let verify_data_payload = Payload::new(verify_data.as_ref());
 
     let m = Message {
         typ: ContentType::Handshake,
@@ -968,7 +968,7 @@ impl hs::State for ExpectFinished {
             .key_schedule
             .sign_server_finish(&handshake_hash);
 
-        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
             .map_err(|_| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecryptError);

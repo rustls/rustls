@@ -79,7 +79,7 @@ impl CompleteClientHelloHandling {
         let real_binder =
             key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
-        constant_time::verify_slices_are_equal(&real_binder, binder).is_ok()
+        constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
     fn into_expect_retried_client_hello(self) -> hs::NextState {
@@ -463,7 +463,7 @@ impl CompleteClientHelloHandling {
             .transcript
             .get_current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
-        let verify_data_payload = Payload::new(verify_data);
+        let verify_data_payload = Payload::new(verify_data.as_ref());
 
         let m = Message {
             typ: ContentType::Handshake,
@@ -1010,7 +1010,7 @@ impl hs::State for ExpectFinished {
             .key_schedule
             .sign_client_finish(&handshake_hash);
 
-        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
             .map_err(|_| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecryptError);

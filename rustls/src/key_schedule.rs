@@ -94,7 +94,7 @@ impl KeyScheduleEarly {
         )
     }
 
-    pub fn resumption_psk_binder_key_and_sign_verify_data(&self, hs_hash: &Digest) -> Vec<u8> {
+    pub fn resumption_psk_binder_key_and_sign_verify_data(&self, hs_hash: &Digest) -> hmac::Tag {
         let resumption_psk_binder_key = self
             .ks
             .derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
@@ -176,7 +176,7 @@ impl KeyScheduleHandshake {
         secret
     }
 
-    pub fn sign_server_finish(&self, hs_hash: &Digest) -> Vec<u8> {
+    pub fn sign_server_finish(&self, hs_hash: &Digest) -> hmac::Tag {
         self.ks.sign_finish(
             self.current_server_traffic_secret
                 .as_ref()
@@ -212,7 +212,7 @@ pub struct KeyScheduleTrafficWithClientFinishedPending {
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
-    pub fn sign_client_finish(&self, hs_hash: &Digest) -> Vec<u8> {
+    pub fn sign_client_finish(&self, hs_hash: &Digest) -> hmac::Tag {
         self.ks
             .sign_finish(&self.handshake_client_traffic_secret, hs_hash)
     }
@@ -408,18 +408,16 @@ impl KeySchedule {
 
     /// Sign the finished message consisting of `hs_hash` using a current
     /// traffic secret.
-    fn sign_finish(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> Vec<u8> {
+    fn sign_finish(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> hmac::Tag {
         self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
-    fn sign_verify_data(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> Vec<u8> {
+    fn sign_verify_data(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> hmac::Tag {
         let hmac_alg = self.algorithm.hmac_algorithm();
         let hmac_key = hkdf_expand(base_key, hmac_alg, b"finished", &[]);
         hmac::sign(&hmac_key, hs_hash.as_ref())
-            .as_ref()
-            .to_vec()
     }
 
     /// Derive the next application traffic secret, returning it.
