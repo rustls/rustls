@@ -260,18 +260,22 @@ fn emit_certverify(
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TLSError> {
-    if client_auth.signer.is_none() {
-        trace!("Not sending CertificateVerify, no key");
-        handshake
-            .transcript
-            .abandon_client_auth();
-        return Ok(());
-    }
+    let signer = match client_auth.signer.take() {
+        None => {
+            trace!("Not sending CertificateVerify, no key");
+            handshake
+                .transcript
+                .abandon_client_auth();
+            return Ok(());
+        },
+        Some(signer) => {
+            signer
+        }
+    };
 
     let message = handshake
         .transcript
         .take_handshake_buf();
-    let signer = client_auth.signer.take().unwrap();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let body = DigitallySignedStruct::new(scheme, sig);
