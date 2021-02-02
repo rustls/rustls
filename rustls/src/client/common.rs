@@ -16,6 +16,7 @@ use crate::suites;
 use webpki;
 
 use std::mem;
+use std::time::SystemTime;
 
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
@@ -61,6 +62,17 @@ pub struct HandshakeDetails {
     pub sent_tls13_fake_ccs: bool,
     pub dns_name: webpki::DNSName,
     pub extra_exts: Vec<ClientExtension>,
+
+    /// This time is used as the "current time", i.e. "now", for (TODO: almost)
+    /// all operations that need the current time. If the handshake were to be
+    /// stretched out over a long period of time (as an attacker might try to
+    /// do) then there could be an arbitrarily large difference between this
+    /// time and the current time later in the handshake. In theory a
+    /// certificate could get revoked during that window, or similar, which
+    /// could be a material difference. However, on some operating systems it
+    /// is inefficient to query the system time so doing it as little as
+    /// practical is generally good.
+    pub(super) start_time: SystemTime,
 }
 
 impl HandshakeDetails {
@@ -75,6 +87,7 @@ impl HandshakeDetails {
             sent_tls13_fake_ccs: false,
             dns_name: host_name,
             extra_exts,
+            start_time: SystemTime::now()
         }
     }
 }

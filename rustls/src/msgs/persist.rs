@@ -8,6 +8,7 @@ use webpki;
 
 use std::cmp;
 use std::mem;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 // These are the keys and values we store in session storage.
 
@@ -145,8 +146,14 @@ impl ClientSessionValue {
         self.age_add = age_add;
     }
 
-    pub fn has_expired(&self, time_now: u64) -> bool {
-        self.lifetime != 0 && self.epoch + u64::from(self.lifetime) < time_now
+    pub fn has_expired(&self, now: SystemTime) -> bool {
+        if self.lifetime == 0 {
+            false
+        } else if let Ok(time_now) = now.duration_since(UNIX_EPOCH).as_ref().map(Duration::as_secs) {
+            self.epoch + u64::from(self.lifetime) < time_now
+        } else {
+            true
+        }
     }
 
     pub fn get_obfuscated_ticket_age(&self, time_now: u64) -> u32 {

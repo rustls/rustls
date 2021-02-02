@@ -785,7 +785,7 @@ impl hs::State for ExpectCertificate {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        let now = std::time::SystemTime::now();
+        let now = self.handshake.start_time;
         sess.config
             .get_verifier()
             .verify_client_cert(&cert_chain, sess.get_sni(), now)

@@ -5,6 +5,7 @@ use crate::session::SessionRandoms;
 use crate::suites;
 
 use std::mem;
+use std::time::SystemTime;
 
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
@@ -13,6 +14,9 @@ pub struct HandshakeDetails {
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub extra_exts: Vec<ServerExtension>,
+
+    /// See the detailed description in `client::common::HandshakeDetails`.
+    pub(super) start_time: SystemTime,
 }
 
 impl HandshakeDetails {
@@ -24,6 +28,7 @@ impl HandshakeDetails {
             randoms: SessionRandoms::for_server(),
             using_ems: false,
             extra_exts,
+            start_time: SystemTime::now()
         }
     }
 }

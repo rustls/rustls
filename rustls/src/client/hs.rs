@@ -26,7 +26,6 @@ use crate::msgs::persist;
 use crate::rand;
 use crate::session::SessionSecrets;
 use crate::suites;
-use crate::ticketer;
 use crate::verify;
 
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
@@ -34,6 +33,7 @@ use crate::client::common::{HandshakeDetails, ServerCertDetails};
 use crate::client::{tls12, tls13};
 
 use webpki;
+use std::time::SystemTime;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TLSError>;
@@ -76,6 +76,7 @@ pub fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TLSEr
 fn find_session(
     sess: &mut ClientSessionImpl,
     dns_name: webpki::DNSNameRef,
+    now: SystemTime,
 ) -> Option<persist::ClientSessionValue> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
@@ -93,7 +94,7 @@ fn find_session(
     let value = maybe_value.unwrap();
     let mut reader = Reader::init(&value[..]);
     if let Some(result) = persist::ClientSessionValue::read(&mut reader) {
-        if result.has_expired(ticketer::timebase()) {
+        if result.has_expired(now) {
             None
         } else {
             #[cfg(feature = "quic")]
@@ -192,7 +193,7 @@ fn emit_client_hello_for_retry(
     retryreq: Option<&HelloRetryRequest>,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
-    handshake.resuming_session = find_session(sess, handshake.dns_name.as_ref());
+    handshake.resuming_session = find_session(sess, handshake.dns_name.as_ref(), handshake.start_time);
     let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
         let resuming = handshake
             .resuming_session

@@ -37,6 +37,7 @@ use crate::client::hs;
 
 use ring::constant_time;
 use webpki;
+use std::time::UNIX_EPOCH;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -688,7 +689,7 @@ impl hs::State for ExpectCertificateVerify {
             return Err(TLSError::NoCertificatesPresented);
         }
 
-        let now = std::time::SystemTime::now();
+        let now = self.handshake.start_time;
         let certv = sess
             .config
             .get_verifier()
@@ -1116,7 +1117,11 @@ impl ExpectTraffic {
             secret,
             &sess.server_cert_chain,
         );
-        value.set_times(ticketer::timebase(), nst.lifetime, nst.age_add);
+
+        let handshake_start_time = self.handshake.start_time.duration_since(UNIX_EPOCH)
+            .map_err(|_| TLSError::FailedToGetCurrentTime)?.as_secs();
+
+        value.set_times(handshake_start_time, nst.lifetime, nst.age_add);
 
         if let Some(sz) = nst.get_max_early_data_size() {
             value.set_max_early_data_size(sz);

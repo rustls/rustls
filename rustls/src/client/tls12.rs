@@ -16,7 +16,6 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::session::SessionSecrets;
 use crate::suites;
-use crate::ticketer;
 use crate::verify;
 
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
@@ -25,6 +24,7 @@ use crate::client::hs;
 
 use ring::constant_time;
 use std::mem;
+use std::time::UNIX_EPOCH;
 
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
@@ -523,8 +523,7 @@ impl hs::State for ExpectServerDone {
         if st.server_cert.cert_chain.is_empty() {
             return Err(TLSError::NoCertificatesPresented);
         }
-
-        let now = std::time::SystemTime::now();
+        let now = st.handshake.start_time;
         let certv = sess
             .config
             .get_verifier()
@@ -741,6 +740,14 @@ fn save_session(
         return;
     }
 
+    let handshake_start_time = match handshake.start_time.duration_since(UNIX_EPOCH) {
+        Ok(handshake_start_time) => handshake_start_time.as_secs(),
+        Err(_) => {
+            debug!("Session not saved: failed to convert handshake start time");
+            return;
+        }
+    };
+
     let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
     let scs = sess.common.get_suite_assert();
@@ -754,7 +761,7 @@ fn save_session(
         master_secret,
         &sess.server_cert_chain,
     );
-    value.set_times(ticketer::timebase(), recvd_ticket.new_ticket_lifetime, 0);
+    value.set_times(handshake_start_time, recvd_ticket.new_ticket_lifetime, 0);
     if handshake.using_ems {
         value.set_extended_ms_used();
     }
