@@ -185,18 +185,16 @@ impl hs::State for ExpectServerKX {
             HandshakeType::ServerKeyExchange,
             HandshakePayload::ServerKeyExchange
         )?;
-        let maybe_decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite_assert().kx);
         self.handshake
             .transcript
             .add_message(&m);
 
-        if maybe_decoded_kx.is_none() {
-            sess.common
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
-        }
-
-        let decoded_kx = maybe_decoded_kx.unwrap();
+        let decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite_assert().kx)
+            .ok_or_else(|| {
+                sess.common
+                    .send_fatal_alert(AlertDescription::DecodeError);
+                TLSError::CorruptMessagePayload(ContentType::Handshake)
+            })?;
 
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
