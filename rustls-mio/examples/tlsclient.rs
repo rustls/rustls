@@ -449,8 +449,9 @@ mod danger {
     impl rustls::ServerCertVerifier for NoCertificateVerification {
         fn verify_server_cert(
             &self,
+            _end_entity: &rustls::Certificate,
+            _intermediates: &[rustls::Certificate],
             _roots: &rustls::RootCertStore,
-            _presented_certs: &[rustls::Certificate],
             _dns_name: webpki::DNSNameRef<'_>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,

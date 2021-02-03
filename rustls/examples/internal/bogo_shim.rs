@@ -191,7 +191,8 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
 
     fn verify_client_cert(
         &self,
-        _certs: &[rustls::Certificate],
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
         _sni: Option<&webpki::DNSName>,
         _now: SystemTime,
     ) -> Result<rustls::ClientCertVerified, rustls::TLSError> {
@@ -204,8 +205,9 @@ struct DummyServerAuth {}
 impl rustls::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
-        _roots: &rustls::RootCertStore,
+        _end_entity: &rustls::Certificate,
         _certs: &[rustls::Certificate],
+        _roots: &rustls::RootCertStore,
         _hostname: webpki::DNSNameRef<'_>,
         _ocsp: &[u8],
         _now: SystemTime,

@@ -343,7 +343,8 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn verify_client_cert(
         &self,
-        _presented_certs: &[Certificate],
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         _now: std::time::SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
