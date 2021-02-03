@@ -63,25 +63,26 @@ impl hs::State for ExpectCertificate {
                 TLSError::General("client rejected by client_auth_mandatory".into())
             })?;
 
-        if cert_chain.is_empty() {
-            if !mandatory {
-                debug!("client auth requested but no certificate supplied");
-                self.handshake
-                    .transcript
-                    .abandon_client_auth();
-                return Ok(self.into_expect_tls12_client_kx(None));
-            }
-            sess.common
-                .send_fatal_alert(AlertDescription::CertificateRequired);
-            return Err(TLSError::NoCertificatesPresented);
-        }
-
         trace!("certs {:?}", cert_chain);
+
+        let (end_entity, intermediates) = match cert_chain.split_first() {
+            None => {
+                if !mandatory {
+                    debug!("client auth requested but no certificate supplied");
+                    self.handshake.transcript.abandon_client_auth();
+                    return Ok(self.into_expect_tls12_client_kx(None));
+                }
+                sess.common
+                    .send_fatal_alert(AlertDescription::CertificateRequired);
+                return Err(TLSError::NoCertificatesPresented);
+            }
+            Some(chain) => chain,
+        };
 
         let now = std::time::SystemTime::now();
         sess.config
             .verifier
-            .verify_client_cert(cert_chain, sess.get_sni(), now)
+            .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
             .or_else(|err| {
                 hs::incompatible(sess, "certificate invalid");
                 Err(err)

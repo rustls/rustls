@@ -522,17 +522,19 @@ impl hs::State for ExpectServerDone {
         // 6. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        if st.server_cert.cert_chain.is_empty() {
-            return Err(TLSError::NoCertificatesPresented);
-        }
-
+        let (end_entity, intermediates) = st
+            .server_cert
+            .cert_chain
+            .split_first()
+            .ok_or(TLSError::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
         let certv = sess
             .config
             .get_verifier()
             .verify_server_cert(
+                end_entity,
+                intermediates,
                 &sess.config.root_store,
-                &st.server_cert.cert_chain,
                 st.handshake.dns_name.as_ref(),
                 &st.server_cert.ocsp_response,
                 now,

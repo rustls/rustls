@@ -194,10 +194,11 @@ impl Context {
     fn bench(&self, count: usize) {
         let mut times = Vec::new();
 
+        let (end_entity, intermediates) = self.chain.split_first().unwrap();
         for _ in 0..count {
             let start = Instant::now();
             let dns_name = webpki::DNSNameRef::try_from_ascii_str(self.domain).unwrap();
-            V.verify_server_cert(&self.roots, &self.chain[..], dns_name, &[], self.now)
+            V.verify_server_cert(end_entity, intermediates, &self.roots, dns_name, &[], self.now)
                 .unwrap();
             times.push(duration_nanos(Instant::now().duration_since(start)));
         }

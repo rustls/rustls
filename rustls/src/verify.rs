@@ -79,13 +79,18 @@ impl ClientCertVerified {
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
 pub trait ServerCertVerifier: Send + Sync {
-    /// Verify a the certificate chain `presented_certs` against the roots
-    /// configured in `roots`.  Make sure that `dns_name` is quoted by
-    /// the top certificate in the chain.
+    /// Verify the end-entity certificate `end_entity` is valid for the
+    /// hostname `dns_name` and chains to at least one of the trust anchors
+    /// in `roots`.
+    ///
+    /// `intermediates` contains the intermediate certificates the client sent
+    /// along with the end-entity certificate; it is in the same order that the
+    /// peer sent them and may be empty.
     fn verify_server_cert(
         &self,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
         roots: &RootCertStore,
-        presented_certs: &[Certificate],
         dns_name: webpki::DNSNameRef,
         ocsp_response: &[u8],
         now: SystemTime,
@@ -118,7 +123,6 @@ pub trait ServerCertVerifier: Send + Sync {
     ) -> Result<HandshakeSignatureValid, TLSError> {
         verify_signed_struct(message, cert, dss)
     }
-
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -182,13 +186,19 @@ pub trait ClientCertVerifier: Send + Sync {
         sni: Option<&webpki::DNSName>,
     ) -> Option<DistinguishedNames>;
 
-    /// Verify a certificate chain. `presented_certs` is the certificate chain from the client.
+    /// Verify the end-entity certificate `end_entity` is valid for the
+    /// and chains to at least one of the trust anchors in `roots`.
+    ///
+    /// `intermediates` contains the intermediate certificates the
+    /// client sent along with the end-entity certificate; it is in the same
+    /// order that the peer sent them and may be empty.
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
     fn verify_client_cert(
         &self,
-        presented_certs: &[Certificate],
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError>;
@@ -262,15 +272,15 @@ impl ServerCertVerifier for WebPKIVerifier {
     /// - OCSP data is present
     fn verify_server_cert(
         &self,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
         roots: &RootCertStore,
-        presented_certs: &[Certificate],
         dns_name: webpki::DNSNameRef,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, TLSError> {
-        let (cert, chain, trustroots) = prepare(roots, presented_certs)?;
-        let now = webpki::Time::try_from(now)
-            .map_err(|_| TLSError::FailedToGetCurrentTime)?;
+        let (cert, chain, trustroots) = prepare(end_entity, intermediates, roots)?;
+        let now = webpki::Time::try_from(now).map_err(|_| TLSError::FailedToGetCurrentTime)?;
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
@@ -320,21 +330,14 @@ type CertChainAndRoots<'a, 'b> = (
 );
 
 fn prepare<'a, 'b>(
+    end_entity: &'a Certificate,
+    intermediates: &'a [Certificate],
     roots: &'b RootCertStore,
-    presented_certs: &'a [Certificate],
 ) -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
-    if presented_certs.is_empty() {
-        return Err(TLSError::NoCertificatesPresented);
-    }
-
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&presented_certs[0].0).map_err(TLSError::WebPKIError)?;
+    let cert = webpki::EndEntityCert::from(&end_entity.0).map_err(TLSError::WebPKIError)?;
 
-    let chain: Vec<&'a [u8]> = presented_certs
-        .iter()
-        .skip(1)
-        .map(|cert| cert.0.as_ref())
-        .collect();
+    let intermediates: Vec<&'a [u8]> = intermediates.iter().map(|cert| cert.0.as_ref()).collect();
 
     let trustroots: Vec<webpki::TrustAnchor> = roots
         .roots
@@ -342,7 +345,7 @@ fn prepare<'a, 'b>(
         .map(OwnedTrustAnchor::to_trust_anchor)
         .collect();
 
-    Ok((cert, chain, trustroots))
+    Ok((cert, intermediates, trustroots))
 }
 
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
@@ -378,13 +381,13 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
 
     fn verify_client_cert(
         &self,
-        presented_certs: &[Certificate],
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
         _sni: Option<&webpki::DNSName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
-        let (cert, chain, trustroots) = prepare(&self.roots, presented_certs)?;
-        let now = webpki::Time::try_from(now)
-            .map_err(|_| TLSError::FailedToGetCurrentTime)?;
+        let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
+        let now = webpki::Time::try_from(now).map_err(|_| TLSError::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
             &webpki::TLSClientTrustAnchors(&trustroots),
@@ -430,18 +433,18 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         sni: Option<&webpki::DNSName>,
     ) -> Option<DistinguishedNames> {
-        self.inner
-            .client_auth_root_subjects(sni)
+        self.inner.client_auth_root_subjects(sni)
     }
 
     fn verify_client_cert(
         &self,
-        presented_certs: &[Certificate],
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         self.inner
-            .verify_client_cert(presented_certs, sni, now)
+            .verify_client_cert(end_entity, intermediates, sni, now)
     }
 }
 
@@ -469,7 +472,8 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn verify_client_cert(
         &self,
-        _presented_certs: &[Certificate],
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
         _sni: Option<&webpki::DNSName>,
         _now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {

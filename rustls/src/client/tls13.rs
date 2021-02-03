@@ -677,17 +677,19 @@ impl hs::State for ExpectCertificateVerify {
         trace!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
-        if self.server_cert.cert_chain.is_empty() {
-            return Err(TLSError::NoCertificatesPresented);
-        }
-
+        let (end_entity, intermediates) = self
+            .server_cert
+            .cert_chain
+            .split_first()
+            .ok_or(TLSError::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
         let certv = sess
             .config
             .get_verifier()
             .verify_server_cert(
+                end_entity,
+                intermediates,
                 &sess.config.root_store,
-                &self.server_cert.cert_chain,
                 self.handshake.dns_name.as_ref(),
                 &self.server_cert.ocsp_response,
                 now,
