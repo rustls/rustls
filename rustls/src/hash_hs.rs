@@ -15,9 +15,6 @@ use std::mem;
 /// This is disabled in cases where client auth is not possible.
 pub struct HandshakeHash {
     /// None before we know what hash function we're using
-    alg: Option<&'static digest::Algorithm>,
-
-    /// None before we know what hash function we're using
     ctx: Option<digest::Context>,
 
     /// true if we need to keep all messages
@@ -30,7 +27,6 @@ pub struct HandshakeHash {
 impl HandshakeHash {
     pub fn new() -> HandshakeHash {
         HandshakeHash {
-            alg: None,
             ctx: None,
             client_auth_enabled: false,
             buffer: Vec::new(),
@@ -53,10 +49,10 @@ impl HandshakeHash {
 
     /// We now know what hash function the verify_data will use.
     pub fn start_hash(&mut self, alg: &'static digest::Algorithm) -> bool {
-        match self.alg {
+        match &self.ctx {
             None => {}
-            Some(started) => {
-                if started != alg {
+            Some(ctx) => {
+                if ctx.algorithm() != alg {
                     // hash type is changing
                     warn!("altered hash to HandshakeHash::start_hash");
                     return false;
@@ -65,8 +61,6 @@ impl HandshakeHash {
                 return true;
             }
         }
-        self.alg = Some(alg);
-        debug_assert!(self.ctx.is_none());
 
         let mut ctx = digest::Context::new(alg);
         ctx.update(&self.buffer);
@@ -93,8 +87,8 @@ impl HandshakeHash {
 
     /// Hash or buffer a byte slice.
     fn update_raw(&mut self, buf: &[u8]) -> &mut Self {
-        if self.ctx.is_some() {
-            self.ctx.as_mut().unwrap().update(buf);
+        if let Some(ctx) = &mut self.ctx {
+            ctx.update(buf);
         }
 
         if self.ctx.is_none() || self.client_auth_enabled {
@@ -129,11 +123,13 @@ impl HandshakeHash {
     /// 'handshake_hash' handshake message.  Start this hash
     /// again, with that message at the front.
     pub fn rollup_for_hrr(&mut self) {
-        let old_hash = self.ctx.take().unwrap().finish();
+        let ctx = self.ctx.as_mut().unwrap();
+
+        let old_ctx = mem::replace(ctx, digest::Context::new(ctx.algorithm()));
+        let old_hash = old_ctx.finish();
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
-        self.ctx = Some(digest::Context::new(self.alg.unwrap()));
         self.update_raw(&old_handshake_hash_msg.get_encoding());
     }
 
