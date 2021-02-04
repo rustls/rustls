@@ -106,20 +106,13 @@ impl KeyExchange {
 
     pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
         let peer_key = ring::agreement::UnparsedPublicKey::new(self.alg, peer);
-        let secret = ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), |v| {
-            let mut r = Vec::new();
-            r.extend_from_slice(v);
-            Ok(r)
-        });
-
-        if secret.is_err() {
-            return None;
-        }
-
-        Some(KeyExchangeResult {
-            pubkey: self.pubkey,
-            shared_secret: secret.unwrap(),
-        })
+        let pubkey = self.pubkey;
+        ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), move |v| {
+            Ok(KeyExchangeResult {
+                pubkey,
+                shared_secret: Vec::from(v),
+            })
+        }).ok()
     }
 }
 
