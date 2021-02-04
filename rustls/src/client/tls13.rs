@@ -103,33 +103,26 @@ pub fn choose_kx_groups(
     // - if not, we might have a hint of what the server supports
     // - if not, send just X25519.
     //
-    let groups = retryreq
+    let group = retryreq
         .and_then(HelloRetryRequest::get_requested_key_share_group)
         .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
-        .or_else(|| Some(NamedGroup::X25519))
-        .map(|grp| vec![grp])
-        .unwrap();
+        .unwrap_or_else(|| NamedGroup::X25519);
 
     let mut key_shares = vec![];
 
-    for group in groups {
-        // in reply to HelloRetryRequest, we must not alter any existing key
-        // shares
-        if let Some(already_offered_share) = hello.find_key_share(group) {
-            key_shares.push(KeyShareEntry::new(
-                group,
-                already_offered_share.pubkey.as_ref(),
-            ));
-            hello
-                .offered_key_shares
-                .push(already_offered_share);
-            continue;
-        }
-
-        if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
-            key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
-            hello.offered_key_shares.push(key_share);
-        }
+    // in reply to HelloRetryRequest, we must not alter any existing key
+    // shares
+    if let Some(already_offered_share) = hello.find_key_share(group) {
+        key_shares.push(KeyShareEntry::new(
+            group,
+            already_offered_share.pubkey.as_ref(),
+        ));
+        hello
+            .offered_key_shares
+            .push(already_offered_share);
+    } else if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
+        key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
+        hello.offered_key_shares.push(key_share);
     }
 
     exts.push(ClientExtension::KeyShare(key_shares));
