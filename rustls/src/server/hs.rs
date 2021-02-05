@@ -173,8 +173,7 @@ impl ExtensionProcessing {
 
             sess.alpn_protocol = our_protocols
                 .iter()
-                .filter(|protocol| their_protocols.contains(&protocol.as_slice()))
-                .nth(0)
+                .find(|protocol| their_protocols.contains(&protocol.as_slice()))
                 .cloned();
             if let Some(ref selected_protocol) = sess.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
@@ -737,10 +736,7 @@ impl State for ExpectClientHello {
             trace!("sig schemes {:?}", sigschemes_ext);
             trace!("alpn protocols {:?}", alpn_protocols);
 
-            let alpn_slices = match alpn_protocols {
-                Some(ref vec) => Some(vec.as_slice()),
-                None => None,
-            };
+            let alpn_slices = alpn_protocols.as_ref().map(|vec| vec.as_slice());
 
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
@@ -928,15 +924,13 @@ impl State for ExpectClientHello {
 
         let group = suites::KeyExchange::supported_groups()
             .iter()
-            .filter(|group| groups_ext.contains(group))
-            .nth(0)
+            .find(|group| groups_ext.contains(group))
             .cloned()
             .ok_or_else(|| incompatible(sess, "no supported group"))?;
 
         let ecpoint = ECPointFormatList::supported()
             .iter()
-            .filter(|format| ecpoints_ext.contains(format))
-            .nth(0)
+            .find(|format| ecpoints_ext.contains(format))
             .cloned()
             .ok_or_else(|| incompatible(sess, "no supported point format"))?;
 
