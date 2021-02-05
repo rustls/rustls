@@ -583,8 +583,7 @@ impl CompleteClientHelloHandling {
         let supported_groups = suites::KeyExchange::supported_groups();
         let chosen_group = supported_groups
             .iter()
-            .filter(|group| share_groups.contains(group))
-            .nth(0)
+            .find(|group| share_groups.contains(group))
             .cloned();
 
         if chosen_group.is_none() {
@@ -592,8 +591,7 @@ impl CompleteClientHelloHandling {
             // send a HelloRetryRequest.
             let retry_group_maybe = supported_groups
                 .iter()
-                .filter(|group| groups_ext.contains(group))
-                .nth(0)
+                .find(|group| groups_ext.contains(group))
                 .cloned();
             self.handshake
                 .transcript
