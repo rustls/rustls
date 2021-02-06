@@ -775,7 +775,11 @@ fn main() {
             "-on-retry-expect-early-data-reason" |
             "-on-resume-expect-early-data-reason" |
             "-on-initial-expect-early-data-reason" |
+            "-on-initial-expect-cipher" |
+            "-on-resume-expect-cipher" |
+            "-on-retry-expect-cipher" |
             "-handshaker-path" |
+            "-application-settings" |
             "-expect-msg-callback" => {
                 println!("not checking {} {}; NYI", arg, args.remove(0));
             }
