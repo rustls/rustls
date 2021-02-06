@@ -24,6 +24,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - Planned: removal of unused signature verification schemes at link-time.
   - *Breaking API change*: PEM parsing now lives in the [rustls-pemfile crate](https://crates.io/crates/rustls-pemfile).
     This means `rustls::internals::pemfile` and `rustls::RootCertStore::add_pem_file` no longer exist.
+  - *Breaking API change*: `ServerCertVerifier::verify_server_cert` and `ClientCertVerifier::verify_client_cert`
+    pass the end-entity and intermediate certificates separately.  This means rustls deals with the case
+    where the certificate chain is empty, rather than leaving that to ServerCertVerifier/ClientCertVerifier
+    implementation.
 * 0.19.0 (2020-11-22):
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.
