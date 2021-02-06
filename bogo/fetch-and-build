@@ -13,11 +13,10 @@ ssl/test/runner
 util/testresult
 EOF
 
-# a known-good commit
-COMMIT=47a6f5b4bf4d7acd8d5f7d43cb9c94335cec1c60
-git fetch --depth=1 https://boringssl.googlesource.com/boringssl $COMMIT
+# fix on a tested point of rustls-testing branch
+COMMIT=3fea50a7cb55bb72e4a69d34015f1a6971e7934c
+git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
 git checkout $COMMIT
-patch -p1 < ../patches/testerrormap.diff
 (cd ssl/test/runner && go test -c)
 
 popd
