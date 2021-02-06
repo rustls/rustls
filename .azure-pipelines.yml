@@ -1,6 +1,6 @@
 variables:
-  clippy_toolchain: 1.40.0
-  minimum_toolchain: 1.40.0
+  clippy_toolchain: 1.47.0
+  minimum_toolchain: 1.47.0
 
 resources:
   repositories:
