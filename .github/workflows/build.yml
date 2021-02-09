@@ -152,3 +152,25 @@ jobs:
 
       - name: cargo test (debug; all features; -Z minimal-versions)
         run: cargo -Z minimal-versions test --all-features
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          default: true
+      - name: Check formatting
+        run: |
+          cd ..
+          git clone  --depth 1 https://github.com/rust-lang/rustfmt
+          cd rustfmt
+          export CFG_RELEASE=nightly
+          export CFG_RELEASE_CHANNEL=nightly
+          cargo install --path . --force --features rustfmt,cargo-fmt
+          cd ../rustls && cargo-fmt -- --check
