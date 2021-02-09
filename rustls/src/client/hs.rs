@@ -200,6 +200,14 @@ fn emit_client_hello_for_retry(
             .unwrap();
         if resuming.version == ProtocolVersion::TLSv1_2 {
             random_sessionid_for_ticket(resuming);
+        } else if !sess.common.is_quic() {
+            // Fill in the session ID for TLS 1.3 resumption over TCP (RFC8446 Appendix D.4). When
+            // handling a HelloRetryRequest, make sure to use the same session ID used in the
+            // initial ClientHello (RFC8446 section 4.1.2).
+            if retryreq.is_none() && handshake.session_id.is_empty() {
+                handshake.session_id = random_sessionid();
+            }
+            resuming.session_id = handshake.session_id;
         }
         debug!("Resuming session");
         (
