@@ -763,12 +763,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         check_aligned_handshake(sess)?;
 
-        let has_cookie = hrr.get_cookie().is_some();
+        let cookie = hrr.get_cookie();
         let req_group = hrr.get_requested_key_share_group();
 
         // A retry request is illegal if it contains no cookie and asks for
         // retry of a group we already sent.
-        if !has_cookie
+        if cookie.is_none()
             && req_group
                 .map(|g| self.next.hello.has_key_share(g))
                 .unwrap_or(false)
@@ -784,11 +784,13 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or has an empty cookie.
-        if has_cookie && hrr.get_cookie().unwrap().0.is_empty() {
-            return Err(illegal_param(
-                sess,
-                "server requested hrr with empty cookie",
-            ));
+        if let Some(cookie) = cookie {
+            if cookie.0.is_empty() {
+                return Err(illegal_param(
+                    sess,
+                    "server requested hrr with empty cookie",
+                ));
+            }
         }
 
         // Or has something unrecognised
@@ -806,7 +808,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to change nothing.
-        if !has_cookie && req_group.is_none() {
+        if cookie.is_none() && req_group.is_none() {
             return Err(illegal_param(sess, "server requested hrr with no changes"));
         }
 
