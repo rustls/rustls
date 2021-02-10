@@ -78,8 +78,8 @@ impl HandshakeJoiner {
         self.buf.len() >= HEADER_SIZE
             && self.buf.len()
                 >= (codec::u24::decode(&self.buf[1..4])
-                    .unwrap()
-                    .0 as usize)
+                    .map(|s| s.0 as usize))
+                    .unwrap_or(0) 
                     + HEADER_SIZE
     }
 
