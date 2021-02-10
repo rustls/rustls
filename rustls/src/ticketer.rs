@@ -182,18 +182,13 @@ impl ProducesTickets for TicketSwitcher {
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
         self.maybe_roll();
 
+        // Decrypt with the current key; if that fails, try with the previous.
         let state = self.state.lock().unwrap();
-        let rc = state.current.decrypt(ciphertext);
-
-        if rc.is_none() && state.previous.is_some() {
-            state
-                .previous
-                .as_ref()
-                .unwrap()
-                .decrypt(ciphertext)
-        } else {
-            rc
-        }
+        state.current.decrypt(ciphertext)
+            .or_else(|| {
+                state.previous.as_ref()
+                    .and_then(|previous| previous.decrypt(ciphertext))
+            })
     }
 }
 
