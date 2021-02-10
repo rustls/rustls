@@ -583,34 +583,33 @@ impl CompleteClientHelloHandling {
         let supported_groups = suites::KeyExchange::supported_groups();
         let chosen_group = supported_groups
             .iter()
-            .find(|group| share_groups.contains(group))
-            .cloned();
+            .find(|group| share_groups.contains(group));
 
-        if chosen_group.is_none() {
-            // We don't have a suitable key share.  Choose a suitable group and
-            // send a HelloRetryRequest.
-            let retry_group_maybe = supported_groups
-                .iter()
-                .find(|group| groups_ext.contains(group))
-                .cloned();
-            self.handshake
-                .transcript
-                .add_message(chm);
-
-            if let Some(group) = retry_group_maybe {
+        let chosen_group = match chosen_group {
+            Some(&chosen_group) => chosen_group,
+            None => {
+                // If we already requested a retry then the client is required
+                // to reply with a supported group.
                 if self.done_retry {
                     return Err(hs::illegal_param(sess, "did not follow retry request"));
                 }
+
+                let group = supported_groups
+                    .iter()
+                    .find(|group| groups_ext.contains(group))
+                    .cloned()
+                    .ok_or_else(||hs::incompatible(sess, "no kx group overlap with client"))?;
+
+                self.handshake
+                    .transcript
+                    .add_message(chm);
 
                 self.emit_hello_retry_request(sess, group);
                 self.emit_fake_ccs(sess);
                 return Ok(self.into_expect_retried_client_hello());
             }
+        };
 
-            return Err(hs::incompatible(sess, "no kx group overlap with client"));
-        }
-
-        let chosen_group = chosen_group.unwrap();
         let chosen_share = shares_ext
             .iter()
             .find(|share| share.group == chosen_group)
