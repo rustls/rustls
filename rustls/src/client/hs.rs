@@ -80,17 +80,15 @@ fn find_session(
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
-    let maybe_value = sess
+    let value = sess
         .config
         .session_persistence
-        .get(&key_buf);
+        .get(&key_buf)
+        .or_else(|| {
+            debug!("No cached session for {:?}", dns_name);
+            None
+        })?;
 
-    if maybe_value.is_none() {
-        debug!("No cached session for {:?}", dns_name);
-        return None;
-    }
-
-    let value = maybe_value.unwrap();
     let mut reader = Reader::init(&value[..]);
     if let Some(result) = persist::ClientSessionValue::read(&mut reader) {
         if result.has_expired(ticketer::timebase()) {
