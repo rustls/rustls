@@ -732,12 +732,11 @@ fn save_session(
     // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
     // original ticket again.
     let mut ticket = mem::replace(&mut recvd_ticket.new_ticket, Vec::new());
-    if ticket.is_empty() && handshake.resuming_session.is_some() {
-        ticket = handshake
-            .resuming_session
-            .as_mut()
-            .unwrap()
-            .take_ticket();
+
+    if ticket.is_empty() {
+        if let Some(resuming_session) = &mut handshake.resuming_session {
+            ticket = resuming_session.take_ticket();
+        }
     }
 
     if handshake.session_id.is_empty() && ticket.is_empty() {
