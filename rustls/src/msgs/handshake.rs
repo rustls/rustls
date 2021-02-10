@@ -961,21 +961,16 @@ impl ClientHelloPayload {
     }
 
     pub fn has_keyshare_extension_with_duplicates(&self) -> bool {
-        let entries = self.get_keyshare_extension();
-        if entries.is_none() {
-            return false;
-        }
-
-        let mut seen = collections::HashSet::new();
-
-        for kse in entries.unwrap() {
-            let grp = kse.group.get_u16();
-
-            if seen.contains(&grp) {
-                return true;
+        if let Some(entries) = self.get_keyshare_extension() {
+            let mut seen = collections::HashSet::new();
+            
+            for kse in entries {
+                let grp = kse.group.get_u16();
+    
+                if !seen.insert(grp) {
+                    return true;
+                }
             }
-
-            seen.insert(grp);
         }
 
         false
