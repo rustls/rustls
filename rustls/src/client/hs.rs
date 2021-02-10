@@ -417,14 +417,16 @@ pub fn process_alpn_protocol(
     proto: Option<&[u8]>,
 ) -> Result<(), TLSError> {
     sess.alpn_protocol = proto.map(ToOwned::to_owned);
-    if sess.alpn_protocol.is_some()
-        && !sess
+
+    if let Some(alpn_protocol) = &sess.alpn_protocol {
+        if !sess
             .config
             .alpn_protocols
-            .contains(sess.alpn_protocol.as_ref().unwrap())
-    {
-        return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
+            .contains(alpn_protocol) {
+                return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
+            }
     }
+
     debug!(
         "ALPN protocol is {:?}",
         sess.alpn_protocol
