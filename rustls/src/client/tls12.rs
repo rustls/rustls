@@ -578,8 +578,8 @@ impl hs::State for ExpectServerDone {
         sess.server_cert_chain = st.server_cert.take_chain();
 
         // 4.
-        if st.client_auth.is_some() {
-            emit_certificate(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess);
+        if let Some(client_auth) = &mut st.client_auth {
+            emit_certificate(&mut st.handshake, client_auth, sess);
         }
 
         // 5a.
@@ -598,8 +598,8 @@ impl hs::State for ExpectServerDone {
             .get_current_hash();
 
         // 5c.
-        if st.client_auth.is_some() {
-            emit_certverify(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess)?;
+        if let Some(client_auth) = &mut st.client_auth {
+            emit_certverify(&mut st.handshake, client_auth, sess)?;
         }
 
         // 5d.
