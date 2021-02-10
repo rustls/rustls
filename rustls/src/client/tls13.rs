@@ -855,15 +855,17 @@ fn emit_certverify_tls13(
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TLSError> {
-    if client_auth.signer.is_none() {
-        debug!("Skipping certverify message (no client scheme/key)");
-        return Ok(());
-    }
+    let signer = match client_auth.signer.take() {
+        Some(s) => s,
+        None => {
+            debug!("Skipping certverify message (no client scheme/key)");
+            return Ok(());
+        } 
+    };
 
     let message =
         verify::construct_tls13_client_verify_message(&handshake.transcript.get_current_hash());
 
-    let signer = client_auth.signer.take().unwrap();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let dss = DigitallySignedStruct::new(scheme, sig);
