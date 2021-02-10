@@ -90,16 +90,15 @@ impl HandshakeJoiner {
     fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
         let used = {
             let mut rd = codec::Reader::init(&self.buf);
-            let payload = HandshakeMessagePayload::read_version(&mut rd, version);
-
-            if payload.is_none() {
-                return false;
-            }
-
+            let payload = match HandshakeMessagePayload::read_version(&mut rd, version) {
+                Some(p) => p,
+                None => return false,
+            };
+            
             let m = Message {
                 typ: ContentType::Handshake,
                 version,
-                payload: MessagePayload::Handshake(payload.unwrap()),
+                payload: MessagePayload::Handshake(payload),
             };
 
             self.frames.push_back(m);
