@@ -575,46 +575,39 @@ impl CompleteClientHelloHandling {
             return Err(hs::illegal_param(sess, "client sent duplicate keyshares"));
         }
 
-        let share_groups: Vec<NamedGroup> = shares_ext
-            .iter()
-            .map(|share| share.group)
-            .collect();
-
         let supported_groups = suites::KeyExchange::supported_groups();
-        let chosen_group = supported_groups
+
+        let chosen_share = supported_groups
             .iter()
-            .find(|group| share_groups.contains(group))
-            .cloned();
+            .find_map(|group| shares_ext.iter().find(|share| share.group == *group));
 
-        if chosen_group.is_none() {
-            // We don't have a suitable key share.  Choose a suitable group and
-            // send a HelloRetryRequest.
-            let retry_group_maybe = supported_groups
-                .iter()
-                .find(|group| groups_ext.contains(group))
-                .cloned();
-            self.handshake
-                .transcript
-                .add_message(chm);
+        let chosen_share =  match chosen_share {
+            Some(s) => s,
+            None => {
+                // We don't have a suitable key share.  Choose a suitable group and
+                // send a HelloRetryRequest.
+                let retry_group_maybe = supported_groups
+                    .iter()
+                    .find(|group| groups_ext.contains(group))
+                    .cloned();
 
-            if let Some(group) = retry_group_maybe {
-                if self.done_retry {
-                    return Err(hs::illegal_param(sess, "did not follow retry request"));
+                self.handshake
+                    .transcript
+                    .add_message(chm);
+
+                if let Some(group) = retry_group_maybe {
+                    if self.done_retry {
+                        return Err(hs::illegal_param(sess, "did not follow retry request"));
+                    }
+
+                    self.emit_hello_retry_request(sess, group);
+                    self.emit_fake_ccs(sess);
+                    return Ok(self.into_expect_retried_client_hello());
                 }
 
-                self.emit_hello_retry_request(sess, group);
-                self.emit_fake_ccs(sess);
-                return Ok(self.into_expect_retried_client_hello());
+                return Err(hs::incompatible(sess, "no kx group overlap with client"));
             }
-
-            return Err(hs::incompatible(sess, "no kx group overlap with client"));
-        }
-
-        let chosen_group = chosen_group.unwrap();
-        let chosen_share = shares_ext
-            .iter()
-            .find(|share| share.group == chosen_group)
-            .unwrap();
+        };
 
         let mut chosen_psk_index = None;
         let mut resumedata = None;
