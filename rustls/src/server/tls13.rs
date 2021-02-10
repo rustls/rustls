@@ -909,14 +909,12 @@ impl ExpectFinished {
     ) {
         let nonce = rand::random_vec(32);
         let plain = get_server_session_value(handshake, key_schedule, sess, &nonce).get_encoding();
-        let maybe_ticket = sess.config.ticketer.encrypt(&plain);
+        let ticket = match sess.config.ticketer.encrypt(&plain) {
+            Some(t) => t,
+            None => return,
+        };
         let ticket_lifetime = sess.config.ticketer.get_lifetime();
 
-        if maybe_ticket.is_none() {
-            return;
-        }
-
-        let ticket = maybe_ticket.unwrap();
         let age_add = rand::random_u32(); // nb, we don't do 0-RTT data, so whatever
         #[allow(unused_mut)]
         let mut payload =
