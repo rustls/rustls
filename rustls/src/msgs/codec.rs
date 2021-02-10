@@ -113,9 +113,22 @@ pub struct u24(pub u32);
 
 impl u24 {
     pub fn decode(bytes: &[u8]) -> Option<u24> {
-        Some(u24((u32::from(bytes[0]) << 16)
-            | (u32::from(bytes[1]) << 8)
-            | u32::from(bytes[2])))
+        let (a, b, c) = (bytes.get(0), bytes.get(1), bytes.get(2));
+        if let (Some(&a), Some(&b), Some(&c)) = (a, b, c) {
+            Some(u24((u32::from(a) << 16)
+                | (u32::from(b) << 8)
+                | u32::from(c)))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+impl Into<usize> for u24 {
+    #[inline]
+    fn into(self) -> usize {
+        self.0 as usize
     }
 }
 

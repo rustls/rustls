@@ -75,12 +75,13 @@ impl HandshakeJoiner {
     /// enough to contain a header, and that header has a length which falls
     /// within `buf`.
     fn buf_contains_message(&self) -> bool {
-        self.buf.len() >= HEADER_SIZE
-            && self.buf.len()
-                >= (codec::u24::decode(&self.buf[1..4])
-                    .unwrap()
-                    .0 as usize)
-                    + HEADER_SIZE
+        let (len_bytes, rest) = (self.buf.get(1..HEADER_SIZE), self.buf.get(HEADER_SIZE..));
+        if let (Some(len_bytes), Some(rest)) = (len_bytes, rest) {
+            if let Some(len) = codec::u24::decode(len_bytes) {
+                return rest.get(..len.into()).is_some();
+            }
+        }
+        false
     }
 
     /// Take a TLS handshake payload off the front of `buf`, and put it onto
