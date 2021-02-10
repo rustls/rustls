@@ -575,18 +575,13 @@ impl CompleteClientHelloHandling {
             return Err(hs::illegal_param(sess, "client sent duplicate keyshares"));
         }
 
-        let share_groups: Vec<NamedGroup> = shares_ext
-            .iter()
-            .map(|share| share.group)
-            .collect();
-
         let supported_groups = suites::KeyExchange::supported_groups();
-        let chosen_group = supported_groups
+        let chosen_share = shares_ext
             .iter()
-            .find(|group| share_groups.contains(group));
+            .find(|share| supported_groups.contains(&share.group));
 
-        let chosen_group = match chosen_group {
-            Some(&chosen_group) => chosen_group,
+        let chosen_share = match chosen_share {
+            Some(share) => share,
             None => {
                 // If we already requested a retry then the client is required
                 // to reply with a supported group.
@@ -609,11 +604,6 @@ impl CompleteClientHelloHandling {
                 return Ok(self.into_expect_retried_client_hello());
             }
         };
-
-        let chosen_share = shares_ext
-            .iter()
-            .find(|share| share.group == chosen_group)
-            .unwrap();
 
         let mut chosen_psk_index = None;
         let mut resumedata = None;
