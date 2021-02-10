@@ -760,7 +760,7 @@ impl State for ExpectClientHello {
         let protocol_version = sess.common.negotiated_version.unwrap();
         let suitable_suites = suites::reduce_given_version(&suitable_suites, protocol_version);
 
-        let maybe_ciphersuite = if sess.config.ignore_client_order {
+        let ciphersuite = if sess.config.ignore_client_order {
             suites::choose_ciphersuite_preferring_server(
                 &client_hello.cipher_suites,
                 &suitable_suites,
@@ -770,18 +770,11 @@ impl State for ExpectClientHello {
                 &client_hello.cipher_suites,
                 &suitable_suites,
             )
-        };
-
-        if maybe_ciphersuite.is_none() {
-            return Err(incompatible(sess, "no ciphersuites in common"));
         }
+        .ok_or_else(|| incompatible(sess, "no ciphersuites in common"))?;
 
-        debug!(
-            "decided upon suite {:?}",
-            maybe_ciphersuite.as_ref().unwrap()
-        );
-        sess.common
-            .set_suite(maybe_ciphersuite.unwrap());
+        debug!("decided upon suite {:?}", ciphersuite);
+        sess.common.set_suite(ciphersuite);
 
         // Start handshake hash.
         let starting_hash = sess
