@@ -1009,9 +1009,9 @@ impl hs::State for ExpectFinished {
 
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
-        if st.client_auth.is_some() {
-            emit_certificate_tls13(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess);
-            emit_certverify_tls13(&mut st.handshake, st.client_auth.as_mut().unwrap(), sess)?;
+        if let Some(client_auth) = &mut st.client_auth {
+            emit_certificate_tls13(&mut st.handshake, client_auth, sess);
+            emit_certverify_tls13(&mut st.handshake, client_auth, sess)?;
         }
 
         let mut key_schedule_finished = st
