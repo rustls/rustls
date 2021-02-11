@@ -120,6 +120,14 @@ impl u24 {
     }
 }
 
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+impl Into<usize> for u24 {
+    #[inline]
+    fn into(self) -> usize {
+        self.0 as usize
+    }
+}
+
 impl Codec for u24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let be_bytes = u32::to_be_bytes(self.0);
