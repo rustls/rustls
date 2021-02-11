@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::convert::TryInto;
 
 /// Read from a byte slice.
 pub struct Reader<'a> {
@@ -86,8 +87,8 @@ impl Codec for u8 {
 }
 
 pub fn put_u16(v: u16, out: &mut [u8]) {
-    out[0] = (v >> 8) as u8;
-    out[1] = v as u8;
+    let out: &mut [u8; 2] = (&mut out[..2]).try_into().unwrap();
+    *out = u16::to_be_bytes(v);
 }
 
 pub fn decode_u16(bytes: &[u8]) -> Option<u16> {
@@ -121,9 +122,8 @@ impl u24 {
 
 impl Codec for u24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.push((self.0 >> 16) as u8);
-        bytes.push((self.0 >> 8) as u8);
-        bytes.push(self.0 as u8);
+        let be_bytes = u32::to_be_bytes(self.0);
+        bytes.extend_from_slice(&be_bytes[1..])
     }
 
     fn read(r: &mut Reader) -> Option<u24> {
@@ -142,10 +142,7 @@ pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
 
 impl Codec for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.push((*self >> 24) as u8);
-        bytes.push((*self >> 16) as u8);
-        bytes.push((*self >> 8) as u8);
-        bytes.push(*self as u8);
+        bytes.extend(&u32::to_be_bytes(*self))
     }
 
     fn read(r: &mut Reader) -> Option<u32> {
@@ -154,14 +151,8 @@ impl Codec for u32 {
 }
 
 pub fn put_u64(v: u64, bytes: &mut [u8]) {
-    bytes[0] = (v >> 56) as u8;
-    bytes[1] = (v >> 48) as u8;
-    bytes[2] = (v >> 40) as u8;
-    bytes[3] = (v >> 32) as u8;
-    bytes[4] = (v >> 24) as u8;
-    bytes[5] = (v >> 16) as u8;
-    bytes[6] = (v >> 8) as u8;
-    bytes[7] = v as u8;
+    let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
+    *bytes = u64::to_be_bytes(v)
 }
 
 pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
