@@ -455,11 +455,13 @@ impl ExpectServerHello {
 
     fn into_expect_tls12_new_ticket_resume(
         self,
+        negotiated_version: ProtocolVersion,
         secrets: SessionSecrets,
         certv: verify::ServerCertVerified,
         sigv: verify::HandshakeSignatureValid,
     ) -> NextState {
         Box::new(tls12::ExpectNewTicket {
+            negotiated_version,
             secrets,
             handshake: self.handshake,
             resuming: true,
@@ -470,11 +472,13 @@ impl ExpectServerHello {
 
     fn into_expect_tls12_ccs_resume(
         self,
+        negotiated_version: ProtocolVersion,
         secrets: SessionSecrets,
         certv: verify::ServerCertVerified,
         sigv: verify::HandshakeSignatureValid,
     ) -> NextState {
         Box::new(tls12::ExpectCCS {
+            negotiated_version,
             secrets,
             handshake: self.handshake,
             ticket: ReceivedTicketDetails::new(),
@@ -484,8 +488,9 @@ impl ExpectServerHello {
         })
     }
 
-    fn into_expect_tls12_certificate(self) -> NextState {
+    fn into_expect_tls12_certificate(self, negotiated_version: ProtocolVersion) -> NextState {
         Box::new(tls12::ExpectCertificate {
+            negotiated_version,
             handshake: self.handshake,
             server_cert: self.server_cert,
             may_send_cert_status: self.may_send_cert_status,
@@ -511,10 +516,10 @@ impl State for ExpectServerHello {
             server_hello.legacy_version
         };
 
-        match server_version {
+        let version = match server_version {
             TLSv1_3 if tls13_supported => {
-                sess.common.negotiated_version = Some(TLSv1_3);
-            }
+                TLSv1_3
+            },
             TLSv1_2 if sess.config.supports_version(TLSv1_2) => {
                 if sess.early_data.is_enabled() && sess.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
@@ -523,7 +528,6 @@ impl State for ExpectServerHello {
                         "server chose v1.2 when offering 0-rtt".to_string(),
                     ));
                 }
-                sess.common.negotiated_version = Some(TLSv1_2);
 
                 if server_hello
                     .get_supported_versions()
@@ -534,6 +538,8 @@ impl State for ExpectServerHello {
                         "server chose v1.2 using v1.3 extension",
                     ));
                 }
+
+                TLSv1_2
             }
             _ => {
                 sess.common
@@ -568,6 +574,8 @@ impl State for ExpectServerHello {
             ));
         }
 
+        sess.common.negotiated_version = Some(version);
+
         // Extract ALPN protocol
         if !sess.common.is_tls13() {
             process_alpn_protocol(sess, server_hello.get_alpn_protocol())?;
@@ -598,7 +606,6 @@ impl State for ExpectServerHello {
             return Err(illegal_param(sess, "server varied selected ciphersuite"));
         }
 
-        let version = sess.common.negotiated_version.unwrap();
         if !sess
             .common
             .get_suite_assert()
@@ -733,14 +740,14 @@ impl State for ExpectServerHello {
                 let sigv = verify::HandshakeSignatureValid::assertion();
 
                 return if self.must_issue_new_ticket {
-                    Ok(self.into_expect_tls12_new_ticket_resume(secrets, certv, sigv))
+                    Ok(self.into_expect_tls12_new_ticket_resume(version, secrets, certv, sigv))
                 } else {
-                    Ok(self.into_expect_tls12_ccs_resume(secrets, certv, sigv))
+                    Ok(self.into_expect_tls12_ccs_resume(version, secrets, certv, sigv))
                 };
             }
         }
 
-        Ok(self.into_expect_tls12_certificate())
+        Ok(self.into_expect_tls12_certificate(version))
     }
 }
 
