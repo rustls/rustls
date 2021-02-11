@@ -243,18 +243,17 @@ impl ExtensionProcessing {
                 }
             }
 
-            if !for_resume
-                && hello
-                    .find_extension(ExtensionType::SCT)
-                    .is_some()
-                && server_key.has_sct_list()
-            {
-                self.send_sct = true;
+            let can_use_sct = !for_resume && hello.find_extension(ExtensionType::SCT).is_some();
+            if can_use_sct {
+                if let Some(list) = server_key.take_sct_list() {
+                    self.send_sct = true;
 
-                if !sess.common.is_tls13() {
-                    let sct_list = server_key.take_sct_list().unwrap();
-                    self.exts
-                        .push(ServerExtension::make_sct(sct_list));
+                    if sess.common.is_tls13() {
+                        // Restore the SCT list if we can't use it for a ServerExtension.
+                        server_key.sct_list = Some(list);
+                    } else {
+                        self.exts.push(ServerExtension::make_sct(list));
+                    }
                 }
             }
         }

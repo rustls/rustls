@@ -86,11 +86,6 @@ impl CertifiedKey {
         mem::replace(&mut self.ocsp, None)
     }
 
-    /// Return true if there's an SCT list.
-    pub fn has_sct_list(&self) -> bool {
-        self.sct_list.is_some()
-    }
-
     /// Steal ownership of the SCT list.
     pub fn take_sct_list(&mut self) -> Option<Vec<u8>> {
         mem::replace(&mut self.sct_list, None)
