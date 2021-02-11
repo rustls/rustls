@@ -524,10 +524,10 @@ impl State for ExpectServerHello {
             server_hello.legacy_version
         };
 
-        match server_version {
+        let version = match server_version {
             TLSv1_3 if tls13_supported => {
-                sess.common.negotiated_version = Some(TLSv1_3);
-            }
+                TLSv1_3
+            },
             TLSv1_2 if sess.config.supports_version(TLSv1_2) => {
                 if sess.early_data.is_enabled() && sess.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
@@ -536,7 +536,6 @@ impl State for ExpectServerHello {
                         "server chose v1.2 when offering 0-rtt".to_string(),
                     ));
                 }
-                sess.common.negotiated_version = Some(TLSv1_2);
 
                 if server_hello
                     .get_supported_versions()
@@ -547,6 +546,8 @@ impl State for ExpectServerHello {
                         "server chose v1.2 using v1.3 extension",
                     ));
                 }
+
+                TLSv1_2
             }
             _ => {
                 sess.common
@@ -581,6 +582,8 @@ impl State for ExpectServerHello {
             ));
         }
 
+        sess.common.negotiated_version = Some(version);
+
         // Extract ALPN protocol
         if !sess.common.is_tls13() {
             process_alpn_protocol(sess, server_hello.get_alpn_protocol())?;
@@ -611,7 +614,6 @@ impl State for ExpectServerHello {
             return Err(illegal_param(sess, "server varied selected ciphersuite"));
         }
 
-        let version = sess.common.negotiated_version.unwrap();
         if !scs.usable_for_version(version)
         {
             return Err(illegal_param(

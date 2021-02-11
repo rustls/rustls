@@ -758,9 +758,8 @@ fn save_session(
     let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
     let master_secret = secrets.get_master_secret();
-    let version = sess.get_protocol_version().unwrap();
     let mut value = persist::ClientSessionValue::new(
-        version,
+        ProtocolVersion::TLSv1_2,
         secrets.suite().suite,
         &handshake.session_id,
         ticket,
