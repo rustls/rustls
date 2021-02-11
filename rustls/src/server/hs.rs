@@ -640,11 +640,13 @@ impl State for ExpectClientHello {
 
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.get_versions_extension();
-        if let Some(versions) = maybe_versions_ext {
+        let version = if let Some(versions) = maybe_versions_ext {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
-                sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+                ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
                 return Err(bad_version(sess, "TLS1.2 not offered/enabled"));
+            } else {
+                ProtocolVersion::TLSv1_2
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
             return Err(bad_version(sess, "Client does not support TLSv1_2"));
@@ -653,11 +655,11 @@ impl State for ExpectClientHello {
                 sess,
                 "Server requires TLS1.3, but client omitted versions ext",
             ));
-        }
+        } else {
+            ProtocolVersion::TLSv1_2
+        };
 
-        if sess.common.negotiated_version == None {
-            sess.common.negotiated_version = Some(ProtocolVersion::TLSv1_2);
-        }
+        sess.common.negotiated_version = Some(version);
 
         // --- Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
 
@@ -745,8 +747,7 @@ impl State for ExpectClientHello {
             suites::reduce_given_sigalg(&sess.config.ciphersuites, certkey.key.algorithm());
 
         // And version
-        let protocol_version = sess.common.negotiated_version.unwrap();
-        let suitable_suites = suites::reduce_given_version(&suitable_suites, protocol_version);
+        let suitable_suites = suites::reduce_given_version(&suitable_suites, version);
 
         let ciphersuite = if sess.config.ignore_client_order {
             suites::choose_ciphersuite_preferring_server(
