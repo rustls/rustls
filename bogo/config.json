@@ -1,6 +1,5 @@
 {
   "DisabledTests": {
-    "TLS13SessionID-TLS13": "FIXME!",
     "SendV2ClientHello-*": "only support TLS1.2",
     "*SSL3*": "",
     "*SSLv3*": "",

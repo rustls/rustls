@@ -115,14 +115,6 @@ fn random_sessionid() -> SessionID {
     SessionID::new(&random_id)
 }
 
-/// If we have a ticket, we use the sessionid as a signal that we're
-/// doing an abbreviated handshake.  See section 3.4 in RFC5077.
-fn random_sessionid_for_ticket(csv: &mut persist::ClientSessionValue) {
-    if !csv.ticket.0.is_empty() {
-        csv.session_id = random_sessionid();
-    }
-}
-
 struct InitialState {
     handshake: HandshakeDetails,
     extra_exts: Vec<ClientExtension>,
@@ -155,20 +147,25 @@ impl InitialState {
 
         self.handshake.resuming_session = find_session(sess, self.handshake.dns_name.as_ref());
 
-        self.handshake.session_id = if let Some(resuming) = &mut self.handshake.resuming_session {
+        if let Some(resuming) = &mut self.handshake.resuming_session {
             if resuming.version == ProtocolVersion::TLSv1_2 {
-                random_sessionid_for_ticket(resuming);
+                // If we have a ticket, we use the sessionid as a signal that
+                // we're  doing an abbreviated handshake.  See section 3.4 in
+                // RFC5077.
+                if !resuming.ticket.0.is_empty() {
+                    resuming.session_id = random_sessionid();
+                }
+                self.handshake.session_id = resuming.session_id;
             }
             debug!("Resuming session");
-            resuming.session_id
         } else {
             debug!("Not resuming any session");
-            if !sess.common.is_quic() {
-                random_sessionid()
-            } else {
-                SessionID::empty()
-            }
-        };
+        }
+        // https://tools.ietf.org/html/rfc8446#appendix-D.4
+        // https://tools.ietf.org/html/draft-ietf-quic-tls-34#ref-TLS13
+        if self.handshake.session_id.is_empty() && !sess.common.is_quic() {
+            self.handshake.session_id = random_sessionid();
+        }
 
         let hello_details = ClientHelloDetails::new();
         emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts)
