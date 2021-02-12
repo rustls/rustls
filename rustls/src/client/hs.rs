@@ -137,6 +137,12 @@ impl InitialState {
     }
 
     fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> NextState {
+        // During retries "the client MUST send the same ClientHello without
+        // modification" with only a few exceptions as noted in
+        // https://tools.ietf.org/html/rfc8446#section-4.1.2,
+        // Calculate all inputs to the client hellos that might otherwise
+        // change between the initial and retry hellos here to enforce this.
+
         if sess
             .config
             .client_auth_cert_resolver
@@ -146,6 +152,8 @@ impl InitialState {
                 .transcript
                 .set_client_auth_enabled();
         }
+
+        self.handshake.resuming_session = find_session(sess, self.handshake.dns_name.as_ref());
         let hello_details = ClientHelloDetails::new();
         emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts)
     }
@@ -191,7 +199,6 @@ fn emit_client_hello_for_retry(
     extra_exts: Vec<ClientExtension>,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
-    handshake.resuming_session = find_session(sess, handshake.dns_name.as_ref());
     let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
         let resuming = handshake
             .resuming_session
