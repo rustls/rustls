@@ -50,8 +50,6 @@ use ring::constant_time;
 pub struct CompleteClientHelloHandling {
     pub handshake: HandshakeDetails,
     pub done_retry: bool,
-    pub send_cert_status: bool,
-    pub send_sct: bool,
     pub send_ticket: bool,
 }
 
@@ -86,8 +84,6 @@ impl CompleteClientHelloHandling {
         Box::new(hs::ExpectClientHello {
             handshake: self.handshake,
             done_retry: true,
-            send_cert_status: self.send_cert_status,
-            send_sct: self.send_sct,
             send_ticket: self.send_ticket,
         })
     }
@@ -286,9 +282,6 @@ impl CompleteClientHelloHandling {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(sess, Some(server_key), hello, resumedata, &self.handshake)?;
 
-        self.send_cert_status = ep.send_cert_status;
-        self.send_sct = ep.send_sct;
-
         let ee = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
@@ -377,22 +370,18 @@ impl CompleteClientHelloHandling {
         if let Some(end_entity_cert) = cert_entries.first_mut() {
             // Apply OCSP response to first certificate (we don't support OCSP
             // except for leaf certs).
-            if self.send_cert_status {
-                if let Some(ocsp) = server_key.take_ocsp() {
-                    let cst = CertificateStatus::new(ocsp);
-                    end_entity_cert
-                        .exts
-                        .push(CertificateExtension::CertificateStatus(cst));
-                }
+            if let Some(ocsp) = server_key.take_ocsp() {
+                let cst = CertificateStatus::new(ocsp);
+                end_entity_cert
+                    .exts
+                    .push(CertificateExtension::CertificateStatus(cst));
             }
 
             // Likewise, SCT
-            if self.send_sct {
-                if let Some(sct_list) = server_key.take_sct_list() {
-                    end_entity_cert
-                        .exts
-                        .push(CertificateExtension::make_sct(sct_list));
-                }
+            if let Some(sct_list) = server_key.take_sct_list() {
+                end_entity_cert
+                    .exts
+                    .push(CertificateExtension::make_sct(sct_list));
             }
         }
 

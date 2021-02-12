@@ -137,9 +137,6 @@ pub struct ExtensionProcessing {
     // extensions to reply with
     pub exts: Vec<ServerExtension>,
 
-    // effects on later handshake steps
-    pub send_cert_status: bool,
-    pub send_sct: bool,
     pub send_ticket: bool,
 }
 
@@ -232,30 +229,30 @@ impl ExtensionProcessing {
                 && hello
                     .find_extension(ExtensionType::StatusRequest)
                     .is_some()
-                && server_key.has_ocsp()
             {
-                self.send_cert_status = true;
-
-                if !sess.common.is_tls13() {
+                if server_key.has_ocsp() && !sess.common.is_tls13() {
                     // Only TLS1.2 sends confirmation in ServerHello
                     self.exts
                         .push(ServerExtension::CertificateStatusAck);
                 }
+            } else {
+                // Throw away any OCSP response so we don't try to send it later.
+                drop(server_key.take_ocsp());
             }
 
             if !for_resume
                 && hello
                     .find_extension(ExtensionType::SCT)
-                    .is_some()
-                && server_key.has_sct_list()
-            {
-                self.send_sct = true;
-
+                    .is_some() {
                 if !sess.common.is_tls13() {
-                    let sct_list = server_key.take_sct_list().unwrap();
-                    self.exts
-                        .push(ServerExtension::make_sct(sct_list));
+                    // Take the SCT list, if any, so we don't send it later,
+                    // and put it in the legacy extension.
+                    server_key.take_sct_list().map(|sct_list| self.exts
+                        .push(ServerExtension::make_sct(sct_list)));
                 }
+            } else {
+                // Throw away any SCT list so we don't send it later.
+                drop(server_key.take_sct_list());
             }
         }
 
@@ -309,8 +306,6 @@ impl ExtensionProcessing {
 pub struct ExpectClientHello {
     pub handshake: HandshakeDetails,
     pub done_retry: bool,
-    pub send_cert_status: bool,
-    pub send_sct: bool,
     pub send_ticket: bool,
 }
 
@@ -322,8 +317,6 @@ impl ExpectClientHello {
         let mut ech = ExpectClientHello {
             handshake: HandshakeDetails::new(extra_exts),
             done_retry: false,
-            send_cert_status: false,
-            send_sct: false,
             send_ticket: false,
         };
 
@@ -352,8 +345,6 @@ impl ExpectClientHello {
         tls13::CompleteClientHelloHandling {
             handshake: self.handshake,
             done_retry: self.done_retry,
-            send_cert_status: self.send_cert_status,
-            send_sct: self.send_sct,
             send_ticket: self.send_ticket,
         }
     }
@@ -387,8 +378,6 @@ impl ExpectClientHello {
         ep.process_tls12(sess, hello, &self.handshake);
 
         self.send_ticket = ep.send_ticket;
-        self.send_cert_status = ep.send_cert_status;
-        self.send_sct = ep.send_sct;
 
         let sh = Message {
             typ: ContentType::Handshake,
@@ -441,12 +430,12 @@ impl ExpectClientHello {
         sess: &mut ServerSessionImpl,
         server_certkey: &mut sign::CertifiedKey,
     ) {
-        if !self.send_cert_status || !server_certkey.has_ocsp() {
-            return;
-        }
+       let ocsp = match server_certkey.take_ocsp() {
+           Some(ocsp) => ocsp,
+           None => return,
+       };
 
-        let ocsp = server_certkey.take_ocsp();
-        let st = CertificateStatus::new(ocsp.unwrap());
+        let st = CertificateStatus::new(ocsp);
 
         let c = Message {
             typ: ContentType::Handshake,
