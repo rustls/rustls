@@ -37,6 +37,7 @@ use crate::client::hs;
 
 use ring::constant_time;
 use webpki;
+use ring::digest::Digest;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -171,7 +172,7 @@ pub fn start_handshake_traffic(
     server_hello: &ServerHelloPayload,
     handshake: &mut HandshakeDetails,
     hello: &mut ClientHelloDetails,
-) -> Result<KeyScheduleHandshake, TLSError> {
+) -> Result<(KeyScheduleHandshake, Digest), TLSError> {
     let suite = sess.common.get_suite_assert();
 
     let their_key_share = server_hello
@@ -241,7 +242,6 @@ pub fn start_handshake_traffic(
     hs::check_aligned_handshake(sess)?;
 
     let hash_at_client_recvd_server_hello = handshake.transcript.get_current_hash();
-    handshake.hash_at_client_recvd_server_hello = Some(hash_at_client_recvd_server_hello);
 
     let _maybe_write_key = if !sess.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
@@ -285,7 +285,7 @@ pub fn start_handshake_traffic(
         });
     }
 
-    Ok(key_schedule)
+    Ok((key_schedule, hash_at_client_recvd_server_hello))
 }
 
 pub fn prepare_resumption(
@@ -393,6 +393,7 @@ pub struct ExpectEncryptedExtensions {
     pub key_schedule: KeyScheduleHandshake,
     pub server_cert: ServerCertDetails,
     pub hello: ClientHelloDetails,
+    pub hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectEncryptedExtensions {
@@ -407,6 +408,7 @@ impl ExpectEncryptedExtensions {
             client_auth: None,
             cert_verified: certv,
             sig_verified: sigv,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 
@@ -415,6 +417,7 @@ impl ExpectEncryptedExtensions {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
             server_cert: self.server_cert,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 }
@@ -463,11 +466,7 @@ impl hs::State for ExpectEncryptedExtensions {
                 let write_key = self
                     .key_schedule
                     .client_handshake_traffic_secret(
-                        self
-                            .handshake
-                            .hash_at_client_recvd_server_hello
-                            .as_ref()
-                            .unwrap(),
+                        &self.hash_at_client_recvd_server_hello,
                         &*sess.config.key_log,
                         &self.handshake.randoms.client,
                     );
@@ -500,6 +499,7 @@ struct ExpectCertificate {
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectCertificate {
@@ -509,6 +509,7 @@ impl ExpectCertificate {
             key_schedule: self.key_schedule,
             server_cert: self.server_cert,
             client_auth: self.client_auth,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 }
@@ -571,6 +572,7 @@ struct ExpectCertificateOrCertReq {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectCertificateOrCertReq {
@@ -580,6 +582,7 @@ impl ExpectCertificateOrCertReq {
             key_schedule: self.key_schedule,
             server_cert: self.server_cert,
             client_auth: None,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 
@@ -588,6 +591,7 @@ impl ExpectCertificateOrCertReq {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
             server_cert: self.server_cert,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 }
@@ -618,6 +622,7 @@ struct ExpectCertificateVerify {
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectCertificateVerify {
@@ -632,6 +637,7 @@ impl ExpectCertificateVerify {
             client_auth: self.client_auth,
             cert_verified: certv,
             sig_verified: sigv,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 }
@@ -728,6 +734,7 @@ struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectCertificateRequest {
@@ -737,6 +744,7 @@ impl ExpectCertificateRequest {
             key_schedule: self.key_schedule,
             server_cert: self.server_cert,
             client_auth: Some(client_auth),
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
 }
@@ -930,6 +938,7 @@ struct ExpectFinished {
     client_auth: Option<ClientAuthDetails>,
     cert_verified: verify::ServerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectFinished {
@@ -979,8 +988,7 @@ impl hs::State for ExpectFinished {
             let key = st
                 .key_schedule
                 .client_handshake_traffic_secret(
-                    st.handshake
-                        .hash_at_client_recvd_server_hello.as_ref().unwrap(),
+                    &st.hash_at_client_recvd_server_hello,
                     &*sess.config.key_log,
                     &st.handshake.randoms.client,
                 );

@@ -15,7 +15,6 @@ use crate::suites;
 use webpki;
 
 use std::mem;
-use ring::digest;
 
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
@@ -54,7 +53,6 @@ impl ServerKXDetails {
 pub struct HandshakeDetails {
     pub resuming_session: Option<persist::ClientSessionValue>,
     pub transcript: hash_hs::HandshakeHash,
-    pub hash_at_client_recvd_server_hello: Option<digest::Digest>,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
@@ -67,7 +65,6 @@ impl HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
             transcript: hash_hs::HandshakeHash::new(),
-            hash_at_client_recvd_server_hello: None,
             randoms: SessionRandoms::for_client(),
             using_ems: false,
             session_id: SessionID::empty(),
