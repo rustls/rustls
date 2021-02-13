@@ -277,7 +277,7 @@ pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
 pub use crate::server::{ServerConfig, ServerSession};
 pub use crate::session::Session;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES};
+pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES, ALL_NAMED_GROUPS};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
@@ -296,6 +296,13 @@ pub mod ciphersuite {
     pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
     pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
     pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+}
+
+/// All defined Key Exchange Groups appear in this module.
+///
+/// ALL_NAMED_GROUPS provides an array of all of these values
+pub mod named_group {
+    pub use crate::msgs::enums::NamedGroup::*;
 }
 
 /// Message signing interfaces and implementations.

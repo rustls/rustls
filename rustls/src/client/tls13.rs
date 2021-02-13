@@ -105,9 +105,17 @@ pub fn choose_kx_groups(
     // - if not, send just X25519.
     //
     let group = retryreq
-        .and_then(HelloRetryRequest::get_requested_key_share_group)
+        .and_then(|req| {
+            HelloRetryRequest::get_requested_key_share_group(req, &sess.config.supported_key_shares)
+        })
         .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
-        .unwrap_or_else(|| NamedGroup::X25519);
+        .unwrap_or_else(|| {
+                sess.config
+                    .supported_key_shares
+                    .get(0)
+                    .expect("No supported group configured.")
+                    .clone()
+        });
 
     let mut key_shares = vec![];
 

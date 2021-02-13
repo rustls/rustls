@@ -5,7 +5,7 @@ use crate::keylog::{KeyLog, NoKeyLog};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::SignatureScheme;
+use crate::msgs::enums::{SignatureScheme, NamedGroup};
 use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
@@ -13,7 +13,7 @@ use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
 use crate::sign;
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES, ALL_NAMED_GROUPS};
 use crate::verify;
 
 use std::fmt;
@@ -85,6 +85,9 @@ pub trait ResolvesClientCert: Send + Sync {
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
     pub ciphersuites: Vec<&'static SupportedCipherSuite>,
+
+    /// List of supported key exchange algorithms, in preference order.
+    pub supported_key_shares: Vec<NamedGroup>,
 
     /// Collection of root certificates.
     pub root_store: anchors::RootCertStore,
@@ -162,6 +165,7 @@ impl ClientConfig {
     pub fn with_ciphersuites(ciphersuites: &[&'static SupportedCipherSuite]) -> ClientConfig {
         ClientConfig {
             ciphersuites: ciphersuites.to_vec(),
+            supported_key_shares: ALL_NAMED_GROUPS.to_vec(),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
             session_persistence: handy::ClientSessionMemoryCache::new(32),

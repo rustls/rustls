@@ -23,6 +23,15 @@ pub enum BulkAlgorithm {
     CHACHA20_POLY1305,
 }
 
+/// List of all supported named groups for key exchange.
+///
+/// In preference order.
+pub const ALL_NAMED_GROUPS: &'static [NamedGroup] = &[
+            NamedGroup::X25519,
+            NamedGroup::secp384r1,
+            NamedGroup::secp256r1,
+];
+
 /// The result of a key exchange.  This has our public key,
 /// and the agreed shared secret (also known as the "premaster secret"
 /// in TLS1.0-era protocols, and "Z" in TLS1.3).
@@ -53,12 +62,7 @@ impl KeyExchange {
     }
 
     pub fn supported_groups() -> &'static [NamedGroup] {
-        // in preference order
-        &[
-            NamedGroup::X25519,
-            NamedGroup::secp384r1,
-            NamedGroup::secp256r1,
-        ]
+        ALL_NAMED_GROUPS
     }
 
     pub fn client_ecdhe(kx_params: &[u8]) -> Option<KeyExchangeResult> {
