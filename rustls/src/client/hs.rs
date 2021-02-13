@@ -783,7 +783,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         check_aligned_handshake(sess)?;
 
         let cookie = hrr.get_cookie();
-        let req_group = hrr.get_requested_key_share_group();
+        let req_group = hrr.get_requested_key_share_group(&sess.config.supported_key_shares);
 
         // A retry request is illegal if it contains no cookie and asks for
         // retry of a group we already sent.

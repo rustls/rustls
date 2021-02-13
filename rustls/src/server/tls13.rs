@@ -559,7 +559,7 @@ impl CompleteClientHelloHandling {
             return Err(hs::illegal_param(sess, "client sent duplicate keyshares"));
         }
 
-        let supported_groups = suites::KeyExchange::supported_groups();
+        let supported_groups = &sess.config.supported_key_shares;
 
         let chosen_share = supported_groups
             .iter()
