@@ -1988,7 +1988,7 @@ fn negotiated_ciphersuite_default() {
         do_suite_test(
             make_client_config(*kt),
             make_server_config(*kt),
-            find_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256),
+            find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384),
             ProtocolVersion::TLSv1_3,
         );
     }
@@ -2261,9 +2261,9 @@ fn vectored_write_for_client_handshake() {
     {
         let mut pipe = OtherSession::new(&mut server);
         let wrlen = client.write_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 138);
+        assert_eq!(wrlen, 154);
         // CCS, finished, then two application datas
-        assert_eq!(pipe.writevs, vec![vec![6, 58, 42, 32]]);
+        assert_eq!(pipe.writevs, vec![vec![6, 74, 42, 32]]);
     }
 
     assert_eq!(server.is_handshaking(), false);
