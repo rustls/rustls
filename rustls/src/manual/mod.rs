@@ -24,3 +24,7 @@ pub mod _03_howto;
 /// This section documents rustls itself: what protocol features are and are not implemented.
 #[path = "features.rs"]
 pub mod _04_features;
+
+/// This section provides rationale for the defaults in rustls.
+#[path = "defaults.rs"]
+pub mod _05_defaults;
