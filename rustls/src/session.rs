@@ -21,7 +21,6 @@ use std::io::{Read, Write};
 
 use std::collections::VecDeque;
 use std::io;
-use ring::hmac;
 use ring::digest::Digest;
 
 /// Generalises `ClientSession` and `ServerSession`
@@ -289,26 +288,26 @@ fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
 /// TLS1.2 per-session keying material
 pub struct SessionSecrets {
     pub randoms: SessionRandoms,
-    hmac_alg: hmac::Algorithm,
+    suite: &'static SupportedCipherSuite,
     pub master_secret: [u8; 48],
 }
 
 impl SessionSecrets {
     pub fn new(
         randoms: &SessionRandoms,
-        hmac_alg: hmac::Algorithm,
+        suite: &'static SupportedCipherSuite,
         pms: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
             randoms: randoms.clone(),
-            hmac_alg,
+            suite,
             master_secret: [0u8; 48],
         };
 
         let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
         prf::prf(
             &mut ret.master_secret,
-            ret.hmac_alg,
+            suite.hmac_algorithm(),
             pms,
             b"master secret",
             &randoms,
@@ -319,18 +318,18 @@ impl SessionSecrets {
     pub fn new_ems(
         randoms: &SessionRandoms,
         hs_hash: &Digest,
-        hmac_alg: hmac::Algorithm,
+        suite: &'static SupportedCipherSuite,
         pms: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
             randoms: randoms.clone(),
-            hmac_alg,
             master_secret: [0u8; 48],
+            suite,
         };
 
         prf::prf(
             &mut ret.master_secret,
-            ret.hmac_alg,
+            suite.hmac_algorithm(),
             pms,
             b"extended master secret",
             hs_hash.as_ref(),
@@ -340,12 +339,12 @@ impl SessionSecrets {
 
     pub fn new_resume(
         randoms: &SessionRandoms,
-        hmac_alg: hmac::Algorithm,
+        suite: &'static SupportedCipherSuite,
         master_secret: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
             randoms: randoms.clone(),
-            hmac_alg,
+            suite,
             master_secret: [0u8; 48],
         };
         ret.master_secret
@@ -364,13 +363,17 @@ impl SessionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.hmac_alg,
+            self.suite.hmac_algorithm(),
             &self.master_secret,
             b"key expansion",
             &randoms,
         );
 
         out
+    }
+
+    pub fn suite(&self) -> &'static SupportedCipherSuite {
+        self.suite
     }
 
     pub fn get_master_secret(&self) -> Vec<u8> {
@@ -385,7 +388,7 @@ impl SessionSecrets {
 
         prf::prf(
             &mut out,
-            self.hmac_alg,
+            self.suite.hmac_algorithm(),
             &self.master_secret,
             label,
             handshake_hash.as_ref(),
@@ -411,7 +414,7 @@ impl SessionSecrets {
             randoms.extend_from_slice(context);
         }
 
-        prf::prf(output, self.hmac_alg, &self.master_secret, label, &randoms)
+        prf::prf(output, self.suite.hmac_algorithm(), &self.master_secret, label, &randoms)
     }
 }
 
@@ -791,7 +794,7 @@ impl SessionCommon {
     }
 
     pub fn start_encryption_tls12(&mut self, secrets: &SessionSecrets) {
-        let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), secrets);
+        let (dec, enc) = cipher::new_tls12(secrets.suite(), secrets);
         self.record_layer
             .prepare_message_encrypter(enc);
         self.record_layer

@@ -605,17 +605,15 @@ impl hs::State for ExpectServerDone {
         emit_ccs(sess);
 
         // 5e. Now commit secrets.
-        let hmac_alg = suite
-            .hmac_algorithm();
         let secrets = if st.handshake.using_ems {
             SessionSecrets::new_ems(
                 &st.handshake.randoms,
                 &handshake_hash,
-                hmac_alg,
+                suite,
                 &kxd.shared_secret,
             )
         } else {
-            SessionSecrets::new(&st.handshake.randoms, hmac_alg, &kxd.shared_secret)
+            SessionSecrets::new(&st.handshake.randoms, suite,  &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",
@@ -743,12 +741,11 @@ fn save_session(
 
     let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
 
-    let scs = sess.common.get_suite_assert();
     let master_secret = secrets.get_master_secret();
     let version = sess.get_protocol_version().unwrap();
     let mut value = persist::ClientSessionValue::new(
         version,
-        scs.suite,
+        secrets.suite().suite,
         &handshake.session_id,
         ticket,
         master_secret,
