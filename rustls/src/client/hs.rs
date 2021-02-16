@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::cipher;
+use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
 use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
@@ -199,7 +199,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 
 pub fn compatible_suite(
     sess: &ClientSessionImpl,
-    resuming_suite: &suites::SupportedCipherSuite,
+    resuming_suite: &SupportedCipherSuite,
 ) -> bool {
     match sess.common.get_suite() {
         Some(suite) => suite.can_resume_to(&resuming_suite),
@@ -496,9 +496,10 @@ impl ExpectServerHello {
         })
     }
 
-    fn into_expect_tls12_certificate(self) -> NextState {
+    fn into_expect_tls12_certificate(self, suite: &'static SupportedCipherSuite) -> NextState {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
+            suite,
             server_cert: self.server_cert,
             may_send_cert_status: self.may_send_cert_status,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -746,7 +747,7 @@ impl State for ExpectServerHello {
             }
         }
 
-        Ok(self.into_expect_tls12_certificate())
+        Ok(self.into_expect_tls12_certificate(scs))
     }
 }
 
