@@ -15,7 +15,7 @@ use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::session::SessionSecrets;
-use crate::suites;
+use crate::{suites, SupportedCipherSuite};
 use crate::ticketer;
 use crate::verify;
 
@@ -28,6 +28,7 @@ use std::mem;
 
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
+    pub suite: &'static SupportedCipherSuite,
     pub server_cert: ServerCertDetails,
     pub may_send_cert_status: bool,
     pub must_issue_new_ticket: bool,
@@ -37,6 +38,7 @@ impl ExpectCertificate {
     fn into_expect_certificate_status_or_server_kx(self) -> hs::NextState {
         Box::new(ExpectCertificateStatusOrServerKX {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
@@ -45,6 +47,7 @@ impl ExpectCertificate {
     fn into_expect_server_kx(self) -> hs::NextState {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
@@ -75,6 +78,7 @@ impl hs::State for ExpectCertificate {
 
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
 }
@@ -83,6 +87,7 @@ impl ExpectCertificateStatus {
     fn into_expect_server_kx(self) -> hs::NextState {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
@@ -115,6 +120,7 @@ impl hs::State for ExpectCertificateStatus {
 
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
 }
@@ -123,6 +129,7 @@ impl ExpectCertificateStatusOrServerKX {
     fn into_expect_server_kx(self) -> hs::NextState {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
@@ -131,6 +138,7 @@ impl ExpectCertificateStatusOrServerKX {
     fn into_expect_certificate_status(self) -> hs::NextState {
         Box::new(ExpectCertificateStatus {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
@@ -159,6 +167,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
 
 struct ExpectServerKX {
     handshake: HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
 }
@@ -167,6 +176,7 @@ impl ExpectServerKX {
     fn into_expect_server_done_or_certreq(self, skx: ServerKXDetails) -> hs::NextState {
         Box::new(ExpectServerDoneOrCertReq {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             server_kx: skx,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -189,7 +199,7 @@ impl hs::State for ExpectServerKX {
             .transcript
             .add_message(&m);
 
-        let decoded_kx = opaque_kx.unwrap_given_kxa(&sess.common.get_suite_assert().kx)
+        let decoded_kx = opaque_kx.unwrap_given_kxa(&self.suite.kx)
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecodeError);
@@ -331,6 +341,7 @@ fn emit_finished(
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
     must_issue_new_ticket: bool,
@@ -340,6 +351,7 @@ impl ExpectCertificateRequest {
     fn into_expect_server_done(self, client_auth: ClientAuthDetails) -> hs::NextState {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
             client_auth: Some(client_auth),
@@ -402,6 +414,7 @@ impl hs::State for ExpectCertificateRequest {
 
 struct ExpectServerDoneOrCertReq {
     handshake: HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
     must_issue_new_ticket: bool,
@@ -411,6 +424,7 @@ impl ExpectServerDoneOrCertReq {
     fn into_expect_certificate_req(self) -> hs::NextState {
         Box::new(ExpectCertificateRequest {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -420,6 +434,7 @@ impl ExpectServerDoneOrCertReq {
     fn into_expect_server_done(self) -> hs::NextState {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
+            suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
             client_auth: None,
@@ -455,6 +470,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 
 struct ExpectServerDone {
     handshake: HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
     client_auth: Option<ClientAuthDetails>,
@@ -509,7 +525,7 @@ impl hs::State for ExpectServerDone {
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.handshake.dns_name);
 
-        let suite = sess.common.get_suite_assert();
+        let suite = st.suite;
 
         // 1. Verify the cert chain.
         // 2. Verify any SCTs provided with the certificate.
@@ -613,7 +629,7 @@ impl hs::State for ExpectServerDone {
                 &kxd.shared_secret,
             )
         } else {
-            SessionSecrets::new(&st.handshake.randoms, suite,  &kxd.shared_secret)
+            SessionSecrets::new(&st.handshake.randoms, suite, &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",
