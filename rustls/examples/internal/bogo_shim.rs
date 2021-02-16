@@ -498,11 +498,11 @@ fn handle_err(err: rustls::TLSError) -> ! {
         TLSError::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        TLSError::WebPKIError(webpki::Error::BadDER) => quit(":CANNOT_PARSE_LEAF_CERT:"),
-        TLSError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey) => {
+        TLSError::WebPKIError(webpki::Error::BadDER, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
+        TLSError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey, ..) => {
             quit(":BAD_SIGNATURE:")
         }
-        TLSError::WebPKIError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => {
+        TLSError::WebPKIError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey, ..) => {
             quit(":WRONG_SIGNATURE_TYPE:")
         }
         TLSError::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),

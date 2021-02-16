@@ -4,6 +4,34 @@ use std::error::Error;
 use std::fmt;
 use webpki;
 
+/// The reason WebPKI operation was performed, used in [`TLSError`].
+#[derive(Debug, PartialEq, Clone)]
+#[non_exhaustive]
+pub enum WebPKIOp {
+    /// Validate server certificate.
+    ValidateServerCert,
+    /// Validate client certificate.
+    ValidateClientCert,
+    /// Validate certificate for DNS name
+    ValidateForDNSName,
+    /// Parse end entity certificate.
+    ParseEndEntity,
+    /// Verify message signature using the certificate.
+    VerifySignature,
+}
+
+impl fmt::Display for WebPKIOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WebPKIOp::ValidateServerCert => write!(f, "validate server certificate"),
+            WebPKIOp::ValidateClientCert => write!(f, "validate client certificate"),
+            WebPKIOp::ValidateForDNSName => write!(f, "validate certificate for DNS name"),
+            WebPKIOp::ParseEndEntity => write!(f, "parse end entity certificate"),
+            WebPKIOp::VerifySignature => write!(f, "verify signature"),
+        }
+    }
+}
+
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
 pub enum TLSError {
@@ -53,7 +81,7 @@ pub enum TLSError {
     AlertReceived(AlertDescription),
 
     /// The presented certificate chain is invalid.
-    WebPKIError(webpki::Error),
+    WebPKIError(webpki::Error, WebPKIOp),
 
     /// The presented SCT(s) were invalid.
     InvalidSCT(sct::Error),
@@ -110,7 +138,7 @@ impl fmt::Display for TLSError {
             TLSError::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
             TLSError::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
             TLSError::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            TLSError::WebPKIError(ref err) => write!(f, "invalid certificate: {:?}", err),
+            TLSError::WebPKIError(ref err, ref reason) => write!(f, "certificate error in operation: {}: {:?}", reason, err),
             TLSError::CorruptMessage => write!(f, "received corrupt message"),
             TLSError::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             TLSError::DecryptError => write!(f, "cannot decrypt peer's message"),
@@ -131,6 +159,7 @@ mod tests {
     #[test]
     fn smoke() {
         use super::TLSError;
+        use super::WebPKIOp;
         use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
         use webpki;
@@ -151,7 +180,7 @@ mod tests {
             TLSError::PeerIncompatibleError("no tls1.2".to_string()),
             TLSError::PeerMisbehavedError("inconsistent something".to_string()),
             TLSError::AlertReceived(AlertDescription::ExportRestriction),
-            TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid),
+            TLSError::WebPKIError(webpki::Error::ExtensionValueInvalid, WebPKIOp::ParseEndEntity),
             TLSError::InvalidSCT(sct::Error::MalformedSCT),
             TLSError::General("undocumented error".to_string()),
             TLSError::FailedToGetCurrentTime,

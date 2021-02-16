@@ -62,7 +62,7 @@ fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict,
 
             if let Err(err) = client.process_new_packets() {
                 return match err {
-                    TLSError::WebPKIError(_) | TLSError::AlertReceived(_) => {
+                    TLSError::WebPKIError(..) | TLSError::AlertReceived(_) => {
                         Ok(Verdict::Reject(err))
                     }
                     _ => Err(From::from(format!("{:?}", err))),
