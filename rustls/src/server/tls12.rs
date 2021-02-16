@@ -151,10 +151,9 @@ impl hs::State for ExpectClientKX {
                 TLSError::PeerMisbehavedError("key exchange completion failed".to_string())
             })?;
 
-        let hmac_alg = sess
+        let suite = sess
             .common
-            .get_suite_assert()
-            .hmac_algorithm();
+            .get_suite_assert();
         let secrets = if self.handshake.using_ems {
             let handshake_hash = self
                 .handshake
@@ -163,11 +162,11 @@ impl hs::State for ExpectClientKX {
             SessionSecrets::new_ems(
                 &self.handshake.randoms,
                 &handshake_hash,
-                hmac_alg,
+                suite,
                 &kxd.shared_secret,
             )
         } else {
-            SessionSecrets::new(&self.handshake.randoms, hmac_alg, &kxd.shared_secret)
+            SessionSecrets::new(&self.handshake.randoms, suite, &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",
@@ -283,14 +282,13 @@ fn get_server_session_value_tls12(
     handshake: &HandshakeDetails,
     sess: &ServerSessionImpl,
 ) -> persist::ServerSessionValue {
-    let scs = sess.common.get_suite_assert();
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(
         sess.get_sni(),
         version,
-        scs.suite,
+        secrets.suite().suite,
         secret,
         &sess.client_cert_chain,
         sess.alpn_protocol.clone(),

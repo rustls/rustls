@@ -576,13 +576,12 @@ impl ExpectClientHello {
         self.handshake.session_id = *id;
         self.emit_server_hello(sess, None, client_hello, Some(&resumedata))?;
 
-        let hmac_alg = sess
+        let suite = sess
             .common
-            .get_suite_assert()
-            .hmac_algorithm();
+            .get_suite_assert();
         let secrets = SessionSecrets::new_resume(
             &self.handshake.randoms,
-            hmac_alg,
+            suite,
             &resumedata.master_secret.0,
         );
         sess.config.key_log.log(
