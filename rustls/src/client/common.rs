@@ -35,6 +35,15 @@ impl ServerCertDetails {
     pub fn take_chain(&mut self) -> CertificatePayload {
         mem::replace(&mut self.cert_chain, Vec::new())
     }
+
+    pub fn scts(&self) -> impl Iterator<Item=&[u8]> {
+        self.scts
+            .as_ref()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+            .iter()
+            .map(|payload| payload.0.as_slice())
+    }
 }
 
 pub struct ServerKXDetails {
@@ -82,6 +91,10 @@ impl ClientHelloDetails {
             sent_extensions: Vec::new(),
             offered_key_shares: Vec::new(),
         }
+    }
+
+    pub fn server_may_send_sct_list(&self) -> bool {
+        self.sent_extensions.contains(&ExtensionType::SCT)
     }
 
     pub fn has_key_share(&self, group: NamedGroup) -> bool {

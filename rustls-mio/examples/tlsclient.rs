@@ -453,6 +453,7 @@ mod danger {
             _intermediates: &[rustls::Certificate],
             _roots: &rustls::RootCertStore,
             _dns_name: webpki::DNSNameRef<'_>,
+            _scts: &mut dyn Iterator<Item=&[u8]>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
         ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
@@ -501,7 +502,6 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config
             .root_store
             .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-        config.ct_logs = Some(&ct_logs::LOGS);
     }
 
     if args.flag_no_tickets {

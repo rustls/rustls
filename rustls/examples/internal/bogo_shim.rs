@@ -212,6 +212,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
         _certs: &[rustls::Certificate],
         _roots: &rustls::RootCertStore,
         _hostname: webpki::DNSNameRef<'_>,
+        _scts: &mut dyn Iterator<Item=&[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
     ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {

@@ -417,6 +417,7 @@ impl ExpectEncryptedExtensions {
             handshake: self.handshake,
             randoms: self.randoms,
             key_schedule: self.key_schedule,
+            may_send_sct_list: self.hello.server_may_send_sct_list(),
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
@@ -498,6 +499,7 @@ struct ExpectCertificate {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
     client_auth: Option<ClientAuthDetails>,
     hash_at_client_recvd_server_hello: Digest,
 }
@@ -560,7 +562,7 @@ impl hs::State for ExpectCertificate {
                 return Err(TlsError::PeerMisbehavedError(error_msg));
             }
 
-            if sess.config.ct_logs.is_none() {
+            if !self.may_send_sct_list {
                 let error_msg = "server sent unsolicited SCT list".to_string();
                 return Err(TlsError::PeerMisbehavedError(error_msg));
             }
@@ -574,6 +576,7 @@ struct ExpectCertificateOrCertReq {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
     hash_at_client_recvd_server_hello: Digest,
 }
 
@@ -583,6 +586,7 @@ impl ExpectCertificateOrCertReq {
             handshake: self.handshake,
             randoms: self.randoms,
             key_schedule: self.key_schedule,
+            may_send_sct_list: self.may_send_sct_list,
             client_auth: None,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
@@ -593,6 +597,7 @@ impl ExpectCertificateOrCertReq {
             handshake: self.handshake,
             randoms: self.randoms,
             key_schedule: self.key_schedule,
+            may_send_sct_list: self.may_send_sct_list,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
@@ -694,6 +699,7 @@ impl hs::State for ExpectCertificateVerify {
                 intermediates,
                 &sess.config.root_store,
                 self.handshake.dns_name.as_ref(),
+                &mut self.server_cert.scts(),
                 &self.server_cert.ocsp_response,
                 now,
             )
@@ -714,14 +720,6 @@ impl hs::State for ExpectCertificateVerify {
             )
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
-        // 3. Verify any included SCTs.
-        match (self.server_cert.scts.as_ref(), sess.config.ct_logs) {
-            (Some(scts), Some(logs)) => {
-                verify::verify_scts(&self.server_cert.cert_chain[0], now, scts, logs)?;
-            }
-            (_, _) => {}
-        }
-
         sess.server_cert_chain = self.server_cert.take_chain();
         self.handshake
             .transcript
@@ -738,6 +736,7 @@ struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
     key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
     hash_at_client_recvd_server_hello: Digest,
 }
 
@@ -747,6 +746,7 @@ impl ExpectCertificateRequest {
             handshake: self.handshake,
             randoms: self.randoms,
             key_schedule: self.key_schedule,
+            may_send_sct_list: self.may_send_sct_list,
             client_auth: Some(client_auth),
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })

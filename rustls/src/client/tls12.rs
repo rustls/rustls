@@ -584,18 +584,11 @@ impl hs::State for ExpectServerDone {
                 intermediates,
                 &sess.config.root_store,
                 st.handshake.dns_name.as_ref(),
+                &mut st.server_cert.scts(),
                 &st.server_cert.ocsp_response,
                 now,
             )
             .map_err(|err| hs::send_cert_error_alert(sess, err))?;
-
-        // 2. Verify any included SCTs.
-        match (st.server_cert.scts.as_ref(), sess.config.ct_logs) {
-            (Some(scts), Some(logs)) => {
-                verify::verify_scts(&st.server_cert.cert_chain[0], now, scts, logs)?;
-            }
-            (_, _) => {}
-        }
 
         // 3.
         // Build up the contents of the signed message.

@@ -13,7 +13,6 @@ use crate::key::Certificate;
 use crate::log::{debug, trace, warn};
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::DigitallySignedStruct;
-use crate::msgs::handshake::SCTList;
 use ring::digest::Digest;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
@@ -87,12 +86,16 @@ pub trait ServerCertVerifier: Send + Sync {
     /// `intermediates` contains the intermediate certificates the client sent
     /// along with the end-entity certificate; it is in the same order that the
     /// peer sent them and may be empty.
+    ///
+    /// `scts` contains the Signed Certificate Timestamps (SCTs) the server
+    /// sent with the certificate, if any.
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
         roots: &RootCertStore,
         dns_name: webpki::DNSNameRef,
+        scts: &mut dyn Iterator<Item=&[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, TlsError>;
@@ -154,6 +157,16 @@ pub trait ServerCertVerifier: Send + Sync {
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         WebPkiVerifier::verification_schemes()
+    }
+
+    /// Returns `true` if Rustls should ask the server to send SCTs.
+    ///
+    /// Signed Certificate Timestamps (SCTs) are used for Certificate
+    /// Transparency validation.
+    ///
+    /// The default implementation of this function returns true.
+    fn request_scts(&self) -> bool {
+        true
     }
 }
 
@@ -277,21 +290,26 @@ impl ServerCertVerifier for WebPkiVerifier {
         intermediates: &[Certificate],
         roots: &RootCertStore,
         dns_name: webpki::DNSNameRef,
+        scts: &mut dyn Iterator<Item=&[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, TlsError> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, roots)?;
-        let now = webpki::Time::try_from(now).map_err(|_| TlsError::FailedToGetCurrentTime)?;
+        let webpki_now = webpki::Time::try_from(now)
+            .map_err(|_| TlsError::FailedToGetCurrentTime)?;
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
                 SUPPORTED_SIG_ALGS,
                 &webpki::TLSServerTrustAnchors(&trustroots),
                 &chain,
-                now,
+                webpki_now,
             )
             .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateServerCert))
             .map(|_| cert)?;
+
+        // 3. Verify any included SCTs.
+        verify_scts(end_entity, now, scts, &self.ct_logs)?;
 
         if !ocsp_response.is_empty() {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
@@ -304,9 +322,22 @@ impl ServerCertVerifier for WebPkiVerifier {
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
-pub struct WebPkiVerifier;
+pub struct WebPkiVerifier {
+    ct_logs: &'static [&'static sct::Log<'static>],
+}
 
 impl WebPkiVerifier {
+    /// Constructs a new `WebPKIVerifier`.
+    ///
+    /// `ct_logs` is the list of logs that are trusted for Certificate
+    /// Transparency. Currently CT log enforcement is opportunistic; see
+    /// https://github.com/ctz/rustls/issues/479.
+    pub fn new(ct_logs: &'static [&'static sct::Log<'static>]) -> Self {
+        Self {
+            ct_logs
+        }
+    }
+
     /// Returns the signature verification methods supported by
     /// webpki.
     pub fn verification_schemes() -> Vec<SignatureScheme> {
@@ -614,20 +645,26 @@ fn unix_time_millis(now: SystemTime) -> Result<u64, TlsError> {
         })
 }
 
-pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[&sct::Log]) -> Result<(), TlsError> {
-    let mut valid_scts = 0;
+fn verify_scts(cert: &Certificate,
+               now: SystemTime,
+               scts: &mut dyn Iterator<Item=&[u8]>, logs: &[&sct::Log])
+    -> Result<(), TlsError>
+{
+    if logs.is_empty() {
+        return Ok(());
+    }
+
     let now = unix_time_millis(now)?;
     let mut last_sct_error = None;
-
     for sct in scts {
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-        match sct::verify_sct(&cert.0, &sct.0, now, logs) {
+        match sct::verify_sct(&cert.0, sct, now, logs) {
             Ok(index) => {
                 debug!(
                     "Valid SCT signed by {} on {}",
                     logs[index].operated_by, logs[index].description
                 );
-                valid_scts += 1;
+                return Ok(());
             }
             Err(e) => {
                 if e.should_be_fatal() {
@@ -641,9 +678,9 @@ pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[
 
     /* If we were supplied with some logs, and some SCTs,
      * but couldn't verify any of them, fail the handshake. */
-    if !logs.is_empty() && !scts.is_empty() && valid_scts == 0 {
+    if let Some(last_sct_error) = last_sct_error {
         warn!("No valid SCTs provided");
-        return Err(TlsError::InvalidSCT(last_sct_error.unwrap()));
+        return Err(TlsError::InvalidSCT(last_sct_error));
     }
 
     Ok(())

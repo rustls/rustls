@@ -18,8 +18,6 @@ fn duration_nanos(d: Duration) -> u64 {
     ((d.as_secs() as f64) * 1e9 + (d.subsec_nanos() as f64)) as u64
 }
 
-static V: &'static verify::WebPkiVerifier = &verify::WebPkiVerifier;
-
 #[test]
 fn test_reddit_cert() {
     Context::new(
@@ -192,13 +190,23 @@ impl Context {
     }
 
     fn bench(&self, count: usize) {
+        let verifier = verify::WebPkiVerifier::new(&[]);
+        const SCTS: &[&[u8]] = &[];
+        const OCSP_RESPONSE: &[u8] = &[];
         let mut times = Vec::new();
 
         let (end_entity, intermediates) = self.chain.split_first().unwrap();
         for _ in 0..count {
             let start = Instant::now();
             let dns_name = webpki::DNSNameRef::try_from_ascii_str(self.domain).unwrap();
-            V.verify_server_cert(end_entity, intermediates, &self.roots, dns_name, &[], self.now)
+            verifier.verify_server_cert(
+                end_entity,
+                intermediates,
+                &self.roots,
+                dns_name,
+                &mut SCTS.iter().copied(),
+                OCSP_RESPONSE,
+                self.now)
                 .unwrap();
             times.push(duration_nanos(Instant::now().duration_since(start)));
         }
