@@ -790,7 +790,7 @@ impl State for ExpectClientHello {
         if sess.common.is_tls13() {
             return self
                 .into_complete_tls13_client_hello_handling()
-                .handle_client_hello(sess, certkey, &m);
+                .handle_client_hello(ciphersuite, sess, certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
