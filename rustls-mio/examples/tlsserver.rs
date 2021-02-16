@@ -470,7 +470,7 @@ struct Args {
 }
 
 fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
-    for suite in &rustls::ALL_CIPHERSUITES {
+    for suite in rustls::ALL_CIPHERSUITES {
         let sname = format!("{:?}", suite.suite).to_lowercase();
 
         if sname == name.to_string().to_lowercase() {
