@@ -171,7 +171,8 @@ impl InitialState {
         };
 
         let hello_details = ClientHelloDetails::new();
-        emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts)
+        let may_send_sct_list = sess.config.verifier.request_scts();
+        emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts, may_send_sct_list)
     }
 }
 
@@ -210,6 +211,7 @@ fn emit_client_hello_for_retry(
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
     extra_exts: Vec<ClientExtension>,
+    may_send_sct_list: bool,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
@@ -263,7 +265,7 @@ fn emit_client_hello_for_retry(
         CertificateStatusRequest::build_ocsp(),
     ));
 
-    if sess.config.ct_logs.is_some() {
+    if may_send_sct_list {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
     }
 
@@ -869,12 +871,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
             sess.early_data.rejected();
         }
 
+        let may_send_sct_list = self.next.hello.server_may_send_sct_list();
         Ok(emit_client_hello_for_retry(
             sess,
             self.next.handshake,
             self.next.hello,
             Some(&hrr),
             self.extra_exts,
+            may_send_sct_list,
         ))
     }
 }

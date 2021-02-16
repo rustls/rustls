@@ -21,7 +21,6 @@ use std::io::{self, IoSlice};
 use std::mem;
 use std::sync::Arc;
 
-use sct;
 use webpki;
 
 #[macro_use]
@@ -113,11 +112,6 @@ pub struct ClientConfig {
     /// is all supported versions.
     pub versions: Vec<ProtocolVersion>,
 
-    /// Collection of certificate transparency logs.
-    /// If this collection is empty, then certificate transparency
-    /// checking is disabled.
-    pub ct_logs: Option<&'static [&'static sct::Log<'static>]>,
-
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
     ///
@@ -169,9 +163,8 @@ impl ClientConfig {
             client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
-            ct_logs: None,
             enable_sni: true,
-            verifier: Arc::new(verify::WebPKIVerifier),
+            verifier: Arc::new(verify::WebPKIVerifier::new(&[])),
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
         }
