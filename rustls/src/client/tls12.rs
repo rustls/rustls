@@ -509,6 +509,8 @@ impl hs::State for ExpectServerDone {
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.handshake.dns_name);
 
+        let suite = sess.common.get_suite_assert();
+
         // 1. Verify the cert chain.
         // 2. Verify any SCTs provided with the certificate.
         // 3. Verify that the top certificate signed their kx.
@@ -560,12 +562,11 @@ impl hs::State for ExpectServerDone {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            let scs = sess.common.get_suite_assert();
-            if !scs.usable_for_sigalg(sig.scheme.sign()) {
+            if !suite.usable_for_sigalg(sig.scheme.sign()) {
                 let error_message = format!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),
-                    scs.sign
+                    suite.sign
                 );
                 return Err(TLSError::PeerMisbehavedError(error_message));
             }
@@ -583,9 +584,7 @@ impl hs::State for ExpectServerDone {
         }
 
         // 5a.
-        let kxd = sess
-            .common
-            .get_suite_assert()
+        let kxd = suite
             .do_client_kx(&st.server_kx.kx_params)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
@@ -606,9 +605,7 @@ impl hs::State for ExpectServerDone {
         emit_ccs(sess);
 
         // 5e. Now commit secrets.
-        let hmac_alg = sess
-            .common
-            .get_suite_assert()
+        let hmac_alg = suite
             .hmac_algorithm();
         let secrets = if st.handshake.using_ems {
             SessionSecrets::new_ems(

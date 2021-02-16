@@ -611,10 +611,7 @@ impl State for ExpectServerHello {
         }
 
         let version = sess.common.negotiated_version.unwrap();
-        if !sess
-            .common
-            .get_suite_assert()
-            .usable_for_version(version)
+        if !scs.usable_for_version(version)
         {
             return Err(illegal_param(
                 sess,
@@ -623,13 +620,9 @@ impl State for ExpectServerHello {
         }
 
         // Start our handshake hash, and input the server-hello.
-        let starting_hash = sess
-            .common
-            .get_suite_assert()
-            .get_hash();
         self.handshake
             .transcript
-            .start_hash(starting_hash);
+            .start_hash(scs.get_hash());
         self.handshake
             .transcript
             .add_message(&m);
@@ -639,6 +632,7 @@ impl State for ExpectServerHello {
         if sess.common.is_tls13() {
             tls13::validate_server_hello(sess, &server_hello)?;
             let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
+                scs,
                 sess,
                 self.early_key_schedule.take(),
                 &server_hello,

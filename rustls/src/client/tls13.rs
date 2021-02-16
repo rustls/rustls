@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::cipher;
+use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
 use crate::key_schedule::{
@@ -167,14 +167,13 @@ pub fn fill_in_psk_binder(
 }
 
 pub fn start_handshake_traffic(
+    suite: &'static SupportedCipherSuite,
     sess: &mut ClientSessionImpl,
     early_key_schedule: Option<KeyScheduleEarly>,
     server_hello: &ServerHelloPayload,
     handshake: &mut HandshakeDetails,
     hello: &mut ClientHelloDetails,
 ) -> Result<(KeyScheduleHandshake, Digest), TLSError> {
-    let suite = sess.common.get_suite_assert();
-
     let their_key_share = server_hello
         .get_key_share()
         .ok_or_else(|| {

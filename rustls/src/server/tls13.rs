@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::cipher;
+use crate::{cipher, SupportedCipherSuite};
 use crate::error::TLSError;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
@@ -56,7 +56,7 @@ pub struct CompleteClientHelloHandling {
 impl CompleteClientHelloHandling {
     fn check_binder(
         &self,
-        sess: &mut ServerSessionImpl,
+        suite: &'static SupportedCipherSuite,
         client_hello: &Message,
         psk: &[u8],
         binder: &[u8],
@@ -66,7 +66,6 @@ impl CompleteClientHelloHandling {
             _ => unreachable!(),
         };
 
-        let suite = sess.common.get_suite_assert();
         let suite_hash = suite.get_hash();
         let handshake_hash = self
             .handshake
@@ -112,6 +111,7 @@ impl CompleteClientHelloHandling {
 
     fn emit_server_hello(
         &mut self,
+        suite: &'static SupportedCipherSuite,
         sess: &mut ServerSessionImpl,
         session_id: &SessionID,
         share: &KeyShareEntry,
@@ -142,7 +142,7 @@ impl CompleteClientHelloHandling {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.handshake.randoms.server),
                     session_id: *session_id,
-                    cipher_suite: sess.common.get_suite_assert().suite,
+                    cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions,
                 }),
@@ -155,12 +155,7 @@ impl CompleteClientHelloHandling {
         let client_hello_hash = self
             .handshake
             .transcript
-            .get_hash_given(
-                sess.common
-                    .get_suite_assert()
-                    .get_hash(),
-                &[],
-            );
+            .get_hash_given(suite.get_hash(), &[]);
 
         trace!("sending server hello {:?}", sh);
         self.handshake
@@ -169,7 +164,6 @@ impl CompleteClientHelloHandling {
         sess.common.send_msg(sh, false);
 
         // Start key schedule
-        let suite = sess.common.get_suite_assert();
         let mut key_schedule = if let Some(psk) = resuming_psk {
             let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
 
@@ -238,11 +232,11 @@ impl CompleteClientHelloHandling {
         sess.common.send_msg(m, false);
     }
 
-    fn emit_hello_retry_request(&mut self, sess: &mut ServerSessionImpl, group: NamedGroup) {
+    fn emit_hello_retry_request(&mut self, suite: &'static SupportedCipherSuite, sess: &mut ServerSessionImpl, group: NamedGroup) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id: SessionID::empty(),
-            cipher_suite: sess.common.get_suite_assert().suite,
+            cipher_suite: suite.suite,
             extensions: Vec::new(),
         };
 
@@ -530,6 +524,7 @@ impl CompleteClientHelloHandling {
 
     pub fn handle_client_hello(
         mut self,
+        suite: &'static SupportedCipherSuite,
         sess: &mut ServerSessionImpl,
         mut server_key: sign::CertifiedKey,
         chm: &Message,
@@ -589,7 +584,7 @@ impl CompleteClientHelloHandling {
                         return Err(hs::illegal_param(sess, "did not follow retry request"));
                     }
 
-                    self.emit_hello_retry_request(sess, group);
+                    self.emit_hello_retry_request(suite, sess, group);
                     self.emit_fake_ccs(sess);
                     return Ok(self.into_expect_retried_client_hello());
                 }
@@ -625,7 +620,7 @@ impl CompleteClientHelloHandling {
 
                 let resume = maybe_resume.unwrap();
 
-                if !self.check_binder(sess, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
+                if !self.check_binder(suite, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
                     sess.common
                         .send_fatal_alert(AlertDescription::DecryptError);
                     return Err(TLSError::PeerMisbehavedError(
@@ -658,6 +653,7 @@ impl CompleteClientHelloHandling {
             .transcript
             .add_message(chm);
         let key_schedule = self.emit_server_hello(
+            suite,
             sess,
             &client_hello.session_id,
             chosen_share,
