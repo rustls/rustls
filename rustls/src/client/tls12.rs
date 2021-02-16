@@ -582,7 +582,6 @@ impl hs::State for ExpectServerDone {
             .verify_server_cert(
                 end_entity,
                 intermediates,
-                &sess.config.root_store,
                 st.handshake.dns_name.as_ref(),
                 &mut st.server_cert.scts(),
                 &st.server_cert.ocsp_response,

@@ -309,14 +309,13 @@ fn make_client_config(
     clientauth: ClientAuth,
     resume: Resumption,
 ) -> ClientConfig {
-    let mut cfg = ClientConfig::new();
+    let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
-    cfg.root_store
+    root_store
         .add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
-    cfg.ciphersuites.clear();
-    cfg.ciphersuites
-        .push(params.ciphersuite);
+
+    let mut cfg = ClientConfig::new(root_store, &[], &[params.ciphersuite]);
     cfg.versions.clear();
     cfg.versions.push(params.version);
 

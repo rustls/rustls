@@ -92,19 +92,24 @@
 //! ## Getting started
 //! This is the minimum you need to do to make a TLS client connection.
 //!
-//! First, we make a `ClientConfig`.  You're likely to make one of these per process,
-//! and use it for all connections made by that process.
-//!
-//! ```
-//! let mut config = rustls::ClientConfig::new();
-//! ```
-//!
-//! Next we load some root certificates.  These are used to authenticate the server.
+//! First we load some root certificates.  These are used to authenticate the server.
 //! The recommended way is to depend on the `webpki_roots` crate which contains
 //! the Mozilla set of root certificates.
 //!
 //! ```rust,ignore
-//! config.root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! let mut root_store = rustls::RootCertStore::empty();
+//! root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! let trusted_ct_logs = &[];
+//! ```
+//!
+//! Next, we make a `ClientConfig`.  You're likely to make one of these per process,
+//! and use it for all connections made by that process.
+//!
+//! ```rust,ignore
+//! let config = rustls::ClientConfig::new(
+//!     root_store,
+//!     trusted_ct_logs,
+//!     rustls::DEFAULT_CIPHERSUITES);
 //! ```
 //!
 //! Now we can make a session.  You need to provide the server's hostname so we
@@ -114,7 +119,13 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # let mut config = rustls::ClientConfig::new();
+//! # let mut root_store = rustls::RootCertStore::empty();
+//! # root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! # let trusted_ct_logs = &[];
+//! # let config = rustls::ClientConfig::new(
+//! #     root_store,
+//! #     trusted_ct_logs,
+//! #     rustls::DEFAULT_CIPHERSUITES);
 //! let rc_config = Arc::new(config);
 //! let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
 //! let mut client = rustls::ClientSession::new(&rc_config, example_com);
@@ -278,9 +289,9 @@ pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
 pub use crate::server::{ServerConfig, ServerSession};
 pub use crate::session::Session;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES};
+pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES, DEFAULT_CIPHERSUITES};
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-pub use crate::ticketer::Ticketer;
+    pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
 };

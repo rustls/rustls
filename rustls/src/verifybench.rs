@@ -190,7 +190,7 @@ impl Context {
     }
 
     fn bench(&self, count: usize) {
-        let verifier = verify::WebPkiVerifier::new(&[]);
+        let verifier = verify::WebPkiVerifier::new(self.roots.clone(),&[]);
         const SCTS: &[&[u8]] = &[];
         const OCSP_RESPONSE: &[u8] = &[];
         let mut times = Vec::new();
@@ -202,7 +202,6 @@ impl Context {
             verifier.verify_server_cert(
                 end_entity,
                 intermediates,
-                &self.roots,
                 dns_name,
                 &mut SCTS.iter().copied(),
                 OCSP_RESPONSE,

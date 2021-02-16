@@ -5,7 +5,7 @@ use rustls;
 use rustls_pemfile;
 
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
-use rustls::ProtocolVersion;
+use rustls::{ProtocolVersion, DEFAULT_CIPHERSUITES};
 use rustls::Session;
 use rustls::TlsError;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
@@ -234,12 +234,11 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    let mut cfg = ClientConfig::new();
+    let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
-    cfg.root_store
+    root_store
         .add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
-
-    cfg
+    ClientConfig::new(root_store, &[], DEFAULT_CIPHERSUITES)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {

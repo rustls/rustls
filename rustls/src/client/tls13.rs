@@ -697,7 +697,6 @@ impl hs::State for ExpectCertificateVerify {
             .verify_server_cert(
                 end_entity,
                 intermediates,
-                &sess.config.root_store,
                 self.handshake.dns_name.as_ref(),
                 &mut self.server_cert.scts(),
                 &self.server_cert.ocsp_response,

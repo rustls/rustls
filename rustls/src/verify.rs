@@ -80,8 +80,7 @@ impl ClientCertVerified {
 /// signatures made by certificates.
 pub trait ServerCertVerifier: Send + Sync {
     /// Verify the end-entity certificate `end_entity` is valid for the
-    /// hostname `dns_name` and chains to at least one of the trust anchors
-    /// in `roots`.
+    /// hostname `dns_name` and chains to at least one trust anchor.
     ///
     /// `intermediates` contains the intermediate certificates the client sent
     /// along with the end-entity certificate; it is in the same order that the
@@ -93,7 +92,6 @@ pub trait ServerCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        roots: &RootCertStore,
         dns_name: webpki::DNSNameRef,
         scts: &mut dyn Iterator<Item=&[u8]>,
         ocsp_response: &[u8],
@@ -288,13 +286,13 @@ impl ServerCertVerifier for WebPkiVerifier {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        roots: &RootCertStore,
         dns_name: webpki::DNSNameRef,
         scts: &mut dyn Iterator<Item=&[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, TlsError> {
-        let (cert, chain, trustroots) = prepare(end_entity, intermediates, roots)?;
+        let (cert, chain, trustroots) =
+            prepare(end_entity, intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now)
             .map_err(|_| TlsError::FailedToGetCurrentTime)?;
 
@@ -308,7 +306,6 @@ impl ServerCertVerifier for WebPkiVerifier {
             .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateServerCert))
             .map(|_| cert)?;
 
-        // 3. Verify any included SCTs.
         verify_scts(end_entity, now, scts, &self.ct_logs)?;
 
         if !ocsp_response.is_empty() {
@@ -323,17 +320,24 @@ impl ServerCertVerifier for WebPkiVerifier {
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
 pub struct WebPkiVerifier {
+    roots: RootCertStore,
     ct_logs: &'static [&'static sct::Log<'static>],
 }
 
 impl WebPkiVerifier {
     /// Constructs a new `WebPKIVerifier`.
     ///
+    /// `roots` is the set of trust anchors to trust for issuing server certs.
+    ///
     /// `ct_logs` is the list of logs that are trusted for Certificate
     /// Transparency. Currently CT log enforcement is opportunistic; see
     /// https://github.com/ctz/rustls/issues/479.
-    pub fn new(ct_logs: &'static [&'static sct::Log<'static>]) -> Self {
+    pub fn new(roots: RootCertStore,
+               ct_logs: &'static [&'static sct::Log<'static>])
+        -> Self
+    {
         Self {
+            roots,
             ct_logs
         }
     }

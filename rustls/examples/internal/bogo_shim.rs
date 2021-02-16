@@ -7,7 +7,6 @@
 use base64;
 use env_logger;
 use rustls;
-use sct;
 use webpki;
 
 use rustls::internal::msgs::enums::ProtocolVersion;
@@ -203,20 +202,25 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
     }
 }
 
-struct DummyServerAuth {}
+struct DummyServerAuth {
+    send_sct: bool,
+}
 
 impl rustls::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
         _end_entity: &rustls::Certificate,
         _certs: &[rustls::Certificate],
-        _roots: &rustls::RootCertStore,
         _hostname: webpki::DNSNameRef<'_>,
         _scts: &mut dyn Iterator<Item=&[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
     ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
         Ok(rustls::ServerCertVerified::assertion())
+    }
+
+    fn request_scts(&self) -> bool {
+        self.send_sct
     }
 }
 
@@ -389,8 +393,6 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     Arc::new(cfg)
 }
 
-static EMPTY_LOGS: [&sct::Log<'_>; 0] = [];
-
 struct ClientCacheWithoutKxHints(Arc<rustls::ClientSessionMemoryCache>);
 
 impl ClientCacheWithoutKxHints {
@@ -416,18 +418,15 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
-    let mut cfg = rustls::ClientConfig::new();
+    let mut cfg = rustls::ClientConfig::new_dangerous(
+        Arc::new(DummyServerAuth{
+            send_sct: opts.send_sct,
+        }),
+        &rustls::DEFAULT_CIPHERSUITES);
     let persist = ClientCacheWithoutKxHints::new();
     cfg.set_persistence(persist);
-    cfg.root_store
-        .add(&load_cert("cert.pem")[0])
-        .unwrap();
     cfg.enable_sni = opts.use_sni;
     cfg.mtu = opts.mtu;
-
-    if opts.send_sct {
-        cfg.ct_logs = Some(&EMPTY_LOGS);
-    }
 
     if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
@@ -443,9 +442,6 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
             scheme,
         });
     }
-
-    cfg.dangerous()
-        .set_certificate_verifier(Arc::new(DummyServerAuth {}));
 
     if !opts.protocols.is_empty() {
         cfg.set_protocols(

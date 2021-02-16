@@ -3043,6 +3043,5 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
 
 #[test]
 fn test_ownedtrustanchor_to_trust_anchor_is_public() {
-    let client_config = make_client_config(KeyType::RSA);
-    let _anchor: webpki::TrustAnchor = client_config.root_store.roots[0].to_trust_anchor();
+    let _ = rustls::OwnedTrustAnchor::to_trust_anchor;
 }

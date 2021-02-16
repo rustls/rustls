@@ -1,6 +1,5 @@
-use crate::anchors;
 use crate::error::TlsError;
-use crate::key;
+use crate::{key, RootCertStore};
 use crate::keylog::{KeyLog, NoKeyLog};
 #[cfg(feature = "logging")]
 use crate::log::trace;
@@ -13,7 +12,7 @@ use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
 use crate::sign;
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::suites::SupportedCipherSuite;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
 
@@ -93,9 +92,6 @@ pub struct ClientConfig {
     /// and in TLS1.3 a key share for it is sent in the client hello.
     pub kx_groups: Vec<&'static SupportedKxGroup>,
 
-    /// Collection of root certificates.
-    pub root_store: anchors::RootCertStore,
-
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<Vec<u8>>,
@@ -140,32 +136,47 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
-impl Default for ClientConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ClientConfig {
-    /// Make a `ClientConfig` with a default set of ciphersuites,
-    /// no root certificates, no ALPN protocols, and no client auth.
+    /// Make a `ClientConfig`.
     ///
-    /// The default session persistence provider stores up to 32
+    /// The verifier will use the roots in `root_store` and CT logs (if any) in
+    /// `ct_logs`.
+    ///
+    /// `ciphersuites` contains the list of cipher suites to enable. It should
+    /// generally be `DEFAULT_CIPHERSUITES`.
+    ///
+    /// No ALPN protocols will be enabled, and client auth will be supported
+    /// by default. The default session persistence provider stores up to 32
     /// items in memory.
-    pub fn new() -> ClientConfig {
-        ClientConfig::with_ciphersuites(&ALL_CIPHERSUITES)
+    pub fn new(root_store: RootCertStore, ct_logs: &'static [&'static sct::Log],
+               ciphersuites: &[&'static SupportedCipherSuite]) -> Self {
+        let verifier = verify::WebPkiVerifier::new(root_store, ct_logs);
+        Self::new_(Arc::new(verifier), ciphersuites)
     }
 
-    /// Make a `ClientConfig` with a custom set of ciphersuites,
-    /// no root certificates, no ALPN protocols, and no client auth.
+    /// Make a `ClientConfig` with a custom certificate verifier.
     ///
-    /// The default session persistence provider stores up to 32
+    /// `verifier` is the certificate verifier to use.
+    ///
+    /// `ciphersuites` contains the list of cipher suites to enable. It should
+    /// generally be `DEFAULT_CIPHERSUITES`.
+    ///
+    /// No ALPN protocols will be enabled, and client auth will be supported
+    /// by default. The default session persistence provider stores up to 32
     /// items in memory.
-    pub fn with_ciphersuites(ciphersuites: &[&'static SupportedCipherSuite]) -> ClientConfig {
-        ClientConfig {
+    #[cfg(feature = "dangerous_configuration")]
+    pub fn new_dangerous(
+        verifier: Arc<dyn verify::ServerCertVerifier>,
+        ciphersuites: &[&'static SupportedCipherSuite]) -> Self
+    {
+        Self::new_(verifier, ciphersuites)
+    }
+
+    fn new_(verifier: Arc<dyn verify::ServerCertVerifier>,
+            ciphersuites: &[&'static SupportedCipherSuite]) -> Self {
+        Self {
             ciphersuites: ciphersuites.to_vec(),
             kx_groups: ALL_KX_GROUPS.to_vec(),
-            root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
             session_persistence: handy::ClientSessionMemoryCache::new(32),
             mtu: None,
@@ -173,7 +184,7 @@ impl ClientConfig {
             enable_tickets: true,
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             enable_sni: true,
-            verifier: Arc::new(verify::WebPkiVerifier::new(&[])),
+            verifier,
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
         }

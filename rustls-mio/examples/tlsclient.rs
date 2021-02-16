@@ -18,12 +18,11 @@ extern crate serde_derive;
 
 use docopt::Docopt;
 
-use ct_logs;
 use rustls;
 use webpki;
 use webpki_roots;
 
-use rustls::Session;
+use rustls::{Session, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -360,7 +359,7 @@ fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
 
 /// Find a ciphersuite with the given name
 fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
-    for suite in &rustls::ALL_CIPHERSUITES {
+    for suite in rustls::ALL_CIPHERSUITES {
         let sname = format!("{:?}", suite.suite).to_lowercase();
 
         if sname == name.to_string().to_lowercase() {
@@ -451,7 +450,6 @@ mod danger {
             &self,
             _end_entity: &rustls::Certificate,
             _intermediates: &[rustls::Certificate],
-            _roots: &rustls::RootCertStore,
             _dns_name: webpki::DNSNameRef<'_>,
             _scts: &mut dyn Iterator<Item=&[u8]>,
             _ocsp: &[u8],
@@ -479,7 +477,21 @@ fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig) {
 
 /// Build a `ClientConfig` from our arguments
 fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
-    let mut config = rustls::ClientConfig::new();
+    let mut root_store = RootCertStore::empty();
+
+    if args.flag_cafile.is_some() {
+        let cafile = args.flag_cafile.as_ref().unwrap();
+
+        let certfile = fs::File::open(&cafile).expect("Cannot open CA file");
+        let mut reader = BufReader::new(certfile);
+        root_store
+            .add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
+    } else {
+        root_store
+            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    }
+
+    let mut config = rustls::ClientConfig::new(root_store, &[], rustls::DEFAULT_CIPHERSUITES);
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if !args.flag_suite.is_empty() {
@@ -488,20 +500,6 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
 
     if !args.flag_protover.is_empty() {
         config.versions = lookup_versions(&args.flag_protover);
-    }
-
-    if args.flag_cafile.is_some() {
-        let cafile = args.flag_cafile.as_ref().unwrap();
-
-        let certfile = fs::File::open(&cafile).expect("Cannot open CA file");
-        let mut reader = BufReader::new(certfile);
-        config
-            .root_store
-            .add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
-    } else {
-        config
-            .root_store
-            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     }
 
     if args.flag_no_tickets {

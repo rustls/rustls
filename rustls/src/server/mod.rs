@@ -10,7 +10,7 @@ use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
 use crate::sign;
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
 
@@ -214,7 +214,7 @@ impl ServerConfig {
     /// default, requiring client authentication, requires additional
     /// configuration that we cannot provide reasonable defaults for.
     pub fn new(client_cert_verifier: Arc<dyn verify::ClientCertVerifier>) -> ServerConfig {
-        ServerConfig::with_ciphersuites(client_cert_verifier, &ALL_CIPHERSUITES)
+        ServerConfig::with_ciphersuites(client_cert_verifier, DEFAULT_CIPHERSUITES)
     }
 
     /// Make a `ServerConfig` with a custom set of ciphersuites,
