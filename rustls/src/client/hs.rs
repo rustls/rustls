@@ -896,7 +896,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
 
 pub fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSError {
     match err {
-        TLSError::WebPKIError(webpki::Error::BadDER) => {
+        TLSError::WebPKIError(webpki::Error::BadDER, _) => {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }

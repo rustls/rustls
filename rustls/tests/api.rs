@@ -16,6 +16,7 @@ use rustls::ClientHello;
 use rustls::KeyLog;
 use rustls::Session;
 use rustls::TLSError;
+use rustls::WebPKIOp;
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ResolvesServerCert, ServerConfig, ServerSession};
@@ -587,7 +588,8 @@ fn client_checks_server_certificate_with_given_name() {
             assert_eq!(
                 err,
                 Err(TLSErrorFromPeer::Client(TLSError::WebPKIError(
-                    webpki::Error::CertNotValidForName
+                    webpki::Error::CertNotValidForName,
+                    WebPKIOp::ValidateForDNSName,
                 )))
             );
         }
