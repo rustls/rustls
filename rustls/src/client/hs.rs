@@ -154,6 +154,22 @@ impl InitialState {
         }
 
         self.handshake.resuming_session = find_session(sess, self.handshake.dns_name.as_ref());
+
+        self.handshake.session_id = if let Some(resuming) = &mut self.handshake.resuming_session {
+            if resuming.version == ProtocolVersion::TLSv1_2 {
+                random_sessionid_for_ticket(resuming);
+            }
+            debug!("Resuming session");
+            resuming.session_id
+        } else {
+            debug!("Not resuming any session");
+            if !sess.common.is_quic() {
+                random_sessionid()
+            } else {
+                SessionID::empty()
+            }
+        };
+
         let hello_details = ClientHelloDetails::new();
         emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts)
     }
@@ -199,27 +215,13 @@ fn emit_client_hello_for_retry(
     extra_exts: Vec<ClientExtension>,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
-    let (session_id, ticket, resume_version) = if handshake.resuming_session.is_some() {
-        let resuming = handshake
-            .resuming_session
-            .as_mut()
-            .unwrap();
-        if resuming.version == ProtocolVersion::TLSv1_2 {
-            random_sessionid_for_ticket(resuming);
-        }
-        debug!("Resuming session");
+    let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
         (
-            resuming.session_id,
             resuming.ticket.0.clone(),
             resuming.version,
         )
     } else {
-        debug!("Not resuming any session");
-        if handshake.session_id.is_empty() && !sess.common.is_quic() {
-            handshake.session_id = random_sessionid();
-        }
         (
-            handshake.session_id,
             Vec::new(),
             ProtocolVersion::Unknown(0),
         )
@@ -326,7 +328,7 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&handshake.randoms.client),
-            session_id,
+            session_id: handshake.session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
