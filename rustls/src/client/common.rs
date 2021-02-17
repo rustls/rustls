@@ -23,11 +23,13 @@ pub struct ServerCertDetails {
 }
 
 impl ServerCertDetails {
-    pub fn new() -> ServerCertDetails {
+    pub fn new(cert_chain: CertificatePayload,
+               ocsp_response: Vec<u8>,
+               scts: Option<SCTList>) -> ServerCertDetails {
         ServerCertDetails {
-            cert_chain: Vec::new(),
-            ocsp_response: Vec::new(),
-            scts: None,
+            cert_chain,
+            ocsp_response,
+            scts,
         }
     }
 

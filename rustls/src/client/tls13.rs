@@ -390,7 +390,6 @@ fn validate_encrypted_extensions(
 pub struct ExpectEncryptedExtensions {
     pub handshake: HandshakeDetails,
     pub key_schedule: KeyScheduleHandshake,
-    pub server_cert: ServerCertDetails,
     pub hello: ClientHelloDetails,
     pub hash_at_client_recvd_server_hello: Digest,
 }
@@ -415,7 +414,6 @@ impl ExpectEncryptedExtensions {
         Box::new(ExpectCertificateOrCertReq {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
-            server_cert: self.server_cert,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
@@ -496,17 +494,16 @@ impl hs::State for ExpectEncryptedExtensions {
 struct ExpectCertificate {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
     hash_at_client_recvd_server_hello: Digest,
 }
 
 impl ExpectCertificate {
-    fn into_expect_certificate_verify(self) -> hs::NextState {
+    fn into_expect_certificate_verify(self, server_cert: ServerCertDetails) -> hs::NextState {
         Box::new(ExpectCertificateVerify {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
-            server_cert: self.server_cert,
+            server_cert,
             client_auth: self.client_auth,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
@@ -547,11 +544,12 @@ impl hs::State for ExpectCertificate {
             ));
         }
 
-        self.server_cert.ocsp_response = cert_chain.get_end_entity_ocsp();
-        self.server_cert.scts = cert_chain.get_end_entity_scts();
-        self.server_cert.cert_chain = cert_chain.convert();
+        let server_cert = ServerCertDetails::new(
+            cert_chain.convert(),
+            cert_chain.get_end_entity_ocsp(),
+            cert_chain.get_end_entity_scts());
 
-        if let Some(sct_list) = self.server_cert.scts.as_ref() {
+        if let Some(sct_list) = server_cert.scts.as_ref() {
             if hs::sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
@@ -563,14 +561,13 @@ impl hs::State for ExpectCertificate {
             }
         }
 
-        Ok(self.into_expect_certificate_verify())
+        Ok(self.into_expect_certificate_verify(server_cert))
     }
 }
 
 struct ExpectCertificateOrCertReq {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails,
     hash_at_client_recvd_server_hello: Digest,
 }
 
@@ -579,7 +576,6 @@ impl ExpectCertificateOrCertReq {
         Box::new(ExpectCertificate {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
-            server_cert: self.server_cert,
             client_auth: None,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
@@ -589,7 +585,6 @@ impl ExpectCertificateOrCertReq {
         Box::new(ExpectCertificateRequest {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
-            server_cert: self.server_cert,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })
     }
@@ -732,7 +727,6 @@ impl hs::State for ExpectCertificateVerify {
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails,
     hash_at_client_recvd_server_hello: Digest,
 }
 
@@ -741,7 +735,6 @@ impl ExpectCertificateRequest {
         Box::new(ExpectCertificate {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
-            server_cert: self.server_cert,
             client_auth: Some(client_auth),
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         })

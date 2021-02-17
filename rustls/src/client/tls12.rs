@@ -8,7 +8,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::DecomposedSignatureScheme;
+use crate::msgs::handshake::{DecomposedSignatureScheme, SCTList, CertificatePayload};
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::ServerKeyExchangePayload;
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
@@ -29,26 +29,30 @@ use std::mem;
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
-    pub server_cert: ServerCertDetails,
     pub may_send_cert_status: bool,
     pub must_issue_new_ticket: bool,
+    pub server_cert_sct_list: Option<SCTList>,
 }
 
 impl ExpectCertificate {
-    fn into_expect_certificate_status_or_server_kx(self) -> hs::NextState {
+    fn into_expect_certificate_status_or_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
         Box::new(ExpectCertificateStatusOrServerKX {
             handshake: self.handshake,
             suite: self.suite,
-            server_cert: self.server_cert,
+            server_cert_sct_list: self.server_cert_sct_list,
+            server_cert_chain,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 
-    fn into_expect_server_kx(self) -> hs::NextState {
+    fn into_expect_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
+        let server_cert = ServerCertDetails::new(
+            server_cert_chain, vec![], self.server_cert_sct_list);
+
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             suite: self.suite,
-            server_cert: self.server_cert,
+            server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -60,18 +64,19 @@ impl hs::State for ExpectCertificate {
         _sess: &mut ClientSessionImpl,
         m: Message,
     ) -> hs::NextStateOrError {
-        let cert_chain =
+        let server_cert_chain =
             require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
         self.handshake
             .transcript
             .add_message(&m);
 
-        self.server_cert.cert_chain = cert_chain.clone();
+        // TODO(perf): Avoid this clone of a large object.
+        let server_cert_chain = server_cert_chain.clone();
 
         if self.may_send_cert_status {
-            Ok(self.into_expect_certificate_status_or_server_kx())
+            Ok(self.into_expect_certificate_status_or_server_kx(server_cert_chain))
         } else {
-            Ok(self.into_expect_server_kx())
+            Ok(self.into_expect_server_kx(server_cert_chain))
         }
     }
 }
@@ -79,16 +84,20 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
     suite: &'static SupportedCipherSuite,
-    server_cert: ServerCertDetails,
+    server_cert_sct_list: Option<SCTList>,
+    server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
 
 impl ExpectCertificateStatus {
-    fn into_expect_server_kx(self) -> hs::NextState {
+    fn into_expect_server_kx(self, server_ocsp_response: Vec<u8>) -> hs::NextState {
+        let server_cert = ServerCertDetails::new(
+            self.server_cert_chain, server_ocsp_response, self.server_cert_sct_list);
+
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             suite: self.suite,
-            server_cert: self.server_cert,
+            server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -109,28 +118,31 @@ impl hs::State for ExpectCertificateStatus {
             HandshakePayload::CertificateStatus
         )?;
 
-        self.server_cert.ocsp_response = status.take_ocsp_response();
+        let server_cert_ocsp_response = status.take_ocsp_response();
         trace!(
             "Server stapled OCSP response is {:?}",
-            self.server_cert.ocsp_response
+            &server_cert_ocsp_response
         );
-        Ok(self.into_expect_server_kx())
+        Ok(self.into_expect_server_kx(server_cert_ocsp_response))
     }
 }
 
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
     suite: &'static SupportedCipherSuite,
-    server_cert: ServerCertDetails,
+    server_cert_sct_list: Option<SCTList>,
+    server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
 
 impl ExpectCertificateStatusOrServerKX {
     fn into_expect_server_kx(self) -> hs::NextState {
+        let server_cert = ServerCertDetails::new(
+            self.server_cert_chain, vec![], self.server_cert_sct_list);
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             suite: self.suite,
-            server_cert: self.server_cert,
+            server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -139,7 +151,8 @@ impl ExpectCertificateStatusOrServerKX {
         Box::new(ExpectCertificateStatus {
             handshake: self.handshake,
             suite: self.suite,
-            server_cert: self.server_cert,
+            server_cert_sct_list: self.server_cert_sct_list,
+            server_cert_chain: self.server_cert_chain,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
