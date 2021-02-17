@@ -30,7 +30,7 @@ use crate::ticketer;
 use crate::verify;
 
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
-use crate::client::common::{HandshakeDetails, ServerCertDetails};
+use crate::client::common::HandshakeDetails;
 use crate::client::{tls12, tls13};
 
 use webpki;
@@ -187,9 +187,6 @@ struct ExpectServerHello {
     handshake: HandshakeDetails,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    server_cert: ServerCertDetails,
-    may_send_cert_status: bool,
-    must_issue_new_ticket: bool,
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
@@ -410,9 +407,6 @@ fn emit_client_hello_for_retry(
         handshake,
         hello,
         early_key_schedule,
-        server_cert: ServerCertDetails::new(),
-        may_send_cert_status: false,
-        must_issue_new_ticket: false,
     };
 
     if support_tls13 && retryreq.is_none() {
@@ -459,7 +453,6 @@ impl ExpectServerHello {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
             key_schedule,
-            server_cert: self.server_cert,
             hello: self.hello,
             hash_at_client_recvd_server_hello,
         })
@@ -496,13 +489,20 @@ impl ExpectServerHello {
         })
     }
 
-    fn into_expect_tls12_certificate(self, suite: &'static SupportedCipherSuite) -> NextState {
+    fn into_expect_tls12_certificate(
+        self,
+        suite: &'static SupportedCipherSuite,
+        may_send_cert_status: bool,
+        must_issue_new_ticket: bool,
+        server_cert_sct_list: Option<SCTList>)
+        -> NextState
+    {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             suite,
-            server_cert: self.server_cert,
-            may_send_cert_status: self.may_send_cert_status,
-            must_issue_new_ticket: self.must_issue_new_ticket,
+            may_send_cert_status,
+            must_issue_new_ticket,
+            server_cert_sct_list,
         })
     }
 }
@@ -673,7 +673,7 @@ impl State for ExpectServerHello {
         }
 
         // Might the server send a ticket?
-        let with_tickets = if server_hello
+        let must_issue_new_ticket = if server_hello
             .find_extension(ExtensionType::SessionTicket)
             .is_some()
         {
@@ -682,28 +682,29 @@ impl State for ExpectServerHello {
         } else {
             false
         };
-        self.must_issue_new_ticket = with_tickets;
 
         // Might the server send a CertificateStatus between Certificate and
         // ServerKeyExchange?
-        if server_hello
+        let may_send_cert_status = server_hello
             .find_extension(ExtensionType::StatusRequest)
-            .is_some()
-        {
+            .is_some();
+        if may_send_cert_status {
             debug!("Server may staple OCSP response");
-            self.may_send_cert_status = true;
         }
 
         // Save any sent SCTs for verification against the certificate.
-        if let Some(sct_list) = server_hello.get_sct_list() {
+        let server_cert_list_list =
+            if let Some(sct_list) = server_hello.get_sct_list() {
             debug!("Server sent {:?} SCTs", sct_list.len());
 
             if sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
                 return Err(TLSError::PeerMisbehavedError(error_msg));
             }
-            self.server_cert.scts = Some(sct_list.clone());
-        }
+            Some(sct_list.clone())
+        } else {
+            None
+        };
 
         // See if we're successfully resuming.
         if let Some(ref resuming) = self.handshake.resuming_session {
@@ -741,7 +742,7 @@ impl State for ExpectServerHello {
                 let certv = verify::ServerCertVerified::assertion();
                 let sigv = verify::HandshakeSignatureValid::assertion();
 
-                return if self.must_issue_new_ticket {
+                return if must_issue_new_ticket {
                     Ok(self.into_expect_tls12_new_ticket_resume(secrets, certv, sigv))
                 } else {
                     Ok(self.into_expect_tls12_ccs_resume(secrets, certv, sigv))
@@ -749,7 +750,7 @@ impl State for ExpectServerHello {
             }
         }
 
-        Ok(self.into_expect_tls12_certificate(scs))
+        Ok(self.into_expect_tls12_certificate(scs, may_send_cert_status, must_issue_new_ticket, server_cert_list_list))
     }
 }
 
