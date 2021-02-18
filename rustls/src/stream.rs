@@ -5,6 +5,7 @@ use std::io::{IoSlice, Read, Result, Write};
 /// a Session `S` and an underlying transport `T`, such as a socket.
 ///
 /// This allows you to use a rustls Session like a normal stream.
+#[derive(Debug)]
 pub struct Stream<'a, S: 'a + Session + ?Sized, T: 'a + Read + Write + ?Sized> {
     /// Our session
     pub sess: &'a mut S,
@@ -106,6 +107,7 @@ where
 /// `T`, such as a socket.
 ///
 /// This allows you to use a rustls Session like a normal stream.
+#[derive(Debug)]
 pub struct StreamOwned<S: Session + Sized, T: Read + Write + Sized> {
     /// Our session
     pub sess: S,
