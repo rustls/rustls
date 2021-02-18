@@ -1058,7 +1058,7 @@ fn main() {
                     dns_name,
                     opts.quic_transport_params.clone(),
                 )
-            };
+            }.unwrap();
             ClientOrServer::Client(c)
         }
     }

@@ -265,7 +265,7 @@ pub fn make_pair_for_arc_configs(
     server_config: &Arc<ServerConfig>,
 ) -> (ClientSession, ServerSession) {
     (
-        ClientSession::new(client_config, dns_name("localhost")),
+        ClientSession::new(client_config, dns_name("localhost")).unwrap(),
         ServerSession::new(server_config),
     )
 }

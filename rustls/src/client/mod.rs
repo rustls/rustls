@@ -665,10 +665,10 @@ impl ClientSession {
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
+    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TLSError> {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), vec![]).unwrap();
-        ClientSession { imp }
+        imp.start_handshake(hostname.into(), vec![])?;
+        Ok(ClientSession { imp })
     }
 
     /// Returns an `io::Write` implementer you can write bytes to

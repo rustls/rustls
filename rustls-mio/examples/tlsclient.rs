@@ -46,7 +46,7 @@ impl TlsClient {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_session: rustls::ClientSession::new(&cfg, hostname),
+            tls_session: rustls::ClientSession::new(&cfg, hostname).unwrap(),
         }
     }
 
