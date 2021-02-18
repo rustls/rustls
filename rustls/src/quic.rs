@@ -335,7 +335,7 @@ pub trait ClientQuicExt {
         quic_version: Version,
         hostname: webpki::DNSNameRef,
         params: Vec<u8>,
-    ) -> ClientSession {
+    ) -> Result<ClientSession, TLSError> {
         assert!(
             config
                 .versions
@@ -349,8 +349,8 @@ pub trait ClientQuicExt {
         };
         let mut imp = ClientSessionImpl::new(config);
         imp.common.protocol = Protocol::Quic;
-        imp.start_handshake(hostname.into(), vec![ext]).unwrap();
-        ClientSession { imp }
+        imp.start_handshake(hostname.into(), vec![ext])?;
+        Ok(ClientSession { imp })
     }
 }
 
