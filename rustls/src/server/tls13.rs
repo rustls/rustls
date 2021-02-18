@@ -880,23 +880,38 @@ impl ExpectFinished {
         })
     }
 
-    fn emit_stateless_ticket(
+    fn emit_ticket(
         handshake: &mut HandshakeDetails,
         sess: &mut ServerSessionImpl,
         key_schedule: &KeyScheduleTraffic,
     ) {
         let nonce = rand::random_vec(32);
         let plain = get_server_session_value(handshake, key_schedule, sess, &nonce).get_encoding();
-        let ticket = match sess.config.ticketer.encrypt(&plain) {
-            Some(t) => t,
-            None => return,
-        };
-        let ticket_lifetime = sess.config.ticketer.get_lifetime();
 
-        let age_add = rand::random_u32(); // nb, we don't do 0-RTT data, so whatever
+        let stateless = sess.config.ticketer.enabled();
+        let (ticket, lifetime) = if stateless {
+            let ticket = match sess.config.ticketer.encrypt(&plain) {
+                Some(t) => t,
+                None => return,
+            };
+            (ticket, sess.config.ticketer.get_lifetime())
+        } else {
+            let id = rand::random_vec(32);
+            let stored = sess
+                .config
+                .session_storage
+                .put(id.clone(), plain);
+            if !stored {
+                trace!("resumption not available; not issuing ticket");
+                return;
+            }
+            let stateful_lifetime = 24 * 60 * 60; // this is a bit of a punt
+            (id, stateful_lifetime)
+        };
+
+        let age_add = rand::random_u32();
         #[allow(unused_mut)]
-        let mut payload =
-            NewSessionTicketPayloadTLS13::new(ticket_lifetime, age_add, nonce, ticket);
+        let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
         #[cfg(feature = "quic")]
         {
             if sess.config.max_early_data_size > 0 && sess.common.protocol == Protocol::Quic {
@@ -916,55 +931,9 @@ impl ExpectFinished {
             }),
         };
 
-        trace!("sending new ticket {:?}", m);
+        trace!("sending new ticket {:?} (stateless: {})", m, stateless);
         handshake.transcript.add_message(&m);
         sess.common.send_msg(m, true);
-    }
-
-    fn emit_stateful_ticket(
-        handshake: &mut HandshakeDetails,
-        sess: &mut ServerSessionImpl,
-        key_schedule: &KeyScheduleTraffic,
-    ) {
-        let nonce = rand::random_vec(32);
-        let id = rand::random_vec(32);
-        let plain = get_server_session_value(handshake, key_schedule, sess, &nonce).get_encoding();
-
-        if sess
-            .config
-            .session_storage
-            .put(id.clone(), plain)
-        {
-            let stateful_lifetime = 24 * 60 * 60; // this is a bit of a punt
-            let age_add = rand::random_u32();
-            #[allow(unused_mut)]
-            let mut payload =
-                NewSessionTicketPayloadTLS13::new(stateful_lifetime, age_add, nonce, id);
-            #[cfg(feature = "quic")]
-            {
-                if sess.config.max_early_data_size > 0 && sess.common.protocol == Protocol::Quic {
-                    payload
-                        .exts
-                        .push(NewSessionTicketExtension::EarlyData(
-                            sess.config.max_early_data_size,
-                        ));
-                }
-            }
-            let m = Message {
-                typ: ContentType::Handshake,
-                version: ProtocolVersion::TLSv1_3,
-                payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                    typ: HandshakeType::NewSessionTicket,
-                    payload: HandshakePayload::NewSessionTicketTLS13(payload),
-                }),
-            };
-
-            trace!("sending new stateful ticket {:?}", m);
-            handshake.transcript.add_message(&m);
-            sess.common.send_msg(m, true);
-        } else {
-            trace!("resumption not available; not issuing ticket");
-        }
     }
 }
 
@@ -1019,11 +988,7 @@ impl hs::State for ExpectFinished {
         let key_schedule_traffic = self.key_schedule.into_traffic();
 
         if self.send_ticket {
-            if sess.config.ticketer.enabled() {
-                Self::emit_stateless_ticket(&mut self.handshake, sess, &key_schedule_traffic);
-            } else {
-                Self::emit_stateful_ticket(&mut self.handshake, sess, &key_schedule_traffic);
-            }
+            Self::emit_ticket(&mut self.handshake, sess, &key_schedule_traffic);
         }
 
         sess.common.start_traffic();
