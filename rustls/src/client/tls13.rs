@@ -72,7 +72,7 @@ pub fn validate_server_hello(
     Ok(())
 }
 
-fn find_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
+fn find_kx_hint(sess: &ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
@@ -92,10 +92,10 @@ fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, grou
 }
 
 pub fn choose_kx_groups(
-    sess: &mut ClientSessionImpl,
+    sess: &ClientSessionImpl,
     exts: &mut Vec<ClientExtension>,
     hello: &mut ClientHelloDetails,
-    handshake: &mut HandshakeDetails,
+    handshake: &HandshakeDetails,
     retryreq: Option<&HelloRetryRequest>,
 ) {
     // Choose our groups:
@@ -133,7 +133,7 @@ pub fn choose_kx_groups(
 /// data dependency on the message they are contained within.
 pub fn fill_in_psk_binder(
     sess: &mut ClientSessionImpl,
-    handshake: &mut HandshakeDetails,
+    handshake: &HandshakeDetails,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
