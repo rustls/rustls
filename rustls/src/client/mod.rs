@@ -433,13 +433,7 @@ impl ClientSessionImpl {
     }
 
     pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
-        for scs in &self.config.ciphersuites {
-            if scs.suite == suite {
-                return Some(scs);
-            }
-        }
-
-        None
+        self.config.ciphersuites.iter().copied().find(|&scs| scs.suite == suite)
     }
 
     pub fn wants_read(&self) -> bool {

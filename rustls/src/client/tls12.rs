@@ -773,7 +773,7 @@ fn save_session(
     let master_secret = secrets.get_master_secret();
     let mut value = persist::ClientSessionValue::new(
         ProtocolVersion::TLSv1_2,
-        secrets.suite().suite,
+        secrets.suite(),
         &handshake.session_id,
         ticket,
         master_secret,

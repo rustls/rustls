@@ -8,6 +8,7 @@ use webpki;
 
 use std::cmp;
 use std::mem;
+use crate::SupportedCipherSuite;
 
 // These are the keys and values we store in session storage.
 
@@ -53,7 +54,7 @@ impl ClientSessionKey {
 #[derive(Debug)]
 pub struct ClientSessionValue {
     pub version: ProtocolVersion,
-    pub cipher_suite: CipherSuite,
+    pub suite: &'static SupportedCipherSuite,
     pub session_id: SessionID,
     pub ticket: PayloadU16,
     pub master_secret: PayloadU8,
@@ -65,10 +66,10 @@ pub struct ClientSessionValue {
     pub server_cert_chain: CertificatePayload,
 }
 
-impl Codec for ClientSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+impl ClientSessionValue {
+    pub fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
-        self.cipher_suite.encode(bytes);
+        self.suite.suite.encode(bytes);
         self.session_id.encode(bytes);
         self.ticket.encode(bytes);
         self.master_secret.encode(bytes);
@@ -80,9 +81,11 @@ impl Codec for ClientSessionValue {
         self.server_cert_chain.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ClientSessionValue> {
+    pub fn read(r: &mut Reader, enabled_cipher_suites: &[&'static SupportedCipherSuite]) -> Option<ClientSessionValue> {
         let v = ProtocolVersion::read(r)?;
         let cs = CipherSuite::read(r)?;
+        let cipher_suite =
+            enabled_cipher_suites.iter().find(|scs| scs.suite == cs)?;
         let sid = SessionID::read(r)?;
         let ticket = PayloadU16::read(r)?;
         let ms = PayloadU8::read(r)?;
@@ -95,7 +98,7 @@ impl Codec for ClientSessionValue {
 
         Some(ClientSessionValue {
             version: v,
-            cipher_suite: cs,
+            suite: cipher_suite,
             session_id: sid,
             ticket,
             master_secret: ms,
@@ -107,6 +110,12 @@ impl Codec for ClientSessionValue {
             server_cert_chain,
         })
     }
+
+    pub fn get_encoding(&self) -> Vec<u8> {
+        let mut result = Vec::new();
+        self.encode(&mut result);
+        result
+    }
 }
 
 static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
@@ -114,7 +123,7 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 impl ClientSessionValue {
     pub fn new(
         v: ProtocolVersion,
-        cs: CipherSuite,
+        cipher_suite: &'static SupportedCipherSuite,
         sessid: &SessionID,
         ticket: Vec<u8>,
         ms: Vec<u8>,
@@ -122,7 +131,7 @@ impl ClientSessionValue {
     ) -> ClientSessionValue {
         ClientSessionValue {
             version: v,
-            cipher_suite: cs,
+            suite: cipher_suite,
             session_id: *sessid,
             ticket: PayloadU16::new(ticket),
             master_secret: PayloadU8::new(ms),
