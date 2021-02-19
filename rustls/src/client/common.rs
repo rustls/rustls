@@ -58,7 +58,6 @@ pub struct HandshakeDetails {
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
-    pub sent_tls13_fake_ccs: bool,
     pub dns_name: webpki::DNSName,
 }
 
@@ -70,7 +69,6 @@ impl HandshakeDetails {
             randoms: SessionRandoms::for_client(),
             using_ems: false,
             session_id: SessionID::empty(),
-            sent_tls13_fake_ccs: false,
             dns_name: host_name,
         }
     }
