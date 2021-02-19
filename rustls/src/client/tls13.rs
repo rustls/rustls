@@ -326,12 +326,12 @@ pub fn prepare_resumption(
     true
 }
 
-pub fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
+pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSessionImpl) {
     if sess.common.is_quic() {
         return;
     }
 
-    if hs.sent_tls13_fake_ccs {
+    if std::mem::replace(sent_tls13_fake_ccs, true) {
         return;
     }
 
@@ -341,7 +341,6 @@ pub fn emit_fake_ccs(hs: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
     sess.common.send_msg(m, false);
-    hs.sent_tls13_fake_ccs = true;
 }
 
 fn validate_encrypted_extensions(

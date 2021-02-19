@@ -170,7 +170,14 @@ impl InitialState {
         }
 
         let hello_details = ClientHelloDetails::new();
-        emit_client_hello_for_retry(sess, self.handshake, hello_details, None, self.extra_exts)
+        let sent_tls13_fake_ccs = false;
+        emit_client_hello_for_retry(
+            sess,
+            self.handshake,
+            sent_tls13_fake_ccs,
+            hello_details,
+            None,
+            self.extra_exts)
     }
 }
 
@@ -186,6 +193,7 @@ struct ExpectServerHello {
     handshake: HandshakeDetails,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
+    sent_tls13_fake_ccs: bool,
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
@@ -206,6 +214,7 @@ pub fn compatible_suite(
 fn emit_client_hello_for_retry(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
+    mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
     extra_exts: Vec<ClientExtension>,
@@ -353,7 +362,7 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut handshake, sess);
+        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, sess);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -364,7 +373,7 @@ fn emit_client_hello_for_retry(
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     if sess.early_data.is_enabled() {
         // For middlebox compatibility
-        tls13::emit_fake_ccs(&mut handshake, sess);
+        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, sess);
 
         // It is safe to call unwrap() because fill_in_binder is true.
         let resuming_suite = handshake
@@ -406,6 +415,7 @@ fn emit_client_hello_for_retry(
         handshake,
         hello,
         early_key_schedule,
+        sent_tls13_fake_ccs,
     };
 
     if support_tls13 && retryreq.is_none() {
@@ -641,7 +651,7 @@ impl State for ExpectServerHello {
                 &mut self.handshake,
                 &mut self.hello,
             )?;
-            tls13::emit_fake_ccs(&mut self.handshake, sess);
+            tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
             return Ok(self.into_expect_tls13_encrypted_extensions(key_schedule, hash_at_client_recvd_server_hello));
         }
 
@@ -871,6 +881,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         Ok(emit_client_hello_for_retry(
             sess,
             self.next.handshake,
+            self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
             self.extra_exts,
