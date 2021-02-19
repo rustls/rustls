@@ -91,7 +91,9 @@ fn find_session(
         })?;
 
     let mut reader = Reader::init(&value[..]);
-    if let Some(result) = persist::ClientSessionValue::read(&mut reader) {
+    let result = persist::ClientSessionValue::read(
+        &mut reader, &sess.config.ciphersuites);
+    if let Some(result) = result {
         if result.has_expired(ticketer::timebase()) {
             None
         } else {
@@ -330,7 +332,7 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if fill_in_binder {
-        Some(tls13::fill_in_psk_binder(sess, &mut handshake, &mut chp))
+        Some(tls13::fill_in_psk_binder(&mut handshake, &mut chp))
     } else {
         None
     };
@@ -368,7 +370,7 @@ fn emit_client_hello_for_retry(
         let resuming_suite = handshake
             .resuming_session
             .as_ref()
-            .and_then(|resume| sess.find_cipher_suite(resume.cipher_suite))
+            .map(|resume| resume.suite)
             .unwrap();
 
         let client_hello_hash = handshake
@@ -709,7 +711,7 @@ impl State for ExpectServerHello {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
-                if resuming.cipher_suite != scs.suite {
+                if resuming.suite != scs {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
                     return Err(TLSError::PeerMisbehavedError(error_msg));
                 }

@@ -4,6 +4,7 @@ use super::handshake::*;
 use super::persist::*;
 use crate::key::Certificate;
 use webpki::DNSNameRef;
+use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
 
 #[test]
 fn clientsessionkey_is_debug() {
@@ -23,7 +24,7 @@ fn clientsessionkey_cannot_be_read() {
 fn clientsessionvalue_is_debug() {
     let csv = ClientSessionValue::new(
         ProtocolVersion::TLSv1_2,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &SessionID::new(&[1u8]),
         vec![],
         vec![1, 2, 3],
