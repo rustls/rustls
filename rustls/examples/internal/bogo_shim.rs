@@ -24,6 +24,7 @@ use std::ops::{Deref, DerefMut};
 use std::process;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::num::NonZeroUsize;
 
 static BOGO_NACK: i32 = 89;
 
@@ -373,7 +374,7 @@ struct ClientCacheWithoutKxHints(Arc<rustls::ClientSessionMemoryCache>);
 impl ClientCacheWithoutKxHints {
     fn new() -> Arc<ClientCacheWithoutKxHints> {
         Arc::new(ClientCacheWithoutKxHints(
-            rustls::ClientSessionMemoryCache::new(32),
+            rustls::ClientSessionMemoryCache::new(NonZeroUsize::new(32).unwrap()),
         ))
     }
 }

@@ -6,6 +6,8 @@ use crate::sign;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
+use std::num::NonZeroUsize;
+use std::collections::hash_map::Entry;
 
 /// An implementer of `StoresClientSessions` which does nothing.
 pub struct NoClientSessionStorage {}
@@ -25,36 +27,60 @@ impl client::StoresClientSessions for NoClientSessionStorage {
 /// to bound memory usage.
 pub struct ClientSessionMemoryCache {
     cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
-    max_entries: usize,
+    max_entries: NonZeroUsize,
 }
 
 impl ClientSessionMemoryCache {
     /// Make a new ClientSessionMemoryCache.  `size` is the
     /// maximum number of stored sessions.
-    pub fn new(size: usize) -> Arc<ClientSessionMemoryCache> {
-        debug_assert!(size > 0);
+    pub fn new(size: NonZeroUsize) -> Arc<ClientSessionMemoryCache> {
         Arc::new(ClientSessionMemoryCache {
             cache: Mutex::new(collections::HashMap::new()),
             max_entries: size,
         })
     }
-
-    fn limit_size(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        while cache.len() > self.max_entries {
-            let k = cache.keys().next().unwrap().clone();
-            cache.remove(&k);
-        }
-    }
 }
 
 impl client::StoresClientSessions for ClientSessionMemoryCache {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache
+        let mut cache = self.cache
             .lock()
-            .unwrap()
-            .insert(key, value);
-        self.limit_size();
+            .unwrap();
+
+        // Always replace an existing entry with the same key instead of
+        // evicting any other entry.
+        let len = cache.len();
+        let key = match cache.entry(key) {
+            Entry::Occupied(mut existing) => {
+                existing.insert(value);
+                return true;
+            },
+            Entry::Vacant(vacant) if len < self.max_entries.get() => {
+                vacant.insert(value);
+                return true;
+            },
+            Entry::Vacant(vacant) => {
+                vacant.into_key()
+            }
+        };
+
+        // The cache is full. Evict an entry to make room for the new entry.
+
+        debug_assert_eq!(cache.len(), self.max_entries.get());
+        debug_assert!(!cache.is_empty());
+
+        // Remove an arbitrary entry.
+        // TODO(issue 469): Implement a better eviction policy.
+        let to_remove = cache.keys().next().unwrap().clone();
+        cache.remove(&to_remove);
+
+        debug_assert_eq!(cache.len(), self.max_entries.get() - 1);
+
+        // Unfortunately, we have to do another search to insert the new entry.
+        cache.insert(key, value);
+
+        debug_assert_eq!(cache.len(), self.max_entries.get());
+
         true
     }
 
@@ -118,6 +144,10 @@ mod test {
     use super::*;
     use crate::StoresClientSessions;
 
+    fn four() -> NonZeroUsize {
+        NonZeroUsize::new(4).unwrap()
+    }
+
     #[test]
     fn test_noclientsessionstorage_drops_put() {
         let c = NoClientSessionStorage {};
@@ -135,13 +165,13 @@ mod test {
 
     #[test]
     fn test_clientsessionmemorycache_accepts_put() {
-        let c = ClientSessionMemoryCache::new(4);
+        let c = ClientSessionMemoryCache::new(four());
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
     }
 
     #[test]
     fn test_clientsessionmemorycache_persists_put() {
-        let c = ClientSessionMemoryCache::new(4);
+        let c = ClientSessionMemoryCache::new(four());
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
         assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
         assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
@@ -149,7 +179,7 @@ mod test {
 
     #[test]
     fn test_clientsessionmemorycache_overwrites_put() {
-        let c = ClientSessionMemoryCache::new(4);
+        let c = ClientSessionMemoryCache::new(four());
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
         assert_eq!(c.put(vec![0x01], vec![0x04]), true);
         assert_eq!(c.get(&[0x01]), Some(vec![0x04]));
@@ -157,7 +187,7 @@ mod test {
 
     #[test]
     fn test_clientsessionmemorycache_drops_to_maintain_size_invariant() {
-        let c = ClientSessionMemoryCache::new(4);
+        let c = ClientSessionMemoryCache::new(four());
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
         assert_eq!(c.put(vec![0x03], vec![0x04]), true);
         assert_eq!(c.put(vec![0x05], vec![0x06]), true);

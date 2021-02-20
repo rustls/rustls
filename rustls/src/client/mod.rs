@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 use sct;
 use webpki;
+use std::num::NonZeroUsize;
 
 #[macro_use]
 mod hs;
@@ -164,7 +165,7 @@ impl ClientConfig {
             ciphersuites: ciphersuites.to_vec(),
             root_store: anchors::RootCertStore::empty(),
             alpn_protocols: Vec::new(),
-            session_persistence: handy::ClientSessionMemoryCache::new(32),
+            session_persistence: handy::ClientSessionMemoryCache::new(NonZeroUsize::new(32).unwrap()),
             mtu: None,
             client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
             enable_tickets: true,

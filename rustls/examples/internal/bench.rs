@@ -23,6 +23,7 @@ use rustls::{ServerConfig, ServerSession};
 use rustls_pemfile;
 
 use webpki;
+use std::num::NonZeroUsize;
 
 fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
@@ -329,7 +330,7 @@ fn make_client_config(
     }
 
     if resume != Resumption::No {
-        cfg.set_persistence(ClientSessionMemoryCache::new(128));
+        cfg.set_persistence(ClientSessionMemoryCache::new(NonZeroUsize::new(128).unwrap()));
     } else {
         cfg.set_persistence(Arc::new(NoClientSessionStorage {}));
     }
