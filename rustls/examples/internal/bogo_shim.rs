@@ -61,6 +61,7 @@ struct Options {
     server_sct_list: Vec<u8>,
     use_signing_scheme: u16,
     expect_curve: u16,
+    curves: Option<Vec<u16>>,
     export_keying_material: usize,
     export_keying_material_label: String,
     export_keying_material_context: String,
@@ -105,6 +106,7 @@ impl Options {
             server_sct_list: vec![],
             use_signing_scheme: 0,
             expect_curve: 0,
+            curves: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
             export_keying_material_context: "".to_string(),
@@ -302,6 +304,18 @@ fn lookup_scheme(scheme: u16) -> rustls::SignatureScheme {
     }
 }
 
+fn lookup_kx_group(group: u16) -> &'static rustls::SupportedKxGroup {
+    match group   {
+        0x001d => &rustls::kx_group::X25519,
+        0x0017 => &rustls::kx_group::SECP256R1,
+        0x0018 => &rustls::kx_group::SECP384R1,
+        _ => {
+            println_err!("Unsupported kx group {:04x}", group);
+            process::exit(BOGO_NACK);
+        }
+    }
+}
+
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
@@ -361,6 +375,13 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     if opts.tls13_supported() {
         cfg.versions
             .push(ProtocolVersion::TLSv1_3);
+    }
+
+    if let Some(curves) = &opts.curves {
+        cfg.kx_groups = curves
+            .iter()
+            .map(|curveid| lookup_kx_group(*curveid))
+            .collect();
     }
 
     Arc::new(cfg)
@@ -448,6 +469,13 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
 
     if opts.enable_early_data {
         cfg.enable_early_data = true;
+    }
+
+    if let Some(curves) = &opts.curves {
+        cfg.kx_groups = curves
+            .iter()
+            .map(|curveid| lookup_kx_group(*curveid))
+            .collect();
     }
 
     Arc::new(cfg)
@@ -896,6 +924,14 @@ fn main() {
             "-expect-version" => {
                 opts.expect_version = args.remove(0).parse::<u16>().unwrap();
             }
+            "-curves" => {
+                let curve = args.remove(0).parse::<u16>().unwrap();
+                if let Some(mut curves) = opts.curves.take() {
+                    curves.push(curve);
+                } else {
+                    opts.curves = Some(vec![ curve ]);
+                }
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -931,14 +967,12 @@ fn main() {
             "-expect-channel-id" |
             "-send-channel-id" |
             "-select-next-proto" |
-            "-p384-only" |
             "-expect-verify-result" |
             "-send-alert" |
             "-digest-prefs" |
             "-use-exporter-between-reads" |
             "-ticket-key" |
             "-tls-unique" |
-            "-curves" |
             "-enable-server-custom-extension" |
             "-enable-client-custom-extension" |
             "-expect-dhe-group-size" |
