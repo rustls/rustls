@@ -2360,6 +2360,53 @@ impl rustls::StoresServerSessions for ServerStorage {
     }
 }
 
+struct ClientStorage {
+    storage: Arc<dyn rustls::StoresClientSessions>,
+    put_count: AtomicUsize,
+    get_count: AtomicUsize,
+}
+
+impl ClientStorage {
+    fn new() -> ClientStorage {
+        ClientStorage {
+            storage: rustls::ClientSessionMemoryCache::new(1024),
+            put_count: AtomicUsize::new(0),
+            get_count: AtomicUsize::new(0),
+        }
+    }
+
+    fn puts(&self) -> usize {
+        self.put_count.load(Ordering::SeqCst)
+    }
+    fn gets(&self) -> usize {
+        self.get_count.load(Ordering::SeqCst)
+    }
+}
+
+impl fmt::Debug for ClientStorage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(puts: {:?}, gets: {:?} )",
+            self.put_count, self.get_count
+        )
+    }
+}
+
+impl rustls::StoresClientSessions for ClientStorage {
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+        self.put_count
+            .fetch_add(1, Ordering::SeqCst);
+        self.storage.put(key, value)
+    }
+
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.get_count
+            .fetch_add(1, Ordering::SeqCst);
+        self.storage.get(key)
+    }
+}
+
 #[test]
 fn tls13_stateful_resumption() {
     let kt = KeyType::RSA;
@@ -2746,6 +2793,70 @@ fn test_client_config_keyshare_mismatch() {
     server_config.kx_groups= vec![ &rustls::kx_group::X25519 ];
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
+}
+
+#[test]
+fn test_client_sends_helloretryrequest() {
+    // client sends a secp384r1 key share
+    let mut client_config = make_client_config(KeyType::RSA);
+    client_config.kx_groups = vec![
+        &rustls::kx_group::SECP384R1,
+        &rustls::kx_group::X25519,
+    ];
+
+    let storage = Arc::new(ClientStorage::new());
+    client_config.session_persistence = storage.clone();
+
+    // but server only accepts x25519, so a HRR is required
+    let mut server_config = make_server_config(KeyType::RSA);
+    server_config.kx_groups = vec![
+        &rustls::kx_group::X25519
+    ];
+
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+
+    // client sends hello
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let wrlen = client.write_tls(&mut pipe).unwrap();
+        assert!(wrlen > 200);
+        assert_eq!(pipe.writevs.len(), 1);
+        assert!(pipe.writevs[0].len() == 1);
+    }
+
+    // server sends HRR
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.write_tls(&mut pipe).unwrap();
+        assert!(wrlen < 100); // just the hello retry request
+        assert_eq!(pipe.writevs.len(), 1); // only one writev
+        assert!(pipe.writevs[0].len() == 2); // hello retry request and CCS
+    }
+
+    // client sends fixed hello
+    {
+        let mut pipe = OtherSession::new(&mut server);
+        let wrlen = client.write_tls(&mut pipe).unwrap();
+        assert!(wrlen > 200); // just the client hello retry
+        assert_eq!(pipe.writevs.len(), 1); // only one writev
+        assert!(pipe.writevs[0].len() == 2); // only a CCS & client hello retry
+    }
+
+    // server completes handshake
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.write_tls(&mut pipe).unwrap();
+        assert!(wrlen > 200);
+        assert_eq!(pipe.writevs.len(), 1);
+        assert!(pipe.writevs[0].len() == 5); // server hello / encrypted exts / cert / cert-verify / finished
+    }
+
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+
+    // client only did two storage queries: one for a session, another for a kx type
+    assert_eq!(storage.gets(), 2);
+    assert_eq!(storage.puts(), 2);
 }
 
 #[test]
