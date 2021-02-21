@@ -157,7 +157,8 @@ pub struct ServerConfig {
 
     /// List of supported key exchange groups.
     ///
-    /// They will be offered to the client in this order.
+    /// The first is the highest priority: they will be
+    /// offered to the client in this order.
     pub kx_groups: Vec<&'static SupportedKxGroup>,
 
     /// Ignore the client's ciphersuite order. Instead,
