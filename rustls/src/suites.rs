@@ -1,10 +1,8 @@
 use crate::cipher;
-use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
-use crate::msgs::enums::{NamedGroup, ProtocolVersion};
+use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::handshake::DecomposedSignatureScheme;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
 use ring;
 use std::fmt;
@@ -21,103 +19,6 @@ pub enum BulkAlgorithm {
 
     /// Chacha20 for confidentiality with poly1305 for authenticity.
     CHACHA20_POLY1305,
-}
-
-/// List of all supported named groups for key exchange.
-///
-/// In preference order.
-pub const ALL_NAMED_GROUPS: &'static [NamedGroup] = &[
-            NamedGroup::X25519,
-            NamedGroup::secp384r1,
-            NamedGroup::secp256r1,
-];
-
-/// The result of a key exchange.  This has our public key,
-/// and the agreed shared secret (also known as the "premaster secret"
-/// in TLS1.0-era protocols, and "Z" in TLS1.3).
-pub struct KeyExchangeResult {
-    pub pubkey: ring::agreement::PublicKey,
-    pub shared_secret: Vec<u8>,
-}
-
-/// An in-progress key exchange.  This has the algorithm,
-/// our private key, and our public key.
-pub struct KeyExchange {
-    pub group: NamedGroup,
-    alg: &'static ring::agreement::Algorithm,
-    privkey: ring::agreement::EphemeralPrivateKey,
-    pub pubkey: ring::agreement::PublicKey,
-}
-
-impl KeyExchange {
-    pub fn named_group_to_ecdh_alg(
-        group: NamedGroup,
-    ) -> Option<&'static ring::agreement::Algorithm> {
-        match group {
-            NamedGroup::X25519 => Some(&ring::agreement::X25519),
-            NamedGroup::secp256r1 => Some(&ring::agreement::ECDH_P256),
-            NamedGroup::secp384r1 => Some(&ring::agreement::ECDH_P384),
-            _ => None,
-        }
-    }
-
-    pub fn supported_groups() -> &'static [NamedGroup] {
-        ALL_NAMED_GROUPS
-    }
-
-    pub fn client_ecdhe(kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        let mut rd = Reader::init(kx_params);
-        let ecdh_params = ServerECDHParams::read(&mut rd)?;
-
-        KeyExchange::start_ecdhe(ecdh_params.curve_params.named_group)?
-            .complete(&ecdh_params.public.0)
-    }
-
-    pub fn start_ecdhe(named_group: NamedGroup) -> Option<KeyExchange> {
-        let alg = KeyExchange::named_group_to_ecdh_alg(named_group)?;
-        let rng = ring::rand::SystemRandom::new();
-        let ours = ring::agreement::EphemeralPrivateKey::generate(alg, &rng).unwrap();
-
-        let pubkey = ours.compute_public_key().unwrap();
-
-        Some(KeyExchange {
-            group: named_group,
-            alg,
-            privkey: ours,
-            pubkey,
-        })
-    }
-
-    pub fn check_client_params(&self, kx_params: &[u8]) -> bool {
-        self.decode_client_params(kx_params)
-            .is_some()
-    }
-
-    fn decode_client_params(&self, kx_params: &[u8]) -> Option<ClientECDHParams> {
-        let mut rd = Reader::init(kx_params);
-        let ecdh_params = ClientECDHParams::read(&mut rd).unwrap();
-        if rd.any_left() {
-            None
-        } else {
-            Some(ecdh_params)
-        }
-    }
-
-    pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        self.decode_client_params(kx_params)
-            .and_then(|ecdh| self.complete(&ecdh.public.0))
-    }
-
-    pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
-        let peer_key = ring::agreement::UnparsedPublicKey::new(self.alg, peer);
-        let pubkey = self.pubkey;
-        ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), move |v| {
-            Ok(KeyExchangeResult {
-                pubkey,
-                shared_secret: Vec::from(v),
-            })
-        }).ok()
-    }
 }
 
 /// A cipher suite supported by rustls.
@@ -174,7 +75,6 @@ impl fmt::Debug for SupportedCipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SupportedCipherSuite")
             .field("suite", &self.suite)
-            .field("kx", &self.kx)
             .field("bulk", &self.bulk)
             .field("hash", &self.hash)
             .field("sign", &self.sign)
@@ -197,24 +97,6 @@ impl SupportedCipherSuite {
             .hmac_algorithm()
     }
 
-    /// We have parameters and a verified public key in `kx_params`.
-    /// Generate an ephemeral key, generate the shared secret, and
-    /// return it and the public half in a `KeyExchangeResult`.
-    pub fn do_client_kx(&self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        match self.kx {
-            KeyExchangeAlgorithm::ECDHE => KeyExchange::client_ecdhe(kx_params),
-            _ => None,
-        }
-    }
-
-    /// Start the KX process with the given group.  This generates
-    /// the server's share, but we don't yet have the client's share.
-    pub fn start_server_kx(&self, named_group: NamedGroup) -> Option<KeyExchange> {
-        match self.kx {
-            KeyExchangeAlgorithm::ECDHE => KeyExchange::start_ecdhe(named_group),
-            _ => None,
-        }
-    }
 
     /// Resolve the set of supported `SignatureScheme`s from the
     /// offered `SupportedSignatureSchemes`.  If we return an empty

@@ -139,16 +139,13 @@ impl hs::State for ExpectClientKX {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let kx = self.server_kx.take_kx();
-        if !kx.check_client_params(&client_kx.0) {
-            sess.common
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
-        }
 
         let kxd = kx
             .server_complete(&client_kx.0)
             .ok_or_else(|| {
-                TLSError::PeerMisbehavedError("key exchange completion failed".to_string())
+                sess.common
+                    .send_fatal_alert(AlertDescription::DecodeError);
+                TLSError::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
         let suite = sess

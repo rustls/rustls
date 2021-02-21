@@ -25,7 +25,6 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
 use crate::session::SessionSecrets;
-use crate::suites;
 use crate::ticketer;
 use crate::verify;
 
@@ -259,7 +258,10 @@ fn emit_client_hello_for_retry(
         ECPointFormatList::supported(),
     ));
     exts.push(ClientExtension::NamedGroups(
-        suites::KeyExchange::supported_groups().to_vec(),
+        sess.config.kx_groups
+            .iter()
+            .map(|skxg| skxg.name)
+            .collect()
     ));
     exts.push(ClientExtension::SignatureAlgorithms(
         sess.config
@@ -783,7 +785,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         check_aligned_handshake(sess)?;
 
         let cookie = hrr.get_cookie();
-        let req_group = hrr.get_requested_key_share_group(&sess.config.supported_key_shares);
+        let req_group = hrr.get_requested_key_share_group();
 
         // A retry request is illegal if it contains no cookie and asks for
         // retry of a group we already sent.
@@ -797,7 +799,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks for us to retry on an unsupported group.
         if let Some(group) = req_group {
-            if !suites::KeyExchange::supported_groups().contains(&group) {
+            if sess.config.kx_groups.iter().find(|skxg| skxg.name == group).is_none() {
                 return Err(illegal_param(sess, "server requested hrr with bad group"));
             }
         }

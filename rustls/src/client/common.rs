@@ -11,7 +11,7 @@ use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
 use crate::session::SessionRandoms;
 use crate::sign;
-use crate::suites;
+use crate::kx;
 use webpki;
 
 use std::mem;
@@ -76,7 +76,7 @@ impl HandshakeDetails {
 
 pub struct ClientHelloDetails {
     pub sent_extensions: Vec<ExtensionType>,
-    pub offered_key_shares: Vec<suites::KeyExchange>,
+    pub offered_key_shares: Vec<kx::KeyExchange>,
 }
 
 impl ClientHelloDetails {
@@ -90,20 +90,20 @@ impl ClientHelloDetails {
     pub fn has_key_share(&self, group: NamedGroup) -> bool {
         self.offered_key_shares
             .iter()
-            .any(|share| share.group == group)
+            .any(|share| share.group() == group)
     }
 
-    pub fn find_key_share(&mut self, group: NamedGroup) -> Option<suites::KeyExchange> {
+    pub fn find_key_share(&mut self, group: NamedGroup) -> Option<kx::KeyExchange> {
         self.offered_key_shares
             .iter()
-            .position(|s| s.group == group)
+            .position(|s| s.group() == group)
             .map(|idx| self.offered_key_shares.remove(idx))
     }
 
     pub fn find_key_share_and_discard_others(
         &mut self,
         group: NamedGroup,
-    ) -> Option<suites::KeyExchange> {
+    ) -> Option<kx::KeyExchange> {
         match self.find_key_share(group) {
             Some(group) => {
                 self.offered_key_shares.clear();

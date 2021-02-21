@@ -2730,22 +2730,20 @@ fn test_client_does_not_offer_sha1() {
 
 #[test]
 fn test_client_config_keyshare() {
-    use rustls::named_group::*;
     let mut client_config = make_client_config(KeyType::RSA);
-    client_config.supported_key_shares = vec![secp384r1];
+    client_config.kx_groups = vec![ &rustls::kx_group::SECP384R1 ];
     let mut server_config = make_server_config(KeyType::RSA);
-    server_config.supported_key_shares = vec![secp384r1];
+    server_config.kx_groups = vec![ &rustls::kx_group::SECP384R1 ];
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake_until_error(&mut client, &mut server).unwrap();
 }
 
 #[test]
 fn test_client_config_keyshare_mismatch() {
-    use rustls::named_group::*;
     let mut client_config = make_client_config(KeyType::RSA);
-    client_config.supported_key_shares = vec![secp384r1];
+    client_config.kx_groups = vec![ &rustls::kx_group::SECP384R1 ];
     let mut server_config = make_server_config(KeyType::RSA);
-    server_config.supported_key_shares = vec![X25519];
+    server_config.kx_groups= vec![ &rustls::kx_group::X25519 ];
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }

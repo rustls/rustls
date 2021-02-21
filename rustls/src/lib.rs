@@ -246,6 +246,7 @@ mod key;
 mod keylog;
 mod server;
 mod suites;
+mod kx;
 mod ticketer;
 
 /// Internal classes which may be useful outside the library.
@@ -277,7 +278,8 @@ pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
 pub use crate::server::{ServerConfig, ServerSession};
 pub use crate::session::Session;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES, ALL_NAMED_GROUPS};
+pub use crate::suites::{BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES};
+pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
@@ -285,7 +287,7 @@ pub use crate::verify::{
 
 /// All defined ciphersuites appear in this module.
 ///
-/// ALL_CIPHERSUITES is provided an array of all of these values.
+/// ALL_CIPHERSUITES is provided as an array of all of these values.
 pub mod ciphersuite {
     pub use crate::suites::TLS13_AES_128_GCM_SHA256;
     pub use crate::suites::TLS13_AES_256_GCM_SHA384;
@@ -298,11 +300,13 @@ pub mod ciphersuite {
     pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
 }
 
-/// All defined Key Exchange Groups appear in this module.
+/// All defined key exchange groups appear in this module.
 ///
-/// ALL_NAMED_GROUPS provides an array of all of these values
-pub mod named_group {
-    pub use crate::msgs::enums::NamedGroup::*;
+/// ALL_KX_GROUPS is provided as an array of all of these values.
+pub mod kx_group {
+    pub use crate::kx::SECP256R1;
+    pub use crate::kx::SECP384R1;
+    pub use crate::kx::X25519;
 }
 
 /// Message signing interfaces and implementations.

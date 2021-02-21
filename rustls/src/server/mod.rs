@@ -5,12 +5,13 @@ use crate::keylog::{KeyLog, NoKeyLog};
 use crate::log::trace;
 use crate::msgs::enums::ContentType;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{AlertDescription, HandshakeType, NamedGroup, ProtocolVersion};
+use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
 use crate::sign;
-use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES, ALL_NAMED_GROUPS};
+use crate::suites::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
 
 use webpki;
@@ -154,10 +155,10 @@ pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
     pub ciphersuites: Vec<&'static SupportedCipherSuite>,
 
-    /// List of supported key exchange algorithms.
+    /// List of supported key exchange groups.
     ///
     /// They will be offered to the client in this order.
-    pub supported_key_shares: Vec<NamedGroup>,
+    pub kx_groups: Vec<&'static SupportedKxGroup>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -234,7 +235,7 @@ impl ServerConfig {
     ) -> ServerConfig {
         ServerConfig {
             ciphersuites: ciphersuites.to_vec(),
-            supported_key_shares: ALL_NAMED_GROUPS.to_vec(),
+            kx_groups: ALL_KX_GROUPS.to_vec(),
             ignore_client_order: false,
             mtu: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),

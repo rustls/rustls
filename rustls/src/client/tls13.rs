@@ -25,7 +25,7 @@ use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign;
-use crate::suites;
+use crate::kx;
 use crate::ticketer;
 use crate::verify;
 #[cfg(feature = "quic")]
@@ -101,20 +101,20 @@ pub fn choose_kx_groups(
     // Choose our groups:
     // - if we've been asked via HelloRetryRequest for a specific
     //   one, do that.
-    // - if not, we might have a hint of what the server supports
-    // - if not, send just X25519.
+    // - if not, we might have a hint of what the server supports.
+    // - if not, send just the first configured group.
     //
     let group = retryreq
         .and_then(|req| {
-            HelloRetryRequest::get_requested_key_share_group(req, &sess.config.supported_key_shares)
+            HelloRetryRequest::get_requested_key_share_group(req)
         })
         .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
         .unwrap_or_else(|| {
                 sess.config
-                    .supported_key_shares
+                    .kx_groups
                     .get(0)
-                    .expect("No supported group configured.")
-                    .clone()
+                    .expect("No kx groups configured")
+                    .name
         });
 
     let mut key_shares = vec![];
@@ -129,7 +129,7 @@ pub fn choose_kx_groups(
         hello
             .offered_key_shares
             .push(already_offered_share);
-    } else if let Some(key_share) = suites::KeyExchange::start_ecdhe(group) {
+    } else if let Some(key_share) = kx::KeyExchange::choose(group, &sess.config.kx_groups).and_then(kx::KeyExchange::start) {
         key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
         hello.offered_key_shares.push(key_share);
     }

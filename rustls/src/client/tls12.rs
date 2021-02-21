@@ -15,7 +15,8 @@ use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::session::SessionSecrets;
-use crate::{suites, SupportedCipherSuite};
+use crate::SupportedCipherSuite;
+use crate::kx;
 use crate::ticketer;
 use crate::verify;
 
@@ -258,7 +259,7 @@ fn emit_certificate(
 fn emit_clientkx(
     handshake: &mut HandshakeDetails,
     sess: &mut ClientSessionImpl,
-    kxd: &suites::KeyExchangeResult,
+    kxd: &kx::KeyExchangeResult,
 ) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(kxd.pubkey.as_ref()));
@@ -613,8 +614,7 @@ impl hs::State for ExpectServerDone {
         }
 
         // 5a.
-        let kxd = suite
-            .do_client_kx(&st.server_kx.kx_params)
+        let kxd = kx::KeyExchange::client_ecdhe(&st.server_kx.kx_params, &sess.config.kx_groups)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
