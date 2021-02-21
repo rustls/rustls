@@ -37,7 +37,7 @@ use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerSessionImpl;
 use crate::sign;
-use crate::suites;
+use crate::kx;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{msgs::handshake::NewSessionTicketExtension, quic, session::Protocol};
@@ -121,7 +121,8 @@ impl CompleteClientHelloHandling {
         let mut extensions = Vec::new();
 
         // Do key exchange
-        let kxr = suites::KeyExchange::start_ecdhe(share.group)
+        let kxr = kx::KeyExchange::choose(share.group, &sess.config.kx_groups)
+            .and_then(kx::KeyExchange::start)
             .and_then(|kx| kx.complete(&share.payload.0))
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
@@ -559,20 +560,19 @@ impl CompleteClientHelloHandling {
             return Err(hs::illegal_param(sess, "client sent duplicate keyshares"));
         }
 
-        let supported_groups = &sess.config.supported_key_shares;
-
-        let chosen_share = supported_groups
+        // choose a share that we support
+        let chosen_share = sess.config.kx_groups
             .iter()
-            .find_map(|group| shares_ext.iter().find(|share| share.group == *group));
+            .find_map(|group| shares_ext.iter().find(|share| share.group == group.name));
 
         let chosen_share =  match chosen_share {
             Some(s) => s,
             None => {
                 // We don't have a suitable key share.  Choose a suitable group and
                 // send a HelloRetryRequest.
-                let retry_group_maybe = supported_groups
+                let retry_group_maybe = sess.config.kx_groups
                     .iter()
-                    .find(|group| groups_ext.contains(group))
+                    .find(|group| groups_ext.contains(&group.name))
                     .cloned();
 
                 self.handshake
@@ -584,7 +584,7 @@ impl CompleteClientHelloHandling {
                         return Err(hs::illegal_param(sess, "did not follow retry request"));
                     }
 
-                    self.emit_hello_retry_request(suite, sess, group);
+                    self.emit_hello_retry_request(suite, sess, group.name);
                     self.emit_fake_ccs(sess);
                     return Ok(self.into_expect_retried_client_hello());
                 }

@@ -3,7 +3,7 @@ use crate::error::TLSError;
 use crate::log::{debug, trace};
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ExtensionType};
-use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, NamedGroup};
+use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat};
 use crate::msgs::enums::{ClientCertificateType, SignatureScheme};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::CertificateRequestPayload;
@@ -25,6 +25,7 @@ use crate::session::Protocol;
 use crate::session::SessionSecrets;
 use crate::sign;
 use crate::suites;
+use crate::kx;
 use webpki;
 
 use crate::server::common::{HandshakeDetails, ServerKXDetails};
@@ -349,7 +350,7 @@ impl ExpectClientHello {
         }
     }
 
-    fn into_expect_tls12_certificate(self, kx: suites::KeyExchange) -> NextState {
+    fn into_expect_tls12_certificate(self, kx: kx::KeyExchange) -> NextState {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             server_kx: ServerKXDetails::new(kx),
@@ -357,7 +358,7 @@ impl ExpectClientHello {
         })
     }
 
-    fn into_expect_tls12_client_kx(self, kx: suites::KeyExchange) -> NextState {
+    fn into_expect_tls12_client_kx(self, kx: kx::KeyExchange) -> NextState {
         Box::new(tls12::ExpectClientKX {
             handshake: self.handshake,
             server_kx: ServerKXDetails::new(kx),
@@ -456,15 +457,12 @@ impl ExpectClientHello {
         &mut self,
         sess: &mut ServerSessionImpl,
         sigschemes: Vec<SignatureScheme>,
-        group: NamedGroup,
+        skxg: &'static kx::SupportedKxGroup,
         server_certkey: &mut sign::CertifiedKey,
-    ) -> Result<suites::KeyExchange, TLSError> {
-        let kx = sess
-            .common
-            .get_suite_assert()
-            .start_server_kx(group)
+    ) -> Result<kx::KeyExchange, TLSError> {
+        let kx = kx::KeyExchange::start(skxg)
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
-        let secdh = ServerECDHParams::new(group, kx.pubkey.as_ref());
+        let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();
         msg.extend(&self.handshake.randoms.client);
@@ -904,9 +902,9 @@ impl State for ExpectClientHello {
             return Err(incompatible(sess, "no supported sig scheme"));
         }
 
-        let group = suites::KeyExchange::supported_groups()
+        let group = sess.config.kx_groups
             .iter()
-            .find(|group| groups_ext.contains(group))
+            .find(|skxg| groups_ext.contains(&skxg.name))
             .cloned()
             .ok_or_else(|| incompatible(sess, "no supported group"))?;
 

@@ -2,7 +2,7 @@ use crate::hash_hs;
 use crate::key;
 use crate::msgs::handshake::{ServerExtension, SessionID};
 use crate::session::SessionRandoms;
-use crate::suites;
+use crate::kx;
 
 use std::mem;
 use ring::digest;
@@ -30,15 +30,15 @@ impl HandshakeDetails {
 }
 
 pub struct ServerKXDetails {
-    pub kx: Option<suites::KeyExchange>,
+    pub kx: Option<kx::KeyExchange>,
 }
 
 impl ServerKXDetails {
-    pub fn new(kx: suites::KeyExchange) -> ServerKXDetails {
+    pub fn new(kx: kx::KeyExchange) -> ServerKXDetails {
         ServerKXDetails { kx: Some(kx) }
     }
 
-    pub fn take_kx(&mut self) -> suites::KeyExchange {
+    pub fn take_kx(&mut self) -> kx::KeyExchange {
         self.kx.take().unwrap()
     }
 }

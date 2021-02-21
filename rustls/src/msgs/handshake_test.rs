@@ -2,7 +2,7 @@ use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{put_u16, Codec, Reader};
 use super::enums::*;
 use super::handshake::*;
-use crate::{ALL_NAMED_GROUPS, key::Certificate};
+use crate::key::Certificate;
 use webpki::DNSNameRef;
 
 use std::mem;
@@ -576,7 +576,7 @@ fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRe
 #[test]
 fn helloretry_get_requested_key_share_group() {
     test_helloretry_extension_getter(ExtensionType::KeyShare, |hrr| {
-        hrr.get_requested_key_share_group(ALL_NAMED_GROUPS)
+        hrr.get_requested_key_share_group()
             .is_some()
     });
 }
