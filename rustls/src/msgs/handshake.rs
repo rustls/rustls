@@ -1,4 +1,4 @@
-use crate::key;
+use crate::{key, rand};
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
@@ -79,6 +79,12 @@ impl Codec for Random {
 }
 
 impl Random {
+    pub fn random() -> Self {
+        let mut value = [0u8; 32];
+        rand::fill_random(&mut value);
+        Self(value)
+    }
+
     pub fn from_slice(bytes: &[u8]) -> Random {
         let mut rd = Reader::init(bytes);
         Random::read(&mut rd).unwrap()
@@ -87,6 +93,12 @@ impl Random {
     pub fn write_slice(&self, mut bytes: &mut [u8]) {
         let buf = self.get_encoding();
         bytes.write_all(&buf).unwrap();
+    }
+}
+
+impl AsRef<[u8; 32]> for Random {
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 

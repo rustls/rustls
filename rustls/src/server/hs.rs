@@ -578,7 +578,7 @@ impl ExpectClientHello {
             .common
             .get_suite_assert();
         let secrets = SessionSecrets::new_resume(
-            &self.handshake.randoms,
+            self.handshake.randoms.clone(),
             suite,
             &resumedata.master_secret.0,
         );

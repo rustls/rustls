@@ -22,6 +22,7 @@ use std::io::{Read, Write};
 use std::collections::VecDeque;
 use std::io;
 use ring::digest::Digest;
+use crate::msgs::handshake::Random;
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
@@ -231,9 +232,16 @@ pub struct SessionRandoms {
     pub server: [u8; 32],
 }
 
-static TLS12_DOWNGRADE_SENTINEL: &[u8] = &[0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
+pub static TLS12_DOWNGRADE_SENTINEL: &[u8] = &[0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 impl SessionRandoms {
+    pub fn from_client_and_server(we_are_client: bool, client_random: &Random, server_random: &Random) -> Self {
+        Self {
+            we_are_client,
+            client: *client_random.as_ref(),
+            server: *server_random.as_ref()
+        }
+    }
     pub fn for_server() -> SessionRandoms {
         let mut ret = SessionRandoms {
             we_are_client: false,
@@ -245,30 +253,12 @@ impl SessionRandoms {
         ret
     }
 
-    pub fn for_client() -> SessionRandoms {
-        let mut ret = SessionRandoms {
-            we_are_client: true,
-            client: [0u8; 32],
-            server: [0u8; 32],
-        };
-
-        rand::fill_random(&mut ret.client);
-        ret
-    }
-
     pub fn set_tls12_downgrade_marker(&mut self) {
         assert!(!self.we_are_client);
         self.server[24..]
             .as_mut()
             .write_all(TLS12_DOWNGRADE_SENTINEL)
             .unwrap();
-    }
-
-    pub fn has_tls12_downgrade_marker(&mut self) -> bool {
-        assert!(self.we_are_client);
-        // both the server random and TLS12_DOWNGRADE_SENTINEL are
-        // public values and don't require constant time comparison
-        &self.server[24..] == TLS12_DOWNGRADE_SENTINEL
     }
 }
 
@@ -338,12 +328,12 @@ impl SessionSecrets {
     }
 
     pub fn new_resume(
-        randoms: &SessionRandoms,
+        randoms: SessionRandoms,
         suite: &'static SupportedCipherSuite,
         master_secret: &[u8],
     ) -> SessionSecrets {
         let mut ret = SessionSecrets {
-            randoms: randoms.clone(),
+            randoms,
             suite,
             master_secret: [0u8; 48],
         };

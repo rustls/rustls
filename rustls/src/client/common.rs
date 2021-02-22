@@ -9,7 +9,6 @@ use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
-use crate::session::SessionRandoms;
 use crate::sign;
 use crate::kx;
 use webpki;
@@ -55,7 +54,6 @@ impl ServerKXDetails {
 pub struct HandshakeDetails {
     pub resuming_session: Option<persist::ClientSessionValue>,
     pub transcript: hash_hs::HandshakeHash,
-    pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
     pub dns_name: webpki::DNSName,
@@ -66,7 +64,6 @@ impl HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
             transcript: hash_hs::HandshakeHash::new(),
-            randoms: SessionRandoms::for_client(),
             using_ems: false,
             session_id: SessionID::empty(),
             dns_name: host_name,

@@ -24,7 +24,7 @@ use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::session::SessionSecrets;
+use crate::session::{SessionSecrets, TLS12_DOWNGRADE_SENTINEL, SessionRandoms};
 use crate::ticketer;
 use crate::verify;
 
@@ -168,11 +168,13 @@ impl InitialState {
             self.handshake.session_id = random_sessionid();
         }
 
+        let client_random = Random::random();
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         emit_client_hello_for_retry(
             sess,
             self.handshake,
+            client_random,
             sent_tls13_fake_ccs,
             hello_details,
             None,
@@ -190,6 +192,7 @@ pub fn start_handshake(
 
 struct ExpectServerHello {
     handshake: HandshakeDetails,
+    client_random: Random,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     sent_tls13_fake_ccs: bool,
@@ -213,6 +216,7 @@ pub fn compatible_suite(
 fn emit_client_hello_for_retry(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
+    client_random: Random,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
@@ -334,7 +338,7 @@ fn emit_client_hello_for_retry(
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
-            random: Random::from_slice(&handshake.randoms.client),
+            random: client_random.clone(),
             session_id: handshake.session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
@@ -393,7 +397,7 @@ fn emit_client_hello_for_retry(
             .client_early_traffic_secret(
                 &client_hello_hash,
                 &*sess.config.key_log,
-                &handshake.randoms.client,
+                client_random.as_ref(),
             );
         // Set early data encryption key
         sess.common
@@ -415,6 +419,7 @@ fn emit_client_hello_for_retry(
 
     let next = ExpectServerHello {
         handshake,
+        client_random,
         hello,
         early_key_schedule,
         sent_tls13_fake_ccs,
@@ -458,11 +463,13 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 impl ExpectServerHello {
     fn into_expect_tls13_encrypted_extensions(
         self,
+        randoms: SessionRandoms,
         key_schedule: KeyScheduleHandshake,
         hash_at_client_recvd_server_hello: Digest,
     ) -> NextState {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
+            randoms,
             key_schedule,
             hello: self.hello,
             hash_at_client_recvd_server_hello,
@@ -503,6 +510,7 @@ impl ExpectServerHello {
     fn into_expect_tls12_certificate(
         self,
         suite: &'static SupportedCipherSuite,
+        randoms: SessionRandoms,
         may_send_cert_status: bool,
         must_issue_new_ticket: bool,
         server_cert_sct_list: Option<SCTList>)
@@ -511,6 +519,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             suite,
+            randoms,
             may_send_cert_status,
             must_issue_new_ticket,
             server_cert_sct_list,
@@ -641,6 +650,8 @@ impl State for ExpectServerHello {
             .transcript
             .add_message(&m);
 
+        let randoms = SessionRandoms::from_client_and_server(true, &self.client_random, &server_hello.random);
+
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         if sess.common.is_tls13() {
@@ -651,27 +662,21 @@ impl State for ExpectServerHello {
                 self.early_key_schedule.take(),
                 &server_hello,
                 &mut self.handshake,
+                randoms.clone(),
                 &mut self.hello,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
-            return Ok(self.into_expect_tls13_encrypted_extensions(key_schedule, hash_at_client_recvd_server_hello));
+            return Ok(self.into_expect_tls13_encrypted_extensions(randoms, key_schedule, hash_at_client_recvd_server_hello));
         }
 
         // TLS1.2 only from here-on
 
-        // Save ServerRandom and SessionID
-        server_hello
-            .random
-            .write_slice(&mut self.handshake.randoms.server);
         self.handshake.session_id = server_hello.session_id;
 
         // Look for TLS1.3 downgrade signal in server random
-        if tls13_supported
-            && self
-                .handshake
-                .randoms
-                .has_tls12_downgrade_marker()
-        {
+        // both the server random and TLS12_DOWNGRADE_SENTINEL are
+        // public values and don't require constant time comparison
+        if tls13_supported && &server_hello.random.as_ref()[24..] == TLS12_DOWNGRADE_SENTINEL {
             return Err(illegal_param(
                 sess,
                 "downgrade to TLS1.2 when TLS1.3 is supported",
@@ -735,7 +740,7 @@ impl State for ExpectServerHello {
                 }
 
                 let secrets = SessionSecrets::new_resume(
-                    &self.handshake.randoms,
+                    randoms,
                     scs,
                     &resuming.master_secret.0,
                 );
@@ -761,7 +766,7 @@ impl State for ExpectServerHello {
             }
         }
 
-        Ok(self.into_expect_tls12_certificate(scs, may_send_cert_status, must_issue_new_ticket, server_cert_list_list))
+        Ok(self.into_expect_tls12_certificate(scs, randoms, may_send_cert_status, must_issue_new_ticket, server_cert_list_list))
     }
 }
 
@@ -883,6 +888,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         Ok(emit_client_hello_for_retry(
             sess,
             self.next.handshake,
+            self.next.client_random,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
