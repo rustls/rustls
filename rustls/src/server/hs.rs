@@ -76,8 +76,8 @@ pub fn decode_error(sess: &mut ServerSessionImpl, why: &str) -> TLSError {
 pub fn can_resume(
     sess: &ServerSessionImpl,
     handshake: &HandshakeDetails,
-    resumedata: &Option<persist::ServerSessionValue>,
-) -> bool {
+    resumedata: persist::ServerSessionValue,
+) -> Option<persist::ServerSessionValue> {
     // The RFCs underspecify what happens if we try to resume to
     // an unoffered/varying suite.  We merely don't resume in weird cases.
     //
@@ -86,14 +86,15 @@ pub fn can_resume(
     // a different name. Instead, it proceeds with a full handshake to
     // establish a new session."
 
-    if let Some(ref resume) = *resumedata {
-        resume.cipher_suite == sess.common.get_suite_assert().suite
-            && (resume.extended_ms == handshake.using_ems
-                || (resume.extended_ms && !handshake.using_ems))
-            && same_dns_name_or_both_none(resume.sni.as_ref(), sess.sni.as_ref())
-    } else {
-        false
+    if resumedata.cipher_suite == sess.common.get_suite_assert().suite
+        && (resumedata.extended_ms == handshake.using_ems
+            || (resumedata.extended_ms && !handshake.using_ems))
+        && same_dns_name_or_both_none(resumedata.sni.as_ref(), sess.sni.as_ref())
+    {
+        return Some(resumedata)
     }
+
+    None
 }
 
 // Require an exact match for the purpose of comparing SNI DNS Names from two
@@ -844,19 +845,19 @@ impl State for ExpectClientHello {
                 ticket_received = true;
                 debug!("Ticket received");
 
-                let maybe_resume = sess
+                if let Some(resume) = sess
                     .config
                     .ticketer
                     .decrypt(&ticket.0)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain));
-
-                if can_resume(sess, &self.handshake, &maybe_resume) {
+                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+                    .and_then(|resumedata| can_resume(sess, &self.handshake, resumedata))
+                {
                     return self.start_resumption(
                         sess,
                         client_hello,
                         sni.as_ref(),
                         &client_hello.session_id,
-                        maybe_resume.unwrap(),
+                        resume,
                     );
                 } else {
                     debug!("Ticket didn't decrypt");
@@ -875,19 +876,19 @@ impl State for ExpectClientHello {
         // Perhaps resume?  If we received a ticket, the sessionid
         // does not correspond to a real session.
         if !client_hello.session_id.is_empty() && !ticket_received {
-            let maybe_resume = sess
+            if let Some(resume) = sess
                 .config
                 .session_storage
                 .get(&client_hello.session_id.get_encoding())
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x));
-
-            if can_resume(sess, &self.handshake, &maybe_resume) {
+                .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
+                .and_then(|resumedata| can_resume(sess, &self.handshake, resumedata))
+            {
                 return self.start_resumption(
                     sess,
                     client_hello,
                     sni.as_ref(),
                     &client_hello.session_id,
-                    maybe_resume.unwrap(),
+                    resume,
                 );
             }
         }
