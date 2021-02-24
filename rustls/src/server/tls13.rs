@@ -612,13 +612,12 @@ impl CompleteClientHelloHandling {
             }
 
             for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                let maybe_resume = self.attempt_tls13_ticket_decryption(sess, &psk_id.identity.0);
-
-                if !hs::can_resume(sess, &self.handshake, &maybe_resume) {
-                    continue;
-                }
-
-                let resume = maybe_resume.unwrap();
+                let resume = match self.attempt_tls13_ticket_decryption(sess, &psk_id.identity.0)
+                    .and_then(|resumedata| hs::can_resume(sess, &self.handshake, resumedata))
+                {
+                    Some(resume) => resume,
+                    None => continue,
+                };
 
                 if !self.check_binder(suite, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
                     sess.common
