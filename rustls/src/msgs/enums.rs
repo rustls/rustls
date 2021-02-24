@@ -790,3 +790,12 @@ enum_builder! {
         OCSP => 0x01
     }
 }
+
+enum_builder! {
+    /// The `ECH` protocol version.
+    @U16
+    EnumName: ECHVersion;
+    EnumVal{
+        V9 => 0xfe09
+    }
+}
