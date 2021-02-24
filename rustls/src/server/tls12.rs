@@ -101,26 +101,6 @@ pub struct ExpectClientKX {
     pub send_ticket: bool,
 }
 
-impl ExpectClientKX {
-    fn into_expect_tls12_certificate_verify(self, secrets: SessionSecrets, client_cert: ClientCertDetails) -> hs::NextState {
-        Box::new(ExpectCertificateVerify {
-            secrets,
-            handshake: self.handshake,
-            client_cert,
-            send_ticket: self.send_ticket,
-        })
-    }
-
-    fn into_expect_tls12_ccs(self, secrets: SessionSecrets) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            resuming: false,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectClientKX {
     fn handle(
         mut self: Box<Self>,
@@ -138,9 +118,7 @@ impl hs::State for ExpectClientKX {
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
-        let kx = self.server_kx.take_kx();
-
-        let kxd = kx
+        let kxd = self.server_kx.kx
             .server_complete(&client_kx.0)
             .ok_or_else(|| {
                 sess.common
@@ -173,10 +151,20 @@ impl hs::State for ExpectClientKX {
         sess.common
             .start_encryption_tls12(&secrets);
 
-        if let Some(client_cert) = self.client_cert.take() {
-            Ok(self.into_expect_tls12_certificate_verify(secrets, client_cert))
+        if let Some(client_cert) = self.client_cert {
+            Ok(Box::new(ExpectCertificateVerify {
+                secrets,
+                handshake: self.handshake,
+                client_cert,
+                send_ticket: self.send_ticket,
+            }))
         } else {
-            Ok(self.into_expect_tls12_ccs(secrets))
+            Ok(Box::new(ExpectCCS {
+                secrets,
+                handshake: self.handshake,
+                resuming: false,
+                send_ticket: self.send_ticket,
+            }))
         }
     }
 }

@@ -30,16 +30,12 @@ impl HandshakeDetails {
 }
 
 pub struct ServerKXDetails {
-    pub kx: Option<kx::KeyExchange>,
+    pub kx: kx::KeyExchange,
 }
 
 impl ServerKXDetails {
     pub fn new(kx: kx::KeyExchange) -> ServerKXDetails {
-        ServerKXDetails { kx: Some(kx) }
-    }
-
-    pub fn take_kx(&mut self) -> kx::KeyExchange {
-        self.kx.take().unwrap()
+        ServerKXDetails { kx }
     }
 }
 
