@@ -102,11 +102,11 @@ pub struct ExpectClientKX {
 }
 
 impl ExpectClientKX {
-    fn into_expect_tls12_certificate_verify(self, secrets: SessionSecrets) -> hs::NextState {
+    fn into_expect_tls12_certificate_verify(self, secrets: SessionSecrets, client_cert: ClientCertDetails) -> hs::NextState {
         Box::new(ExpectCertificateVerify {
             secrets,
             handshake: self.handshake,
-            client_cert: self.client_cert.unwrap(),
+            client_cert,
             send_ticket: self.send_ticket,
         })
     }
@@ -173,8 +173,8 @@ impl hs::State for ExpectClientKX {
         sess.common
             .start_encryption_tls12(&secrets);
 
-        if self.client_cert.is_some() {
-            Ok(self.into_expect_tls12_certificate_verify(secrets))
+        if let Some(client_cert) = self.client_cert.take() {
+            Ok(self.into_expect_tls12_certificate_verify(secrets, client_cert))
         } else {
             Ok(self.into_expect_tls12_ccs(secrets))
         }
