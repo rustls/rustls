@@ -799,3 +799,46 @@ enum_builder! {
         V9 => 0xfe09
     }
 }
+
+// HKDF algorithm identifiers.
+// These are unchanged between draft-cfrg-hpke-07 and draft-cfrg-hpke-08.
+
+enum_builder! {
+    /// The `KEM` type for HPKE operations.
+    /// Listed by IANA, as specified in draft-irtf-cfrg-hpke.
+    @U16
+    EnumName: KEM;
+    EnumVal{
+        DHKEM_P256_HKDF_SHA256 => 0x0010,
+        DHKEM_P384_HKDF_SHA384 => 0x0011,
+        DHKEM_P521_HKDF_SHA512 => 0x0012,
+        DHKEM_X25519_HKDF_SHA256 => 0x0020,
+        DHKEM_X448_HKDF_SHA512 => 0x0021
+    }
+}
+
+enum_builder! {
+    /// The `KDF` type for HPKE operations.
+    /// Listed by IANA, as specified in draft-irtf-cfrg-hpke.
+    @U16
+    EnumName: KDF;
+    EnumVal{
+        HKDF_SHA256 => 0x0001,
+        HKDF_SHA384 => 0x0002,
+        HKDF_SHA512 => 0x0003
+    }
+}
+
+enum_builder! {
+    /// The `AEAD` type for HPKE operations.
+    /// Listed by IANA, as specified in draft-irtf-cfrg-hpke.
+    @U16
+    EnumName: AEAD;
+    EnumVal{
+        AES_128_GCM => 0x0001,
+        AES_256_GCM => 0x0002,
+        CHACHA20_POLY_1305 => 0x0003
+        // TODO: Do we want this included?
+        // EXPORT_ONLY => 0xFFFF
+    }
+}

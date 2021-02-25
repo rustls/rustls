@@ -9,7 +9,7 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType}
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
-use crate::msgs::enums::ECHVersion;
+use crate::msgs::enums::{ECHVersion, KEM, KDF, AEAD};
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -2303,11 +2303,10 @@ impl HandshakeMessagePayload {
 
 #[derive(Clone, Debug)]
 pub struct ECHCipherSuite {
-    pub hpke_kdf_id: u16,
-    pub hpke_aead_id: u16,
+    pub hpke_kdf_id: KDF,
+    pub hpke_aead_id: AEAD,
 }
 
-// TODO: make the HPKE stuff enums
 impl Codec for ECHCipherSuite {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.hpke_kdf_id.encode(bytes);
@@ -2316,8 +2315,8 @@ impl Codec for ECHCipherSuite {
 
     fn read(r: &mut Reader) -> Option<ECHCipherSuite> {
         Some(ECHCipherSuite {
-            hpke_kdf_id: u16::read(r)?,
-            hpke_aead_id: u16::read(r)?,
+            hpke_kdf_id: KDF::read(r)?,
+            hpke_aead_id: AEAD::read(r)?,
         })
     }
 }
@@ -2328,7 +2327,7 @@ declare_u16_vec!(ECHCipherSuites, ECHCipherSuite);
 pub struct ECHConfigContents {
     pub public_name: PayloadU16,
     pub hpke_public_key: PayloadU16,
-    pub hpke_kem_id: u16,
+    pub hpke_kem_id: KEM,
     pub ech_cipher_suites: ECHCipherSuites,
     pub maximum_name_length: u16,
     pub extensions: PayloadU16,
@@ -2348,7 +2347,7 @@ impl Codec for ECHConfigContents {
         Some(ECHConfigContents {
             public_name: PayloadU16::read(r)?,
             hpke_public_key: PayloadU16::read(r)?,
-            hpke_kem_id: u16::read(r)?,
+            hpke_kem_id: KEM::read(r)?,
             ech_cipher_suites: ECHCipherSuites::read(r)?,
             maximum_name_length: u16::read(r)?,
             extensions: PayloadU16::read(r)?,
