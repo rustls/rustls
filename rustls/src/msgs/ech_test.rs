@@ -6,8 +6,8 @@ use crate::msgs::enums::{ECHVersion, KEM, KDF, AEAD};
 #[test]
 fn test_echconfig_serialization() {
     // An ECHConfig record from Cloudflare for "crypto.cloudflare.com"
-    let base64_echconfig = "AEf+CQBDABNjbG91ZGZsYXJlLWVzbmkuY29tACCD91Ovu3frIsjhFKo0I1fPd/a09nzKMrjC9GZV3NvrfQAgAAQAAQABAAAAAA==";
-    let bytes = base64::decode(&base64_echconfig).unwrap();
+    let base64_echconfigs = "AEf+CQBDABNjbG91ZGZsYXJlLWVzbmkuY29tACCD91Ovu3frIsjhFKo0I1fPd/a09nzKMrjC9GZV3NvrfQAgAAQAAQABAAAAAA==";
+    let bytes = base64::decode(&base64_echconfigs).unwrap();
     let configs = ECHConfigs::read(&mut Reader::init(&bytes)).unwrap();
     let config: &ECHConfig = &configs[0];
     assert_eq!(config.version, ECHVersion::V9);
@@ -20,5 +20,5 @@ fn test_echconfig_serialization() {
     assert_eq!(config.contents.ech_cipher_suites[0].hpke_aead_id, AEAD::AES_128_GCM);
     let mut output = Vec::new();
     configs.encode(&mut output);
-    assert_eq!(base64_echconfig, base64::encode(&output));
+    assert_eq!(base64_echconfigs, base64::encode(&output));
 }
