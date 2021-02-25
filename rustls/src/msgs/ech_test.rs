@@ -9,6 +9,7 @@ fn test_echconfig_serialization() {
     let base64_echconfigs = "AEf+CQBDABNjbG91ZGZsYXJlLWVzbmkuY29tACCD91Ovu3frIsjhFKo0I1fPd/a09nzKMrjC9GZV3NvrfQAgAAQAAQABAAAAAA==";
     let bytes = base64::decode(&base64_echconfigs).unwrap();
     let configs = ECHConfigs::read(&mut Reader::init(&bytes)).unwrap();
+    assert_eq!(configs.len(), 1);
     let config: &ECHConfig = &configs[0];
     assert_eq!(config.version, ECHVersion::V9);
     assert_eq!(config.length, 67);
