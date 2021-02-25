@@ -800,7 +800,7 @@ enum_builder! {
     }
 }
 
-// HKDF algorithm identifiers.
+// HPKE algorithm identifiers.
 // These are unchanged between draft-cfrg-hpke-07 and draft-cfrg-hpke-08.
 
 enum_builder! {
