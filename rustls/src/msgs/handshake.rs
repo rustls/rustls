@@ -2338,10 +2338,9 @@ pub struct ECHConfigContents {
 impl ECHConfigContents {
     // TODO: revisit the default configuration. This is just what Cloudflare ships right now.
     /// Generates an ECHKey containing a single ECHCipherSuite in the default configuration:
-    /// KEM: DHKEM(X25519, HKDF-SHA256)
     /// KDF: HKDF-SHA256
     /// AEAD: AES-128-GCM
-    pub(crate) fn new(public_key: HPKEPublicKey, kem: KEM, name: webpki::DNSNameRef) -> ECHConfigContents {
+    pub fn new(public_key: HPKEPublicKey, kem: KEM, name: webpki::DNSNameRef) -> ECHConfigContents {
         let mut cipher_suites: Vec<ECHCipherSuite> = vec![];
         cipher_suites.push(ECHCipherSuite {
             hpke_kdf_id: KDF::HKDF_SHA256,
