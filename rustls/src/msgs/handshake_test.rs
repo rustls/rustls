@@ -1166,3 +1166,18 @@ fn cannot_decode_huge_certificate() {
     buf[6] = 0x01;
     assert!(HandshakeMessagePayload::read_bytes(&buf).is_none());
 }
+
+#[test]
+fn test_ech_cipher_suite() {
+    let ecs = ECHCipherSuite {
+        hpke_kdf_id: KDF::HKDF_SHA256,
+        hpke_aead_id: AEAD::AES_128_GCM,
+    };
+
+    let mut output = Vec::new();
+    ecs.encode(&mut output);
+
+    let decoded = ECHCipherSuite::read(&mut Reader::init(&output)).unwrap();
+    assert_eq!(ecs.hpke_kdf_id, decoded.hpke_kdf_id);
+    assert_eq!(ecs.hpke_aead_id, decoded.hpke_aead_id);
+}
