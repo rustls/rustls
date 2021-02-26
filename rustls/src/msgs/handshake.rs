@@ -2341,7 +2341,7 @@ impl ECHConfigContents {
     /// KEM: DHKEM(X25519, HKDF-SHA256)
     /// KDF: HKDF-SHA256
     /// AEAD: AES-128-GCM
-    pub(crate) fn new(public_key: HPKEPublicKey, name: webpki::DNSNameRef) -> ECHConfigContents {
+    pub(crate) fn new(public_key: HPKEPublicKey, kem: KEM, name: webpki::DNSNameRef) -> ECHConfigContents {
         let mut cipher_suites: Vec<ECHCipherSuite> = vec![];
         cipher_suites.push(ECHCipherSuite {
             hpke_kdf_id: KDF::HKDF_SHA256,
@@ -2351,7 +2351,7 @@ impl ECHConfigContents {
         ECHConfigContents {
             public_name: PayloadU16::new(dns_name_str.as_bytes().to_vec()),
             hpke_public_key: PayloadU16::new(public_key),
-            hpke_kem_id: KEM::DHKEM_X25519_HKDF_SHA256,
+            hpke_kem_id: kem,
             ech_cipher_suites: cipher_suites,
             maximum_name_length: 255,
             extensions: PayloadU16::empty(),

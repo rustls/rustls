@@ -3,7 +3,6 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{ECHConfigs, ECHConfig};
 use crate::msgs::enums::{ECHVersion, KEM, KDF, AEAD};
 use crate::msgs::ech::{HPKEKeyPair, ECHKey};
-use std::convert::TryFrom;
 
 #[test]
 fn test_echconfig_serialization() {

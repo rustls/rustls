@@ -11,14 +11,15 @@ pub type HPKEPublicKey = Vec<u8>;
 
 #[derive(Clone, Debug)]
 pub struct HPKEKeyPair {
+    pub kem_id: KEM,
     pub private_key: HPKEPrivateKey,
     pub public_key: HPKEPublicKey,
 }
 
 impl HPKEKeyPair {
-    pub fn new(kem: KEM) -> HPKEKeyPair {
+    pub fn new(kem_id: KEM) -> HPKEKeyPair {
         let mut csprng = StdRng::from_entropy();
-        let (private_key, public_key) = match kem {
+        let (private_key, public_key) = match kem_id {
             KEM::DHKEM_P256_HKDF_SHA256 => {
                 let (private, public) = kem::DhP256HkdfSha256::gen_keypair(&mut csprng);
                 (private.to_bytes().as_slice().to_vec(), public.to_bytes().as_slice().to_vec())
@@ -33,6 +34,7 @@ impl HPKEKeyPair {
             _ => unreachable!(),
         };
         HPKEKeyPair {
+            kem_id,
             private_key,
             public_key,
         }
@@ -52,7 +54,7 @@ impl ECHKey {
             private_key: key_pair.private_key,
             config: ECHConfig {
                 version: ECHVersion::V9,
-                contents: ECHConfigContents::new(key_pair.public_key, domain)
+                contents: ECHConfigContents::new(key_pair.public_key, key_pair.kem_id, domain)
             }
         }
     }
