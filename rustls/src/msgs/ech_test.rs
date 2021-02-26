@@ -12,7 +12,6 @@ fn test_echconfig_serialization() {
     assert_eq!(configs.len(), 1);
     let config: &ECHConfig = &configs[0];
     assert_eq!(config.version, ECHVersion::V9);
-    assert_eq!(config.length, 67);
     let name = String::from_utf8(config.contents.public_name.clone().into_inner()).unwrap();
     assert_eq!("cloudflare-esni.com", name.as_str());
     assert_eq!(config.contents.hpke_kem_id, KEM::DHKEM_X25519_HKDF_SHA256);

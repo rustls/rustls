@@ -19,6 +19,7 @@ use std::fmt;
 use std::io::Write;
 use std::mem;
 use webpki;
+use crate::msgs::ech::HPKEPublicKey;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -2323,6 +2324,7 @@ impl Codec for ECHCipherSuite {
 
 declare_u16_vec!(ECHCipherSuites, ECHCipherSuite);
 
+// TODO: This structure changes in the next ECH draft.
 #[derive(Clone, Debug)]
 pub struct ECHConfigContents {
     pub public_name: PayloadU16,
@@ -2331,6 +2333,30 @@ pub struct ECHConfigContents {
     pub ech_cipher_suites: ECHCipherSuites,
     pub maximum_name_length: u16,
     pub extensions: PayloadU16,
+}
+
+impl ECHConfigContents {
+    // TODO: revisit the default configuration. This is just what Cloudflare ships right now.
+    /// Generates an ECHKey containing a single ECHCipherSuite in the default configuration:
+    /// KEM: DHKEM(X25519, HKDF-SHA256)
+    /// KDF: HKDF-SHA256
+    /// AEAD: AES-128-GCM
+    pub(crate) fn new(public_key: HPKEPublicKey, name: webpki::DNSNameRef) -> ECHConfigContents {
+        let mut cipher_suites: Vec<ECHCipherSuite> = vec![];
+        cipher_suites.push(ECHCipherSuite {
+            hpke_kdf_id: KDF::HKDF_SHA256,
+            hpke_aead_id: AEAD::AES_128_GCM,
+        });
+        let dns_name_str: &str = name.into();
+        ECHConfigContents {
+            public_name: PayloadU16::new(dns_name_str.as_bytes().to_vec()),
+            hpke_public_key: PayloadU16::new(public_key),
+            hpke_kem_id: KEM::DHKEM_X25519_HKDF_SHA256,
+            ech_cipher_suites: cipher_suites,
+            maximum_name_length: 255,
+            extensions: PayloadU16::empty(),
+        }
+    }
 }
 
 impl Codec for ECHConfigContents {
@@ -2358,15 +2384,18 @@ impl Codec for ECHConfigContents {
 #[derive(Clone, Debug)]
 pub struct ECHConfig {
     pub version: ECHVersion,
-    pub length: u16,
     pub contents: ECHConfigContents,
 }
 
 impl Codec for ECHConfig {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
-        self.length.encode(bytes);
-        self.contents.encode(bytes);
+        let mut contents = Vec::with_capacity(128);
+        self.contents.encode(&mut contents);
+        let length: &mut[u8; 2] = &mut[0, 0];
+        codec::put_u16(contents.len() as u16, length);
+        bytes.extend_from_slice(length);
+        bytes.extend(contents);
     }
 
     fn read(r: &mut Reader) -> Option<ECHConfig> {
@@ -2374,7 +2403,6 @@ impl Codec for ECHConfig {
         let length = u16::read(r)?;
         Some(ECHConfig {
             version,
-            length,
             contents: ECHConfigContents::read(&mut r.sub(length as usize)?)?,
         })
     }

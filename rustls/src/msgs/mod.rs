@@ -14,6 +14,7 @@ pub mod handshake;
 pub mod hsjoiner;
 pub mod message;
 pub mod persist;
+pub mod ech;
 
 #[cfg(test)]
 mod handshake_test;

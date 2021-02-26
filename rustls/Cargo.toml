@@ -17,6 +17,12 @@ ring = "0.16.19"
 sct = "0.6.0"
 webpki = "0.21.4"
 
+# Temporary until ring has HPKE.
+# Version 0.4.3 supports draft-cfrg-hpke-07, which corresponds to
+# ECH draft-09, the version currently running on crypto.cloudflare.com.
+hpke = "0.4.3"
+rand = "0.7.3"
+
 [features]
 default = ["logging"]
 logging = ["log"]
