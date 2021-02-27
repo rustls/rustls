@@ -67,3 +67,48 @@ fn test_create_default_ech_config() {
     assert_eq!(key.config.contents.ech_cipher_suites[0].hpke_aead_id, AEAD::AES_128_GCM);
     assert_eq!(key.config.contents.ech_cipher_suites[0].hpke_kdf_id, KDF::HKDF_SHA256);
 }
+
+// Some test data from https://github.com/cloudflare/go/blob/cf/src/crypto/tls/ech_test.go
+const ECH_CONFIGS: &str = "AMf+CQBPABNjbG91ZGZsYXJlLWVzbmkuY29tACBFy97nrxkmIILJkm/CsjHQUihIJCKHOx7kQkzfq/3wFwAgABAAAQABAAEAAwACAAEAAgADAAAAAP4JAHAAE2Nsb3VkZmxhcmUtZXNuaS5jb20AQQSlUJ59U4Ini8sB7pdc/H93rD/K7io/ZqwR8b9phx6CA0VFLXd/YWF+ZOwWxy1Gyt+LQpHh8+UTjr0/Fmc0snzAABAAEAABAAEAAQADAAIAAQACAAMAAAAA";
+//const SIGNING_KEY: &str = "MHcCAQEEIIJsLXmfzw6FDlqyRRLhY6lVB6ws5ewjUQjnS4DXsQ60oAoGCCqGSM49AwEHoUQDQgAElq+qE01Z87KIPHWdEAk0cWssHkRnS4aQCDfstoxDIWQ4rMwHvrWGFy/vytRwyjhHuX9ntc5ArCpwbAmY+oW/4w==";
+const ECH_KEYS: &str = "ACA/SG/gkFYqQ0vvrgz8CRtn8QBhUdmJIHrpLRa4MHbjpgBT/gkATwATY2xvdWRmbGFyZS1lc25pLmNvbQAgRcve568ZJiCCyZJvwrIx0FIoSCQihzse5EJM36v98BcAIAAQAAEAAQABAAMAAgABAAIAAwAAAAAAIOpdZ5c3Q1EIq5eztNrW+7GcUiPKPDhm6JqulMAt5NLmAHT+CQBwABNjbG91ZGZsYXJlLWVzbmkuY29tAEEEpVCefVOCJ4vLAe6XXPx/d6w/yu4qP2asEfG/aYceggNFRS13f2FhfmTsFsctRsrfi0KR4fPlE469PxZnNLJ8wAAQABAAAQABAAEAAwACAAEAAgADAAAAAA==";
+
+fn test_decode_for_kem(config: &ECHConfig, kem: KEM) {
+    assert_eq!(config.version, ECHVersion::V9);
+    let name = String::from_utf8(config.contents.public_name.clone().into_inner()).unwrap();
+    assert_eq!("cloudflare-esni.com", name.as_str());
+    assert_eq!(config.contents.hpke_kem_id, kem);
+    assert_eq!(config.contents.ech_cipher_suites.len(), 4);
+    let cipher_suites = &config.contents.ech_cipher_suites;
+    assert_eq!(cipher_suites[0].hpke_kdf_id, KDF::HKDF_SHA256);
+    assert_eq!(cipher_suites[0].hpke_aead_id, AEAD::AES_128_GCM);
+    assert_eq!(cipher_suites[1].hpke_kdf_id, KDF::HKDF_SHA256);
+    assert_eq!(cipher_suites[1].hpke_aead_id, AEAD::CHACHA20_POLY_1305);
+    assert_eq!(cipher_suites[2].hpke_kdf_id, KDF::HKDF_SHA384);
+    assert_eq!(cipher_suites[2].hpke_aead_id, AEAD::AES_128_GCM);
+    assert_eq!(cipher_suites[3].hpke_kdf_id, KDF::HKDF_SHA384);
+    assert_eq!(cipher_suites[3].hpke_aead_id, AEAD::CHACHA20_POLY_1305);
+}
+
+
+
+fn decode_ech_keys() -> Vec<ECHKey> {
+    let keys = vec![];
+
+    keys
+}
+
+#[test]
+fn test_sign_and_decode() {
+    let bytes = base64::decode(&ECH_CONFIGS).unwrap();
+    let configs = ECHConfigs::read(&mut Reader::init(&bytes)).unwrap();
+    assert_eq!(configs.len(), 2);
+    let x25519_config = &configs[0];
+    test_decode_for_kem(x25519_config, KEM::DHKEM_X25519_HKDF_SHA256);
+    let p256_config = &configs[1];
+    test_decode_for_kem(p256_config, KEM::DHKEM_P256_HKDF_SHA256);
+
+    let key_bytes = base64::decode(&ECH_KEYS).unwrap();
+    println!("bytes: {:x?}", key_bytes.as_slice());
+    //assert!(false);
+}

@@ -21,38 +21,6 @@ use std::mem;
 use webpki;
 use crate::msgs::ech::HPKEPublicKey;
 
-macro_rules! declare_u8_vec(
-  ($name:ident, $itemtype:ty) => {
-    pub type $name = Vec<$itemtype>;
-
-    impl Codec for $name {
-      fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u8(bytes, self);
-      }
-
-      fn read(r: &mut Reader) -> Option<$name> {
-        codec::read_vec_u8::<$itemtype>(r)
-      }
-    }
-  }
-);
-
-macro_rules! declare_u16_vec(
-  ($name:ident, $itemtype:ty) => {
-    pub type $name = Vec<$itemtype>;
-
-    impl Codec for $name {
-      fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u16(bytes, self);
-      }
-
-      fn read(r: &mut Reader) -> Option<$name> {
-        codec::read_vec_u16::<$itemtype>(r)
-      }
-    }
-  }
-);
-
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 

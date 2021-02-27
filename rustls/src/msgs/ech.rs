@@ -3,6 +3,8 @@ use crate::msgs::handshake::{ECHConfigContents, ECHConfig};
 use hpke::{kem, Kem};
 use hpke::kex::Serializable;
 
+use crate::msgs::codec::{Codec, Reader};
+
 // TODO: delegate to ring?
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -41,8 +43,8 @@ impl HPKEKeyPair {
     }
 }
 
-
 /// A private key paired with an ECHConfig, which contains the corresponding public key.
+#[derive(Clone, Debug)]
 pub struct ECHKey {
     pub private_key: HPKEPrivateKey,
     pub config: ECHConfig,
@@ -59,3 +61,9 @@ impl ECHKey {
         }
     }
 }
+/*
+
+#[test]
+impl Codec for ECHKey {
+
+}*/
