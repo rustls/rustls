@@ -90,12 +90,13 @@ fn test_decode_for_kem(config: &ECHConfig, kem: KEM) {
     assert_eq!(cipher_suites[3].hpke_aead_id, AEAD::CHACHA20_POLY_1305);
 }
 
-
-
 fn decode_ech_keys() -> Vec<ECHKey> {
-    let keys = vec![];
+    let mut keys = vec![];
     let bytes = base64::decode(&ECH_KEYS).unwrap();
-
+    let reader = &mut Reader::init(&bytes);
+    while reader.any_left() {
+        keys.push(ECHKey::read(reader).unwrap());
+    }
     keys
 }
 
@@ -109,7 +110,6 @@ fn test_sign_and_decode() {
     let p256_config = &configs[1];
     test_decode_for_kem(p256_config, KEM::DHKEM_P256_HKDF_SHA256);
 
-    let key_bytes = base64::decode(&ECH_KEYS).unwrap();
-    println!("bytes: {:x?}", key_bytes.as_slice());
-    assert!(false);
+    let keys = decode_ech_keys();
+    assert_eq!(keys.len(), 2);
 }
