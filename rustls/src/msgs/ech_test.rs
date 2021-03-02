@@ -94,6 +94,7 @@ fn test_decode_for_kem(config: &ECHConfig, kem: KEM) {
 
 fn decode_ech_keys() -> Vec<ECHKey> {
     let keys = vec![];
+    let bytes = base64::decode(&ECH_KEYS).unwrap();
 
     keys
 }
@@ -110,5 +111,5 @@ fn test_sign_and_decode() {
 
     let key_bytes = base64::decode(&ECH_KEYS).unwrap();
     println!("bytes: {:x?}", key_bytes.as_slice());
-    //assert!(false);
+    assert!(false);
 }

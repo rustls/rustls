@@ -7,6 +7,7 @@ use crate::msgs::codec::{Codec, Reader};
 
 // TODO: delegate to ring?
 use rand::{rngs::StdRng, SeedableRng};
+use crate::msgs::base::PayloadU16;
 
 pub type HPKEPrivateKey = Vec<u8>;
 pub type HPKEPublicKey = Vec<u8>;
@@ -61,9 +62,19 @@ impl ECHKey {
         }
     }
 }
-/*
 
-#[test]
 impl Codec for ECHKey {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend(PayloadU16(self.private_key.clone()));
+        self.config.encode(bytes);
+    }
 
-}*/
+    fn read(r: &mut Reader) -> Option<ECHKey> {
+        let private_key = PayloadU16::read(r)?;
+        let config = ECHConfig.read(r)?;
+        Some(ECHKey {
+            private_key: private_key.into_inner(),
+            config,
+        })
+    }
+}
