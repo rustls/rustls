@@ -562,6 +562,7 @@ pub enum ClientExtension {
     CertificateStatusRequest(CertificateStatusRequest),
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
+    TransportParametersDraft(Vec<u8>),
     EarlyData,
     Unknown(UnknownExtension),
 }
@@ -586,6 +587,7 @@ impl ClientExtension {
             ClientExtension::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
+            ClientExtension::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
             ClientExtension::Unknown(ref r) => r.typ,
         }
@@ -614,7 +616,8 @@ impl Codec for ClientExtension {
             ClientExtension::PresharedKey(ref r) => r.encode(&mut sub),
             ClientExtension::Cookie(ref r) => r.encode(&mut sub),
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
-            ClientExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
+            ClientExtension::TransportParameters(ref r)
+            | ClientExtension::TransportParametersDraft(ref r) => sub.extend_from_slice(r),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -676,6 +679,9 @@ impl Codec for ClientExtension {
             ExtensionType::TransportParameters => {
                 ClientExtension::TransportParameters(sub.rest().to_vec())
             }
+            ExtensionType::TransportParametersDraft => {
+                ClientExtension::TransportParametersDraft(sub.rest().to_vec())
+            }
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         })
@@ -723,6 +729,7 @@ pub enum ServerExtension {
     SignedCertificateTimestamp(SCTList),
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
+    TransportParametersDraft(Vec<u8>),
     EarlyData,
     Unknown(UnknownExtension),
 }
@@ -742,6 +749,7 @@ impl ServerExtension {
             ServerExtension::SignedCertificateTimestamp(_) => ExtensionType::SCT,
             ServerExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ServerExtension::TransportParameters(_) => ExtensionType::TransportParameters,
+            ServerExtension::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             ServerExtension::EarlyData => ExtensionType::EarlyData,
             ServerExtension::Unknown(ref r) => r.typ,
         }
@@ -766,7 +774,8 @@ impl Codec for ServerExtension {
             ServerExtension::PresharedKey(r) => r.encode(&mut sub),
             ServerExtension::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             ServerExtension::SupportedVersions(ref r) => r.encode(&mut sub),
-            ServerExtension::TransportParameters(ref r) => sub.extend_from_slice(r),
+            ServerExtension::TransportParameters(ref r)
+            | ServerExtension::TransportParametersDraft(ref r) => sub.extend_from_slice(r),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -804,6 +813,9 @@ impl Codec for ServerExtension {
             }
             ExtensionType::TransportParameters => {
                 ServerExtension::TransportParameters(sub.rest().to_vec())
+            }
+            ExtensionType::TransportParametersDraft => {
+                ServerExtension::TransportParametersDraft(sub.rest().to_vec())
             }
             ExtensionType::EarlyData => ServerExtension::EarlyData,
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
@@ -933,9 +945,12 @@ impl ClientHelloPayload {
     }
 
     pub fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
-        let ext = self.find_extension(ExtensionType::TransportParameters)?;
+        let ext = self
+            .find_extension(ExtensionType::TransportParameters)
+            .or_else(|| self.find_extension(ExtensionType::TransportParametersDraft))?;
         match *ext {
-            ClientExtension::TransportParameters(ref bytes) => Some(bytes.to_vec()),
+            ClientExtension::TransportParameters(ref bytes)
+            | ClientExtension::TransportParametersDraft(ref bytes) => Some(bytes.to_vec()),
             _ => None,
         }
     }
@@ -1739,9 +1754,12 @@ pub trait HasServerExtensions {
     }
 
     fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
-        let ext = self.find_extension(ExtensionType::TransportParameters)?;
+        let ext = self
+            .find_extension(ExtensionType::TransportParameters)
+            .or_else(|| self.find_extension(ExtensionType::TransportParametersDraft))?;
         match *ext {
-            ServerExtension::TransportParameters(ref bytes) => Some(bytes.to_vec()),
+            ServerExtension::TransportParameters(ref bytes)
+            | ServerExtension::TransportParametersDraft(ref bytes) => Some(bytes.to_vec()),
             _ => None,
         }
     }

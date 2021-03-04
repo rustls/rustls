@@ -11,6 +11,7 @@ use sct;
 use webpki;
 
 use rustls::internal::msgs::enums::ProtocolVersion;
+use rustls::quic;
 use rustls::quic::ClientQuicExt;
 use rustls::quic::ServerQuicExt;
 use rustls::ClientHello;
@@ -1041,6 +1042,7 @@ fn main() {
             } else {
                 rustls::ServerSession::new_quic(
                     scfg.as_ref().unwrap(),
+                    quic::Version::V1,
                     opts.quic_transport_params.clone(),
                 )
             };
@@ -1052,6 +1054,7 @@ fn main() {
             } else {
                 rustls::ClientSession::new_quic(
                     ccfg.as_ref().unwrap(),
+                    quic::Version::V1,
                     dns_name,
                     opts.quic_transport_params.clone(),
                 )
