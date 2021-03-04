@@ -332,6 +332,7 @@ pub trait ClientQuicExt {
     /// TLS-encoded transport parameters to send.
     fn new_quic(
         config: &Arc<ClientConfig>,
+        quic_version: Version,
         hostname: webpki::DNSNameRef,
         params: Vec<u8>,
     ) -> ClientSession {
@@ -342,12 +343,13 @@ pub trait ClientQuicExt {
                 .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
             "QUIC requires TLS version >= 1.3"
         );
+        let ext = match quic_version {
+            Version::V1Draft => ClientExtension::TransportParametersDraft(params),
+            Version::V1 => ClientExtension::TransportParameters(params),
+        };
         let mut imp = ClientSessionImpl::new(config);
         imp.common.protocol = Protocol::Quic;
-        imp.start_handshake(
-            hostname.into(),
-            vec![ClientExtension::TransportParameters(params)],
-        );
+        imp.start_handshake(hostname.into(), vec![ext]);
         ClientSession { imp }
     }
 }
@@ -359,7 +361,7 @@ pub trait ServerQuicExt {
     /// Make a new QUIC ServerSession. This differs from `ServerSession::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    fn new_quic(config: &Arc<ServerConfig>, params: Vec<u8>) -> ServerSession {
+    fn new_quic(config: &Arc<ServerConfig>, quic_version: Version, params: Vec<u8>) -> ServerSession {
         assert!(
             config
                 .versions
@@ -371,14 +373,28 @@ pub trait ServerQuicExt {
             config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
             "QUIC sessions must set a max early data of 0 or 2^32-1"
         );
-        let mut imp =
-            ServerSessionImpl::new(config, vec![ServerExtension::TransportParameters(params)]);
+        let ext = match quic_version {
+            Version::V1Draft => ServerExtension::TransportParametersDraft(params),
+            Version::V1 => ServerExtension::TransportParameters(params),
+        };
+        let mut imp = ServerSessionImpl::new(config, vec![ext]);
         imp.common.protocol = Protocol::Quic;
         ServerSession { imp }
     }
 }
 
 impl ServerQuicExt for ServerSession {}
+
+/// QUIC protocol version
+///
+/// Governs version-specific behavior in the TLS layer
+#[non_exhaustive]
+pub enum Version {
+    /// Draft versions prior to V1
+    V1Draft,
+    /// First stable RFC
+    V1,
+}
 
 #[cfg(test)]
 mod test {
