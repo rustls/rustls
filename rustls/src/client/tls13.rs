@@ -392,31 +392,6 @@ pub struct ExpectEncryptedExtensions {
     pub hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectEncryptedExtensions {
-    fn into_expect_finished_resume(
-        self,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectFinished {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            client_auth: None,
-            cert_verified: certv,
-            sig_verified: sigv,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-
-    fn into_expect_certificate_or_certreq(self) -> hs::NextState {
-        Box::new(ExpectCertificateOrCertReq {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-}
-
 impl hs::State for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
@@ -478,13 +453,24 @@ impl hs::State for ExpectEncryptedExtensions {
             // continuation of the previous session in terms of security policy.
             let certv = verify::ServerCertVerified::assertion();
             let sigv = verify::HandshakeSignatureValid::assertion();
-            Ok(self.into_expect_finished_resume(certv, sigv))
+            Ok(Box::new(ExpectFinished {
+                handshake: self.handshake,
+                key_schedule: self.key_schedule,
+                client_auth: None,
+                cert_verified: certv,
+                sig_verified: sigv,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }))
         } else {
             if exts.early_data_extension_offered() {
                 let msg = "server sent early data extension without resumption".to_string();
                 return Err(TLSError::PeerMisbehavedError(msg));
             }
-            Ok(self.into_expect_certificate_or_certreq())
+            Ok(Box::new(ExpectCertificateOrCertReq {
+                handshake: self.handshake,
+                key_schedule: self.key_schedule,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }))
         }
     }
 }
@@ -494,18 +480,6 @@ struct ExpectCertificate {
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     hash_at_client_recvd_server_hello: Digest,
-}
-
-impl ExpectCertificate {
-    fn into_expect_certificate_verify(self, server_cert: ServerCertDetails) -> hs::NextState {
-        Box::new(ExpectCertificateVerify {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            server_cert,
-            client_auth: self.client_auth,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificate {
@@ -559,7 +533,13 @@ impl hs::State for ExpectCertificate {
             }
         }
 
-        Ok(self.into_expect_certificate_verify(server_cert))
+        Ok(Box::new(ExpectCertificateVerify {
+            handshake: self.handshake,
+            key_schedule: self.key_schedule,
+            server_cert,
+            client_auth: self.client_auth,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
     }
 }
 
@@ -567,25 +547,6 @@ struct ExpectCertificateOrCertReq {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
     hash_at_client_recvd_server_hello: Digest,
-}
-
-impl ExpectCertificateOrCertReq {
-    fn into_expect_certificate(self) -> hs::NextState {
-        Box::new(ExpectCertificate {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            client_auth: None,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-
-    fn into_expect_certificate_req(self) -> hs::NextState {
-        Box::new(ExpectCertificateRequest {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificateOrCertReq {
@@ -599,11 +560,18 @@ impl hs::State for ExpectCertificateOrCertReq {
             ],
         )?;
         if m.is_handshake_type(HandshakeType::Certificate) {
-            self.into_expect_certificate()
-                .handle(sess, m)
+            Box::new(ExpectCertificate {
+                handshake: self.handshake,
+                key_schedule: self.key_schedule,
+                client_auth: None,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }).handle(sess, m)
         } else {
-            self.into_expect_certificate_req()
-                .handle(sess, m)
+            Box::new(ExpectCertificateRequest {
+                handshake: self.handshake,
+                key_schedule: self.key_schedule,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }).handle(sess, m)
         }
     }
 }
@@ -615,23 +583,6 @@ struct ExpectCertificateVerify {
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
     hash_at_client_recvd_server_hello: Digest,
-}
-
-impl ExpectCertificateVerify {
-    fn into_expect_finished(
-        self,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectFinished {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            client_auth: self.client_auth,
-            cert_verified: certv,
-            sig_verified: sigv,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
 }
 
 fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSError {
@@ -715,7 +666,14 @@ impl hs::State for ExpectCertificateVerify {
             .transcript
             .add_message(&m);
 
-        Ok(self.into_expect_finished(certv, sigv))
+        Ok(Box::new(ExpectFinished {
+            handshake: self.handshake,
+            key_schedule: self.key_schedule,
+            client_auth: self.client_auth,
+            cert_verified: certv,
+            sig_verified: sigv,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
     }
 }
 
@@ -726,17 +684,6 @@ struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     key_schedule: KeyScheduleHandshake,
     hash_at_client_recvd_server_hello: Digest,
-}
-
-impl ExpectCertificateRequest {
-    fn into_expect_certificate(self, client_auth: ClientAuthDetails) -> hs::NextState {
-        Box::new(ExpectCertificate {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            client_auth: Some(client_auth),
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificateRequest {
@@ -809,7 +756,12 @@ impl hs::State for ExpectCertificateRequest {
             debug!("Client auth requested but no cert selected");
         }
 
-        Ok(self.into_expect_certificate(client_auth))
+        Ok(Box::new(ExpectCertificate {
+            handshake: self.handshake,
+            key_schedule: self.key_schedule,
+            client_auth: Some(client_auth),
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
     }
 }
 
@@ -931,25 +883,6 @@ struct ExpectFinished {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectFinished {
-    fn into_expect_traffic(
-        handshake: HandshakeDetails,
-        key_schedule: KeyScheduleTraffic,
-        cert_verified: verify::ServerCertVerified,
-        sig_verified: verify::HandshakeSignatureValid,
-        fin_verified: verify::FinishedMessageVerified,
-    ) -> ExpectTraffic {
-        ExpectTraffic {
-            handshake,
-            key_schedule,
-            want_write_key_update: false,
-            _cert_verified: cert_verified,
-            _sig_verified: sig_verified,
-            _fin_verified: fin_verified,
-        }
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
@@ -1048,13 +981,15 @@ impl hs::State for ExpectFinished {
         let key_schedule_traffic = key_schedule_finished.into_traffic();
         sess.common.start_traffic();
 
-        let st = Self::into_expect_traffic(
-            st.handshake,
-            key_schedule_traffic,
-            st.cert_verified,
-            st.sig_verified,
-            fin,
-        );
+        let st = ExpectTraffic {
+            handshake: st.handshake,
+            key_schedule: key_schedule_traffic,
+            want_write_key_update: false,
+            _cert_verified: st.cert_verified,
+            _sig_verified: st.sig_verified,
+            _fin_verified: fin,
+        };
+
         #[cfg(feature = "quic")]
         {
             if sess.common.protocol == Protocol::Quic {

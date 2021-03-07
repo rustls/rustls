@@ -35,30 +35,6 @@ pub struct ExpectCertificate {
     pub server_cert_sct_list: Option<SCTList>,
 }
 
-impl ExpectCertificate {
-    fn into_expect_certificate_status_or_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
-        Box::new(ExpectCertificateStatusOrServerKX {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert_sct_list: self.server_cert_sct_list,
-            server_cert_chain,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-
-    fn into_expect_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            server_cert_chain, vec![], self.server_cert_sct_list);
-
-        Box::new(ExpectServerKX {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -73,12 +49,25 @@ impl hs::State for ExpectCertificate {
 
         // TODO(perf): Avoid this clone of a large object.
         let server_cert_chain = server_cert_chain.clone();
-
-        if self.may_send_cert_status {
-            Ok(self.into_expect_certificate_status_or_server_kx(server_cert_chain))
+        Ok(if self.may_send_cert_status {
+            Box::new(ExpectCertificateStatusOrServerKX {
+                handshake: self.handshake,
+                suite: self.suite,
+                server_cert_sct_list: self.server_cert_sct_list,
+                server_cert_chain,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            })
         } else {
-            Ok(self.into_expect_server_kx(server_cert_chain))
-        }
+            let server_cert = ServerCertDetails::new(
+                server_cert_chain, vec![], self.server_cert_sct_list);
+
+            Box::new(ExpectServerKX {
+                handshake: self.handshake,
+                suite: self.suite,
+                server_cert,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            })
+        })
     }
 }
 
@@ -88,20 +77,6 @@ struct ExpectCertificateStatus {
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
-}
-
-impl ExpectCertificateStatus {
-    fn into_expect_server_kx(self, server_ocsp_response: Vec<u8>) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain, server_ocsp_response, self.server_cert_sct_list);
-
-        Box::new(ExpectServerKX {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificateStatus {
@@ -124,7 +99,15 @@ impl hs::State for ExpectCertificateStatus {
             "Server stapled OCSP response is {:?}",
             &server_cert_ocsp_response
         );
-        Ok(self.into_expect_server_kx(server_cert_ocsp_response))
+
+        let server_cert = ServerCertDetails::new(
+            self.server_cert_chain, server_cert_ocsp_response, self.server_cert_sct_list);
+        Ok(Box::new(ExpectServerKX {
+            handshake: self.handshake,
+            suite: self.suite,
+            server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
@@ -134,29 +117,6 @@ struct ExpectCertificateStatusOrServerKX {
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
-}
-
-impl ExpectCertificateStatusOrServerKX {
-    fn into_expect_server_kx(self) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain, vec![], self.server_cert_sct_list);
-        Box::new(ExpectServerKX {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-
-    fn into_expect_certificate_status(self) -> hs::NextState {
-        Box::new(ExpectCertificateStatus {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert_sct_list: self.server_cert_sct_list,
-            server_cert_chain: self.server_cert_chain,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificateStatusOrServerKX {
@@ -169,12 +129,24 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
                 HandshakeType::CertificateStatus,
             ],
         )?;
+
         if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
-            self.into_expect_server_kx()
-                .handle(sess, m)
+            let server_cert = ServerCertDetails::new(
+                self.server_cert_chain, vec![], self.server_cert_sct_list);
+            Box::new(ExpectServerKX {
+                handshake: self.handshake,
+                suite: self.suite,
+                server_cert,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         } else {
-            self.into_expect_certificate_status()
-                .handle(sess, m)
+            Box::new(ExpectCertificateStatus {
+                handshake: self.handshake,
+                suite: self.suite,
+                server_cert_sct_list: self.server_cert_sct_list,
+                server_cert_chain: self.server_cert_chain,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         }
     }
 }
@@ -184,18 +156,6 @@ struct ExpectServerKX {
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
-}
-
-impl ExpectServerKX {
-    fn into_expect_server_done_or_certreq(self, skx: ServerKXDetails) -> hs::NextState {
-        Box::new(ExpectServerDoneOrCertReq {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: skx,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectServerKX {
@@ -232,7 +192,13 @@ impl hs::State for ExpectServerKX {
             }
         }
 
-        Ok(self.into_expect_server_done_or_certreq(skx))
+        Ok(Box::new(ExpectServerDoneOrCertReq {
+            handshake: self.handshake,
+            suite: self.suite,
+            server_cert: self.server_cert,
+            server_kx: skx,
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
@@ -361,19 +327,6 @@ struct ExpectCertificateRequest {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectCertificateRequest {
-    fn into_expect_server_done(self, client_auth: ClientAuthDetails) -> hs::NextState {
-        Box::new(ExpectServerDone {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            client_auth: Some(client_auth),
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
@@ -422,7 +375,14 @@ impl hs::State for ExpectCertificateRequest {
             debug!("Client auth requested but no cert/sigscheme available");
         }
 
-        Ok(self.into_expect_server_done(client_auth))
+        Ok(Box::new(ExpectServerDone {
+            handshake: self.handshake,
+            suite: self.suite,
+            server_cert: self.server_cert,
+            server_kx: self.server_kx,
+            client_auth: Some(client_auth),
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
@@ -432,29 +392,6 @@ struct ExpectServerDoneOrCertReq {
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
     must_issue_new_ticket: bool,
-}
-
-impl ExpectServerDoneOrCertReq {
-    fn into_expect_certificate_req(self) -> hs::NextState {
-        Box::new(ExpectCertificateRequest {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-
-    fn into_expect_server_done(self) -> hs::NextState {
-        Box::new(ExpectServerDone {
-            handshake: self.handshake,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            client_auth: None,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectServerDoneOrCertReq {
@@ -470,14 +407,26 @@ impl hs::State for ExpectServerDoneOrCertReq {
         )
         .is_ok()
         {
-            self.into_expect_certificate_req()
-                .handle(sess, m)
+            Box::new(ExpectCertificateRequest {
+                handshake: self.handshake,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         } else {
             self.handshake
                 .transcript
                 .abandon_client_auth();
-            self.into_expect_server_done()
-                .handle(sess, m)
+
+            Box::new(ExpectServerDone {
+                handshake: self.handshake,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                client_auth: None,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         }
     }
 }
@@ -489,39 +438,6 @@ struct ExpectServerDone {
     server_kx: ServerKXDetails,
     client_auth: Option<ClientAuthDetails>,
     must_issue_new_ticket: bool,
-}
-
-impl ExpectServerDone {
-    fn into_expect_new_ticket(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectNewTicket {
-            secrets,
-            handshake: self.handshake,
-            resuming: false,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-
-    fn into_expect_ccs(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            ticket: ReceivedTicketDetails::new(),
-            resuming: false,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
 }
 
 impl hs::State for ExpectServerDone {
@@ -560,7 +476,7 @@ impl hs::State for ExpectServerDone {
             .split_first()
             .ok_or(TLSError::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let certv = sess
+        let cert_verified = sess
             .config
             .get_verifier()
             .verify_server_cert(
@@ -584,7 +500,7 @@ impl hs::State for ExpectServerDone {
         // 3.
         // Build up the contents of the signed message.
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
-        let sigv = {
+        let sig_verified = {
             let mut message = Vec::new();
             message.extend_from_slice(&st.handshake.randoms.client);
             message.extend_from_slice(&st.handshake.randoms.server);
@@ -658,11 +574,24 @@ impl hs::State for ExpectServerDone {
         // 6.
         emit_finished(&secrets, &mut st.handshake, sess);
 
-        if st.must_issue_new_ticket {
-            Ok(st.into_expect_new_ticket(secrets, certv, sigv))
+        Ok(if st.must_issue_new_ticket {
+            Box::new(ExpectNewTicket {
+                secrets,
+                handshake: st.handshake,
+                resuming: false,
+                cert_verified,
+                sig_verified,
+            })
         } else {
-            Ok(st.into_expect_ccs(secrets, certv, sigv))
-        }
+            Box::new(ExpectCCS {
+                secrets,
+                handshake: st.handshake,
+                ticket: ReceivedTicketDetails::new(),
+                resuming: false,
+                cert_verified,
+                sig_verified,
+            })
+        })
     }
 }
 
@@ -674,19 +603,6 @@ pub struct ExpectCCS {
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
     pub sig_verified: verify::HandshakeSignatureValid,
-}
-
-impl ExpectCCS {
-    fn into_expect_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            ticket: self.ticket,
-            resuming: self.resuming,
-            cert_verified: self.cert_verified,
-            sig_verified: self.sig_verified,
-        })
-    }
 }
 
 impl hs::State for ExpectCCS {
@@ -701,7 +617,14 @@ impl hs::State for ExpectCCS {
             .record_layer
             .start_decrypting();
 
-        Ok(self.into_expect_finished())
+        Ok(Box::new(ExpectFinished {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            ticket: self.ticket,
+            resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
+        }))
     }
 }
 
@@ -711,19 +634,6 @@ pub struct ExpectNewTicket {
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
     pub sig_verified: verify::HandshakeSignatureValid,
-}
-
-impl ExpectNewTicket {
-    fn into_expect_ccs(self, ticket: ReceivedTicketDetails) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            ticket,
-            resuming: self.resuming,
-            cert_verified: self.cert_verified,
-            sig_verified: self.sig_verified,
-        })
-    }
 }
 
 impl hs::State for ExpectNewTicket {
@@ -741,8 +651,15 @@ impl hs::State for ExpectNewTicket {
             HandshakeType::NewSessionTicket,
             HandshakePayload::NewSessionTicket
         )?;
-        let recvd = ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint);
-        Ok(self.into_expect_ccs(recvd))
+
+        Ok(Box::new(ExpectCCS {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
+            resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
+        }))
     }
 }
 
@@ -805,17 +722,6 @@ struct ExpectFinished {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl ExpectFinished {
-    fn into_expect_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            secrets: self.secrets,
-            _cert_verified: self.cert_verified,
-            _sig_verified: self.sig_verified,
-            _fin_verified: fin,
-        })
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
@@ -855,7 +761,12 @@ impl hs::State for ExpectFinished {
         }
 
         sess.common.start_traffic();
-        Ok(st.into_expect_traffic(fin))
+        Ok(Box::new(ExpectTraffic {
+            secrets: st.secrets,
+            _cert_verified: st.cert_verified,
+            _sig_verified: st.sig_verified,
+            _fin_verified: fin,
+        }))
     }
 }
 

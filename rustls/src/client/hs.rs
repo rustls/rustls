@@ -4,7 +4,7 @@ use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
-use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
+use crate::key_schedule::KeyScheduleEarly;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -33,7 +33,6 @@ use crate::client::common::HandshakeDetails;
 use crate::client::{tls12, tls13};
 
 use webpki;
-use ring::digest::Digest;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TLSError>;
@@ -504,69 +503,6 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
     scts.is_empty() || scts.iter().any(|sct| sct.0.is_empty())
 }
 
-impl ExpectServerHello {
-    fn into_expect_tls13_encrypted_extensions(
-        self,
-        key_schedule: KeyScheduleHandshake,
-        hash_at_client_recvd_server_hello: Digest,
-    ) -> NextState {
-        Box::new(tls13::ExpectEncryptedExtensions {
-            handshake: self.handshake,
-            key_schedule,
-            hello: self.hello,
-            hash_at_client_recvd_server_hello,
-        })
-    }
-
-    fn into_expect_tls12_new_ticket_resume(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> NextState {
-        Box::new(tls12::ExpectNewTicket {
-            secrets,
-            handshake: self.handshake,
-            resuming: true,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-
-    fn into_expect_tls12_ccs_resume(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> NextState {
-        Box::new(tls12::ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            ticket: ReceivedTicketDetails::new(),
-            resuming: true,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-
-    fn into_expect_tls12_certificate(
-        self,
-        suite: &'static SupportedCipherSuite,
-        may_send_cert_status: bool,
-        must_issue_new_ticket: bool,
-        server_cert_sct_list: Option<SCTList>)
-        -> NextState
-    {
-        Box::new(tls12::ExpectCertificate {
-            handshake: self.handshake,
-            suite,
-            may_send_cert_status,
-            must_issue_new_ticket,
-            server_cert_sct_list,
-        })
-    }
-}
-
 impl State for ExpectServerHello {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let server_hello =
@@ -703,7 +639,12 @@ impl State for ExpectServerHello {
                 &mut self.hello,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
-            return Ok(self.into_expect_tls13_encrypted_extensions(key_schedule, hash_at_client_recvd_server_hello));
+            return Ok(Box::new(tls13::ExpectEncryptedExtensions {
+                handshake: self.handshake,
+                key_schedule,
+                hello: self.hello,
+                hash_at_client_recvd_server_hello,
+            }));
         }
 
         // TLS1.2 only from here-on
@@ -802,15 +743,34 @@ impl State for ExpectServerHello {
                 let certv = verify::ServerCertVerified::assertion();
                 let sigv = verify::HandshakeSignatureValid::assertion();
 
-                return if must_issue_new_ticket {
-                    Ok(self.into_expect_tls12_new_ticket_resume(secrets, certv, sigv))
+                return Ok(if must_issue_new_ticket {
+                    Box::new(tls12::ExpectNewTicket {
+                        secrets,
+                        handshake: self.handshake,
+                        resuming: true,
+                        cert_verified: certv,
+                        sig_verified: sigv,
+                    })
                 } else {
-                    Ok(self.into_expect_tls12_ccs_resume(secrets, certv, sigv))
-                };
+                    Box::new(tls12::ExpectCCS {
+                        secrets,
+                        handshake: self.handshake,
+                        ticket: ReceivedTicketDetails::new(),
+                        resuming: true,
+                        cert_verified: certv,
+                        sig_verified: sigv,
+                    })
+                });
             }
         }
 
-        Ok(self.into_expect_tls12_certificate(scs, may_send_cert_status, must_issue_new_ticket, server_cert_list_list))
+        Ok(Box::new(tls12::ExpectCertificate {
+            handshake: self.handshake,
+            suite: scs,
+            may_send_cert_status,
+            must_issue_new_ticket,
+            server_cert_sct_list: server_cert_list_list,
+        }))
     }
 }
 

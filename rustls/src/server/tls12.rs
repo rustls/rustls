@@ -177,17 +177,6 @@ pub struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl ExpectCertificateVerify {
-    fn into_expect_tls12_ccs(self) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            resuming: false,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
@@ -223,7 +212,12 @@ impl hs::State for ExpectCertificateVerify {
         self.handshake
             .transcript
             .add_message(&m);
-        Ok(self.into_expect_tls12_ccs())
+        Ok(Box::new(ExpectCCS {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            resuming: false,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -233,17 +227,6 @@ pub struct ExpectCCS {
     pub handshake: HandshakeDetails,
     pub resuming: bool,
     pub send_ticket: bool,
-}
-
-impl ExpectCCS {
-    fn into_expect_tls12_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            resuming: self.resuming,
-            send_ticket: self.send_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectCCS {
@@ -257,7 +240,12 @@ impl hs::State for ExpectCCS {
         sess.common
             .record_layer
             .start_decrypting();
-        Ok(self.into_expect_tls12_finished())
+        Ok(Box::new(ExpectFinished {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            resuming: self.resuming,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -357,15 +345,6 @@ pub struct ExpectFinished {
     send_ticket: bool,
 }
 
-impl ExpectFinished {
-    fn into_expect_tls12_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            secrets: self.secrets,
-            _fin_verified: fin,
-        })
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
@@ -422,7 +401,10 @@ impl hs::State for ExpectFinished {
         }
 
         sess.common.start_traffic();
-        Ok(self.into_expect_tls12_traffic(fin))
+        Ok(Box::new(ExpectTraffic {
+            secrets: self.secrets,
+            _fin_verified: fin,
+        }))
     }
 }
 

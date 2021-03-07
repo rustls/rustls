@@ -79,36 +79,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn into_expect_retried_client_hello(self) -> hs::NextState {
-        Box::new(hs::ExpectClientHello {
-            handshake: self.handshake,
-            done_retry: true,
-            send_ticket: self.send_ticket,
-        })
-    }
-
-    fn into_expect_certificate(
-        self,
-        key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    ) -> hs::NextState {
-        Box::new(ExpectCertificate {
-            handshake: self.handshake,
-            key_schedule,
-            send_ticket: self.send_ticket,
-        })
-    }
-
-    fn into_expect_finished(
-        self,
-        key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    ) -> hs::NextState {
-        Box::new(ExpectFinished {
-            handshake: self.handshake,
-            key_schedule,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn emit_server_hello(
         &mut self,
         suite: &'static SupportedCipherSuite,
@@ -586,7 +556,11 @@ impl CompleteClientHelloHandling {
 
                     self.emit_hello_retry_request(suite, sess, group.name);
                     self.emit_fake_ccs(sess);
-                    return Ok(self.into_expect_retried_client_hello());
+                    return Ok(Box::new(hs::ExpectClientHello {
+                        handshake: self.handshake,
+                        done_retry: true,
+                        send_ticket: self.send_ticket,
+                    }));
                 }
 
                 return Err(hs::incompatible(sess, "no kx group overlap with client"));
@@ -677,12 +651,19 @@ impl CompleteClientHelloHandling {
 
         hs::check_aligned_handshake(sess)?;
         let key_schedule_traffic = self.emit_finished_tls13(sess, key_schedule);
-
-        if doing_client_auth {
-            Ok(self.into_expect_certificate(key_schedule_traffic))
+        Ok(if doing_client_auth {
+            Box::new(ExpectCertificate {
+                handshake: self.handshake,
+                key_schedule: key_schedule_traffic,
+                send_ticket: self.send_ticket,
+            })
         } else {
-            Ok(self.into_expect_finished(key_schedule_traffic))
-        }
+            Box::new(ExpectFinished {
+                handshake: self.handshake,
+                key_schedule: key_schedule_traffic,
+                send_ticket: self.send_ticket,
+            })
+        })
     }
 }
 
@@ -690,25 +671,6 @@ pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     pub send_ticket: bool,
-}
-
-impl ExpectCertificate {
-    fn into_expect_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            key_schedule: self.key_schedule,
-            handshake: self.handshake,
-            send_ticket: self.send_ticket,
-        })
-    }
-
-    fn into_expect_certificate_verify(self, cert: ClientCertDetails) -> hs::NextState {
-        Box::new(ExpectCertificateVerify {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            client_cert: cert,
-            send_ticket: self.send_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificate {
@@ -752,7 +714,11 @@ impl hs::State for ExpectCertificate {
                 if !mandatory {
                     debug!("client auth requested but no certificate supplied");
                     self.handshake.transcript.abandon_client_auth();
-                    return Ok(self.into_expect_finished());
+                    return Ok(Box::new(ExpectFinished {
+                        key_schedule: self.key_schedule,
+                        handshake: self.handshake,
+                        send_ticket: self.send_ticket,
+                    }));
                 }
 
                 sess.common
@@ -772,7 +738,12 @@ impl hs::State for ExpectCertificate {
             })?;
 
         let cert = ClientCertDetails::new(cert_chain);
-        Ok(self.into_expect_certificate_verify(cert))
+        Ok(Box::new(ExpectCertificateVerify {
+            handshake: self.handshake,
+            key_schedule: self.key_schedule,
+            client_cert: cert,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -781,16 +752,6 @@ pub struct ExpectCertificateVerify {
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     client_cert: ClientCertDetails,
     send_ticket: bool,
-}
-
-impl ExpectCertificateVerify {
-    fn into_expect_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            key_schedule: self.key_schedule,
-            handshake: self.handshake,
-            send_ticket: self.send_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectCertificateVerify {
@@ -832,7 +793,11 @@ impl hs::State for ExpectCertificateVerify {
         self.handshake
             .transcript
             .add_message(&m);
-        Ok(self.into_expect_finished())
+        Ok(Box::new(ExpectFinished {
+            key_schedule: self.key_schedule,
+            handshake: self.handshake,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -868,17 +833,6 @@ pub struct ExpectFinished {
 }
 
 impl ExpectFinished {
-    fn into_expect_traffic(
-        fin: verify::FinishedMessageVerified,
-        ks: KeyScheduleTraffic,
-    ) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            key_schedule: ks,
-            want_write_key_update: false,
-            _fin_verified: fin,
-        })
-    }
-
     fn emit_ticket(
         handshake: &mut HandshakeDetails,
         sess: &mut ServerSessionImpl,
@@ -1002,7 +956,11 @@ impl hs::State for ExpectFinished {
             }
         }
 
-        Ok(Self::into_expect_traffic(fin, key_schedule_traffic))
+        Ok(Box::new(ExpectTraffic {
+            key_schedule: key_schedule_traffic,
+            want_write_key_update: false,
+            _fin_verified: fin,
+        }))
     }
 }
 
