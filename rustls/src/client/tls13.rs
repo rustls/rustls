@@ -786,6 +786,10 @@ impl hs::State for ExpectCertificateRequest {
             .resolve(&canames, &compat_sigschemes);
 
         let client_auth = ClientAuthDetails::from_key(maybe_certkey, &compat_sigschemes);
+        if !client_auth.is_enabled() {
+            self.handshake.transcript.abandon_client_auth();
+        }
+
         Ok(Box::new(ExpectCertificate {
             handshake: self.handshake,
             key_schedule: self.key_schedule,

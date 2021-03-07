@@ -173,4 +173,8 @@ impl ClientAuthDetails {
             None => (None, None),
         }
     }
+
+    pub fn is_enabled(&self) -> bool {
+        self.0.is_some()
+    }
 }

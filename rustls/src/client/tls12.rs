@@ -284,13 +284,7 @@ fn emit_certverify(
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TLSError> {
     let signer = match signer {
-        None => {
-            trace!("Not sending CertificateVerify, no key");
-            handshake
-                .transcript
-                .abandon_client_auth();
-            return Ok(());
-        },
+        None => return Ok(()),
         Some(signer) => {
             signer
         }
@@ -393,6 +387,10 @@ impl hs::State for ExpectCertificateRequest {
             .resolve(&canames, &certreq.sigschemes);
 
         let client_auth = ClientAuthDetails::from_key(maybe_certkey, &certreq.sigschemes);
+        if !client_auth.is_enabled() {
+            self.handshake.transcript.abandon_client_auth();
+        }
+
         Ok(Box::new(ExpectServerDone {
             handshake: self.handshake,
             suite: self.suite,
