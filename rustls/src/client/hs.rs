@@ -38,6 +38,55 @@ use ring::digest::Digest;
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TLSError>;
 
+/// The client-side handshake state machine
+///
+/// InitialState ->                             ExpectServerHello
+///                                             | ExpectServerHelloOrHelloRetryRequest
+///
+/// ExpectServerHello ->                        tls13::ExpectEncryptedExtensions
+///                                             | tls12::ExpectCertificate
+///                                             | tls12::ExpectNewTicket
+///                                             | tls12::ExpectCCS
+///
+/// ExpectServerHelloOrHelloRetryRequest ->     ExpectServerHello
+///
+/// tls12::ExpectCertificate ->                 tls12::ExpectCertificateStatusOrServerKX
+///                                             | tls12::ExpectServerKX
+///
+/// tls12::ExpectCertificateStatusOrServerKX -> tls12::ExpectServerKX
+///                                             | tls12::ExpectCertificateStatus
+///
+/// tls12::ExpectCertificateStatus ->           tls12::ExpectServerKX
+///
+/// tls12::ExpectServerKX ->                    tls12::ExpectServerDoneOrCertReq
+///
+/// tls12::ExpectServerDoneOrCertReq ->         tls12::ExpectCertificateRequest
+///                                             | tls12::ExpectServerDone
+///
+/// tls12::ExpectCertificateRequest ->          tls12::ExpectServerDone
+///
+/// tls12::ExpectServerDone ->                  tls12::ExpectNewTicket
+///                                             | tls12::ExpectCCS
+///
+/// tls12::ExpectNewTicket ->                   tls12::ExpectCCS
+///
+/// tls12::ExpectCCS ->                         tls12::ExpectFinished
+///
+/// tls12::ExpectFinished ->                    tls12::ExpectTraffic
+///
+/// tls13::ExpectEncryptedExtensions ->         tls13::ExpectFinished
+///                                             | tls13::ExpectCertificateOrCertReq
+///
+/// tls13::ExpectCertificateOrCertReq ->        tls13::ExpectCertificate
+///                                             | tls13::ExpectCertificateRequest
+///
+/// tls13::ExpectCertificateRequest ->          tls13::ExpectCertificate
+///
+/// tls13::ExpectCertificate ->                 tls13::ExpectCertificateVerify
+///
+/// tls13::ExpectCertificateVerify ->           tls13::ExpectFinished
+///
+/// tls13::ExpectFinished ->                    tls13::ExpectTraffic
 pub trait State {
     /// Each handle() implementation consumes a whole TLS message, and returns
     /// either an error or the next state.

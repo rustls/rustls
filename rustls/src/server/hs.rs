@@ -34,6 +34,34 @@ use crate::server::{tls12, tls13};
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TLSError>;
 
+/// The server-side handshake state machine
+///
+/// ExpectClientHello ->                    tls13::CompleteClientHelloHandling
+///                                         | tls12::ExpectCertificate
+///                                         | tls12::ExpectClientKX
+///                                         | tls12::ExpectCCS
+///
+/// tls12::ExpectCertificate ->             tls12::ExpectClientKX
+///
+/// tls12::ExpectClientKX ->                tls12::ExpectCertificateVerify
+///                                         | tls12::ExpectCCS
+///
+/// tls12::ExpectCertificateVerify ->       | tls12::ExpectCCS
+///
+/// tls12::ExpectCCS ->                     | tls12::ExpectFinished
+///
+/// tls12::ExpectFinished ->                | tls12::ExpectTraffic
+///
+/// tls13::CompleteClientHelloHandling ->   ExpectClientHello
+///                                         | tls13::ExpectCertificate
+///                                         | tls13::ExpectFinished
+///
+/// tls13::ExpectCertificate ->             tls13::ExpectFinished
+///                                         | tls13::CertificateVerify
+///
+/// tls13::CertificateVerify ->             tls13::ExpectFinished
+///
+/// tls13::ExpectFinished ->                tls13::ExpectTraffic
 pub trait State {
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError;
 
