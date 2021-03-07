@@ -1,8 +1,8 @@
 use crate::hash_hs;
 #[cfg(feature = "logging")]
-use crate::log::trace;
+use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::enums::NamedGroup;
+use crate::msgs::enums::{NamedGroup, SignatureScheme};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::SCTList;
@@ -10,7 +10,7 @@ use crate::msgs::handshake::ServerExtension;
 use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
 use crate::session::SessionRandoms;
-use crate::sign;
+use crate::sign::{self, CertifiedKey};
 use crate::kx;
 use webpki;
 
@@ -149,16 +149,29 @@ impl ReceivedTicketDetails {
     }
 }
 
+#[derive(Default)]
 pub struct ClientAuthDetails {
     pub cert: Option<CertificatePayload>,
     pub signer: Option<Box<dyn sign::Signer>>,
 }
 
 impl ClientAuthDetails {
-    pub fn new() -> ClientAuthDetails {
-        ClientAuthDetails {
-            cert: None,
-            signer: None,
+    pub fn from_key(key: Option<CertifiedKey>, sig_schemes: &[SignatureScheme]) -> Self {
+        let mut new = Self::default();
+        if let Some(mut certkey) = key {
+            let maybe_signer = certkey
+                .key
+                .choose_scheme(&sig_schemes);
+
+            if let Some(_) = &maybe_signer {
+                debug!("Attempting client auth");
+                new.cert = Some(certkey.take_cert());
+            }
+            new.signer = maybe_signer;
+        } else {
+            debug!("Client auth requested but no cert/sigscheme available");
         }
+
+        new
     }
 }

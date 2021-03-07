@@ -377,8 +377,6 @@ impl hs::State for ExpectCertificateRequest {
             .add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
 
-        let mut client_auth = ClientAuthDetails::new();
-
         // The RFC jovially describes the design here as 'somewhat complicated'
         // and 'somewhat underspecified'.  So thanks for that.
         //
@@ -395,20 +393,7 @@ impl hs::State for ExpectCertificateRequest {
             .client_auth_cert_resolver
             .resolve(&canames, &certreq.sigschemes);
 
-        if let Some(mut certkey) = maybe_certkey {
-            let maybe_signer = certkey
-                .key
-                .choose_scheme(&certreq.sigschemes);
-
-            if let Some(_) = &maybe_signer {
-                debug!("Attempting client auth");
-                client_auth.cert = Some(certkey.take_cert());
-            }
-            client_auth.signer = maybe_signer;
-        } else {
-            debug!("Client auth requested but no cert/sigscheme available");
-        }
-
+        let client_auth = ClientAuthDetails::from_key(maybe_certkey, &certreq.sigschemes);
         Ok(Box::new(ExpectServerDone {
             handshake: self.handshake,
             suite: self.suite,

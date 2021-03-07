@@ -785,18 +785,7 @@ impl hs::State for ExpectCertificateRequest {
             .client_auth_cert_resolver
             .resolve(&canames, &compat_sigschemes);
 
-        let mut client_auth = ClientAuthDetails::new();
-        if let Some(mut certkey) = maybe_certkey {
-            debug!("Attempting client auth");
-            let maybe_signer = certkey
-                .key
-                .choose_scheme(&compat_sigschemes);
-            client_auth.cert = Some(certkey.take_cert());
-            client_auth.signer = maybe_signer;
-        } else {
-            debug!("Client auth requested but no cert selected");
-        }
-
+        let client_auth = ClientAuthDetails::from_key(maybe_certkey, &compat_sigschemes);
         Ok(Box::new(ExpectCertificate {
             handshake: self.handshake,
             key_schedule: self.key_schedule,
