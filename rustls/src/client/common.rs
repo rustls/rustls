@@ -149,29 +149,28 @@ impl ReceivedTicketDetails {
     }
 }
 
-#[derive(Default)]
-pub struct ClientAuthDetails {
-    pub cert: Option<CertificatePayload>,
-    pub signer: Option<Box<dyn sign::Signer>>,
-}
+pub struct ClientAuthDetails(Option<(CertificatePayload, Box<dyn sign::Signer>)>);
 
 impl ClientAuthDetails {
     pub fn from_key(key: Option<CertifiedKey>, sig_schemes: &[SignatureScheme]) -> Self {
-        let mut new = Self::default();
-        if let Some(mut certkey) = key {
-            let maybe_signer = certkey
-                .key
-                .choose_scheme(&sig_schemes);
-
-            if let Some(_) = &maybe_signer {
-                debug!("Attempting client auth");
-                new.cert = Some(certkey.take_cert());
+        Self(if let Some(mut certkey) = key {
+            match certkey.key.choose_scheme(&sig_schemes) {
+                Some(signer) => {
+                    debug!("Attempting client auth");
+                    Some((certkey.take_cert(), signer))
+                }
+                None => None,
             }
-            new.signer = maybe_signer;
         } else {
             debug!("Client auth requested but no cert/sigscheme available");
-        }
+            None
+        })
+    }
 
-        new
+    pub fn into_parts(self) -> (Option<CertificatePayload>, Option<Box<dyn sign::Signer>>) {
+        match self.0 {
+            Some((cert, signer)) => (Some(cert), Some(signer)),
+            None => (None, None),
+        }
     }
 }

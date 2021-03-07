@@ -17,7 +17,7 @@ use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureSch
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
-use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
+use crate::msgs::handshake::{CertificateEntry, CertificatePayload, CertificatePayloadTLS13};
 use crate::msgs::handshake::{ClientExtension, HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID};
@@ -797,7 +797,7 @@ impl hs::State for ExpectCertificateRequest {
 
 fn emit_certificate_tls13(
     handshake: &mut HandshakeDetails,
-    client_auth: &mut ClientAuthDetails,
+    cert: Option<CertificatePayload>,
     sess: &mut ClientSessionImpl,
 ) {
     let mut cert_payload = CertificatePayloadTLS13 {
@@ -805,7 +805,7 @@ fn emit_certificate_tls13(
         entries: Vec::new(),
     };
 
-    if let Some(cert_chain) = client_auth.cert.take() {
+    if let Some(cert_chain) = cert {
         for cert in cert_chain {
             cert_payload
                 .entries
@@ -827,10 +827,10 @@ fn emit_certificate_tls13(
 
 fn emit_certverify_tls13(
     handshake: &mut HandshakeDetails,
-    client_auth: &mut ClientAuthDetails,
+    signer: Option<Box<dyn sign::Signer>>,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TLSError> {
-    let signer = match client_auth.signer.take() {
+    let signer = match signer {
         Some(s) => s,
         None => {
             debug!("Skipping certverify message (no client scheme/key)");
@@ -984,9 +984,10 @@ impl hs::State for ExpectFinished {
 
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
-        if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate_tls13(&mut st.handshake, client_auth, sess);
-            emit_certverify_tls13(&mut st.handshake, client_auth, sess)?;
+        if let Some(client_auth) = st.client_auth {
+            let (cert, signer) = client_auth.into_parts();
+            emit_certificate_tls13(&mut st.handshake, cert, sess);
+            emit_certverify_tls13(&mut st.handshake, signer, sess)?;
         }
 
         let mut key_schedule_finished = st

@@ -17,6 +17,7 @@ use crate::msgs::persist;
 use crate::session::SessionSecrets;
 use crate::SupportedCipherSuite;
 use crate::kx;
+use crate::sign;
 use crate::ticketer;
 use crate::verify;
 
@@ -238,11 +239,9 @@ impl hs::State for ExpectServerKX {
 
 fn emit_certificate(
     handshake: &mut HandshakeDetails,
-    client_auth: &mut ClientAuthDetails,
+    chosen_cert: Option<CertificatePayload>,
     sess: &mut ClientSessionImpl,
 ) {
-    let chosen_cert = client_auth.cert.take();
-
     let cert = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
@@ -281,10 +280,10 @@ fn emit_clientkx(
 
 fn emit_certverify(
     handshake: &mut HandshakeDetails,
-    client_auth: &mut ClientAuthDetails,
+    signer: Option<Box<dyn sign::Signer>>,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TLSError> {
-    let signer = match client_auth.signer.take() {
+    let signer = match signer {
         None => {
             trace!("Not sending CertificateVerify, no key");
             handshake
@@ -555,9 +554,14 @@ impl hs::State for ExpectServerDone {
         sess.server_cert_chain = st.server_cert.take_chain();
 
         // 4.
-        if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate(&mut st.handshake, client_auth, sess);
-        }
+        let client_signer = match st.client_auth {
+            Some(client_auth) => {
+                let (cert, signer) = client_auth.into_parts();
+                emit_certificate(&mut st.handshake, cert, sess);
+                Some(signer)
+            }
+            None => None,
+        };
 
         // 5a.
         let kxd = kx::KeyExchange::client_ecdhe(&st.server_kx.kx_params, &sess.config.kx_groups)
@@ -572,8 +576,8 @@ impl hs::State for ExpectServerDone {
             .get_current_hash();
 
         // 5c.
-        if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut st.handshake, client_auth, sess)?;
+        if let Some(signer) = client_signer {
+            emit_certverify(&mut st.handshake, signer, sess)?;
         }
 
         // 5d.
