@@ -793,7 +793,6 @@ impl hs::State for ExpectCertificateRequest {
                 .choose_scheme(&compat_sigschemes);
             client_auth.cert = Some(certkey.take_cert());
             client_auth.signer = maybe_signer;
-            client_auth.auth_context = Some(certreq.context.0.clone());
         } else {
             debug!("Client auth requested but no cert selected");
         }
@@ -812,13 +811,8 @@ fn emit_certificate_tls13(
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) {
-    let context = client_auth
-        .auth_context
-        .take()
-        .unwrap_or_else(Vec::new);
-
     let mut cert_payload = CertificatePayloadTLS13 {
-        context: PayloadU8::new(context),
+        context: PayloadU8::new(Vec::new()),
         entries: Vec::new(),
     };
 
@@ -852,7 +846,7 @@ fn emit_certverify_tls13(
         None => {
             debug!("Skipping certverify message (no client scheme/key)");
             return Ok(());
-        } 
+        }
     };
 
     let message =

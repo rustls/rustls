@@ -152,7 +152,6 @@ impl ReceivedTicketDetails {
 pub struct ClientAuthDetails {
     pub cert: Option<CertificatePayload>,
     pub signer: Option<Box<dyn sign::Signer>>,
-    pub auth_context: Option<Vec<u8>>,
 }
 
 impl ClientAuthDetails {
@@ -160,7 +159,6 @@ impl ClientAuthDetails {
         ClientAuthDetails {
             cert: None,
             signer: None,
-            auth_context: None,
         }
     }
 }
