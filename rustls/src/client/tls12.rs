@@ -1,6 +1,7 @@
 use crate::check::check_message;
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
+use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -29,6 +30,7 @@ use std::mem;
 
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
+    pub transcript: HandshakeHash,
     pub suite: &'static SupportedCipherSuite,
     pub may_send_cert_status: bool,
     pub must_issue_new_ticket: bool,
@@ -43,8 +45,7 @@ impl hs::State for ExpectCertificate {
     ) -> hs::NextStateOrError {
         let server_cert_chain =
             require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
-        self.handshake
-            .transcript
+        self.transcript
             .add_message(&m);
 
         // TODO(perf): Avoid this clone of a large object.
@@ -52,6 +53,7 @@ impl hs::State for ExpectCertificate {
         Ok(if self.may_send_cert_status {
             Box::new(ExpectCertificateStatusOrServerKX {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 suite: self.suite,
                 server_cert_sct_list: self.server_cert_sct_list,
                 server_cert_chain,
@@ -63,6 +65,7 @@ impl hs::State for ExpectCertificate {
 
             Box::new(ExpectServerKX {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 suite: self.suite,
                 server_cert,
                 must_issue_new_ticket: self.must_issue_new_ticket,
@@ -73,6 +76,7 @@ impl hs::State for ExpectCertificate {
 
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
@@ -85,8 +89,7 @@ impl hs::State for ExpectCertificateStatus {
         _sess: &mut ClientSessionImpl,
         m: Message,
     ) -> hs::NextStateOrError {
-        self.handshake
-            .transcript
+        self.transcript
             .add_message(&m);
         let mut status = require_handshake_msg_mut!(
             m,
@@ -104,6 +107,7 @@ impl hs::State for ExpectCertificateStatus {
             self.server_cert_chain, server_cert_ocsp_response, self.server_cert_sct_list);
         Ok(Box::new(ExpectServerKX {
             handshake: self.handshake,
+            transcript: self.transcript,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -113,6 +117,7 @@ impl hs::State for ExpectCertificateStatus {
 
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
@@ -135,6 +140,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
                 self.server_cert_chain, vec![], self.server_cert_sct_list);
             Box::new(ExpectServerKX {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 suite: self.suite,
                 server_cert,
                 must_issue_new_ticket: self.must_issue_new_ticket,
@@ -142,6 +148,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
         } else {
             Box::new(ExpectCertificateStatus {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 suite: self.suite,
                 server_cert_sct_list: self.server_cert_sct_list,
                 server_cert_chain: self.server_cert_chain,
@@ -153,6 +160,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
 
 struct ExpectServerKX {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
@@ -169,8 +177,7 @@ impl hs::State for ExpectServerKX {
             HandshakeType::ServerKeyExchange,
             HandshakePayload::ServerKeyExchange
         )?;
-        self.handshake
-            .transcript
+        self.transcript
             .add_message(&m);
 
         let decoded_kx = opaque_kx.unwrap_given_kxa(&self.suite.kx)
@@ -194,6 +201,7 @@ impl hs::State for ExpectServerKX {
 
         Ok(Box::new(ExpectServerDoneOrCertReq {
             handshake: self.handshake,
+            transcript: self.transcript,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: skx,
@@ -203,7 +211,7 @@ impl hs::State for ExpectServerKX {
 }
 
 fn emit_certificate(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) {
@@ -218,12 +226,12 @@ fn emit_certificate(
         }),
     };
 
-    handshake.transcript.add_message(&cert);
+    transcript.add_message(&cert);
     sess.common.send_msg(cert, false);
 }
 
 fn emit_clientkx(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     sess: &mut ClientSessionImpl,
     kxd: &kx::KeyExchangeResult,
 ) {
@@ -241,20 +249,19 @@ fn emit_clientkx(
         }),
     };
 
-    handshake.transcript.add_message(&ckx);
+    transcript.add_message(&ckx);
     sess.common.send_msg(ckx, false);
 }
 
 fn emit_certverify(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TLSError> {
     let signer = match client_auth.signer.take() {
         None => {
             trace!("Not sending CertificateVerify, no key");
-            handshake
-                .transcript
+            transcript
                 .abandon_client_auth();
             return Ok(());
         },
@@ -263,8 +270,7 @@ fn emit_certverify(
         }
     };
 
-    let message = handshake
-        .transcript
+    let message = transcript
         .take_handshake_buf();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
@@ -279,7 +285,7 @@ fn emit_certverify(
         }),
     };
 
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     sess.common.send_msg(m, false);
     Ok(())
 }
@@ -296,10 +302,10 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
 
 fn emit_finished(
     secrets: &SessionSecrets,
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     sess: &mut ClientSessionImpl,
 ) {
-    let vh = handshake.transcript.get_current_hash();
+    let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -312,7 +318,7 @@ fn emit_finished(
         }),
     };
 
-    handshake.transcript.add_message(&f);
+    transcript.add_message(&f);
     sess.common.send_msg(f, true);
 }
 
@@ -321,6 +327,7 @@ fn emit_finished(
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -338,8 +345,7 @@ impl hs::State for ExpectCertificateRequest {
             HandshakeType::CertificateRequest,
             HandshakePayload::CertificateRequest
         )?;
-        self.handshake
-            .transcript
+        self.transcript
             .add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
 
@@ -377,6 +383,7 @@ impl hs::State for ExpectCertificateRequest {
 
         Ok(Box::new(ExpectServerDone {
             handshake: self.handshake,
+            transcript: self.transcript,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -388,6 +395,7 @@ impl hs::State for ExpectCertificateRequest {
 
 struct ExpectServerDoneOrCertReq {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -409,18 +417,19 @@ impl hs::State for ExpectServerDoneOrCertReq {
         {
             Box::new(ExpectCertificateRequest {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 suite: self.suite,
                 server_cert: self.server_cert,
                 server_kx: self.server_kx,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }).handle(sess, m)
         } else {
-            self.handshake
-                .transcript
+            self.transcript
                 .abandon_client_auth();
 
             Box::new(ExpectServerDone {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 suite: self.suite,
                 server_cert: self.server_cert,
                 server_kx: self.server_kx,
@@ -433,6 +442,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 
 struct ExpectServerDone {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -448,7 +458,7 @@ impl hs::State for ExpectServerDone {
             &[ContentType::Handshake],
             &[HandshakeType::ServerHelloDone],
         )?;
-        st.handshake.transcript.add_message(&m);
+        st.transcript.add_message(&m);
 
         hs::check_aligned_handshake(sess)?;
 
@@ -526,7 +536,7 @@ impl hs::State for ExpectServerDone {
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate(&mut st.handshake, client_auth, sess);
+            emit_certificate(&mut st.transcript, client_auth, sess);
         }
 
         // 5a.
@@ -534,16 +544,15 @@ impl hs::State for ExpectServerDone {
             .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
-        emit_clientkx(&mut st.handshake, sess, &kxd);
+        emit_clientkx(&mut st.transcript, sess, &kxd);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
         let handshake_hash = st
-            .handshake
             .transcript
             .get_current_hash();
 
         // 5c.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut st.handshake, client_auth, sess)?;
+            emit_certverify(&mut st.transcript, client_auth, sess)?;
         }
 
         // 5d.
@@ -572,12 +581,13 @@ impl hs::State for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut st.handshake, sess);
+        emit_finished(&secrets, &mut st.transcript, sess);
 
         Ok(if st.must_issue_new_ticket {
             Box::new(ExpectNewTicket {
                 secrets,
                 handshake: st.handshake,
+                transcript: st.transcript,
                 resuming: false,
                 cert_verified,
                 sig_verified,
@@ -586,6 +596,7 @@ impl hs::State for ExpectServerDone {
             Box::new(ExpectCCS {
                 secrets,
                 handshake: st.handshake,
+                transcript: st.transcript,
                 ticket: ReceivedTicketDetails::new(),
                 resuming: false,
                 cert_verified,
@@ -599,6 +610,7 @@ impl hs::State for ExpectServerDone {
 pub struct ExpectCCS {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub transcript: HandshakeHash,
     pub ticket: ReceivedTicketDetails,
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
@@ -620,6 +632,7 @@ impl hs::State for ExpectCCS {
         Ok(Box::new(ExpectFinished {
             secrets: self.secrets,
             handshake: self.handshake,
+            transcript: self.transcript,
             ticket: self.ticket,
             resuming: self.resuming,
             cert_verified: self.cert_verified,
@@ -631,6 +644,7 @@ impl hs::State for ExpectCCS {
 pub struct ExpectNewTicket {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub transcript: HandshakeHash,
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
     pub sig_verified: verify::HandshakeSignatureValid,
@@ -642,8 +656,7 @@ impl hs::State for ExpectNewTicket {
         _sess: &mut ClientSessionImpl,
         m: Message,
     ) -> hs::NextStateOrError {
-        self.handshake
-            .transcript
+        self.transcript
             .add_message(&m);
 
         let nst = require_handshake_msg_mut!(
@@ -655,6 +668,7 @@ impl hs::State for ExpectNewTicket {
         Ok(Box::new(ExpectCCS {
             secrets: self.secrets,
             handshake: self.handshake,
+            transcript: self.transcript,
             ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
             resuming: self.resuming,
             cert_verified: self.cert_verified,
@@ -715,6 +729,7 @@ fn save_session(
 
 struct ExpectFinished {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     ticket: ReceivedTicketDetails,
     secrets: SessionSecrets,
     resuming: bool,
@@ -732,7 +747,6 @@ impl hs::State for ExpectFinished {
 
         // Work out what verify_data we expect.
         let vh = st
-            .handshake
             .transcript
             .get_current_hash();
         let expect_verify_data = st.secrets.server_verify_data(&vh);
@@ -748,7 +762,7 @@ impl hs::State for ExpectFinished {
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Hash this message too.
-        st.handshake.transcript.add_message(&m);
+        st.transcript.add_message(&m);
 
         save_session(&st.secrets, &mut st.handshake, &mut st.ticket, sess);
 
@@ -757,7 +771,7 @@ impl hs::State for ExpectFinished {
             sess.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&st.secrets, &mut st.handshake, sess);
+            emit_finished(&st.secrets, &mut st.transcript, sess);
         }
 
         sess.common.start_traffic();

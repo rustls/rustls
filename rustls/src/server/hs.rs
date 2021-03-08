@@ -18,6 +18,7 @@ use crate::msgs::handshake::{HandshakeMessagePayload, Random, ServerHelloPayload
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::hash_hs::HandshakeHash;
 use crate::rand;
 use crate::server::{ClientHello, ServerConfig, ServerSessionImpl};
 #[cfg(feature = "quic")]
@@ -335,6 +336,7 @@ impl ExtensionProcessing {
 
 pub struct ExpectClientHello {
     pub handshake: HandshakeDetails,
+    pub transcript: HandshakeHash,
     pub done_retry: bool,
     pub send_ticket: bool,
 }
@@ -346,6 +348,7 @@ impl ExpectClientHello {
     ) -> ExpectClientHello {
         let mut ech = ExpectClientHello {
             handshake: HandshakeDetails::new(extra_exts),
+            transcript: HandshakeHash::new(),
             done_retry: false,
             send_ticket: false,
         };
@@ -354,9 +357,7 @@ impl ExpectClientHello {
             .verifier
             .offer_client_auth()
         {
-            ech.handshake
-                .transcript
-                .set_client_auth_enabled();
+            ech.transcript.set_client_auth_enabled();
         }
 
         ech
@@ -392,9 +393,7 @@ impl ExpectClientHello {
         };
 
         trace!("sending server hello {:?}", sh);
-        self.handshake
-            .transcript
-            .add_message(&sh);
+        self.transcript.add_message(&sh);
         sess.common.send_msg(sh, false);
         Ok(())
     }
@@ -415,9 +414,7 @@ impl ExpectClientHello {
             }),
         };
 
-        self.handshake
-            .transcript
-            .add_message(&c);
+        self.transcript.add_message(&c);
         sess.common.send_msg(c, false);
     }
 
@@ -442,9 +439,7 @@ impl ExpectClientHello {
             }),
         };
 
-        self.handshake
-            .transcript
-            .add_message(&c);
+        self.transcript.add_message(&c);
         sess.common.send_msg(c, false);
     }
 
@@ -485,9 +480,7 @@ impl ExpectClientHello {
             }),
         };
 
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         sess.common.send_msg(m, false);
         Ok(kx)
     }
@@ -529,9 +522,7 @@ impl ExpectClientHello {
         };
 
         trace!("Sending CertificateRequest {:?}", m);
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         sess.common.send_msg(m, false);
         Ok(true)
     }
@@ -546,9 +537,7 @@ impl ExpectClientHello {
             }),
         };
 
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         sess.common.send_msg(m, false);
     }
 
@@ -587,19 +576,20 @@ impl ExpectClientHello {
         sess.client_cert_chain = resumedata.client_cert_chain;
 
         if self.send_ticket {
-            tls12::emit_ticket(&secrets, &mut self.handshake, sess);
+            tls12::emit_ticket(&secrets, &mut self.handshake, &mut self.transcript, sess);
         }
         tls12::emit_ccs(sess);
         sess.common
             .record_layer
             .start_encrypting();
-        tls12::emit_finished(&secrets, &mut self.handshake, sess);
+        tls12::emit_finished(&secrets, &mut self.transcript, sess);
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
         Ok(Box::new(tls12::ExpectCCS {
             secrets,
             handshake: self.handshake,
+            transcript: self.transcript,
             resuming: true,
             send_ticket: self.send_ticket,
         }))
@@ -768,11 +758,7 @@ impl State for ExpectClientHello {
             .common
             .get_suite_assert()
             .get_hash();
-        if !self
-            .handshake
-            .transcript
-            .start_hash(starting_hash)
-        {
+        if !self.transcript.start_hash(starting_hash) {
             sess.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
             return Err(TLSError::PeerIncompatibleError(
@@ -788,15 +774,14 @@ impl State for ExpectClientHello {
         if sess.common.is_tls13() {
             return tls13::CompleteClientHelloHandling {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 done_retry: self.done_retry,
                 send_ticket: self.send_ticket,
             }.handle_client_hello(ciphersuite, sess, certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         if client_hello.ems_support_offered() {
             self.handshake.using_ems = true;
@@ -928,12 +913,14 @@ impl State for ExpectClientHello {
         Ok(if doing_client_auth {
             Box::new(tls12::ExpectCertificate {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 server_kx: ServerKXDetails::new(kx),
                 send_ticket: self.send_ticket,
             })
         } else {
             Box::new(tls12::ExpectClientKX {
                 handshake: self.handshake,
+                transcript: self.transcript,
                 server_kx: ServerKXDetails::new(kx),
                 client_cert: None,
                 send_ticket: self.send_ticket,
