@@ -46,7 +46,7 @@ use crate::{msgs::handshake::NewSessionTicketExtension, quic, session::Protocol}
 use crate::server::common::{ClientCertDetails, HandshakeDetails};
 use crate::server::hs;
 
-use ring::constant_time;
+use ring::{constant_time, digest};
 
 pub struct CompleteClientHelloHandling {
     pub handshake: HandshakeDetails,
@@ -77,376 +77,6 @@ impl CompleteClientHelloHandling {
             key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
-    }
-
-    fn emit_server_hello(
-        &mut self,
-        suite: &'static SupportedCipherSuite,
-        sess: &mut ServerSessionImpl,
-        session_id: &SessionID,
-        share: &KeyShareEntry,
-        chosen_psk_idx: Option<usize>,
-        resuming_psk: Option<&[u8]>,
-    ) -> Result<KeyScheduleHandshake, TLSError> {
-        let mut extensions = Vec::new();
-
-        // Do key exchange
-        let kxr = kx::KeyExchange::choose(share.group, &sess.config.kx_groups)
-            .and_then(kx::KeyExchange::start)
-            .and_then(|kx| kx.complete(&share.payload.0))
-            .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
-
-        let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
-        extensions.push(ServerExtension::KeyShare(kse));
-        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
-
-        if let Some(psk_idx) = chosen_psk_idx {
-            extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
-        }
-
-        let sh = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&self.handshake.randoms.server),
-                    session_id: *session_id,
-                    cipher_suite: suite.suite,
-                    compression_method: Compression::Null,
-                    extensions,
-                }),
-            }),
-        };
-
-        hs::check_aligned_handshake(sess)?;
-
-        #[cfg(feature = "quic")]
-        let client_hello_hash = self
-            .transcript
-            .get_hash_given(suite.get_hash(), &[]);
-
-        trace!("sending server hello {:?}", sh);
-        self.transcript.add_message(&sh);
-        sess.common.send_msg(sh, false);
-
-        // Start key schedule
-        let mut key_schedule = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
-
-            #[cfg(feature = "quic")]
-            {
-                if sess.common.protocol == Protocol::Quic {
-                    let client_early_traffic_secret = early_key_schedule
-                        .client_early_traffic_secret(
-                            &client_hello_hash,
-                            &*sess.config.key_log,
-                            &self.handshake.randoms.client,
-                        );
-                    // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
-                    // before the application can see.
-                    sess.common.quic.early_secret = Some(client_early_traffic_secret);
-                }
-            }
-
-            early_key_schedule.into_handshake(&kxr.shared_secret)
-        } else {
-            KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
-        };
-
-        let handshake_hash = self.transcript.get_current_hash();
-        let write_key = key_schedule.server_handshake_traffic_secret(
-            &handshake_hash,
-            &*sess.config.key_log,
-            &self.handshake.randoms.client,
-        );
-        sess.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-
-        let read_key = key_schedule.client_handshake_traffic_secret(
-            &handshake_hash,
-            &*sess.config.key_log,
-            &self.handshake.randoms.client,
-        );
-        sess.common
-            .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-
-        #[cfg(feature = "quic")]
-        {
-            sess.common.quic.hs_secrets = Some(quic::Secrets {
-                client: read_key,
-                server: write_key,
-            });
-        }
-
-        Ok(key_schedule)
-    }
-
-    fn emit_fake_ccs(&mut self, sess: &mut ServerSessionImpl) {
-        if sess.common.is_quic() {
-            return;
-        }
-        let m = Message {
-            typ: ContentType::ChangeCipherSpec,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-        };
-        sess.common.send_msg(m, false);
-    }
-
-    fn emit_hello_retry_request(&mut self, suite: &'static SupportedCipherSuite, sess: &mut ServerSessionImpl, group: NamedGroup) {
-        let mut req = HelloRetryRequest {
-            legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: SessionID::empty(),
-            cipher_suite: suite.suite,
-            extensions: Vec::new(),
-        };
-
-        req.extensions
-            .push(HelloRetryExtension::KeyShare(group));
-        req.extensions
-            .push(HelloRetryExtension::SupportedVersions(
-                ProtocolVersion::TLSv1_3,
-            ));
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::HelloRetryRequest,
-                payload: HandshakePayload::HelloRetryRequest(req),
-            }),
-        };
-
-        trace!("Requesting retry {:?}", m);
-        self.transcript.rollup_for_hrr();
-        self.transcript.add_message(&m);
-        sess.common.send_msg(m, false);
-    }
-
-    fn emit_encrypted_extensions(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
-        hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
-    ) -> Result<(), TLSError> {
-        let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(sess, Some(server_key), hello, resumedata, &self.handshake)?;
-
-        let ee = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::EncryptedExtensions,
-                payload: HandshakePayload::EncryptedExtensions(ep.exts),
-            }),
-        };
-
-        trace!("sending encrypted extensions {:?}", ee);
-        self.transcript.add_message(&ee);
-        sess.common.send_msg(ee, true);
-        Ok(())
-    }
-
-    fn emit_certificate_req_tls13(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-    ) -> Result<bool, TLSError> {
-        if !sess.config.verifier.offer_client_auth() {
-            return Ok(false);
-        }
-
-        let mut cr = CertificateRequestPayloadTLS13 {
-            context: PayloadU8::empty(),
-            extensions: Vec::new(),
-        };
-
-        let schemes = sess
-            .config
-            .get_verifier()
-            .supported_verify_schemes();
-        cr.extensions
-            .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
-
-        let names = sess
-            .config
-            .verifier
-            .client_auth_root_subjects(sess.get_sni())
-            .ok_or_else(|| {
-                debug!("could not determine root subjects based on SNI");
-                sess.common
-                    .send_fatal_alert(AlertDescription::AccessDenied);
-                TLSError::General("client rejected by client_auth_root_subjects".into())
-            })?;
-
-        if !names.is_empty() {
-            cr.extensions
-                .push(CertReqExtension::AuthorityNames(names));
-        }
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateRequest,
-                payload: HandshakePayload::CertificateRequestTLS13(cr),
-            }),
-        };
-
-        trace!("Sending CertificateRequest {:?}", m);
-        self.transcript.add_message(&m);
-        sess.common.send_msg(m, true);
-        Ok(true)
-    }
-
-    fn emit_certificate_tls13(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
-    ) {
-        let mut cert_entries = vec![];
-        for cert in server_key.take_cert() {
-            let entry = CertificateEntry {
-                cert,
-                exts: Vec::new(),
-            };
-
-            cert_entries.push(entry);
-        }
-
-        if let Some(end_entity_cert) = cert_entries.first_mut() {
-            // Apply OCSP response to first certificate (we don't support OCSP
-            // except for leaf certs).
-            if let Some(ocsp) = server_key.take_ocsp() {
-                let cst = CertificateStatus::new(ocsp);
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::CertificateStatus(cst));
-            }
-
-            // Likewise, SCT
-            if let Some(sct_list) = server_key.take_sct_list() {
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::make_sct(sct_list));
-            }
-        }
-
-        let cert_body = CertificatePayloadTLS13::new(cert_entries);
-        let c = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::CertificateTLS13(cert_body),
-            }),
-        };
-
-        trace!("sending certificate {:?}", c);
-        self.transcript.add_message(&c);
-        sess.common.send_msg(c, true);
-    }
-
-    fn emit_certificate_verify_tls13(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
-        schemes: &[SignatureScheme],
-    ) -> Result<(), TLSError> {
-        let message = verify::construct_tls13_server_verify_message(
-            &self.transcript.get_current_hash(),
-        );
-
-        let signing_key = &server_key.key;
-        let signer = signing_key
-            .choose_scheme(schemes)
-            .ok_or_else(|| hs::incompatible(sess, "no overlapping sigschemes"))?;
-
-        let scheme = signer.get_scheme();
-        let sig = signer.sign(&message)?;
-
-        let cv = DigitallySignedStruct::new(scheme, sig);
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateVerify,
-                payload: HandshakePayload::CertificateVerify(cv),
-            }),
-        };
-
-        trace!("sending certificate-verify {:?}", m);
-        self.transcript.add_message(&m);
-        sess.common.send_msg(m, true);
-        Ok(())
-    }
-
-    fn emit_finished_tls13(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-        key_schedule: KeyScheduleHandshake,
-    ) -> KeyScheduleTrafficWithClientFinishedPending {
-        let handshake_hash = self.transcript
-            .get_current_hash();
-        let verify_data = key_schedule.sign_server_finish(&handshake_hash);
-        let verify_data_payload = Payload::new(verify_data.as_ref());
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Finished,
-                payload: HandshakePayload::Finished(verify_data_payload),
-            }),
-        };
-
-        trace!("sending finished {:?}", m);
-        self.transcript
-            .add_message(&m);
-        let hash_at_server_fin = self.transcript
-            .get_current_hash();
-        self.handshake.hash_at_server_fin = Some(hash_at_server_fin);
-        sess.common.send_msg(m, true);
-
-        // Now move to application data keys.  Read key change is deferred until
-        // the Finish message is received & validated.
-        let mut key_schedule_traffic = key_schedule.into_traffic_with_client_finished_pending();
-        let suite = sess.common.get_suite_assert();
-        let write_key = key_schedule_traffic.server_application_traffic_secret(
-            &hash_at_server_fin,
-            &*sess.config.key_log,
-            &self.handshake.randoms.client,
-        );
-        sess.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-
-        key_schedule_traffic.exporter_master_secret(
-            &hash_at_server_fin,
-            &*sess.config.key_log,
-            &self.handshake.randoms.client,
-        );
-
-        let _read_key = key_schedule_traffic.client_application_traffic_secret(
-            &hash_at_server_fin,
-            &*sess.config.key_log,
-            &self.handshake.randoms.client,
-        );
-
-        #[cfg(feature = "quic")]
-        {
-            sess.common.quic.traffic_secrets = Some(quic::Secrets {
-                client: _read_key,
-                server: write_key,
-            });
-        }
-
-        key_schedule_traffic
     }
 
     fn attempt_tls13_ticket_decryption(
@@ -527,8 +157,8 @@ impl CompleteClientHelloHandling {
                         return Err(hs::illegal_param(sess, "did not follow retry request"));
                     }
 
-                    self.emit_hello_retry_request(suite, sess, group.name);
-                    self.emit_fake_ccs(sess);
+                    emit_hello_retry_request(&mut self.transcript, suite, sess, group.name);
+                    emit_fake_ccs(sess);
                     return Ok(Box::new(hs::ExpectClientHello {
                         handshake: self.handshake,
                         transcript: self.transcript,
@@ -598,7 +228,9 @@ impl CompleteClientHelloHandling {
         let full_handshake = resumedata.is_none();
         self.transcript
             .add_message(chm);
-        let key_schedule = self.emit_server_hello(
+        let key_schedule = emit_server_hello(
+            &self.handshake,
+            &mut self.transcript,
             suite,
             sess,
             &client_hello.session_id,
@@ -609,21 +241,40 @@ impl CompleteClientHelloHandling {
                 .map(|x| &x.master_secret.0[..]),
         )?;
         if !self.done_retry {
-            self.emit_fake_ccs(sess);
+            emit_fake_ccs(sess);
         }
-        self.emit_encrypted_extensions(sess, &mut server_key, client_hello, resumedata.as_ref())?;
+        emit_encrypted_extensions(
+            &self.handshake,
+            &mut self.transcript,
+            sess,
+            &mut server_key,
+            client_hello,
+            resumedata.as_ref(),
+        )?;
 
         let doing_client_auth = if full_handshake {
-            let client_auth = self.emit_certificate_req_tls13(sess)?;
-            self.emit_certificate_tls13(sess, &mut server_key);
-            self.emit_certificate_verify_tls13(sess, &mut server_key, &sigschemes_ext)?;
+            let client_auth = emit_certificate_req_tls13(&mut self.transcript, sess)?;
+            emit_certificate_tls13(&mut self.transcript, sess, &mut server_key);
+            emit_certificate_verify_tls13(
+                &mut self.transcript,
+                sess,
+                &mut server_key,
+                &sigschemes_ext,
+            )?;
             client_auth
         } else {
             false
         };
 
         hs::check_aligned_handshake(sess)?;
-        let key_schedule_traffic = self.emit_finished_tls13(sess, key_schedule);
+        let (hash_at_server_fin, key_schedule_traffic) = emit_finished_tls13(
+            &self.handshake,
+            &mut self.transcript,
+            sess,
+            key_schedule,
+        );
+        self.handshake.hash_at_server_fin = Some(hash_at_server_fin);
+
         Ok(if doing_client_auth {
             Box::new(ExpectCertificate {
                 handshake: self.handshake,
@@ -640,6 +291,379 @@ impl CompleteClientHelloHandling {
             })
         })
     }
+}
+
+
+fn emit_server_hello(
+    handshake: &HandshakeDetails,
+    transcript: &mut HandshakeHash,
+    suite: &'static SupportedCipherSuite,
+    sess: &mut ServerSessionImpl,
+    session_id: &SessionID,
+    share: &KeyShareEntry,
+    chosen_psk_idx: Option<usize>,
+    resuming_psk: Option<&[u8]>,
+) -> Result<KeyScheduleHandshake, TLSError> {
+    let mut extensions = Vec::new();
+
+    // Do key exchange
+    let kxr = kx::KeyExchange::choose(share.group, &sess.config.kx_groups)
+        .and_then(kx::KeyExchange::start)
+        .and_then(|kx| kx.complete(&share.payload.0))
+        .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
+
+    let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
+    extensions.push(ServerExtension::KeyShare(kse));
+    extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
+
+    if let Some(psk_idx) = chosen_psk_idx {
+        extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
+    }
+
+    let sh = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ServerHello,
+            payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                legacy_version: ProtocolVersion::TLSv1_2,
+                random: Random::from_slice(&handshake.randoms.server),
+                session_id: *session_id,
+                cipher_suite: suite.suite,
+                compression_method: Compression::Null,
+                extensions,
+            }),
+        }),
+    };
+
+    hs::check_aligned_handshake(sess)?;
+
+    #[cfg(feature = "quic")]
+    let client_hello_hash = transcript.get_hash_given(suite.get_hash(), &[]);
+
+    trace!("sending server hello {:?}", sh);
+    transcript.add_message(&sh);
+    sess.common.send_msg(sh, false);
+
+    // Start key schedule
+    let mut key_schedule = if let Some(psk) = resuming_psk {
+        let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
+
+        #[cfg(feature = "quic")]
+        {
+            if sess.common.protocol == Protocol::Quic {
+                let client_early_traffic_secret = early_key_schedule
+                    .client_early_traffic_secret(
+                        &client_hello_hash,
+                        &*sess.config.key_log,
+                        &handshake.randoms.client,
+                    );
+                // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
+                // before the application can see.
+                sess.common.quic.early_secret = Some(client_early_traffic_secret);
+            }
+        }
+
+        early_key_schedule.into_handshake(&kxr.shared_secret)
+    } else {
+        KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
+    };
+
+    let handshake_hash = transcript.get_current_hash();
+    let write_key = key_schedule.server_handshake_traffic_secret(
+        &handshake_hash,
+        &*sess.config.key_log,
+        &handshake.randoms.client,
+    );
+    sess.common
+        .record_layer
+        .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+
+    let read_key = key_schedule.client_handshake_traffic_secret(
+        &handshake_hash,
+        &*sess.config.key_log,
+        &handshake.randoms.client,
+    );
+    sess.common
+        .record_layer
+        .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+
+    #[cfg(feature = "quic")]
+    {
+        sess.common.quic.hs_secrets = Some(quic::Secrets {
+            client: read_key,
+            server: write_key,
+        });
+    }
+
+    Ok(key_schedule)
+}
+
+fn emit_fake_ccs(sess: &mut ServerSessionImpl) {
+    if sess.common.is_quic() {
+        return;
+    }
+    let m = Message {
+        typ: ContentType::ChangeCipherSpec,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+    };
+    sess.common.send_msg(m, false);
+}
+
+fn emit_hello_retry_request(
+    transcript: &mut HandshakeHash,
+    suite: &'static SupportedCipherSuite,
+    sess: &mut ServerSessionImpl,
+    group: NamedGroup,
+) {
+    let mut req = HelloRetryRequest {
+        legacy_version: ProtocolVersion::TLSv1_2,
+        session_id: SessionID::empty(),
+        cipher_suite: suite.suite,
+        extensions: Vec::new(),
+    };
+
+    req.extensions
+        .push(HelloRetryExtension::KeyShare(group));
+    req.extensions
+        .push(HelloRetryExtension::SupportedVersions(
+            ProtocolVersion::TLSv1_3,
+        ));
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::HelloRetryRequest,
+            payload: HandshakePayload::HelloRetryRequest(req),
+        }),
+    };
+
+    trace!("Requesting retry {:?}", m);
+    transcript.rollup_for_hrr();
+    transcript.add_message(&m);
+    sess.common.send_msg(m, false);
+}
+
+fn emit_encrypted_extensions(
+    handshake: &HandshakeDetails,
+    transcript: &mut HandshakeHash,
+    sess: &mut ServerSessionImpl,
+    server_key: &mut sign::CertifiedKey,
+    hello: &ClientHelloPayload,
+    resumedata: Option<&persist::ServerSessionValue>,
+) -> Result<(), TLSError> {
+    let mut ep = hs::ExtensionProcessing::new();
+    ep.process_common(sess, Some(server_key), hello, resumedata, &handshake)?;
+
+    let ee = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::EncryptedExtensions,
+            payload: HandshakePayload::EncryptedExtensions(ep.exts),
+        }),
+    };
+
+    trace!("sending encrypted extensions {:?}", ee);
+    transcript.add_message(&ee);
+    sess.common.send_msg(ee, true);
+    Ok(())
+}
+
+fn emit_certificate_req_tls13(
+    transcript: &mut HandshakeHash,
+    sess: &mut ServerSessionImpl,
+) -> Result<bool, TLSError> {
+    if !sess.config.verifier.offer_client_auth() {
+        return Ok(false);
+    }
+
+    let mut cr = CertificateRequestPayloadTLS13 {
+        context: PayloadU8::empty(),
+        extensions: Vec::new(),
+    };
+
+    let schemes = sess
+        .config
+        .get_verifier()
+        .supported_verify_schemes();
+    cr.extensions
+        .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
+
+    let names = sess
+        .config
+        .verifier
+        .client_auth_root_subjects(sess.get_sni())
+        .ok_or_else(|| {
+            debug!("could not determine root subjects based on SNI");
+            sess.common
+                .send_fatal_alert(AlertDescription::AccessDenied);
+            TLSError::General("client rejected by client_auth_root_subjects".into())
+        })?;
+
+    if !names.is_empty() {
+        cr.extensions
+            .push(CertReqExtension::AuthorityNames(names));
+    }
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateRequest,
+            payload: HandshakePayload::CertificateRequestTLS13(cr),
+        }),
+    };
+
+    trace!("Sending CertificateRequest {:?}", m);
+    transcript.add_message(&m);
+    sess.common.send_msg(m, true);
+    Ok(true)
+}
+
+fn emit_certificate_tls13(
+    transcript: &mut HandshakeHash,
+    sess: &mut ServerSessionImpl,
+    server_key: &mut sign::CertifiedKey,
+) {
+    let mut cert_entries = vec![];
+    for cert in server_key.take_cert() {
+        let entry = CertificateEntry {
+            cert,
+            exts: Vec::new(),
+        };
+
+        cert_entries.push(entry);
+    }
+
+    if let Some(end_entity_cert) = cert_entries.first_mut() {
+        // Apply OCSP response to first certificate (we don't support OCSP
+        // except for leaf certs).
+        if let Some(ocsp) = server_key.take_ocsp() {
+            let cst = CertificateStatus::new(ocsp);
+            end_entity_cert
+                .exts
+                .push(CertificateExtension::CertificateStatus(cst));
+        }
+
+        // Likewise, SCT
+        if let Some(sct_list) = server_key.take_sct_list() {
+            end_entity_cert
+                .exts
+                .push(CertificateExtension::make_sct(sct_list));
+        }
+    }
+
+    let cert_body = CertificatePayloadTLS13::new(cert_entries);
+    let c = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTLS13(cert_body),
+        }),
+    };
+
+    trace!("sending certificate {:?}", c);
+    transcript.add_message(&c);
+    sess.common.send_msg(c, true);
+}
+
+fn emit_certificate_verify_tls13(
+    transcript: &mut HandshakeHash,
+    sess: &mut ServerSessionImpl,
+    server_key: &mut sign::CertifiedKey,
+    schemes: &[SignatureScheme],
+) -> Result<(), TLSError> {
+    let message = verify::construct_tls13_server_verify_message(
+        &transcript.get_current_hash(),
+    );
+
+    let signing_key = &server_key.key;
+    let signer = signing_key
+        .choose_scheme(schemes)
+        .ok_or_else(|| hs::incompatible(sess, "no overlapping sigschemes"))?;
+
+    let scheme = signer.get_scheme();
+    let sig = signer.sign(&message)?;
+
+    let cv = DigitallySignedStruct::new(scheme, sig);
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateVerify,
+            payload: HandshakePayload::CertificateVerify(cv),
+        }),
+    };
+
+    trace!("sending certificate-verify {:?}", m);
+    transcript.add_message(&m);
+    sess.common.send_msg(m, true);
+    Ok(())
+}
+
+fn emit_finished_tls13(
+    handshake: &HandshakeDetails,
+    transcript: &mut HandshakeHash,
+    sess: &mut ServerSessionImpl,
+    key_schedule: KeyScheduleHandshake,
+) -> (digest::Digest, KeyScheduleTrafficWithClientFinishedPending) {
+    let handshake_hash = transcript.get_current_hash();
+    let verify_data = key_schedule.sign_server_finish(&handshake_hash);
+    let verify_data_payload = Payload::new(verify_data.as_ref());
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Finished,
+            payload: HandshakePayload::Finished(verify_data_payload),
+        }),
+    };
+
+    trace!("sending finished {:?}", m);
+    transcript.add_message(&m);
+    let hash_at_server_fin = transcript.get_current_hash();
+    sess.common.send_msg(m, true);
+
+    // Now move to application data keys.  Read key change is deferred until
+    // the Finish message is received & validated.
+    let mut key_schedule_traffic = key_schedule.into_traffic_with_client_finished_pending();
+    let suite = sess.common.get_suite_assert();
+    let write_key = key_schedule_traffic.server_application_traffic_secret(
+        &hash_at_server_fin,
+        &*sess.config.key_log,
+        &handshake.randoms.client,
+    );
+    sess.common
+        .record_layer
+        .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+
+    key_schedule_traffic.exporter_master_secret(
+        &hash_at_server_fin,
+        &*sess.config.key_log,
+        &handshake.randoms.client,
+    );
+
+    let _read_key = key_schedule_traffic.client_application_traffic_secret(
+        &hash_at_server_fin,
+        &*sess.config.key_log,
+        &handshake.randoms.client,
+    );
+
+    #[cfg(feature = "quic")]
+    {
+        sess.common.quic.traffic_secrets = Some(quic::Secrets {
+            client: _read_key,
+            server: write_key,
+        });
+    }
+
+    (hash_at_server_fin, key_schedule_traffic)
 }
 
 pub struct ExpectCertificate {
