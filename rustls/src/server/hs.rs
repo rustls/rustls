@@ -612,7 +612,6 @@ impl State for ExpectClientHello {
                         sess,
                         client_hello,
                         sni.as_ref(),
-                        &client_hello.session_id,
                         resume,
                     );
                 } else {
@@ -645,7 +644,6 @@ impl State for ExpectClientHello {
                     sess,
                     client_hello,
                     sni.as_ref(),
-                    &client_hello.session_id,
                     resume,
                 );
             }
@@ -903,7 +901,6 @@ fn start_resumption(
     sess: &mut ServerSessionImpl,
     client_hello: &ClientHelloPayload,
     sni: Option<&webpki::DNSName>,
-    id: &SessionID,
     resumedata: persist::ServerSessionValue,
 ) -> NextStateOrError {
     debug!("Resuming session");
@@ -912,7 +909,7 @@ fn start_resumption(
         return Err(illegal_param(sess, "refusing to resume without ems"));
     }
 
-    handshake.session_id = *id;
+    handshake.session_id = client_hello.session_id;
     let send_ticket = emit_server_hello(
         &handshake,
         &mut transcript,
