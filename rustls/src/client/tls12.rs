@@ -270,8 +270,7 @@ fn emit_certverify(
         }
     };
 
-    let message = transcript
-        .take_handshake_buf();
+    let message = transcript.take_handshake_buf().unwrap();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let body = DigitallySignedStruct::new(scheme, sig);

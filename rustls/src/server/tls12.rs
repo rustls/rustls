@@ -183,7 +183,7 @@ impl hs::State for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_msgs = self.transcript.take_handshake_buf();
+            let handshake_msgs = self.transcript.take_handshake_buf().unwrap();
             let certs = &self.client_cert.cert_chain;
 
             sess.config
