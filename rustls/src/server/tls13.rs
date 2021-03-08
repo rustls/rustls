@@ -709,41 +709,44 @@ impl hs::State for ExpectCertificate {
                 TLSError::General("client rejected by client_auth_mandatory".into())
             })?;
 
-        let (end_entity, intermediates) = match cert_chain.split_first() {
-            None => {
-                if !mandatory {
-                    debug!("client auth requested but no certificate supplied");
-                    self.handshake.transcript.abandon_client_auth();
-                    return Ok(Box::new(ExpectFinished {
-                        key_schedule: self.key_schedule,
-                        handshake: self.handshake,
-                        send_ticket: self.send_ticket,
-                    }));
-                }
-
+        let client_cert = match cert_chain.split_first() {
+            None if mandatory => {
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
                 return Err(TLSError::NoCertificatesPresented);
             }
-            Some(chain) => chain,
+            None => {
+                debug!("client auth requested but no certificate supplied");
+                self.handshake.transcript.abandon_client_auth();
+                None
+            }
+            Some((end_entity, intermediates)) => {
+                let now = std::time::SystemTime::now();
+                sess.config
+                    .get_verifier()
+                    .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
+                    .or_else(|err| {
+                        hs::incompatible(sess, "certificate invalid");
+                        Err(err)
+                    })?;
+
+                Some(ClientCertDetails::new(cert_chain))
+            }
         };
 
-        let now = std::time::SystemTime::now();
-        sess.config
-            .get_verifier()
-            .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
-            .or_else(|err| {
-                hs::incompatible(sess, "certificate invalid");
-                Err(err)
-            })?;
-
-        let cert = ClientCertDetails::new(cert_chain);
-        Ok(Box::new(ExpectCertificateVerify {
-            handshake: self.handshake,
-            key_schedule: self.key_schedule,
-            client_cert: cert,
-            send_ticket: self.send_ticket,
-        }))
+        Ok(match client_cert {
+            Some(client_cert) => Box::new(ExpectCertificateVerify {
+                handshake: self.handshake,
+                key_schedule: self.key_schedule,
+                client_cert,
+                send_ticket: self.send_ticket,
+            }),
+            None => Box::new(ExpectFinished {
+                key_schedule: self.key_schedule,
+                handshake: self.handshake,
+                send_ticket: self.send_ticket,
+            }),
+        })
     }
 }
 

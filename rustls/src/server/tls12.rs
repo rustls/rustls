@@ -28,17 +28,6 @@ pub struct ExpectCertificate {
     pub send_ticket: bool,
 }
 
-impl ExpectCertificate {
-    fn into_expect_tls12_client_kx(self, cert: Option<ClientCertDetails>) -> hs::NextState {
-        Box::new(ExpectClientKX {
-            handshake: self.handshake,
-            server_kx: self.server_kx,
-            client_cert: cert,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -65,31 +54,36 @@ impl hs::State for ExpectCertificate {
 
         trace!("certs {:?}", cert_chain);
 
-        let (end_entity, intermediates) = match cert_chain.split_first() {
-            None => {
-                if !mandatory {
-                    debug!("client auth requested but no certificate supplied");
-                    self.handshake.transcript.abandon_client_auth();
-                    return Ok(self.into_expect_tls12_client_kx(None));
-                }
+        let client_cert = match cert_chain.split_first() {
+            None if mandatory => {
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
                 return Err(TLSError::NoCertificatesPresented);
             }
-            Some(chain) => chain,
+            None => {
+                debug!("client auth requested but no certificate supplied");
+                self.handshake.transcript.abandon_client_auth();
+                None
+            }
+            Some((end_entity, intermediates)) => {
+                let now = std::time::SystemTime::now();
+                sess.config
+                    .verifier
+                    .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
+                    .or_else(|err| {
+                        hs::incompatible(sess, "certificate invalid");
+                        Err(err)
+                    })?;
+                Some(ClientCertDetails::new(cert_chain.clone()))
+            }
         };
 
-        let now = std::time::SystemTime::now();
-        sess.config
-            .verifier
-            .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
-            .or_else(|err| {
-                hs::incompatible(sess, "certificate invalid");
-                Err(err)
-            })?;
-
-        let cert = ClientCertDetails::new(cert_chain.clone());
-        Ok(self.into_expect_tls12_client_kx(Some(cert)))
+        Ok(Box::new(ExpectClientKX {
+            handshake: self.handshake,
+            server_kx: self.server_kx,
+            client_cert,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
