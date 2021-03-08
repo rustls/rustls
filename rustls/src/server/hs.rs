@@ -18,7 +18,7 @@ use crate::msgs::handshake::{HandshakeMessagePayload, Random, ServerHelloPayload
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::rand;
 use crate::server::{ClientHello, ServerConfig, ServerSessionImpl};
 #[cfg(feature = "quic")]
@@ -336,7 +336,7 @@ impl ExtensionProcessing {
 
 pub struct ExpectClientHello {
     pub handshake: HandshakeDetails,
-    pub transcript: HandshakeHash,
+    pub transcript: HandshakeHashOrBuffer,
     pub done_retry: bool,
     pub send_ticket: bool,
 }
@@ -346,21 +346,20 @@ impl ExpectClientHello {
         server_config: &ServerConfig,
         extra_exts: Vec<ServerExtension>,
     ) -> ExpectClientHello {
-        let mut ech = ExpectClientHello {
-            handshake: HandshakeDetails::new(extra_exts),
-            transcript: HandshakeHash::new(),
-            done_retry: false,
-            send_ticket: false,
-        };
-
+        let mut transcript_buffer = HandshakeHashBuffer::new();
         if server_config
             .verifier
             .offer_client_auth()
         {
-            ech.transcript.set_client_auth_enabled();
+            transcript_buffer.set_client_auth_enabled();
         }
 
-        ech
+        ExpectClientHello {
+            handshake: HandshakeDetails::new(extra_exts),
+            transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
+            done_retry: false,
+            send_ticket: false,
+        }
     }
 }
 
@@ -526,13 +525,15 @@ impl State for ExpectClientHello {
             .common
             .get_suite_assert()
             .get_hash();
-        if !self.transcript.start_hash(starting_hash) {
-            sess.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TLSError::PeerIncompatibleError(
-                "hash differed on retry".to_string(),
-            ));
-        }
+        let mut transcript = match self.transcript {
+            HandshakeHashOrBuffer::Buffer(inner) => inner.start_hash(starting_hash),
+            HandshakeHashOrBuffer::Hash(inner) if inner.algorithm() == starting_hash => inner,
+            _ => {
+                sess.common
+                    .send_fatal_alert(AlertDescription::IllegalParameter);
+                return Err(TLSError::PeerIncompatibleError("hash differed on retry".to_string()));
+            }
+        };
 
         // Save their Random.
         client_hello
@@ -542,14 +543,14 @@ impl State for ExpectClientHello {
         if sess.common.is_tls13() {
             return tls13::CompleteClientHelloHandling {
                 handshake: self.handshake,
-                transcript: self.transcript,
+                transcript,
                 done_retry: self.done_retry,
                 send_ticket: self.send_ticket,
             }.handle_client_hello(ciphersuite, sess, certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
-        self.transcript.add_message(&m);
+        transcript.add_message(&m);
 
         if client_hello.ems_support_offered() {
             self.handshake.using_ems = true;
@@ -599,16 +600,17 @@ impl State for ExpectClientHello {
                 ticket_received = true;
                 debug!("Ticket received");
 
+                let handshake = &self.handshake;
                 if let Some(resume) = sess
                     .config
                     .ticketer
                     .decrypt(&ticket.0)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
-                    .and_then(|resumedata| can_resume(sess, &self.handshake, resumedata))
+                    .and_then(|resumedata| can_resume(sess, handshake, resumedata))
                 {
                     return start_resumption(
                         self.handshake,
-                        self.transcript,
+                        transcript,
                         sess,
                         client_hello,
                         sni.as_ref(),
@@ -631,16 +633,17 @@ impl State for ExpectClientHello {
         // Perhaps resume?  If we received a ticket, the sessionid
         // does not correspond to a real session.
         if !client_hello.session_id.is_empty() && !ticket_received {
+            let handshake = &self.handshake;
             if let Some(resume) = sess
                 .config
                 .session_storage
                 .get(&client_hello.session_id.get_encoding())
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                .and_then(|resumedata| can_resume(sess, &self.handshake, resumedata))
+                .and_then(|resumedata| can_resume(sess, handshake, resumedata))
             {
                 return start_resumption(
                     self.handshake,
-                    self.transcript,
+                    transcript,
                     sess,
                     client_hello,
                     sni.as_ref(),
@@ -675,36 +678,36 @@ impl State for ExpectClientHello {
 
         self.send_ticket = emit_server_hello(
             &self.handshake,
-            &mut self.transcript,
+            &mut transcript,
             sess,
             Some(&mut certkey),
             client_hello,
             None,
         )?;
-        emit_certificate(&mut self.transcript, sess, &mut certkey);
-        emit_cert_status(&mut self.transcript, sess, &mut certkey);
+        emit_certificate(&mut transcript, sess, &mut certkey);
+        emit_cert_status(&mut transcript, sess, &mut certkey);
         let kx = emit_server_kx(
             &self.handshake,
-            &mut self.transcript,
+            &mut transcript,
             sess,
             sigschemes,
             group,
             &mut certkey,
         )?;
-        let doing_client_auth = emit_certificate_req(&mut self.transcript, sess)?;
-        emit_server_hello_done(&mut self.transcript, sess);
+        let doing_client_auth = emit_certificate_req(&mut transcript, sess)?;
+        emit_server_hello_done(&mut transcript, sess);
 
         Ok(if doing_client_auth {
             Box::new(tls12::ExpectCertificate {
                 handshake: self.handshake,
-                transcript: self.transcript,
+                transcript,
                 server_kx: ServerKXDetails::new(kx),
                 send_ticket: self.send_ticket,
             })
         } else {
             Box::new(tls12::ExpectClientKX {
                 handshake: self.handshake,
-                transcript: self.transcript,
+                transcript,
                 server_kx: ServerKXDetails::new(kx),
                 client_cert: None,
                 send_ticket: self.send_ticket,
@@ -954,4 +957,15 @@ fn start_resumption(
         resuming: true,
         send_ticket,
     }))
+}
+
+pub enum HandshakeHashOrBuffer {
+    Buffer(HandshakeHashBuffer),
+    Hash(HandshakeHash),
+}
+
+impl From<HandshakeHash> for HandshakeHashOrBuffer {
+    fn from(h: HandshakeHash) -> Self {
+        HandshakeHashOrBuffer::Hash(h)
+    }
 }

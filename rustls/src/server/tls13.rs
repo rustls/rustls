@@ -68,10 +68,7 @@ impl CompleteClientHelloHandling {
             _ => unreachable!(),
         };
 
-        let suite_hash = suite.get_hash();
-        let handshake_hash = self.transcript
-            .get_hash_given(suite_hash, &binder_plaintext);
-
+        let handshake_hash = self.transcript.get_hash_given(&binder_plaintext);
         let key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, &psk);
         let real_binder =
             key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
@@ -149,19 +146,22 @@ impl CompleteClientHelloHandling {
                     .find(|group| groups_ext.contains(&group.name))
                     .cloned();
 
-                self.transcript
-                    .add_message(chm);
-
+                self.transcript.add_message(chm);
                 if let Some(group) = retry_group_maybe {
                     if self.done_retry {
                         return Err(hs::illegal_param(sess, "did not follow retry request"));
                     }
 
-                    emit_hello_retry_request(&mut self.transcript, suite, sess, group.name);
+                    emit_hello_retry_request(
+                        &mut self.transcript,
+                        suite,
+                        sess,
+                        group.name,
+                    );
                     emit_fake_ccs(sess);
                     return Ok(Box::new(hs::ExpectClientHello {
                         handshake: self.handshake,
-                        transcript: self.transcript,
+                        transcript: self.transcript.into(),
                         done_retry: true,
                         send_ticket: self.send_ticket,
                     }));
@@ -339,7 +339,7 @@ fn emit_server_hello(
     hs::check_aligned_handshake(sess)?;
 
     #[cfg(feature = "quic")]
-    let client_hello_hash = transcript.get_hash_given(suite.get_hash(), &[]);
+    let client_hello_hash = transcript.get_hash_given(&[]);
 
     trace!("sending server hello {:?}", sh);
     transcript.add_message(&sh);

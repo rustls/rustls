@@ -2,7 +2,7 @@ use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
@@ -142,7 +142,7 @@ pub fn choose_kx_groups(
 /// data dependency on the message they are contained within.
 pub fn fill_in_psk_binder(
     handshake: &HandshakeDetails,
-    transcript: &HandshakeHash,
+    transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.

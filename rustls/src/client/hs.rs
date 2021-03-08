@@ -4,7 +4,7 @@ use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TLSError;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::HandshakeHashBuffer;
 use crate::key_schedule::KeyScheduleEarly;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -167,7 +167,7 @@ fn random_sessionid() -> SessionID {
 
 struct InitialState {
     handshake: HandshakeDetails,
-    transcript: HandshakeHash,
+    transcript_buffer: HandshakeHashBuffer,
     extra_exts: Vec<ClientExtension>,
 }
 
@@ -175,7 +175,7 @@ impl InitialState {
     fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
             handshake: HandshakeDetails::new(host_name),
-            transcript: HandshakeHash::new(),
+            transcript_buffer: HandshakeHashBuffer::new(),
             extra_exts,
         }
     }
@@ -192,8 +192,7 @@ impl InitialState {
             .client_auth_cert_resolver
             .has_certs()
         {
-            self.transcript
-                .set_client_auth_enabled();
+            self.transcript_buffer.set_client_auth_enabled();
         }
 
         self.handshake.resuming_session = find_session(sess, self.handshake.dns_name.as_ref());
@@ -223,7 +222,7 @@ impl InitialState {
         emit_client_hello_for_retry(
             sess,
             self.handshake,
-            self.transcript,
+            self.transcript_buffer,
             sent_tls13_fake_ccs,
             hello_details,
             None,
@@ -241,7 +240,7 @@ pub fn start_handshake(
 
 struct ExpectServerHello {
     handshake: HandshakeDetails,
-    transcript: HandshakeHash,
+    transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     sent_tls13_fake_ccs: bool,
@@ -265,7 +264,7 @@ pub fn compatible_suite(
 fn emit_client_hello_for_retry(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
-    mut transcript: HandshakeHash,
+    mut transcript_buffer: HandshakeHashBuffer,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
@@ -396,7 +395,7 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if fill_in_binder {
-        Some(tls13::fill_in_psk_binder(&mut handshake, &mut transcript, &mut chp))
+        Some(tls13::fill_in_psk_binder(&mut handshake, &mut transcript_buffer, &mut chp))
     } else {
         None
     };
@@ -422,7 +421,7 @@ fn emit_client_hello_for_retry(
 
     trace!("Sending ClientHello {:#?}", ch);
 
-    transcript.add_message(&ch);
+    transcript_buffer.add_message(&ch);
     sess.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
@@ -437,7 +436,7 @@ fn emit_client_hello_for_retry(
             .map(|resume| resume.suite)
             .unwrap();
 
-        let client_hello_hash = transcript
+        let client_hello_hash = transcript_buffer
             .get_hash_given(resuming_suite.get_hash(), &[]);
         let client_early_traffic_secret = early_key_schedule
             .as_ref()
@@ -467,7 +466,7 @@ fn emit_client_hello_for_retry(
 
     let next = ExpectServerHello {
         handshake,
-        transcript,
+        transcript_buffer,
         hello,
         early_key_schedule,
         sent_tls13_fake_ccs,
@@ -624,10 +623,8 @@ impl State for ExpectServerHello {
         }
 
         // Start our handshake hash, and input the server-hello.
-        self.transcript
-            .start_hash(scs.get_hash());
-        self.transcript
-            .add_message(&m);
+        let mut transcript = self.transcript_buffer.start_hash(scs.get_hash());
+        transcript.add_message(&m);
 
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
@@ -639,13 +636,13 @@ impl State for ExpectServerHello {
                 self.early_key_schedule.take(),
                 &server_hello,
                 &mut self.handshake,
-                &mut self.transcript,
+                &mut transcript,
                 &mut self.hello,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
             return Ok(Box::new(tls13::ExpectEncryptedExtensions {
                 handshake: self.handshake,
-                transcript: self.transcript,
+                transcript,
                 key_schedule,
                 hello: self.hello,
                 hash_at_client_recvd_server_hello,
@@ -752,7 +749,7 @@ impl State for ExpectServerHello {
                     Box::new(tls12::ExpectNewTicket {
                         secrets,
                         handshake: self.handshake,
-                        transcript: self.transcript,
+                        transcript,
                         resuming: true,
                         cert_verified: certv,
                         sig_verified: sigv,
@@ -761,7 +758,7 @@ impl State for ExpectServerHello {
                     Box::new(tls12::ExpectCCS {
                         secrets,
                         handshake: self.handshake,
-                        transcript: self.transcript,
+                        transcript,
                         ticket: ReceivedTicketDetails::new(),
                         resuming: true,
                         cert_verified: certv,
@@ -773,7 +770,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
-            transcript: self.transcript,
+            transcript,
             suite: scs,
             may_send_cert_status,
             must_issue_new_ticket,
@@ -788,7 +785,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 
     fn handle_hello_retry_request(
-        mut self,
+        self,
         sess: &mut ClientSessionImpl,
         m: Message,
     ) -> NextStateOrError {
@@ -879,15 +876,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
         sess.common.set_suite(cs);
 
         // This is the draft19 change where the transcript became a tree
-        self.next
-            .transcript
+        let transcript = self.next
+            .transcript_buffer
             .start_hash(cs.get_hash());
-        self.next
-            .transcript
-            .rollup_for_hrr();
-        self.next
-            .transcript
-            .add_message(&m);
+        let mut transcript_buffer = transcript.into_hrr_buffer();
+        transcript_buffer.add_message(&m);
 
         // Early data is not allowed after HelloRetryrequest
         if sess.early_data.is_enabled() {
@@ -897,7 +890,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         Ok(emit_client_hello_for_retry(
             sess,
             self.next.handshake,
-            self.next.transcript,
+            transcript_buffer,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
