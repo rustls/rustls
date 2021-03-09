@@ -38,18 +38,6 @@ pub struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn into_expect_certificate_status_or_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
-        Box::new(ExpectCertificateStatusOrServerKX {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite: self.suite,
-            server_cert_sct_list: self.server_cert_sct_list,
-            server_cert_chain,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-
     fn into_expect_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
         let server_cert = ServerCertDetails::new(
             server_cert_chain, vec![], self.server_cert_sct_list);
@@ -81,7 +69,15 @@ impl hs::State for ExpectCertificate {
         let server_cert_chain = server_cert_chain.clone();
 
         if self.may_send_cert_status {
-            Ok(self.into_expect_certificate_status_or_server_kx(server_cert_chain))
+            Ok(Box::new(ExpectCertificateStatusOrServerKX {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                suite: self.suite,
+                server_cert_sct_list: self.server_cert_sct_list,
+                server_cert_chain,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }))
         } else {
             Ok(self.into_expect_server_kx(server_cert_chain))
         }
