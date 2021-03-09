@@ -133,19 +133,6 @@ struct ExpectCertificateStatusOrServerKX {
 }
 
 impl ExpectCertificateStatusOrServerKX {
-    fn into_expect_server_kx(self) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain, vec![], self.server_cert_sct_list);
-        Box::new(ExpectServerKX {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-
     fn into_expect_certificate_status(self) -> hs::NextState {
         Box::new(ExpectCertificateStatus {
             handshake: self.handshake,
@@ -169,9 +156,17 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
                 HandshakeType::CertificateStatus,
             ],
         )?;
+
         if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
-            self.into_expect_server_kx()
-                .handle(sess, m)
+            Box::new(ExpectServerKX {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                suite: self.suite,
+                server_cert: ServerCertDetails::new(
+                    self.server_cert_chain, vec![], self.server_cert_sct_list),
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         } else {
             self.into_expect_certificate_status()
                 .handle(sess, m)
