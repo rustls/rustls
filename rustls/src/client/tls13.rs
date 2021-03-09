@@ -557,17 +557,6 @@ struct ExpectCertificateOrCertReq {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectCertificateOrCertReq {
-    fn into_expect_certificate_req(self) -> hs::NextState {
-        Box::new(ExpectCertificateRequest {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateOrCertReq {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         check_message(
@@ -587,8 +576,12 @@ impl hs::State for ExpectCertificateOrCertReq {
                 hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
             }).handle(sess, m)
         } else {
-            self.into_expect_certificate_req()
-                .handle(sess, m)
+            Box::new(ExpectCertificateRequest {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule: self.key_schedule,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }).handle(sess, m)
         }
     }
 }
