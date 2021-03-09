@@ -754,17 +754,6 @@ struct ExpectFinished {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl ExpectFinished {
-    fn into_expect_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            secrets: self.secrets,
-            _cert_verified: self.cert_verified,
-            _sig_verified: self.sig_verified,
-            _fin_verified: fin,
-        })
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
@@ -782,7 +771,7 @@ impl hs::State for ExpectFinished {
 
         // Constant-time verification of this is relatively unimportant: they only
         // get one chance.  But it can't hurt.
-        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        let _fin_verified = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
             .map_err(|_| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecryptError);
@@ -804,7 +793,12 @@ impl hs::State for ExpectFinished {
         }
 
         sess.common.start_traffic();
-        Ok(st.into_expect_traffic(fin))
+        Ok(Box::new(ExpectTraffic {
+            secrets: st.secrets,
+            _cert_verified: st.cert_verified,
+            _sig_verified: st.sig_verified,
+            _fin_verified,
+        }))
     }
 }
 
