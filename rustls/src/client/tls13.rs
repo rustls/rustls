@@ -396,22 +396,6 @@ pub struct ExpectEncryptedExtensions {
 }
 
 impl ExpectEncryptedExtensions {
-    fn into_expect_finished_resume(
-        self,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectFinished {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            client_auth: None,
-            cert_verified: certv,
-            sig_verified: sigv,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-
     fn into_expect_certificate_or_certreq(self) -> hs::NextState {
         Box::new(ExpectCertificateOrCertReq {
             handshake: self.handshake,
@@ -482,9 +466,17 @@ impl hs::State for ExpectEncryptedExtensions {
 
             // We *don't* reverify the certificate chain here: resumption is a
             // continuation of the previous session in terms of security policy.
-            let certv = verify::ServerCertVerified::assertion();
-            let sigv = verify::HandshakeSignatureValid::assertion();
-            Ok(self.into_expect_finished_resume(certv, sigv))
+            let cert_verified = verify::ServerCertVerified::assertion();
+            let sig_verified = verify::HandshakeSignatureValid::assertion();
+            Ok(Box::new(ExpectFinished {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule: self.key_schedule,
+                client_auth: None,
+                cert_verified,
+                sig_verified,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }))
         } else {
             if exts.early_data_extension_offered() {
                 let msg = "server sent early data extension without resumption".to_string();
