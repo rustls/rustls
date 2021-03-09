@@ -468,22 +468,6 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl ExpectServerHello {
-    fn into_expect_tls12_new_ticket_resume(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> NextState {
-        Box::new(tls12::ExpectNewTicket {
-            secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: true,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-
     fn into_expect_tls12_ccs_resume(
         self,
         secrets: SessionSecrets,
@@ -758,13 +742,20 @@ impl State for ExpectServerHello {
                 // Since we're resuming, we verified the certificate and
                 // proof of possession in the prior session.
                 sess.server_cert_chain = resuming.server_cert_chain.clone();
-                let certv = verify::ServerCertVerified::assertion();
-                let sigv = verify::HandshakeSignatureValid::assertion();
+                let cert_verified = verify::ServerCertVerified::assertion();
+                let sig_verified = verify::HandshakeSignatureValid::assertion();
 
                 return if must_issue_new_ticket {
-                    Ok(self.into_expect_tls12_new_ticket_resume(secrets, certv, sigv))
+                    Ok(Box::new(tls12::ExpectNewTicket {
+                        secrets,
+                        handshake: self.handshake,
+                        using_ems: self.using_ems,
+                        resuming: true,
+                        cert_verified,
+                        sig_verified,
+                    }))
                 } else {
-                    Ok(self.into_expect_tls12_ccs_resume(secrets, certv, sigv))
+                    Ok(self.into_expect_tls12_ccs_resume(secrets, cert_verified, sig_verified))
                 };
             }
         }
