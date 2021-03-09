@@ -632,20 +632,6 @@ pub struct ExpectCCS {
     pub sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl ExpectCCS {
-    fn into_expect_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            ticket: self.ticket,
-            resuming: self.resuming,
-            cert_verified: self.cert_verified,
-            sig_verified: self.sig_verified,
-        })
-    }
-}
-
 impl hs::State for ExpectCCS {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
@@ -658,7 +644,15 @@ impl hs::State for ExpectCCS {
             .record_layer
             .start_decrypting();
 
-        Ok(self.into_expect_finished())
+        Ok(Box::new(ExpectFinished {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            ticket: self.ticket,
+            resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
+        }))
     }
 }
 
