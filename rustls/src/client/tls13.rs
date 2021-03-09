@@ -601,24 +601,6 @@ struct ExpectCertificateVerify {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectCertificateVerify {
-    fn into_expect_finished(
-        self,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectFinished {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            client_auth: self.client_auth,
-            cert_verified: certv,
-            sig_verified: sigv,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-}
-
 fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TlsError) -> TlsError {
     match err {
         TlsError::WebPKIError(webpki::Error::BadDER, _) => {
@@ -659,7 +641,7 @@ impl hs::State for ExpectCertificateVerify {
             .split_first()
             .ok_or(TlsError::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let certv = sess
+        let cert_verified = sess
             .config
             .get_verifier()
             .verify_server_cert(
@@ -677,7 +659,7 @@ impl hs::State for ExpectCertificateVerify {
             .handshake
             .transcript
             .get_current_hash();
-        let sigv = sess
+        let sig_verified = sess
             .config
             .get_verifier()
             .verify_tls13_signature(
@@ -692,7 +674,15 @@ impl hs::State for ExpectCertificateVerify {
             .transcript
             .add_message(&m);
 
-        Ok(self.into_expect_finished(certv, sigv))
+        Ok(Box::new(ExpectFinished {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            key_schedule: self.key_schedule,
+            client_auth: self.client_auth,
+            cert_verified,
+            sig_verified,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
     }
 }
 
