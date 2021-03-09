@@ -421,18 +421,6 @@ struct ExpectServerDoneOrCertReq {
 }
 
 impl ExpectServerDoneOrCertReq {
-    fn into_expect_certificate_req(self) -> hs::NextState {
-        Box::new(ExpectCertificateRequest {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-
     fn into_expect_server_done(self) -> hs::NextState {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
@@ -460,8 +448,15 @@ impl hs::State for ExpectServerDoneOrCertReq {
         )
         .is_ok()
         {
-            self.into_expect_certificate_req()
-                .handle(sess, m)
+            Box::new(ExpectCertificateRequest {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         } else {
             self.handshake
                 .transcript
