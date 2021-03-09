@@ -408,20 +408,6 @@ struct ExpectServerDoneOrCertReq {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectServerDoneOrCertReq {
-    fn into_expect_server_done(self) -> hs::NextState {
-        Box::new(ExpectServerDone {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            client_auth: None,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectServerDoneOrCertReq {
     fn handle(
         mut self: Box<Self>,
@@ -447,8 +433,16 @@ impl hs::State for ExpectServerDoneOrCertReq {
             self.handshake
                 .transcript
                 .abandon_client_auth();
-            self.into_expect_server_done()
-                .handle(sess, m)
+
+            Box::new(ExpectServerDone {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                client_auth: None,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         }
     }
 }
