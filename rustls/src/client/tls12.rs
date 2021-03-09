@@ -665,20 +665,6 @@ pub struct ExpectNewTicket {
     pub sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl ExpectNewTicket {
-    fn into_expect_ccs(self, ticket: ReceivedTicketDetails) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            ticket,
-            resuming: self.resuming,
-            cert_verified: self.cert_verified,
-            sig_verified: self.sig_verified,
-        })
-    }
-}
-
 impl hs::State for ExpectNewTicket {
     fn handle(
         mut self: Box<Self>,
@@ -694,8 +680,16 @@ impl hs::State for ExpectNewTicket {
             HandshakeType::NewSessionTicket,
             HandshakePayload::NewSessionTicket
         )?;
-        let recvd = ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint);
-        Ok(self.into_expect_ccs(recvd))
+
+        Ok(Box::new(ExpectCCS {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
+            resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
+        }))
     }
 }
 
