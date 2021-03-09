@@ -2,6 +2,7 @@ use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TlsError;
+use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
@@ -779,7 +780,7 @@ impl hs::State for ExpectCertificateRequest {
 }
 
 fn emit_certificate_tls13(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) {
@@ -809,12 +810,12 @@ fn emit_certificate_tls13(
             payload: HandshakePayload::CertificateTLS13(cert_payload),
         }),
     };
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     sess.common.send_msg(m, true);
 }
 
 fn emit_certverify_tls13(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
 ) -> Result<(), TlsError> {
@@ -827,7 +828,7 @@ fn emit_certverify_tls13(
     };
 
     let message =
-        verify::construct_tls13_client_verify_message(&handshake.transcript.get_current_hash());
+        verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
 
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
@@ -842,17 +843,17 @@ fn emit_certverify_tls13(
         }),
     };
 
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     sess.common.send_msg(m, true);
     Ok(())
 }
 
 fn emit_finished_tls13(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     key_schedule: &KeyScheduleTrafficWithClientFinishedPending,
     sess: &mut ClientSessionImpl,
 ) {
-    let handshake_hash = handshake.transcript.get_current_hash();
+    let handshake_hash = transcript.get_current_hash();
     let verify_data = key_schedule.sign_client_finish(&handshake_hash);
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
@@ -865,11 +866,11 @@ fn emit_finished_tls13(
         }),
     };
 
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     sess.common.send_msg(m, true);
 }
 
-fn emit_end_of_early_data_tls13(handshake: &mut HandshakeDetails, sess: &mut ClientSessionImpl) {
+fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, sess: &mut ClientSessionImpl) {
     if sess.common.is_quic() {
         return;
     }
@@ -883,7 +884,7 @@ fn emit_end_of_early_data_tls13(handshake: &mut HandshakeDetails, sess: &mut Cli
         }),
     };
 
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     sess.common.send_msg(m, true);
 }
 
@@ -944,7 +945,7 @@ impl hs::State for ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if let Some(write_key) = maybe_write_key {
-            emit_end_of_early_data_tls13(&mut st.handshake, sess);
+            emit_end_of_early_data_tls13(&mut st.handshake.transcript, sess);
             sess.common.early_traffic = false;
             sess.early_data.finished();
             sess.common
@@ -955,14 +956,14 @@ impl hs::State for ExpectFinished {
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate_tls13(&mut st.handshake, client_auth, sess);
-            emit_certverify_tls13(&mut st.handshake, client_auth, sess)?;
+            emit_certificate_tls13(&mut st.handshake.transcript, client_auth, sess);
+            emit_certverify_tls13(&mut st.handshake.transcript, client_auth, sess)?;
         }
 
         let mut key_schedule_finished = st
             .key_schedule
             .into_traffic_with_client_finished_pending();
-        emit_finished_tls13(&mut st.handshake, &key_schedule_finished, sess);
+        emit_finished_tls13(&mut st.handshake.transcript, &key_schedule_finished, sess);
 
         /* Now move to our application traffic keys. */
         hs::check_aligned_handshake(sess)?;
