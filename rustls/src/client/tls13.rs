@@ -697,19 +697,6 @@ struct ExpectCertificateRequest {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectCertificateRequest {
-    fn into_expect_certificate(self, client_auth: ClientAuthDetails) -> hs::NextState {
-        Box::new(ExpectCertificate {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            may_send_sct_list: self.may_send_sct_list,
-            client_auth: Some(client_auth),
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
@@ -780,7 +767,14 @@ impl hs::State for ExpectCertificateRequest {
             debug!("Client auth requested but no cert selected");
         }
 
-        Ok(self.into_expect_certificate(client_auth))
+        Ok(Box::new(ExpectCertificate {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            key_schedule: self.key_schedule,
+            may_send_sct_list: self.may_send_sct_list,
+            client_auth: Some(client_auth),
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
     }
 }
 
