@@ -490,19 +490,6 @@ struct ExpectCertificate {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectCertificate {
-    fn into_expect_certificate_verify(self, server_cert: ServerCertDetails) -> hs::NextState {
-        Box::new(ExpectCertificateVerify {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            server_cert,
-            client_auth: self.client_auth,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -554,7 +541,14 @@ impl hs::State for ExpectCertificate {
             }
         }
 
-        Ok(self.into_expect_certificate_verify(server_cert))
+        Ok(Box::new(ExpectCertificateVerify {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            key_schedule: self.key_schedule,
+            server_cert,
+            client_auth: self.client_auth,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
     }
 }
 
