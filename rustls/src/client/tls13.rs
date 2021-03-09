@@ -558,16 +558,6 @@ struct ExpectCertificateOrCertReq {
 }
 
 impl ExpectCertificateOrCertReq {
-    fn into_expect_certificate(self) -> hs::NextState {
-        Box::new(ExpectCertificate {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            client_auth: None,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-
     fn into_expect_certificate_req(self) -> hs::NextState {
         Box::new(ExpectCertificateRequest {
             handshake: self.handshake,
@@ -589,8 +579,13 @@ impl hs::State for ExpectCertificateOrCertReq {
             ],
         )?;
         if m.is_handshake_type(HandshakeType::Certificate) {
-            self.into_expect_certificate()
-                .handle(sess, m)
+            Box::new(ExpectCertificate {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule: self.key_schedule,
+                client_auth: None,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }).handle(sess, m)
         } else {
             self.into_expect_certificate_req()
                 .handle(sess, m)
