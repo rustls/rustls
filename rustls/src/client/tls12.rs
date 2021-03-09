@@ -36,21 +36,6 @@ pub struct ExpectCertificate {
     pub server_cert_sct_list: Option<SCTList>,
 }
 
-impl ExpectCertificate {
-    fn into_expect_server_kx(self, server_cert_chain: CertificatePayload) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            server_cert_chain, vec![], self.server_cert_sct_list);
-
-        Box::new(ExpectServerKX {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -76,7 +61,16 @@ impl hs::State for ExpectCertificate {
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }))
         } else {
-            Ok(self.into_expect_server_kx(server_cert_chain))
+            let server_cert = ServerCertDetails::new(
+                server_cert_chain, vec![], self.server_cert_sct_list);
+
+            Ok(Box::new(ExpectServerKX {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                suite: self.suite,
+                server_cert,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }))
         }
     }
 }
