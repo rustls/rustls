@@ -88,22 +88,6 @@ struct ExpectCertificateStatus {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectCertificateStatus {
-    fn into_expect_server_kx(self, server_ocsp_response: Vec<u8>) -> hs::NextState {
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain, server_ocsp_response, self.server_cert_sct_list);
-
-        Box::new(ExpectServerKX {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateStatus {
     fn handle(
         mut self: Box<Self>,
@@ -124,7 +108,18 @@ impl hs::State for ExpectCertificateStatus {
             "Server stapled OCSP response is {:?}",
             &server_cert_ocsp_response
         );
-        Ok(self.into_expect_server_kx(server_cert_ocsp_response))
+
+        let server_cert = ServerCertDetails::new(
+            self.server_cert_chain, server_cert_ocsp_response, self.server_cert_sct_list);
+
+        Ok(Box::new(ExpectServerKX {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            using_ems: self.using_ems,
+            suite: self.suite,
+            server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
