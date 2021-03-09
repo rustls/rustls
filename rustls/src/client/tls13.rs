@@ -897,25 +897,6 @@ struct ExpectFinished {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectFinished {
-    fn into_expect_traffic(
-        handshake: HandshakeDetails,
-        key_schedule: KeyScheduleTraffic,
-        cert_verified: verify::ServerCertVerified,
-        sig_verified: verify::HandshakeSignatureValid,
-        fin_verified: verify::FinishedMessageVerified,
-    ) -> ExpectTraffic {
-        ExpectTraffic {
-            handshake,
-            key_schedule,
-            want_write_key_update: false,
-            _cert_verified: cert_verified,
-            _sig_verified: sig_verified,
-            _fin_verified: fin_verified,
-        }
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
@@ -1014,13 +995,15 @@ impl hs::State for ExpectFinished {
         let key_schedule_traffic = key_schedule_finished.into_traffic();
         sess.common.start_traffic();
 
-        let st = Self::into_expect_traffic(
-            st.handshake,
-            key_schedule_traffic,
-            st.cert_verified,
-            st.sig_verified,
-            fin,
-        );
+        let st = ExpectTraffic {
+            handshake: st.handshake,
+            key_schedule: key_schedule_traffic,
+            want_write_key_update: false,
+            _cert_verified: st.cert_verified,
+            _sig_verified: st.sig_verified,
+            _fin_verified: fin,
+        };
+
         #[cfg(feature = "quic")]
         {
             if sess.common.protocol == Protocol::Quic {
