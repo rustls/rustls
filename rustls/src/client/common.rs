@@ -13,8 +13,6 @@ use crate::sign;
 use crate::kx;
 use webpki;
 
-use std::mem;
-
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
     pub ocsp_response: Vec<u8>,
@@ -30,10 +28,6 @@ impl ServerCertDetails {
             ocsp_response,
             scts,
         }
-    }
-
-    pub fn take_chain(&mut self) -> CertificatePayload {
-        mem::replace(&mut self.cert_chain, Vec::new())
     }
 
     pub fn scts(&self) -> impl Iterator<Item=&[u8]> {
