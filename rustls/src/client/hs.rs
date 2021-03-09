@@ -467,27 +467,6 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
     scts.is_empty() || scts.iter().any(|sct| sct.0.is_empty())
 }
 
-impl ExpectServerHello {
-    fn into_expect_tls12_certificate(
-        self,
-        suite: &'static SupportedCipherSuite,
-        may_send_cert_status: bool,
-        must_issue_new_ticket: bool,
-        server_cert_sct_list: Option<SCTList>)
-        -> NextState
-    {
-        Box::new(tls12::ExpectCertificate {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite,
-            may_send_cert_status,
-            must_issue_new_ticket,
-            server_cert_sct_list,
-        })
-    }
-}
-
 impl State for ExpectServerHello {
     fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         let server_hello =
@@ -582,7 +561,7 @@ impl State for ExpectServerHello {
             }
         }
 
-        let scs = sess.find_cipher_suite(server_hello.cipher_suite)
+        let suite = sess.find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
@@ -591,11 +570,11 @@ impl State for ExpectServerHello {
             })?;
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
-        if !sess.common.set_suite(scs) {
+        if !sess.common.set_suite(suite) {
             return Err(illegal_param(sess, "server varied selected ciphersuite"));
         }
 
-        if !scs.usable_for_version(version)
+        if !suite.usable_for_version(version)
         {
             return Err(illegal_param(
                 sess,
@@ -606,7 +585,7 @@ impl State for ExpectServerHello {
         // Start our handshake hash, and input the server-hello.
         self.handshake
             .transcript
-            .start_hash(scs.get_hash());
+            .start_hash(suite.get_hash());
         self.handshake
             .transcript
             .add_message(&m);
@@ -616,7 +595,7 @@ impl State for ExpectServerHello {
         if sess.common.is_tls13() {
             tls13::validate_server_hello(sess, &server_hello)?;
             let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
-                scs,
+                suite,
                 sess,
                 self.early_key_schedule.take(),
                 &server_hello,
@@ -679,7 +658,7 @@ impl State for ExpectServerHello {
         }
 
         // Save any sent SCTs for verification against the certificate.
-        let server_cert_list_list =
+        let server_cert_sct_list =
             if let Some(sct_list) = server_hello.get_sct_list() {
             debug!("Server sent {:?} SCTs", sct_list.len());
 
@@ -698,7 +677,7 @@ impl State for ExpectServerHello {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
-                if resuming.suite != scs {
+                if resuming.suite != suite {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
                     return Err(TlsError::PeerMisbehavedError(error_msg));
                 }
@@ -711,7 +690,7 @@ impl State for ExpectServerHello {
 
                 let secrets = SessionSecrets::new_resume(
                     &self.randoms,
-                    scs,
+                    suite,
                     &resuming.master_secret.0,
                 );
                 sess.config.key_log.log(
@@ -751,7 +730,15 @@ impl State for ExpectServerHello {
             }
         }
 
-        Ok(self.into_expect_tls12_certificate(scs, may_send_cert_status, must_issue_new_ticket, server_cert_list_list))
+        Ok(Box::new(tls12::ExpectCertificate {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            using_ems: self.using_ems,
+            suite,
+            may_send_cert_status,
+            must_issue_new_ticket,
+            server_cert_sct_list,
+        }))
     }
 }
 
