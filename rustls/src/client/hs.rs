@@ -4,7 +4,7 @@ use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TlsError;
-use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
+use crate::key_schedule::KeyScheduleEarly;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -33,7 +33,6 @@ use crate::client::common::HandshakeDetails;
 use crate::client::{tls12, tls13};
 
 use webpki;
-use ring::digest::Digest;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TlsError>;
@@ -469,20 +468,6 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl ExpectServerHello {
-    fn into_expect_tls13_encrypted_extensions(
-        self,
-        key_schedule: KeyScheduleHandshake,
-        hash_at_client_recvd_server_hello: Digest,
-    ) -> NextState {
-        Box::new(tls13::ExpectEncryptedExtensions {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule,
-            hello: self.hello,
-            hash_at_client_recvd_server_hello,
-        })
-    }
-
     fn into_expect_tls12_new_ticket_resume(
         self,
         secrets: SessionSecrets,
@@ -673,7 +658,14 @@ impl State for ExpectServerHello {
                 &mut self.randoms,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
-            return Ok(self.into_expect_tls13_encrypted_extensions(key_schedule, hash_at_client_recvd_server_hello));
+
+            return Ok(Box::new(tls13::ExpectEncryptedExtensions {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule,
+                hello: self.hello,
+                hash_at_client_recvd_server_hello,
+            }));
         }
 
         // TLS1.2 only from here-on
