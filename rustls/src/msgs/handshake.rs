@@ -16,7 +16,6 @@ use crate::log::warn;
 use std::collections;
 use std::fmt;
 use std::io::Write;
-use std::mem;
 use webpki;
 
 macro_rules! declare_u8_vec(
@@ -2092,9 +2091,8 @@ impl CertificateStatus {
         }
     }
 
-    pub fn take_ocsp_response(&mut self) -> Vec<u8> {
-        let new = PayloadU24::new(Vec::new());
-        mem::replace(&mut self.ocsp_response, new).0
+    pub fn into_inner(self) -> Vec<u8> {
+        self.ocsp_response.0
     }
 }
 
