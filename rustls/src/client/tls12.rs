@@ -132,20 +132,6 @@ struct ExpectCertificateStatusOrServerKX {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectCertificateStatusOrServerKX {
-    fn into_expect_certificate_status(self) -> hs::NextState {
-        Box::new(ExpectCertificateStatus {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite: self.suite,
-            server_cert_sct_list: self.server_cert_sct_list,
-            server_cert_chain: self.server_cert_chain,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateStatusOrServerKX {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         check_message(
@@ -168,8 +154,15 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }).handle(sess, m)
         } else {
-            self.into_expect_certificate_status()
-                .handle(sess, m)
+            Box::new(ExpectCertificateStatus {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                suite: self.suite,
+                server_cert_sct_list: self.server_cert_sct_list,
+                server_cert_chain: self.server_cert_chain,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            }).handle(sess, m)
         }
     }
 }
