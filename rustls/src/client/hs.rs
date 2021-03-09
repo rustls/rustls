@@ -468,23 +468,6 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl ExpectServerHello {
-    fn into_expect_tls12_ccs_resume(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> NextState {
-        Box::new(tls12::ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            ticket: ReceivedTicketDetails::new(),
-            resuming: true,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-
     fn into_expect_tls12_certificate(
         self,
         suite: &'static SupportedCipherSuite,
@@ -755,7 +738,15 @@ impl State for ExpectServerHello {
                         sig_verified,
                     }))
                 } else {
-                    Ok(self.into_expect_tls12_ccs_resume(secrets, cert_verified, sig_verified))
+                    Ok(Box::new(tls12::ExpectCCS {
+                        secrets,
+                        handshake: self.handshake,
+                        using_ems: self.using_ems,
+                        ticket: ReceivedTicketDetails::new(),
+                        resuming: true,
+                        cert_verified,
+                        sig_verified,
+                    }))
                 };
             }
         }
