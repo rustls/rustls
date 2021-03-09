@@ -458,21 +458,6 @@ struct ExpectServerDone {
 }
 
 impl ExpectServerDone {
-    fn into_expect_new_ticket(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectNewTicket {
-            secrets,
-            handshake: self.handshake,
-            resuming: false,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-
     fn into_expect_ccs(
         self,
         secrets: SessionSecrets,
@@ -526,7 +511,7 @@ impl hs::State for ExpectServerDone {
             .split_first()
             .ok_or(TLSError::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let certv = sess
+        let cert_verified = sess
             .config
             .get_verifier()
             .verify_server_cert(
@@ -550,7 +535,7 @@ impl hs::State for ExpectServerDone {
         // 3.
         // Build up the contents of the signed message.
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
-        let sigv = {
+        let sig_verified = {
             let mut message = Vec::new();
             message.extend_from_slice(&st.randoms.client);
             message.extend_from_slice(&st.randoms.server);
@@ -625,9 +610,15 @@ impl hs::State for ExpectServerDone {
         emit_finished(&secrets, &mut st.handshake, sess);
 
         if st.must_issue_new_ticket {
-            Ok(st.into_expect_new_ticket(secrets, certv, sigv))
+            Ok(Box::new(ExpectNewTicket {
+                secrets,
+                handshake: st.handshake,
+                resuming: false,
+                cert_verified,
+                sig_verified,
+            }))
         } else {
-            Ok(st.into_expect_ccs(secrets, certv, sigv))
+            Ok(st.into_expect_ccs(secrets, cert_verified, sig_verified))
         }
     }
 }
