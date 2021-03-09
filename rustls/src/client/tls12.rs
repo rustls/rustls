@@ -457,24 +457,6 @@ struct ExpectServerDone {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectServerDone {
-    fn into_expect_ccs(
-        self,
-        secrets: SessionSecrets,
-        certv: verify::ServerCertVerified,
-        sigv: verify::HandshakeSignatureValid,
-    ) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            ticket: ReceivedTicketDetails::new(),
-            resuming: false,
-            cert_verified: certv,
-            sig_verified: sigv,
-        })
-    }
-}
-
 impl hs::State for ExpectServerDone {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
@@ -618,7 +600,14 @@ impl hs::State for ExpectServerDone {
                 sig_verified,
             }))
         } else {
-            Ok(st.into_expect_ccs(secrets, cert_verified, sig_verified))
+            Ok(Box::new(ExpectCCS {
+                secrets,
+                handshake: st.handshake,
+                ticket: ReceivedTicketDetails::new(),
+                resuming: false,
+                cert_verified,
+                sig_verified,
+            }))
         }
     }
 }
