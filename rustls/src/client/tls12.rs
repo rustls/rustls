@@ -339,20 +339,6 @@ struct ExpectCertificateRequest {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectCertificateRequest {
-    fn into_expect_server_done(self, client_auth: ClientAuthDetails) -> hs::NextState {
-        Box::new(ExpectServerDone {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            client_auth: Some(client_auth),
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
@@ -401,7 +387,15 @@ impl hs::State for ExpectCertificateRequest {
             debug!("Client auth requested but no cert/sigscheme available");
         }
 
-        Ok(self.into_expect_server_done(client_auth))
+        Ok(Box::new(ExpectServerDone {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            suite: self.suite,
+            server_cert: self.server_cert,
+            server_kx: self.server_kx,
+            client_auth: Some(client_auth),
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
