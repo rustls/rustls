@@ -669,7 +669,7 @@ impl hs::State for ExpectCertificateVerify {
             )
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
-        sess.server_cert_chain = self.server_cert.take_chain();
+        sess.server_cert_chain = self.server_cert.cert_chain;
         self.handshake
             .transcript
             .add_message(&m);
