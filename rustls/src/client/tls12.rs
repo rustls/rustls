@@ -176,20 +176,6 @@ struct ExpectServerKX {
     must_issue_new_ticket: bool,
 }
 
-impl ExpectServerKX {
-    fn into_expect_server_done_or_certreq(self, skx: ServerKXDetails) -> hs::NextState {
-        Box::new(ExpectServerDoneOrCertReq {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: skx,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectServerKX {
     fn handle(
         mut self: Box<Self>,
@@ -215,7 +201,7 @@ impl hs::State for ExpectServerKX {
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
         decoded_kx.encode_params(&mut kx_params);
-        let skx = ServerKXDetails::new(kx_params, decoded_kx.get_sig().unwrap());
+        let server_kx = ServerKXDetails::new(kx_params, decoded_kx.get_sig().unwrap());
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
@@ -224,7 +210,15 @@ impl hs::State for ExpectServerKX {
             }
         }
 
-        Ok(self.into_expect_server_done_or_certreq(skx))
+        Ok(Box::new(ExpectServerDoneOrCertReq {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            using_ems: self.using_ems,
+            suite: self.suite,
+            server_cert: self.server_cert,
+            server_kx,
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
