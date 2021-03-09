@@ -395,17 +395,6 @@ pub struct ExpectEncryptedExtensions {
     pub hash_at_client_recvd_server_hello: Digest,
 }
 
-impl ExpectEncryptedExtensions {
-    fn into_expect_certificate_or_certreq(self) -> hs::NextState {
-        Box::new(ExpectCertificateOrCertReq {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        })
-    }
-}
-
 impl hs::State for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
@@ -481,7 +470,12 @@ impl hs::State for ExpectEncryptedExtensions {
                 let msg = "server sent early data extension without resumption".to_string();
                 return Err(TLSError::PeerMisbehavedError(msg));
             }
-            Ok(self.into_expect_certificate_or_certreq())
+            Ok(Box::new(ExpectCertificateOrCertReq {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule: self.key_schedule,
+                hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+            }))
         }
     }
 }
