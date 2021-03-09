@@ -143,6 +143,7 @@ pub fn choose_kx_groups(
 /// data dependency on the message they are contained within.
 pub fn fill_in_psk_binder(
     handshake: &HandshakeDetails,
+    transcript: &HandshakeHash,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
@@ -157,8 +158,7 @@ pub fn fill_in_psk_binder(
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.get_encoding_for_binder_signing();
-    let handshake_hash = handshake
-        .transcript
+    let handshake_hash = transcript
         .get_hash_given(suite_hash, &binder_plaintext);
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
@@ -179,6 +179,7 @@ pub fn start_handshake_traffic(
     early_key_schedule: Option<KeyScheduleEarly>,
     server_hello: &ServerHelloPayload,
     handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     hello: &mut ClientHelloDetails,
     randoms: &SessionRandoms,
 ) -> Result<(KeyScheduleHandshake, Digest), TlsError> {
@@ -245,7 +246,7 @@ pub fn start_handshake_traffic(
     // the two halves will have different record layer protections.  Disallow this.
     hs::check_aligned_handshake(sess)?;
 
-    let hash_at_client_recvd_server_hello = handshake.transcript.get_current_hash();
+    let hash_at_client_recvd_server_hello = transcript.get_current_hash();
 
     let _maybe_write_key = if !sess.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
@@ -391,6 +392,7 @@ fn validate_encrypted_extensions(
 pub struct ExpectEncryptedExtensions {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
+    pub transcript: HandshakeHash,
     pub key_schedule: KeyScheduleHandshake,
     pub hello: ClientHelloDetails,
     pub hash_at_client_recvd_server_hello: Digest,
@@ -408,8 +410,7 @@ impl hs::State for ExpectEncryptedExtensions {
             HandshakePayload::EncryptedExtensions
         )?;
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
-        self.handshake
-            .transcript
+        self.transcript
             .add_message(&m);
 
         validate_encrypted_extensions(sess, &self.hello, &exts)?;
@@ -460,6 +461,7 @@ impl hs::State for ExpectEncryptedExtensions {
             Ok(Box::new(ExpectFinished {
                 handshake: self.handshake,
                 randoms: self.randoms,
+                transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
                 cert_verified,
@@ -474,6 +476,7 @@ impl hs::State for ExpectEncryptedExtensions {
             Ok(Box::new(ExpectCertificateOrCertReq {
                 handshake: self.handshake,
                 randoms: self.randoms,
+                transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.hello.server_may_send_sct_list(),
                 hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
@@ -485,6 +488,7 @@ impl hs::State for ExpectEncryptedExtensions {
 struct ExpectCertificate {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
     client_auth: Option<ClientAuthDetails>,
@@ -502,9 +506,7 @@ impl hs::State for ExpectCertificate {
             HandshakeType::Certificate,
             HandshakePayload::CertificateTLS13
         )?;
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
@@ -545,6 +547,7 @@ impl hs::State for ExpectCertificate {
         Ok(Box::new(ExpectCertificateVerify {
             handshake: self.handshake,
             randoms: self.randoms,
+            transcript: self.transcript,
             key_schedule: self.key_schedule,
             server_cert,
             client_auth: self.client_auth,
@@ -556,6 +559,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateOrCertReq {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
     hash_at_client_recvd_server_hello: Digest,
@@ -575,6 +579,7 @@ impl hs::State for ExpectCertificateOrCertReq {
             Box::new(ExpectCertificate {
                 handshake: self.handshake,
                 randoms: self.randoms,
+                transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.may_send_sct_list,
                 client_auth: None,
@@ -584,6 +589,7 @@ impl hs::State for ExpectCertificateOrCertReq {
             Box::new(ExpectCertificateRequest {
                 handshake: self.handshake,
                 randoms: self.randoms,
+                transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.may_send_sct_list,
                 hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
@@ -596,6 +602,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 struct ExpectCertificateVerify {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
@@ -657,7 +664,6 @@ impl hs::State for ExpectCertificateVerify {
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self
-            .handshake
             .transcript
             .get_current_hash();
         let sig_verified = sess
@@ -671,13 +677,12 @@ impl hs::State for ExpectCertificateVerify {
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
         sess.server_cert_chain = self.server_cert.cert_chain;
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
             handshake: self.handshake,
             randoms: self.randoms,
+            transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
             cert_verified,
@@ -693,6 +698,7 @@ impl hs::State for ExpectCertificateVerify {
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
     hash_at_client_recvd_server_hello: Digest,
@@ -709,9 +715,7 @@ impl hs::State for ExpectCertificateRequest {
             HandshakeType::CertificateRequest,
             HandshakePayload::CertificateRequestTLS13
         )?;
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
 
         // Fortunately the problems here in TLS1.2 and prior are corrected in
@@ -771,6 +775,7 @@ impl hs::State for ExpectCertificateRequest {
         Ok(Box::new(ExpectCertificate {
             handshake: self.handshake,
             randoms: self.randoms,
+            transcript: self.transcript,
             key_schedule: self.key_schedule,
             may_send_sct_list: self.may_send_sct_list,
             client_auth: Some(client_auth),
@@ -891,6 +896,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, sess: &mut Clien
 struct ExpectFinished {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     cert_verified: verify::ServerCertVerified,
@@ -905,7 +911,6 @@ impl hs::State for ExpectFinished {
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
         let handshake_hash = st
-            .handshake
             .transcript
             .get_current_hash();
         let expect_verify_data = st
@@ -935,17 +940,13 @@ impl hs::State for ExpectFinished {
             None
         };
 
-        st.handshake.transcript.add_message(&m);
+        st.transcript.add_message(&m);
 
-        let hash_after_handshake = st
-            .handshake
-            .transcript
-            .get_current_hash();
-
+        let hash_after_handshake = st.transcript.get_current_hash();
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if let Some(write_key) = maybe_write_key {
-            emit_end_of_early_data_tls13(&mut st.handshake.transcript, sess);
+            emit_end_of_early_data_tls13(&mut st.transcript, sess);
             sess.common.early_traffic = false;
             sess.early_data.finished();
             sess.common
@@ -956,14 +957,14 @@ impl hs::State for ExpectFinished {
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate_tls13(&mut st.handshake.transcript, client_auth, sess);
-            emit_certverify_tls13(&mut st.handshake.transcript, client_auth, sess)?;
+            emit_certificate_tls13(&mut st.transcript, client_auth, sess);
+            emit_certverify_tls13(&mut st.transcript, client_auth, sess)?;
         }
 
         let mut key_schedule_finished = st
             .key_schedule
             .into_traffic_with_client_finished_pending();
-        emit_finished_tls13(&mut st.handshake.transcript, &key_schedule_finished, sess);
+        emit_finished_tls13(&mut st.transcript, &key_schedule_finished, sess);
 
         /* Now move to our application traffic keys. */
         hs::check_aligned_handshake(sess)?;
@@ -998,6 +999,7 @@ impl hs::State for ExpectFinished {
 
         let st = ExpectTraffic {
             handshake: st.handshake,
+            transcript: st.transcript,
             key_schedule: key_schedule_traffic,
             want_write_key_update: false,
             _cert_verified: st.cert_verified,
@@ -1025,6 +1027,7 @@ impl hs::State for ExpectFinished {
 // and application data.
 struct ExpectTraffic {
     handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
     _cert_verified: verify::ServerCertVerified,
@@ -1039,7 +1042,6 @@ impl ExpectTraffic {
         nst: &NewSessionTicketPayloadTLS13,
     ) -> Result<(), TlsError> {
         let handshake_hash = self
-            .handshake
             .transcript
             .get_current_hash();
         let secret = self
