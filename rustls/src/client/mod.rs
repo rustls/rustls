@@ -8,7 +8,7 @@ use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::handshake::CertificatePayload;
+use crate::msgs::handshake::{CertificatePayload, ECHConfig};
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
 use crate::session::{MiddleboxCCS, Session, SessionCommon};
@@ -653,6 +653,97 @@ impl ClientSessionImpl {
     }
 }
 
+pub trait HelloData {
+    fn get_extra_exts(&self) -> &Vec<ClientExtension>;
+    fn push_extra_ext(&mut self, ext: ClientExtension);
+    fn get_hostname(&self) -> webpki::DNSNameRef;
+    fn get_ech_config(&self) -> Option<&ECHConfig>;
+    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>>;
+}
+
+pub struct Host {
+    hostname: webpki::DNSName,
+    extra_exts: Vec<ClientExtension>,
+}
+
+impl HelloData for Host {
+    fn get_extra_exts(&self) -> &Vec<ClientExtension> {
+        &self.extra_exts
+    }
+
+    fn push_extra_ext(&mut self, ext: ClientExtension) {
+        self.extra_exts.push(ext);
+    }
+
+    fn get_hostname(&self) -> webpki::DNSNameRef {
+        self.hostname.as_ref()
+    }
+
+    fn get_ech_config(&self) -> Option<&ECHConfig> {
+        None
+    }
+
+    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>> {
+        None
+    }
+}
+
+pub struct EncryptedHost {
+    hostname: webpki::DNSName,
+    ech_config: ECHConfig,
+    extra_exts: Vec<ClientExtension>,
+    extra_outer_exts: Vec<ClientExtension>,
+}
+
+impl EncryptedHost {
+    #[allow(dead_code)]
+    fn new(hostname: webpki::DNSNameRef, ech_config: ECHConfig) -> EncryptedHost {
+        EncryptedHost {
+            hostname: hostname.into(),
+            ech_config,
+            extra_exts: vec![],
+            extra_outer_exts: vec![],
+        }
+    }
+}
+
+impl HelloData for EncryptedHost {
+    fn get_extra_exts(&self) -> &Vec<ClientExtension> {
+        &self.extra_exts
+    }
+
+    fn push_extra_ext(&mut self, ext: ClientExtension) {
+        self.extra_exts.push(ext);
+    }
+
+    fn get_hostname(&self) -> webpki::DNSNameRef {
+        self.hostname.as_ref()
+    }
+
+    fn get_ech_config(&self) -> Option<&ECHConfig> {
+        Some(&self.ech_config)
+    }
+
+    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>> {
+        Some(&self.extra_outer_exts)
+    }
+}
+
+pub enum ClientPeerData /* or something */ {
+    Host(Host),
+    EncryptedHost(EncryptedHost),
+    // space for IpAddress(std::net::IpAddr) in the future
+}
+
+impl From<webpki::DNSNameRef<'_>> for ClientPeerData {
+    fn from(hostname: webpki::DNSNameRef) -> ClientPeerData {
+        ClientPeerData::Host(Host {
+            hostname: hostname.into(),
+            extra_exts: vec![]
+        })
+    }
+}
+
 /// This represents a single TLS client session.
 #[derive(Debug)]
 pub struct ClientSession {
@@ -665,8 +756,20 @@ impl ClientSession {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
+        ClientSession::from_peer_data(config, hostname.into())
+    }
+
+    /// Make a new ClientSession.  `config` controls how
+    /// we behave in the TLS protocol, `peer_data` is the
+    /// contains the data needed for the ClientHello message.
+    pub fn from_peer_data(config: &Arc<ClientConfig>, peer_data: ClientPeerData) -> ClientSession {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), vec![]);
+        let hello_data: Box<dyn HelloData> = match peer_data {
+            ClientPeerData::Host(host) => Box::new(host),
+            ClientPeerData::EncryptedHost(host) => Box::new(host),
+        };
+        // TODO:: thread through the HelloData instead of these two params
+        imp.start_handshake(hello_data.get_hostname().into(), hello_data.get_extra_exts().to_vec() );
         ClientSession { imp }
     }
 
