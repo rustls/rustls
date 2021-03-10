@@ -18,7 +18,7 @@ fn duration_nanos(d: Duration) -> u64 {
     ((d.as_secs() as f64) * 1e9 + (d.subsec_nanos() as f64)) as u64
 }
 
-static V: &'static verify::WebPKIVerifier = &verify::WebPKIVerifier;
+static V: &'static verify::WebPkiVerifier = &verify::WebPkiVerifier;
 
 #[test]
 fn test_reddit_cert() {

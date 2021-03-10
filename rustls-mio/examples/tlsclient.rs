@@ -455,7 +455,7 @@ mod danger {
             _dns_name: webpki::DNSNameRef<'_>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
-        ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+        ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
             Ok(rustls::ServerCertVerified::assertion())
         }
     }

@@ -7,7 +7,7 @@
 use webpki;
 use webpki_roots;
 
-use rustls::{ClientConfig, ClientSession, Session, TLSError};
+use rustls::{ClientConfig, ClientSession, Session, TlsError};
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 enum Verdict {
     Accept,
-    Reject(TLSError),
+    Reject(TlsError),
 }
 
 fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Error>> {
@@ -62,7 +62,7 @@ fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict,
 
             if let Err(err) = client.process_new_packets() {
                 return match err {
-                    TLSError::WebPKIError(..) | TLSError::AlertReceived(_) => {
+                    TlsError::WebPKIError(..) | TlsError::AlertReceived(_) => {
                         Ok(Verdict::Reject(err))
                     }
                     _ => Err(From::from(format!("{:?}", err))),

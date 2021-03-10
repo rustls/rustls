@@ -1,5 +1,5 @@
 use crate::anchors;
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
 #[cfg(feature = "logging")]
@@ -180,7 +180,7 @@ impl ClientConfig {
             versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
             ct_logs: None,
             enable_sni: true,
-            verifier: Arc::new(verify::WebPKIVerifier),
+            verifier: Arc::new(verify::WebPkiVerifier),
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
         }
@@ -244,7 +244,7 @@ impl ClientConfig {
         &mut self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         self.client_auth_cert_resolver = Arc::new(resolver);
         Ok(())
@@ -396,7 +396,7 @@ pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub alpn_protocol: Option<Vec<u8>>,
     pub common: SessionCommon,
-    pub error: Option<TLSError>,
+    pub error: Option<TlsError>,
     pub state: Option<hs::NextState>,
     pub server_cert_chain: CertificatePayload,
     pub early_data: EarlyData,
@@ -424,7 +424,7 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hostname: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> Result<(), TLSError> {
+    pub fn start_handshake(&mut self, hostname: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> Result<(), TlsError> {
         self.state = Some(hs::start_handshake(self, hostname, extra_exts)?);
         Ok(())
     }
@@ -468,7 +468,7 @@ impl ClientSessionImpl {
         self.common.set_buffer_limit(len)
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
+    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TlsError> {
         // TLS1.3: drop CCS at any time during handshaking
         if let MiddleboxCCS::Drop = self.common.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
@@ -494,14 +494,14 @@ impl ClientSessionImpl {
                 .ok_or_else(|| {
                     self.common
                         .send_fatal_alert(AlertDescription::DecodeError);
-                    TLSError::CorruptMessagePayload(ContentType::Handshake)
+                    TlsError::CorruptMessagePayload(ContentType::Handshake)
                 })?;
             return self.process_new_handshake_messages();
         }
 
         // Now we can fully parse the message payload.
         if !msg.decode_payload() {
-            return Err(TLSError::CorruptMessagePayload(msg.typ));
+            return Err(TlsError::CorruptMessagePayload(msg.typ));
         }
 
         // For alerts, we have separate logic.
@@ -512,7 +512,7 @@ impl ClientSessionImpl {
         self.process_main_protocol(msg)
     }
 
-    pub fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
+    pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -525,7 +525,7 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    fn reject_renegotiation_attempt(&mut self) -> Result<(), TLSError> {
+    fn reject_renegotiation_attempt(&mut self) -> Result<(), TlsError> {
         self.common
             .send_warning_alert(AlertDescription::NoRenegotiation);
         Ok(())
@@ -538,8 +538,8 @@ impl ClientSessionImpl {
 
     fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
         match rc {
-            Err(TLSError::InappropriateMessage { .. })
-            | Err(TLSError::InappropriateHandshakeMessage { .. }) => {
+            Err(TlsError::InappropriateMessage { .. })
+            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
                 self.queue_unexpected_alert();
             }
             _ => {}
@@ -550,7 +550,7 @@ impl ClientSessionImpl {
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
+    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if msg.is_handshake_type(HandshakeType::HelloRequest)
@@ -568,13 +568,13 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    pub fn process_new_packets(&mut self) -> Result<(), TlsError> {
         if let Some(ref err) = self.error {
             return Err(err.clone());
         }
 
         if self.common.message_deframer.desynced {
-            return Err(TLSError::CorruptMessage);
+            return Err(TlsError::CorruptMessage);
         }
 
         while let Some(msg) = self
@@ -637,10 +637,10 @@ impl ClientSessionImpl {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.state
             .as_ref()
-            .ok_or_else(|| TLSError::HandshakeNotComplete)
+            .ok_or_else(|| TlsError::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
@@ -665,7 +665,7 @@ impl ClientSession {
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TLSError> {
+    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TlsError> {
         let mut imp = ClientSessionImpl::new(config);
         imp.start_handshake(hostname.into(), vec![])?;
         Ok(ClientSession { imp })
@@ -717,7 +717,7 @@ impl Session for ClientSession {
         self.imp.common.write_tls(wr)
     }
 
-    fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    fn process_new_packets(&mut self) -> Result<(), TlsError> {
         self.imp.process_new_packets()
     }
 
@@ -758,7 +758,7 @@ impl Session for ClientSession {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.imp
             .export_keying_material(output, label, context)
     }

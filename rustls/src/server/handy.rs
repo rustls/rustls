@@ -1,4 +1,4 @@
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key;
 use crate::server;
 use crate::server::ClientHello;
@@ -110,9 +110,9 @@ impl AlwaysResolvesChain {
     pub fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesChain, TLSError> {
+    ) -> Result<AlwaysResolvesChain, TlsError> {
         let key = sign::any_supported_type(priv_key)
-            .map_err(|_| TLSError::General("invalid private key".into()))?;
+            .map_err(|_| TlsError::General("invalid private key".into()))?;
         Ok(AlwaysResolvesChain(sign::CertifiedKey::new(
             chain,
             Arc::new(key),
@@ -128,7 +128,7 @@ impl AlwaysResolvesChain {
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,
-    ) -> Result<AlwaysResolvesChain, TLSError> {
+    ) -> Result<AlwaysResolvesChain, TlsError> {
         let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
@@ -148,14 +148,14 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
 
 /// Something that resolves do different cert chains/keys based
 /// on client-supplied server name (via SNI).
-pub struct ResolvesServerCertUsingSNI {
+pub struct ResolvesServerCertUsingSni {
     by_name: collections::HashMap<String, sign::CertifiedKey>,
 }
 
-impl ResolvesServerCertUsingSNI {
+impl ResolvesServerCertUsingSni {
     /// Create a new and empty (i.e., knows no certificates) resolver.
-    pub fn new() -> ResolvesServerCertUsingSNI {
-        ResolvesServerCertUsingSNI {
+    pub fn new() -> ResolvesServerCertUsingSni {
+        ResolvesServerCertUsingSni {
             by_name: collections::HashMap::new(),
         }
     }
@@ -165,9 +165,9 @@ impl ResolvesServerCertUsingSNI {
     /// This function fails if `name` is not a valid DNS name, or if
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
-    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), TLSError> {
+    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), TlsError> {
         let checked_name = webpki::DNSNameRef::try_from_ascii_str(name)
-            .map_err(|_| TLSError::General("Bad DNS name".into()))?;
+            .map_err(|_| TlsError::General("Bad DNS name".into()))?;
 
         ck.cross_check_end_entity_cert(Some(checked_name))?;
         self.by_name.insert(name.into(), ck);
@@ -175,7 +175,7 @@ impl ResolvesServerCertUsingSNI {
     }
 }
 
-impl server::ResolvesServerCert for ResolvesServerCertUsingSNI {
+impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
         if let Some(name) = client_hello.server_name() {
             self.by_name.get(name.into()).cloned()
@@ -287,7 +287,7 @@ mod test {
 
     #[test]
     fn test_resolvesservercertusingsni_requires_sni() {
-        let rscsni = ResolvesServerCertUsingSNI::new();
+        let rscsni = ResolvesServerCertUsingSni::new();
         assert!(
             rscsni
                 .resolve(ClientHello::new(None, &[], None))
@@ -297,7 +297,7 @@ mod test {
 
     #[test]
     fn test_resolvesservercertusingsni_handles_unknown_name() {
-        let rscsni = ResolvesServerCertUsingSNI::new();
+        let rscsni = ResolvesServerCertUsingSni::new();
         let name = webpki::DNSNameRef::try_from_ascii_str("hello.com").unwrap();
         assert!(
             rscsni

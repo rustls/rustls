@@ -264,14 +264,14 @@ pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage}
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
-pub use crate::error::TLSError;
+pub use crate::error::TlsError;
 pub use crate::error::WebPKIOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
-pub use crate::server::handy::ResolvesServerCertUsingSNI;
+pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::StoresServerSessions;
 pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
@@ -333,8 +333,20 @@ pub use crate::client::danger::DangerousClientConfig;
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::verify::{
     ClientCertVerified, ClientCertVerifier, HandshakeSignatureValid, ServerCertVerified,
-    ServerCertVerifier, WebPKIVerifier,
+    ServerCertVerifier, WebPkiVerifier,
 };
 
 /// This is the rustls manual.
 pub mod manual;
+
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use ResolvesServerCertUsingSni")]
+pub type ResolvesServerCertUsingSNI = ResolvesServerCertUsingSni;
+#[cfg(feature = "dangerous_configuration")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use WebPkiVerifier")]
+pub type WebPKIVerifier = WebPkiVerifier;
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use TlsError")]
+pub type TLSError = TlsError;

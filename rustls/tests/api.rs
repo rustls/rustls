@@ -15,7 +15,7 @@ use rustls::sign;
 use rustls::ClientHello;
 use rustls::KeyLog;
 use rustls::Session;
-use rustls::TLSError;
+use rustls::TlsError;
 use rustls::WebPKIOp;
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
@@ -587,7 +587,7 @@ fn client_checks_server_certificate_with_given_name() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
-                Err(TLSErrorFromPeer::Client(TLSError::WebPKIError(
+                Err(TLSErrorFromPeer::Client(TlsError::WebPKIError(
                     webpki::Error::CertNotValidForName,
                     WebPKIOp::ValidateForDNSName,
                 )))
@@ -658,7 +658,7 @@ fn client_cert_resolve() {
 
             assert_eq!(
                 do_handshake_until_error(&mut client, &mut server),
-                Err(TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented))
+                Err(TLSErrorFromPeer::Server(TlsError::NoCertificatesPresented))
             );
         }
     }
@@ -686,18 +686,18 @@ mod test_clientverifier {
     use rustls::internal::msgs::enums::ContentType;
 
     // Client is authorized!
-    fn ver_ok() -> Result<ClientCertVerified, TLSError> {
+    fn ver_ok() -> Result<ClientCertVerified, TlsError> {
         Ok(rustls::ClientCertVerified::assertion())
     }
 
     // Use when we shouldn't even attempt verification
-    fn ver_unreachable() -> Result<ClientCertVerified, TLSError> {
+    fn ver_unreachable() -> Result<ClientCertVerified, TlsError> {
         unreachable!()
     }
 
     // Verifier that returns an error that we can expect
-    fn ver_err() -> Result<ClientCertVerified, TLSError> {
-        Err(TLSError::General("test err".to_string()))
+    fn ver_err() -> Result<ClientCertVerified, TlsError> {
+        Err(TlsError::General("test err".to_string()))
     }
 
     #[test]
@@ -753,7 +753,7 @@ mod test_clientverifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(
                     err,
-                    Err(TLSErrorFromPeer::Client(TLSError::CorruptMessagePayload(
+                    Err(TLSErrorFromPeer::Client(TlsError::CorruptMessagePayload(
                         ContentType::Handshake
                     )))
                 );
@@ -788,10 +788,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TLSError::General(
+                        TLSErrorFromPeer::Server(TlsError::General(
                             "client rejected by client_auth_root_subjects".into()
                         )),
-                        TLSErrorFromPeer::Client(TLSError::AlertReceived(
+                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
                             AlertDescription::AccessDenied
                         ))
                     ])
@@ -827,10 +827,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TLSError::General(
+                        TLSErrorFromPeer::Server(TlsError::General(
                             "client rejected by client_auth_root_subjects".into()
                         )),
-                        TLSErrorFromPeer::Client(TLSError::AlertReceived(
+                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
                             AlertDescription::AccessDenied
                         ))
                     ])
@@ -867,8 +867,8 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TLSError::NoCertificatesPresented),
-                        TLSErrorFromPeer::Client(TLSError::AlertReceived(
+                        TLSErrorFromPeer::Server(TlsError::NoCertificatesPresented),
+                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
                             AlertDescription::CertificateRequired
                         ))
                     ])
@@ -903,7 +903,7 @@ mod test_clientverifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(
                     err,
-                    Err(TLSErrorFromPeer::Server(TLSError::General(
+                    Err(TLSErrorFromPeer::Server(TlsError::General(
                         "test err".into()
                     )))
                 );
@@ -938,10 +938,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TLSError::General(
+                        TLSErrorFromPeer::Server(TlsError::General(
                             "client rejected by client_auth_mandatory".into()
                         )),
-                        TLSErrorFromPeer::Client(TLSError::AlertReceived(
+                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
                             AlertDescription::AccessDenied
                         ))
                     ])
@@ -1146,7 +1146,7 @@ struct OtherSession<'a> {
     pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
     pub short_writes: bool,
-    pub last_error: Option<rustls::TLSError>,
+    pub last_error: Option<rustls::TlsError>,
 }
 
 impl<'a> OtherSession<'a> {
@@ -1700,7 +1700,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 #[test]
 fn server_exposes_offered_sni_even_if_resolver_fails() {
     let kt = KeyType::RSA;
-    let resolver = rustls::ResolvesServerCertUsingSNI::new();
+    let resolver = rustls::ResolvesServerCertUsingSni::new();
 
     let mut server_config = make_server_config(kt);
     server_config.cert_resolver = Arc::new(resolver);
@@ -1715,7 +1715,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         transfer(&mut client, &mut server);
         assert_eq!(
             server.process_new_packets(),
-            Err(TLSError::General(
+            Err(TlsError::General(
                 "no server certificate chain resolved".to_string()
             ))
         );
@@ -1726,8 +1726,8 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 #[test]
 fn sni_resolver_works() {
     let kt = KeyType::RSA;
-    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
-    let signing_key = sign::RSASigningKey::new(&kt.get_key()).unwrap();
+    let mut resolver = rustls::ResolvesServerCertUsingSni::new();
+    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
     resolver
         .add(
@@ -1751,7 +1751,7 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client2, &mut server2);
     assert_eq!(
         err,
-        Err(TLSErrorFromPeer::Server(TLSError::General(
+        Err(TLSErrorFromPeer::Server(TlsError::General(
             "no server certificate chain resolved".into()
         )))
     );
@@ -1760,8 +1760,8 @@ fn sni_resolver_works() {
 #[test]
 fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::RSA;
-    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
-    let signing_key = sign::RSASigningKey::new(&kt.get_key()).unwrap();
+    let mut resolver = rustls::ResolvesServerCertUsingSni::new();
+    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
     assert_eq!(
@@ -1772,7 +1772,7 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(TLSError::General(
+        Err(TlsError::General(
             "The server certificate is not valid for the given name".into()
         )),
         resolver.add(
@@ -1781,7 +1781,7 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(TLSError::General("Bad DNS name".into())),
+        Err(TlsError::General("Bad DNS name".into())),
         resolver.add(
             "not ascii 🦀",
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
@@ -1792,12 +1792,12 @@ fn sni_resolver_rejects_wrong_names() {
 #[test]
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::RSA;
-    let mut resolver = rustls::ResolvesServerCertUsingSNI::new();
-    let signing_key = sign::RSASigningKey::new(&kt.get_key()).unwrap();
+    let mut resolver = rustls::ResolvesServerCertUsingSni::new();
+    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
     assert_eq!(
-        Err(TLSError::General(
+        Err(TlsError::General(
             "No end-entity certificate in certificate chain".into()
         )),
         resolver.add(
@@ -1808,7 +1808,7 @@ fn sni_resolver_rejects_bad_certs() {
 
     let bad_chain = vec![rustls::Certificate(vec![0xa0])];
     assert_eq!(
-        Err(TLSError::General(
+        Err(TlsError::General(
             "End-entity certificate in certificate chain is syntactically invalid".into()
         )),
         resolver.add(
@@ -1825,11 +1825,11 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_eq!(
-        Err(TLSError::HandshakeNotComplete),
+        Err(TlsError::HandshakeNotComplete),
         client.export_keying_material(&mut client_secret, b"label", Some(b"context"))
     );
     assert_eq!(
-        Err(TLSError::HandshakeNotComplete),
+        Err(TlsError::HandshakeNotComplete),
         server.export_keying_material(&mut server_secret, b"label", Some(b"context"))
     );
     do_handshake(&mut client, &mut server);
@@ -2528,7 +2528,7 @@ mod test_quic {
     fn step(
         send: &mut dyn Session,
         recv: &mut dyn Session,
-    ) -> Result<Option<quic::Keys>, TLSError> {
+    ) -> Result<Option<quic::Keys>, TlsError> {
         let mut buf = Vec::new();
         let secrets = loop {
             let prev = buf.len();
@@ -2712,7 +2712,7 @@ mod test_quic {
                 step(&mut client, &mut server)
                     .err()
                     .unwrap(),
-                TLSError::NoApplicationProtocol
+                TlsError::NoApplicationProtocol
             );
 
             assert_eq!(
@@ -2984,7 +2984,7 @@ fn test_server_rejects_duplicate_sni_names() {
     transfer_altered(&mut client, duplicate_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(TLSError::PeerMisbehavedError(
+        Err(TlsError::PeerMisbehavedError(
             "ClientHello SNI contains duplicate name types".into()
         ))
     );
@@ -3008,7 +3008,7 @@ fn test_server_rejects_empty_sni_extension() {
     transfer_altered(&mut client, empty_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(TLSError::PeerMisbehavedError(
+        Err(TlsError::PeerMisbehavedError(
             "ClientHello SNI did not contain a hostname".into()
         ))
     );
@@ -3035,7 +3035,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
     transfer_altered(&mut client, different_kx_group, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(TLSError::PeerIncompatibleError(
+        Err(TlsError::PeerIncompatibleError(
             "no kx group overlap with client".into()
         ))
     );

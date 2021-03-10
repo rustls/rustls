@@ -1,5 +1,5 @@
 use crate::cipher;
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, warn};
@@ -67,7 +67,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     ///
     /// Success from this function can mean new plaintext is available:
     /// obtain it using `read`.
-    fn process_new_packets(&mut self) -> Result<(), TLSError>;
+    fn process_new_packets(&mut self) -> Result<(), TlsError>;
 
     /// Returns true if the caller should call `read_tls` as soon
     /// as possible.
@@ -140,7 +140,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError>;
+    ) -> Result<(), TlsError>;
 
     /// Retrieves the ciphersuite agreed with the peer.
     ///
@@ -510,7 +510,7 @@ impl SessionCommon {
         }
     }
 
-    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, TLSError> {
+    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, TlsError> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
@@ -521,7 +521,7 @@ impl SessionCommon {
         }
 
         if self.received_middlebox_ccs {
-            Err(TLSError::PeerMisbehavedError(
+            Err(TlsError::PeerMisbehavedError(
                 "illegal middlebox CCS received".into(),
             ))
         } else {
@@ -530,7 +530,7 @@ impl SessionCommon {
         }
     }
 
-    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TLSError> {
+    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TlsError> {
         if self
             .record_layer
             .wants_close_before_decrypt()
@@ -539,7 +539,7 @@ impl SessionCommon {
         }
 
         let rc = self.record_layer.decrypt_incoming(encr);
-        if let Err(TLSError::PeerSentOversizedRecord) = rc {
+        if let Err(TlsError::PeerSentOversizedRecord) = rc {
             self.send_fatal_alert(AlertDescription::RecordOverflow);
         }
         rc
@@ -554,7 +554,7 @@ impl SessionCommon {
         self.sendable_tls.set_limit(limit);
     }
 
-    pub fn process_alert(&mut self, msg: Message) -> Result<(), TLSError> {
+    pub fn process_alert(&mut self, msg: Message) -> Result<(), TlsError> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
             // Reject unknown AlertLevels.
             if let AlertLevel::Unknown(_) = alert.level {
@@ -580,9 +580,9 @@ impl SessionCommon {
             }
 
             error!("TLS alert received: {:#?}", msg);
-            Err(TLSError::AlertReceived(alert.description))
+            Err(TlsError::AlertReceived(alert.description))
         } else {
-            Err(TLSError::CorruptMessagePayload(ContentType::Alert))
+            Err(TlsError::CorruptMessagePayload(ContentType::Alert))
         }
     }
 
