@@ -1,7 +1,7 @@
 use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
@@ -59,12 +59,12 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 pub fn validate_server_hello(
     sess: &mut ClientSessionImpl,
     server_hello: &ServerHelloPayload,
-) -> Result<(), TLSError> {
+) -> Result<(), TlsError> {
     for ext in &server_hello.extensions {
         if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
             sess.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(TLSError::PeerMisbehavedError(
+            return Err(TlsError::PeerMisbehavedError(
                 "server sent unexpected cleartext ext".to_string(),
             ));
         }
@@ -180,13 +180,13 @@ pub fn start_handshake_traffic(
     handshake: &mut HandshakeDetails,
     hello: &mut ClientHelloDetails,
     randoms: &SessionRandoms,
-) -> Result<(KeyScheduleHandshake, Digest), TLSError> {
+) -> Result<(KeyScheduleHandshake, Digest), TlsError> {
     let their_key_share = server_hello
         .get_key_share()
         .ok_or_else(|| {
             sess.common
                 .send_fatal_alert(AlertDescription::MissingExtension);
-            TLSError::PeerMisbehavedError("missing key share".to_string())
+            TlsError::PeerMisbehavedError("missing key share".to_string())
         })?;
 
     let our_key_share = hello
@@ -194,7 +194,7 @@ pub fn start_handshake_traffic(
         .ok_or_else(|| hs::illegal_param(sess, "wrong group for key share"))?;
     let shared = our_key_share
         .complete(&their_key_share.payload.0)
-        .ok_or_else(|| TLSError::PeerMisbehavedError("key exchange failed".to_string()))?;
+        .ok_or_else(|| TlsError::PeerMisbehavedError("key exchange failed".to_string()))?;
 
     let mut key_schedule = if let Some(selected_psk) = server_hello.get_psk_index() {
         if let Some(ref resuming) = handshake.resuming_session {
@@ -221,7 +221,7 @@ pub fn start_handshake_traffic(
             debug!("Resuming using PSK");
             // The key schedule has been initialized and set in fill_in_psk_binder()
         } else {
-            return Err(TLSError::PeerMisbehavedError(
+            return Err(TlsError::PeerMisbehavedError(
                 "server selected unoffered psk".to_string(),
             ));
         }
@@ -357,11 +357,11 @@ fn validate_encrypted_extensions(
     sess: &mut ClientSessionImpl,
     hello: &ClientHelloDetails,
     exts: &EncryptedExtensions,
-) -> Result<(), TLSError> {
+) -> Result<(), TlsError> {
     if exts.has_duplicate_extension() {
         sess.common
             .send_fatal_alert(AlertDescription::DecodeError);
-        return Err(TLSError::PeerMisbehavedError(
+        return Err(TlsError::PeerMisbehavedError(
             "server sent duplicate encrypted extensions".to_string(),
         ));
     }
@@ -370,7 +370,7 @@ fn validate_encrypted_extensions(
         sess.common
             .send_fatal_alert(AlertDescription::UnsupportedExtension);
         let msg = "server sent unsolicited encrypted extension".to_string();
-        return Err(TLSError::PeerMisbehavedError(msg));
+        return Err(TlsError::PeerMisbehavedError(msg));
     }
 
     for ext in exts {
@@ -380,7 +380,7 @@ fn validate_encrypted_extensions(
             sess.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
             let msg = "server sent inappropriate encrypted extension".to_string();
-            return Err(TLSError::PeerMisbehavedError(msg));
+            return Err(TlsError::PeerMisbehavedError(msg));
         }
     }
 
@@ -487,7 +487,7 @@ impl hs::State for ExpectEncryptedExtensions {
         } else {
             if exts.early_data_extension_offered() {
                 let msg = "server sent early data extension without resumption".to_string();
-                return Err(TLSError::PeerMisbehavedError(msg));
+                return Err(TlsError::PeerMisbehavedError(msg));
             }
             Ok(self.into_expect_certificate_or_certreq())
         }
@@ -535,7 +535,7 @@ impl hs::State for ExpectCertificate {
             warn!("certificate with non-empty context during handshake");
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+            return Err(TlsError::CorruptMessagePayload(ContentType::Handshake));
         }
 
         if cert_chain.any_entry_has_duplicate_extension()
@@ -544,7 +544,7 @@ impl hs::State for ExpectCertificate {
             warn!("certificate chain contains unsolicited/unknown extension");
             sess.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(TLSError::PeerMisbehavedError(
+            return Err(TlsError::PeerMisbehavedError(
                 "bad cert chain extensions".to_string(),
             ));
         }
@@ -557,12 +557,12 @@ impl hs::State for ExpectCertificate {
         if let Some(sct_list) = server_cert.scts.as_ref() {
             if hs::sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
-                return Err(TLSError::PeerMisbehavedError(error_msg));
+                return Err(TlsError::PeerMisbehavedError(error_msg));
             }
 
             if sess.config.ct_logs.is_none() {
                 let error_msg = "server sent unsolicited SCT list".to_string();
-                return Err(TLSError::PeerMisbehavedError(error_msg));
+                return Err(TlsError::PeerMisbehavedError(error_msg));
             }
         }
 
@@ -646,13 +646,13 @@ impl ExpectCertificateVerify {
     }
 }
 
-fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TLSError) -> TLSError {
+fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TlsError) -> TlsError {
     match err {
-        TLSError::WebPKIError(webpki::Error::BadDER, _) => {
+        TlsError::WebPKIError(webpki::Error::BadDER, _) => {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }
-        TLSError::PeerMisbehavedError(_) => {
+        TlsError::PeerMisbehavedError(_) => {
             sess.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
         }
@@ -684,7 +684,7 @@ impl hs::State for ExpectCertificateVerify {
             .server_cert
             .cert_chain
             .split_first()
-            .ok_or(TLSError::NoCertificatesPresented)?;
+            .ok_or(TlsError::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
         let certv = sess
             .config
@@ -777,7 +777,7 @@ impl hs::State for ExpectCertificateRequest {
             warn!("Server sent non-empty certreq context");
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+            return Err(TlsError::CorruptMessagePayload(ContentType::Handshake));
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
@@ -793,7 +793,7 @@ impl hs::State for ExpectCertificateRequest {
         if compat_sigschemes.is_empty() {
             sess.common
                 .send_fatal_alert(AlertDescription::HandshakeFailure);
-            return Err(TLSError::PeerIncompatibleError(
+            return Err(TlsError::PeerIncompatibleError(
                 "server sent bad certreq schemes".to_string(),
             ));
         }
@@ -866,7 +866,7 @@ fn emit_certverify_tls13(
     handshake: &mut HandshakeDetails,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSessionImpl,
-) -> Result<(), TLSError> {
+) -> Result<(), TlsError> {
     let signer = match client_auth.signer.take() {
         Some(s) => s,
         None => {
@@ -983,7 +983,7 @@ impl hs::State for ExpectFinished {
             .map_err(|_| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecryptError);
-                TLSError::DecryptError
+                TlsError::DecryptError
             })
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -1102,7 +1102,7 @@ impl ExpectTraffic {
         &mut self,
         sess: &mut ClientSessionImpl,
         nst: &NewSessionTicketPayloadTLS13,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         let handshake_hash = self
             .handshake
             .transcript
@@ -1127,7 +1127,7 @@ impl ExpectTraffic {
             {
                 if sess.common.protocol == Protocol::Quic {
                     if sz != 0 && sz != 0xffff_ffff {
-                        return Err(TLSError::PeerMisbehavedError(
+                        return Err(TlsError::PeerMisbehavedError(
                             "invalid max_early_data_size".into(),
                         ));
                     }
@@ -1170,7 +1170,7 @@ impl ExpectTraffic {
         &mut self,
         sess: &mut ClientSessionImpl,
         kur: &KeyUpdateRequest,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = sess.common.protocol {
@@ -1178,7 +1178,7 @@ impl ExpectTraffic {
                     .send_fatal_alert(AlertDescription::UnexpectedMessage);
                 let msg = "KeyUpdate received in QUIC connection".to_string();
                 warn!("{}", msg);
-                return Err(TLSError::PeerMisbehavedError(msg));
+                return Err(TlsError::PeerMisbehavedError(msg));
             }
         }
 
@@ -1193,7 +1193,7 @@ impl ExpectTraffic {
             _ => {
                 sess.common
                     .send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(TLSError::CorruptMessagePayload(ContentType::Handshake));
+                return Err(TlsError::CorruptMessagePayload(ContentType::Handshake));
             }
         }
 
@@ -1245,7 +1245,7 @@ impl hs::State for ExpectTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.key_schedule
             .export_keying_material(output, label, context)
     }
@@ -1292,7 +1292,7 @@ impl hs::State for ExpectQUICTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.0
             .export_keying_material(output, label, context)
     }

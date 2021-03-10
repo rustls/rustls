@@ -1,4 +1,4 @@
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::msgs::codec;
 use crate::msgs::codec::Codec;
@@ -12,12 +12,12 @@ use std::io::Write;
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
-    fn decrypt(&self, m: Message, seq: u64) -> Result<Message, TLSError>;
+    fn decrypt(&self, m: Message, seq: u64) -> Result<Message, TlsError>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
-    fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TLSError>;
+    fn encrypt(&self, m: BorrowMessage, seq: u64) -> Result<Message, TlsError>;
 }
 
 impl dyn MessageEncrypter {
@@ -185,14 +185,14 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GCMMessageDecrypter {
-    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TlsError> {
         let payload = msg
             .take_opaque_payload()
-            .ok_or(TLSError::DecryptError)?;
+            .ok_or(TlsError::DecryptError)?;
         let mut buf = payload.0;
 
         if buf.len() < GCM_OVERHEAD {
-            return Err(TLSError::DecryptError);
+            return Err(TlsError::DecryptError);
         }
 
         let nonce = {
@@ -213,11 +213,11 @@ impl MessageDecrypter for GCMMessageDecrypter {
         let plain_len = self
             .dec_key
             .open_within(nonce, aad, &mut buf, GCM_EXPLICIT_NONCE_LEN..)
-            .map_err(|_| TLSError::DecryptError)?
+            .map_err(|_| TlsError::DecryptError)?
             .len();
 
         if plain_len > MAX_FRAGMENT_LEN {
-            return Err(TLSError::PeerSentOversizedRecord);
+            return Err(TlsError::PeerSentOversizedRecord);
         }
 
         buf.truncate(plain_len);
@@ -231,7 +231,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
 }
 
 impl MessageEncrypter for GCMMessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TlsError> {
         let nonce = make_tls13_nonce(&self.iv, seq);
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
@@ -243,7 +243,7 @@ impl MessageEncrypter for GCMMessageEncrypter {
         self.enc_key
             .seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
             .map(|tag| payload.extend(tag.as_ref()))
-            .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
+            .map_err(|_| TlsError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
             typ: msg.typ,
@@ -364,7 +364,7 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]> {
 }
 
 impl MessageEncrypter for TLS13MessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TlsError> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(&msg.payload);
@@ -375,7 +375,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
 
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut buf)
-            .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
+            .map_err(|_| TlsError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
             typ: ContentType::ApplicationData,
@@ -386,14 +386,14 @@ impl MessageEncrypter for TLS13MessageEncrypter {
 }
 
 impl MessageDecrypter for TLS13MessageDecrypter {
-    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TlsError> {
         let payload = msg
             .take_opaque_payload()
-            .ok_or(TLSError::DecryptError)?;
+            .ok_or(TlsError::DecryptError)?;
         let mut buf = payload.0;
 
         if buf.len() < self.dec_key.algorithm().tag_len() {
-            return Err(TLSError::DecryptError);
+            return Err(TlsError::DecryptError);
         }
 
         let nonce = make_tls13_nonce(&self.iv, seq);
@@ -401,23 +401,23 @@ impl MessageDecrypter for TLS13MessageDecrypter {
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, &mut buf)
-            .map_err(|_| TLSError::DecryptError)?
+            .map_err(|_| TlsError::DecryptError)?
             .len();
 
         buf.truncate(plain_len);
 
         if buf.len() > MAX_FRAGMENT_LEN + 1 {
-            return Err(TLSError::PeerSentOversizedRecord);
+            return Err(TlsError::PeerSentOversizedRecord);
         }
 
         let content_type = unpad_tls13(&mut buf);
         if content_type == ContentType::Unknown(0) {
             let msg = "peer sent bad TLSInnerPlaintext".to_string();
-            return Err(TLSError::PeerMisbehavedError(msg));
+            return Err(TlsError::PeerMisbehavedError(msg));
         }
 
         if buf.len() > MAX_FRAGMENT_LEN {
-            return Err(TLSError::PeerSentOversizedRecord);
+            return Err(TlsError::PeerSentOversizedRecord);
         }
 
         Ok(Message {
@@ -493,14 +493,14 @@ impl ChaCha20Poly1305MessageDecrypter {
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
-    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TLSError> {
+    fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, TlsError> {
         let payload = msg
             .take_opaque_payload()
-            .ok_or(TLSError::DecryptError)?;
+            .ok_or(TlsError::DecryptError)?;
         let mut buf = payload.0;
 
         if buf.len() < CHACHAPOLY1305_OVERHEAD {
-            return Err(TLSError::DecryptError);
+            return Err(TlsError::DecryptError);
         }
 
         let nonce = make_tls13_nonce(&self.dec_offset, seq);
@@ -514,11 +514,11 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, &mut buf)
-            .map_err(|_| TLSError::DecryptError)?
+            .map_err(|_| TlsError::DecryptError)?
             .len();
 
         if plain_len > MAX_FRAGMENT_LEN {
-            return Err(TLSError::PeerSentOversizedRecord);
+            return Err(TlsError::PeerSentOversizedRecord);
         }
 
         buf.truncate(plain_len);
@@ -532,7 +532,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TLSError> {
+    fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, TlsError> {
         let nonce = make_tls13_nonce(&self.enc_offset, seq);
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
@@ -542,7 +542,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut buf)
-            .map_err(|_| TLSError::General("encrypt failed".to_string()))?;
+            .map_err(|_| TlsError::General("encrypt failed".to_string()))?;
 
         Ok(Message {
             typ: msg.typ,
@@ -556,8 +556,8 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 pub struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&self, _m: BorrowMessage, _seq: u64) -> Result<Message, TLSError> {
-        Err(TLSError::General("encrypt not yet available".to_string()))
+    fn encrypt(&self, _m: BorrowMessage, _seq: u64) -> Result<Message, TlsError> {
+        Err(TlsError::General("encrypt not yet available".to_string()))
     }
 }
 
@@ -565,7 +565,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 pub struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt(&self, _m: Message, _seq: u64) -> Result<Message, TLSError> {
-        Err(TLSError::DecryptError)
+    fn decrypt(&self, _m: Message, _seq: u64) -> Result<Message, TlsError> {
+        Err(TlsError::DecryptError)
     }
 }

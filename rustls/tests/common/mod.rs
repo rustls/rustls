@@ -7,7 +7,7 @@ use rustls_pemfile;
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
 use rustls::ProtocolVersion;
 use rustls::Session;
-use rustls::TLSError;
+use rustls::TlsError;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
 use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientSession};
@@ -15,7 +15,7 @@ use rustls::{ServerConfig, ServerSession};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::{
-    ClientCertVerified, ClientCertVerifier, DistinguishedNames, SignatureScheme, WebPKIVerifier,
+    ClientCertVerified, ClientCertVerifier, DistinguishedNames, SignatureScheme, WebPkiVerifier,
 };
 
 use webpki;
@@ -318,7 +318,7 @@ impl Iterator for AllClientVersions {
 
 #[cfg(feature = "dangerous_configuration")]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<ClientCertVerified, TLSError>,
+    pub verified: fn() -> Result<ClientCertVerified, TlsError>,
     pub subjects: Option<DistinguishedNames>,
     pub mandatory: Option<bool>,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
@@ -347,7 +347,7 @@ impl ClientCertVerifier for MockClientVerifier {
         _intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         _now: std::time::SystemTime,
-    ) -> Result<ClientCertVerified, TLSError> {
+    ) -> Result<ClientCertVerified, TlsError> {
         assert!(sni.is_some());
         (self.verified)()
     }
@@ -356,15 +356,15 @@ impl ClientCertVerifier for MockClientVerifier {
         if let Some(schemes) = &self.offered_schemes {
             schemes.clone()
         } else {
-            WebPKIVerifier::verification_schemes()
+            WebPkiVerifier::verification_schemes()
         }
     }
 }
 
 #[derive(PartialEq, Debug)]
 pub enum TLSErrorFromPeer {
-    Client(TLSError),
-    Server(TLSError),
+    Client(TlsError),
+    Server(TlsError),
 }
 
 pub fn do_handshake_until_error(

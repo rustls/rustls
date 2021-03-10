@@ -1,6 +1,6 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::client::{ClientConfig, ClientSession, ClientSessionImpl};
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
@@ -44,7 +44,7 @@ pub trait QuicExt {
     /// Consume unencrypted TLS handshake data.
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError>;
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError>;
 
     /// Emit unencrypted TLS handshake data.
     ///
@@ -83,7 +83,7 @@ impl QuicExt for ClientSession {
         ))
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
         read_hs(&mut self.imp.common, plaintext)?;
         self.imp
             .process_new_handshake_messages()
@@ -123,7 +123,7 @@ impl QuicExt for ServerSession {
         ))
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TLSError> {
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
         read_hs(&mut self.imp.common, plaintext)?;
         self.imp
             .process_new_handshake_messages()
@@ -260,7 +260,7 @@ impl Keys {
     }
 }
 
-fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TLSError> {
+fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TlsError> {
     if this
         .handshake_joiner
         .take_message(Message {
@@ -271,7 +271,7 @@ fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TLSError> {
         .is_none()
     {
         this.quic.alert = Some(AlertDescription::DecodeError);
-        return Err(TLSError::CorruptMessage);
+        return Err(TlsError::CorruptMessage);
     }
     Ok(())
 }
@@ -335,7 +335,7 @@ pub trait ClientQuicExt {
         quic_version: Version,
         hostname: webpki::DNSNameRef,
         params: Vec<u8>,
-    ) -> Result<ClientSession, TLSError> {
+    ) -> Result<ClientSession, TlsError> {
         assert!(
             config
                 .versions

@@ -1,5 +1,5 @@
 use crate::cipher::{Iv, IvLen};
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::msgs::base::PayloadU8;
 use crate::KeyLog;
 /// Key schedule maintenance for TLS1.3
@@ -323,7 +323,7 @@ impl KeyScheduleTraffic {
         out: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.ks
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
@@ -443,7 +443,7 @@ impl KeySchedule {
         out: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         let digest_alg = self
             .algorithm
             .hmac_algorithm()
@@ -467,7 +467,7 @@ impl KeySchedule {
             h_context.as_ref(),
             |okm| okm.fill(out),
         )
-        .map_err(|_| TLSError::General("exporting too much".to_string()))
+        .map_err(|_| TlsError::General("exporting too much".to_string()))
     }
 }
 

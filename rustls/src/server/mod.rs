@@ -1,4 +1,4 @@
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
 #[cfg(feature = "logging")]
@@ -290,7 +290,7 @@ impl ServerConfig {
         &mut self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
         self.cert_resolver = Arc::new(resolver);
         Ok(())
@@ -313,7 +313,7 @@ impl ServerConfig {
         key_der: key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         let resolver =
             handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp, scts)?;
         self.cert_resolver = Arc::new(resolver);
@@ -348,7 +348,7 @@ pub struct ServerSessionImpl {
     pub quic_params: Option<Vec<u8>>,
     pub received_resumption_data: Option<Vec<u8>>,
     pub resumption_data: Vec<u8>,
-    pub error: Option<TLSError>,
+    pub error: Option<TlsError>,
     pub state: Option<Box<dyn hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
     /// Whether to reject early data even if it would otherwise be accepted
@@ -407,7 +407,7 @@ impl ServerSessionImpl {
         self.common.set_buffer_limit(len)
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TLSError> {
+    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TlsError> {
         // TLS1.3: drop CCS at any time during handshaking
         if let MiddleboxCCS::Drop = self.common.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
@@ -433,7 +433,7 @@ impl ServerSessionImpl {
                 .ok_or_else(|| {
                     self.common
                         .send_fatal_alert(AlertDescription::DecodeError);
-                    TLSError::CorruptMessagePayload(ContentType::Handshake)
+                    TlsError::CorruptMessagePayload(ContentType::Handshake)
                 })?;
             return self.process_new_handshake_messages();
         }
@@ -448,7 +448,7 @@ impl ServerSessionImpl {
         self.process_main_protocol(msg)
     }
 
-    pub fn process_new_handshake_messages(&mut self) -> Result<(), TLSError> {
+    pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -468,8 +468,8 @@ impl ServerSessionImpl {
 
     fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
         match rc {
-            Err(TLSError::InappropriateMessage { .. })
-            | Err(TLSError::InappropriateHandshakeMessage { .. }) => {
+            Err(TlsError::InappropriateMessage { .. })
+            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
                 self.queue_unexpected_alert();
             }
             _ => {}
@@ -477,7 +477,7 @@ impl ServerSessionImpl {
         rc
     }
 
-    pub fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
+    pub fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
         if self.common.traffic
             && !self.common.is_tls13()
             && msg.is_handshake_type(HandshakeType::ClientHello)
@@ -495,13 +495,13 @@ impl ServerSessionImpl {
         Ok(())
     }
 
-    pub fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    pub fn process_new_packets(&mut self) -> Result<(), TlsError> {
         if let Some(ref err) = self.error {
             return Err(err.clone());
         }
 
         if self.common.message_deframer.desynced {
-            return Err(TLSError::CorruptMessage);
+            return Err(TlsError::CorruptMessage);
         }
 
         while let Some(msg) = self
@@ -557,10 +557,10 @@ impl ServerSessionImpl {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.state
             .as_ref()
-            .ok_or_else(|| TLSError::HandshakeNotComplete)
+            .ok_or_else(|| TlsError::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
@@ -663,7 +663,7 @@ impl Session for ServerSession {
         self.imp.common.write_tls(wr)
     }
 
-    fn process_new_packets(&mut self) -> Result<(), TLSError> {
+    fn process_new_packets(&mut self) -> Result<(), TlsError> {
         self.imp.process_new_packets()
     }
 
@@ -704,7 +704,7 @@ impl Session for ServerSession {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TLSError> {
+    ) -> Result<(), TlsError> {
         self.imp
             .export_keying_material(output, label, context)
     }

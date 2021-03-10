@@ -6,7 +6,7 @@ use webpki;
 
 use crate::anchors::OwnedTrustAnchor;
 use crate::anchors::{DistinguishedNames, RootCertStore};
-use crate::error::TLSError;
+use crate::error::TlsError;
 use crate::error::WebPKIOp;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
@@ -95,7 +95,7 @@ pub trait ServerCertVerifier: Send + Sync {
         dns_name: webpki::DNSNameRef,
         ocsp_response: &[u8],
         now: SystemTime,
-    ) -> Result<ServerCertVerified, TLSError>;
+    ) -> Result<ServerCertVerified, TlsError>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -121,7 +121,7 @@ pub trait ServerCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         verify_signed_struct(message, cert, dss)
     }
 
@@ -141,7 +141,7 @@ pub trait ServerCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         verify_tls13(message, cert, dss)
     }
 
@@ -153,7 +153,7 @@ pub trait ServerCertVerifier: Send + Sync {
     /// This trait method has a default implementation that reflects the schemes
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPKIVerifier::verification_schemes()
+        WebPkiVerifier::verification_schemes()
     }
 }
 
@@ -202,7 +202,7 @@ pub trait ClientCertVerifier: Send + Sync {
         intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         now: SystemTime,
-    ) -> Result<ClientCertVerified, TLSError>;
+    ) -> Result<ClientCertVerified, TlsError>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -228,7 +228,7 @@ pub trait ClientCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         verify_signed_struct(message, cert, dss)
     }
 
@@ -249,7 +249,7 @@ pub trait ClientCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
+    ) -> Result<HandshakeSignatureValid, TlsError> {
         verify_tls13(message, cert, dss)
     }
 
@@ -261,11 +261,11 @@ pub trait ClientCertVerifier: Send + Sync {
     /// This trait method has a default implementation that reflects the schemes
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPKIVerifier::verification_schemes()
+        WebPkiVerifier::verification_schemes()
     }
 }
 
-impl ServerCertVerifier for WebPKIVerifier {
+impl ServerCertVerifier for WebPkiVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a  trusted `RootCertStore` CA
     /// - Not Expired
@@ -279,9 +279,9 @@ impl ServerCertVerifier for WebPKIVerifier {
         dns_name: webpki::DNSNameRef,
         ocsp_response: &[u8],
         now: SystemTime,
-    ) -> Result<ServerCertVerified, TLSError> {
+    ) -> Result<ServerCertVerified, TlsError> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, roots)?;
-        let now = webpki::Time::try_from(now).map_err(|_| TLSError::FailedToGetCurrentTime)?;
+        let now = webpki::Time::try_from(now).map_err(|_| TlsError::FailedToGetCurrentTime)?;
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
@@ -290,7 +290,7 @@ impl ServerCertVerifier for WebPKIVerifier {
                 &chain,
                 now,
             )
-            .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ValidateServerCert))
+            .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateServerCert))
             .map(|_| cert)?;
 
         if !ocsp_response.is_empty() {
@@ -298,15 +298,15 @@ impl ServerCertVerifier for WebPKIVerifier {
         }
 
         cert.verify_is_valid_for_dns_name(dns_name)
-            .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ValidateForDNSName))
+            .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateForDNSName))
             .map(|_| ServerCertVerified::assertion())
     }
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
-pub struct WebPKIVerifier;
+pub struct WebPkiVerifier;
 
-impl WebPKIVerifier {
+impl WebPkiVerifier {
     /// Returns the signature verification methods supported by
     /// webpki.
     pub fn verification_schemes() -> Vec<SignatureScheme> {
@@ -334,9 +334,9 @@ fn prepare<'a, 'b>(
     end_entity: &'a Certificate,
     intermediates: &'a [Certificate],
     roots: &'b RootCertStore,
-) -> Result<CertChainAndRoots<'a, 'b>, TLSError> {
+) -> Result<CertChainAndRoots<'a, 'b>, TlsError> {
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&end_entity.0).map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::from(&end_entity.0).map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     let intermediates: Vec<&'a [u8]> = intermediates.iter().map(|cert| cert.0.as_ref()).collect();
 
@@ -386,16 +386,16 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         intermediates: &[Certificate],
         _sni: Option<&webpki::DNSName>,
         now: SystemTime,
-    ) -> Result<ClientCertVerified, TLSError> {
+    ) -> Result<ClientCertVerified, TlsError> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
-        let now = webpki::Time::try_from(now).map_err(|_| TLSError::FailedToGetCurrentTime)?;
+        let now = webpki::Time::try_from(now).map_err(|_| TlsError::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
             &webpki::TLSClientTrustAnchors(&trustroots),
             &chain,
             now,
         )
-        .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ValidateClientCert))
+        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateClientCert))
         .map(|_| ClientCertVerified::assertion())
     }
 }
@@ -443,7 +443,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         now: SystemTime,
-    ) -> Result<ClientCertVerified, TLSError> {
+    ) -> Result<ClientCertVerified, TlsError> {
         self.inner
             .verify_client_cert(end_entity, intermediates, sni, now)
     }
@@ -477,7 +477,7 @@ impl ClientCertVerifier for NoClientAuth {
         _intermediates: &[Certificate],
         _sni: Option<&webpki::DNSName>,
         _now: SystemTime,
-    ) -> Result<ClientCertVerified, TLSError> {
+    ) -> Result<ClientCertVerified, TlsError> {
         unimplemented!();
     }
 }
@@ -497,7 +497,7 @@ static RSA_PSS_SHA256: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA256
 static RSA_PSS_SHA384: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
 static RSA_PSS_SHA512: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
 
-fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSError> {
+fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TlsError> {
     match scheme {
         // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
         SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
@@ -515,7 +515,7 @@ fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TLSErr
 
         _ => {
             let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
-            Err(TLSError::PeerMisbehavedError(error_msg))
+            Err(TlsError::PeerMisbehavedError(error_msg))
         }
     }
 }
@@ -542,18 +542,18 @@ fn verify_signed_struct(
     message: &[u8],
     cert: &Certificate,
     dss: &DigitallySignedStruct,
-) -> Result<HandshakeSignatureValid, TLSError> {
+) -> Result<HandshakeSignatureValid, TlsError> {
     let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::from(&cert.0).map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::from(&cert.0).map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
-        .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::VerifySignature))
+        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
 fn convert_alg_tls13(
     scheme: SignatureScheme,
-) -> Result<&'static webpki::SignatureAlgorithm, TLSError> {
+) -> Result<&'static webpki::SignatureAlgorithm, TlsError> {
     use crate::msgs::enums::SignatureScheme::*;
 
     match scheme {
@@ -565,7 +565,7 @@ fn convert_alg_tls13(
         RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => {
             let error_msg = format!("received unsupported sig scheme {:?}", scheme);
-            Err(TLSError::PeerMisbehavedError(error_msg))
+            Err(TlsError::PeerMisbehavedError(error_msg))
         }
     }
 }
@@ -592,29 +592,29 @@ fn verify_tls13(
     msg: &[u8],
     cert: &Certificate,
     dss: &DigitallySignedStruct,
-) -> Result<HandshakeSignatureValid, TLSError> {
+) -> Result<HandshakeSignatureValid, TlsError> {
     let alg = convert_alg_tls13(dss.scheme)?;
 
 
-    let cert = webpki::EndEntityCert::from(&cert.0).map_err(|e| TLSError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::from(&cert.0).map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, &msg, &dss.sig.0)
-        .map_err(|e| TLSError::WebPKIError(e, WebPKIOp::VerifySignature))
+        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
-fn unix_time_millis(now: SystemTime) -> Result<u64, TLSError> {
+fn unix_time_millis(now: SystemTime) -> Result<u64, TlsError> {
     now
         .duration_since(std::time::UNIX_EPOCH)
         .map(|dur| dur.as_secs())
-        .map_err(|_| TLSError::FailedToGetCurrentTime)
+        .map_err(|_| TlsError::FailedToGetCurrentTime)
         .and_then(|secs| {
             secs.checked_mul(1000)
-                .ok_or(TLSError::FailedToGetCurrentTime)
+                .ok_or(TlsError::FailedToGetCurrentTime)
         })
 }
 
-pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[&sct::Log]) -> Result<(), TLSError> {
+pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[&sct::Log]) -> Result<(), TlsError> {
     let mut valid_scts = 0;
     let now = unix_time_millis(now)?;
     let mut last_sct_error = None;
@@ -631,7 +631,7 @@ pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[
             }
             Err(e) => {
                 if e.should_be_fatal() {
-                    return Err(TLSError::InvalidSCT(e));
+                    return Err(TlsError::InvalidSCT(e));
                 }
                 debug!("SCT ignored because {:?}", e);
                 last_sct_error = Some(e);
@@ -643,7 +643,7 @@ pub fn verify_scts(cert: &Certificate, now: SystemTime, scts: &SCTList, logs: &[
      * but couldn't verify any of them, fail the handshake. */
     if !logs.is_empty() && !scts.is_empty() && valid_scts == 0 {
         warn!("No valid SCTs provided");
-        return Err(TLSError::InvalidSCT(last_sct_error.unwrap()));
+        return Err(TlsError::InvalidSCT(last_sct_error.unwrap()));
     }
 
     Ok(())
