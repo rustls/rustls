@@ -2,7 +2,7 @@ use crate::cipher;
 use crate::error::TlsError;
 use crate::key;
 #[cfg(feature = "logging")]
-use crate::log::{debug, error, warn};
+use crate::log::{debug, error, trace, warn};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::MessageDeframer;
@@ -488,6 +488,45 @@ impl SessionCommon {
         }
     }
 
+    pub fn process_msg(&mut self, mut msg: Message, ignore_corrupt_payload: bool) -> Result<Option<MessageType>, TlsError> {
+        // TLS1.3: drop CCS at any time during handshaking
+        if let MiddleboxCCS::Drop = self.filter_tls13_ccs(&msg)? {
+            trace!("Dropping CCS");
+            return Ok(None);
+        }
+
+        // Decrypt if demanded by current state.
+        if self.record_layer.is_decrypting() {
+            let dm = self.decrypt_incoming(msg)?;
+            msg = dm;
+        }
+
+        // For handshake messages, we need to join them before parsing
+        // and processing.
+        if self.handshake_joiner.want_message(&msg) {
+            self.handshake_joiner
+                .take_message(msg)
+                .ok_or_else(|| {
+                    self.send_fatal_alert(AlertDescription::DecodeError);
+                    TlsError::CorruptMessagePayload(ContentType::Handshake)
+                })?;
+            return Ok(Some(MessageType::Handshake));
+        }
+
+        // Now we can fully parse the message payload. We only return an error
+        // on the client, or we fail a bogo test (WrongMessageType-TLS13-ServerHello-TLS).
+        if !msg.decode_payload() && !ignore_corrupt_payload {
+            return Err(TlsError::CorruptMessagePayload(msg.typ));
+        }
+
+        // For alerts, we have separate logic.
+        if msg.is_content_type(ContentType::Alert) {
+            return self.process_alert(msg).map(|()| None);
+        }
+
+        Ok(Some(MessageType::Data(msg)))
+    }
+
     pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.suite
     }
@@ -832,6 +871,11 @@ impl SessionCommon {
         #[cfg(not(feature = "quic"))]
         false
     }
+}
+
+pub enum MessageType {
+    Handshake,
+    Data(Message),
 }
 
 #[cfg(feature = "quic")]
