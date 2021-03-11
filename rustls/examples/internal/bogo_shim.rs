@@ -1042,7 +1042,7 @@ fn main() {
             } else {
                 rustls::ServerSession::new_quic(
                     scfg.as_ref().unwrap(),
-                    quic::Version::V1,
+                    quic::Version::V1Draft,
                     opts.quic_transport_params.clone(),
                 )
             };
@@ -1054,7 +1054,7 @@ fn main() {
             } else {
                 rustls::ClientSession::new_quic(
                     ccfg.as_ref().unwrap(),
-                    quic::Version::V1,
+                    quic::Version::V1Draft,
                     dns_name,
                     opts.quic_transport_params.clone(),
                 )
