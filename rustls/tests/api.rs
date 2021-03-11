@@ -2573,8 +2573,8 @@ mod test_quic {
 
         // full handshake
         let mut client =
-            ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
-        let mut server = ServerSession::new_quic(&server_config, server_params.into());
+            ClientSession::new_quic(&client_config, quic::Version::V1, dns_name("localhost"), client_params.into());
+        let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
         let client_initial = step(&mut client, &mut server).unwrap();
         assert!(client_initial.is_none());
         assert!(client.get_0rtt_keys().is_none());
@@ -2613,13 +2613,13 @@ mod test_quic {
 
         // 0-RTT handshake
         let mut client =
-            ClientSession::new_quic(&client_config, dns_name("localhost"), client_params.into());
+            ClientSession::new_quic(&client_config, quic::Version::V1, dns_name("localhost"), client_params.into());
         assert!(
             client
                 .get_negotiated_ciphersuite()
                 .is_some()
         );
-        let mut server = ServerSession::new_quic(&server_config, server_params.into());
+        let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
         step(&mut client, &mut server).unwrap();
         assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
         {
@@ -2644,10 +2644,11 @@ mod test_quic {
             client_config.alpn_protocols = vec!["foo".into()];
             let mut client = ClientSession::new_quic(
                 &Arc::new(client_config),
+                quic::Version::V1,
                 dns_name("localhost"),
                 client_params.into(),
             );
-            let mut server = ServerSession::new_quic(&server_config, server_params.into());
+            let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
             step(&mut client, &mut server).unwrap();
             assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
             assert!(client.get_0rtt_keys().is_some());
@@ -2667,10 +2668,11 @@ mod test_quic {
         // failed handshake
         let mut client = ClientSession::new_quic(
             &client_config,
+            quic::Version::V1,
             dns_name("example.com"),
             client_params.into(),
         );
-        let mut server = ServerSession::new_quic(&server_config, server_params.into());
+        let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
         step(&mut client, &mut server).unwrap();
         step(&mut server, &mut client)
             .unwrap()
@@ -2700,10 +2702,11 @@ mod test_quic {
 
             let mut client = ClientSession::new_quic(
                 &client_config,
+                quic::Version::V1,
                 dns_name("localhost"),
                 client_params.into(),
             );
-            let mut server = ServerSession::new_quic(&server_config, server_params.into());
+            let mut server = ServerSession::new_quic(&server_config, quic::Version::V1, server_params.into());
 
             assert_eq!(
                 step(&mut client, &mut server)
