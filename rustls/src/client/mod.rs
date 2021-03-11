@@ -424,7 +424,7 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hello_data: Box<dyn HelloData>) {
+    pub fn start_handshake<T: HelloData>(&mut self, hello_data: T) {
         self.state = Some(hs::start_handshake(self, hello_data));
     }
 
@@ -666,6 +666,15 @@ pub struct Host {
     extra_exts: Vec<ClientExtension>,
 }
 
+impl Host {
+    pub(crate) fn new(hostname: webpki::DNSNameRef) -> Host {
+        Host {
+            hostname: hostname.into(),
+            extra_exts: vec![],
+        }
+    }
+}
+
 impl HelloData for Host {
     fn get_extra_exts(&self) -> &Vec<ClientExtension> {
         &self.extra_exts
@@ -691,8 +700,8 @@ impl HelloData for Host {
 pub struct EncryptedHost {
     hostname: webpki::DNSName,
     ech_config: ECHConfig,
-    extra_exts: Vec<ClientExtension>,
-    extra_outer_exts: Vec<ClientExtension>,
+    pub extra_exts: Vec<ClientExtension>,
+    pub extra_outer_exts: Vec<ClientExtension>,
 }
 
 impl EncryptedHost {
@@ -764,12 +773,11 @@ impl ClientSession {
     /// contains the data needed for the ClientHello message.
     pub fn from_peer_data(config: &Arc<ClientConfig>, peer_data: ClientPeerData) -> ClientSession {
         let mut imp = ClientSessionImpl::new(config);
-        let hello_data: Box<dyn HelloData> = match peer_data {
-            ClientPeerData::Host(host) => Box::new(host),
-            ClientPeerData::EncryptedHost(host) => Box::new(host),
+        match peer_data {
+            ClientPeerData::Host(host) => imp.start_handshake(host),
+            ClientPeerData::EncryptedHost(host) => imp.start_handshake(host),
         };
-        // TODO:: thread through the HelloData instead of these two params
-        imp.start_handshake(hello_data );
+
         ClientSession { imp }
     }
 

@@ -1,5 +1,5 @@
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::client::{ClientConfig, ClientSession, ClientSessionImpl};
+use crate::client::{ClientConfig, ClientSession, ClientSessionImpl, Host, HelloData};
 use crate::error::TLSError;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
@@ -344,10 +344,9 @@ pub trait ClientQuicExt {
         );
         let mut imp = ClientSessionImpl::new(config);
         imp.common.protocol = Protocol::Quic;
-        imp.start_handshake(
-            hostname.into(),
-            vec![ClientExtension::TransportParameters(params)],
-        );
+        let mut host = Host::new(hostname);
+        host.push_extra_ext(ClientExtension::TransportParameters(params));
+        imp.start_handshake(host);
         ClientSession { imp }
     }
 }

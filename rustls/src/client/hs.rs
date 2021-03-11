@@ -122,7 +122,7 @@ struct InitialState {
 }
 
 impl InitialState {
-    fn new(hello_data: Box<dyn HelloData>) -> InitialState {
+    fn new<T: HelloData>(hello_data: T) -> InitialState {
         InitialState {
             handshake: HandshakeDetails::new(hello_data.get_hostname().into()),
             extra_exts: hello_data.get_extra_exts().to_vec(),
@@ -180,9 +180,9 @@ impl InitialState {
     }
 }
 
-pub fn start_handshake(
+pub fn start_handshake<T: HelloData>(
     sess: &mut ClientSessionImpl,
-    hello_data: Box<dyn HelloData>,
+    hello_data: T,
 ) -> NextState {
     InitialState::new(hello_data).emit_initial_client_hello(sess)
 }
