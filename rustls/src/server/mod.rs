@@ -396,10 +396,6 @@ impl ServerSessionImpl {
         !self.common.traffic
     }
 
-    pub fn set_buffer_limit(&mut self, len: usize) {
-        self.common.set_buffer_limit(len)
-    }
-
     pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .common
@@ -632,7 +628,7 @@ impl Session for ServerSession {
     }
 
     fn set_buffer_limit(&mut self, len: usize) {
-        self.imp.set_buffer_limit(len)
+        self.imp.common.set_buffer_limit(len)
     }
 
     fn send_close_notify(&mut self) {
