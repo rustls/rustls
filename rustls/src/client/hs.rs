@@ -2,7 +2,7 @@
 use crate::bs_debug;
 use crate::check::check_message;
 use crate::{cipher, SupportedCipherSuite};
-use crate::client::ClientSessionImpl;
+use crate::client::{ClientSessionImpl, HelloData};
 use crate::error::TLSError;
 use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake};
 #[cfg(feature = "logging")]
@@ -122,10 +122,10 @@ struct InitialState {
 }
 
 impl InitialState {
-    fn new(host_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
+    fn new(hello_data: Box<dyn HelloData>) -> InitialState {
         InitialState {
-            handshake: HandshakeDetails::new(host_name),
-            extra_exts,
+            handshake: HandshakeDetails::new(hello_data.get_hostname().into()),
+            extra_exts: hello_data.get_extra_exts().to_vec(),
         }
     }
 
@@ -182,10 +182,9 @@ impl InitialState {
 
 pub fn start_handshake(
     sess: &mut ClientSessionImpl,
-    host_name: webpki::DNSName,
-    extra_exts: Vec<ClientExtension>,
+    hello_data: Box<dyn HelloData>,
 ) -> NextState {
-    InitialState::new(host_name, extra_exts).emit_initial_client_hello(sess)
+    InitialState::new(hello_data).emit_initial_client_hello(sess)
 }
 
 struct ExpectServerHello {

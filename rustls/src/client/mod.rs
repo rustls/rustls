@@ -424,8 +424,8 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hostname: webpki::DNSName, extra_exts: Vec<ClientExtension>) {
-        self.state = Some(hs::start_handshake(self, hostname, extra_exts));
+    pub fn start_handshake(&mut self, hello_data: Box<dyn HelloData>) {
+        self.state = Some(hs::start_handshake(self, hello_data));
     }
 
     pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
@@ -769,7 +769,7 @@ impl ClientSession {
             ClientPeerData::EncryptedHost(host) => Box::new(host),
         };
         // TODO:: thread through the HelloData instead of these two params
-        imp.start_handshake(hello_data.get_hostname().into(), hello_data.get_extra_exts().to_vec() );
+        imp.start_handshake(hello_data );
         ClientSession { imp }
     }
 
