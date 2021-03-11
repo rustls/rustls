@@ -46,7 +46,7 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Er
 fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict, Box<dyn Error>> {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(&host).unwrap();
     let rc_config = Arc::new(config);
-    let mut client = ClientSession::new(&rc_config, dns_name);
+    let mut client = ClientSession::new(&rc_config, dns_name).unwrap();
     let mut stream = TcpStream::connect((&*host, port))?;
 
     client.write_all(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")?;

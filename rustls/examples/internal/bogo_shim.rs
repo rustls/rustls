@@ -351,7 +351,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     }
 
     if opts.tickets {
-        cfg.ticketer = rustls::Ticketer::new();
+        cfg.ticketer = rustls::Ticketer::new().unwrap();
     } else if opts.resumes == 0 {
         cfg.set_persistence(Arc::new(rustls::NoServerSessionStorage {}));
     }
@@ -1058,7 +1058,7 @@ fn main() {
                     dns_name,
                     opts.quic_transport_params.clone(),
                 )
-            };
+            }.unwrap();
             ClientOrServer::Client(c)
         }
     }

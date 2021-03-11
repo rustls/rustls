@@ -14,7 +14,7 @@ use crate::msgs::handshake::ServerKeyExchangePayload;
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::session::SessionSecrets;
+use crate::session::{SessionRandoms, SessionSecrets};
 use crate::SupportedCipherSuite;
 use crate::kx;
 use crate::ticketer;
@@ -30,6 +30,7 @@ use std::mem;
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub dns_name: webpki::DNSName,
+    pub randoms: SessionRandoms,
     pub suite: &'static SupportedCipherSuite,
     pub may_send_cert_status: bool,
     pub must_issue_new_ticket: bool,
@@ -41,6 +42,7 @@ impl ExpectCertificate {
         Box::new(ExpectCertificateStatusOrServerKX {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert_sct_list: self.server_cert_sct_list,
             server_cert_chain,
@@ -55,6 +57,7 @@ impl ExpectCertificate {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -88,6 +91,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     suite: &'static SupportedCipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
@@ -102,6 +106,7 @@ impl ExpectCertificateStatus {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -136,6 +141,7 @@ impl hs::State for ExpectCertificateStatus {
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     suite: &'static SupportedCipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
@@ -149,6 +155,7 @@ impl ExpectCertificateStatusOrServerKX {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -159,6 +166,7 @@ impl ExpectCertificateStatusOrServerKX {
         Box::new(ExpectCertificateStatus {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert_sct_list: self.server_cert_sct_list,
             server_cert_chain: self.server_cert_chain,
@@ -190,6 +198,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
 struct ExpectServerKX {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
@@ -200,6 +209,7 @@ impl ExpectServerKX {
         Box::new(ExpectServerDoneOrCertReq {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: skx,
@@ -366,6 +376,7 @@ fn emit_finished(
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -377,6 +388,7 @@ impl ExpectCertificateRequest {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -441,6 +453,7 @@ impl hs::State for ExpectCertificateRequest {
 struct ExpectServerDoneOrCertReq {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -452,6 +465,7 @@ impl ExpectServerDoneOrCertReq {
         Box::new(ExpectCertificateRequest {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -463,6 +477,7 @@ impl ExpectServerDoneOrCertReq {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -500,6 +515,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 struct ExpectServerDone {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -604,8 +620,8 @@ impl hs::State for ExpectServerDone {
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
         let sigv = {
             let mut message = Vec::new();
-            message.extend_from_slice(&st.handshake.randoms.client);
-            message.extend_from_slice(&st.handshake.randoms.server);
+            message.extend_from_slice(&st.randoms.client);
+            message.extend_from_slice(&st.randoms.server);
             message.extend_from_slice(&st.server_kx.kx_params);
 
             // Check the signature is compatible with the ciphersuite.
@@ -654,13 +670,13 @@ impl hs::State for ExpectServerDone {
         // 5e. Now commit secrets.
         let secrets = if st.handshake.using_ems {
             SessionSecrets::new_ems(
-                &st.handshake.randoms,
+                &st.randoms,
                 &handshake_hash,
                 suite,
                 &kxd.shared_secret,
             )
         } else {
-            SessionSecrets::new(&st.handshake.randoms, suite, &kxd.shared_secret)
+            SessionSecrets::new(&st.randoms, suite, &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",

@@ -24,7 +24,7 @@ use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::session::SessionSecrets;
+use crate::session::{SessionRandoms, SessionSecrets};
 use crate::ticketer;
 use crate::verify;
 
@@ -110,10 +110,10 @@ fn find_session(
     }
 }
 
-fn random_sessionid() -> SessionID {
+fn random_sessionid() -> Result<SessionID, rand::GetRandomFailed> {
     let mut random_id = [0u8; 32];
-    rand::fill_random(&mut random_id);
-    SessionID::new(&random_id)
+    rand::fill_random(&mut random_id)?;
+    Ok(SessionID::new(&random_id))
 }
 
 struct InitialState<T: HelloData + Send + Sync> {
@@ -129,7 +129,7 @@ impl <T: 'static + HelloData + Send + Sync> InitialState<T> {
         }
     }
 
-    fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> NextState {
+    fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> NextStateOrError {
         // During retries "the client MUST send the same ClientHello without
         // modification" with only a few exceptions as noted in
         // https://tools.ietf.org/html/rfc8446#section-4.1.2,
@@ -154,7 +154,7 @@ impl <T: 'static + HelloData + Send + Sync> InitialState<T> {
                 // we're  doing an abbreviated handshake.  See section 3.4 in
                 // RFC5077.
                 if !resuming.ticket.0.is_empty() {
-                    resuming.session_id = random_sessionid();
+                    resuming.session_id = random_sessionid()?;
                 }
                 self.handshake.session_id = resuming.session_id;
             }
@@ -165,14 +165,16 @@ impl <T: 'static + HelloData + Send + Sync> InitialState<T> {
         // https://tools.ietf.org/html/rfc8446#appendix-D.4
         // https://tools.ietf.org/html/draft-ietf-quic-tls-34#ref-TLS13
         if self.handshake.session_id.is_empty() && !sess.common.is_quic() {
-            self.handshake.session_id = random_sessionid();
+            self.handshake.session_id = random_sessionid()?;
         }
 
+        let randoms = SessionRandoms::for_client()?;
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         emit_client_hello_for_retry(
             sess,
             self.handshake,
+            randoms,
             sent_tls13_fake_ccs,
             hello_details,
             None,
@@ -183,13 +185,14 @@ impl <T: 'static + HelloData + Send + Sync> InitialState<T> {
 pub fn start_handshake<T: 'static + HelloData + Send + Sync>(
     sess: &mut ClientSessionImpl,
     hello_data: T,
-) -> NextState {
+) -> NextStateOrError {
     InitialState::new(hello_data).emit_initial_client_hello(sess)
 }
 
 struct ExpectServerHello {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
+    randoms: SessionRandoms,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     sent_tls13_fake_ccs: bool,
@@ -213,11 +216,12 @@ pub fn compatible_suite(
 fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
     hello_data: T,
-) -> NextState {
+) -> NextStateOrError {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
         (
@@ -334,7 +338,7 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
-            random: Random::from_slice(&handshake.randoms.client),
+            random: Random::from_slice(&randoms.client),
             session_id: handshake.session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
@@ -393,7 +397,7 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
             .client_early_traffic_secret(
                 &client_hello_hash,
                 &*sess.config.key_log,
-                &handshake.randoms.client,
+                &randoms.client,
             );
         // Set early data encryption key
         sess.common
@@ -416,16 +420,17 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
     let next = ExpectServerHello {
         handshake,
         dns_name: hello_data.get_hostname().into(),
+        randoms,
         hello,
         early_key_schedule,
         sent_tls13_fake_ccs,
     };
 
-    if support_tls13 && retryreq.is_none() {
+    Ok(if support_tls13 && retryreq.is_none() {
         Box::new(ExpectServerHelloOrHelloRetryRequest { next, hello_data })
     } else {
         Box::new(next)
-    }
+    })
 }
 
 pub fn process_alpn_protocol(
@@ -465,6 +470,7 @@ impl ExpectServerHello {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             key_schedule,
             hello: self.hello,
             hash_at_client_recvd_server_hello,
@@ -515,6 +521,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             dns_name: self.dns_name,
+            randoms: self.randoms,
             suite,
             may_send_cert_status,
             must_issue_new_ticket,
@@ -658,6 +665,7 @@ impl State for ExpectServerHello {
                 &mut self.handshake,
                 self.dns_name.as_ref(),
                 &mut self.hello,
+                &mut self.randoms,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
             return Ok(self.into_expect_tls13_encrypted_extensions(key_schedule, hash_at_client_recvd_server_hello));
@@ -668,13 +676,12 @@ impl State for ExpectServerHello {
         // Save ServerRandom and SessionID
         server_hello
             .random
-            .write_slice(&mut self.handshake.randoms.server);
+            .write_slice(&mut self.randoms.server);
         self.handshake.session_id = server_hello.session_id;
 
         // Look for TLS1.3 downgrade signal in server random
         if tls13_supported
             && self
-                .handshake
                 .randoms
                 .has_tls12_downgrade_marker()
         {
@@ -741,7 +748,7 @@ impl State for ExpectServerHello {
                 }
 
                 let secrets = SessionSecrets::new_resume(
-                    &self.handshake.randoms,
+                    &self.randoms,
                     scs,
                     &resuming.master_secret.0,
                 );
@@ -886,14 +893,15 @@ impl <T: 'static + HelloData + Send + Sync> ExpectServerHelloOrHelloRetryRequest
             sess.early_data.rejected();
         }
 
-        Ok(emit_client_hello_for_retry(
+        emit_client_hello_for_retry(
             sess,
             self.next.handshake,
+            self.next.randoms,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
             self.hello_data,
-        ))
+        )
     }
 }
 

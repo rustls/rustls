@@ -424,8 +424,9 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake<T: 'static + HelloData + Send + Sync>(&mut self, hello_data: T) {
-        self.state = Some(hs::start_handshake(self, hello_data));
+    pub fn start_handshake<T: 'static + HelloData + Send + Sync>(&mut self, hello_data: T) -> Result<(), TLSError> {
+        self.state = Some(hs::start_handshake(self, hello_data)?);
+        Ok(())
     }
 
     pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
@@ -764,21 +765,21 @@ impl ClientSession {
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> ClientSession {
+    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TLSError> {
         ClientSession::from_peer_data(config, hostname.into())
     }
 
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `peer_data` is the
     /// contains the data needed for the ClientHello message.
-    pub fn from_peer_data(config: &Arc<ClientConfig>, peer_data: ClientPeerData) -> ClientSession {
+    pub fn from_peer_data(config: &Arc<ClientConfig>, peer_data: ClientPeerData) -> Result<ClientSession, TLSError> {
         let mut imp = ClientSessionImpl::new(config);
         match peer_data {
-            ClientPeerData::Host(host) => imp.start_handshake(host),
-            ClientPeerData::EncryptedHost(host) => imp.start_handshake(host),
+            ClientPeerData::Host(host) => imp.start_handshake(host)?,
+            ClientPeerData::EncryptedHost(host) => imp.start_handshake(host)?,
         };
 
-        ClientSession { imp }
+        Ok(ClientSession { imp })
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
