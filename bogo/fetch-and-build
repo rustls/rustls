@@ -2,7 +2,7 @@
 
 set -ex
 
-mkdir bogo
+mkdir -p bogo
 pushd bogo
 
 git init

@@ -9,7 +9,7 @@ if [ ! -e ../target/debug/examples/bogo_shim ] ; then
   (cd ../rustls && cargo build --example bogo_shim --features dangerous_configuration,quic)
 fi
 
-if [ ! -e bogo/ ] ; then
+if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
   ./fetch-and-build
   cp -v keys/* bogo/
 fi
