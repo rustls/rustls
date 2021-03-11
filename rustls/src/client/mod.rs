@@ -6,11 +6,11 @@ use crate::log::trace;
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType};
-use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
-use crate::session::{MiddleboxCCS, Session, SessionCommon};
+use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -472,50 +472,6 @@ impl ClientSessionImpl {
         self.common.set_buffer_limit(len)
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<(), TlsError> {
-        // TLS1.3: drop CCS at any time during handshaking
-        if let MiddleboxCCS::Drop = self.common.filter_tls13_ccs(&msg)? {
-            trace!("Dropping CCS");
-            return Ok(());
-        }
-
-        // Decrypt if demanded by current state.
-        if self.common.record_layer.is_decrypting() {
-            let dm = self.common.decrypt_incoming(msg)?;
-            msg = dm;
-        }
-
-        // For handshake messages, we need to join them before parsing
-        // and processing.
-        if self
-            .common
-            .handshake_joiner
-            .want_message(&msg)
-        {
-            self.common
-                .handshake_joiner
-                .take_message(msg)
-                .ok_or_else(|| {
-                    self.common
-                        .send_fatal_alert(AlertDescription::DecodeError);
-                    TlsError::CorruptMessagePayload(ContentType::Handshake)
-                })?;
-            return self.process_new_handshake_messages();
-        }
-
-        // Now we can fully parse the message payload.
-        if !msg.decode_payload() {
-            return Err(TlsError::CorruptMessagePayload(msg.typ));
-        }
-
-        // For alerts, we have separate logic.
-        if msg.is_content_type(ContentType::Alert) {
-            return self.common.process_alert(msg);
-        }
-
-        self.process_main_protocol(msg)
-    }
-
     pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .common
@@ -587,12 +543,18 @@ impl ClientSessionImpl {
             .frames
             .pop_front()
         {
-            match self.process_msg(msg) {
-                Ok(_) => {}
-                Err(err) => {
-                    self.error = Some(err.clone());
-                    return Err(err);
-                }
+            let ignore_corrupt_payload = false;
+            let result = self.common
+                .process_msg(msg, ignore_corrupt_payload)
+                .and_then(|val| match val {
+                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
+                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
+                    None => Ok(()),
+                });
+
+            if let Err(err) = result {
+                self.error = Some(err.clone());
+                return Err(err);
             }
         }
 
