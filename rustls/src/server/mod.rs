@@ -345,7 +345,6 @@ pub struct ServerSessionImpl {
     pub quic_params: Option<Vec<u8>>,
     pub received_resumption_data: Option<Vec<u8>>,
     pub resumption_data: Vec<u8>,
-    pub error: Option<TlsError>,
     pub state: Option<Box<dyn hs::State + Send + Sync>>,
     pub client_cert_chain: Option<Vec<key::Certificate>>,
     /// Whether to reject early data even if it would otherwise be accepted
@@ -372,7 +371,6 @@ impl ServerSessionImpl {
             quic_params: None,
             received_resumption_data: None,
             resumption_data: Vec::new(),
-            error: None,
             state: Some(Box::new(hs::ExpectClientHello::new(
                 server_config,
                 extra_exts,
@@ -452,7 +450,7 @@ impl ServerSessionImpl {
     }
 
     pub fn process_new_packets(&mut self) -> Result<(), TlsError> {
-        if let Some(ref err) = self.error {
+        if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
 
@@ -476,7 +474,7 @@ impl ServerSessionImpl {
                 });
 
             if let Err(err) = result {
-                self.error = Some(err.clone());
+                self.common.error = Some(err.clone());
                 return Err(err);
             }
         }

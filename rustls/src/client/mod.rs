@@ -400,7 +400,6 @@ pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub alpn_protocol: Option<Vec<u8>>,
     pub common: SessionCommon,
-    pub error: Option<TlsError>,
     pub state: Option<hs::NextState>,
     pub server_cert_chain: CertificatePayload,
     pub early_data: EarlyData,
@@ -420,7 +419,6 @@ impl ClientSessionImpl {
             config: config.clone(),
             alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
-            error: None,
             state: None,
             server_cert_chain: Vec::new(),
             early_data: EarlyData::new(),
@@ -529,7 +527,7 @@ impl ClientSessionImpl {
     }
 
     pub fn process_new_packets(&mut self) -> Result<(), TlsError> {
-        if let Some(ref err) = self.error {
+        if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
 
@@ -553,7 +551,7 @@ impl ClientSessionImpl {
                 });
 
             if let Err(err) = result {
-                self.error = Some(err.clone());
+                self.common.error = Some(err.clone());
                 return Err(err);
             }
         }
