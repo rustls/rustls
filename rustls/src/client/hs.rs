@@ -439,9 +439,9 @@ pub fn process_alpn_protocol(
     sess: &mut ClientSessionImpl,
     proto: Option<&[u8]>,
 ) -> Result<(), TlsError> {
-    sess.alpn_protocol = proto.map(ToOwned::to_owned);
+    sess.common.alpn_protocol = proto.map(ToOwned::to_owned);
 
-    if let Some(alpn_protocol) = &sess.alpn_protocol {
+    if let Some(alpn_protocol) = &sess.common.alpn_protocol {
         if !sess
             .config
             .alpn_protocols
@@ -452,7 +452,8 @@ pub fn process_alpn_protocol(
 
     debug!(
         "ALPN protocol is {:?}",
-        sess.alpn_protocol
+        sess.common
+            .alpn_protocol
             .as_ref()
             .map(|v| bs_debug::BsDebug(&v))
     );

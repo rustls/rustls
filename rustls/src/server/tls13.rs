@@ -866,7 +866,7 @@ fn get_server_session_value(
         scs.suite,
         secret,
         &sess.client_cert_chain,
-        sess.alpn_protocol.clone(),
+        sess.common.alpn_protocol.clone(),
         sess.resumption_data.clone(),
     )
 }

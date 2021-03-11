@@ -398,7 +398,6 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
-    pub alpn_protocol: Option<Vec<u8>>,
     pub common: SessionCommon,
     pub state: Option<hs::NextState>,
     pub server_cert_chain: CertificatePayload,
@@ -417,7 +416,6 @@ impl ClientSessionImpl {
     pub fn new(config: &Arc<ClientConfig>) -> ClientSessionImpl {
         ClientSessionImpl {
             config: config.clone(),
-            alpn_protocol: None,
             common: SessionCommon::new(config.mtu, true),
             state: None,
             server_cert_chain: Vec::new(),
@@ -572,12 +570,6 @@ impl ClientSessionImpl {
         )
     }
 
-    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol
-            .as_ref()
-            .map(AsRef::as_ref)
-    }
-
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
     }
@@ -710,7 +702,7 @@ impl Session for ClientSession {
     }
 
     fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.imp.get_alpn_protocol()
+        self.imp.common.get_alpn_protocol()
     }
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
