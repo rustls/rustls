@@ -1,2 +1,2 @@
 #!/bin/sh -e
-llvm-cov-11 gcov $*
+llvm-cov-12 gcov $*
