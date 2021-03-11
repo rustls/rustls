@@ -288,7 +288,7 @@ fn get_server_session_value_tls12(
         secrets.suite().suite,
         secret,
         &sess.client_cert_chain,
-        sess.alpn_protocol.clone(),
+        sess.common.alpn_protocol.clone(),
         sess.resumption_data.clone(),
     );
 

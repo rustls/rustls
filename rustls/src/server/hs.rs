@@ -170,11 +170,11 @@ impl ExtensionProcessing {
                 ));
             }
 
-            sess.alpn_protocol = our_protocols
+            sess.common.alpn_protocol = our_protocols
                 .iter()
                 .find(|protocol| their_protocols.contains(&protocol.as_slice()))
                 .cloned();
-            if let Some(ref selected_protocol) = sess.alpn_protocol {
+            if let Some(ref selected_protocol) = sess.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts
                     .push(ServerExtension::make_alpn(&[selected_protocol]));
@@ -203,7 +203,7 @@ impl ExtensionProcessing {
                         && hello.early_data_extension_offered()
                         && resume.version == sess.common.negotiated_version.unwrap()
                         && resume.cipher_suite == sess.common.get_suite_assert().suite
-                        && resume.alpn.as_ref().map(|x| &x.0) == sess.alpn_protocol.as_ref()
+                        && resume.alpn.as_ref().map(|x| &x.0) == sess.common.alpn_protocol.as_ref()
                         && !sess.reject_early_data
                     {
                         self.exts

@@ -440,6 +440,7 @@ pub struct SessionCommon {
     pub is_client: bool,
     pub record_layer: record_layer::RecordLayer,
     suite: Option<&'static SupportedCipherSuite>,
+    pub alpn_protocol: Option<Vec<u8>>,
     peer_eof: bool,
     pub traffic: bool,
     pub early_traffic: bool,
@@ -465,6 +466,7 @@ impl SessionCommon {
             is_client: client,
             record_layer: record_layer::RecordLayer::new(),
             suite: None,
+            alpn_protocol: None,
             peer_eof: false,
             traffic: false,
             early_traffic: false,
@@ -549,6 +551,12 @@ impl SessionCommon {
             }
             _ => false,
         }
+    }
+
+    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
+        self.alpn_protocol
+            .as_ref()
+            .map(AsRef::as_ref)
     }
 
     pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, TlsError> {

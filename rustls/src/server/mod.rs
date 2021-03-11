@@ -341,7 +341,6 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub common: SessionCommon,
     sni: Option<webpki::DNSName>,
-    pub alpn_protocol: Option<Vec<u8>>,
     pub quic_params: Option<Vec<u8>>,
     pub received_resumption_data: Option<Vec<u8>>,
     pub resumption_data: Vec<u8>,
@@ -367,7 +366,6 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             common: SessionCommon::new(server_config.mtu, false),
             sni: None,
-            alpn_protocol: None,
             quic_params: None,
             received_resumption_data: None,
             resumption_data: Vec::new(),
@@ -486,12 +484,6 @@ impl ServerSessionImpl {
         self.client_cert_chain
             .as_ref()
             .map(|chain| chain.iter().cloned().collect())
-    }
-
-    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol
-            .as_ref()
-            .map(AsRef::as_ref)
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
@@ -652,7 +644,7 @@ impl Session for ServerSession {
     }
 
     fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.imp.get_alpn_protocol()
+        self.imp.common.get_alpn_protocol()
     }
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
