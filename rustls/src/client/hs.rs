@@ -116,16 +116,16 @@ fn random_sessionid() -> SessionID {
     SessionID::new(&random_id)
 }
 
-struct InitialState {
+struct InitialState<T: HelloData + Send + Sync> {
     handshake: HandshakeDetails,
-    extra_exts: Vec<ClientExtension>,
+    hello_data: T,
 }
 
-impl InitialState {
-    fn new<T: HelloData>(hello_data: T) -> InitialState {
+impl <T: 'static + HelloData + Send + Sync> InitialState<T> {
+    fn new(hello_data: T) -> InitialState<T> {
         InitialState {
-            handshake: HandshakeDetails::new(hello_data.get_hostname().into()),
-            extra_exts: hello_data.get_extra_exts().to_vec(),
+            handshake: HandshakeDetails::new(),
+            hello_data,
         }
     }
 
@@ -146,7 +146,7 @@ impl InitialState {
                 .set_client_auth_enabled();
         }
 
-        self.handshake.resuming_session = find_session(sess, self.handshake.dns_name.as_ref());
+        self.handshake.resuming_session = find_session(sess, self.hello_data.get_hostname());
 
         if let Some(resuming) = &mut self.handshake.resuming_session {
             if resuming.version == ProtocolVersion::TLSv1_2 {
@@ -176,11 +176,11 @@ impl InitialState {
             sent_tls13_fake_ccs,
             hello_details,
             None,
-            self.extra_exts)
+            self.hello_data)
     }
 }
 
-pub fn start_handshake<T: HelloData>(
+pub fn start_handshake<T: 'static + HelloData + Send + Sync>(
     sess: &mut ClientSessionImpl,
     hello_data: T,
 ) -> NextState {
@@ -189,14 +189,15 @@ pub fn start_handshake<T: HelloData>(
 
 struct ExpectServerHello {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     sent_tls13_fake_ccs: bool,
 }
 
-struct ExpectServerHelloOrHelloRetryRequest {
+struct ExpectServerHelloOrHelloRetryRequest<T: 'static + HelloData + Send + Sync> {
     next: ExpectServerHello,
-    extra_exts: Vec<ClientExtension>,
+    hello_data: T,
 }
 
 pub fn compatible_suite(
@@ -209,13 +210,13 @@ pub fn compatible_suite(
     }
 }
 
-fn emit_client_hello_for_retry(
+fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
-    extra_exts: Vec<ClientExtension>,
+    hello_data: T,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
@@ -251,7 +252,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
     if sess.config.enable_sni {
-        exts.push(ClientExtension::make_sni(handshake.dns_name.as_ref()));
+        exts.push(ClientExtension::make_sni(hello_data.get_hostname()));
     }
     exts.push(ClientExtension::ECPointFormats(
         ECPointFormatList::supported(),
@@ -277,7 +278,7 @@ fn emit_client_hello_for_retry(
     }
 
     if support_tls13 {
-        tls13::choose_kx_groups(sess, &mut exts, &mut hello, &mut handshake, retryreq);
+        tls13::choose_kx_groups(sess, &mut exts, &mut hello, hello_data.get_hostname(), retryreq);
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
@@ -303,7 +304,7 @@ fn emit_client_hello_for_retry(
     }
 
     // Extra extensions must be placed before the PSK extension
-    exts.extend(extra_exts.iter().cloned());
+    exts.extend(hello_data.get_extra_exts().iter().cloned());
 
     let fill_in_binder = if support_tls13
         && sess.config.enable_tickets
@@ -414,13 +415,14 @@ fn emit_client_hello_for_retry(
 
     let next = ExpectServerHello {
         handshake,
+        dns_name: hello_data.get_hostname().into(),
         hello,
         early_key_schedule,
         sent_tls13_fake_ccs,
     };
 
     if support_tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
+        Box::new(ExpectServerHelloOrHelloRetryRequest { next, hello_data })
     } else {
         Box::new(next)
     }
@@ -462,6 +464,7 @@ impl ExpectServerHello {
     ) -> NextState {
         Box::new(tls13::ExpectEncryptedExtensions {
             handshake: self.handshake,
+            dns_name: self.dns_name,
             key_schedule,
             hello: self.hello,
             hash_at_client_recvd_server_hello,
@@ -477,6 +480,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectNewTicket {
             secrets,
             handshake: self.handshake,
+            dns_name: self.dns_name,
             resuming: true,
             cert_verified: certv,
             sig_verified: sigv,
@@ -492,6 +496,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectCCS {
             secrets,
             handshake: self.handshake,
+            dns_name: self.dns_name,
             ticket: ReceivedTicketDetails::new(),
             resuming: true,
             cert_verified: certv,
@@ -509,6 +514,7 @@ impl ExpectServerHello {
     {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
+            dns_name: self.dns_name,
             suite,
             may_send_cert_status,
             must_issue_new_ticket,
@@ -650,6 +656,7 @@ impl State for ExpectServerHello {
                 self.early_key_schedule.take(),
                 &server_hello,
                 &mut self.handshake,
+                self.dns_name.as_ref(),
                 &mut self.hello,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
@@ -764,7 +771,7 @@ impl State for ExpectServerHello {
     }
 }
 
-impl ExpectServerHelloOrHelloRetryRequest {
+impl <T: 'static + HelloData + Send + Sync> ExpectServerHelloOrHelloRetryRequest<T> {
     fn into_expect_server_hello(self) -> NextState {
         Box::new(self.next)
     }
@@ -885,12 +892,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
-            self.extra_exts,
+            self.hello_data,
         ))
     }
 }
 
-impl State for ExpectServerHelloOrHelloRetryRequest {
+impl <T: 'static + HelloData + Send + Sync> State for ExpectServerHelloOrHelloRetryRequest<T> {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         check_message(
             &m,

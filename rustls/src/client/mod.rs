@@ -424,7 +424,7 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake<T: HelloData>(&mut self, hello_data: T) {
+    pub fn start_handshake<T: 'static + HelloData + Send + Sync>(&mut self, hello_data: T) {
         self.state = Some(hs::start_handshake(self, hello_data));
     }
 

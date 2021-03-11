@@ -12,7 +12,6 @@ use crate::msgs::persist;
 use crate::session::SessionRandoms;
 use crate::sign;
 use crate::kx;
-use webpki;
 
 use std::mem;
 
@@ -58,18 +57,16 @@ pub struct HandshakeDetails {
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub session_id: SessionID,
-    pub dns_name: webpki::DNSName,
 }
 
 impl HandshakeDetails {
-    pub fn new(host_name: webpki::DNSName) -> HandshakeDetails {
+    pub fn new() -> HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
             transcript: hash_hs::HandshakeHash::new(),
             randoms: SessionRandoms::for_client(),
             using_ems: false,
             session_id: SessionID::empty(),
-            dns_name: host_name,
         }
     }
 }
