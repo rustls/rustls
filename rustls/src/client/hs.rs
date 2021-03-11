@@ -168,11 +168,13 @@ impl InitialState {
             self.handshake.session_id = random_sessionid()?;
         }
 
+        let randoms = SessionRandoms::for_client()?;
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         emit_client_hello_for_retry(
             sess,
             self.handshake,
+            randoms,
             sent_tls13_fake_ccs,
             hello_details,
             None,
@@ -214,6 +216,7 @@ pub fn compatible_suite(
 fn emit_client_hello_for_retry(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
+    randoms: SessionRandoms,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
@@ -331,7 +334,6 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let randoms = SessionRandoms::for_client()?;
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
@@ -888,6 +890,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         emit_client_hello_for_retry(
             sess,
             self.next.handshake,
+            self.next.randoms,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
