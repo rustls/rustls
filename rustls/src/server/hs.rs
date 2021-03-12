@@ -1,4 +1,5 @@
 use crate::error::TlsError;
+use crate::key::Certificate;
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -30,6 +31,8 @@ use webpki;
 
 use crate::server::common::{HandshakeDetails, ServerKXDetails};
 use crate::server::{tls12, tls13};
+
+use std::sync::Arc;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TlsError>;
@@ -150,7 +153,8 @@ impl ExtensionProcessing {
     pub fn process_common(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: Option<&mut sign::CertifiedKey>,
+        ocsp_response: &mut Option<Vec<u8>>,
+        sct_list: &mut Option<Vec<u8>>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         handshake: &HandshakeDetails,
@@ -223,7 +227,6 @@ impl ExtensionProcessing {
                 .push(ServerExtension::ServerNameAck);
         }
 
-        if let Some(server_key) = server_key {
             // Send status_request response if we have one.  This is not allowed
             // if we're resuming, and is only triggered if we have an OCSP response
             // to send.
@@ -232,14 +235,14 @@ impl ExtensionProcessing {
                     .find_extension(ExtensionType::StatusRequest)
                     .is_some()
             {
-                if server_key.has_ocsp() && !sess.common.is_tls13() {
+                if ocsp_response.is_some() && !sess.common.is_tls13() {
                     // Only TLS1.2 sends confirmation in ServerHello
                     self.exts
                         .push(ServerExtension::CertificateStatusAck);
                 }
             } else {
                 // Throw away any OCSP response so we don't try to send it later.
-                drop(server_key.take_ocsp());
+                ocsp_response.take();
             }
 
             if !for_resume
@@ -250,18 +253,14 @@ impl ExtensionProcessing {
                 if !sess.common.is_tls13() {
                     // Take the SCT list, if any, so we don't send it later,
                     // and put it in the legacy extension.
-                    server_key
-                        .take_sct_list()
-                        .map(|sct_list| {
-                            self.exts
-                                .push(ServerExtension::make_sct(sct_list))
-                        });
+                    if let Some(sct_list) = sct_list.take() {
+                        self.exts.push(ServerExtension::make_sct(sct_list));
+                    }
                 }
             } else {
                 // Throw away any SCT list so we don't send it later.
-                drop(server_key.take_sct_list());
+                sct_list.take();
             }
-        }
 
         self.exts
             .extend(handshake.extra_exts.iter().cloned());
@@ -395,13 +394,14 @@ impl ExpectClientHello {
     fn emit_server_hello(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: Option<&mut sign::CertifiedKey>,
+        ocsp_response: &mut Option<Vec<u8>>,
+        sct_list: &mut Option<Vec<u8>>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         randoms: &SessionRandoms,
     ) -> Result<(), TlsError> {
         let mut ep = ExtensionProcessing::new();
-        ep.process_common(sess, server_key, hello, resumedata, &self.handshake)?;
+        ep.process_common(sess, ocsp_response, sct_list, hello, resumedata, &self.handshake)?;
         ep.process_tls12(sess, hello, self.using_ems);
 
         self.send_ticket = ep.send_ticket;
@@ -433,10 +433,8 @@ impl ExpectClientHello {
     fn emit_certificate(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_certkey: &mut sign::CertifiedKey,
+        cert_chain: Vec<Certificate>,
     ) {
-        let cert_chain = server_certkey.take_cert();
-
         let c = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -455,13 +453,8 @@ impl ExpectClientHello {
     fn emit_cert_status(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_certkey: &mut sign::CertifiedKey,
+        ocsp: Vec<u8>,
     ) {
-        let ocsp = match server_certkey.take_ocsp() {
-            Some(ocsp) => ocsp,
-            None => return,
-        };
-
         let st = CertificateStatus::new(ocsp);
 
         let c = Message {
@@ -484,7 +477,7 @@ impl ExpectClientHello {
         sess: &mut ServerSessionImpl,
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
-        server_certkey: &mut sign::CertifiedKey,
+        signing_key: Arc<Box<dyn sign::SigningKey>>,
         randoms: &SessionRandoms,
     ) -> Result<kx::KeyExchange, TlsError> {
         let kx = kx::KeyExchange::start(skxg)
@@ -496,7 +489,6 @@ impl ExpectClientHello {
         msg.extend(&randoms.server);
         secdh.encode(&mut msg);
 
-        let signing_key = &server_certkey.key;
         let signer = signing_key
             .choose_scheme(&sigschemes)
             .ok_or_else(|| TlsError::General("incompatible signing key".to_string()))?;
@@ -600,7 +592,7 @@ impl ExpectClientHello {
         }
 
         self.handshake.session_id = *id;
-        self.emit_server_hello(sess, None, client_hello, Some(&resumedata), randoms)?;
+        self.emit_server_hello(sess, &mut None, &mut None, client_hello, Some(&resumedata), randoms)?;
 
         let suite = sess.common.get_suite_assert();
         let secrets = SessionSecrets::new_resume(&randoms, suite, &resumedata.master_secret.0);
@@ -738,7 +730,7 @@ impl State for ExpectClientHello {
             .map(|protos| protos.to_slices());
 
         // Choose a certificate.
-        let mut certkey = {
+        let certkey = {
             let sni_ref = sni
                 .as_ref()
                 .map(webpki::DNSName::as_ref);
@@ -943,10 +935,14 @@ impl State for ExpectClientHello {
 
         debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-        self.emit_server_hello(sess, Some(&mut certkey), client_hello, None, &randoms)?;
-        self.emit_certificate(sess, &mut certkey);
-        self.emit_cert_status(sess, &mut certkey);
-        let kx = self.emit_server_kx(sess, sigschemes, group, &mut certkey, &randoms)?;
+        let sign::CertifiedKey { cert, key, mut ocsp, mut sct_list } = certkey;
+        self.emit_server_hello(sess, &mut ocsp, &mut sct_list, client_hello, None, &randoms)?;
+        self.emit_certificate(sess, cert);
+        if let Some(ocsp_response) = ocsp {
+            self.emit_cert_status(sess, ocsp_response);
+        }
+
+        let kx = self.emit_server_kx(sess, sigschemes, group, key, &randoms)?;
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 

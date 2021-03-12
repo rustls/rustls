@@ -388,14 +388,14 @@ impl hs::State for ExpectCertificateRequest {
             .client_auth_cert_resolver
             .resolve(&canames, &certreq.sigschemes);
 
-        if let Some(mut certkey) = maybe_certkey {
+        if let Some(certkey) = maybe_certkey {
             let maybe_signer = certkey
                 .key
                 .choose_scheme(&certreq.sigschemes);
 
             if let Some(_) = &maybe_signer {
                 debug!("Attempting client auth");
-                client_auth.cert = Some(certkey.take_cert());
+                client_auth.cert = Some(certkey.cert);
             }
             client_auth.signer = maybe_signer;
         } else {

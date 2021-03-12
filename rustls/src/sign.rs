@@ -8,7 +8,6 @@ use ring::{
 };
 use webpki;
 
-use std::mem;
 use std::sync::Arc;
 
 /// An abstract signing key.
@@ -66,31 +65,6 @@ impl CertifiedKey {
         }
     }
 
-    /// The end-entity certificate.
-    pub fn end_entity_cert(&self) -> Result<&key::Certificate, ()> {
-        self.cert.get(0).ok_or(())
-    }
-
-    /// Steal ownership of the certificate chain.
-    pub fn take_cert(&mut self) -> Vec<key::Certificate> {
-        mem::replace(&mut self.cert, Vec::new())
-    }
-
-    /// Return true if there's an OCSP response.
-    pub fn has_ocsp(&self) -> bool {
-        self.ocsp.is_some()
-    }
-
-    /// Steal ownership of the OCSP response.
-    pub fn take_ocsp(&mut self) -> Option<Vec<u8>> {
-        mem::replace(&mut self.ocsp, None)
-    }
-
-    /// Steal ownership of the SCT list.
-    pub fn take_sct_list(&mut self) -> Option<Vec<u8>> {
-        mem::replace(&mut self.sct_list, None)
-    }
-
     /// Check the certificate chain for validity:
     /// - it should be non-empty list
     /// - the first certificate should be parsable as a x509v3,
@@ -104,7 +78,7 @@ impl CertifiedKey {
         name: Option<webpki::DNSNameRef>,
     ) -> Result<(), TlsError> {
         // Always reject an empty certificate chain.
-        let end_entity_cert = self.end_entity_cert().map_err(|()| {
+        let end_entity_cert = self.cert.first().ok_or_else(|| {
             TlsError::General("No end-entity certificate in certificate chain".to_string())
         })?;
 
