@@ -227,7 +227,7 @@ pub fn compatible_suite(sess: &ClientSession, resuming_suite: &SupportedCipherSu
 
 fn emit_client_hello_for_retry(
     sess: &mut ClientSession,
-    mut handshake: HandshakeDetails,
+    handshake: HandshakeDetails,
     randoms: SessionRandoms,
     using_ems: bool,
     mut transcript: HandshakeHash,
@@ -367,11 +367,12 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if fill_in_binder {
-        Some(tls13::fill_in_psk_binder(
-            &mut handshake,
-            &mut transcript,
-            &mut chp,
-        ))
+        // Must be `Some` if `fill_in_binder` is `true`
+        let resuming = handshake
+            .resuming_session
+            .as_ref()
+            .unwrap();
+        Some(tls13::fill_in_psk_binder(&resuming, &transcript, &mut chp))
     } else {
         None
     };
