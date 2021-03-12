@@ -84,7 +84,7 @@ impl CompleteClientHelloHandling {
     fn into_expect_retried_client_hello(self) -> hs::NextState {
         Box::new(hs::ExpectClientHello {
             handshake: self.handshake,
-            using_ems: true,
+            using_ems: false,
             done_retry: true,
             send_ticket: self.send_ticket,
         })
