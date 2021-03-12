@@ -145,43 +145,23 @@ impl CertifiedKey {
 pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey + Send + Sync>, ()> {
     if let Ok(rsa) = RsaSigningKey::new(der) {
         Ok(Box::new(rsa))
-    } else if let Ok(ecdsa) = any_ecdsa_type(der) {
-        Ok(ecdsa)
-    } else {
-        any_eddsa_type(der)
-    }
-}
-
-/// Parse `der` as any ECDSA key type, returning the first which works.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey + Send + Sync>, ()> {
-    if let Ok(ecdsa_p256) = ECDSASigningKey::new(
+    } else if let Ok(ecdsa_p256) = ECDSASigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
         &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
     ) {
-        return Ok(Box::new(ecdsa_p256));
-    }
-
-    if let Ok(ecdsa_p384) = ECDSASigningKey::new(
+        Ok(Box::new(ecdsa_p256))
+    } else if let Ok(ecdsa_p384) = ECDSASigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP384_SHA384,
         &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
     ) {
-        return Ok(Box::new(ecdsa_p384));
+        Ok(Box::new(ecdsa_p384))
+    } else if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
+        Ok(Box::new(ed25519))
+    } else {
+        Err(())
     }
-
-    Err(())
-}
-
-/// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey + Send + Sync>, ()> {
-    if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
-        return Ok(Box::new(ed25519));
-    }
-
-    // TODO: Add support for Ed448
-
-    Err(())
 }
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS
