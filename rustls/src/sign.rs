@@ -12,19 +12,19 @@ use std::mem;
 use std::sync::Arc;
 
 /// An abstract signing key.
-pub trait SigningKey: Send + Sync {
+pub trait SigningKey {
     /// Choose a `SignatureScheme` from those offered.
     ///
     /// Expresses the choice by returning something that implements `Signer`,
     /// using the chosen scheme.
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer + Send + Sync>>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
 }
 
 /// A thing that can sign a message.
-pub trait Signer: Send + Sync {
+pub trait Signer {
     /// Signs `message` using the selected scheme.
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TlsError>;
 
@@ -40,7 +40,7 @@ pub struct CertifiedKey {
     pub cert: Vec<key::Certificate>,
 
     /// The certified key.
-    pub key: Arc<Box<dyn SigningKey>>,
+    pub key: Arc<Box<dyn SigningKey + Send + Sync>>,
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
@@ -57,7 +57,7 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<dyn SigningKey>>) -> CertifiedKey {
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<dyn SigningKey + Send + Sync>>) -> CertifiedKey {
         CertifiedKey {
             cert,
             key,
@@ -142,7 +142,7 @@ impl CertifiedKey {
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey + Send + Sync>, ()> {
     if let Ok(rsa) = RsaSigningKey::new(der) {
         Ok(Box::new(rsa))
     } else if let Ok(ecdsa) = any_ecdsa_type(der) {
@@ -153,7 +153,7 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, 
 }
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey + Send + Sync>, ()> {
     if let Ok(ecdsa_p256) = ECDSASigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -174,7 +174,7 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> 
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey + Send + Sync>, ()> {
     if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
         return Ok(Box::new(ed25519));
     }
@@ -210,7 +210,7 @@ impl RsaSigningKey {
 }
 
 impl SigningKey for RsaSigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer + Send + Sync>> {
         ALL_RSA_SCHEMES
             .iter()
             .find(|scheme| offered.contains(scheme))
@@ -233,7 +233,7 @@ struct RSASigner {
 }
 
 impl RSASigner {
-    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
+    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer + Send + Sync> {
         let encoding: &dyn signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
@@ -302,7 +302,7 @@ impl ECDSASigningKey {
 }
 
 impl SigningKey for ECDSASigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer + Send + Sync>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(ECDSASigner {
                 key: self.key.clone(),
@@ -368,7 +368,7 @@ impl Ed25519SigningKey {
 }
 
 impl SigningKey for Ed25519SigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer + Send + Sync>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(Ed25519Signer {
                 key: self.key.clone(),

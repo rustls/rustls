@@ -41,7 +41,7 @@ mod tls13;
 /// in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common
 /// choice.
-pub trait StoresClientSessions: Send + Sync {
+pub trait StoresClientSessions {
     /// Stores a new `value` for `key`.  Returns `true`
     /// if the value was stored.
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
@@ -53,7 +53,7 @@ pub trait StoresClientSessions: Send + Sync {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert: Send + Sync {
+pub trait ResolvesClientCert {
     /// With the server-supplied acceptable issuers in `acceptable_issuers`,
     /// the server's supported signature schemes in `sigschemes`,
     /// return a certificate chain and signing key to authenticate.
@@ -97,13 +97,13 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
-    pub session_persistence: Arc<dyn StoresClientSessions>,
+    pub session_persistence: Arc<dyn StoresClientSessions + Send + Sync>,
 
     /// Our MTU.  If None, we don't limit TLS message sizes.
     pub mtu: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
+    pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert + Send + Sync>,
 
     /// Whether to support RFC5077 tickets.  You must provide a working
     /// `session_persistence` member for this to have any meaningful
@@ -218,7 +218,7 @@ impl ClientConfig {
     }
 
     /// Sets persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Arc<dyn StoresClientSessions>) {
+    pub fn set_persistence(&mut self, persist: Arc<dyn StoresClientSessions + Send + Sync>) {
         self.session_persistence = persist;
     }
 

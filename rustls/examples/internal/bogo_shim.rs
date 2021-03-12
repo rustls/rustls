@@ -225,7 +225,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
 }
 
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<Box<dyn rustls::sign::SigningKey>>,
+    key: Arc<Box<dyn rustls::sign::SigningKey + Send + Sync>>,
     scheme: rustls::SignatureScheme,
 }
 
@@ -233,7 +233,7 @@ impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
     fn choose_scheme(
         &self,
         offered: &[rustls::SignatureScheme],
-    ) -> Option<Box<dyn rustls::sign::Signer>> {
+    ) -> Option<Box<dyn rustls::sign::Signer + Send + Sync>> {
         if offered.contains(&self.scheme) {
             self.key.choose_scheme(&[self.scheme])
         } else {
@@ -246,7 +246,7 @@ impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
 }
 
 struct FixedSignatureSchemeServerCertResolver {
-    resolver: Arc<dyn rustls::ResolvesServerCert>,
+    resolver: Arc<dyn rustls::ResolvesServerCert + Send + Sync>,
     scheme: rustls::SignatureScheme,
 }
 
@@ -262,7 +262,7 @@ impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
 }
 
 struct FixedSignatureSchemeClientCertResolver {
-    resolver: Arc<dyn rustls::ResolvesClientCert>,
+    resolver: Arc<dyn rustls::ResolvesClientCert + Send + Sync>,
     scheme: rustls::SignatureScheme,
 }
 

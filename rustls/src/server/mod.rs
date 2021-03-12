@@ -95,7 +95,7 @@ pub trait ProducesTickets: Send + Sync {
 
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
-pub trait ResolvesServerCert: Send + Sync {
+pub trait ResolvesServerCert {
     /// Choose a certificate chain and matching key given simplified
     /// ClientHello information.
     ///
@@ -176,7 +176,7 @@ pub struct ServerConfig {
     pub ticketer: Arc<dyn ProducesTickets>,
 
     /// How to choose a server cert and key.
-    pub cert_resolver: Arc<dyn ResolvesServerCert>,
+    pub cert_resolver: Arc<dyn ResolvesServerCert + Send + Sync>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
