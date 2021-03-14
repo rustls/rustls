@@ -192,13 +192,27 @@ pub fn openssl_find() -> String {
         return format!("{}/bin/openssl", dir);
     }
 
-    // We need a homebrew openssl, because OSX comes with
-    // 0.9.8y or something equally ancient!
+    // We may need a homebrew openssl, because older versions of OSX come with
+    // 0.9.8y or something equally ancient.
     if cfg!(target_os = "macos") {
-        if Path::new("/usr/local/opt/openssl@1.1/bin/openssl").is_file() {
-            return "/usr/local/opt/openssl@1.1/bin/openssl".to_string();
-        } else {
-            return "/usr/local/opt/openssl/bin/openssl".to_string();
+        match process::Command::new("brew")
+            .args(&["--prefix", "openssl"])
+            .output() {
+            Ok(output) => {
+                let mut openssl = str::from_utf8(&*output.stdout).unwrap().trim().to_string();
+                openssl.push_str("/bin/openssl");
+                return openssl;
+            },
+            Err(_) => {
+                if Path::new("/usr/local/opt/openssl@1.1/bin/openssl").is_file() {
+                    return "/usr/local/opt/openssl@1.1/bin/openssl".to_string();
+                } else if Path::new("/usr/local/opt/openssl/bin/openssl").is_file() {
+                    return "/usr/local/opt/openssl/bin/openssl".to_string();
+                } else if Path::new("/usr/bin/openssl").is_file() {
+                    // This may return LibreSSL 2.8.3 on Big Sur, and will currently fail a test.
+                    return "/usr/bin/openssl".to_string()
+                }
+            }
         }
     }
 
