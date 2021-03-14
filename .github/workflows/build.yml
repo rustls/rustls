@@ -54,6 +54,47 @@ jobs:
       - name: cargo test (release; no run)
         run: cargo test --release --no-run
 
+
+  bogo:
+    name: BoGo test suite
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install golang toolchain
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.14"
+
+      - name: Run test suite
+        working-directory: bogo
+        run: ./runme
+
+
+  benchmarks:
+    name: Smoke-test benchmarks
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Smoke-test benchmark program
+        run: cargo run --release --example bench
+
+
   coverage:
     name: Measure coverage
     runs-on: ubuntu-18.04
@@ -93,6 +134,7 @@ jobs:
         with:
           file: final.info
           fail_ci_if_error: false
+
 
   minver:
     name: Check minimum versions
