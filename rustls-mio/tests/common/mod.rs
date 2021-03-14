@@ -199,7 +199,7 @@ pub fn openssl_find() -> String {
             .args(&["--prefix", "openssl"])
             .output() {
             Ok(output) => {
-                let dir = str::from_utf8(&*output.stdout).unwrap().trim().to_string();
+                let dir = str::from_utf8(&*output.stdout).unwrap().trim();
                 return format!("{}/bin/openssl", dir);
             },
             Err(_) => {
