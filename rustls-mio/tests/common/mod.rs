@@ -203,13 +203,17 @@ pub fn openssl_find() -> String {
                 return format!("{}/bin/openssl", dir);
             },
             Err(_) => {
-                if Path::new("/usr/local/opt/openssl@1.1/bin/openssl").is_file() {
-                    return "/usr/local/opt/openssl@1.1/bin/openssl".to_string();
-                } else if Path::new("/usr/local/opt/openssl/bin/openssl").is_file() {
-                    return "/usr/local/opt/openssl/bin/openssl".to_string();
-                } else if Path::new("/usr/bin/openssl").is_file() {
+                const SEARCH_PATHS: [&'static str; 3] = [
+                    "/usr/local/opt/openssl@1.1/bin/openssl",
+                    "/usr/local/opt/openssl/bin/openssl",
                     // This may return LibreSSL 2.8.3 on Big Sur, and will currently fail a test.
-                    return "/usr/bin/openssl".to_string()
+                    "/usr/bin/openssl",
+                ];
+
+                if let Some(path) = SEARCH_PATHS.iter().find(|s| {
+                    Path::new(s).is_file()
+                }) {
+                    return path.to_string();
                 }
             }
         }
