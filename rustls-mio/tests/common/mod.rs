@@ -199,9 +199,8 @@ pub fn openssl_find() -> String {
             .args(&["--prefix", "openssl"])
             .output() {
             Ok(output) => {
-                let mut openssl = str::from_utf8(&*output.stdout).unwrap().trim().to_string();
-                openssl.push_str("/bin/openssl");
-                return openssl;
+                let dir = str::from_utf8(&*output.stdout).unwrap().trim().to_string();
+                return format!("{}/bin/openssl", dir);
             },
             Err(_) => {
                 if Path::new("/usr/local/opt/openssl@1.1/bin/openssl").is_file() {
