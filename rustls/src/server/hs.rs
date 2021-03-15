@@ -147,10 +147,10 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub fn process_common(
+    pub(crate) fn process_common(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: Option<&mut sign::CertifiedKey>,
+        server_key: Option<&mut sign::ActiveCertifiedKey>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         handshake: &HandshakeDetails,
@@ -254,7 +254,7 @@ impl ExtensionProcessing {
                         .take_sct_list()
                         .map(|sct_list| {
                             self.exts
-                                .push(ServerExtension::make_sct(sct_list))
+                                .push(ServerExtension::make_sct(sct_list.to_vec()))
                         });
                 }
             } else {
@@ -395,7 +395,7 @@ impl ExpectClientHello {
     fn emit_server_hello(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: Option<&mut sign::CertifiedKey>,
+        server_key: Option<&mut sign::ActiveCertifiedKey>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         randoms: &SessionRandoms,
@@ -433,16 +433,16 @@ impl ExpectClientHello {
     fn emit_certificate(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_certkey: &mut sign::CertifiedKey,
+        server_certkey: &sign::ActiveCertifiedKey,
     ) {
-        let cert_chain = server_certkey.take_cert();
+        let cert_chain = server_certkey.get_cert();
 
         let c = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain),
+                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
             }),
         };
 
@@ -455,14 +455,14 @@ impl ExpectClientHello {
     fn emit_cert_status(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_certkey: &mut sign::CertifiedKey,
+        server_certkey: &mut sign::ActiveCertifiedKey,
     ) {
         let ocsp = match server_certkey.take_ocsp() {
             Some(ocsp) => ocsp,
             None => return,
         };
 
-        let st = CertificateStatus::new(ocsp);
+        let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
             typ: ContentType::Handshake,
@@ -484,7 +484,7 @@ impl ExpectClientHello {
         sess: &mut ServerSessionImpl,
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
-        server_certkey: &mut sign::CertifiedKey,
+        server_certkey: &sign::ActiveCertifiedKey,
         randoms: &SessionRandoms,
     ) -> Result<kx::KeyExchange, TlsError> {
         let kx = kx::KeyExchange::start(skxg)
@@ -496,7 +496,7 @@ impl ExpectClientHello {
         msg.extend(&randoms.server);
         secdh.encode(&mut msg);
 
-        let signing_key = &server_certkey.key;
+        let signing_key = server_certkey.get_key();
         let signer = signing_key
             .choose_scheme(&sigschemes)
             .ok_or_else(|| TlsError::General("incompatible signing key".to_string()))?;
@@ -756,17 +756,18 @@ impl State for ExpectClientHello {
                 .config
                 .cert_resolver
                 .resolve(client_hello);
-            certkey.ok_or_else(|| {
+            let certkey = certkey.ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 TlsError::General("no server certificate chain resolved".to_string())
-            })?
+            })?;
+            sign::ActiveCertifiedKey::from_certified_key(certkey)
         };
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
         let suitable_suites =
-            suites::reduce_given_sigalg(&sess.config.ciphersuites, certkey.key.algorithm());
+            suites::reduce_given_sigalg(&sess.config.ciphersuites, certkey.get_key().algorithm());
 
         // And version
         let suitable_suites = suites::reduce_given_version(&suitable_suites, version);
@@ -944,9 +945,9 @@ impl State for ExpectClientHello {
         debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
         self.emit_server_hello(sess, Some(&mut certkey), client_hello, None, &randoms)?;
-        self.emit_certificate(sess, &mut certkey);
+        self.emit_certificate(sess, &certkey);
         self.emit_cert_status(sess, &mut certkey);
-        let kx = self.emit_server_kx(sess, sigschemes, group, &mut certkey, &randoms)?;
+        let kx = self.emit_server_kx(sess, sigschemes, group, &certkey, &randoms)?;
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 

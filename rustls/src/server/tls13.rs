@@ -275,7 +275,7 @@ impl CompleteClientHelloHandling {
     fn emit_encrypted_extensions(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
+        server_key: &mut sign::ActiveCertifiedKey,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
     ) -> Result<(), TlsError> {
@@ -355,12 +355,12 @@ impl CompleteClientHelloHandling {
     fn emit_certificate_tls13(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
+        server_key: &mut sign::ActiveCertifiedKey,
     ) {
         let mut cert_entries = vec![];
-        for cert in server_key.take_cert() {
+        for cert in server_key.get_cert() {
             let entry = CertificateEntry {
-                cert,
+                cert: cert.to_owned(),
                 exts: Vec::new(),
             };
 
@@ -371,7 +371,7 @@ impl CompleteClientHelloHandling {
             // Apply OCSP response to first certificate (we don't support OCSP
             // except for leaf certs).
             if let Some(ocsp) = server_key.take_ocsp() {
-                let cst = CertificateStatus::new(ocsp);
+                let cst = CertificateStatus::new(ocsp.to_owned());
                 end_entity_cert
                     .exts
                     .push(CertificateExtension::CertificateStatus(cst));
@@ -381,7 +381,7 @@ impl CompleteClientHelloHandling {
             if let Some(sct_list) = server_key.take_sct_list() {
                 end_entity_cert
                     .exts
-                    .push(CertificateExtension::make_sct(sct_list));
+                    .push(CertificateExtension::make_sct(sct_list.to_owned()));
             }
         }
 
@@ -405,7 +405,7 @@ impl CompleteClientHelloHandling {
     fn emit_certificate_verify_tls13(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
+        server_key: &sign::ActiveCertifiedKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), TlsError> {
         let message = verify::construct_tls13_server_verify_message(
@@ -415,7 +415,7 @@ impl CompleteClientHelloHandling {
                 .get_current_hash(),
         );
 
-        let signing_key = &server_key.key;
+        let signing_key = server_key.get_key();
         let signer = signing_key
             .choose_scheme(schemes)
             .ok_or_else(|| hs::incompatible(sess, "no overlapping sigschemes"))?;
@@ -528,11 +528,11 @@ impl CompleteClientHelloHandling {
         }
     }
 
-    pub fn handle_client_hello(
+    pub(crate) fn handle_client_hello(
         mut self,
         suite: &'static SupportedCipherSuite,
         sess: &mut ServerSessionImpl,
-        mut server_key: sign::CertifiedKey,
+        mut server_key: sign::ActiveCertifiedKey,
         chm: &Message,
     ) -> hs::NextStateOrError {
         let client_hello = require_handshake_msg!(

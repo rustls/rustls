@@ -27,6 +27,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     pass the end-entity and intermediate certificates separately.  This means rustls deals with the case
     where the certificate chain is empty, rather than leaving that to ServerCertVerifier/ClientCertVerifier
     implementation.
+  - *Breaking API change*: `ResolvesServerCert::resolve` now returns `Option<Arc<CertifiedKey>>` instead of 
+    `Option<CertifiedKey>`.
 * 0.19.0 (2020-11-22):
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.
