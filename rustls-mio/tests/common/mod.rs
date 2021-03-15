@@ -192,13 +192,30 @@ pub fn openssl_find() -> String {
         return format!("{}/bin/openssl", dir);
     }
 
-    // We need a homebrew openssl, because OSX comes with
-    // 0.9.8y or something equally ancient!
+    // We may need a homebrew openssl, because older versions of OSX come with
+    // 0.9.8y or something equally ancient.
     if cfg!(target_os = "macos") {
-        if Path::new("/usr/local/opt/openssl@1.1/bin/openssl").is_file() {
-            return "/usr/local/opt/openssl@1.1/bin/openssl".to_string();
-        } else {
-            return "/usr/local/opt/openssl/bin/openssl".to_string();
+        match process::Command::new("brew")
+            .args(&["--prefix", "openssl"])
+            .output() {
+            Ok(output) => {
+                let dir = str::from_utf8(&*output.stdout).unwrap().trim();
+                return format!("{}/bin/openssl", dir);
+            },
+            Err(_) => {
+                const SEARCH_PATHS: [&'static str; 3] = [
+                    "/usr/local/opt/openssl@1.1/bin/openssl",
+                    "/usr/local/opt/openssl/bin/openssl",
+                    // This may return LibreSSL 2.8.3 on Big Sur, and will currently fail a test.
+                    "/usr/bin/openssl",
+                ];
+
+                if let Some(path) = SEARCH_PATHS.iter().find(|s| {
+                    Path::new(s).is_file()
+                }) {
+                    return path.to_string();
+                }
+            }
         }
     }
 
