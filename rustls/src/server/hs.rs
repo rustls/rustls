@@ -738,7 +738,7 @@ impl State for ExpectClientHello {
             .map(|protos| protos.to_slices());
 
         // Choose a certificate.
-        let mut certkey = {
+        let certkey = {
             let sni_ref = sni
                 .as_ref()
                 .map(webpki::DNSName::as_ref);
@@ -756,13 +756,13 @@ impl State for ExpectClientHello {
                 .config
                 .cert_resolver
                 .resolve(client_hello);
-            let certkey = certkey.ok_or_else(|| {
+            certkey.ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 TlsError::General("no server certificate chain resolved".to_string())
-            })?;
-            sign::ActiveCertifiedKey::from_certified_key(certkey)
+            })?
         };
+        let mut certkey = sign::ActiveCertifiedKey::from_certified_key(certkey.as_ref());
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
