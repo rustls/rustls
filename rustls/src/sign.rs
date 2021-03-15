@@ -73,11 +73,6 @@ impl CertifiedKey {
         mem::take(&mut self.cert)
     }
 
-    /// Return true if there's an OCSP response.
-    pub fn has_ocsp(&self) -> bool {
-        self.ocsp.is_some()
-    }
-
     /// Check the certificate chain for validity:
     /// - it should be non-empty list
     /// - the first certificate should be parsable as a x509v3,
@@ -131,24 +126,19 @@ impl CertifiedKey {
 
 /// ActiveCertifiedKey wraps CertifiedKey and prevents `ocsp` and `sct_list` from being
 /// consumed more than once.
-pub(crate) struct ActiveCertifiedKey {
-    key: Arc<CertifiedKey>,
-    ocsp_taken: bool,
-    sct_list_taken: bool,
+pub(crate) struct ActiveCertifiedKey<'a> {
+    key: &'a CertifiedKey,
+    ocsp: Option<&'a [u8]>,
+    sct_list: Option<&'a [u8]>,
 }
 
-impl ActiveCertifiedKey {
-    pub fn from_certified_key(key: Arc<CertifiedKey>) -> Self {
-        ActiveCertifiedKey { 
+impl<'a> ActiveCertifiedKey<'a> {
+    pub fn from_certified_key<'k>(key: &'k CertifiedKey) -> ActiveCertifiedKey<'k> {
+        ActiveCertifiedKey {
             key,
-            ocsp_taken: false,
-            sct_list_taken: false,
+            ocsp: key.ocsp.as_deref(),
+            sct_list: key.sct_list.as_deref(),
         }
-    }
-
-    #[inline]
-    pub fn has_ocsp(&self) -> bool {
-        !self.ocsp_taken && self.key.has_ocsp()
     }
 
     /// Get the certificate chain
@@ -164,21 +154,13 @@ impl ActiveCertifiedKey {
     }
 
     #[inline]
-    pub fn take_ocsp(&mut self) -> Option<&[u8]> {
-        if std::mem::replace(&mut self.ocsp_taken, true) {
-            None
-        } else {
-            self.key.ocsp.as_deref()
-        }
+    pub fn get_ocsp(&self) -> Option<&[u8]> {
+        self.ocsp
     }
 
     #[inline]
-    pub fn take_sct_list(&mut self) -> Option<&[u8]> {
-        if std::mem::replace(&mut self.sct_list_taken, true) {
-            None
-        } else {
-            self.key.sct_list.as_deref()
-        }
+    pub fn get_sct_list(&self) -> Option<&[u8]> {
+        self.sct_list
     }
 }
 

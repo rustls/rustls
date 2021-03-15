@@ -186,7 +186,8 @@ mod client_hello {
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
             let (mut ocsp_response, mut sct_list) =
-                (server_key.ocsp.as_deref(), server_key.sct_list.as_deref());
+                (server_key.get_ocsp(), server_key.get_sct_list());
+
             self.send_ticket = emit_server_hello(
                 &mut self.handshake,
                 conn,
@@ -199,7 +200,7 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.handshake, conn, &server_key.cert);
+            emit_certificate(&mut self.handshake, conn, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut self.handshake, conn, ocsp_response);
             }
@@ -208,7 +209,7 @@ mod client_hello {
                 conn,
                 sigschemes,
                 group,
-                &*server_key.key,
+                server_key.get_key(),
                 &self.randoms,
             )?;
             let doing_client_auth = emit_certificate_req(&mut self.handshake, conn)?;

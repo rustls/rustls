@@ -275,7 +275,7 @@ mod client_hello {
             }
 
             let (mut ocsp_response, mut sct_list) =
-                (server_key.ocsp.as_deref(), server_key.sct_list.as_deref());
+                (server_key.get_ocsp(), server_key.get_sct_list());
             emit_encrypted_extensions(
                 &mut self.handshake,
                 suite,
@@ -292,14 +292,14 @@ mod client_hello {
                 emit_certificate_tls13(
                     &mut self.handshake,
                     conn,
-                    &server_key.cert,
+                    server_key.get_cert(),
                     ocsp_response,
                     sct_list,
                 );
                 emit_certificate_verify_tls13(
                     &mut self.handshake,
                     conn,
-                    &*server_key.key,
+                    server_key.get_key(),
                     &sigschemes_ext,
                 )?;
                 client_auth

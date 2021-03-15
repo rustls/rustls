@@ -13,6 +13,7 @@ use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig, ServerConnection};
+use crate::sign;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
@@ -462,9 +463,9 @@ impl State for ExpectClientHello {
                 conn.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("no server certificate chain resolved".to_string())
-            })?;
-            sign::ActiveCertifiedKey::from_certified_key(certkey)
+            })?
         };
+        let certkey = sign::ActiveCertifiedKey::from_certified_key(&certkey);
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
