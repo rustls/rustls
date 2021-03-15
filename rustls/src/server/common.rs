@@ -10,7 +10,6 @@ pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
     pub hash_at_server_fin: Option<digest::Digest>,
     pub session_id: SessionID,
-    pub using_ems: bool,
     pub extra_exts: Vec<ServerExtension>,
 }
 
@@ -20,7 +19,6 @@ impl HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
             hash_at_server_fin: None,
             session_id: SessionID::empty(),
-            using_ems: false,
             extra_exts,
         }
     }

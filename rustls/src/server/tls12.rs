@@ -25,6 +25,7 @@ use ring::constant_time;
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
+    pub using_ems: bool,
     pub server_kx: ServerKXDetails,
     pub send_ticket: bool,
 }
@@ -34,6 +35,7 @@ impl ExpectCertificate {
         Box::new(ExpectClientKX {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             server_kx: self.server_kx,
             client_cert: cert,
             send_ticket: self.send_ticket,
@@ -99,6 +101,7 @@ impl hs::State for ExpectCertificate {
 pub struct ExpectClientKX {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
+    pub using_ems: bool,
     pub server_kx: ServerKXDetails,
     pub client_cert: Option<ClientCertDetails>,
     pub send_ticket: bool,
@@ -132,7 +135,7 @@ impl hs::State for ExpectClientKX {
         let suite = sess
             .common
             .get_suite_assert();
-        let secrets = if self.handshake.using_ems {
+        let secrets = if self.using_ems {
             let handshake_hash = self
                 .handshake
                 .transcript
@@ -158,6 +161,7 @@ impl hs::State for ExpectClientKX {
             Ok(Box::new(ExpectCertificateVerify {
                 secrets,
                 handshake: self.handshake,
+                using_ems: self.using_ems,
                 client_cert,
                 send_ticket: self.send_ticket,
             }))
@@ -165,6 +169,7 @@ impl hs::State for ExpectClientKX {
             Ok(Box::new(ExpectCCS {
                 secrets,
                 handshake: self.handshake,
+                using_ems: self.using_ems,
                 resuming: false,
                 send_ticket: self.send_ticket,
             }))
@@ -176,6 +181,7 @@ impl hs::State for ExpectClientKX {
 pub struct ExpectCertificateVerify {
     secrets: SessionSecrets,
     handshake: HandshakeDetails,
+    using_ems: bool,
     client_cert: ClientCertDetails,
     send_ticket: bool,
 }
@@ -185,6 +191,7 @@ impl ExpectCertificateVerify {
         Box::new(ExpectCCS {
             secrets: self.secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             resuming: false,
             send_ticket: self.send_ticket,
         })
@@ -234,6 +241,7 @@ impl hs::State for ExpectCertificateVerify {
 pub struct ExpectCCS {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub using_ems: bool,
     pub resuming: bool,
     pub send_ticket: bool,
 }
@@ -243,6 +251,7 @@ impl ExpectCCS {
         Box::new(ExpectFinished {
             secrets: self.secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             resuming: self.resuming,
             send_ticket: self.send_ticket,
         })
@@ -267,7 +276,7 @@ impl hs::State for ExpectCCS {
 // --- Process client's Finished ---
 fn get_server_session_value_tls12(
     secrets: &SessionSecrets,
-    handshake: &HandshakeDetails,
+    using_ems: bool,
     sess: &ServerSessionImpl,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
@@ -283,7 +292,7 @@ fn get_server_session_value_tls12(
         sess.resumption_data.clone(),
     );
 
-    if handshake.using_ems {
+    if using_ems {
         v.set_extended_ms_used();
     }
 
@@ -293,11 +302,12 @@ fn get_server_session_value_tls12(
 pub fn emit_ticket(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
+    using_ems: bool,
     sess: &mut ServerSessionImpl,
 ) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
-    let plain = get_server_session_value_tls12(secrets, handshake, sess).get_encoding();
+    let plain = get_server_session_value_tls12(secrets, using_ems, sess).get_encoding();
     let ticket = sess
         .config
         .ticketer
@@ -356,6 +366,7 @@ pub fn emit_finished(
 pub struct ExpectFinished {
     secrets: SessionSecrets,
     handshake: HandshakeDetails,
+    using_ems: bool,
     resuming: bool,
     send_ticket: bool,
 }
@@ -396,7 +407,7 @@ impl hs::State for ExpectFinished {
 
         // Save session, perhaps
         if !self.resuming && !self.handshake.session_id.is_empty() {
-            let value = get_server_session_value_tls12(&self.secrets, &self.handshake, sess);
+            let value = get_server_session_value_tls12(&self.secrets, self.using_ems, sess);
 
             let worked = sess.config.session_storage.put(
                 self.handshake.session_id.get_encoding(),
@@ -415,7 +426,7 @@ impl hs::State for ExpectFinished {
             .add_message(&m);
         if !self.resuming {
             if self.send_ticket {
-                emit_ticket(&self.secrets, &mut self.handshake, sess);
+                emit_ticket(&self.secrets, &mut self.handshake, self.using_ems, sess);
             }
             emit_ccs(sess);
             sess.common

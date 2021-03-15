@@ -75,7 +75,7 @@ pub fn decode_error(sess: &mut ServerSessionImpl, why: &str) -> TlsError {
 
 pub fn can_resume(
     sess: &ServerSessionImpl,
-    handshake: &HandshakeDetails,
+    using_ems: bool,
     resumedata: persist::ServerSessionValue,
 ) -> Option<persist::ServerSessionValue> {
     // The RFCs underspecify what happens if we try to resume to
@@ -87,8 +87,8 @@ pub fn can_resume(
     // establish a new session."
 
     if resumedata.cipher_suite == sess.common.get_suite_assert().suite
-        && (resumedata.extended_ms == handshake.using_ems
-            || (resumedata.extended_ms && !handshake.using_ems))
+        && (resumedata.extended_ms == using_ems
+            || (resumedata.extended_ms && !using_ems))
         && same_dns_name_or_both_none(resumedata.sni.as_ref(), sess.sni.as_ref())
     {
         return Some(resumedata);
@@ -273,7 +273,7 @@ impl ExtensionProcessing {
         &mut self,
         sess: &ServerSessionImpl,
         hello: &ClientHelloPayload,
-        handshake: &HandshakeDetails,
+        using_ems: bool,
     ) {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
@@ -303,7 +303,7 @@ impl ExtensionProcessing {
         }
 
         // Confirm use of EMS if offered.
-        if handshake.using_ems {
+        if using_ems {
             self.exts
                 .push(ServerExtension::ExtendedMasterSecretAck);
         }
@@ -312,6 +312,7 @@ impl ExtensionProcessing {
 
 pub struct ExpectClientHello {
     pub handshake: HandshakeDetails,
+    pub using_ems: bool,
     pub done_retry: bool,
     pub send_ticket: bool,
 }
@@ -323,6 +324,7 @@ impl ExpectClientHello {
     ) -> ExpectClientHello {
         let mut ech = ExpectClientHello {
             handshake: HandshakeDetails::new(extra_exts),
+            using_ems: false,
             done_retry: false,
             send_ticket: false,
         };
@@ -343,6 +345,7 @@ impl ExpectClientHello {
         Box::new(tls12::ExpectCCS {
             secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             resuming: true,
             send_ticket: self.send_ticket,
         })
@@ -368,6 +371,7 @@ impl ExpectClientHello {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             randoms,
+            using_ems: self.using_ems,
             server_kx: ServerKXDetails::new(kx),
             send_ticket: self.send_ticket,
         })
@@ -381,6 +385,7 @@ impl ExpectClientHello {
         Box::new(tls12::ExpectClientKX {
             handshake: self.handshake,
             randoms,
+            using_ems: self.using_ems,
             server_kx: ServerKXDetails::new(kx),
             client_cert: None,
             send_ticket: self.send_ticket,
@@ -397,7 +402,7 @@ impl ExpectClientHello {
     ) -> Result<(), TlsError> {
         let mut ep = ExtensionProcessing::new();
         ep.process_common(sess, server_key, hello, resumedata, &self.handshake)?;
-        ep.process_tls12(sess, hello, &self.handshake);
+        ep.process_tls12(sess, hello, self.using_ems);
 
         self.send_ticket = ep.send_ticket;
 
@@ -590,7 +595,7 @@ impl ExpectClientHello {
     ) -> NextStateOrError {
         debug!("Resuming session");
 
-        if resumedata.extended_ms && !self.handshake.using_ems {
+        if resumedata.extended_ms && !self.using_ems {
             return Err(illegal_param(sess, "refusing to resume without ems"));
         }
 
@@ -609,7 +614,7 @@ impl ExpectClientHello {
         sess.client_cert_chain = resumedata.client_cert_chain;
 
         if self.send_ticket {
-            tls12::emit_ticket(&secrets, &mut self.handshake, sess);
+            tls12::emit_ticket(&secrets, &mut self.handshake, self.using_ems, sess);
         }
         tls12::emit_ccs(sess);
         sess.common
@@ -817,7 +822,7 @@ impl State for ExpectClientHello {
             .add_message(&m);
 
         if client_hello.ems_support_offered() {
-            self.handshake.using_ems = true;
+            self.using_ems = true;
         }
 
         let groups_ext = client_hello
@@ -867,7 +872,7 @@ impl State for ExpectClientHello {
                     .ticketer
                     .decrypt(&ticket.0)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
-                    .and_then(|resumedata| can_resume(sess, &self.handshake, resumedata))
+                    .and_then(|resumedata| can_resume(sess, self.using_ems, resumedata))
                 {
                     return self.start_resumption(
                         sess,
@@ -899,7 +904,7 @@ impl State for ExpectClientHello {
                 .session_storage
                 .get(&client_hello.session_id.get_encoding())
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                .and_then(|resumedata| can_resume(sess, &self.handshake, resumedata))
+                .and_then(|resumedata| can_resume(sess, self.using_ems, resumedata))
             {
                 return self.start_resumption(
                     sess,

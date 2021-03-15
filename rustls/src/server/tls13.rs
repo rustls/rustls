@@ -84,6 +84,7 @@ impl CompleteClientHelloHandling {
     fn into_expect_retried_client_hello(self) -> hs::NextState {
         Box::new(hs::ExpectClientHello {
             handshake: self.handshake,
+            using_ems: false,
             done_retry: true,
             send_ticket: self.send_ticket,
         })
@@ -617,7 +618,7 @@ impl CompleteClientHelloHandling {
 
             for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                 let resume = match self.attempt_tls13_ticket_decryption(sess, &psk_id.identity.0)
-                    .and_then(|resumedata| hs::can_resume(sess, &self.handshake, resumedata))
+                    .and_then(|resumedata| hs::can_resume(sess, false, resumedata))
                 {
                     Some(resume) => resume,
                     None => continue,
