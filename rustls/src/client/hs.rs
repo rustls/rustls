@@ -204,7 +204,6 @@ struct ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest {
     next: ExpectServerHello,
-    using_ems: bool,
     extra_exts: Vec<ClientExtension>,
 }
 
@@ -434,7 +433,7 @@ fn emit_client_hello_for_retry(
     };
 
     Ok(if support_tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest { next, using_ems, extra_exts })
+        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
     })
@@ -901,7 +900,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             sess,
             self.next.handshake,
             self.next.randoms,
-            self.using_ems,
+            self.next.using_ems,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
