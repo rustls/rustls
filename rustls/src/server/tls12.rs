@@ -51,7 +51,7 @@ mod client_hello {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             conn: &mut ServerConnection,
-            server_key: &sign::CertifiedKey,
+            server_key: sign::ActiveCertifiedKey,
             chm: &Message,
             client_hello: &ClientHelloPayload,
             sigschemes_ext: Vec<SignatureScheme>,

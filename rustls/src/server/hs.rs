@@ -138,7 +138,7 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub fn process_common(
+    pub(crate) fn process_common(
         &mut self,
         conn: &mut ServerConnection,
         #[allow(unused_variables)] // #[cfg(feature = "quic")] only
@@ -462,13 +462,14 @@ impl State for ExpectClientHello {
                 conn.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("no server certificate chain resolved".to_string())
-            })?
+            })?;
+            sign::ActiveCertifiedKey::from_certified_key(certkey)
         };
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
         let suitable_suites =
-            suites::reduce_given_sigalg(&conn.config.cipher_suites, certkey.key.algorithm());
+            suites::reduce_given_sigalg(&conn.config.cipher_suites, certkey.get_key().algorithm());
 
         // And version
         let suitable_suites = suites::reduce_given_version(&suitable_suites, version);
@@ -518,7 +519,7 @@ impl State for ExpectClientHello {
                 send_ticket: self.send_ticket,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(suite, conn, &certkey, &m)
+            .handle_client_hello(suite, conn, certkey, &m)
         } else {
             tls12::CompleteClientHelloHandling {
                 handshake: self.handshake,
@@ -530,7 +531,7 @@ impl State for ExpectClientHello {
             }
             .handle_client_hello(
                 conn,
-                &certkey,
+                certkey,
                 &m,
                 client_hello,
                 sigschemes_ext,

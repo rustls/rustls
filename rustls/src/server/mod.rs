@@ -99,7 +99,7 @@ pub trait ResolvesServerCert: Send + Sync {
     /// ClientHello information.
     ///
     /// Return `None` to abort the handshake.
-    fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey>;
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>>;
 }
 
 /// A struct representing the received Client Hello

@@ -85,13 +85,13 @@ impl server::ProducesTickets for NeverProducesTickets {
 pub struct FailResolveChain {}
 
 impl server::ResolvesServerCert for FailResolveChain {
-    fn resolve(&self, _client_hello: ClientHello) -> Option<sign::CertifiedKey> {
+    fn resolve(&self, _client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
         None
     }
 }
 
 /// Something which always resolves to the same cert chain.
-pub struct AlwaysResolvesChain(sign::CertifiedKey);
+pub struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
@@ -102,7 +102,9 @@ impl AlwaysResolvesChain {
     ) -> Result<AlwaysResolvesChain, Error> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
-        Ok(AlwaysResolvesChain(sign::CertifiedKey::new(chain, key)))
+        Ok(AlwaysResolvesChain(Arc::new(sign::CertifiedKey::new(
+            chain, key,
+        ))))
     }
 
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
@@ -116,26 +118,31 @@ impl AlwaysResolvesChain {
         scts: Vec<u8>,
     ) -> Result<AlwaysResolvesChain, Error> {
         let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
-        if !ocsp.is_empty() {
-            r.0.ocsp = Some(ocsp);
+
+        {
+            let cert = Arc::make_mut(&mut r.0);
+            if !ocsp.is_empty() {
+                cert.ocsp = Some(ocsp);
+            }
+            if !scts.is_empty() {
+                cert.sct_list = Some(scts);
+            }
         }
-        if !scts.is_empty() {
-            r.0.sct_list = Some(scts);
-        }
+
         Ok(r)
     }
 }
 
 impl server::ResolvesServerCert for AlwaysResolvesChain {
-    fn resolve(&self, _client_hello: ClientHello) -> Option<sign::CertifiedKey> {
-        Some(self.0.clone())
+    fn resolve(&self, _client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
     }
 }
 
 /// Something that resolves do different cert chains/keys based
 /// on client-supplied server name (via SNI).
 pub struct ResolvesServerCertUsingSni {
-    by_name: collections::HashMap<String, sign::CertifiedKey>,
+    by_name: collections::HashMap<String, Arc<sign::CertifiedKey>>,
 }
 
 impl ResolvesServerCertUsingSni {
@@ -156,15 +163,18 @@ impl ResolvesServerCertUsingSni {
             .map_err(|_| Error::General("Bad DNS name".into()))?;
 
         ck.cross_check_end_entity_cert(Some(checked_name))?;
-        self.by_name.insert(name.into(), ck);
+        self.by_name
+            .insert(name.into(), Arc::new(ck));
         Ok(())
     }
 }
 
 impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
-    fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
         if let Some(name) = client_hello.server_name() {
-            self.by_name.get(name.into()).cloned()
+            self.by_name
+                .get(name.into())
+                .map(Arc::clone)
         } else {
             // This kind of resolver requires SNI
             None

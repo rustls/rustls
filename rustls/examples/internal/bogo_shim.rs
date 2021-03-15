@@ -251,9 +251,9 @@ struct FixedSignatureSchemeServerCertResolver {
 }
 
 impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: ClientHello) -> Option<rustls::sign::CertifiedKey> {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<rustls::sign::CertifiedKey>> {
         let mut certkey = self.resolver.resolve(client_hello)?;
-        certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
+        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
         });

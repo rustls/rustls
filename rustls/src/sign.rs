@@ -73,6 +73,11 @@ impl CertifiedKey {
         mem::take(&mut self.cert)
     }
 
+    /// Return true if there's an OCSP response.
+    pub fn has_ocsp(&self) -> bool {
+        self.ocsp.is_some()
+    }
+
     /// Check the certificate chain for validity:
     /// - it should be non-empty list
     /// - the first certificate should be parsable as a x509v3,
@@ -121,6 +126,59 @@ impl CertifiedKey {
         }
 
         Ok(())
+    }
+}
+
+/// ActiveCertifiedKey wraps CertifiedKey and prevents `ocsp` and `sct_list` from being
+/// consumed more than once.
+pub(crate) struct ActiveCertifiedKey {
+    key: Arc<CertifiedKey>,
+    ocsp_taken: bool,
+    sct_list_taken: bool,
+}
+
+impl ActiveCertifiedKey {
+    pub fn from_certified_key(key: Arc<CertifiedKey>) -> Self {
+        ActiveCertifiedKey { 
+            key,
+            ocsp_taken: false,
+            sct_list_taken: false,
+        }
+    }
+
+    #[inline]
+    pub fn has_ocsp(&self) -> bool {
+        !self.ocsp_taken && self.key.has_ocsp()
+    }
+
+    /// Get the certificate chain
+    #[inline]
+    pub fn get_cert(&self) -> &[key::Certificate] {
+        &self.key.cert
+    }
+
+    /// Get the signing key
+    #[inline]
+    pub fn get_key(&self) -> &dyn SigningKey {
+        &*self.key.key
+    }
+
+    #[inline]
+    pub fn take_ocsp(&mut self) -> Option<&[u8]> {
+        if std::mem::replace(&mut self.ocsp_taken, true) {
+            None
+        } else {
+            self.key.ocsp.as_deref()
+        }
+    }
+
+    #[inline]
+    pub fn take_sct_list(&mut self) -> Option<&[u8]> {
+        if std::mem::replace(&mut self.sct_list_taken, true) {
+            None
+        } else {
+            self.key.sct_list.as_deref()
+        }
     }
 }
 

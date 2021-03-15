@@ -113,7 +113,7 @@ mod client_hello {
             mut self,
             suite: &'static SupportedCipherSuite,
             conn: &mut ServerConnection,
-            server_key: &sign::CertifiedKey,
+            server_key: sign::ActiveCertifiedKey,
             chm: &Message,
         ) -> hs::NextStateOrError {
             let client_hello = require_handshake_msg!(
