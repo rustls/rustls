@@ -30,6 +30,7 @@ use std::mem;
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
+    pub using_ems: bool,
     pub suite: &'static SupportedCipherSuite,
     pub may_send_cert_status: bool,
     pub must_issue_new_ticket: bool,
@@ -41,6 +42,7 @@ impl ExpectCertificate {
         Box::new(ExpectCertificateStatusOrServerKX {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert_sct_list: self.server_cert_sct_list,
             server_cert_chain,
@@ -55,6 +57,7 @@ impl ExpectCertificate {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -88,6 +91,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     suite: &'static SupportedCipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
@@ -102,6 +106,7 @@ impl ExpectCertificateStatus {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -136,6 +141,7 @@ impl hs::State for ExpectCertificateStatus {
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     suite: &'static SupportedCipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
@@ -149,6 +155,7 @@ impl ExpectCertificateStatusOrServerKX {
         Box::new(ExpectServerKX {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
@@ -159,6 +166,7 @@ impl ExpectCertificateStatusOrServerKX {
         Box::new(ExpectCertificateStatus {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert_sct_list: self.server_cert_sct_list,
             server_cert_chain: self.server_cert_chain,
@@ -190,6 +198,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
 struct ExpectServerKX {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
@@ -200,6 +209,7 @@ impl ExpectServerKX {
         Box::new(ExpectServerDoneOrCertReq {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: skx,
@@ -366,6 +376,7 @@ fn emit_finished(
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -377,6 +388,7 @@ impl ExpectCertificateRequest {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -441,6 +453,7 @@ impl hs::State for ExpectCertificateRequest {
 struct ExpectServerDoneOrCertReq {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -452,6 +465,7 @@ impl ExpectServerDoneOrCertReq {
         Box::new(ExpectCertificateRequest {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -463,6 +477,7 @@ impl ExpectServerDoneOrCertReq {
         Box::new(ExpectServerDone {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx: self.server_kx,
@@ -500,6 +515,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 struct ExpectServerDone {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKXDetails,
@@ -517,6 +533,7 @@ impl ExpectServerDone {
         Box::new(ExpectNewTicket {
             secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             resuming: false,
             cert_verified: certv,
             sig_verified: sigv,
@@ -532,6 +549,7 @@ impl ExpectServerDone {
         Box::new(ExpectCCS {
             secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             ticket: ReceivedTicketDetails::new(),
             resuming: false,
             cert_verified: certv,
@@ -642,7 +660,7 @@ impl hs::State for ExpectServerDone {
         emit_ccs(sess);
 
         // 5e. Now commit secrets.
-        let secrets = if st.handshake.using_ems {
+        let secrets = if st.using_ems {
             SessionSecrets::new_ems(
                 &st.randoms,
                 &handshake_hash,
@@ -678,6 +696,7 @@ impl hs::State for ExpectServerDone {
 pub struct ExpectCCS {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub using_ems: bool,
     pub ticket: ReceivedTicketDetails,
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
@@ -689,6 +708,7 @@ impl ExpectCCS {
         Box::new(ExpectFinished {
             secrets: self.secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             ticket: self.ticket,
             resuming: self.resuming,
             cert_verified: self.cert_verified,
@@ -716,6 +736,7 @@ impl hs::State for ExpectCCS {
 pub struct ExpectNewTicket {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub using_ems: bool,
     pub resuming: bool,
     pub cert_verified: verify::ServerCertVerified,
     pub sig_verified: verify::HandshakeSignatureValid,
@@ -726,6 +747,7 @@ impl ExpectNewTicket {
         Box::new(ExpectCCS {
             secrets: self.secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             ticket,
             resuming: self.resuming,
             cert_verified: self.cert_verified,
@@ -758,6 +780,7 @@ impl hs::State for ExpectNewTicket {
 fn save_session(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
+    using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
     sess: &mut ClientSessionImpl,
 ) {
@@ -788,7 +811,7 @@ fn save_session(
         &sess.server_cert_chain,
     );
     value.set_times(ticketer::timebase(), recvd_ticket.new_ticket_lifetime, 0);
-    if handshake.using_ems {
+    if using_ems {
         value.set_extended_ms_used();
     }
 
@@ -806,6 +829,7 @@ fn save_session(
 
 struct ExpectFinished {
     handshake: HandshakeDetails,
+    using_ems: bool,
     ticket: ReceivedTicketDetails,
     secrets: SessionSecrets,
     resuming: bool,
@@ -852,7 +876,7 @@ impl hs::State for ExpectFinished {
         // Hash this message too.
         st.handshake.transcript.add_message(&m);
 
-        save_session(&st.secrets, &mut st.handshake, &mut st.ticket, sess);
+        save_session(&st.secrets, &mut st.handshake, st.using_ems, &mut st.ticket, sess);
 
         if st.resuming {
             emit_ccs(sess);

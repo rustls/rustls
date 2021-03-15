@@ -63,7 +63,6 @@ impl ServerKXDetails {
 pub struct HandshakeDetails {
     pub resuming_session: Option<persist::ClientSessionValue>,
     pub transcript: hash_hs::HandshakeHash,
-    pub using_ems: bool,
     pub session_id: SessionID,
     pub dns_name: webpki::DNSName,
 }
@@ -73,7 +72,6 @@ impl HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
             transcript: hash_hs::HandshakeHash::new(),
-            using_ems: false,
             session_id: SessionID::empty(),
             dns_name: host_name,
         }
