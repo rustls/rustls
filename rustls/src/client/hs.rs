@@ -176,6 +176,7 @@ impl InitialState {
             sess,
             self.handshake,
             randoms,
+            false,
             sent_tls13_fake_ccs,
             hello_details,
             None,
@@ -195,6 +196,7 @@ pub fn start_handshake(
 struct ExpectServerHello {
     handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     sent_tls13_fake_ccs: bool,
@@ -219,6 +221,7 @@ fn emit_client_hello_for_retry(
     sess: &mut ClientSessionImpl,
     mut handshake: HandshakeDetails,
     randoms: SessionRandoms,
+    using_ems: bool,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     retryreq: Option<&HelloRetryRequest>,
@@ -423,6 +426,7 @@ fn emit_client_hello_for_retry(
     let next = ExpectServerHello {
         handshake,
         randoms,
+        using_ems,
         hello,
         early_key_schedule,
         sent_tls13_fake_ccs,
@@ -487,6 +491,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectNewTicket {
             secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             resuming: true,
             cert_verified: certv,
             sig_verified: sigv,
@@ -502,6 +507,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectCCS {
             secrets,
             handshake: self.handshake,
+            using_ems: self.using_ems,
             ticket: ReceivedTicketDetails::new(),
             resuming: true,
             cert_verified: certv,
@@ -520,6 +526,7 @@ impl ExpectServerHello {
         Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             randoms: self.randoms,
+            using_ems: self.using_ems,
             suite,
             may_send_cert_status,
             must_issue_new_ticket,
@@ -689,9 +696,7 @@ impl State for ExpectServerHello {
         }
 
         // Doing EMS?
-        if server_hello.ems_support_acked() {
-            self.handshake.using_ems = true;
-        }
+        self.using_ems = server_hello.ems_support_acked();
 
         // Might the server send a ticket?
         let must_issue_new_ticket = if server_hello
@@ -739,7 +744,7 @@ impl State for ExpectServerHello {
                 }
 
                 // And about EMS support?
-                if resuming.extended_ms != self.handshake.using_ems {
+                if resuming.extended_ms != self.using_ems {
                     let error_msg = "server varied ems support over resume".to_string();
                     return Err(TlsError::PeerMisbehavedError(error_msg));
                 }
@@ -895,6 +900,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             sess,
             self.next.handshake,
             self.next.randoms,
+            self.next.using_ems,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(&hrr),
