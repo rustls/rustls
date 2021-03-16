@@ -106,10 +106,8 @@ impl HandshakeHash {
                 let mut ctx = digest::Context::new(hash);
                 ctx.update(&self.buffer);
                 ctx
-            },
-            Some(ctx) => {
-                ctx.clone()
             }
+            Some(ctx) => ctx.clone(),
         };
 
         ctx.update(extra);
@@ -132,8 +130,7 @@ impl HandshakeHash {
 
     /// Get the current hash value.
     pub fn get_current_hash(&self) -> digest::Digest {
-        self
-            .ctx
+        self.ctx
             .as_ref()
             .unwrap()
             .clone()

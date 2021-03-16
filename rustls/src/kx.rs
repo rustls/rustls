@@ -1,5 +1,5 @@
-use crate::msgs::enums::NamedGroup;
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
 use ring;
@@ -21,11 +21,13 @@ pub struct KeyExchange {
 }
 
 impl KeyExchange {
-
     /// From a TLS1.2 client's point of view, start a key exchange: `kx_params` is the server's ServerECDHParams
     /// saying which group to use and the server's public key.  `supported` is the list of
     /// supported key exchange groups.
-    pub fn client_ecdhe(kx_params: &[u8], supported: &[&'static SupportedKxGroup]) -> Option<KeyExchangeResult> {
+    pub fn client_ecdhe(
+        kx_params: &[u8],
+        supported: &[&'static SupportedKxGroup],
+    ) -> Option<KeyExchangeResult> {
         let mut rd = Reader::init(kx_params);
         let ecdh_params = ServerECDHParams::read(&mut rd)?;
 
@@ -35,7 +37,10 @@ impl KeyExchange {
     }
 
     /// Choose a SupportedKxGroup by name, from a list of supported groups.
-    pub fn choose(name: NamedGroup, supported: &[&'static SupportedKxGroup]) -> Option<&'static SupportedKxGroup> {
+    pub fn choose(
+        name: NamedGroup,
+        supported: &[&'static SupportedKxGroup],
+    ) -> Option<&'static SupportedKxGroup> {
         supported
             .iter()
             .find(|skxg| skxg.name == name)
@@ -47,7 +52,8 @@ impl KeyExchange {
     /// This generates an ephemeral key pair and stores it in the returned KeyExchange object.
     pub fn start(skxg: &'static SupportedKxGroup) -> Option<KeyExchange> {
         let rng = ring::rand::SystemRandom::new();
-        let ours = ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).unwrap();
+        let ours =
+            ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).unwrap();
 
         let pubkey = ours.compute_public_key().unwrap();
 
@@ -90,7 +96,8 @@ impl KeyExchange {
                 pubkey,
                 shared_secret: Vec::from(v),
             })
-        }).ok()
+        })
+        .ok()
     }
 }
 
@@ -126,9 +133,4 @@ pub static SECP384R1: SupportedKxGroup = SupportedKxGroup {
 };
 
 /// A list of all the key exchange groups supported by rustls.
-pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [
-    &X25519,
-    &SECP256R1,
-    &SECP384R1,
-];
-
+pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP384R1];

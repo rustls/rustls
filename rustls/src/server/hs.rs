@@ -87,8 +87,7 @@ pub fn can_resume(
     // establish a new session."
 
     if resumedata.cipher_suite == sess.common.get_suite_assert().suite
-        && (resumedata.extended_ms == using_ems
-            || (resumedata.extended_ms && !using_ems))
+        && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
         && same_dns_name_or_both_none(resumedata.sni.as_ref(), sess.sni.as_ref())
     {
         return Some(resumedata);

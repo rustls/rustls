@@ -5,12 +5,12 @@ use rustls;
 use rustls_pemfile;
 
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
-use rustls::{ProtocolVersion, DEFAULT_CIPHERSUITES};
 use rustls::Session;
 use rustls::TlsError;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
 use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientSession};
+use rustls::{ProtocolVersion, DEFAULT_CIPHERSUITES};
 use rustls::{ServerConfig, ServerSession};
 
 #[cfg(feature = "dangerous_configuration")]
@@ -179,28 +179,37 @@ impl KeyType {
     }
 
     pub fn get_chain(&self) -> Vec<Certificate> {
-        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain"))).unwrap()
+        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain")))
+            .unwrap()
             .iter()
             .map(|v| Certificate(v.clone()))
             .collect()
     }
 
     pub fn get_key(&self) -> PrivateKey {
-        PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key"))).unwrap()[0]
-            .clone())
+        PrivateKey(
+            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key")))
+                .unwrap()[0]
+                .clone(),
+        )
     }
 
     fn get_client_chain(&self) -> Vec<Certificate> {
-        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain"))).unwrap()
+        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
+            .unwrap()
             .iter()
             .map(|v| Certificate(v.clone()))
             .collect()
     }
 
     fn get_client_key(&self) -> PrivateKey {
-        PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("client.key"))).unwrap()
-            [0]
-        .clone())
+        PrivateKey(
+            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+                self.bytes_for("client.key"),
+            ))
+            .unwrap()[0]
+                .clone(),
+        )
     }
 }
 
@@ -236,8 +245,7 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
-    root_store
-        .add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
     ClientConfig::new(root_store, &[], DEFAULT_CIPHERSUITES)
 }
 

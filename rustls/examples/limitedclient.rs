@@ -14,12 +14,11 @@ use rustls::Session;
 
 fn main() {
     let mut root_store = rustls::RootCertStore::empty();
-    root_store
-        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     let config = rustls::ClientConfig::new(
         root_store,
         &[],
-        &[&rustls::ciphersuite::TLS13_CHACHA20_POLY1305_SHA256]
+        &[&rustls::ciphersuite::TLS13_CHACHA20_POLY1305_SHA256],
     );
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("google.com").unwrap();

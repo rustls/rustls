@@ -7,7 +7,7 @@
 use webpki;
 use webpki_roots;
 
-use rustls::{ClientConfig, ClientSession, Session, TlsError, RootCertStore, DEFAULT_CIPHERSUITES};
+use rustls::{ClientConfig, ClientSession, RootCertStore, Session, TlsError, DEFAULT_CIPHERSUITES};
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -25,8 +25,7 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Er
     let mut root_store = RootCertStore::empty();
     match args.len() {
         3 => {
-            root_store
-                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+            root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
         }
         4 => {
             let f = File::open(&args[3])?;
@@ -37,11 +36,7 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Er
             return Err(From::from("Incorrect number of arguments"));
         }
     };
-    let config = ClientConfig::new(
-        root_store,
-        &[],
-        DEFAULT_CIPHERSUITES
-    );
+    let config = ClientConfig::new(root_store, &[], DEFAULT_CIPHERSUITES);
 
     let port = args[2].parse()?;
     Ok((args[1].clone(), port, config))

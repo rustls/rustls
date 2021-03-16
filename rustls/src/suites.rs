@@ -1,6 +1,6 @@
 use crate::cipher;
-use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
 use crate::msgs::enums::ProtocolVersion;
+use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
 use crate::msgs::handshake::DecomposedSignatureScheme;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 
@@ -88,13 +88,11 @@ impl fmt::Debug for SupportedCipherSuite {
 impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
     pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
-        self.hmac_algorithm()
-            .digest_algorithm()
+        self.hmac_algorithm().digest_algorithm()
     }
 
     pub(crate) fn hmac_algorithm(&self) -> ring::hmac::Algorithm {
-        self.hkdf_algorithm
-            .hmac_algorithm()
+        self.hkdf_algorithm.hmac_algorithm()
     }
 
 
@@ -328,7 +326,6 @@ pub static ALL_CIPHERSUITES: &[&SupportedCipherSuite] = &[
     &TLS13_AES_256_GCM_SHA384,
     &TLS13_AES_128_GCM_SHA256,
     &TLS13_CHACHA20_POLY1305_SHA256,
-
     // TLS1.2 suites
     &TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     &TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,

@@ -3,8 +3,8 @@ use super::enums::*;
 use super::handshake::*;
 use super::persist::*;
 use crate::key::Certificate;
-use webpki::DNSNameRef;
 use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+use webpki::DNSNameRef;
 
 #[test]
 fn clientsessionkey_is_debug() {

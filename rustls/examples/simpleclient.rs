@@ -16,16 +16,12 @@ use rustls;
 use webpki;
 use webpki_roots;
 
-use rustls::{Session, RootCertStore};
+use rustls::{RootCertStore, Session};
 
 fn main() {
     let mut root_store = RootCertStore::empty();
-    root_store
-        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-    let config = rustls::ClientConfig::new(
-        root_store,
-        &[],
-        rustls::DEFAULT_CIPHERSUITES);
+    root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let config = rustls::ClientConfig::new(root_store, &[], rustls::DEFAULT_CIPHERSUITES);
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("google.com").unwrap();
     let mut sess = rustls::ClientSession::new(&Arc::new(config), dns_name).unwrap();

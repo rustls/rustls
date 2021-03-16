@@ -1,7 +1,6 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TlsError;
 use crate::hash_hs::HandshakeHash;
@@ -28,9 +27,10 @@ use crate::rand;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::ticketer;
 use crate::verify;
+use crate::{cipher, SupportedCipherSuite};
 
-use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::common::HandshakeDetails;
+use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
 
 use webpki;
@@ -90,8 +90,7 @@ fn find_session(
         })?;
 
     let mut reader = Reader::init(&value[..]);
-    let result = persist::ClientSessionValue::read(
-        &mut reader, &sess.config.ciphersuites);
+    let result = persist::ClientSessionValue::read(&mut reader, &sess.config.ciphersuites);
     if let Some(result) = result {
         if result.has_expired(ticketer::timebase()) {
             None
@@ -183,7 +182,8 @@ impl InitialState {
             hello_details,
             None,
             self.extra_exts,
-            may_send_sct_list)
+            may_send_sct_list,
+        )
     }
 }
 
@@ -210,13 +210,10 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: Vec<ClientExtension>,
 }
 
-pub fn compatible_suite(
-    sess: &ClientSessionImpl,
-    resuming_suite: &SupportedCipherSuite,
-) -> bool {
+pub fn compatible_suite(sess: &ClientSessionImpl, resuming_suite: &SupportedCipherSuite) -> bool {
     match sess.common.get_suite() {
         Some(suite) => suite.can_resume_to(&resuming_suite),
-        None => true
+        None => true,
     }
 }
 
@@ -234,15 +231,9 @@ fn emit_client_hello_for_retry(
 ) -> NextStateOrError {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
-        (
-            resuming.ticket.0.clone(),
-            resuming.version,
-        )
+        (resuming.ticket.0.clone(), resuming.version)
     } else {
-        (
-            Vec::new(),
-            ProtocolVersion::Unknown(0),
-        )
+        (Vec::new(), ProtocolVersion::Unknown(0))
     };
 
     let support_tls12 = sess
@@ -272,10 +263,11 @@ fn emit_client_hello_for_retry(
         ECPointFormatList::supported(),
     ));
     exts.push(ClientExtension::NamedGroups(
-        sess.config.kx_groups
+        sess.config
+            .kx_groups
             .iter()
             .map(|skxg| skxg.name)
-            .collect()
+            .collect(),
     ));
     exts.push(ClientExtension::SignatureAlgorithms(
         sess.config
@@ -357,7 +349,11 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if fill_in_binder {
-        Some(tls13::fill_in_psk_binder(&mut handshake, &mut transcript, &mut chp))
+        Some(tls13::fill_in_psk_binder(
+            &mut handshake,
+            &mut transcript,
+            &mut chp,
+        ))
     } else {
         None
     };
@@ -398,8 +394,7 @@ fn emit_client_hello_for_retry(
             .map(|resume| resume.suite)
             .unwrap();
 
-        let client_hello_hash = transcript
-            .get_hash_given(resuming_suite.get_hash(), &[]);
+        let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
         let client_early_traffic_secret = early_key_schedule
             .as_ref()
             .unwrap()
@@ -453,9 +448,10 @@ pub fn process_alpn_protocol(
         if !sess
             .config
             .alpn_protocols
-            .contains(alpn_protocol) {
-                return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
-            }
+            .contains(alpn_protocol)
+        {
+            return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
+        }
     }
 
     debug!(
@@ -490,9 +486,7 @@ impl State for ExpectServerHello {
         };
 
         let version = match server_version {
-            TLSv1_3 if tls13_supported => {
-                TLSv1_3
-            },
+            TLSv1_3 if tls13_supported => TLSv1_3,
             TLSv1_2 if sess.config.supports_version(TLSv1_2) => {
                 if sess.early_data.is_enabled() && sess.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
@@ -566,12 +560,12 @@ impl State for ExpectServerHello {
             }
         }
 
-        let suite = sess.find_cipher_suite(server_hello.cipher_suite)
+        let suite = sess
+            .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
-                TlsError::PeerMisbehavedError(
-                    "server chose non-offered ciphersuite".to_string())
+                TlsError::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
             })?;
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
@@ -579,8 +573,7 @@ impl State for ExpectServerHello {
             return Err(illegal_param(sess, "server varied selected ciphersuite"));
         }
 
-        if !suite.usable_for_version(version)
-        {
+        if !suite.usable_for_version(version) {
             return Err(illegal_param(
                 sess,
                 "server chose unusable ciphersuite for version",
@@ -588,7 +581,8 @@ impl State for ExpectServerHello {
         }
 
         // Start our handshake hash, and input the server-hello.
-        self.transcript.start_hash(suite.get_hash());
+        self.transcript
+            .start_hash(suite.get_hash());
         self.transcript.add_message(&m);
 
         // For TLS1.3, start message encryption using
@@ -661,8 +655,7 @@ impl State for ExpectServerHello {
         }
 
         // Save any sent SCTs for verification against the certificate.
-        let server_cert_sct_list =
-            if let Some(sct_list) = server_hello.get_sct_list() {
+        let server_cert_sct_list = if let Some(sct_list) = server_hello.get_sct_list() {
             debug!("Server sent {:?} SCTs", sct_list.len());
 
             if sct_list_is_invalid(sct_list) {
@@ -691,11 +684,8 @@ impl State for ExpectServerHello {
                     return Err(TlsError::PeerMisbehavedError(error_msg));
                 }
 
-                let secrets = SessionSecrets::new_resume(
-                    &self.randoms,
-                    suite,
-                    &resuming.master_secret.0,
-                );
+                let secrets =
+                    SessionSecrets::new_resume(&self.randoms, suite, &resuming.master_secret.0);
                 sess.config.key_log.log(
                     "CLIENT_RANDOM",
                     &secrets.randoms.client,
@@ -782,7 +772,13 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks for us to retry on an unsupported group.
         if let Some(group) = req_group {
-            if sess.config.kx_groups.iter().find(|skxg| skxg.name == group).is_none() {
+            if sess
+                .config
+                .kx_groups
+                .iter()
+                .find(|skxg| skxg.name == group)
+                .is_none()
+            {
                 return Err(illegal_param(sess, "server requested hrr with bad group"));
             }
         }
@@ -848,19 +844,18 @@ impl ExpectServerHelloOrHelloRetryRequest {
         self.next
             .transcript
             .start_hash(cs.get_hash());
-        self.next
-            .transcript
-            .rollup_for_hrr();
-        self.next
-            .transcript
-            .add_message(&m);
+        self.next.transcript.rollup_for_hrr();
+        self.next.transcript.add_message(&m);
 
         // Early data is not allowed after HelloRetryrequest
         if sess.early_data.is_enabled() {
             sess.early_data.rejected();
         }
 
-        let may_send_sct_list = self.next.hello.server_may_send_sct_list();
+        let may_send_sct_list = self
+            .next
+            .hello
+            .server_may_send_sct_list();
         emit_client_hello_for_retry(
             sess,
             self.next.handshake,
@@ -871,7 +866,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.hello,
             Some(&hrr),
             self.extra_exts,
-            may_send_sct_list
+            may_send_sct_list,
         )
     }
 }

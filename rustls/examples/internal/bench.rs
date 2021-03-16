@@ -240,11 +240,13 @@ impl KeyType {
     }
 
     fn get_key(&self) -> rustls::PrivateKey {
-        rustls::PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-            fs::File::open(self.path_for("end.key")).unwrap(),
-        ))
-        .unwrap()[0]
-            .clone())
+        rustls::PrivateKey(
+            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+                fs::File::open(self.path_for("end.key")).unwrap(),
+            ))
+            .unwrap()[0]
+                .clone(),
+        )
     }
 
     fn get_client_chain(&self) -> Vec<rustls::Certificate> {
@@ -258,11 +260,13 @@ impl KeyType {
     }
 
     fn get_client_key(&self) -> rustls::PrivateKey {
-        rustls::PrivateKey(rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-            fs::File::open(self.path_for("client.key")).unwrap(),
-        ))
-        .unwrap()[0]
-            .clone())
+        rustls::PrivateKey(
+            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+                fs::File::open(self.path_for("client.key")).unwrap(),
+            ))
+            .unwrap()[0]
+                .clone(),
+        )
     }
 }
 
@@ -312,8 +316,7 @@ fn make_client_config(
     let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
-    root_store
-        .add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
     let mut cfg = ClientConfig::new(root_store, &[], &[params.ciphersuite]);
     cfg.versions.clear();

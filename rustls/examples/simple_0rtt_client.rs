@@ -5,9 +5,9 @@ use std::net::TcpStream;
 
 use env_logger;
 use rustls;
+use rustls::RootCertStore;
 use webpki;
 use webpki_roots;
-use rustls::RootCertStore;
 
 fn start_session(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain_name).unwrap();
@@ -56,13 +56,9 @@ fn main() {
     env_logger::init();
 
     let mut root_store = RootCertStore::empty();
-    root_store
-        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 
-    let mut config = rustls::ClientConfig::new(
-        root_store,
-        &[],
-        rustls::DEFAULT_CIPHERSUITES);
+    let mut config = rustls::ClientConfig::new(root_store, &[], rustls::DEFAULT_CIPHERSUITES);
 
     // Enable early data.
     config.enable_early_data = true;

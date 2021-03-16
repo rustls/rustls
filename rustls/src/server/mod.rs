@@ -1,6 +1,7 @@
 use crate::error::TlsError;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
+use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
@@ -8,7 +9,6 @@ use crate::msgs::message::Message;
 use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
 
 use webpki;
@@ -459,7 +459,8 @@ impl ServerSessionImpl {
             .pop_front()
         {
             let ignore_corrupt_payload = true;
-            let result = self.common
+            let result = self
+                .common
                 .process_msg(msg, ignore_corrupt_payload)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => self.process_new_handshake_messages(),
