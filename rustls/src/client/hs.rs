@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::client::ClientSessionImpl;
+use crate::client::ClientSession;
 use crate::error::TlsError;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::KeyScheduleEarly;
@@ -41,7 +41,7 @@ pub type NextStateOrError = Result<NextState, TlsError>;
 pub trait State {
     /// Each handle() implementation consumes a whole TLS message, and returns
     /// either an error or the next state.
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -52,16 +52,16 @@ pub trait State {
         Err(TlsError::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _sess: &mut ClientSessionImpl) {}
+    fn perhaps_write_key_update(&mut self, _sess: &mut ClientSession) {}
 }
 
-pub fn illegal_param(sess: &mut ClientSessionImpl, why: &str) -> TlsError {
+pub fn illegal_param(sess: &mut ClientSession, why: &str) -> TlsError {
     sess.common
         .send_fatal_alert(AlertDescription::IllegalParameter);
     TlsError::PeerMisbehavedError(why.to_string())
 }
 
-pub fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TlsError> {
+pub fn check_aligned_handshake(sess: &mut ClientSession) -> Result<(), TlsError> {
     if !sess.common.handshake_joiner.is_empty() {
         sess.common
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
@@ -74,7 +74,7 @@ pub fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TlsEr
 }
 
 fn find_session(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     dns_name: webpki::DNSNameRef,
 ) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
@@ -133,7 +133,7 @@ impl InitialState {
         }
     }
 
-    fn emit_initial_client_hello(mut self, sess: &mut ClientSessionImpl) -> NextStateOrError {
+    fn emit_initial_client_hello(mut self, sess: &mut ClientSession) -> NextStateOrError {
         // During retries "the client MUST send the same ClientHello without
         // modification" with only a few exceptions as noted in
         // https://tools.ietf.org/html/rfc8446#section-4.1.2,
@@ -194,7 +194,7 @@ impl InitialState {
 }
 
 pub fn start_handshake(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     host_name: webpki::DNSName,
     extra_exts: Vec<ClientExtension>,
 ) -> NextStateOrError {
@@ -218,7 +218,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: Vec<ClientExtension>,
 }
 
-pub fn compatible_suite(sess: &ClientSessionImpl, resuming_suite: &SupportedCipherSuite) -> bool {
+pub fn compatible_suite(sess: &ClientSession, resuming_suite: &SupportedCipherSuite) -> bool {
     match sess.common.get_suite() {
         Some(suite) => suite.can_resume_to(&resuming_suite),
         None => true,
@@ -226,7 +226,7 @@ pub fn compatible_suite(sess: &ClientSessionImpl, resuming_suite: &SupportedCiph
 }
 
 fn emit_client_hello_for_retry(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     mut handshake: HandshakeDetails,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -453,7 +453,7 @@ fn emit_client_hello_for_retry(
 }
 
 pub fn process_alpn_protocol(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     proto: Option<&[u8]>,
 ) -> Result<(), TlsError> {
     sess.common.alpn_protocol = proto.map(ToOwned::to_owned);
@@ -483,7 +483,7 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl State for ExpectServerHello {
-    fn handle(mut self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> NextStateOrError {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {:#?}", server_hello);
@@ -767,7 +767,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
     fn handle_hello_retry_request(
         mut self,
-        sess: &mut ClientSessionImpl,
+        sess: &mut ClientSession,
         m: Message,
     ) -> NextStateOrError {
         let hrr = require_handshake_msg!(
@@ -896,7 +896,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],
@@ -911,7 +911,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TlsError) -> TlsError {
+pub fn send_cert_error_alert(sess: &mut ClientSession, err: TlsError) -> TlsError {
     match err {
         TlsError::WebPKIError(webpki::Error::BadDER, _) => {
             sess.common

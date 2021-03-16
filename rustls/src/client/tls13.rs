@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::client::ClientSessionImpl;
+use crate::client::ClientSession;
 use crate::error::TlsError;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::{
@@ -58,7 +58,7 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 ];
 
 pub fn validate_server_hello(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), TlsError> {
     for ext in &server_hello.extensions {
@@ -74,7 +74,7 @@ pub fn validate_server_hello(
     Ok(())
 }
 
-fn find_kx_hint(sess: &ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
+fn find_kx_hint(sess: &ClientSession, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
@@ -85,7 +85,7 @@ fn find_kx_hint(sess: &ClientSessionImpl, dns_name: webpki::DNSNameRef) -> Optio
     maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
-fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, group: NamedGroup) {
+fn save_kx_hint(sess: &mut ClientSession, dns_name: webpki::DNSNameRef, group: NamedGroup) {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
 
     sess.config
@@ -94,7 +94,7 @@ fn save_kx_hint(sess: &mut ClientSessionImpl, dns_name: webpki::DNSNameRef, grou
 }
 
 pub fn choose_kx_groups(
-    sess: &ClientSessionImpl,
+    sess: &ClientSession,
     exts: &mut Vec<ClientExtension>,
     hello: &mut ClientHelloDetails,
     dns_name: webpki::DNSNameRef,
@@ -174,7 +174,7 @@ pub fn fill_in_psk_binder(
 
 pub fn start_handshake_traffic(
     suite: &'static SupportedCipherSuite,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     early_key_schedule: Option<KeyScheduleEarly>,
     server_hello: &ServerHelloPayload,
     handshake: &mut HandshakeDetails,
@@ -297,7 +297,7 @@ pub fn start_handshake_traffic(
 }
 
 pub fn prepare_resumption(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     ticket: Vec<u8>,
     handshake: &HandshakeDetails,
     exts: &mut Vec<ClientExtension>,
@@ -341,7 +341,7 @@ pub fn prepare_resumption(
     true
 }
 
-pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSessionImpl) {
+pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSession) {
     if sess.common.is_quic() {
         return;
     }
@@ -359,7 +359,7 @@ pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSessionImp
 }
 
 fn validate_encrypted_extensions(
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     hello: &ClientHelloDetails,
     exts: &EncryptedExtensions,
 ) -> Result<(), TlsError> {
@@ -403,11 +403,7 @@ pub struct ExpectEncryptedExtensions {
 }
 
 impl hs::State for ExpectEncryptedExtensions {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let exts = require_handshake_msg!(
             m,
             HandshakeType::EncryptedExtensions,
@@ -499,11 +495,7 @@ struct ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let cert_chain = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
@@ -570,7 +562,7 @@ struct ExpectCertificateOrCertReq {
 }
 
 impl hs::State for ExpectCertificateOrCertReq {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],
@@ -615,7 +607,7 @@ struct ExpectCertificateVerify {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TlsError) -> TlsError {
+fn send_cert_error_alert(sess: &mut ClientSession, err: TlsError) -> TlsError {
     match err {
         TlsError::WebPKIError(webpki::Error::BadDER, _) => {
             sess.common
@@ -635,11 +627,7 @@ fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TlsError) -> TlsErro
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
             m,
             HandshakeType::CertificateVerify,
@@ -709,11 +697,7 @@ struct ExpectCertificateRequest {
 }
 
 impl hs::State for ExpectCertificateRequest {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -791,7 +775,7 @@ impl hs::State for ExpectCertificateRequest {
 fn emit_certificate_tls13(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) {
     let context = client_auth
         .auth_context
@@ -826,7 +810,7 @@ fn emit_certificate_tls13(
 fn emit_certverify_tls13(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) -> Result<(), TlsError> {
     let signer = match client_auth.signer.take() {
         Some(s) => s,
@@ -859,7 +843,7 @@ fn emit_certverify_tls13(
 fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
     key_schedule: &KeyScheduleTrafficWithClientFinishedPending,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) {
     let handshake_hash = transcript.get_current_hash();
     let verify_data = key_schedule.sign_client_finish(&handshake_hash);
@@ -878,7 +862,7 @@ fn emit_finished_tls13(
     sess.common.send_msg(m, true);
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, sess: &mut ClientSessionImpl) {
+fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, sess: &mut ClientSession) {
     if sess.common.is_quic() {
         return;
     }
@@ -908,7 +892,7 @@ struct ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -1039,7 +1023,7 @@ struct ExpectTraffic {
 impl ExpectTraffic {
     fn handle_new_ticket_tls13(
         &mut self,
-        sess: &mut ClientSessionImpl,
+        sess: &mut ClientSession,
         nst: &NewSessionTicketPayloadTLS13,
     ) -> Result<(), TlsError> {
         let handshake_hash = self.transcript.get_current_hash();
@@ -1104,7 +1088,7 @@ impl ExpectTraffic {
 
     fn handle_key_update(
         &mut self,
-        sess: &mut ClientSessionImpl,
+        sess: &mut ClientSession,
         kur: &KeyUpdateRequest,
     ) -> Result<(), TlsError> {
         #[cfg(feature = "quic")]
@@ -1149,7 +1133,7 @@ impl ExpectTraffic {
 impl hs::State for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
+        sess: &mut ClientSession,
         mut m: Message,
     ) -> hs::NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
@@ -1186,7 +1170,7 @@ impl hs::State for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    fn perhaps_write_key_update(&mut self, sess: &mut ClientSessionImpl) {
+    fn perhaps_write_key_update(&mut self, sess: &mut ClientSession) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
             sess.common
@@ -1208,11 +1192,7 @@ pub struct ExpectQUICTraffic(ExpectTraffic);
 
 #[cfg(feature = "quic")]
 impl hs::State for ExpectQUICTraffic {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let nst = require_handshake_msg!(
             m,
             HandshakeType::NewSessionTicket,
