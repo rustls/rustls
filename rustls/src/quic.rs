@@ -361,7 +361,11 @@ pub trait ServerQuicExt {
     /// Make a new QUIC ServerSession. This differs from `ServerSession::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    fn new_quic(config: &Arc<ServerConfig>, quic_version: Version, params: Vec<u8>) -> ServerSession {
+    fn new_quic(
+        config: &Arc<ServerConfig>,
+        quic_version: Version,
+        params: Vec<u8>,
+    ) -> ServerSession {
         assert!(
             config
                 .versions

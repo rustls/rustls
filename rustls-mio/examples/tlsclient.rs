@@ -22,7 +22,7 @@ use rustls;
 use webpki;
 use webpki_roots;
 
-use rustls::{Session, RootCertStore};
+use rustls::{RootCertStore, Session};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -407,7 +407,8 @@ fn lookup_versions(versions: &[String]) -> Vec<rustls::ProtocolVersion> {
 fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader).unwrap()
+    rustls_pemfile::certs(&mut reader)
+        .unwrap()
         .iter()
         .map(|v| rustls::Certificate(v.clone()))
         .collect()
@@ -426,7 +427,10 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
         }
     }
 
-    panic!("no keys found in {:?} (encrypted keys not supported)", filename);
+    panic!(
+        "no keys found in {:?} (encrypted keys not supported)",
+        filename
+    );
 }
 
 fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile: &str) {
@@ -451,7 +455,7 @@ mod danger {
             _end_entity: &rustls::Certificate,
             _intermediates: &[rustls::Certificate],
             _dns_name: webpki::DNSNameRef<'_>,
-            _scts: &mut dyn Iterator<Item=&[u8]>,
+            _scts: &mut dyn Iterator<Item = &[u8]>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
         ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
@@ -484,11 +488,9 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
 
         let certfile = fs::File::open(&cafile).expect("Cannot open CA file");
         let mut reader = BufReader::new(certfile);
-        root_store
-            .add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
+        root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
     } else {
-        root_store
-            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+        root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     }
 
     let mut config = rustls::ClientConfig::new(root_store, &[], rustls::DEFAULT_CIPHERSUITES);

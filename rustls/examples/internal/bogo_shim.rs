@@ -212,7 +212,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
         _end_entity: &rustls::Certificate,
         _certs: &[rustls::Certificate],
         _hostname: webpki::DNSNameRef<'_>,
-        _scts: &mut dyn Iterator<Item=&[u8]>,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
     ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
@@ -311,7 +311,7 @@ fn lookup_scheme(scheme: u16) -> rustls::SignatureScheme {
 }
 
 fn lookup_kx_group(group: u16) -> &'static rustls::SupportedKxGroup {
-    match group   {
+    match group {
         0x001d => &rustls::kx_group::X25519,
         0x0017 => &rustls::kx_group::SECP256R1,
         0x0018 => &rustls::kx_group::SECP384R1,
@@ -419,10 +419,11 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     let mut cfg = rustls::ClientConfig::new_dangerous(
-        Arc::new(DummyServerAuth{
+        Arc::new(DummyServerAuth {
             send_sct: opts.send_sct,
         }),
-        &rustls::DEFAULT_CIPHERSUITES);
+        &rustls::DEFAULT_CIPHERSUITES,
+    );
     let persist = ClientCacheWithoutKxHints::new();
     cfg.set_persistence(persist);
     cfg.enable_sni = opts.use_sni;
@@ -1055,7 +1056,8 @@ fn main() {
                     dns_name,
                     opts.quic_transport_params.clone(),
                 )
-            }.unwrap();
+            }
+            .unwrap();
             ClientOrServer::Client(c)
         }
     }

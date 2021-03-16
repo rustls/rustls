@@ -1,20 +1,20 @@
 use crate::error::TlsError;
-use crate::{key, RootCertStore};
 use crate::keylog::{KeyLog, NoKeyLog};
+use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::CipherSuite;
+use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType};
-use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
 use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::verify;
+use crate::{key, RootCertStore};
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -148,8 +148,11 @@ impl ClientConfig {
     /// No ALPN protocols will be enabled, and client auth will be supported
     /// by default. The default session persistence provider stores up to 32
     /// items in memory.
-    pub fn new(root_store: RootCertStore, ct_logs: &'static [&'static sct::Log],
-               ciphersuites: &[&'static SupportedCipherSuite]) -> Self {
+    pub fn new(
+        root_store: RootCertStore,
+        ct_logs: &'static [&'static sct::Log],
+        ciphersuites: &[&'static SupportedCipherSuite],
+    ) -> Self {
         let verifier = verify::WebPkiVerifier::new(root_store, ct_logs);
         Self::new_(Arc::new(verifier), ciphersuites)
     }
@@ -167,13 +170,15 @@ impl ClientConfig {
     #[cfg(feature = "dangerous_configuration")]
     pub fn new_dangerous(
         verifier: Arc<dyn verify::ServerCertVerifier>,
-        ciphersuites: &[&'static SupportedCipherSuite]) -> Self
-    {
+        ciphersuites: &[&'static SupportedCipherSuite],
+    ) -> Self {
         Self::new_(verifier, ciphersuites)
     }
 
-    fn new_(verifier: Arc<dyn verify::ServerCertVerifier>,
-            ciphersuites: &[&'static SupportedCipherSuite]) -> Self {
+    fn new_(
+        verifier: Arc<dyn verify::ServerCertVerifier>,
+        ciphersuites: &[&'static SupportedCipherSuite],
+    ) -> Self {
         Self {
             ciphersuites: ciphersuites.to_vec(),
             kx_groups: ALL_KX_GROUPS.to_vec(),
@@ -424,7 +429,11 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hostname: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> Result<(), TlsError> {
+    pub fn start_handshake(
+        &mut self,
+        hostname: webpki::DNSName,
+        extra_exts: Vec<ClientExtension>,
+    ) -> Result<(), TlsError> {
         self.state = Some(hs::start_handshake(self, hostname, extra_exts)?);
         Ok(())
     }
@@ -443,7 +452,11 @@ impl ClientSessionImpl {
     }
 
     pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
-        self.config.ciphersuites.iter().copied().find(|&scs| scs.suite == suite)
+        self.config
+            .ciphersuites
+            .iter()
+            .copied()
+            .find(|&scs| scs.suite == suite)
     }
 
     pub fn wants_read(&self) -> bool {
@@ -536,7 +549,8 @@ impl ClientSessionImpl {
             .pop_front()
         {
             let ignore_corrupt_payload = false;
-            let result = self.common
+            let result = self
+                .common
                 .process_msg(msg, ignore_corrupt_payload)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => self.process_new_handshake_messages(),
@@ -617,7 +631,10 @@ impl ClientSession {
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TlsError> {
+    pub fn new(
+        config: &Arc<ClientConfig>,
+        hostname: webpki::DNSNameRef,
+    ) -> Result<ClientSession, TlsError> {
         let mut imp = ClientSessionImpl::new(config);
         imp.start_handshake(hostname.into(), vec![])?;
         Ok(ClientSession { imp })

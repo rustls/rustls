@@ -1,5 +1,4 @@
 use crate::check::check_message;
-use crate::{cipher, SupportedCipherSuite};
 use crate::client::ClientSessionImpl;
 use crate::error::TlsError;
 use crate::hash_hs::HandshakeHash;
@@ -7,6 +6,7 @@ use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
 };
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -27,9 +27,9 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::session::SessionRandoms;
 use crate::sign;
-use crate::kx;
 use crate::ticketer;
 use crate::verify;
+use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{msgs::base::PayloadU16, quic, session::Protocol};
 
@@ -38,8 +38,8 @@ use crate::client::common::{HandshakeDetails, ServerCertDetails};
 use crate::client::hs;
 
 use ring::constant_time;
-use webpki;
 use ring::digest::Digest;
+use webpki;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -107,16 +107,14 @@ pub fn choose_kx_groups(
     // - if not, send just the first configured group.
     //
     let group = retryreq
-        .and_then(|req| {
-            HelloRetryRequest::get_requested_key_share_group(req)
-        })
+        .and_then(|req| HelloRetryRequest::get_requested_key_share_group(req))
         .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
         .unwrap_or_else(|| {
-                sess.config
-                    .kx_groups
-                    .get(0)
-                    .expect("No kx groups configured")
-                    .name
+            sess.config
+                .kx_groups
+                .get(0)
+                .expect("No kx groups configured")
+                .name
         });
 
     let mut key_shares = vec![];
@@ -131,7 +129,9 @@ pub fn choose_kx_groups(
         hello
             .offered_key_shares
             .push(already_offered_share);
-    } else if let Some(key_share) = kx::KeyExchange::choose(group, &sess.config.kx_groups).and_then(kx::KeyExchange::start) {
+    } else if let Some(key_share) =
+        kx::KeyExchange::choose(group, &sess.config.kx_groups).and_then(kx::KeyExchange::start)
+    {
         key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
         hello.offered_key_shares.push(key_share);
     }
@@ -158,8 +158,7 @@ pub fn fill_in_psk_binder(
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.get_encoding_for_binder_signing();
-    let handshake_hash = transcript
-        .get_hash_given(suite_hash, &binder_plaintext);
+    let handshake_hash = transcript.get_hash_given(suite_hash, &binder_plaintext);
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
@@ -326,7 +325,7 @@ pub fn prepare_resumption(
     //
     // Include an empty binder. It gets filled in below because it depends on
     // the message it's contained in (!!!).
-    let obfuscated_ticket_age= resuming_session.get_obfuscated_ticket_age(ticketer::timebase());
+    let obfuscated_ticket_age = resuming_session.get_obfuscated_ticket_age(ticketer::timebase());
 
     let binder_len = resuming_suite.get_hash().output_len;
     let binder = vec![0u8; binder_len];
@@ -410,8 +409,7 @@ impl hs::State for ExpectEncryptedExtensions {
             HandshakePayload::EncryptedExtensions
         )?;
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
-        self.transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         validate_encrypted_extensions(sess, &self.hello, &exts)?;
         hs::process_alpn_protocol(sess, exts.get_alpn_protocol())?;
@@ -530,7 +528,8 @@ impl hs::State for ExpectCertificate {
         let server_cert = ServerCertDetails::new(
             cert_chain.convert(),
             cert_chain.get_end_entity_ocsp(),
-            cert_chain.get_end_entity_scts());
+            cert_chain.get_end_entity_scts(),
+        );
 
         if let Some(sct_list) = server_cert.scts.as_ref() {
             if hs::sct_list_is_invalid(sct_list) {
@@ -584,7 +583,8 @@ impl hs::State for ExpectCertificateOrCertReq {
                 may_send_sct_list: self.may_send_sct_list,
                 client_auth: None,
                 hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-            }).handle(sess, m)
+            })
+            .handle(sess, m)
         } else {
             Box::new(ExpectCertificateRequest {
                 handshake: self.handshake,
@@ -593,7 +593,8 @@ impl hs::State for ExpectCertificateOrCertReq {
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.may_send_sct_list,
                 hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-            }).handle(sess, m)
+            })
+            .handle(sess, m)
         }
     }
 }
@@ -663,9 +664,7 @@ impl hs::State for ExpectCertificateVerify {
             .map_err(|err| send_cert_error_alert(sess, err))?;
 
         // 2. Verify their signature on the handshake.
-        let handshake_hash = self
-            .transcript
-            .get_current_hash();
+        let handshake_hash = self.transcript.get_current_hash();
         let sig_verified = sess
             .config
             .get_verifier()
@@ -829,11 +828,10 @@ fn emit_certverify_tls13(
         None => {
             debug!("Skipping certverify message (no client scheme/key)");
             return Ok(());
-        } 
+        }
     };
 
-    let message =
-        verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
+    let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
 
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
@@ -910,9 +908,7 @@ impl hs::State for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        let handshake_hash = st
-            .transcript
-            .get_current_hash();
+        let handshake_hash = st.transcript.get_current_hash();
         let expect_verify_data = st
             .key_schedule
             .sign_server_finish(&handshake_hash);
@@ -1041,9 +1037,7 @@ impl ExpectTraffic {
         sess: &mut ClientSessionImpl,
         nst: &NewSessionTicketPayloadTLS13,
     ) -> Result<(), TlsError> {
-        let handshake_hash = self
-            .transcript
-            .get_current_hash();
+        let handshake_hash = self.transcript.get_current_hash();
         let secret = self
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
