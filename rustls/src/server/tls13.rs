@@ -1,5 +1,6 @@
 use crate::check::check_message;
 use crate::error::TlsError;
+use crate::key::Certificate;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
@@ -47,6 +48,8 @@ use crate::server::common::{ClientCertDetails, HandshakeDetails};
 use crate::server::hs;
 
 use ring::constant_time;
+
+use std::sync::Arc;
 
 pub struct CompleteClientHelloHandling {
     pub handshake: HandshakeDetails,
@@ -280,12 +283,13 @@ impl CompleteClientHelloHandling {
     fn emit_encrypted_extensions(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
+        ocsp_response: &mut Option<&[u8]>,
+        sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
     ) -> Result<(), TlsError> {
         let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(sess, Some(server_key), hello, resumedata, &self.handshake)?;
+        ep.process_common(sess, ocsp_response, sct_list, hello, resumedata, &self.handshake)?;
 
         let ee = Message {
             typ: ContentType::Handshake,
@@ -360,12 +364,14 @@ impl CompleteClientHelloHandling {
     fn emit_certificate_tls13(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
+        cert_chain: &[Certificate],
+        ocsp_response: Option<&[u8]>,
+        sct_list: Option<&[u8]>,
     ) {
         let mut cert_entries = vec![];
-        for cert in server_key.take_cert() {
+        for cert in cert_chain {
             let entry = CertificateEntry {
-                cert,
+                cert: cert.to_owned(),
                 exts: Vec::new(),
             };
 
@@ -375,18 +381,18 @@ impl CompleteClientHelloHandling {
         if let Some(end_entity_cert) = cert_entries.first_mut() {
             // Apply OCSP response to first certificate (we don't support OCSP
             // except for leaf certs).
-            if let Some(ocsp) = server_key.take_ocsp() {
-                let cst = CertificateStatus::new(ocsp);
+            if let Some(ocsp) = ocsp_response {
+                let cst = CertificateStatus::new(ocsp.to_owned());
                 end_entity_cert
                     .exts
                     .push(CertificateExtension::CertificateStatus(cst));
             }
 
             // Likewise, SCT
-            if let Some(sct_list) = server_key.take_sct_list() {
+            if let Some(sct_list) = sct_list {
                 end_entity_cert
                     .exts
-                    .push(CertificateExtension::make_sct(sct_list));
+                    .push(CertificateExtension::make_sct(sct_list.to_owned()));
             }
         }
 
@@ -410,7 +416,7 @@ impl CompleteClientHelloHandling {
     fn emit_certificate_verify_tls13(
         &mut self,
         sess: &mut ServerSessionImpl,
-        server_key: &mut sign::CertifiedKey,
+        signing_key: &Arc<Box<dyn sign::SigningKey>>,
         schemes: &[SignatureScheme],
     ) -> Result<(), TlsError> {
         let message = verify::construct_tls13_server_verify_message(
@@ -420,7 +426,6 @@ impl CompleteClientHelloHandling {
                 .get_current_hash(),
         );
 
-        let signing_key = &server_key.key;
         let signer = signing_key
             .choose_scheme(schemes)
             .ok_or_else(|| hs::incompatible(sess, "no overlapping sigschemes"))?;
@@ -537,7 +542,7 @@ impl CompleteClientHelloHandling {
         mut self,
         suite: &'static SupportedCipherSuite,
         sess: &mut ServerSessionImpl,
-        mut server_key: sign::CertifiedKey,
+        server_key: &sign::CertifiedKey,
         chm: &Message,
     ) -> hs::NextStateOrError {
         let client_hello = require_handshake_msg!(
@@ -684,12 +689,14 @@ impl CompleteClientHelloHandling {
         if !self.done_retry {
             self.emit_fake_ccs(sess);
         }
-        self.emit_encrypted_extensions(sess, &mut server_key, client_hello, resumedata.as_ref())?;
+
+        let (mut ocsp_response, mut sct_list) = (server_key.ocsp.as_deref(), server_key.sct_list.as_deref());
+        self.emit_encrypted_extensions(sess, &mut ocsp_response, &mut sct_list, client_hello, resumedata.as_ref())?;
 
         let doing_client_auth = if full_handshake {
             let client_auth = self.emit_certificate_req_tls13(sess)?;
-            self.emit_certificate_tls13(sess, &mut server_key);
-            self.emit_certificate_verify_tls13(sess, &mut server_key, &sigschemes_ext)?;
+            self.emit_certificate_tls13(sess, &server_key.cert, ocsp_response, sct_list);
+            self.emit_certificate_verify_tls13(sess, &server_key.key, &sigschemes_ext)?;
             client_auth
         } else {
             false
