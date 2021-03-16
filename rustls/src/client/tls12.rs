@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::client::ClientSessionImpl;
+use crate::client::ClientSession;
 use crate::error::TlsError;
 use crate::hash_hs::HandshakeHash;
 use crate::kx;
@@ -40,11 +40,7 @@ pub struct ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        _sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let server_cert_chain =
             require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
         self.transcript.add_message(&m);
@@ -92,11 +88,7 @@ struct ExpectCertificateStatus {
 }
 
 impl hs::State for ExpectCertificateStatus {
-    fn handle(
-        mut self: Box<Self>,
-        _sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let server_cert_ocsp_response = require_handshake_msg_mut!(
             m,
@@ -140,7 +132,7 @@ struct ExpectCertificateStatusOrServerKX {
 }
 
 impl hs::State for ExpectCertificateStatusOrServerKX {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],
@@ -192,11 +184,7 @@ struct ExpectServerKX {
 }
 
 impl hs::State for ExpectServerKX {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
             m,
             HandshakeType::ServerKeyExchange,
@@ -240,7 +228,7 @@ impl hs::State for ExpectServerKX {
 fn emit_certificate(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) {
     let chosen_cert = client_auth.cert.take();
 
@@ -259,7 +247,7 @@ fn emit_certificate(
 
 fn emit_clientkx(
     transcript: &mut HandshakeHash,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
     kxd: &kx::KeyExchangeResult,
 ) {
     let mut buf = Vec::new();
@@ -283,7 +271,7 @@ fn emit_clientkx(
 fn emit_certverify(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) -> Result<(), TlsError> {
     let signer = match client_auth.signer.take() {
         None => {
@@ -313,7 +301,7 @@ fn emit_certverify(
     Ok(())
 }
 
-fn emit_ccs(sess: &mut ClientSessionImpl) {
+fn emit_ccs(sess: &mut ClientSession) {
     let ccs = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
@@ -326,7 +314,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
 fn emit_finished(
     secrets: &SessionSecrets,
     transcript: &mut HandshakeHash,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
@@ -360,11 +348,7 @@ struct ExpectCertificateRequest {
 }
 
 impl hs::State for ExpectCertificateRequest {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let certreq = require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -431,11 +415,7 @@ struct ExpectServerDoneOrCertReq {
 }
 
 impl hs::State for ExpectServerDoneOrCertReq {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         if require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -486,7 +466,7 @@ struct ExpectServerDone {
 }
 
 impl hs::State for ExpectServerDone {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         check_message(
             &m,
@@ -641,7 +621,7 @@ pub struct ExpectCCS {
 }
 
 impl hs::State for ExpectCCS {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
@@ -676,11 +656,7 @@ pub struct ExpectNewTicket {
 }
 
 impl hs::State for ExpectNewTicket {
-    fn handle(
-        mut self: Box<Self>,
-        _sess: &mut ClientSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, _sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
 
         let nst = require_handshake_msg_mut!(
@@ -708,7 +684,7 @@ fn save_session(
     handshake: &mut HandshakeDetails,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
-    sess: &mut ClientSessionImpl,
+    sess: &mut ClientSession,
 ) {
     // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
     // original ticket again.
@@ -765,7 +741,7 @@ struct ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -825,11 +801,7 @@ struct ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(
-        self: Box<Self>,
-        sess: &mut ClientSessionImpl,
-        mut m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ClientSession, mut m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;
         sess.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());

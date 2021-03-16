@@ -1,5 +1,5 @@
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::client::{ClientConfig, ClientSession, ClientSessionImpl};
+use crate::client::{ClientConfig, ClientSession};
 use crate::error::TlsError;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
@@ -64,8 +64,7 @@ pub trait QuicExt {
 
 impl QuicExt for ClientSession {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.imp
-            .common
+        self.common
             .quic
             .params
             .as_ref()
@@ -74,31 +73,26 @@ impl QuicExt for ClientSession {
 
     fn get_0rtt_keys(&self) -> Option<DirectionalKeys> {
         Some(DirectionalKeys::new(
-            self.imp.resumption_ciphersuite?,
-            self.imp
-                .common
-                .quic
-                .early_secret
-                .as_ref()?,
+            self.resumption_ciphersuite?,
+            self.common.quic.early_secret.as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
-        read_hs(&mut self.imp.common, plaintext)?;
-        self.imp
-            .process_new_handshake_messages()
+        read_hs(&mut self.common, plaintext)?;
+        self.process_new_handshake_messages()
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
-        write_hs(&mut self.imp.common, buf)
+        write_hs(&mut self.common, buf)
     }
 
     fn get_alert(&self) -> Option<AlertDescription> {
-        self.imp.common.quic.alert
+        self.common.quic.alert
     }
 
     fn next_1rtt_keys(&mut self) -> PacketKeySet {
-        next_1rtt_keys(&mut self.imp.common)
+        next_1rtt_keys(&mut self.common)
     }
 }
 
@@ -347,10 +341,10 @@ pub trait ClientQuicExt {
             Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             Version::V1 => ClientExtension::TransportParameters(params),
         };
-        let mut imp = ClientSessionImpl::new(config);
-        imp.common.protocol = Protocol::Quic;
-        imp.start_handshake(hostname.into(), vec![ext])?;
-        Ok(ClientSession { imp })
+        let mut session = ClientSession::from_config(config);
+        session.common.protocol = Protocol::Quic;
+        session.start_handshake(hostname.into(), vec![ext])?;
+        Ok(session)
     }
 }
 
