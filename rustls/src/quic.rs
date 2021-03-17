@@ -5,6 +5,7 @@ use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::message::{Message, MessagePayload};
+use crate::client::{HelloData, Host};
 use crate::server::{ServerConfig, ServerSession, ServerSessionImpl};
 use crate::session::{Protocol, SessionCommon};
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
