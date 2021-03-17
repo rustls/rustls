@@ -142,7 +142,9 @@ impl fmt::Display for TlsError {
             TlsError::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
             TlsError::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
             TlsError::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            TlsError::WebPKIError(ref err, ref reason) => write!(f, "certificate error in operation: {}: {:?}", reason, err),
+            TlsError::WebPKIError(ref err, ref reason) => {
+                write!(f, "certificate error in operation: {}: {:?}", reason, err)
+            }
             TlsError::CorruptMessage => write!(f, "received corrupt message"),
             TlsError::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             TlsError::DecryptError => write!(f, "cannot decrypt peer's message"),
@@ -191,7 +193,10 @@ mod tests {
             TlsError::PeerIncompatibleError("no tls1.2".to_string()),
             TlsError::PeerMisbehavedError("inconsistent something".to_string()),
             TlsError::AlertReceived(AlertDescription::ExportRestriction),
-            TlsError::WebPKIError(webpki::Error::ExtensionValueInvalid, WebPKIOp::ParseEndEntity),
+            TlsError::WebPKIError(
+                webpki::Error::ExtensionValueInvalid,
+                WebPKIOp::ParseEndEntity,
+            ),
             TlsError::InvalidSCT(sct::Error::MalformedSCT),
             TlsError::General("undocumented error".to_string()),
             TlsError::FailedToGetCurrentTime,

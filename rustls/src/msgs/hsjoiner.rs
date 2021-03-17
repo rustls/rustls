@@ -97,7 +97,7 @@ impl HandshakeJoiner {
                 Some(p) => p,
                 None => return false,
             };
-            
+
             let m = Message {
                 typ: ContentType::Handshake,
                 version,

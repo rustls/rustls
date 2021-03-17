@@ -73,7 +73,9 @@ impl hs::State for ExpectCertificate {
             None => {
                 if !mandatory {
                     debug!("client auth requested but no certificate supplied");
-                    self.handshake.transcript.abandon_client_auth();
+                    self.handshake
+                        .transcript
+                        .abandon_client_auth();
                     return Ok(self.into_expect_tls12_client_kx(None));
                 }
                 sess.common
@@ -124,7 +126,9 @@ impl hs::State for ExpectClientKX {
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
-        let kxd = self.server_kx.kx
+        let kxd = self
+            .server_kx
+            .kx
             .server_complete(&client_kx.0)
             .ok_or_else(|| {
                 sess.common
@@ -132,20 +136,13 @@ impl hs::State for ExpectClientKX {
                 TlsError::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
-        let suite = sess
-            .common
-            .get_suite_assert();
+        let suite = sess.common.get_suite_assert();
         let secrets = if self.using_ems {
             let handshake_hash = self
                 .handshake
                 .transcript
                 .get_current_hash();
-            SessionSecrets::new_ems(
-                &self.randoms,
-                &handshake_hash,
-                suite,
-                &kxd.shared_secret,
-            )
+            SessionSecrets::new_ems(&self.randoms, &handshake_hash, suite, &kxd.shared_secret)
         } else {
             SessionSecrets::new(&self.randoms, suite, &kxd.shared_secret)
         };

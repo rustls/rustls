@@ -1,3 +1,4 @@
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::ExtensionType;
@@ -9,7 +10,6 @@ use crate::msgs::handshake::ServerExtension;
 use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
 use crate::sign;
-use crate::kx;
 
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
@@ -18,9 +18,11 @@ pub struct ServerCertDetails {
 }
 
 impl ServerCertDetails {
-    pub fn new(cert_chain: CertificatePayload,
-               ocsp_response: Vec<u8>,
-               scts: Option<SCTList>) -> ServerCertDetails {
+    pub fn new(
+        cert_chain: CertificatePayload,
+        ocsp_response: Vec<u8>,
+        scts: Option<SCTList>,
+    ) -> ServerCertDetails {
         ServerCertDetails {
             cert_chain,
             ocsp_response,
@@ -28,7 +30,7 @@ impl ServerCertDetails {
         }
     }
 
-    pub fn scts(&self) -> impl Iterator<Item=&[u8]> {
+    pub fn scts(&self) -> impl Iterator<Item = &[u8]> {
         self.scts
             .as_ref()
             .map(|v| v.as_slice())
@@ -80,7 +82,8 @@ impl ClientHelloDetails {
     }
 
     pub fn server_may_send_sct_list(&self) -> bool {
-        self.sent_extensions.contains(&ExtensionType::SCT)
+        self.sent_extensions
+            .contains(&ExtensionType::SCT)
     }
 
     pub fn has_key_share(&self, group: NamedGroup) -> bool {

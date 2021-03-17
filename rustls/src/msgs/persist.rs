@@ -6,9 +6,9 @@ use crate::msgs::handshake::SessionID;
 
 use webpki;
 
+use crate::SupportedCipherSuite;
 use std::cmp;
 use std::mem;
-use crate::SupportedCipherSuite;
 
 // These are the keys and values we store in session storage.
 
@@ -81,11 +81,15 @@ impl ClientSessionValue {
         self.server_cert_chain.encode(bytes);
     }
 
-    pub fn read(r: &mut Reader, enabled_cipher_suites: &[&'static SupportedCipherSuite]) -> Option<ClientSessionValue> {
+    pub fn read(
+        r: &mut Reader,
+        enabled_cipher_suites: &[&'static SupportedCipherSuite],
+    ) -> Option<ClientSessionValue> {
         let v = ProtocolVersion::read(r)?;
         let cs = CipherSuite::read(r)?;
-        let cipher_suite =
-            enabled_cipher_suites.iter().find(|scs| scs.suite == cs)?;
+        let cipher_suite = enabled_cipher_suites
+            .iter()
+            .find(|scs| scs.suite == cs)?;
         let sid = SessionID::read(r)?;
         let ticket = PayloadU16::read(r)?;
         let ms = PayloadU8::read(r)?;

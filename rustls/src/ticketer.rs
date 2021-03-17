@@ -47,7 +47,11 @@ impl AEADTicketer {
     pub fn new() -> Result<AEADTicketer, rand::GetRandomFailed> {
         let mut key = [0u8; 32];
         rand::fill_random(&mut key)?;
-        Ok(AEADTicketer::new_custom(&aead::CHACHA20_POLY1305, &key, 60 * 60 * 12))
+        Ok(AEADTicketer::new_custom(
+            &aead::CHACHA20_POLY1305,
+            &key,
+            60 * 60 * 12,
+        ))
     }
 }
 
@@ -131,7 +135,10 @@ impl TicketSwitcher {
     /// is used to generate new tickets.  Tickets are accepted for no
     /// longer than twice this duration.  `generator` produces a new
     /// `ProducesTickets` implementation.
-    pub fn new(lifetime: u32, generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>) -> Result<TicketSwitcher, rand::GetRandomFailed> {
+    pub fn new(
+        lifetime: u32,
+        generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
+    ) -> Result<TicketSwitcher, rand::GetRandomFailed> {
         Ok(TicketSwitcher {
             generator,
             lifetime,
@@ -185,9 +192,13 @@ impl ProducesTickets for TicketSwitcher {
 
         // Decrypt with the current key; if that fails, try with the previous.
         let state = self.state.lock().unwrap();
-        state.current.decrypt(ciphertext)
+        state
+            .current
+            .decrypt(ciphertext)
             .or_else(|| {
-                state.previous.as_ref()
+                state
+                    .previous
+                    .as_ref()
                     .and_then(|previous| previous.decrypt(ciphertext))
             })
     }

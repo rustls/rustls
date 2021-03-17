@@ -1,10 +1,10 @@
 use crate::check::check_message;
-use crate::{cipher, SupportedCipherSuite};
 use crate::error::TlsError;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
     KeyScheduleTrafficWithClientFinishedPending,
 };
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -38,8 +38,8 @@ use crate::rand;
 use crate::server::ServerSessionImpl;
 use crate::session::SessionRandoms;
 use crate::sign;
-use crate::kx;
 use crate::verify;
+use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{msgs::handshake::NewSessionTicketExtension, quic, session::Protocol};
 
@@ -238,7 +238,12 @@ impl CompleteClientHelloHandling {
         sess.common.send_msg(m, false);
     }
 
-    fn emit_hello_retry_request(&mut self, suite: &'static SupportedCipherSuite, sess: &mut ServerSessionImpl, group: NamedGroup) {
+    fn emit_hello_retry_request(
+        &mut self,
+        suite: &'static SupportedCipherSuite,
+        sess: &mut ServerSessionImpl,
+        group: NamedGroup,
+    ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id: SessionID::empty(),
@@ -566,16 +571,24 @@ impl CompleteClientHelloHandling {
         }
 
         // choose a share that we support
-        let chosen_share = sess.config.kx_groups
+        let chosen_share = sess
+            .config
+            .kx_groups
             .iter()
-            .find_map(|group| shares_ext.iter().find(|share| share.group == group.name));
+            .find_map(|group| {
+                shares_ext
+                    .iter()
+                    .find(|share| share.group == group.name)
+            });
 
-        let chosen_share =  match chosen_share {
+        let chosen_share = match chosen_share {
             Some(s) => s,
             None => {
                 // We don't have a suitable key share.  Choose a suitable group and
                 // send a HelloRetryRequest.
-                let retry_group_maybe = sess.config.kx_groups
+                let retry_group_maybe = sess
+                    .config
+                    .kx_groups
                     .iter()
                     .find(|group| groups_ext.contains(&group.name))
                     .cloned();
@@ -617,14 +630,16 @@ impl CompleteClientHelloHandling {
             }
 
             for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                let resume = match self.attempt_tls13_ticket_decryption(sess, &psk_id.identity.0)
+                let resume = match self
+                    .attempt_tls13_ticket_decryption(sess, &psk_id.identity.0)
                     .and_then(|resumedata| hs::can_resume(sess, false, resumedata))
                 {
                     Some(resume) => resume,
                     None => continue,
                 };
 
-                if !self.check_binder(suite, chm, &resume.master_secret.0, &psk_offer.binders[i].0) {
+                if !self.check_binder(suite, chm, &resume.master_secret.0, &psk_offer.binders[i].0)
+                {
                     sess.common
                         .send_fatal_alert(AlertDescription::DecryptError);
                     return Err(TlsError::PeerMisbehavedError(
@@ -759,7 +774,9 @@ impl hs::State for ExpectCertificate {
             None => {
                 if !mandatory {
                     debug!("client auth requested but no certificate supplied");
-                    self.handshake.transcript.abandon_client_auth();
+                    self.handshake
+                        .transcript
+                        .abandon_client_auth();
                     return Ok(self.into_expect_finished());
                 }
 
@@ -988,7 +1005,10 @@ impl hs::State for ExpectFinished {
         let read_key = self
             .key_schedule
             .client_application_traffic_secret(
-                self.handshake.hash_at_server_fin.as_ref().unwrap(),
+                self.handshake
+                    .hash_at_server_fin
+                    .as_ref()
+                    .unwrap(),
                 &*sess.config.key_log,
                 &self.randoms.client,
             );

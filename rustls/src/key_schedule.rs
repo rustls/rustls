@@ -4,7 +4,8 @@ use crate::msgs::base::PayloadU8;
 use crate::KeyLog;
 /// Key schedule maintenance for TLS1.3
 use ring::{
-    aead, digest::{self, Digest},
+    aead,
+    digest::{self, Digest},
     hkdf::{self, KeyType as _},
     hmac,
 };

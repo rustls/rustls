@@ -197,11 +197,14 @@ pub fn openssl_find() -> String {
     if cfg!(target_os = "macos") {
         match process::Command::new("brew")
             .args(&["--prefix", "openssl"])
-            .output() {
+            .output()
+        {
             Ok(output) => {
-                let dir = str::from_utf8(&*output.stdout).unwrap().trim();
+                let dir = str::from_utf8(&*output.stdout)
+                    .unwrap()
+                    .trim();
                 return format!("{}/bin/openssl", dir);
-            },
+            }
             Err(_) => {
                 const SEARCH_PATHS: [&'static str; 3] = [
                     "/usr/local/opt/openssl@1.1/bin/openssl",
@@ -210,9 +213,10 @@ pub fn openssl_find() -> String {
                     "/usr/bin/openssl",
                 ];
 
-                if let Some(path) = SEARCH_PATHS.iter().find(|s| {
-                    Path::new(s).is_file()
-                }) {
+                if let Some(path) = SEARCH_PATHS
+                    .iter()
+                    .find(|s| Path::new(s).is_file())
+                {
                     return path.to_string();
                 }
             }
