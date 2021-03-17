@@ -21,8 +21,6 @@ use std::io::{self, IoSlice};
 use std::mem;
 use std::sync::Arc;
 
-use webpki;
-
 #[macro_use]
 mod hs;
 mod common;
@@ -424,8 +422,8 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(&mut self, hostname: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> Result<(), TlsError> {
-        self.state = Some(hs::start_handshake(self, hostname, extra_exts)?);
+    pub fn start_handshake<T: 'static + HelloData + Send + Sync>(&mut self, hello_data: T) -> Result<(), TlsError> {
+        self.state = Some(hs::start_handshake(self, hello_data)?);
         Ok(())
     }
 
@@ -606,6 +604,55 @@ impl ClientSessionImpl {
     }
 }
 
+// Added in anticipation of another struct, EncryptedHost, that returns
+// Some() for the last two methods.
+pub trait HelloData {
+    fn get_extra_exts(&self) -> &Vec<ClientExtension>;
+    fn push_extra_ext(&mut self, ext: ClientExtension);
+    fn get_hostname(&self) -> webpki::DNSNameRef;
+    fn get_ech_config(&self) -> Option<&ECHConfig>;
+    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>>;
+}
+
+// Nothing for now
+pub struct ECHConfig {}
+
+pub struct Host {
+    hostname: webpki::DNSName,
+    extra_exts: Vec<ClientExtension>,
+}
+
+impl Host {
+    pub fn new(hostname: webpki::DNSNameRef) -> Host {
+        Host {
+            hostname: hostname.into(),
+            extra_exts: vec![],
+        }
+    }
+}
+
+impl HelloData for Host {
+    fn get_extra_exts(&self) -> &Vec<ClientExtension> {
+        &self.extra_exts
+    }
+
+    fn push_extra_ext(&mut self, ext: ClientExtension) {
+        self.extra_exts.push(ext);
+    }
+
+    fn get_hostname(&self) -> webpki::DNSNameRef {
+        self.hostname.as_ref()
+    }
+
+    fn get_ech_config(&self) -> Option<&ECHConfig> {
+        None
+    }
+
+    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>> {
+        None
+    }
+}
+
 /// This represents a single TLS client session.
 #[derive(Debug)]
 pub struct ClientSession {
@@ -618,8 +665,15 @@ impl ClientSession {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TlsError> {
+        ClientSession::from_hello_data(config, Host::new(hostname))
+    }
+
+    /// Make a new ClientSession.  `config` controls how
+    /// we behave in the TLS protocol, `hello_data` is the
+    /// contains the data needed for the ClientHello message.
+    pub fn from_hello_data<T: 'static + HelloData + Send + Sync>(config: &Arc<ClientConfig>, hello_data: T)-> Result<ClientSession, TlsError> {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), vec![])?;
+        imp.start_handshake(hello_data)?;
         Ok(ClientSession { imp })
     }
 

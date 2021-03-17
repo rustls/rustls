@@ -38,8 +38,8 @@ use crate::client::common::{HandshakeDetails, ServerCertDetails};
 use crate::client::hs;
 
 use ring::constant_time;
-use webpki;
 use ring::digest::Digest;
+use webpki;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -97,7 +97,7 @@ pub fn choose_kx_groups(
     sess: &ClientSessionImpl,
     exts: &mut Vec<ClientExtension>,
     hello: &mut ClientHelloDetails,
-    handshake: &HandshakeDetails,
+    dns_name: webpki::DNSNameRef,
     retryreq: Option<&HelloRetryRequest>,
 ) {
     // Choose our groups:
@@ -110,7 +110,7 @@ pub fn choose_kx_groups(
         .and_then(|req| {
             HelloRetryRequest::get_requested_key_share_group(req)
         })
-        .or_else(|| find_kx_hint(sess, handshake.dns_name.as_ref()))
+        .or_else(|| find_kx_hint(sess, dns_name))
         .unwrap_or_else(|| {
                 sess.config
                     .kx_groups
@@ -179,6 +179,7 @@ pub fn start_handshake_traffic(
     early_key_schedule: Option<KeyScheduleEarly>,
     server_hello: &ServerHelloPayload,
     handshake: &mut HandshakeDetails,
+    dns_name: webpki::DNSNameRef,
     transcript: &mut HandshakeHash,
     hello: &mut ClientHelloDetails,
     randoms: &SessionRandoms,
@@ -240,7 +241,7 @@ pub fn start_handshake_traffic(
     };
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(sess, handshake.dns_name.as_ref(), their_key_share.group);
+    save_kx_hint(sess, dns_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -391,6 +392,7 @@ fn validate_encrypted_extensions(
 
 pub struct ExpectEncryptedExtensions {
     pub handshake: HandshakeDetails,
+    pub dns_name: webpki::DNSName,
     pub randoms: SessionRandoms,
     pub transcript: HandshakeHash,
     pub key_schedule: KeyScheduleHandshake,
@@ -459,7 +461,7 @@ impl hs::State for ExpectEncryptedExtensions {
             let cert_verified = verify::ServerCertVerified::assertion();
             let sig_verified = verify::HandshakeSignatureValid::assertion();
             Ok(Box::new(ExpectFinished {
-                handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
@@ -474,7 +476,7 @@ impl hs::State for ExpectEncryptedExtensions {
                 return Err(TlsError::PeerMisbehavedError(msg));
             }
             Ok(Box::new(ExpectCertificateOrCertReq {
-                handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
@@ -486,7 +488,7 @@ impl hs::State for ExpectEncryptedExtensions {
 }
 
 struct ExpectCertificate {
-    handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
@@ -545,7 +547,7 @@ impl hs::State for ExpectCertificate {
         }
 
         Ok(Box::new(ExpectCertificateVerify {
-            handshake: self.handshake,
+            dns_name: self.dns_name,
             randoms: self.randoms,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
@@ -557,7 +559,7 @@ impl hs::State for ExpectCertificate {
 }
 
 struct ExpectCertificateOrCertReq {
-    handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
@@ -577,7 +579,7 @@ impl hs::State for ExpectCertificateOrCertReq {
         )?;
         if m.is_handshake_type(HandshakeType::Certificate) {
             Box::new(ExpectCertificate {
-                handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
@@ -587,7 +589,7 @@ impl hs::State for ExpectCertificateOrCertReq {
             }).handle(sess, m)
         } else {
             Box::new(ExpectCertificateRequest {
-                handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
@@ -600,7 +602,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
-    handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
@@ -655,7 +657,7 @@ impl hs::State for ExpectCertificateVerify {
             .verify_server_cert(
                 end_entity,
                 intermediates,
-                self.handshake.dns_name.as_ref(),
+                self.dns_name.as_ref(),
                 &mut self.server_cert.scts(),
                 &self.server_cert.ocsp_response,
                 now,
@@ -680,7 +682,7 @@ impl hs::State for ExpectCertificateVerify {
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
-            handshake: self.handshake,
+            dns_name: self.dns_name,
             randoms: self.randoms,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
@@ -696,7 +698,7 @@ impl hs::State for ExpectCertificateVerify {
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
 struct ExpectCertificateRequest {
-    handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
@@ -773,7 +775,7 @@ impl hs::State for ExpectCertificateRequest {
         }
 
         Ok(Box::new(ExpectCertificate {
-            handshake: self.handshake,
+            dns_name: self.dns_name,
             randoms: self.randoms,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
@@ -894,7 +896,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, sess: &mut Clien
 }
 
 struct ExpectFinished {
-    handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
@@ -998,7 +1000,7 @@ impl hs::State for ExpectFinished {
         sess.common.start_traffic();
 
         let st = ExpectTraffic {
-            handshake: st.handshake,
+            dns_name: st.dns_name,
             transcript: st.transcript,
             key_schedule: key_schedule_traffic,
             want_write_key_update: false,
@@ -1026,7 +1028,7 @@ impl hs::State for ExpectFinished {
 // In this state we can be sent tickets, keyupdates,
 // and application data.
 struct ExpectTraffic {
-    handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
@@ -1072,7 +1074,7 @@ impl ExpectTraffic {
             }
         }
 
-        let key = persist::ClientSessionKey::session_for_dns_name(self.handshake.dns_name.as_ref());
+        let key = persist::ClientSessionKey::session_for_dns_name(self.dns_name.as_ref());
         #[allow(unused_mut)]
         let mut ticket = value.get_encoding();
 
