@@ -141,13 +141,13 @@ obsolete cryptography.
 * Tunable MTU to make TLS messages match size of underlying transport.
 * Optional use of vectored IO to minimise system calls.
 * TLS1.2 session resumption.
-* TLS1.2 resumption via tickets (RFC5077).
+* TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
 * TLS1.3 resumption via tickets or session storage.
 * TLS1.3 0-RTT data for clients.
 * Client authentication by clients.
 * Client authentication by servers.
-* Extended master secret support (RFC7627).
-* Exporters (RFC5705).
+* Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
+* Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 * OCSP stapling by servers.
 * SCT stapling by servers.
 * SCT verification by clients.
