@@ -198,7 +198,11 @@ impl ClientConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(&v) && self.ciphersuites.iter().any(|cs| cs.usable_for_version(v))
+        self.versions.contains(&v)
+            && self
+                .ciphersuites
+                .iter()
+                .any(|cs| cs.usable_for_version(v))
     }
 
     #[doc(hidden)]
@@ -212,7 +216,8 @@ impl ClientConfig {
     /// preferred, the last is the least preferred.
     pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
         self.alpn_protocols.clear();
-        self.alpn_protocols.extend_from_slice(protocols);
+        self.alpn_protocols
+            .extend_from_slice(protocols);
     }
 
     /// Sets persistence layer to `persist`.
@@ -405,7 +410,8 @@ pub struct ClientSessionImpl {
 
 impl fmt::Debug for ClientSessionImpl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientSessionImpl").finish()
+        f.debug_struct("ClientSessionImpl")
+            .finish()
     }
 }
 
@@ -470,7 +476,12 @@ impl ClientSessionImpl {
     }
 
     pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
-        while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
+        while let Some(msg) = self
+            .common
+            .handshake_joiner
+            .frames
+            .pop_front()
+        {
             self.process_main_protocol(msg)?;
         }
 
@@ -529,7 +540,12 @@ impl ClientSessionImpl {
             return Err(TlsError::CorruptMessage);
         }
 
-        while let Some(msg) = self.common.message_deframer.frames.pop_front() {
+        while let Some(msg) = self
+            .common
+            .message_deframer
+            .frames
+            .pop_front()
+        {
             let ignore_corrupt_payload = false;
             let result = self
                 .common
@@ -554,7 +570,12 @@ impl ClientSessionImpl {
             return None;
         }
 
-        Some(self.server_cert_chain.iter().cloned().collect())
+        Some(
+            self.server_cert_chain
+                .iter()
+                .cloned()
+                .collect(),
+        )
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
@@ -568,7 +589,11 @@ impl ClientSessionImpl {
     pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.early_data
             .check_write(data.len())
-            .and_then(|sz| Ok(self.common.send_early_plaintext(&data[..sz])))
+            .and_then(|sz| {
+                Ok(self
+                    .common
+                    .send_early_plaintext(&data[..sz]))
+            })
     }
 
     fn export_keying_material(
@@ -585,7 +610,8 @@ impl ClientSessionImpl {
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
-        st.as_mut().map(|st| st.perhaps_write_key_update(self));
+        st.as_mut()
+            .map(|st| st.perhaps_write_key_update(self));
         self.state = st;
 
         self.common.send_some_plaintext(buf)
@@ -700,7 +726,8 @@ impl Session for ClientSession {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), TlsError> {
-        self.imp.export_keying_material(output, label, context)
+        self.imp
+            .export_keying_material(output, label, context)
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {

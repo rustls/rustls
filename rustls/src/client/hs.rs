@@ -80,10 +80,14 @@ fn find_session(
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
-    let value = sess.config.session_persistence.get(&key_buf).or_else(|| {
-        debug!("No cached session for {:?}", dns_name);
-        None
-    })?;
+    let value = sess
+        .config
+        .session_persistence
+        .get(&key_buf)
+        .or_else(|| {
+            debug!("No cached session for {:?}", dns_name);
+            None
+        })?;
 
     let mut reader = Reader::init(&value[..]);
     let result = persist::ClientSessionValue::read(&mut reader, &sess.config.ciphersuites);
@@ -135,8 +139,13 @@ impl InitialState {
         // Calculate all inputs to the client hellos that might otherwise
         // change between the initial and retry hellos here to enforce this.
 
-        if sess.config.client_auth_cert_resolver.has_certs() {
-            self.transcript.set_client_auth_enabled();
+        if sess
+            .config
+            .client_auth_cert_resolver
+            .has_certs()
+        {
+            self.transcript
+                .set_client_auth_enabled();
         }
 
         self.handshake.resuming_session = find_session(sess, self.dns_name.as_ref());
@@ -232,8 +241,12 @@ fn emit_client_hello_for_retry(
         (Vec::new(), ProtocolVersion::Unknown(0))
     };
 
-    let support_tls12 = sess.config.supports_version(ProtocolVersion::TLSv1_2);
-    let support_tls13 = sess.config.supports_version(ProtocolVersion::TLSv1_3);
+    let support_tls12 = sess
+        .config
+        .supports_version(ProtocolVersion::TLSv1_2);
+    let support_tls13 = sess
+        .config
+        .supports_version(ProtocolVersion::TLSv1_3);
 
     let mut supported_versions = Vec::new();
     if support_tls13 {
@@ -255,10 +268,16 @@ fn emit_client_hello_for_retry(
         ECPointFormatList::supported(),
     ));
     exts.push(ClientExtension::NamedGroups(
-        sess.config.kx_groups.iter().map(|skxg| skxg.name).collect(),
+        sess.config
+            .kx_groups
+            .iter()
+            .map(|skxg| skxg.name)
+            .collect(),
     ));
     exts.push(ClientExtension::SignatureAlgorithms(
-        sess.config.get_verifier().supported_verify_schemes(),
+        sess.config
+            .get_verifier()
+            .supported_verify_schemes(),
     ));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(
@@ -317,7 +336,10 @@ fn emit_client_hello_for_retry(
     };
 
     // Note what extensions we sent.
-    hello.sent_extensions = exts.iter().map(ClientExtension::get_type).collect();
+    hello.sent_extensions = exts
+        .iter()
+        .map(ClientExtension::get_type)
+        .collect();
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -429,7 +451,11 @@ pub fn process_alpn_protocol(
     sess.common.alpn_protocol = proto.map(ToOwned::to_owned);
 
     if let Some(alpn_protocol) = &sess.common.alpn_protocol {
-        if !sess.config.alpn_protocols.contains(alpn_protocol) {
+        if !sess
+            .config
+            .alpn_protocols
+            .contains(alpn_protocol)
+        {
             return Err(illegal_param(sess, "server sent non-offered ALPN protocol"));
         }
     }
@@ -476,7 +502,10 @@ impl State for ExpectServerHello {
                     ));
                 }
 
-                if server_hello.get_supported_versions().is_some() {
+                if server_hello
+                    .get_supported_versions()
+                    .is_some()
+                {
                     return Err(illegal_param(
                         sess,
                         "server chose v1.2 using v1.3 extension",
@@ -499,7 +528,8 @@ impl State for ExpectServerHello {
         }
 
         if server_hello.has_duplicate_extension() {
-            sess.common.send_fatal_alert(AlertDescription::DecodeError);
+            sess.common
+                .send_fatal_alert(AlertDescription::DecodeError);
             return Err(TlsError::PeerMisbehavedError(
                 "server sent duplicate extensions".to_string(),
             ));
@@ -557,7 +587,8 @@ impl State for ExpectServerHello {
         }
 
         // Start our handshake hash, and input the server-hello.
-        self.transcript.start_hash(suite.get_hash());
+        self.transcript
+            .start_hash(suite.get_hash());
         self.transcript.add_message(&m);
 
         // For TLS1.3, start message encryption using
@@ -591,11 +622,17 @@ impl State for ExpectServerHello {
         // TLS1.2 only from here-on
 
         // Save ServerRandom and SessionID
-        server_hello.random.write_slice(&mut self.randoms.server);
+        server_hello
+            .random
+            .write_slice(&mut self.randoms.server);
         self.handshake.session_id = server_hello.session_id;
 
         // Look for TLS1.3 downgrade signal in server random
-        if tls13_supported && self.randoms.has_tls12_downgrade_marker() {
+        if tls13_supported
+            && self
+                .randoms
+                .has_tls12_downgrade_marker()
+        {
             return Err(illegal_param(
                 sess,
                 "downgrade to TLS1.2 when TLS1.3 is supported",
@@ -662,7 +699,8 @@ impl State for ExpectServerHello {
                     &secrets.randoms.client,
                     &secrets.master_secret,
                 );
-                sess.common.start_encryption_tls12(&secrets);
+                sess.common
+                    .start_encryption_tls12(&secrets);
 
                 // Since we're resuming, we verified the certificate and
                 // proof of possession in the prior session.
@@ -814,7 +852,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
         sess.common.set_suite(cs);
 
         // This is the draft19 change where the transcript became a tree
-        self.next.transcript.start_hash(cs.get_hash());
+        self.next
+            .transcript
+            .start_hash(cs.get_hash());
         self.next.transcript.rollup_for_hrr();
         self.next.transcript.add_message(&m);
 
@@ -823,7 +863,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
             sess.early_data.rejected();
         }
 
-        let may_send_sct_list = self.next.hello.server_may_send_sct_list();
+        let may_send_sct_list = self
+            .next
+            .hello
+            .server_may_send_sct_list();
         emit_client_hello_for_retry(
             sess,
             self.next.handshake,
@@ -848,7 +891,8 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
             &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
         )?;
         if m.is_handshake_type(HandshakeType::ServerHello) {
-            self.into_expect_server_hello().handle(sess, m)
+            self.into_expect_server_hello()
+                .handle(sess, m)
         } else {
             self.handle_hello_retry_request(sess, m)
         }
@@ -858,7 +902,8 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
 pub fn send_cert_error_alert(sess: &mut ClientSessionImpl, err: TlsError) -> TlsError {
     match err {
         TlsError::WebPKIError(webpki::Error::BadDER, _) => {
-            sess.common.send_fatal_alert(AlertDescription::DecodeError);
+            sess.common
+                .send_fatal_alert(AlertDescription::DecodeError);
         }
         TlsError::PeerMisbehavedError(_) => {
             sess.common
