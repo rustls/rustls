@@ -121,7 +121,7 @@ struct InitialState<T: HelloData + Send + Sync> {
     hello_data: T,
 }
 
-impl <T: 'static + HelloData + Send + Sync> InitialState<T> {
+impl<T: 'static + HelloData + Send + Sync> InitialState<T> {
     fn new(hello_data: T) -> InitialState<T> {
         InitialState {
             handshake: HandshakeDetails::new(),
@@ -284,7 +284,13 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
     }
 
     if support_tls13 {
-        tls13::choose_kx_groups(sess, &mut exts, &mut hello, hello_data.get_hostname(), retryreq);
+        tls13::choose_kx_groups(
+            sess,
+            &mut exts,
+            &mut hello,
+            hello_data.get_hostname(),
+            retryreq
+        );
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
@@ -744,7 +750,7 @@ impl State for ExpectServerHello {
     }
 }
 
-impl <T: 'static + HelloData + Send + Sync> ExpectServerHelloOrHelloRetryRequest<T> {
+impl<T: 'static + HelloData + Send + Sync> ExpectServerHelloOrHelloRetryRequest<T> {
     fn into_expect_server_hello(self) -> NextState {
         Box::new(self.next)
     }
@@ -877,7 +883,7 @@ impl <T: 'static + HelloData + Send + Sync> ExpectServerHelloOrHelloRetryRequest
     }
 }
 
-impl <T: 'static + HelloData + Send + Sync> State for ExpectServerHelloOrHelloRetryRequest<T> {
+impl<T: 'static + HelloData + Send + Sync> State for ExpectServerHelloOrHelloRetryRequest<T> {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, m: Message) -> NextStateOrError {
         check_message(
             &m,

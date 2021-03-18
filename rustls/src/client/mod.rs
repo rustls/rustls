@@ -427,8 +427,10 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake<T: 'static + HelloData + Send + Sync>
-        (&mut self, hello_data: T) -> Result<(), TlsError> {
+    pub fn start_handshake<T: 'static + HelloData + Send + Sync>(
+            &mut self,
+            hello_data: T
+        ) -> Result<(), TlsError> {
         self.state = Some(hs::start_handshake(self, hello_data)?);
         Ok(())
     }
@@ -675,14 +677,20 @@ impl ClientSession {
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
-    pub fn new(config: &Arc<ClientConfig>, hostname: webpki::DNSNameRef) -> Result<ClientSession, TlsError> {
+    pub fn new(
+        config: &Arc<ClientConfig>,
+        hostname: webpki::DNSNameRef
+    ) -> Result<ClientSession, TlsError> {
         ClientSession::from_hello_data(config, Host::new(hostname))
     }
 
     /// Make a new ClientSession.  `config` controls how
     /// we behave in the TLS protocol, `hello_data` is the
     /// contains the data needed for the ClientHello message.
-    pub fn from_hello_data<T: 'static + HelloData + Send + Sync>(config: &Arc<ClientConfig>, hello_data: T)-> Result<ClientSession, TlsError> {
+    pub fn from_hello_data<T: 'static + HelloData + Send + Sync>(
+        config: &Arc<ClientConfig>,
+        hello_data: T
+    )-> Result<ClientSession, TlsError> {
         let mut imp = ClientSessionImpl::new(config);
         imp.start_handshake(hello_data)?;
         Ok(ClientSession { imp })
