@@ -428,7 +428,7 @@ fn emit_client_hello_for_retry(
 
     let next = ExpectServerHello {
         handshake,
-        dns_name: dns_name.clone(),
+        dns_name,
         randoms,
         using_ems,
         transcript,
