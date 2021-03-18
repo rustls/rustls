@@ -198,11 +198,7 @@ impl ClientConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(&v)
-            && self
-                .ciphersuites
-                .iter()
-                .any(|cs| cs.usable_for_version(v))
+        self.versions.contains(&v) && self.ciphersuites.iter().any(|cs| cs.usable_for_version(v))
     }
 
     #[doc(hidden)]
@@ -216,8 +212,7 @@ impl ClientConfig {
     /// preferred, the last is the least preferred.
     pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
         self.alpn_protocols.clear();
-        self.alpn_protocols
-            .extend_from_slice(protocols);
+        self.alpn_protocols.extend_from_slice(protocols);
     }
 
     /// Sets persistence layer to `persist`.
@@ -410,8 +405,7 @@ pub struct ClientSessionImpl {
 
 impl fmt::Debug for ClientSessionImpl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientSessionImpl")
-            .finish()
+        f.debug_struct("ClientSessionImpl").finish()
     }
 }
 
@@ -427,11 +421,12 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake<T: 'static + HelloData + Send + Sync>(
+    pub fn start_handshake(
         &mut self,
-        hello_data: T,
+        dns_name: webpki::DNSName,
+        extra_exts: Vec<ClientExtension>,
     ) -> Result<(), TlsError> {
-        self.state = Some(hs::start_handshake(self, hello_data)?);
+        self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
         Ok(())
     }
 
@@ -475,12 +470,7 @@ impl ClientSessionImpl {
     }
 
     pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
-        while let Some(msg) = self
-            .common
-            .handshake_joiner
-            .frames
-            .pop_front()
-        {
+        while let Some(msg) = self.common.handshake_joiner.frames.pop_front() {
             self.process_main_protocol(msg)?;
         }
 
@@ -539,12 +529,7 @@ impl ClientSessionImpl {
             return Err(TlsError::CorruptMessage);
         }
 
-        while let Some(msg) = self
-            .common
-            .message_deframer
-            .frames
-            .pop_front()
-        {
+        while let Some(msg) = self.common.message_deframer.frames.pop_front() {
             let ignore_corrupt_payload = false;
             let result = self
                 .common
@@ -569,12 +554,7 @@ impl ClientSessionImpl {
             return None;
         }
 
-        Some(
-            self.server_cert_chain
-                .iter()
-                .cloned()
-                .collect(),
-        )
+        Some(self.server_cert_chain.iter().cloned().collect())
     }
 
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
@@ -588,11 +568,7 @@ impl ClientSessionImpl {
     pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.early_data
             .check_write(data.len())
-            .and_then(|sz| {
-                Ok(self
-                    .common
-                    .send_early_plaintext(&data[..sz]))
-            })
+            .and_then(|sz| Ok(self.common.send_early_plaintext(&data[..sz])))
     }
 
     fn export_keying_material(
@@ -609,60 +585,10 @@ impl ClientSessionImpl {
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
+        st.as_mut().map(|st| st.perhaps_write_key_update(self));
         self.state = st;
 
         self.common.send_some_plaintext(buf)
-    }
-}
-
-// Added in anticipation of another struct, EncryptedHost, that returns
-// Some() for the last two methods.
-pub trait HelloData {
-    fn get_extra_exts(&self) -> &Vec<ClientExtension>;
-    fn push_extra_ext(&mut self, ext: ClientExtension);
-    fn get_hostname(&self) -> webpki::DNSNameRef;
-    fn get_ech_config(&self) -> Option<&ECHConfig>;
-    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>>;
-}
-
-// Nothing for now
-pub struct ECHConfig {}
-
-pub struct Host {
-    hostname: webpki::DNSName,
-    extra_exts: Vec<ClientExtension>,
-}
-
-impl Host {
-    pub fn new(hostname: webpki::DNSNameRef) -> Host {
-        Host {
-            hostname: hostname.into(),
-            extra_exts: vec![],
-        }
-    }
-}
-
-impl HelloData for Host {
-    fn get_extra_exts(&self) -> &Vec<ClientExtension> {
-        &self.extra_exts
-    }
-
-    fn push_extra_ext(&mut self, ext: ClientExtension) {
-        self.extra_exts.push(ext);
-    }
-
-    fn get_hostname(&self) -> webpki::DNSNameRef {
-        self.hostname.as_ref()
-    }
-
-    fn get_ech_config(&self) -> Option<&ECHConfig> {
-        None
-    }
-
-    fn get_outer_exts(&self) -> Option<&Vec<ClientExtension>> {
-        None
     }
 }
 
@@ -681,18 +607,8 @@ impl ClientSession {
         config: &Arc<ClientConfig>,
         hostname: webpki::DNSNameRef,
     ) -> Result<ClientSession, TlsError> {
-        ClientSession::from_hello_data(config, Host::new(hostname))
-    }
-
-    /// Make a new ClientSession.  `config` controls how
-    /// we behave in the TLS protocol, `hello_data` is the
-    /// contains the data needed for the ClientHello message.
-    pub fn from_hello_data<T: 'static + HelloData + Send + Sync>(
-        config: &Arc<ClientConfig>,
-        hello_data: T,
-    ) -> Result<ClientSession, TlsError> {
         let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hello_data)?;
+        imp.start_handshake(hostname.into(), vec![])?;
         Ok(ClientSession { imp })
     }
 
@@ -784,8 +700,7 @@ impl Session for ClientSession {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), TlsError> {
-        self.imp
-            .export_keying_material(output, label, context)
+        self.imp.export_keying_material(output, label, context)
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
