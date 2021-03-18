@@ -289,7 +289,7 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
             &mut exts,
             &mut hello,
             hello_data.get_hostname(),
-            retryreq
+            retryreq,
         );
     }
 
@@ -316,7 +316,12 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
     }
 
     // Extra extensions must be placed before the PSK extension
-    exts.extend(hello_data.get_extra_exts().iter().cloned());
+    exts.extend(
+        hello_data
+            .get_extra_exts()
+            .iter()
+            .cloned()
+    );
 
     let fill_in_binder = if support_tls13
         && sess.config.enable_tickets

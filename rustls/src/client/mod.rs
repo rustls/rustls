@@ -429,8 +429,8 @@ impl ClientSessionImpl {
 
     pub fn start_handshake<T: 'static + HelloData + Send + Sync>(
             &mut self,
-            hello_data: T
-        ) -> Result<(), TlsError> {
+            hello_data: T,
+    ) -> Result<(), TlsError> {
         self.state = Some(hs::start_handshake(self, hello_data)?);
         Ok(())
     }
@@ -679,7 +679,7 @@ impl ClientSession {
     /// hostname of who we want to talk to.
     pub fn new(
         config: &Arc<ClientConfig>,
-        hostname: webpki::DNSNameRef
+        hostname: webpki::DNSNameRef,
     ) -> Result<ClientSession, TlsError> {
         ClientSession::from_hello_data(config, Host::new(hostname))
     }
@@ -689,8 +689,8 @@ impl ClientSession {
     /// contains the data needed for the ClientHello message.
     pub fn from_hello_data<T: 'static + HelloData + Send + Sync>(
         config: &Arc<ClientConfig>,
-        hello_data: T
-    )-> Result<ClientSession, TlsError> {
+        hello_data: T,
+    ) -> Result<ClientSession, TlsError> {
         let mut imp = ClientSessionImpl::new(config);
         imp.start_handshake(hello_data)?;
         Ok(ClientSession { imp })
