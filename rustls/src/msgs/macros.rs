@@ -27,11 +27,15 @@ macro_rules! enum_builder {
             }
 
             fn read(r: &mut Reader) -> Option<Self> {
-                Some(match u8::read(r) {
-                    None => return None,
-                    $( Some($enum_val) => $enum_name::$enum_var),*
-                    ,Some(x) => $enum_name::Unknown(x)
-                })
+                u8::read(r).map(|x| $enum_name::from(x))
+            }
+        }
+        impl From<u8> for $enum_name {
+            fn from(x: u8) -> Self {
+                match x {
+                    $($enum_val => $enum_name::$enum_var),*
+                    , x => $enum_name::Unknown(x),
+                }
             }
         }
     };
@@ -62,11 +66,15 @@ macro_rules! enum_builder {
             }
 
             fn read(r: &mut Reader) -> Option<Self> {
-                Some(match u16::read(r) {
-                    None => return None,
-                    $( Some($enum_val) => $enum_name::$enum_var),*
-                    ,Some(x) => $enum_name::Unknown(x)
-                })
+                u16::read(r).map(|x| $enum_name::from(x))
+            }
+        }
+        impl From<u16> for $enum_name {
+            fn from(x: u16) -> Self {
+                match x {
+                    $($enum_val => $enum_name::$enum_var),*
+                    , x => $enum_name::Unknown(x),
+                }
             }
         }
     };
