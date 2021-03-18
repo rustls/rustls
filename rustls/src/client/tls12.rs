@@ -27,9 +27,11 @@ use crate::client::hs;
 
 use ring::constant_time;
 use std::mem;
+use webpki;
 
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
+    pub dns_name: webpki::DNSName,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
@@ -55,6 +57,7 @@ impl hs::State for ExpectCertificate {
         if self.may_send_cert_status {
             Ok(Box::new(ExpectCertificateStatusOrServerKX {
                 handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -69,6 +72,7 @@ impl hs::State for ExpectCertificate {
 
             Ok(Box::new(ExpectServerKX {
                 handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -82,6 +86,7 @@ impl hs::State for ExpectCertificate {
 
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -118,6 +123,7 @@ impl hs::State for ExpectCertificateStatus {
 
         Ok(Box::new(ExpectServerKX {
             handshake: self.handshake,
+            dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -130,6 +136,7 @@ impl hs::State for ExpectCertificateStatus {
 
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -153,6 +160,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
         if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
             Box::new(ExpectServerKX {
                 handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -168,6 +176,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
         } else {
             Box::new(ExpectCertificateStatus {
                 handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -183,6 +192,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
 
 struct ExpectServerKX {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -226,6 +236,7 @@ impl hs::State for ExpectServerKX {
 
         Ok(Box::new(ExpectServerDoneOrCertReq {
             handshake: self.handshake,
+            dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -350,6 +361,7 @@ fn emit_finished(
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -407,6 +419,7 @@ impl hs::State for ExpectCertificateRequest {
 
         Ok(Box::new(ExpectServerDone {
             handshake: self.handshake,
+            dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -421,6 +434,7 @@ impl hs::State for ExpectCertificateRequest {
 
 struct ExpectServerDoneOrCertReq {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -445,6 +459,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
         {
             Box::new(ExpectCertificateRequest {
                 handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -459,6 +474,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 
             Box::new(ExpectServerDone {
                 handshake: self.handshake,
+                dns_name: self.dns_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -475,6 +491,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 
 struct ExpectServerDone {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -498,7 +515,7 @@ impl hs::State for ExpectServerDone {
         hs::check_aligned_handshake(sess)?;
 
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
-        debug!("Server DNS name is {:?}", st.handshake.dns_name);
+        debug!("Server DNS name is {:?}", st.dns_name);
 
         let suite = st.suite;
 
@@ -527,7 +544,7 @@ impl hs::State for ExpectServerDone {
             .verify_server_cert(
                 end_entity,
                 intermediates,
-                st.handshake.dns_name.as_ref(),
+                st.dns_name.as_ref(),
                 &mut st.server_cert.scts(),
                 &st.server_cert.ocsp_response,
                 now,
@@ -607,6 +624,7 @@ impl hs::State for ExpectServerDone {
             Ok(Box::new(ExpectNewTicket {
                 secrets,
                 handshake: st.handshake,
+                dns_name: st.dns_name,
                 using_ems: st.using_ems,
                 transcript: st.transcript,
                 resuming: false,
@@ -617,6 +635,7 @@ impl hs::State for ExpectServerDone {
             Ok(Box::new(ExpectCCS {
                 secrets,
                 handshake: st.handshake,
+                dns_name: st.dns_name,
                 using_ems: st.using_ems,
                 transcript: st.transcript,
                 ticket: ReceivedTicketDetails::new(),
@@ -632,6 +651,7 @@ impl hs::State for ExpectServerDone {
 pub struct ExpectCCS {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub dns_name: webpki::DNSName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
     pub ticket: ReceivedTicketDetails,
@@ -655,6 +675,7 @@ impl hs::State for ExpectCCS {
         Ok(Box::new(ExpectFinished {
             secrets: self.secrets,
             handshake: self.handshake,
+            dns_name: self.dns_name,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: self.ticket,
@@ -668,6 +689,7 @@ impl hs::State for ExpectCCS {
 pub struct ExpectNewTicket {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
+    pub dns_name: webpki::DNSName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
     pub resuming: bool,
@@ -692,6 +714,7 @@ impl hs::State for ExpectNewTicket {
         Ok(Box::new(ExpectCCS {
             secrets: self.secrets,
             handshake: self.handshake,
+            dns_name: self.dns_name,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
@@ -706,6 +729,7 @@ impl hs::State for ExpectNewTicket {
 fn save_session(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
+    dns_name: webpki::DNSNameRef,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
     sess: &mut ClientSessionImpl,
@@ -725,7 +749,7 @@ fn save_session(
         return;
     }
 
-    let key = persist::ClientSessionKey::session_for_dns_name(handshake.dns_name.as_ref());
+    let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
 
     let master_secret = secrets.get_master_secret();
     let mut value = persist::ClientSessionValue::new(
@@ -755,6 +779,7 @@ fn save_session(
 
 struct ExpectFinished {
     handshake: HandshakeDetails,
+    dns_name: webpki::DNSName,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: ReceivedTicketDetails,
@@ -793,6 +818,7 @@ impl hs::State for ExpectFinished {
         save_session(
             &st.secrets,
             &mut st.handshake,
+            st.dns_name.as_ref(),
             st.using_ems,
             &mut st.ticket,
             sess,
