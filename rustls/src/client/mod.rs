@@ -428,8 +428,8 @@ impl ClientSessionImpl {
     }
 
     pub fn start_handshake<T: 'static + HelloData + Send + Sync>(
-            &mut self,
-            hello_data: T,
+        &mut self,
+        hello_data: T,
     ) -> Result<(), TlsError> {
         self.state = Some(hs::start_handshake(self, hello_data)?);
         Ok(())

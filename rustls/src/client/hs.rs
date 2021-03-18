@@ -320,7 +320,7 @@ fn emit_client_hello_for_retry<T: 'static + HelloData + Send + Sync>(
         hello_data
             .get_extra_exts()
             .iter()
-            .cloned()
+            .cloned(),
     );
 
     let fill_in_binder = if support_tls13
