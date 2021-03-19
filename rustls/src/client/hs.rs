@@ -175,7 +175,6 @@ impl InitialState {
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         let may_send_sct_list = sess.config.verifier.request_scts();
-
         emit_client_hello_for_retry(
             sess,
             self.handshake,
