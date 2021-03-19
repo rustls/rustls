@@ -120,7 +120,6 @@ struct InitialState {
     dns_name: webpki::DNSName,
     transcript: HandshakeHash,
     extra_exts: Vec<ClientExtension>,
-    session_id: SessionID,
 }
 
 impl InitialState {
@@ -130,7 +129,6 @@ impl InitialState {
             dns_name,
             transcript: HandshakeHash::new(),
             extra_exts,
-            session_id: SessionID::empty(),
         }
     }
 
@@ -150,6 +148,7 @@ impl InitialState {
                 .set_client_auth_enabled();
         }
 
+        let mut session_id: Option<SessionID> = None;
         self.handshake.resuming_session = find_session(sess, self.dns_name.as_ref());
 
         if let Some(resuming) = &mut self.handshake.resuming_session {
@@ -160,22 +159,23 @@ impl InitialState {
                 if !resuming.ticket.0.is_empty() {
                     resuming.session_id = random_sessionid()?;
                 }
-                self.session_id = resuming.session_id;
+                session_id = Some(resuming.session_id);
             }
             debug!("Resuming session");
         } else {
             debug!("Not resuming any session");
         }
         // https://tools.ietf.org/html/rfc8446#appendix-D.4
-        // https://tools.ietf.org/html/draft-ietf-quic-tls-34#ref-TLS13
-        if self.session_id.is_empty() && !sess.common.is_quic() {
-            self.session_id = random_sessionid()?;
+        // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
+        if session_id.is_none() && !sess.common.is_quic() {
+            session_id = Some(random_sessionid()?);
         }
 
         let randoms = SessionRandoms::for_client()?;
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         let may_send_sct_list = sess.config.verifier.request_scts();
+
         emit_client_hello_for_retry(
             sess,
             self.handshake,
@@ -184,7 +184,7 @@ impl InitialState {
             self.transcript,
             sent_tls13_fake_ccs,
             hello_details,
-            self.session_id,
+            session_id,
             None,
             self.dns_name,
             self.extra_exts,
@@ -233,7 +233,7 @@ fn emit_client_hello_for_retry(
     mut transcript: HandshakeHash,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
     dns_name: webpki::DNSName,
     extra_exts: Vec<ClientExtension>,
@@ -346,12 +346,14 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
+    let s_id = session_id.unwrap_or(SessionID::empty());
+
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: session_id,
+            session_id: s_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -438,7 +440,7 @@ fn emit_client_hello_for_retry(
         using_ems,
         transcript,
         hello,
-        session_id,
+        session_id: s_id,
         early_key_schedule,
         sent_tls13_fake_ccs,
     };
@@ -884,7 +886,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.transcript,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
-            self.next.session_id,
+            Some(self.next.session_id),
             Some(&hrr),
             self.next.dns_name,
             self.extra_exts,
