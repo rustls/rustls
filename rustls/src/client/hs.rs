@@ -120,6 +120,7 @@ struct InitialState {
     dns_name: webpki::DNSName,
     transcript: HandshakeHash,
     extra_exts: Vec<ClientExtension>,
+    session_id: SessionID,
 }
 
 impl InitialState {
@@ -129,6 +130,7 @@ impl InitialState {
             dns_name,
             transcript: HandshakeHash::new(),
             extra_exts,
+            session_id: SessionID::empty(),
         }
     }
 
@@ -158,7 +160,7 @@ impl InitialState {
                 if !resuming.ticket.0.is_empty() {
                     resuming.session_id = random_sessionid()?;
                 }
-                self.handshake.session_id = resuming.session_id;
+                self.session_id = resuming.session_id;
             }
             debug!("Resuming session");
         } else {
@@ -166,8 +168,8 @@ impl InitialState {
         }
         // https://tools.ietf.org/html/rfc8446#appendix-D.4
         // https://tools.ietf.org/html/draft-ietf-quic-tls-34#ref-TLS13
-        if self.handshake.session_id.is_empty() && !sess.common.is_quic() {
-            self.handshake.session_id = random_sessionid()?;
+        if self.session_id.is_empty() && !sess.common.is_quic() {
+            self.session_id = random_sessionid()?;
         }
 
         let randoms = SessionRandoms::for_client()?;
@@ -182,6 +184,7 @@ impl InitialState {
             self.transcript,
             sent_tls13_fake_ccs,
             hello_details,
+            self.session_id,
             None,
             self.dns_name,
             self.extra_exts,
@@ -206,6 +209,7 @@ struct ExpectServerHello {
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
+    session_id: SessionID,
     sent_tls13_fake_ccs: bool,
 }
 
@@ -229,6 +233,7 @@ fn emit_client_hello_for_retry(
     mut transcript: HandshakeHash,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
+    session_id: SessionID,
     retryreq: Option<&HelloRetryRequest>,
     dns_name: webpki::DNSName,
     extra_exts: Vec<ClientExtension>,
@@ -346,7 +351,7 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: handshake.session_id,
+            session_id: session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -433,6 +438,7 @@ fn emit_client_hello_for_retry(
         using_ems,
         transcript,
         hello,
+        session_id,
         early_key_schedule,
         sent_tls13_fake_ccs,
     };
@@ -625,7 +631,7 @@ impl State for ExpectServerHello {
         server_hello
             .random
             .write_slice(&mut self.randoms.server);
-        self.handshake.session_id = server_hello.session_id;
+        self.session_id = server_hello.session_id;
 
         // Look for TLS1.3 downgrade signal in server random
         if tls13_supported
@@ -677,7 +683,7 @@ impl State for ExpectServerHello {
 
         // See if we're successfully resuming.
         if let Some(ref resuming) = self.handshake.resuming_session {
-            if resuming.session_id == self.handshake.session_id {
+            if resuming.session_id == self.session_id {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
@@ -712,6 +718,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectNewTicket {
                         secrets,
                         handshake: self.handshake,
+                        session_id: self.session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -723,6 +730,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectCCS {
                         secrets,
                         handshake: self.handshake,
+                        session_id: self.session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -737,6 +745,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
+            session_id: self.session_id,
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
@@ -875,6 +884,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.transcript,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
+            self.next.session_id,
             Some(&hrr),
             self.next.dns_name,
             self.extra_exts,
