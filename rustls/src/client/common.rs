@@ -7,7 +7,6 @@ use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
-use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
 use crate::sign;
 
@@ -56,14 +55,12 @@ impl ServerKXDetails {
 
 pub struct HandshakeDetails {
     pub resuming_session: Option<persist::ClientSessionValue>,
-    pub session_id: SessionID,
 }
 
 impl HandshakeDetails {
     pub fn new() -> HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
-            session_id: SessionID::empty(),
         }
     }
 }
