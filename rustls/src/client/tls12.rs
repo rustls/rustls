@@ -12,7 +12,7 @@ use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::ServerKeyExchangePayload;
-use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList};
+use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -25,7 +25,6 @@ use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{HandshakeDetails, ServerCertDetails, ServerKXDetails};
 use crate::client::hs;
 
-use crate::internal::msgs::handshake::SessionID;
 use ring::constant_time;
 use std::mem;
 use webpki;
