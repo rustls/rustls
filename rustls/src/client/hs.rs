@@ -345,14 +345,14 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let s_id = session_id.unwrap_or(SessionID::empty());
+    let session_id = session_id.unwrap_or(SessionID::empty());
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: s_id,
+            session_id: session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -439,7 +439,7 @@ fn emit_client_hello_for_retry(
         using_ems,
         transcript,
         hello,
-        session_id: s_id,
+        session_id: session_id,
         early_key_schedule,
         sent_tls13_fake_ccs,
     };
