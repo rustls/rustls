@@ -71,7 +71,7 @@ jobs:
       - name: Install golang toolchain
         uses: actions/setup-go@v2
         with:
-          go-version: "1.14"
+          go-version: "1.16"
 
       - name: Run test suite
         working-directory: bogo
