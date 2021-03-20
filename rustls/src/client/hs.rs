@@ -85,7 +85,7 @@ fn find_session(
         .session_persistence
         .get(&key_buf)
         .or_else(|| {
-            debug!(Let's recompile1! "No cached session for {:?}", dns_name);
+            debug!("Let's recompile1! "No cached session for {:?}", dns_name);
             None
         })?;
 
