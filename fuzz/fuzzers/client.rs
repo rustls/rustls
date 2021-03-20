@@ -3,13 +3,14 @@
 extern crate rustls;
 extern crate webpki;
 
-use rustls::{ClientConfig, ClientSession, Session};
+use rustls::{ClientConfig, ClientSession, Session, RootCertStore, DEFAULT_CIPHERSUITES};
 use std::io;
 use std::sync::Arc;
 
 fuzz_target!(|data: &[u8]| {
-    let config = Arc::new(ClientConfig::new());
+    let root_store = RootCertStore::empty();
+    let config = Arc::new(ClientConfig::new(root_store, &[], DEFAULT_CIPHERSUITES));
     let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
-    let mut client = ClientSession::new(&config, example_com);
+    let mut client = ClientSession::new(&config, example_com).unwrap();
     let _ = client.read_tls(&mut io::Cursor::new(data));
 });

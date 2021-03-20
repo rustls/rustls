@@ -151,7 +151,7 @@ pub fn fill_in_psk_binder(
         .resuming_session
         .as_ref()
         .unwrap();
-    let suite = resuming.suite;
+    let suite = resuming.supported_cipher_suite();
     let hkdf_alg = suite.hkdf_algorithm;
     let suite_hash = suite.get_hash();
 
@@ -200,7 +200,10 @@ pub fn start_handshake_traffic(
 
     let mut key_schedule = if let Some(selected_psk) = server_hello.get_psk_index() {
         if let Some(ref resuming) = handshake.resuming_session {
-            if !resuming.suite.can_resume_to(suite) {
+            if !resuming
+                .supported_cipher_suite()
+                .can_resume_to(suite)
+            {
                 return Err(hs::illegal_param(
                     sess,
                     "server resuming incompatible suite",
@@ -209,7 +212,7 @@ pub fn start_handshake_traffic(
 
             // If the server varies the suite here, we will have encrypted early data with
             // the wrong suite.
-            if sess.early_data.is_enabled() && resuming.suite != suite {
+            if sess.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
                 return Err(hs::illegal_param(
                     sess,
                     "server varied suite with early data",
@@ -306,8 +309,8 @@ pub fn prepare_resumption(
             return false;
         }
     };
-    let resuming_suite = resuming_session.suite;
-    if !hs::compatible_suite(sess, resuming_session.suite) {
+    let resuming_suite = resuming_session.supported_cipher_suite();
+    if !hs::compatible_suite(sess, resuming_suite) {
         return false;
     };
 
@@ -1044,7 +1047,7 @@ impl ExpectTraffic {
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
 
-        let mut value = persist::ClientSessionValue::new(
+        let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
             ProtocolVersion::TLSv1_3,
             sess.common.get_suite_assert(),
             &SessionID::empty(),
