@@ -775,7 +775,7 @@ fn save_session(
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
 
     let master_secret = secrets.get_master_secret();
-    let mut value = persist::ClientSessionValue::new(
+    let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
         ProtocolVersion::TLSv1_2,
         secrets.suite(),
         &session_id,
