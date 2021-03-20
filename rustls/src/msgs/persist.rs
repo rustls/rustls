@@ -54,8 +54,8 @@ impl ClientSessionKey {
 #[derive(Debug)]
 pub struct ClientSessionValue {
     pub version: ProtocolVersion,
-    pub suite: &'static SupportedCipherSuite,
     pub session_id: SessionID,
+    cipher_suite: CipherSuite,
     pub ticket: PayloadU16,
     pub master_secret: PayloadU8,
     pub epoch: u64,
@@ -67,9 +67,24 @@ pub struct ClientSessionValue {
 }
 
 impl ClientSessionValue {
-    pub fn encode(&self, bytes: &mut Vec<u8>) {
+    pub fn resolve_cipher_suite(
+        self,
+        enabled_cipher_suites: &[&'static SupportedCipherSuite],
+    ) -> Option<ClientSessionValueWithResolvedCipherSuite> {
+        let supported_cipher_suite = enabled_cipher_suites
+            .iter()
+            .find(|scs| scs.suite == self.cipher_suite)?;
+        Some(ClientSessionValueWithResolvedCipherSuite {
+            value: self,
+            supported_cipher_suite,
+        })
+    }
+}
+
+impl Codec for ClientSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
-        self.suite.suite.encode(bytes);
+        self.cipher_suite.encode(bytes);
         self.session_id.encode(bytes);
         self.ticket.encode(bytes);
         self.master_secret.encode(bytes);
@@ -81,15 +96,9 @@ impl ClientSessionValue {
         self.server_cert_chain.encode(bytes);
     }
 
-    pub fn read(
-        r: &mut Reader,
-        enabled_cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> Option<ClientSessionValue> {
+    fn read(r: &mut Reader) -> Option<ClientSessionValue> {
         let v = ProtocolVersion::read(r)?;
-        let cs = CipherSuite::read(r)?;
-        let cipher_suite = enabled_cipher_suites
-            .iter()
-            .find(|scs| scs.suite == cs)?;
+        let cipher_suite = CipherSuite::read(r)?;
         let sid = SessionID::read(r)?;
         let ticket = PayloadU16::read(r)?;
         let ms = PayloadU8::read(r)?;
@@ -102,7 +111,7 @@ impl ClientSessionValue {
 
         Some(ClientSessionValue {
             version: v,
-            suite: cipher_suite,
+            cipher_suite,
             session_id: sid,
             ticket,
             master_secret: ms,
@@ -114,17 +123,24 @@ impl ClientSessionValue {
             server_cert_chain,
         })
     }
+}
 
-    pub fn get_encoding(&self) -> Vec<u8> {
-        let mut result = Vec::new();
-        self.encode(&mut result);
-        result
+#[derive(Debug)]
+pub struct ClientSessionValueWithResolvedCipherSuite {
+    value: ClientSessionValue,
+    supported_cipher_suite: &'static SupportedCipherSuite,
+}
+
+impl std::ops::Deref for ClientSessionValueWithResolvedCipherSuite {
+    type Target = ClientSessionValue;
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
 static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 
-impl ClientSessionValue {
+impl ClientSessionValueWithResolvedCipherSuite {
     pub fn new(
         v: ProtocolVersion,
         cipher_suite: &'static SupportedCipherSuite,
@@ -132,50 +148,61 @@ impl ClientSessionValue {
         ticket: Vec<u8>,
         ms: Vec<u8>,
         server_cert_chain: &CertificatePayload,
-    ) -> ClientSessionValue {
-        ClientSessionValue {
-            version: v,
-            suite: cipher_suite,
-            session_id: *sessid,
-            ticket: PayloadU16::new(ticket),
-            master_secret: PayloadU8::new(ms),
-            epoch: 0,
-            lifetime: 0,
-            age_add: 0,
-            extended_ms: false,
-            max_early_data_size: 0,
-            server_cert_chain: server_cert_chain.clone(),
+    ) -> Self {
+        ClientSessionValueWithResolvedCipherSuite {
+            value: ClientSessionValue {
+                version: v,
+                cipher_suite: cipher_suite.suite,
+                session_id: *sessid,
+                ticket: PayloadU16::new(ticket),
+                master_secret: PayloadU8::new(ms),
+                epoch: 0,
+                lifetime: 0,
+                age_add: 0,
+                extended_ms: false,
+                max_early_data_size: 0,
+                server_cert_chain: server_cert_chain.clone(),
+            },
+            supported_cipher_suite: cipher_suite,
         }
     }
 
+    pub fn supported_cipher_suite(&self) -> &'static SupportedCipherSuite {
+        self.supported_cipher_suite
+    }
+
+    pub fn set_session_id(&mut self, id: SessionID) {
+        self.value.session_id = id;
+    }
+
     pub fn set_extended_ms_used(&mut self) {
-        self.extended_ms = true;
+        self.value.extended_ms = true;
     }
 
     pub fn set_times(&mut self, receipt_time_secs: u64, lifetime_secs: u32, age_add: u32) {
-        self.epoch = receipt_time_secs;
-        self.lifetime = cmp::min(lifetime_secs, MAX_TICKET_LIFETIME);
-        self.age_add = age_add;
+        self.value.epoch = receipt_time_secs;
+        self.value.lifetime = cmp::min(lifetime_secs, MAX_TICKET_LIFETIME);
+        self.value.age_add = age_add;
     }
 
     pub fn has_expired(&self, time_now: u64) -> bool {
-        self.lifetime != 0 && self.epoch + u64::from(self.lifetime) < time_now
+        self.value.lifetime != 0 && self.value.epoch + u64::from(self.value.lifetime) < time_now
     }
 
     pub fn get_obfuscated_ticket_age(&self, time_now: u64) -> u32 {
-        let age_secs = time_now.saturating_sub(self.epoch);
+        let age_secs = time_now.saturating_sub(self.value.epoch);
         let age_millis = age_secs as u32 * 1000;
-        age_millis.wrapping_add(self.age_add)
+        age_millis.wrapping_add(self.value.age_add)
     }
 
     pub fn take_ticket(&mut self) -> Vec<u8> {
         let new_ticket = PayloadU16::new(Vec::new());
-        let old_ticket = mem::replace(&mut self.ticket, new_ticket);
+        let old_ticket = mem::replace(&mut self.value.ticket, new_ticket);
         old_ticket.0
     }
 
     pub fn set_max_early_data_size(&mut self, sz: u32) {
-        self.max_early_data_size = sz;
+        self.value.max_early_data_size = sz;
     }
 }
 

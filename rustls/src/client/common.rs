@@ -7,10 +7,8 @@ use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
-use crate::msgs::handshake::SessionID;
 use crate::msgs::persist;
 use crate::sign;
-use webpki;
 
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
@@ -56,17 +54,13 @@ impl ServerKXDetails {
 }
 
 pub struct HandshakeDetails {
-    pub resuming_session: Option<persist::ClientSessionValue>,
-    pub session_id: SessionID,
-    pub dns_name: webpki::DNSName,
+    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
 }
 
 impl HandshakeDetails {
-    pub fn new(host_name: webpki::DNSName) -> HandshakeDetails {
+    pub fn new() -> HandshakeDetails {
         HandshakeDetails {
             resuming_session: None,
-            session_id: SessionID::empty(),
-            dns_name: host_name,
         }
     }
 }

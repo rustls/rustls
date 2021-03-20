@@ -72,4 +72,3 @@ jobs:
         working-directory: bogo
         run: ./runme
 
-

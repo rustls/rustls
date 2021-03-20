@@ -21,8 +21,6 @@ use std::io::{self, IoSlice};
 use std::mem;
 use std::sync::Arc;
 
-use webpki;
-
 #[macro_use]
 mod hs;
 mod common;
@@ -431,10 +429,10 @@ impl ClientSessionImpl {
 
     pub fn start_handshake(
         &mut self,
-        hostname: webpki::DNSName,
+        dns_name: webpki::DNSName,
         extra_exts: Vec<ClientExtension>,
     ) -> Result<(), TlsError> {
-        self.state = Some(hs::start_handshake(self, hostname, extra_exts)?);
+        self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
         Ok(())
     }
 
