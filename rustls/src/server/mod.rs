@@ -449,6 +449,7 @@ impl ServerSessionImpl {
         }
 
         if self.common.message_deframer.desynced {
+	    println!("error in server process_new_packets");
             return Err(TlsError::CorruptMessage);
         }
 

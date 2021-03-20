@@ -271,6 +271,7 @@ fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TlsError> {
         .is_none()
     {
         this.quic.alert = Some(AlertDescription::DecodeError);
+	println!("Error in quic read_hs");
         return Err(TlsError::CorruptMessage);
     }
     Ok(())
