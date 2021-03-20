@@ -54,7 +54,7 @@ impl ServerKXDetails {
 }
 
 pub struct HandshakeDetails {
-    pub resuming_session: Option<persist::ClientSessionValue>,
+    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
 }
 
 impl HandshakeDetails {

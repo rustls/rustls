@@ -76,7 +76,7 @@ pub fn check_aligned_handshake(sess: &mut ClientSessionImpl) -> Result<(), TlsEr
 fn find_session(
     sess: &mut ClientSessionImpl,
     dns_name: webpki::DNSNameRef,
-) -> Option<persist::ClientSessionValue> {
+) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
@@ -90,7 +90,8 @@ fn find_session(
         })?;
 
     let mut reader = Reader::init(&value[..]);
-    let result = persist::ClientSessionValue::read(&mut reader, &sess.config.ciphersuites);
+    let result = persist::ClientSessionValue::read(&mut reader)
+        .and_then(|csv| csv.resolve_cipher_suite(&sess.config.ciphersuites));
     if let Some(result) = result {
         if result.has_expired(ticketer::timebase()) {
             None
@@ -157,7 +158,7 @@ impl InitialState {
                 // we're  doing an abbreviated handshake.  See section 3.4 in
                 // RFC5077.
                 if !resuming.ticket.0.is_empty() {
-                    resuming.session_id = random_sessionid()?;
+                    resuming.set_session_id(random_sessionid()?);
                 }
                 session_id = Some(resuming.session_id);
             }
@@ -402,7 +403,7 @@ fn emit_client_hello_for_retry(
         let resuming_suite = handshake
             .resuming_session
             .as_ref()
-            .map(|resume| resume.suite)
+            .map(|resume| resume.supported_cipher_suite())
             .unwrap();
 
         let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
@@ -688,7 +689,7 @@ impl State for ExpectServerHello {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
-                if resuming.suite != suite {
+                if resuming.supported_cipher_suite() != suite {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
                     return Err(TlsError::PeerMisbehavedError(error_msg));
                 }
