@@ -337,90 +337,59 @@ impl ServerConfig {
     }
 }
 
-pub struct ServerSessionImpl {
-    pub config: Arc<ServerConfig>,
-    pub common: SessionCommon,
-    sni: Option<webpki::DNSName>,
-    pub received_resumption_data: Option<Vec<u8>>,
-    pub resumption_data: Vec<u8>,
-    pub state: Option<Box<dyn hs::State + Send + Sync>>,
-    pub client_cert_chain: Option<Vec<key::Certificate>>,
-    /// Whether to reject early data even if it would otherwise be accepted
-    pub reject_early_data: bool,
-}
-
-impl fmt::Debug for ServerSessionImpl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ServerSessionImpl")
-            .finish()
-    }
-}
-
-impl ServerSessionImpl {
-    pub fn new(
-        server_config: &Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
-    ) -> ServerSessionImpl {
-        ServerSessionImpl {
-            config: server_config.clone(),
-            common: SessionCommon::new(server_config.mtu, false),
-            sni: None,
-            received_resumption_data: None,
-            resumption_data: Vec::new(),
-            state: Some(Box::new(hs::ExpectClientHello::new(
-                server_config,
-                extra_exts,
-            ))),
-            client_cert_chain: None,
-            reject_early_data: false,
-        }
-    }
-
-    pub fn get_sni(&self) -> Option<&webpki::DNSName> {
-        self.sni.as_ref()
-    }
-
-    pub fn set_sni(&mut self, value: webpki::DNSName) {
-        // The SNI hostname is immutable once set.
-        assert!(self.sni.is_none());
-        self.sni = Some(value)
-    }
-}
-
 /// This represents a single TLS server session.
 ///
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
-#[derive(Debug)]
 pub struct ServerSession {
-    // We use the pimpl idiom to hide unimportant details.
-    pub(crate) imp: ServerSessionImpl,
+    config: Arc<ServerConfig>,
+    pub(crate) common: SessionCommon,
+    sni: Option<webpki::DNSName>,
+    received_resumption_data: Option<Vec<u8>>,
+    resumption_data: Vec<u8>,
+    state: Option<Box<dyn hs::State + Send + Sync>>,
+    client_cert_chain: Option<Vec<key::Certificate>>,
+    /// Whether to reject early data even if it would otherwise be accepted
+    reject_early_data: bool,
 }
 
 impl ServerSession {
     /// Make a new ServerSession.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
+        Self::from_config(config, vec![])
+    }
+
+    pub(crate) fn from_config(
+        config: &Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+    ) -> Self {
         ServerSession {
-            imp: ServerSessionImpl::new(config, vec![]),
+            config: config.clone(),
+            common: SessionCommon::new(config.mtu, false),
+            sni: None,
+            received_resumption_data: None,
+            resumption_data: Vec::new(),
+            state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
+            client_cert_chain: None,
+            reject_early_data: false,
         }
     }
 
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
-        if self.imp.common.traffic
-            && !self.imp.common.is_tls13()
+        if self.common.traffic
+            && !self.common.is_tls13()
             && msg.is_handshake_type(HandshakeType::ClientHello)
         {
-            self.imp
-                .common
+            self.common
                 .send_warning_alert(AlertDescription::NoRenegotiation);
             return Ok(());
         }
 
-        let state = self.imp.state.take().unwrap();
-        let maybe_next_state = state.handle(&mut self.imp, msg);
+        let state = self.state.take().unwrap();
+        let maybe_next_state = state.handle(self, msg);
         let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
-        self.imp.state = Some(next_state);
+        self.state = Some(next_state);
 
         Ok(())
     }
@@ -437,14 +406,12 @@ impl ServerSession {
     }
 
     fn queue_unexpected_alert(&mut self) {
-        self.imp
-            .common
+        self.common
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
-            .imp
             .common
             .handshake_joiner
             .frames
@@ -473,9 +440,18 @@ impl ServerSession {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn get_sni_hostname(&self) -> Option<&str> {
-        self.imp
-            .get_sni()
+        self.get_sni()
             .map(|s| s.as_ref().into())
+    }
+
+    fn get_sni(&self) -> Option<&webpki::DNSName> {
+        self.sni.as_ref()
+    }
+
+    fn set_sni(&mut self, value: webpki::DNSName) {
+        // The SNI hostname is immutable once set.
+        assert!(self.sni.is_none());
+        self.sni = Some(value)
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -484,8 +460,7 @@ impl ServerSession {
     ///
     /// Returns `Some` iff a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.imp
-            .received_resumption_data
+        self.received_resumption_data
             .as_ref()
             .map(|x| &x[..])
     }
@@ -500,7 +475,7 @@ impl ServerSession {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) {
         assert!(data.len() < 2usize.pow(15));
-        self.imp.resumption_data = data.into();
+        self.resumption_data = data.into();
     }
 
     /// Explicitly discard early data, notifying the client
@@ -513,44 +488,38 @@ impl ServerSession {
             self.is_handshaking(),
             "cannot retroactively reject early data"
         );
-        self.imp.reject_early_data = true;
+        self.reject_early_data = true;
     }
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        let mut st = self.imp.state.take();
+        let mut st = self.state.take();
         st.as_mut()
-            .map(|st| st.perhaps_write_key_update(&mut self.imp));
-        self.imp.state = st;
-        self.imp.common.send_some_plaintext(buf)
+            .map(|st| st.perhaps_write_key_update(self));
+        self.state = st;
+        self.common.send_some_plaintext(buf)
     }
 }
 
 impl Session for ServerSession {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        self.imp.common.read_tls(rd)
+        self.common.read_tls(rd)
     }
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.imp.common.write_tls(wr)
+        self.common.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<(), TlsError> {
-        if let Some(ref err) = self.imp.common.error {
+        if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
 
-        if self
-            .imp
-            .common
-            .message_deframer
-            .desynced
-        {
+        if self.common.message_deframer.desynced {
             return Err(TlsError::CorruptMessage);
         }
 
         while let Some(msg) = self
-            .imp
             .common
             .message_deframer
             .frames
@@ -558,7 +527,6 @@ impl Session for ServerSession {
         {
             let ignore_corrupt_payload = true;
             let result = self
-                .imp
                 .common
                 .process_msg(msg, ignore_corrupt_payload)
                 .and_then(|val| match val {
@@ -568,7 +536,7 @@ impl Session for ServerSession {
                 });
 
             if let Err(err) = result {
-                self.imp.common.error = Some(err.clone());
+                self.common.error = Some(err.clone());
                 return Err(err);
             }
         }
@@ -583,38 +551,37 @@ impl Session for ServerSession {
         //
         // This also covers the handshake case, because we don't have
         // readable plaintext before handshake has completed.
-        !self.imp.common.has_readable_plaintext()
+        !self.common.has_readable_plaintext()
     }
 
     fn wants_write(&self) -> bool {
-        !self.imp.common.sendable_tls.is_empty()
+        !self.common.sendable_tls.is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
-        !self.imp.common.traffic
+        !self.common.traffic
     }
 
     fn set_buffer_limit(&mut self, len: usize) {
-        self.imp.common.set_buffer_limit(len)
+        self.common.set_buffer_limit(len)
     }
 
     fn send_close_notify(&mut self) {
-        self.imp.common.send_close_notify()
+        self.common.send_close_notify()
     }
 
     fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.imp
-            .client_cert_chain
+        self.client_cert_chain
             .as_ref()
             .map(|chain| chain.iter().cloned().collect())
     }
 
     fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.imp.common.get_alpn_protocol()
+        self.common.get_alpn_protocol()
     }
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.imp.common.negotiated_version
+        self.common.negotiated_version
     }
 
     fn export_keying_material(
@@ -623,15 +590,14 @@ impl Session for ServerSession {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), TlsError> {
-        self.imp
-            .state
+        self.state
             .as_ref()
             .ok_or_else(|| TlsError::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.imp.common.get_suite()
+        self.common.get_suite()
     }
 }
 
@@ -649,7 +615,7 @@ impl io::Read for ServerSession {
     /// This means applications using rustls must both handle ErrorKind::ConnectionAborted
     /// from this function, *and* unexpected closure of the underlying TCP connection.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.imp.common.read(buf)
+        self.common.read(buf)
     }
 }
 
@@ -677,7 +643,13 @@ impl io::Write for ServerSession {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.imp.common.flush_plaintext();
+        self.common.flush_plaintext();
         Ok(())
+    }
+}
+
+impl fmt::Debug for ServerSession {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ServerSession").finish()
     }
 }

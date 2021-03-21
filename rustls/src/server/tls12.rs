@@ -12,7 +12,7 @@ use crate::msgs::handshake::HandshakePayload;
 use crate::msgs::handshake::NewSessionTicketPayload;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::ServerSessionImpl;
+use crate::server::ServerSession;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::verify;
 
@@ -44,11 +44,7 @@ impl ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let cert_chain =
             require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
         self.handshake
@@ -110,11 +106,7 @@ pub struct ExpectClientKX {
 }
 
 impl hs::State for ExpectClientKX {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
             HandshakeType::ClientKeyExchange,
@@ -196,11 +188,7 @@ impl ExpectCertificateVerify {
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
                 m,
@@ -256,7 +244,7 @@ impl ExpectCCS {
 }
 
 impl hs::State for ExpectCCS {
-    fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
         // CCS should not be received interleaved with fragmented handshake-level
@@ -274,7 +262,7 @@ impl hs::State for ExpectCCS {
 fn get_server_session_value_tls12(
     secrets: &SessionSecrets,
     using_ems: bool,
-    sess: &ServerSessionImpl,
+    sess: &ServerSession,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
@@ -300,7 +288,7 @@ pub fn emit_ticket(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
     using_ems: bool,
-    sess: &mut ServerSessionImpl,
+    sess: &mut ServerSession,
 ) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -328,7 +316,7 @@ pub fn emit_ticket(
     sess.common.send_msg(m, false);
 }
 
-pub fn emit_ccs(sess: &mut ServerSessionImpl) {
+pub fn emit_ccs(sess: &mut ServerSession) {
     let m = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
@@ -341,7 +329,7 @@ pub fn emit_ccs(sess: &mut ServerSessionImpl) {
 pub fn emit_finished(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
-    sess: &mut ServerSessionImpl,
+    sess: &mut ServerSession,
 ) {
     let vh = handshake.transcript.get_current_hash();
     let verify_data = secrets.server_verify_data(&vh);
@@ -378,11 +366,7 @@ impl ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -446,11 +430,7 @@ pub struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl hs::State for ExpectTraffic {
-    fn handle(
-        self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        mut m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ServerSession, mut m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;
         sess.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
