@@ -376,10 +376,6 @@ impl ServerSessionImpl {
         }
     }
 
-    pub fn is_handshaking(&self) -> bool {
-        !self.common.traffic
-    }
-
     pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .common
@@ -620,7 +616,7 @@ impl Session for ServerSession {
     }
 
     fn is_handshaking(&self) -> bool {
-        self.imp.is_handshaking()
+        !self.imp.common.traffic
     }
 
     fn set_buffer_limit(&mut self, len: usize) {
