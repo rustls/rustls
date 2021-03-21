@@ -604,8 +604,8 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
     }
 
     let addrs = [
-        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
         net::SocketAddr::from((net::Ipv6Addr::LOCALHOST, opts.port)),
+        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
     ];
     let mut conn = net::TcpStream::connect(&addrs[..]).expect("cannot connect");
     let mut sent_shutdown = false;
