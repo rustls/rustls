@@ -21,7 +21,7 @@ use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::server::{ClientHello, ServerConfig, ServerSessionImpl};
+use crate::server::{ClientHello, ServerConfig, ServerSession};
 #[cfg(feature = "quic")]
 use crate::session::Protocol;
 use crate::session::{SessionRandoms, SessionSecrets};
@@ -38,7 +38,7 @@ pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, TlsError>;
 
 pub trait State {
-    fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, sess: &mut ServerSession, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -49,35 +49,35 @@ pub trait State {
         Err(TlsError::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _sess: &mut ServerSessionImpl) {}
+    fn perhaps_write_key_update(&mut self, _sess: &mut ServerSession) {}
 }
 
-pub fn incompatible(sess: &mut ServerSessionImpl, why: &str) -> TlsError {
+pub fn incompatible(sess: &mut ServerSession, why: &str) -> TlsError {
     sess.common
         .send_fatal_alert(AlertDescription::HandshakeFailure);
     TlsError::PeerIncompatibleError(why.to_string())
 }
 
-fn bad_version(sess: &mut ServerSessionImpl, why: &str) -> TlsError {
+fn bad_version(sess: &mut ServerSession, why: &str) -> TlsError {
     sess.common
         .send_fatal_alert(AlertDescription::ProtocolVersion);
     TlsError::PeerIncompatibleError(why.to_string())
 }
 
-pub fn illegal_param(sess: &mut ServerSessionImpl, why: &str) -> TlsError {
+pub fn illegal_param(sess: &mut ServerSession, why: &str) -> TlsError {
     sess.common
         .send_fatal_alert(AlertDescription::IllegalParameter);
     TlsError::PeerMisbehavedError(why.to_string())
 }
 
-pub fn decode_error(sess: &mut ServerSessionImpl, why: &str) -> TlsError {
+pub fn decode_error(sess: &mut ServerSession, why: &str) -> TlsError {
     sess.common
         .send_fatal_alert(AlertDescription::DecodeError);
     TlsError::PeerMisbehavedError(why.to_string())
 }
 
 pub fn can_resume(
-    sess: &ServerSessionImpl,
+    sess: &ServerSession,
     using_ems: bool,
     resumedata: persist::ServerSessionValue,
 ) -> Option<persist::ServerSessionValue> {
@@ -117,7 +117,7 @@ fn same_dns_name_or_both_none(a: Option<&webpki::DNSName>, b: Option<&webpki::DN
 // messages.  Otherwise the defragmented messages will have
 // been protected with two different record layer protections,
 // which is illegal.  Not mentioned in RFC.
-pub fn check_aligned_handshake(sess: &mut ServerSessionImpl) -> Result<(), TlsError> {
+pub fn check_aligned_handshake(sess: &mut ServerSession) -> Result<(), TlsError> {
     if !sess.common.handshake_joiner.is_empty() {
         sess.common
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
@@ -129,7 +129,7 @@ pub fn check_aligned_handshake(sess: &mut ServerSessionImpl) -> Result<(), TlsEr
     }
 }
 
-pub fn save_sni(sess: &mut ServerSessionImpl, sni: Option<webpki::DNSName>) {
+pub fn save_sni(sess: &mut ServerSession, sni: Option<webpki::DNSName>) {
     if let Some(sni) = sni {
         // Save the SNI into the session.
         sess.set_sni(sni);
@@ -151,7 +151,7 @@ impl ExtensionProcessing {
 
     pub fn process_common(
         &mut self,
-        sess: &mut ServerSessionImpl,
+        sess: &mut ServerSession,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -268,12 +268,7 @@ impl ExtensionProcessing {
         Ok(())
     }
 
-    fn process_tls12(
-        &mut self,
-        sess: &ServerSessionImpl,
-        hello: &ClientHelloPayload,
-        using_ems: bool,
-    ) {
+    fn process_tls12(&mut self, sess: &ServerSession, hello: &ClientHelloPayload, using_ems: bool) {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
         let secure_reneg_offered = hello
@@ -342,7 +337,7 @@ impl ExpectClientHello {
 
     fn emit_server_hello(
         &mut self,
-        sess: &mut ServerSessionImpl,
+        sess: &mut ServerSession,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -386,7 +381,7 @@ impl ExpectClientHello {
         Ok(())
     }
 
-    fn emit_certificate(&mut self, sess: &mut ServerSessionImpl, cert_chain: &[Certificate]) {
+    fn emit_certificate(&mut self, sess: &mut ServerSession, cert_chain: &[Certificate]) {
         let c = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -402,7 +397,7 @@ impl ExpectClientHello {
         sess.common.send_msg(c, false);
     }
 
-    fn emit_cert_status(&mut self, sess: &mut ServerSessionImpl, ocsp: &[u8]) {
+    fn emit_cert_status(&mut self, sess: &mut ServerSession, ocsp: &[u8]) {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
@@ -422,7 +417,7 @@ impl ExpectClientHello {
 
     fn emit_server_kx(
         &mut self,
-        sess: &mut ServerSessionImpl,
+        sess: &mut ServerSession,
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
         signing_key: &Arc<Box<dyn sign::SigningKey>>,
@@ -464,7 +459,7 @@ impl ExpectClientHello {
         Ok(kx)
     }
 
-    fn emit_certificate_req(&mut self, sess: &mut ServerSessionImpl) -> Result<bool, TlsError> {
+    fn emit_certificate_req(&mut self, sess: &mut ServerSession) -> Result<bool, TlsError> {
         let client_auth = sess.config.get_verifier();
 
         if !client_auth.offer_client_auth() {
@@ -508,7 +503,7 @@ impl ExpectClientHello {
         Ok(true)
     }
 
-    fn emit_server_hello_done(&mut self, sess: &mut ServerSessionImpl) {
+    fn emit_server_hello_done(&mut self, sess: &mut ServerSession) {
         let m = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -526,7 +521,7 @@ impl ExpectClientHello {
 
     fn start_resumption(
         mut self,
-        sess: &mut ServerSessionImpl,
+        sess: &mut ServerSession,
         client_hello: &ClientHelloPayload,
         sni: Option<&webpki::DNSName>,
         id: &SessionID,
@@ -582,7 +577,7 @@ impl ExpectClientHello {
 }
 
 impl State for ExpectClientHello {
-    fn handle(mut self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> NextStateOrError {
         let client_hello =
             require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
         let tls13_enabled = sess

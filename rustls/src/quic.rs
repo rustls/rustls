@@ -5,7 +5,7 @@ use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::message::{Message, MessagePayload};
-use crate::server::{ServerConfig, ServerSession, ServerSessionImpl};
+use crate::server::{ServerConfig, ServerSession};
 use crate::session::{Protocol, SessionCommon};
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
 
@@ -98,8 +98,7 @@ impl QuicExt for ClientSession {
 
 impl QuicExt for ServerSession {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.imp
-            .common
+        self.common
             .quic
             .params
             .as_ref()
@@ -108,29 +107,26 @@ impl QuicExt for ServerSession {
 
     fn get_0rtt_keys(&self) -> Option<DirectionalKeys> {
         Some(DirectionalKeys::new(
-            self.imp.common.get_suite()?,
-            self.imp
-                .common
-                .quic
-                .early_secret
-                .as_ref()?,
+            self.common.get_suite()?,
+            self.common.quic.early_secret.as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
-        read_hs(&mut self.imp.common, plaintext)?;
+        read_hs(&mut self.common, plaintext)?;
         self.process_new_handshake_messages()
     }
+
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
-        write_hs(&mut self.imp.common, buf)
+        write_hs(&mut self.common, buf)
     }
 
     fn get_alert(&self) -> Option<AlertDescription> {
-        self.imp.common.quic.alert
+        self.common.quic.alert
     }
 
     fn next_1rtt_keys(&mut self) -> PacketKeySet {
-        next_1rtt_keys(&mut self.imp.common)
+        next_1rtt_keys(&mut self.common)
     }
 }
 
@@ -374,9 +370,9 @@ pub trait ServerQuicExt {
             Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             Version::V1 => ServerExtension::TransportParameters(params),
         };
-        let mut imp = ServerSessionImpl::new(config, vec![ext]);
-        imp.common.protocol = Protocol::Quic;
-        ServerSession { imp }
+        let mut new = ServerSession::from_config(config, vec![ext]);
+        new.common.protocol = Protocol::Quic;
+        new
     }
 }
 
