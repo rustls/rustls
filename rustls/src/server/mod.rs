@@ -381,17 +381,6 @@ impl ServerSessionImpl {
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
-    fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
-        match rc {
-            Err(TlsError::InappropriateMessage { .. })
-            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
-                self.queue_unexpected_alert();
-            }
-            _ => {}
-        };
-        rc
-    }
-
     pub fn get_sni(&self) -> Option<&webpki::DNSName> {
         self.sni.as_ref()
     }
@@ -435,12 +424,21 @@ impl ServerSession {
 
         let state = self.imp.state.take().unwrap();
         let maybe_next_state = state.handle(&mut self.imp, msg);
-        let next_state = self
-            .imp
-            .maybe_send_unexpected_alert(maybe_next_state)?;
+        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
         self.imp.state = Some(next_state);
 
         Ok(())
+    }
+
+    fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
+        match rc {
+            Err(TlsError::InappropriateMessage { .. })
+            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
+                self.imp.queue_unexpected_alert();
+            }
+            _ => {}
+        };
+        rc
     }
 
     pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
