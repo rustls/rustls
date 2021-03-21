@@ -392,24 +392,6 @@ impl ServerSessionImpl {
         rc
     }
 
-    pub fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
-        if self.common.traffic
-            && !self.common.is_tls13()
-            && msg.is_handshake_type(HandshakeType::ClientHello)
-        {
-            self.common
-                .send_warning_alert(AlertDescription::NoRenegotiation);
-            return Ok(());
-        }
-
-        let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(self, msg);
-        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
-        self.state = Some(next_state);
-
-        Ok(())
-    }
-
     pub fn get_sni(&self) -> Option<&webpki::DNSName> {
         self.sni.as_ref()
     }
@@ -440,6 +422,27 @@ impl ServerSession {
         }
     }
 
+    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
+        if self.imp.common.traffic
+            && !self.imp.common.is_tls13()
+            && msg.is_handshake_type(HandshakeType::ClientHello)
+        {
+            self.imp
+                .common
+                .send_warning_alert(AlertDescription::NoRenegotiation);
+            return Ok(());
+        }
+
+        let state = self.imp.state.take().unwrap();
+        let maybe_next_state = state.handle(&mut self.imp, msg);
+        let next_state = self
+            .imp
+            .maybe_send_unexpected_alert(maybe_next_state)?;
+        self.imp.state = Some(next_state);
+
+        Ok(())
+    }
+
     pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .imp
@@ -448,7 +451,7 @@ impl ServerSession {
             .frames
             .pop_front()
         {
-            self.imp.process_main_protocol(msg)?;
+            self.process_main_protocol(msg)?;
         }
 
         Ok(())
@@ -561,7 +564,7 @@ impl Session for ServerSession {
                 .process_msg(msg, ignore_corrupt_payload)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => self.process_new_handshake_messages(),
-                    Some(MessageType::Data(msg)) => self.imp.process_main_protocol(msg),
+                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
                     None => Ok(()),
                 });
 
