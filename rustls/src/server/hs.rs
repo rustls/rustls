@@ -401,7 +401,14 @@ impl ExpectClientHello {
         randoms: &SessionRandoms,
     ) -> Result<(), TlsError> {
         let mut ep = ExtensionProcessing::new();
-        ep.process_common(sess, ocsp_response, sct_list, hello, resumedata, &self.handshake)?;
+        ep.process_common(
+            sess,
+            ocsp_response,
+            sct_list,
+            hello,
+            resumedata,
+            &self.handshake,
+        )?;
         ep.process_tls12(sess, hello, self.using_ems);
 
         self.send_ticket = ep.send_ticket;
@@ -430,11 +437,7 @@ impl ExpectClientHello {
         Ok(())
     }
 
-    fn emit_certificate(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-        cert_chain: &[Certificate],
-    ) {
+    fn emit_certificate(&mut self, sess: &mut ServerSessionImpl, cert_chain: &[Certificate]) {
         let c = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -450,11 +453,7 @@ impl ExpectClientHello {
         sess.common.send_msg(c, false);
     }
 
-    fn emit_cert_status(
-        &mut self,
-        sess: &mut ServerSessionImpl,
-        ocsp: &[u8],
-    ) {
+    fn emit_cert_status(&mut self, sess: &mut ServerSessionImpl, ocsp: &[u8]) {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
@@ -592,7 +591,14 @@ impl ExpectClientHello {
         }
 
         self.handshake.session_id = *id;
-        self.emit_server_hello(sess, &mut None, &mut None, client_hello, Some(&resumedata), randoms)?;
+        self.emit_server_hello(
+            sess,
+            &mut None,
+            &mut None,
+            client_hello,
+            Some(&resumedata),
+            randoms,
+        )?;
 
         let suite = sess.common.get_suite_assert();
         let secrets = SessionSecrets::new_resume(&randoms, suite, &resumedata.master_secret.0);
@@ -935,8 +941,16 @@ impl State for ExpectClientHello {
 
         debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-        let (mut ocsp_response, mut sct_list) = (certkey.ocsp.as_deref(), certkey.sct_list.as_deref());
-        self.emit_server_hello(sess, &mut ocsp_response, &mut sct_list, client_hello, None, &randoms)?;
+        let (mut ocsp_response, mut sct_list) =
+            (certkey.ocsp.as_deref(), certkey.sct_list.as_deref());
+        self.emit_server_hello(
+            sess,
+            &mut ocsp_response,
+            &mut sct_list,
+            client_hello,
+            None,
+            &randoms,
+        )?;
         self.emit_certificate(sess, &certkey.cert);
         if let Some(ocsp_response) = ocsp_response {
             self.emit_cert_status(sess, ocsp_response);

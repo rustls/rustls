@@ -289,7 +289,14 @@ impl CompleteClientHelloHandling {
         resumedata: Option<&persist::ServerSessionValue>,
     ) -> Result<(), TlsError> {
         let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(sess, ocsp_response, sct_list, hello, resumedata, &self.handshake)?;
+        ep.process_common(
+            sess,
+            ocsp_response,
+            sct_list,
+            hello,
+            resumedata,
+            &self.handshake,
+        )?;
 
         let ee = Message {
             typ: ContentType::Handshake,
@@ -690,8 +697,15 @@ impl CompleteClientHelloHandling {
             self.emit_fake_ccs(sess);
         }
 
-        let (mut ocsp_response, mut sct_list) = (server_key.ocsp.as_deref(), server_key.sct_list.as_deref());
-        self.emit_encrypted_extensions(sess, &mut ocsp_response, &mut sct_list, client_hello, resumedata.as_ref())?;
+        let (mut ocsp_response, mut sct_list) =
+            (server_key.ocsp.as_deref(), server_key.sct_list.as_deref());
+        self.emit_encrypted_extensions(
+            sess,
+            &mut ocsp_response,
+            &mut sct_list,
+            client_hello,
+            resumedata.as_ref(),
+        )?;
 
         let doing_client_auth = if full_handshake {
             let client_auth = self.emit_certificate_req_tls13(sess)?;
