@@ -441,40 +441,6 @@ impl ServerSessionImpl {
         Ok(())
     }
 
-    pub fn process_new_packets(&mut self) -> Result<(), TlsError> {
-        if let Some(ref err) = self.common.error {
-            return Err(err.clone());
-        }
-
-        if self.common.message_deframer.desynced {
-            return Err(TlsError::CorruptMessage);
-        }
-
-        while let Some(msg) = self
-            .common
-            .message_deframer
-            .frames
-            .pop_front()
-        {
-            let ignore_corrupt_payload = true;
-            let result = self
-                .common
-                .process_msg(msg, ignore_corrupt_payload)
-                .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
-                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
-                    None => Ok(()),
-                });
-
-            if let Err(err) = result {
-                self.common.error = Some(err.clone());
-                return Err(err);
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         self.client_cert_chain
             .as_ref()
@@ -611,7 +577,46 @@ impl Session for ServerSession {
     }
 
     fn process_new_packets(&mut self) -> Result<(), TlsError> {
-        self.imp.process_new_packets()
+        if let Some(ref err) = self.imp.common.error {
+            return Err(err.clone());
+        }
+
+        if self
+            .imp
+            .common
+            .message_deframer
+            .desynced
+        {
+            return Err(TlsError::CorruptMessage);
+        }
+
+        while let Some(msg) = self
+            .imp
+            .common
+            .message_deframer
+            .frames
+            .pop_front()
+        {
+            let ignore_corrupt_payload = true;
+            let result = self
+                .imp
+                .common
+                .process_msg(msg, ignore_corrupt_payload)
+                .and_then(|val| match val {
+                    Some(MessageType::Handshake) => self
+                        .imp
+                        .process_new_handshake_messages(),
+                    Some(MessageType::Data(msg)) => self.imp.process_main_protocol(msg),
+                    None => Ok(()),
+                });
+
+            if let Err(err) = result {
+                self.imp.common.error = Some(err.clone());
+                return Err(err);
+            }
+        }
+
+        Ok(())
     }
 
     fn wants_read(&self) -> bool {
