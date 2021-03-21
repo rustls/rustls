@@ -376,19 +376,6 @@ impl ServerSessionImpl {
         }
     }
 
-    pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
-        while let Some(msg) = self
-            .common
-            .handshake_joiner
-            .frames
-            .pop_front()
-        {
-            self.process_main_protocol(msg)?;
-        }
-
-        Ok(())
-    }
-
     fn queue_unexpected_alert(&mut self) {
         self.common
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
@@ -451,6 +438,20 @@ impl ServerSession {
         ServerSession {
             imp: ServerSessionImpl::new(config, vec![]),
         }
+    }
+
+    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
+        while let Some(msg) = self
+            .imp
+            .common
+            .handshake_joiner
+            .frames
+            .pop_front()
+        {
+            self.imp.process_main_protocol(msg)?;
+        }
+
+        Ok(())
     }
 
     /// Retrieves the SNI hostname, if any, used to select the certificate and
@@ -559,9 +560,7 @@ impl Session for ServerSession {
                 .common
                 .process_msg(msg, ignore_corrupt_payload)
                 .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self
-                        .imp
-                        .process_new_handshake_messages(),
+                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
                     Some(MessageType::Data(msg)) => self.imp.process_main_protocol(msg),
                     None => Ok(()),
                 });

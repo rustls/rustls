@@ -119,8 +119,7 @@ impl QuicExt for ServerSession {
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
         read_hs(&mut self.imp.common, plaintext)?;
-        self.imp
-            .process_new_handshake_messages()
+        self.process_new_handshake_messages()
     }
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
         write_hs(&mut self.imp.common, buf)
