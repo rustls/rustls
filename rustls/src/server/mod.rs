@@ -437,18 +437,6 @@ impl ServerSessionImpl {
         self.sni = Some(value)
     }
 
-    fn export_keying_material(
-        &self,
-        output: &mut [u8],
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
-        self.state
-            .as_ref()
-            .ok_or_else(|| TlsError::HandshakeNotComplete)
-            .and_then(|st| st.export_keying_material(output, label, context))
-    }
-
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
         st.as_mut()
@@ -639,7 +627,10 @@ impl Session for ServerSession {
         context: Option<&[u8]>,
     ) -> Result<(), TlsError> {
         self.imp
-            .export_keying_material(output, label, context)
+            .state
+            .as_ref()
+            .ok_or_else(|| TlsError::HandshakeNotComplete)
+            .and_then(|st| st.export_keying_material(output, label, context))
     }
 
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
