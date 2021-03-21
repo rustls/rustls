@@ -10,6 +10,10 @@ use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
+#[cfg(feature = "quic")]
+use crate::quic;
+#[cfg(feature = "quic")]
+use crate::session::Protocol;
 use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -401,12 +405,12 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 /// This represents a single TLS client session.
 pub struct ClientSession {
-    pub(crate) config: Arc<ClientConfig>,
-    pub(crate) common: SessionCommon,
-    pub(crate) state: Option<hs::NextState>,
-    pub(crate) server_cert_chain: CertificatePayload,
-    pub(crate) early_data: EarlyData,
-    pub(crate) resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+    config: Arc<ClientConfig>,
+    common: SessionCommon,
+    state: Option<hs::NextState>,
+    server_cert_chain: CertificatePayload,
+    early_data: EarlyData,
+    resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
 }
 
 impl fmt::Debug for ClientSession {
@@ -428,7 +432,7 @@ impl ClientSession {
         Ok(new)
     }
 
-    pub(crate) fn from_config(config: &Arc<ClientConfig>) -> Self {
+    fn from_config(config: &Arc<ClientConfig>) -> Self {
         ClientSession {
             config: config.clone(),
             common: SessionCommon::new(config.mtu, true),
@@ -474,7 +478,7 @@ impl ClientSession {
         self.early_data.is_accepted()
     }
 
-    pub(crate) fn start_handshake(
+    fn start_handshake(
         &mut self,
         dns_name: webpki::DNSName,
         extra_exts: Vec<ClientExtension>,
@@ -736,3 +740,71 @@ impl io::Write for ClientSession {
         Ok(())
     }
 }
+
+#[cfg(feature = "quic")]
+impl quic::QuicExt for ClientSession {
+    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.common
+            .quic
+            .params
+            .as_ref()
+            .map(|v| v.as_ref())
+    }
+
+    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+        Some(quic::DirectionalKeys::new(
+            self.resumption_ciphersuite?,
+            self.common.quic.early_secret.as_ref()?,
+        ))
+    }
+
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        quic::read_hs(&mut self.common, plaintext)?;
+        self.process_new_handshake_messages()
+    }
+
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
+        quic::write_hs(&mut self.common, buf)
+    }
+
+    fn get_alert(&self) -> Option<AlertDescription> {
+        self.common.quic.alert
+    }
+
+    fn next_1rtt_keys(&mut self) -> quic::PacketKeySet {
+        quic::next_1rtt_keys(&mut self.common)
+    }
+}
+
+/// Methods specific to QUIC client sessions
+#[cfg(feature = "quic")]
+pub trait ClientQuicExt {
+    /// Make a new QUIC ClientSession. This differs from `ClientSession::new()`
+    /// in that it takes an extra argument, `params`, which contains the
+    /// TLS-encoded transport parameters to send.
+    fn new_quic(
+        config: &Arc<ClientConfig>,
+        quic_version: quic::Version,
+        hostname: webpki::DNSNameRef,
+        params: Vec<u8>,
+    ) -> Result<ClientSession, Error> {
+        assert!(
+            config
+                .versions
+                .iter()
+                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
+            "QUIC requires TLS version >= 1.3"
+        );
+        let ext = match quic_version {
+            quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
+            quic::Version::V1 => ClientExtension::TransportParameters(params),
+        };
+        let mut new = ClientSession::from_config(config);
+        new.common.protocol = Protocol::Quic;
+        new.start_handshake(hostname.into(), vec![ext])?;
+        Ok(new)
+    }
+}
+
+#[cfg(feature = "quic")]
+impl ClientQuicExt for ClientSession {}

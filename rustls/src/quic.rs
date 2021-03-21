@@ -1,9 +1,9 @@
+pub use crate::client::ClientQuicExt;
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::client::{ClientConfig, ClientSession};
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::msgs::handshake::{ClientExtension, ServerExtension};
+use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::server::{ServerConfig, ServerSession};
 use crate::session::{Protocol, SessionCommon};
@@ -12,7 +12,6 @@ use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA25
 use std::sync::Arc;
 
 use ring::{aead, hkdf};
-use webpki;
 
 /// Secrets used to encrypt/decrypt traffic
 #[derive(Clone, Debug)]
@@ -62,40 +61,6 @@ pub trait QuicExt {
     fn next_1rtt_keys(&mut self) -> PacketKeySet;
 }
 
-impl QuicExt for ClientSession {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.common
-            .quic
-            .params
-            .as_ref()
-            .map(|v| v.as_ref())
-    }
-
-    fn get_0rtt_keys(&self) -> Option<DirectionalKeys> {
-        Some(DirectionalKeys::new(
-            self.resumption_ciphersuite?,
-            self.common.quic.early_secret.as_ref()?,
-        ))
-    }
-
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        read_hs(&mut self.common, plaintext)?;
-        self.process_new_handshake_messages()
-    }
-
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
-        write_hs(&mut self.common, buf)
-    }
-
-    fn get_alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
-    }
-
-    fn next_1rtt_keys(&mut self) -> PacketKeySet {
-        next_1rtt_keys(&mut self.common)
-    }
-}
-
 impl QuicExt for ServerSession {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
@@ -139,7 +104,7 @@ pub struct DirectionalKeys {
 }
 
 impl DirectionalKeys {
-    fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
+    pub(crate) fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
         let hp_alg = match suite.bulk {
             BulkAlgorithm::Aes128Gcm => &aead::quic::AES_128,
             BulkAlgorithm::Aes256Gcm => &aead::quic::AES_256,
@@ -249,7 +214,7 @@ impl Keys {
     }
 }
 
-fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), Error> {
+pub(crate) fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), Error> {
     if this
         .handshake_joiner
         .take_message(Message {
@@ -265,7 +230,7 @@ fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
+pub(crate) fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
     while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
         buf.extend_from_slice(&msg);
         if let Some(&(true, _)) = this.quic.hs_queue.front() {
@@ -287,7 +252,7 @@ fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
     None
 }
 
-fn next_1rtt_keys(this: &mut SessionCommon) -> PacketKeySet {
+pub(crate) fn next_1rtt_keys(this: &mut SessionCommon) -> PacketKeySet {
     let hkdf_alg = this.get_suite_assert().hkdf_algorithm;
     let secrets = this
         .quic
@@ -313,37 +278,6 @@ fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {
         server: hkdf_expand(&prev.server, hkdf_alg, b"quic ku", &[]),
     }
 }
-
-/// Methods specific to QUIC client sessions
-pub trait ClientQuicExt {
-    /// Make a new QUIC ClientSession. This differs from `ClientSession::new()`
-    /// in that it takes an extra argument, `params`, which contains the
-    /// TLS-encoded transport parameters to send.
-    fn new_quic(
-        config: &Arc<ClientConfig>,
-        quic_version: Version,
-        hostname: webpki::DNSNameRef,
-        params: Vec<u8>,
-    ) -> Result<ClientSession, Error> {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
-        let ext = match quic_version {
-            Version::V1Draft => ClientExtension::TransportParametersDraft(params),
-            Version::V1 => ClientExtension::TransportParameters(params),
-        };
-        let mut session = ClientSession::from_config(config);
-        session.common.protocol = Protocol::Quic;
-        session.start_handshake(hostname.into(), vec![ext])?;
-        Ok(session)
-    }
-}
-
-impl ClientQuicExt for ClientSession {}
 
 /// Methods specific to QUIC server sessions
 pub trait ServerQuicExt {
