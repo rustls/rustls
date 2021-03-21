@@ -341,7 +341,6 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub common: SessionCommon,
     sni: Option<webpki::DNSName>,
-    pub quic_params: Option<Vec<u8>>,
     pub received_resumption_data: Option<Vec<u8>>,
     pub resumption_data: Vec<u8>,
     pub state: Option<Box<dyn hs::State + Send + Sync>>,
@@ -366,7 +365,6 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             common: SessionCommon::new(server_config.mtu, false),
             sni: None,
-            quic_params: None,
             received_resumption_data: None,
             resumption_data: Vec::new(),
             state: Some(Box::new(hs::ExpectClientHello::new(
