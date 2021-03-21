@@ -423,10 +423,6 @@ impl ServerSessionImpl {
         Ok(())
     }
 
-    pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common.negotiated_version
-    }
-
     pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common.get_suite()
     }
@@ -633,7 +629,7 @@ impl Session for ServerSession {
     }
 
     fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.imp.get_protocol_version()
+        self.imp.common.negotiated_version
     }
 
     fn export_keying_material(
