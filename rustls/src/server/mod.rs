@@ -423,12 +423,6 @@ impl ServerSessionImpl {
         Ok(())
     }
 
-    pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.client_cert_chain
-            .as_ref()
-            .map(|chain| chain.iter().cloned().collect())
-    }
-
     pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
     }
@@ -628,7 +622,10 @@ impl Session for ServerSession {
     }
 
     fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.imp.get_peer_certificates()
+        self.imp
+            .client_cert_chain
+            .as_ref()
+            .map(|chain| chain.iter().cloned().collect())
     }
 
     fn get_alpn_protocol(&self) -> Option<&[u8]> {
