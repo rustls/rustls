@@ -432,14 +432,6 @@ impl ServerSessionImpl {
         assert!(self.sni.is_none());
         self.sni = Some(value)
     }
-
-    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
-        self.state = st;
-        self.common.send_some_plaintext(buf)
-    }
 }
 
 /// This represents a single TLS server session.
@@ -519,6 +511,14 @@ impl ServerSession {
             "cannot retroactively reject early data"
         );
         self.imp.reject_early_data = true;
+    }
+
+    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
+        let mut st = self.imp.state.take();
+        st.as_mut()
+            .map(|st| st.perhaps_write_key_update(&mut self.imp));
+        self.imp.state = st;
+        self.imp.common.send_some_plaintext(buf)
     }
 }
 
@@ -664,13 +664,13 @@ impl io::Write for ServerSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.imp.send_some_plaintext(buf))
+        Ok(self.send_some_plaintext(buf))
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         let mut sz = 0;
         for buf in bufs {
-            sz += self.imp.send_some_plaintext(buf);
+            sz += self.send_some_plaintext(buf);
         }
         Ok(sz)
     }
