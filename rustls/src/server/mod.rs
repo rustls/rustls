@@ -376,16 +376,6 @@ impl ServerSessionImpl {
         }
     }
 
-    pub fn wants_read(&self) -> bool {
-        // We want to read more data all the time, except when we
-        // have unprocessed plaintext.  This provides back-pressure
-        // to the TCP buffers.
-        //
-        // This also covers the handshake case, because we don't have
-        // readable plaintext before handshake has completed.
-        !self.common.has_readable_plaintext()
-    }
-
     pub fn wants_write(&self) -> bool {
         !self.common.sendable_tls.is_empty()
     }
@@ -620,7 +610,13 @@ impl Session for ServerSession {
     }
 
     fn wants_read(&self) -> bool {
-        self.imp.wants_read()
+        // We want to read more data all the time, except when we
+        // have unprocessed plaintext.  This provides back-pressure
+        // to the TCP buffers.
+        //
+        // This also covers the handshake case, because we don't have
+        // readable plaintext before handshake has completed.
+        !self.imp.common.has_readable_plaintext()
     }
 
     fn wants_write(&self) -> bool {
