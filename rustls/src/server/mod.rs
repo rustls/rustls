@@ -376,10 +376,6 @@ impl ServerSessionImpl {
         }
     }
 
-    pub fn wants_write(&self) -> bool {
-        !self.common.sendable_tls.is_empty()
-    }
-
     pub fn is_handshaking(&self) -> bool {
         !self.common.traffic
     }
@@ -620,7 +616,7 @@ impl Session for ServerSession {
     }
 
     fn wants_write(&self) -> bool {
-        self.imp.wants_write()
+        !self.imp.common.sendable_tls.is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
