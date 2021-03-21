@@ -376,11 +376,6 @@ impl ServerSessionImpl {
         }
     }
 
-    fn queue_unexpected_alert(&mut self) {
-        self.common
-            .send_fatal_alert(AlertDescription::UnexpectedMessage);
-    }
-
     pub fn get_sni(&self) -> Option<&webpki::DNSName> {
         self.sni.as_ref()
     }
@@ -434,11 +429,17 @@ impl ServerSession {
         match rc {
             Err(TlsError::InappropriateMessage { .. })
             | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
-                self.imp.queue_unexpected_alert();
+                self.queue_unexpected_alert();
             }
             _ => {}
         };
         rc
+    }
+
+    fn queue_unexpected_alert(&mut self) {
+        self.imp
+            .common
+            .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
