@@ -340,18 +340,6 @@ impl ExpectClientHello {
         ech
     }
 
-    fn into_complete_tls13_client_hello_handling(
-        self,
-        randoms: SessionRandoms,
-    ) -> tls13::CompleteClientHelloHandling {
-        tls13::CompleteClientHelloHandling {
-            handshake: self.handshake,
-            randoms,
-            done_retry: self.done_retry,
-            send_ticket: self.send_ticket,
-        }
-    }
-
     fn into_expect_tls12_certificate(
         self,
         randoms: SessionRandoms,
@@ -805,9 +793,13 @@ impl State for ExpectClientHello {
             .write_slice(&mut randoms.client);
 
         if sess.common.is_tls13() {
-            return self
-                .into_complete_tls13_client_hello_handling(randoms)
-                .handle_client_hello(ciphersuite, sess, &certkey, &m);
+            return tls13::CompleteClientHelloHandling {
+                handshake: self.handshake,
+                randoms,
+                done_retry: self.done_retry,
+                send_ticket: self.send_ticket,
+            }
+            .handle_client_hello(ciphersuite, sess, &certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
