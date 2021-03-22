@@ -57,7 +57,6 @@ mod client_hello {
             chm: &Message,
             client_hello: &ClientHelloPayload,
             sigschemes_ext: Vec<SignatureScheme>,
-            sni: Option<webpki::DnsName>,
             tls13_enabled: bool,
         ) -> hs::NextStateOrError {
             // -- TLS1.2 only from hereon in --
@@ -138,13 +137,7 @@ mod client_hello {
                 });
 
             if let Some(data) = resume_data {
-                return self.start_resumption(
-                    conn,
-                    client_hello,
-                    sni.as_ref(),
-                    &client_hello.session_id,
-                    data,
-                );
+                return self.start_resumption(conn, client_hello, &client_hello.session_id, data);
             }
 
             // Now we have chosen a ciphersuite, we can make kx decisions.
@@ -234,7 +227,6 @@ mod client_hello {
             mut self,
             conn: &mut ServerConnection,
             client_hello: &ClientHelloPayload,
-            sni: Option<&webpki::DnsName>,
             id: &SessionID,
             resumedata: persist::ServerSessionValue,
         ) -> hs::NextStateOrError {
@@ -280,8 +272,6 @@ mod client_hello {
                 .record_layer
                 .start_encrypting();
             emit_finished(&secrets, &mut self.handshake, conn);
-
-            assert_eq!(sni, conn.get_sni());
 
             Ok(Box::new(ExpectCcs {
                 secrets,

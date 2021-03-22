@@ -390,6 +390,10 @@ impl State for ExpectClientHello {
             // The SNI hostname is immutable once set.
             assert!(conn.sni.is_none());
             conn.sni = Some(sni.clone());
+        } else if conn.sni != sni {
+            return Err(Error::PeerIncompatibleError(
+                "SNI differed on retry".to_string(),
+            ));
         }
 
         // We communicate to the upper layer what kind of key they should choose
@@ -508,7 +512,6 @@ impl State for ExpectClientHello {
                 &m,
                 client_hello,
                 sigschemes_ext,
-                sni,
                 tls13_enabled,
             )
         }
