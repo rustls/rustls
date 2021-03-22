@@ -118,15 +118,6 @@ pub fn check_aligned_handshake(conn: &mut ServerConnection) -> Result<(), Error>
     }
 }
 
-pub fn save_sni(conn: &mut ServerConnection, sni: Option<webpki::DnsName>) {
-    if let Some(sni) = sni {
-        // Save the SNI into the session.
-        // The SNI hostname is immutable once set.
-        assert!(conn.sni.is_none());
-        conn.sni = Some(sni);
-    }
-}
-
 #[derive(Default)]
 pub struct ExtensionProcessing {
     // extensions to reply with
@@ -416,9 +407,12 @@ impl State for ExpectClientHello {
             None => None,
         };
 
-        if !self.done_retry {
-            // save only the first SNI
-            save_sni(conn, sni.clone());
+        // save only the first SNI
+        if let (Some(sni), false) = (&sni, self.done_retry) {
+            // Save the SNI into the session.
+            // The SNI hostname is immutable once set.
+            assert!(conn.sni.is_none());
+            conn.sni = Some(sni.clone());
         }
 
         // We communicate to the upper layer what kind of key they should choose
