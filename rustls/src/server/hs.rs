@@ -340,21 +340,6 @@ impl ExpectClientHello {
         ech
     }
 
-    fn into_expect_tls12_client_kx(
-        self,
-        randoms: SessionRandoms,
-        kx: kx::KeyExchange,
-    ) -> NextState {
-        Box::new(tls12::ExpectClientKX {
-            handshake: self.handshake,
-            randoms,
-            using_ems: self.using_ems,
-            server_kx: ServerKXDetails::new(kx),
-            client_cert: None,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn emit_server_hello(
         &mut self,
         sess: &mut ServerSessionImpl,
@@ -933,16 +918,24 @@ impl State for ExpectClientHello {
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 
+        let server_kx = ServerKXDetails::new(kx);
         if doing_client_auth {
             Ok(Box::new(tls12::ExpectCertificate {
                 handshake: self.handshake,
                 randoms,
                 using_ems: self.using_ems,
-                server_kx: ServerKXDetails::new(kx),
+                server_kx,
                 send_ticket: self.send_ticket,
             }))
         } else {
-            Ok(self.into_expect_tls12_client_kx(randoms, kx))
+            Ok(Box::new(tls12::ExpectClientKX {
+                handshake: self.handshake,
+                randoms,
+                using_ems: self.using_ems,
+                server_kx,
+                client_cert: None,
+                send_ticket: self.send_ticket,
+            }))
         }
     }
 }
