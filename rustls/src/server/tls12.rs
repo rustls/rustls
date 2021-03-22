@@ -30,19 +30,6 @@ pub struct ExpectCertificate {
     pub send_ticket: bool,
 }
 
-impl ExpectCertificate {
-    fn into_expect_tls12_client_kx(self, cert: Option<ClientCertDetails>) -> hs::NextState {
-        Box::new(ExpectClientKX {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            server_kx: self.server_kx,
-            client_cert: cert,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -76,7 +63,14 @@ impl hs::State for ExpectCertificate {
                     self.handshake
                         .transcript
                         .abandon_client_auth();
-                    return Ok(self.into_expect_tls12_client_kx(None));
+                    return Ok(Box::new(ExpectClientKX {
+                        handshake: self.handshake,
+                        randoms: self.randoms,
+                        using_ems: self.using_ems,
+                        server_kx: self.server_kx,
+                        client_cert: None,
+                        send_ticket: self.send_ticket,
+                    }));
                 }
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
@@ -95,7 +89,14 @@ impl hs::State for ExpectCertificate {
             })?;
 
         let cert = ClientCertDetails::new(cert_chain.clone());
-        Ok(self.into_expect_tls12_client_kx(Some(cert)))
+        Ok(Box::new(ExpectClientKX {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            using_ems: self.using_ems,
+            server_kx: self.server_kx,
+            client_cert: Some(cert),
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
