@@ -65,8 +65,8 @@ pub fn can_resume(
     suite: &'static SupportedCipherSuite,
     sni: &Option<webpki::DnsName>,
     using_ems: bool,
-    resumedata: persist::ServerSessionValue,
-) -> Option<persist::ServerSessionValue> {
+    resumedata: &persist::ServerSessionValue,
+) -> bool {
     // The RFCs underspecify what happens if we try to resume to
     // an unoffered/varying suite.  We merely don't resume in weird cases.
     //
@@ -74,15 +74,9 @@ pub fn can_resume(
     // the request to resume the session if the server_name extension contains
     // a different name. Instead, it proceeds with a full handshake to
     // establish a new session."
-
-    if resumedata.cipher_suite == suite.suite
+    resumedata.cipher_suite == suite.suite
         && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
         && &resumedata.sni == sni
-    {
-        return Some(resumedata);
-    }
-
-    None
 }
 
 // Changing the keys must not span any fragmented handshake

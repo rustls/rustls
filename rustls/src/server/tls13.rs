@@ -215,7 +215,7 @@ mod client_hello {
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                     let resume = match self
                         .attempt_tls13_ticket_decryption(conn, &psk_id.identity.0)
-                        .and_then(|resumedata| {
+                        .filter(|resumedata| {
                             hs::can_resume(self.suite, &conn.sni, false, resumedata)
                         }) {
                         Some(resume) => resume,
