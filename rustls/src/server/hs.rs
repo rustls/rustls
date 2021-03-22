@@ -77,29 +77,12 @@ pub fn can_resume(
 
     if resumedata.cipher_suite == suite.suite
         && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
-        && same_dns_name_or_both_none(resumedata.sni.as_ref(), sni.as_ref())
+        && &resumedata.sni == sni
     {
         return Some(resumedata);
     }
 
     None
-}
-
-// Require an exact match for the purpose of comparing SNI DNS Names from two
-// client hellos, even though a case-insensitive comparison might also be OK.
-pub(super) fn same_dns_name_or_both_none(
-    a: Option<&webpki::DnsName>,
-    b: Option<&webpki::DnsName>,
-) -> bool {
-    match (a, b) {
-        (Some(a), Some(b)) => {
-            let a: &str = a.as_ref().into();
-            let b: &str = b.as_ref().into();
-            a == b
-        }
-        (None, None) => true,
-        _ => false,
-    }
 }
 
 // Changing the keys must not span any fragmented handshake
