@@ -178,18 +178,6 @@ pub struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl ExpectCertificateVerify {
-    fn into_expect_tls12_ccs(self) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: false,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
@@ -225,7 +213,13 @@ impl hs::State for ExpectCertificateVerify {
         self.handshake
             .transcript
             .add_message(&m);
-        Ok(self.into_expect_tls12_ccs())
+        Ok(Box::new(ExpectCCS {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            resuming: false,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
