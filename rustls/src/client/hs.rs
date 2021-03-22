@@ -747,7 +747,7 @@ impl State for ExpectServerHello {
                 debug!("Did not resume session.");
             }
         }
-        
+
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
             session_id: self
