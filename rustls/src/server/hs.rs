@@ -340,16 +340,6 @@ impl ExpectClientHello {
         ech
     }
 
-    fn into_expect_tls12_ccs(self, secrets: SessionSecrets) -> NextState {
-        Box::new(tls12::ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: true,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn into_complete_tls13_client_hello_handling(
         self,
         randoms: SessionRandoms,
@@ -622,7 +612,13 @@ impl ExpectClientHello {
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
-        Ok(self.into_expect_tls12_ccs(secrets))
+        Ok(Box::new(tls12::ExpectCCS {
+            secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            resuming: true,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
