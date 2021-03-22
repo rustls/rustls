@@ -106,54 +106,45 @@ mod client_hello {
             // our handling of the ClientHello.
             //
             let mut ticket_received = false;
+            let resume_data = client_hello
+                .get_ticket_extension()
+                .and_then(|ticket_ext| match ticket_ext {
+                    ClientExtension::SessionTicketOffer(ticket) => Some(ticket),
+                    _ => None,
+                })
+                .and_then(|ticket| {
+                    ticket_received = true;
+                    debug!("Ticket received");
+                    let data = conn.config.ticketer.decrypt(&ticket.0);
+                    if data.is_none() {
+                        debug!("Ticket didn't decrypt");
+                    }
+                    data
+                })
+                .or_else(|| {
+                    // Perhaps resume?  If we received a ticket, the sessionid
+                    // does not correspond to a real session.
+                    if client_hello.session_id.is_empty() || ticket_received {
+                        return None;
+                    }
 
-            if let Some(ClientExtension::SessionTicketOffer(ref ticket)) =
-                client_hello.get_ticket_extension()
-            {
-                ticket_received = true;
-                debug!("Ticket received");
+                    conn.config
+                        .session_storage
+                        .get(&client_hello.session_id.get_encoding())
+                })
+                .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
+                .and_then(|resumedata| {
+                    hs::can_resume(self.suite, &conn.sni, self.using_ems, resumedata)
+                });
 
-                if let Some(resume) = conn
-                    .config
-                    .ticketer
-                    .decrypt(&ticket.0)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
-                    .and_then(|resumedata| {
-                        hs::can_resume(self.suite, &conn.sni, self.using_ems, resumedata)
-                    })
-                {
-                    return self.start_resumption(
-                        conn,
-                        client_hello,
-                        sni.as_ref(),
-                        &client_hello.session_id,
-                        resume,
-                    );
-                } else {
-                    debug!("Ticket didn't decrypt");
-                }
-            }
-
-            // Perhaps resume?  If we received a ticket, the connionid
-            // does not correspond to a real connion.
-            if !client_hello.session_id.is_empty() && !ticket_received {
-                if let Some(resume) = conn
-                    .config
-                    .session_storage
-                    .get(&client_hello.session_id.get_encoding())
-                    .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                    .and_then(|resumedata| {
-                        hs::can_resume(self.suite, &conn.sni, self.using_ems, resumedata)
-                    })
-                {
-                    return self.start_resumption(
-                        conn,
-                        client_hello,
-                        sni.as_ref(),
-                        &client_hello.session_id,
-                        resume,
-                    );
-                }
+            if let Some(data) = resume_data {
+                return self.start_resumption(
+                    conn,
+                    client_hello,
+                    sni.as_ref(),
+                    &client_hello.session_id,
+                    data,
+                );
             }
 
             // Now we have chosen a ciphersuite, we can make kx decisions.
