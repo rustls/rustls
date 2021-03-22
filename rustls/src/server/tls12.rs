@@ -232,18 +232,6 @@ pub struct ExpectCCS {
     pub send_ticket: bool,
 }
 
-impl ExpectCCS {
-    fn into_expect_tls12_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: self.resuming,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCCS {
     fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
@@ -255,7 +243,13 @@ impl hs::State for ExpectCCS {
         sess.common
             .record_layer
             .start_decrypting();
-        Ok(self.into_expect_tls12_finished())
+        Ok(Box::new(ExpectFinished {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            resuming: self.resuming,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
