@@ -121,7 +121,9 @@ pub fn check_aligned_handshake(conn: &mut ServerConnection) -> Result<(), Error>
 pub fn save_sni(conn: &mut ServerConnection, sni: Option<webpki::DnsName>) {
     if let Some(sni) = sni {
         // Save the SNI into the session.
-        conn.set_sni(sni);
+        // The SNI hostname is immutable once set.
+        assert!(conn.sni.is_none());
+        conn.sni = Some(sni);
     }
 }
 

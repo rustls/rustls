@@ -448,12 +448,6 @@ impl ServerConnection {
         self.sni.as_ref()
     }
 
-    fn set_sni(&mut self, value: webpki::DnsName) {
-        // The SNI hostname is immutable once set.
-        assert!(self.sni.is_none());
-        self.sni = Some(value)
-    }
-
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
     ///
     /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
