@@ -153,19 +153,16 @@ impl SessionID {
         }
     }
 
-    pub fn empty() -> SessionID {
-        SessionID {
-            data: [0u8; 32],
-            len: 0,
-        }
-    }
-
     pub fn len(&self) -> usize {
         self.len
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
+    pub fn encode(session_id: Option<SessionID>, bytes: &mut Vec<u8>) {
+        if let Some(session_id) = session_id {
+            session_id.encode(bytes);
+        } else {
+            bytes.push(0u8);
+        }
     }
 }
 
@@ -842,7 +839,7 @@ impl ServerExtension {
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
     pub extensions: Vec<ClientExtension>,
@@ -852,7 +849,7 @@ impl Codec for ClientHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
-        self.session_id.encode(bytes);
+        SessionID::encode(self.session_id, bytes);
         codec::encode_vec_u16(bytes, &self.cipher_suites);
         codec::encode_vec_u8(bytes, &self.compression_methods);
 
@@ -865,7 +862,7 @@ impl Codec for ClientHelloPayload {
         let mut ret = ClientHelloPayload {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
-            session_id: SessionID::read(r)?,
+            session_id: Some(SessionID::read(r)?),
             cipher_suites: codec::read_vec_u16::<CipherSuite>(r)?,
             compression_methods: codec::read_vec_u8::<Compression>(r)?,
             extensions: Vec::new(),
@@ -1092,7 +1089,7 @@ impl Codec for HelloRetryExtension {
 #[derive(Debug)]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub cipher_suite: CipherSuite,
     pub extensions: Vec<HelloRetryExtension>,
 }
@@ -1101,14 +1098,14 @@ impl Codec for HelloRetryRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.legacy_version.encode(bytes);
         HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
-        self.session_id.encode(bytes);
+        SessionID::encode(self.session_id, bytes);
         self.cipher_suite.encode(bytes);
         Compression::Null.encode(bytes);
         codec::encode_vec_u16(bytes, &self.extensions);
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
-        let session_id = SessionID::read(r)?;
+        let session_id = Some(SessionID::read(r)?);
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
@@ -1186,7 +1183,7 @@ impl HelloRetryRequest {
 pub struct ServerHelloPayload {
     pub legacy_version: ProtocolVersion,
     pub random: Random,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub cipher_suite: CipherSuite,
     pub compression_method: Compression,
     pub extensions: Vec<ServerExtension>,
@@ -1197,7 +1194,7 @@ impl Codec for ServerHelloPayload {
         self.legacy_version.encode(bytes);
         self.random.encode(bytes);
 
-        self.session_id.encode(bytes);
+        SessionID::encode(self.session_id, bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);
 
@@ -1208,7 +1205,7 @@ impl Codec for ServerHelloPayload {
 
     // minus version and random, which have already been read.
     fn read(r: &mut Reader) -> Option<ServerHelloPayload> {
-        let session_id = SessionID::read(r)?;
+        let session_id = Some(SessionID::read(r)?);
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 

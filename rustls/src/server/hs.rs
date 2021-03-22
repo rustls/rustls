@@ -588,7 +588,7 @@ impl ExpectClientHello {
         sess: &mut ServerSessionImpl,
         client_hello: &ClientHelloPayload,
         sni: Option<&webpki::DNSName>,
-        id: &SessionID,
+        id: Option<SessionID>,
         resumedata: persist::ServerSessionValue,
         randoms: &SessionRandoms,
     ) -> NextStateOrError {
@@ -598,7 +598,7 @@ impl ExpectClientHello {
             return Err(illegal_param(sess, "refusing to resume without ems"));
         }
 
-        self.handshake.session_id = *id;
+        self.handshake.session_id = id;
         self.emit_server_hello(sess, None, client_hello, Some(&resumedata), randoms)?;
 
         let suite = sess.common.get_suite_assert();
@@ -877,7 +877,7 @@ impl State for ExpectClientHello {
                         sess,
                         client_hello,
                         sni.as_ref(),
-                        &client_hello.session_id,
+                        client_hello.session_id,
                         resume,
                         &randoms,
                     );
@@ -887,32 +887,34 @@ impl State for ExpectClientHello {
             }
         }
 
-        // If we're not offered a ticket or a potential session ID,
-        // allocate a session ID.
-        if self.handshake.session_id.is_empty() && !ticket_received {
-            let mut bytes = [0u8; 32];
-            rand::fill_random(&mut bytes)?;
-            self.handshake.session_id = SessionID::new(&bytes);
-        }
+        if !ticket_received {
+            // If we're not offered a ticket or a potential session ID,
+            // allocate a session ID.
+            if self.handshake.session_id.is_none() {
+                let mut bytes = [0u8; 32];
+                rand::fill_random(&mut bytes)?;
+                self.handshake.session_id = Some(SessionID::new(&bytes));
+            }
 
-        // Perhaps resume?  If we received a ticket, the sessionid
-        // does not correspond to a real session.
-        if !client_hello.session_id.is_empty() && !ticket_received {
-            if let Some(resume) = sess
-                .config
-                .session_storage
-                .get(&client_hello.session_id.get_encoding())
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                .and_then(|resumedata| can_resume(sess, self.using_ems, resumedata))
-            {
-                return self.start_resumption(
-                    sess,
-                    client_hello,
-                    sni.as_ref(),
-                    &client_hello.session_id,
-                    resume,
-                    &randoms,
-                );
+            // Perhaps resume?  If we received a ticket, the sessionid
+            // does not correspond to a real session.
+            if let Some(session_id) = client_hello.session_id {
+                if let Some(resume) = sess
+                    .config
+                    .session_storage
+                    .get(&session_id.get_encoding())
+                    .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
+                    .and_then(|resumedata| can_resume(sess, self.using_ems, resumedata))
+                {
+                    return self.start_resumption(
+                        sess,
+                        client_hello,
+                        sni.as_ref(),
+                        client_hello.session_id,
+                        resume,
+                        &randoms,
+                    );
+                }
             }
         }
 

@@ -25,7 +25,7 @@ fn clientsessionvalue_is_debug() {
     let csv = ClientSessionValue::new(
         ProtocolVersion::TLSv1_2,
         &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        &SessionID::new(&[1u8]),
+        Some(SessionID::new(&[1u8])),
         vec![],
         vec![1, 2, 3],
         &vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],

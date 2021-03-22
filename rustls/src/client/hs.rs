@@ -157,9 +157,9 @@ impl InitialState {
                 // we're  doing an abbreviated handshake.  See section 3.4 in
                 // RFC5077.
                 if !resuming.ticket.0.is_empty() {
-                    resuming.session_id = random_sessionid()?;
+                    resuming.session_id = Some(random_sessionid()?);
                 }
-                session_id = Some(resuming.session_id);
+                session_id = resuming.session_id;
             }
             debug!("Resuming session");
         } else {
@@ -208,7 +208,7 @@ struct ExpectServerHello {
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     sent_tls13_fake_ccs: bool,
 }
 
@@ -344,8 +344,6 @@ fn emit_client_hello_for_retry(
         .iter()
         .map(ClientExtension::get_type)
         .collect();
-
-    let session_id = session_id.unwrap_or(SessionID::empty());
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -682,71 +680,79 @@ impl State for ExpectServerHello {
             None
         };
 
-        // See if we're successfully resuming.
-        if let Some(ref resuming) = self.handshake.resuming_session {
-            if resuming.session_id == self.session_id {
-                debug!("Server agreed to resume");
+        match (&self.handshake.resuming_session, self.session_id) {
+            (Some(ref resuming), Some(session_id)) => {
+                if resuming.session_id == Some(session_id) {
+                    debug!("Server agreed to resume");
 
-                // Is the server telling lies about the ciphersuite?
-                if resuming.suite != suite {
-                    let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
-                    return Err(TlsError::PeerMisbehavedError(error_msg));
+                    // Is the server telling lies about the ciphersuite?
+                    if resuming.suite != suite {
+                        let error_msg =
+                            "abbreviated handshake offered, but with varied cs".to_string();
+                        return Err(TlsError::PeerMisbehavedError(error_msg));
+                    }
+
+                    // And about EMS support?
+                    if resuming.extended_ms != self.using_ems {
+                        let error_msg = "server varied ems support over resume".to_string();
+                        return Err(TlsError::PeerMisbehavedError(error_msg));
+                    }
+
+                    let secrets =
+                        SessionSecrets::new_resume(&self.randoms, suite, &resuming.master_secret.0);
+                    sess.config.key_log.log(
+                        "CLIENT_RANDOM",
+                        &secrets.randoms.client,
+                        &secrets.master_secret,
+                    );
+                    sess.common
+                        .start_encryption_tls12(&secrets);
+
+                    // Since we're resuming, we verified the certificate and
+                    // proof of possession in the prior session.
+                    sess.server_cert_chain = resuming.server_cert_chain.clone();
+                    let cert_verified = verify::ServerCertVerified::assertion();
+                    let sig_verified = verify::HandshakeSignatureValid::assertion();
+
+                    return if must_issue_new_ticket {
+                        Ok(Box::new(tls12::ExpectNewTicket {
+                            secrets,
+                            handshake: self.handshake,
+                            session_id: session_id,
+                            dns_name: self.dns_name,
+                            using_ems: self.using_ems,
+                            transcript: self.transcript,
+                            resuming: true,
+                            cert_verified,
+                            sig_verified,
+                        }))
+                    } else {
+                        Ok(Box::new(tls12::ExpectCCS {
+                            secrets,
+                            handshake: self.handshake,
+                            session_id: session_id,
+                            dns_name: self.dns_name,
+                            using_ems: self.using_ems,
+                            transcript: self.transcript,
+                            ticket: ReceivedTicketDetails::new(),
+                            resuming: true,
+                            cert_verified,
+                            sig_verified,
+                        }))
+                    };
                 }
-
-                // And about EMS support?
-                if resuming.extended_ms != self.using_ems {
-                    let error_msg = "server varied ems support over resume".to_string();
-                    return Err(TlsError::PeerMisbehavedError(error_msg));
-                }
-
-                let secrets =
-                    SessionSecrets::new_resume(&self.randoms, suite, &resuming.master_secret.0);
-                sess.config.key_log.log(
-                    "CLIENT_RANDOM",
-                    &secrets.randoms.client,
-                    &secrets.master_secret,
-                );
-                sess.common
-                    .start_encryption_tls12(&secrets);
-
-                // Since we're resuming, we verified the certificate and
-                // proof of possession in the prior session.
-                sess.server_cert_chain = resuming.server_cert_chain.clone();
-                let cert_verified = verify::ServerCertVerified::assertion();
-                let sig_verified = verify::HandshakeSignatureValid::assertion();
-
-                return if must_issue_new_ticket {
-                    Ok(Box::new(tls12::ExpectNewTicket {
-                        secrets,
-                        handshake: self.handshake,
-                        session_id: self.session_id,
-                        dns_name: self.dns_name,
-                        using_ems: self.using_ems,
-                        transcript: self.transcript,
-                        resuming: true,
-                        cert_verified,
-                        sig_verified,
-                    }))
-                } else {
-                    Ok(Box::new(tls12::ExpectCCS {
-                        secrets,
-                        handshake: self.handshake,
-                        session_id: self.session_id,
-                        dns_name: self.dns_name,
-                        using_ems: self.using_ems,
-                        transcript: self.transcript,
-                        ticket: ReceivedTicketDetails::new(),
-                        resuming: true,
-                        cert_verified,
-                        sig_verified,
-                    }))
-                };
+            }
+            _ => {
+                debug!("Did not resume session.");
             }
         }
 
+
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
-            session_id: self.session_id,
+            session_id: self
+                .session_id
+                .ok_or(TlsError::HandshakeNotComplete)?,
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
@@ -885,7 +891,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.transcript,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
-            Some(self.next.session_id),
+            self.next.session_id,
             Some(&hrr),
             self.next.dns_name,
             self.extra_exts,

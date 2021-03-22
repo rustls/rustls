@@ -118,7 +118,7 @@ impl CompleteClientHelloHandling {
         &mut self,
         suite: &'static SupportedCipherSuite,
         sess: &mut ServerSessionImpl,
-        session_id: &SessionID,
+        session_id: &Option<SessionID>,
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
@@ -246,7 +246,7 @@ impl CompleteClientHelloHandling {
     ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: SessionID::empty(),
+            session_id: None,
             cipher_suite: suite.suite,
             extensions: Vec::new(),
         };

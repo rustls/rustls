@@ -54,7 +54,6 @@ fn accepts_short_sessionid() {
     let sess = SessionID::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
-    assert_eq!(sess.is_empty(), false);
     assert_eq!(sess.len(), 1);
     assert_eq!(sess, SessionID::new(&[1u8]));
     assert_eq!(rd.any_left(), false);
@@ -67,7 +66,6 @@ fn accepts_empty_sessionid() {
     let sess = SessionID::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
-    assert_eq!(sess.is_empty(), true);
     assert_eq!(sess.len(), 0);
     assert_eq!(sess, SessionID::new(&[]));
     assert_eq!(rd.any_left(), false);
@@ -310,7 +308,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
     ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: Random::from_slice(&[0; 32]),
-        session_id: SessionID::empty(),
+        session_id: None,
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: vec![
@@ -708,7 +706,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
         random: Random::from_slice(&[0; 32]),
-        session_id: SessionID::empty(),
+        session_id: None,
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
@@ -747,7 +745,7 @@ fn can_clone_all_serverextensions() {
 fn get_sample_helloretryrequest() -> HelloRetryRequest {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
-        session_id: SessionID::empty(),
+        session_id: None,
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),

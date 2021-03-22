@@ -21,7 +21,7 @@ use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
 use crate::msgs::handshake::{ClientExtension, HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID};
+use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -1047,7 +1047,7 @@ impl ExpectTraffic {
         let mut value = persist::ClientSessionValue::new(
             ProtocolVersion::TLSv1_3,
             sess.common.get_suite_assert(),
-            &SessionID::empty(),
+            None,
             nst.ticket.0.clone(),
             secret,
             &sess.server_cert_chain,

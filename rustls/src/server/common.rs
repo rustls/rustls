@@ -9,7 +9,7 @@ use std::mem;
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
     pub hash_at_server_fin: Option<digest::Digest>,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub extra_exts: Vec<ServerExtension>,
 }
 
@@ -18,7 +18,7 @@ impl HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
             hash_at_server_fin: None,
-            session_id: SessionID::empty(),
+            session_id: None,
             extra_exts,
         }
     }

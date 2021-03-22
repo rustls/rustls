@@ -751,7 +751,7 @@ impl hs::State for ExpectNewTicket {
 fn save_session(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSNameRef,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
@@ -767,7 +767,7 @@ fn save_session(
         }
     }
 
-    if session_id.is_empty() && ticket.is_empty() {
+    if session_id.is_none() && ticket.is_empty() {
         debug!("Session not saved: server didn't allocate id or ticket");
         return;
     }
@@ -778,7 +778,7 @@ fn save_session(
     let mut value = persist::ClientSessionValue::new(
         ProtocolVersion::TLSv1_2,
         secrets.suite(),
-        &session_id,
+        session_id,
         ticket,
         master_secret,
         &sess.server_cert_chain,
@@ -842,7 +842,7 @@ impl hs::State for ExpectFinished {
         save_session(
             &st.secrets,
             &mut st.handshake,
-            st.session_id,
+            Some(st.session_id),
             st.dns_name.as_ref(),
             st.using_ems,
             &mut st.ticket,
