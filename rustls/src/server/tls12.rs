@@ -133,7 +133,7 @@ mod client_hello {
                         .get(&client_hello.session_id.get_encoding())
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                .and_then(|resumedata| {
+                .filter(|resumedata| {
                     hs::can_resume(self.suite, &conn.sni, self.using_ems, resumedata)
                 });
 
