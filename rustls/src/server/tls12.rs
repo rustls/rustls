@@ -134,12 +134,6 @@ mod client_hello {
                 }
             }
 
-            // If we're not offered a ticket or a potential connion ID,
-            // allocate a connion ID.
-            if self.handshake.session_id.is_empty() && !ticket_received {
-                self.handshake.session_id = SessionID::random()?;
-            }
-
             // Perhaps resume?  If we received a ticket, the connionid
             // does not correspond to a real connion.
             if !client_hello.session_id.is_empty() && !ticket_received {
@@ -189,6 +183,12 @@ mod client_hello {
 
             let (mut ocsp_response, mut sct_list) =
                 (server_key.get_ocsp(), server_key.get_sct_list());
+
+            // If we're not offered a ticket or a potential connection ID,
+            // allocate a connection ID.
+            if self.handshake.session_id.is_empty() && !ticket_received {
+                self.handshake.session_id = SessionID::random()?;
+            }
 
             self.send_ticket = emit_server_hello(
                 &mut self.handshake,
