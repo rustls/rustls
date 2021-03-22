@@ -281,7 +281,7 @@ mod client_hello {
                 .start_encrypting();
             emit_finished(&secrets, &mut self.handshake, conn);
 
-            assert!(hs::same_dns_name_or_both_none(sni, conn.get_sni()));
+            assert_eq!(sni, conn.get_sni());
 
             Ok(Box::new(ExpectCcs {
                 secrets,
