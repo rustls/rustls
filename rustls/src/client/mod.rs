@@ -374,11 +374,11 @@ impl EarlyData {
 
 /// Stub that implements io::Write and dispatches to `write_early_data`.
 pub struct WriteEarlyData<'a> {
-    sess: &'a mut ClientSessionImpl,
+    sess: &'a mut ClientSession,
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(sess: &'a mut ClientSessionImpl) -> WriteEarlyData<'a> {
+    fn new(sess: &'a mut ClientSession) -> WriteEarlyData<'a> {
         WriteEarlyData { sess }
     }
 
@@ -399,25 +399,37 @@ impl<'a> io::Write for WriteEarlyData<'a> {
     }
 }
 
-pub struct ClientSessionImpl {
-    pub config: Arc<ClientConfig>,
-    pub common: SessionCommon,
-    pub state: Option<hs::NextState>,
-    pub server_cert_chain: CertificatePayload,
-    pub early_data: EarlyData,
-    pub resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+/// This represents a single TLS client session.
+pub struct ClientSession {
+    pub(crate) config: Arc<ClientConfig>,
+    pub(crate) common: SessionCommon,
+    pub(crate) state: Option<hs::NextState>,
+    pub(crate) server_cert_chain: CertificatePayload,
+    pub(crate) early_data: EarlyData,
+    pub(crate) resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
 }
 
-impl fmt::Debug for ClientSessionImpl {
+impl fmt::Debug for ClientSession {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientSessionImpl")
-            .finish()
+        f.debug_struct("ClientSession").finish()
     }
 }
 
-impl ClientSessionImpl {
-    pub fn new(config: &Arc<ClientConfig>) -> ClientSessionImpl {
-        ClientSessionImpl {
+impl ClientSession {
+    /// Make a new ClientSession.  `config` controls how
+    /// we behave in the TLS protocol, `hostname` is the
+    /// hostname of who we want to talk to.
+    pub fn new(
+        config: &Arc<ClientConfig>,
+        hostname: webpki::DNSNameRef,
+    ) -> Result<ClientSession, TlsError> {
+        let mut new = Self::from_config(config);
+        new.start_handshake(hostname.into(), vec![])?;
+        Ok(new)
+    }
+
+    pub(crate) fn from_config(config: &Arc<ClientConfig>) -> Self {
+        ClientSession {
             config: config.clone(),
             common: SessionCommon::new(config.mtu, true),
             state: None,
@@ -427,7 +439,42 @@ impl ClientSessionImpl {
         }
     }
 
-    pub fn start_handshake(
+    /// Returns an `io::Write` implementer you can write bytes to
+    /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
+    ///
+    /// This returns None in many circumstances when the capability to
+    /// send early data is not available, including but not limited to:
+    ///
+    /// - The server hasn't been talked to previously.
+    /// - The server does not support resumption.
+    /// - The server does not support early data.
+    /// - The resumption data for the server has expired.
+    ///
+    /// The server specifies a maximum amount of early data.  You can
+    /// learn this limit through the returned object, and writes through
+    /// it will process only this many bytes.
+    ///
+    /// The server can choose not to accept any sent early data --
+    /// in this case the data is lost but the connection continues.  You
+    /// can tell this happened using `is_early_data_accepted`.
+    pub fn early_data(&mut self) -> Option<WriteEarlyData> {
+        if self.early_data.is_enabled() {
+            Some(WriteEarlyData::new(self))
+        } else {
+            None
+        }
+    }
+
+    /// Returns True if the server signalled it will process early data.
+    ///
+    /// If you sent early data and this returns false at the end of the
+    /// handshake then the server will not process the data.  This
+    /// is not an error, but you may wish to resend the data.
+    pub fn is_early_data_accepted(&self) -> bool {
+        self.early_data.is_accepted()
+    }
+
+    pub(crate) fn start_handshake(
         &mut self,
         dns_name: webpki::DNSName,
         extra_exts: Vec<ClientExtension>,
@@ -436,7 +483,7 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    pub fn get_cipher_suites(&self) -> Vec<CipherSuite> {
+    fn get_cipher_suites(&self) -> Vec<CipherSuite> {
         let mut ret = Vec::new();
 
         for cs in &self.config.ciphersuites {
@@ -449,7 +496,7 @@ impl ClientSessionImpl {
         ret
     }
 
-    pub fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
+    fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
         self.config
             .ciphersuites
             .iter()
@@ -457,25 +504,7 @@ impl ClientSessionImpl {
             .find(|&scs| scs.suite == suite)
     }
 
-    pub fn wants_read(&self) -> bool {
-        // We want to read more data all the time, except when we
-        // have unprocessed plaintext.  This provides back-pressure
-        // to the TCP buffers.
-        //
-        // This also covers the handshake case, because we don't have
-        // readable plaintext before handshake has completed.
-        !self.common.has_readable_plaintext()
-    }
-
-    pub fn wants_write(&self) -> bool {
-        !self.common.sendable_tls.is_empty()
-    }
-
-    pub fn is_handshaking(&self) -> bool {
-        !self.common.traffic
-    }
-
-    pub fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
+    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -531,7 +560,37 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    pub fn process_new_packets(&mut self) -> Result<(), TlsError> {
+    fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.early_data
+            .check_write(data.len())
+            .and_then(|sz| {
+                Ok(self
+                    .common
+                    .send_early_plaintext(&data[..sz]))
+            })
+    }
+
+    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
+        let mut st = self.state.take();
+        st.as_mut()
+            .map(|st| st.perhaps_write_key_update(self));
+        self.state = st;
+
+        self.common.send_some_plaintext(buf)
+    }
+}
+
+impl Session for ClientSession {
+    fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+        self.common.read_tls(rd)
+    }
+
+    /// Writes TLS messages to `wr`.
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
+        self.common.write_tls(wr)
+    }
+
+    fn process_new_packets(&mut self) -> Result<(), TlsError> {
         if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
@@ -565,7 +624,33 @@ impl ClientSessionImpl {
         Ok(())
     }
 
-    pub fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn wants_read(&self) -> bool {
+        // We want to read more data all the time, except when we
+        // have unprocessed plaintext.  This provides back-pressure
+        // to the TCP buffers.
+        //
+        // This also covers the handshake case, because we don't have
+        // readable plaintext before handshake has completed.
+        !self.common.has_readable_plaintext()
+    }
+
+    fn wants_write(&self) -> bool {
+        !self.common.sendable_tls.is_empty()
+    }
+
+    fn is_handshaking(&self) -> bool {
+        !self.common.traffic
+    }
+
+    fn set_buffer_limit(&mut self, len: usize) {
+        self.common.set_buffer_limit(len)
+    }
+
+    fn send_close_notify(&mut self) {
+        self.common.send_close_notify()
+    }
+
+    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         if self.server_cert_chain.is_empty() {
             return None;
         }
@@ -578,22 +663,12 @@ impl ClientSessionImpl {
         )
     }
 
-    pub fn get_protocol_version(&self) -> Option<ProtocolVersion> {
+    fn get_alpn_protocol(&self) -> Option<&[u8]> {
+        self.common.get_alpn_protocol()
+    }
+
+    fn get_protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
-    }
-
-    pub fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.common.get_suite()
-    }
-
-    pub fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.early_data
-            .check_write(data.len())
-            .and_then(|sz| {
-                Ok(self
-                    .common
-                    .send_early_plaintext(&data[..sz]))
-            })
     }
 
     fn export_keying_material(
@@ -608,132 +683,10 @@ impl ClientSessionImpl {
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
-    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
-        self.state = st;
-
-        self.common.send_some_plaintext(buf)
-    }
-}
-
-/// This represents a single TLS client session.
-#[derive(Debug)]
-pub struct ClientSession {
-    // We use the pimpl idiom to hide unimportant details.
-    pub(crate) imp: ClientSessionImpl,
-}
-
-impl ClientSession {
-    /// Make a new ClientSession.  `config` controls how
-    /// we behave in the TLS protocol, `hostname` is the
-    /// hostname of who we want to talk to.
-    pub fn new(
-        config: &Arc<ClientConfig>,
-        hostname: webpki::DNSNameRef,
-    ) -> Result<ClientSession, TlsError> {
-        let mut imp = ClientSessionImpl::new(config);
-        imp.start_handshake(hostname.into(), vec![])?;
-        Ok(ClientSession { imp })
-    }
-
-    /// Returns an `io::Write` implementer you can write bytes to
-    /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
-    ///
-    /// This returns None in many circumstances when the capability to
-    /// send early data is not available, including but not limited to:
-    ///
-    /// - The server hasn't been talked to previously.
-    /// - The server does not support resumption.
-    /// - The server does not support early data.
-    /// - The resumption data for the server has expired.
-    ///
-    /// The server specifies a maximum amount of early data.  You can
-    /// learn this limit through the returned object, and writes through
-    /// it will process only this many bytes.
-    ///
-    /// The server can choose not to accept any sent early data --
-    /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using `is_early_data_accepted`.
-    pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-        if self.imp.early_data.is_enabled() {
-            Some(WriteEarlyData::new(&mut self.imp))
-        } else {
-            None
-        }
-    }
-
-    /// Returns True if the server signalled it will process early data.
-    ///
-    /// If you sent early data and this returns false at the end of the
-    /// handshake then the server will not process the data.  This
-    /// is not an error, but you may wish to resend the data.
-    pub fn is_early_data_accepted(&self) -> bool {
-        self.imp.early_data.is_accepted()
-    }
-}
-
-impl Session for ClientSession {
-    fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        self.imp.common.read_tls(rd)
-    }
-
-    /// Writes TLS messages to `wr`.
-    fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.imp.common.write_tls(wr)
-    }
-
-    fn process_new_packets(&mut self) -> Result<(), TlsError> {
-        self.imp.process_new_packets()
-    }
-
-    fn wants_read(&self) -> bool {
-        self.imp.wants_read()
-    }
-
-    fn wants_write(&self) -> bool {
-        self.imp.wants_write()
-    }
-
-    fn is_handshaking(&self) -> bool {
-        self.imp.is_handshaking()
-    }
-
-    fn set_buffer_limit(&mut self, len: usize) {
-        self.imp.common.set_buffer_limit(len)
-    }
-
-    fn send_close_notify(&mut self) {
-        self.imp.common.send_close_notify()
-    }
-
-    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.imp.get_peer_certificates()
-    }
-
-    fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.imp.common.get_alpn_protocol()
-    }
-
-    fn get_protocol_version(&self) -> Option<ProtocolVersion> {
-        self.imp.get_protocol_version()
-    }
-
-    fn export_keying_material(
-        &self,
-        output: &mut [u8],
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
-        self.imp
-            .export_keying_material(output, label, context)
-    }
-
     fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.imp
-            .get_negotiated_ciphersuite()
-            .or(self.imp.resumption_ciphersuite)
+        self.common
+            .get_suite()
+            .or(self.resumption_ciphersuite)
     }
 }
 
@@ -751,7 +704,7 @@ impl io::Read for ClientSession {
     /// This means applications using rustls must both handle ErrorKind::ConnectionAborted
     /// from this function, *and* unexpected closure of the underlying TCP connection.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.imp.common.read(buf)
+        self.common.read(buf)
     }
 }
 
@@ -767,19 +720,19 @@ impl io::Write for ClientSession {
     /// writing much data before it can be sent will
     /// cause excess memory usage.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.imp.send_some_plaintext(buf))
+        Ok(self.send_some_plaintext(buf))
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         let mut sz = 0;
         for buf in bufs {
-            sz += self.imp.send_some_plaintext(buf);
+            sz += self.send_some_plaintext(buf);
         }
         Ok(sz)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.imp.common.flush_plaintext();
+        self.common.flush_plaintext();
         Ok(())
     }
 }

@@ -76,21 +76,6 @@ impl CertifiedKey {
         mem::replace(&mut self.cert, Vec::new())
     }
 
-    /// Return true if there's an OCSP response.
-    pub fn has_ocsp(&self) -> bool {
-        self.ocsp.is_some()
-    }
-
-    /// Steal ownership of the OCSP response.
-    pub fn take_ocsp(&mut self) -> Option<Vec<u8>> {
-        mem::replace(&mut self.ocsp, None)
-    }
-
-    /// Steal ownership of the SCT list.
-    pub fn take_sct_list(&mut self) -> Option<Vec<u8>> {
-        mem::replace(&mut self.sct_list, None)
-    }
-
     /// Check the certificate chain for validity:
     /// - it should be non-empty list
     /// - the first certificate should be parsable as a x509v3,

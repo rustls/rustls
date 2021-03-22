@@ -22,7 +22,7 @@ fn clientsessionkey_cannot_be_read() {
 
 #[test]
 fn clientsessionvalue_is_debug() {
-    let csv = ClientSessionValue::new(
+    let csv = ClientSessionValueWithResolvedCipherSuite::new(
         ProtocolVersion::TLSv1_2,
         &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         Some(SessionID::new(&[1u8])),
