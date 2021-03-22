@@ -351,15 +351,6 @@ pub struct ExpectFinished {
     send_ticket: bool,
 }
 
-impl ExpectFinished {
-    fn into_expect_tls12_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            secrets: self.secrets,
-            _fin_verified: fin,
-        })
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
@@ -377,13 +368,14 @@ impl hs::State for ExpectFinished {
             .get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
-        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-            .map_err(|_| {
-                sess.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
-                TlsError::DecryptError
-            })
-            .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let _fin_verified =
+            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+                .map_err(|_| {
+                    sess.common
+                        .send_fatal_alert(AlertDescription::DecryptError);
+                    TlsError::DecryptError
+                })
+                .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Save session, perhaps
         if !self.resuming && !self.handshake.session_id.is_empty() {
@@ -416,7 +408,10 @@ impl hs::State for ExpectFinished {
         }
 
         sess.common.start_traffic();
-        Ok(self.into_expect_tls12_traffic(fin))
+        Ok(Box::new(ExpectTraffic {
+            secrets: self.secrets,
+            _fin_verified,
+        }))
     }
 }
 
