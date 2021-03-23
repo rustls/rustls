@@ -580,10 +580,9 @@ impl Connection for ClientConnection {
             .frames
             .pop_front()
         {
-            let ignore_corrupt_payload = false;
             let result = self
                 .common
-                .process_msg(msg, ignore_corrupt_payload)
+                .process_msg(msg)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => self.process_new_handshake_messages(),
                     Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
