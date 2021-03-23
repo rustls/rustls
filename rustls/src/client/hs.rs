@@ -12,7 +12,7 @@ use crate::msgs::base::Payload;
 #[cfg(feature = "quic")]
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{AlertDescription, Compression, ProtocolVersion};
+use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::handshake::HelloRetryRequest;
@@ -344,6 +344,14 @@ fn emit_client_hello_for_retry(
         .collect();
 
     let session_id = session_id.unwrap_or_else(SessionID::empty);
+    let mut cipher_suites: Vec<_> = conn
+        .config
+        .cipher_suites
+        .iter()
+        .map(|cs| cs.suite)
+        .collect();
+    // We don't do renegotiation at all, in fact.
+    cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -351,7 +359,7 @@ fn emit_client_hello_for_retry(
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from(randoms.client),
             session_id,
-            cipher_suites: conn.get_cipher_suites(),
+            cipher_suites,
             compression_methods: vec![Compression::Null],
             extensions: exts,
         }),
