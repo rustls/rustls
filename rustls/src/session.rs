@@ -231,7 +231,7 @@ pub struct SessionRandoms {
     pub server: [u8; 32],
 }
 
-static TLS12_DOWNGRADE_SENTINEL: &[u8] = &[0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
+static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 impl SessionRandoms {
     pub fn for_server() -> Result<SessionRandoms, rand::GetRandomFailed> {
@@ -258,10 +258,7 @@ impl SessionRandoms {
 
     pub fn set_tls12_downgrade_marker(&mut self) {
         assert!(!self.we_are_client);
-        self.server[24..]
-            .as_mut()
-            .write_all(TLS12_DOWNGRADE_SENTINEL)
-            .unwrap();
+        self.server[24..].copy_from_slice(&TLS12_DOWNGRADE_SENTINEL);
     }
 
     pub fn has_tls12_downgrade_marker(&mut self) -> bool {
@@ -272,16 +269,10 @@ impl SessionRandoms {
     }
 }
 
-fn join_randoms(first: &[u8], second: &[u8]) -> [u8; 64] {
+fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
     let mut randoms = [0u8; 64];
-    randoms
-        .as_mut()
-        .write_all(first)
-        .unwrap();
-    randoms[32..]
-        .as_mut()
-        .write_all(second)
-        .unwrap();
+    randoms[..32].copy_from_slice(first);
+    randoms[32..].copy_from_slice(second);
     randoms
 }
 
