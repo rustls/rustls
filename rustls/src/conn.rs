@@ -710,6 +710,21 @@ impl ConnectionCommon {
         self.sendable_tls.set_limit(limit);
     }
 
+    pub fn maybe_send_unexpected_alert<T>(&mut self, rc: Result<T, Error>) -> Result<T, Error> {
+        match rc {
+            Err(Error::InappropriateMessage { .. })
+            | Err(Error::InappropriateHandshakeMessage { .. }) => {
+                self.queue_unexpected_alert();
+            }
+            _ => {}
+        };
+        rc
+    }
+
+    fn queue_unexpected_alert(&mut self) {
+        self.send_fatal_alert(AlertDescription::UnexpectedMessage);
+    }
+
     pub fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
             // Reject unknown AlertLevels.
