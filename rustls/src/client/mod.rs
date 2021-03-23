@@ -486,19 +486,6 @@ impl ClientConnection {
         Ok(())
     }
 
-    fn get_cipher_suites(&self) -> Vec<CipherSuite> {
-        let mut ret = Vec::new();
-
-        for cs in &self.config.cipher_suites {
-            ret.push(cs.suite);
-        }
-
-        // We don't do renegotiation at all, in fact.
-        ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
-
-        ret
-    }
-
     fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
         self.config
             .cipher_suites
