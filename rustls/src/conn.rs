@@ -714,15 +714,11 @@ impl ConnectionCommon {
         match rc {
             Err(Error::InappropriateMessage { .. })
             | Err(Error::InappropriateHandshakeMessage { .. }) => {
-                self.queue_unexpected_alert();
+                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
             }
             _ => {}
         };
         rc
-    }
-
-    fn queue_unexpected_alert(&mut self) {
-        self.send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     pub fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
