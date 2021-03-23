@@ -78,8 +78,8 @@ impl ChunkVecBuffer {
 
     /// Take one of the chunks from this object.  This
     /// function panics if the object `is_empty`.
-    pub fn take_one(&mut self) -> Vec<u8> {
-        self.chunks.pop_front().unwrap()
+    pub fn pop(&mut self) -> Option<Vec<u8>> {
+        self.chunks.pop_front()
     }
 
     /// Read data out of this object, writing it into `buf`
@@ -100,13 +100,13 @@ impl ChunkVecBuffer {
     }
 
     fn consume(&mut self, mut used: usize) {
-        while used > 0 && !self.is_empty() {
-            if used >= self.chunks[0].len() {
-                used -= self.chunks[0].len();
-                self.take_one();
+        while let Some(mut buf) = self.chunks.pop_front() {
+            if used < buf.len() {
+                self.chunks
+                    .push_front(buf.split_off(used));
+                break;
             } else {
-                self.chunks[0] = self.chunks[0].split_off(used);
-                used = 0;
+                used -= buf.len();
             }
         }
     }

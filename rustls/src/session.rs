@@ -786,8 +786,7 @@ impl SessionCommon {
             return;
         }
 
-        while !self.sendable_plaintext.is_empty() {
-            let buf = self.sendable_plaintext.take_one();
+        while let Some(buf) = self.sendable_plaintext.pop() {
             self.send_plain(&buf, Limit::No);
         }
     }
