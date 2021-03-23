@@ -631,7 +631,7 @@ impl State for ExpectServerHello {
         server_hello
             .random
             .write_slice(&mut self.randoms.server);
-        self.session_id = server_hello.session_id;
+        let session_id = server_hello.session_id;
 
         // Look for TLS1.3 downgrade signal in server random
         if tls13_supported
@@ -681,7 +681,7 @@ impl State for ExpectServerHello {
             None
         };
 
-        match (&self.handshake.resuming_session, self.session_id) {
+        match (&self.handshake.resuming_session, session_id) {
             (Some(ref resuming), Some(session_id)) if resuming.session_id == Some(session_id) => {
                 debug!("Server agreed to resume");
 
@@ -747,9 +747,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
-            session_id: self
-                .session_id
-                .ok_or(TlsError::HandshakeNotComplete)?,
+            session_id: session_id.ok_or(TlsError::HandshakeNotComplete)?,
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
