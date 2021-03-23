@@ -556,6 +556,7 @@ impl State for ExpectServerHello {
         }
 
         let suite = conn
+            .config
             .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
                 conn.common
@@ -835,7 +836,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
-        let maybe_cs = conn.find_cipher_suite(hrr.cipher_suite);
+        let maybe_cs = conn
+            .config
+            .find_cipher_suite(hrr.cipher_suite);
         let cs = match maybe_cs {
             Some(cs) => cs,
             None => {

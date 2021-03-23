@@ -268,6 +268,13 @@ impl ClientConfig {
     pub fn dangerous(&mut self) -> danger::DangerousClientConfig {
         danger::DangerousClientConfig { cfg: self }
     }
+
+    fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
+        self.cipher_suites
+            .iter()
+            .copied()
+            .find(|&scs| scs.suite == suite)
+    }
 }
 
 /// Container for unsafe APIs
@@ -484,14 +491,6 @@ impl ClientConnection {
     ) -> Result<(), Error> {
         self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
         Ok(())
-    }
-
-    fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
-        self.config
-            .cipher_suites
-            .iter()
-            .copied()
-            .find(|&scs| scs.suite == suite)
     }
 
     pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
