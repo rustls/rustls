@@ -525,22 +525,6 @@ impl ClientConnection {
             .send_warning_alert(AlertDescription::NoRenegotiation);
     }
 
-    fn queue_unexpected_alert(&mut self) {
-        self.common
-            .send_fatal_alert(AlertDescription::UnexpectedMessage);
-    }
-
-    fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
-        match rc {
-            Err(Error::InappropriateMessage { .. })
-            | Err(Error::InappropriateHandshakeMessage { .. }) => {
-                self.queue_unexpected_alert();
-            }
-            _ => {}
-        };
-        rc
-    }
-
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
@@ -557,7 +541,9 @@ impl ClientConnection {
 
         let state = self.state.take().unwrap();
         let maybe_next_state = state.handle(self, msg);
-        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
+        let next_state = self
+            .common
+            .maybe_send_unexpected_alert(maybe_next_state)?;
         self.state = Some(next_state);
 
         Ok(())

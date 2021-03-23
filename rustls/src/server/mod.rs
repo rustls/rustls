@@ -388,26 +388,12 @@ impl ServerConnection {
 
         let state = self.state.take().unwrap();
         let maybe_next_state = state.handle(self, msg);
-        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
+        let next_state = self
+            .common
+            .maybe_send_unexpected_alert(maybe_next_state)?;
         self.state = Some(next_state);
 
         Ok(())
-    }
-
-    fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
-        match rc {
-            Err(Error::InappropriateMessage { .. })
-            | Err(Error::InappropriateHandshakeMessage { .. }) => {
-                self.queue_unexpected_alert();
-            }
-            _ => {}
-        };
-        rc
-    }
-
-    fn queue_unexpected_alert(&mut self) {
-        self.common
-            .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
     fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
