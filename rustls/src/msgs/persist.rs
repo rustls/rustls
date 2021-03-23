@@ -144,7 +144,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
     pub fn new(
         v: ProtocolVersion,
         cipher_suite: &'static SupportedCipherSuite,
-        sessid: Option<SessionID>,
+        session_id: Option<SessionID>,
         ticket: Vec<u8>,
         ms: Vec<u8>,
         server_cert_chain: &CertificatePayload,
@@ -153,7 +153,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
             value: ClientSessionValue {
                 version: v,
                 cipher_suite: cipher_suite.suite,
-                session_id: sessid,
+                session_id,
                 ticket: PayloadU16::new(ticket),
                 master_secret: PayloadU8::new(ms),
                 epoch: 0,

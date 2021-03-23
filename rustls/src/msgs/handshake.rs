@@ -158,10 +158,9 @@ impl SessionID {
     }
 
     pub fn encode(session_id: Option<SessionID>, bytes: &mut Vec<u8>) {
-        if let Some(session_id) = session_id {
-            session_id.encode(bytes);
-        } else {
-            bytes.push(0u8);
+        match session_id {
+            Some(session_id) => session_id.encode(bytes),
+            None => bytes.push(0u8),
         }
     }
 }
