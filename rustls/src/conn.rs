@@ -613,11 +613,7 @@ impl ConnectionCommon {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    pub fn process_msg(
-        &mut self,
-        mut msg: Message,
-        ignore_corrupt_payload: bool,
-    ) -> Result<Option<MessageType>, Error> {
+    pub fn process_msg(&mut self, mut msg: Message) -> Result<Option<MessageType>, Error> {
         // TLS1.3: drop CCS at any time during handshaking
         if let MiddleboxCcs::Drop = self.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
@@ -644,7 +640,7 @@ impl ConnectionCommon {
 
         // Now we can fully parse the message payload. We only return an error
         // on the client, or we fail a bogo test (WrongMessageType-TLS13-ServerHello-TLS).
-        if !msg.decode_payload() && !ignore_corrupt_payload {
+        if !msg.decode_payload() && self.is_client {
             return Err(Error::CorruptMessagePayload(msg.typ));
         }
 
