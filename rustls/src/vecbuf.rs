@@ -115,78 +115,7 @@ impl ChunkVecBuffer {
             return Ok(0);
         }
 
-        // XXX: `rustls`'s MSRV is 1.40.0, where `IoSlice` doesn't implement
-        // `Copy`. When the MSRV is Rust 1.44.0, this could be the much more
-        // concise
-        // ```
-        // let mut bufs = [io::IoSlice::new(&[]); 64];
-        // ```
-        let mut bufs = [
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-            io::IoSlice::new(&[]),
-        ];
+        let mut bufs = [io::IoSlice::new(&[]); 64];
         for (iov, chunk) in bufs.iter_mut().zip(self.chunks.iter()) {
             *iov = io::IoSlice::new(&chunk);
         }
