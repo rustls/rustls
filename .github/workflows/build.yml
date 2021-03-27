@@ -192,10 +192,4 @@ jobs:
           default: true
       - name: Check formatting
         run: |
-          cd ..
-          git clone  --depth 1 https://github.com/rust-lang/rustfmt
-          cd rustfmt
-          export CFG_RELEASE=nightly
-          export CFG_RELEASE_CHANNEL=nightly
-          cargo install --path . --force --features rustfmt,cargo-fmt
-          cd ../rustls && cargo-fmt -- --check
+          ./admin/fmt -- --check
