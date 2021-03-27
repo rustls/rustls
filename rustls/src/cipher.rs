@@ -331,9 +331,7 @@ fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
     loop {
         match v.pop() {
             Some(0) => {}
-
-            Some(content_type) => return ContentType::read_bytes(&[content_type]).unwrap(),
-
+            Some(content_type) => return ContentType::from(content_type),
             None => return ContentType::Unknown(0),
         }
     }
