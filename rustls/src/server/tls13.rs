@@ -49,8 +49,6 @@ use crate::server::hs;
 
 use ring::constant_time;
 
-use std::sync::Arc;
-
 pub struct CompleteClientHelloHandling {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
@@ -387,7 +385,7 @@ impl CompleteClientHelloHandling {
     fn emit_certificate_verify_tls13(
         &mut self,
         sess: &mut ServerSession,
-        signing_key: &Arc<dyn sign::SigningKey>,
+        signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
         let message = verify::construct_tls13_server_verify_message(
@@ -679,7 +677,7 @@ impl CompleteClientHelloHandling {
         let doing_client_auth = if full_handshake {
             let client_auth = self.emit_certificate_req_tls13(sess)?;
             self.emit_certificate_tls13(sess, &server_key.cert, ocsp_response, sct_list);
-            self.emit_certificate_verify_tls13(sess, &server_key.key, &sigschemes_ext)?;
+            self.emit_certificate_verify_tls13(sess, &*server_key.key, &sigschemes_ext)?;
             client_auth
         } else {
             false
