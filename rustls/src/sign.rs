@@ -40,7 +40,7 @@ pub struct CertifiedKey {
     pub cert: Vec<key::Certificate>,
 
     /// The certified key.
-    pub key: Arc<Box<dyn SigningKey>>,
+    pub key: Arc<dyn SigningKey>,
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
@@ -57,7 +57,7 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<Box<dyn SigningKey>>) -> CertifiedKey {
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<dyn SigningKey>) -> CertifiedKey {
         CertifiedKey {
             cert,
             key,
@@ -127,9 +127,9 @@ impl CertifiedKey {
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> {
     if let Ok(rsa) = RsaSigningKey::new(der) {
-        Ok(Box::new(rsa))
+        Ok(Arc::new(rsa))
     } else if let Ok(ecdsa) = any_ecdsa_type(der) {
         Ok(ecdsa)
     } else {
@@ -138,13 +138,13 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, 
 }
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> {
     if let Ok(ecdsa_p256) = ECDSASigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
         &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
     ) {
-        return Ok(Box::new(ecdsa_p256));
+        return Ok(Arc::new(ecdsa_p256));
     }
 
     if let Ok(ecdsa_p384) = ECDSASigningKey::new(
@@ -152,16 +152,16 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> 
         SignatureScheme::ECDSA_NISTP384_SHA384,
         &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
     ) {
-        return Ok(Box::new(ecdsa_p384));
+        return Ok(Arc::new(ecdsa_p384));
     }
 
     Err(())
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Box<dyn SigningKey>, ()> {
+pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> {
     if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
-        return Ok(Box::new(ed25519));
+        return Ok(Arc::new(ed25519));
     }
 
     // TODO: Add support for Ed448

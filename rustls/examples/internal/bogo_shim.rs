@@ -225,7 +225,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
 }
 
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<Box<dyn rustls::sign::SigningKey>>,
+    key: Arc<dyn rustls::sign::SigningKey>,
     scheme: rustls::SignatureScheme,
 }
 
@@ -253,10 +253,10 @@ struct FixedSignatureSchemeServerCertResolver {
 impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self, client_hello: ClientHello) -> Option<rustls::sign::CertifiedKey> {
         let mut certkey = self.resolver.resolve(client_hello)?;
-        certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
+        certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
-        }));
+        });
         Some(certkey)
     }
 }
@@ -278,10 +278,10 @@ impl rustls::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
         let mut certkey = self
             .resolver
             .resolve(acceptable_issuers, sigschemes)?;
-        certkey.key = Arc::new(Box::new(FixedSignatureSchemeSigningKey {
+        certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
-        }));
+        });
         Some(certkey)
     }
 
