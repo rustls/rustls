@@ -82,8 +82,7 @@ impl AlwaysResolvesClientCert {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
         Ok(AlwaysResolvesClientCert(sign::CertifiedKey::new(
-            chain,
-            Arc::new(key),
+            chain, key,
         )))
     }
 }

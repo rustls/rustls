@@ -387,7 +387,7 @@ impl CompleteClientHelloHandling {
     fn emit_certificate_verify_tls13(
         &mut self,
         sess: &mut ServerSession,
-        signing_key: &Arc<Box<dyn sign::SigningKey>>,
+        signing_key: &Arc<dyn sign::SigningKey>,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
         let message = verify::construct_tls13_server_verify_message(
