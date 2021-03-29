@@ -8,7 +8,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ExtensionType};
 use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::{ClientExtension, HandshakeMessagePayload};
+use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
@@ -329,22 +329,6 @@ impl ExpectClientHello {
         }
 
         ech
-    }
-
-    fn emit_server_hello_done(&mut self, conn: &mut ServerConnection) {
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHelloDone,
-                payload: HandshakePayload::ServerHelloDone,
-            }),
-        };
-
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, false);
     }
 
     fn start_resumption(
@@ -744,7 +728,7 @@ impl State for ExpectClientHello {
             &randoms,
         )?;
         let doing_client_auth = tls12::emit_certificate_req(&mut self.handshake, conn)?;
-        self.emit_server_hello_done(conn);
+        tls12::emit_server_hello_done(&mut self.handshake, conn);
 
         let server_kx = ServerKxDetails::new(kx);
         if doing_client_auth {
