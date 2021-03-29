@@ -12,14 +12,12 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat};
 use crate::msgs::enums::{ClientCertificateType, SignatureScheme};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::CertificateRequestPayload;
-use crate::msgs::handshake::CertificateStatus;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::{CertificateStatus, ClientExtension, HandshakeMessagePayload};
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{ECDHEServerKeyExchange, ServerKeyExchangePayload};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
-use crate::msgs::handshake::{HandshakeMessagePayload, Random, ServerHelloPayload};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -268,7 +266,7 @@ impl ExtensionProcessing {
         Ok(())
     }
 
-    fn process_tls12(
+    pub(super) fn process_tls12(
         &mut self,
         conn: &ServerConnection,
         hello: &ClientHelloPayload,
@@ -338,54 +336,6 @@ impl ExpectClientHello {
         }
 
         ech
-    }
-
-    fn emit_server_hello(
-        &mut self,
-        conn: &mut ServerConnection,
-        suite: &'static SupportedCipherSuite,
-        ocsp_response: &mut Option<&[u8]>,
-        sct_list: &mut Option<&[u8]>,
-        hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
-        randoms: &ConnectionRandoms,
-    ) -> Result<(), Error> {
-        let mut ep = ExtensionProcessing::new();
-        ep.process_common(
-            conn,
-            suite,
-            ocsp_response,
-            sct_list,
-            hello,
-            resumedata,
-            &self.handshake,
-        )?;
-        ep.process_tls12(conn, hello, self.using_ems);
-
-        self.send_ticket = ep.send_ticket;
-
-        let sh = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&randoms.server),
-                    session_id: self.handshake.session_id,
-                    cipher_suite: suite.suite,
-                    compression_method: Compression::Null,
-                    extensions: ep.exts,
-                }),
-            }),
-        };
-
-        trace!("sending server hello {:?}", sh);
-        self.handshake
-            .transcript
-            .add_message(&sh);
-        conn.common.send_msg(sh, false);
-        Ok(())
     }
 
     fn emit_certificate(&mut self, conn: &mut ServerConnection, cert_chain: &[Certificate]) {
@@ -543,9 +493,11 @@ impl ExpectClientHello {
         }
 
         self.handshake.session_id = *id;
-        self.emit_server_hello(
+        self.send_ticket = tls12::emit_server_hello(
+            &mut self.handshake,
             conn,
             suite,
+            self.using_ems,
             &mut None,
             &mut None,
             client_hello,
@@ -897,9 +849,11 @@ impl State for ExpectClientHello {
 
         let (mut ocsp_response, mut sct_list) =
             (certkey.ocsp.as_deref(), certkey.sct_list.as_deref());
-        self.emit_server_hello(
+        self.send_ticket = tls12::emit_server_hello(
+            &mut self.handshake,
             conn,
             suite,
+            self.using_ems,
             &mut ocsp_response,
             &mut sct_list,
             client_hello,
