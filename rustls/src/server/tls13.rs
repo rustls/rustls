@@ -802,17 +802,6 @@ pub struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl ExpectCertificateVerify {
-    fn into_expect_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            key_schedule: self.key_schedule,
-            handshake: self.handshake,
-            randoms: self.randoms,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
@@ -852,7 +841,12 @@ impl hs::State for ExpectCertificateVerify {
         self.handshake
             .transcript
             .add_message(&m);
-        Ok(self.into_expect_finished())
+        Ok(Box::new(ExpectFinished {
+            key_schedule: self.key_schedule,
+            handshake: self.handshake,
+            randoms: self.randoms,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
