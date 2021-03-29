@@ -198,7 +198,10 @@ pub(super) fn emit_certificate_req(
     Ok(true)
 }
 
-pub(super) fn emit_server_hello_done(handshake: &mut HandshakeDetails, conn: &mut ServerConnection) {
+pub(super) fn emit_server_hello_done(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+) {
     let m = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
