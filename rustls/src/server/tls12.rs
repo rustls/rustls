@@ -7,10 +7,10 @@ use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::AlertDescription;
-use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::HandshakeMessagePayload;
+use crate::msgs::enums::{Compression, ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::HandshakePayload;
-use crate::msgs::handshake::NewSessionTicketPayload;
+use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, ServerHelloPayload};
+use crate::msgs::handshake::{NewSessionTicketPayload, Random};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerConnection;
@@ -20,6 +20,51 @@ use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKxDetails
 use crate::server::hs;
 
 use ring::constant_time;
+
+pub(super) fn emit_server_hello(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+    suite: &'static SupportedCipherSuite,
+    using_ems: bool,
+    ocsp_response: &mut Option<&[u8]>,
+    sct_list: &mut Option<&[u8]>,
+    hello: &ClientHelloPayload,
+    resumedata: Option<&persist::ServerSessionValue>,
+    randoms: &ConnectionRandoms,
+) -> Result<bool, Error> {
+    let mut ep = hs::ExtensionProcessing::new();
+    ep.process_common(
+        conn,
+        suite,
+        ocsp_response,
+        sct_list,
+        hello,
+        resumedata,
+        &handshake,
+    )?;
+    ep.process_tls12(conn, hello, using_ems);
+
+    let sh = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ServerHello,
+            payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                legacy_version: ProtocolVersion::TLSv1_2,
+                random: Random::from_slice(&randoms.server),
+                session_id: handshake.session_id,
+                cipher_suite: suite.suite,
+                compression_method: Compression::Null,
+                extensions: ep.exts,
+            }),
+        }),
+    };
+
+    trace!("sending server hello {:?}", sh);
+    handshake.transcript.add_message(&sh);
+    conn.common.send_msg(sh, false);
+    Ok(ep.send_ticket)
+}
 
 // --- Process client's Certificate for client auth ---
 pub struct ExpectCertificate {
