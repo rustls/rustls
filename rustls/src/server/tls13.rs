@@ -83,45 +83,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn emit_certificate_verify_tls13(
-        &mut self,
-        conn: &mut ServerConnection,
-        signing_key: &dyn sign::SigningKey,
-        schemes: &[SignatureScheme],
-    ) -> Result<(), Error> {
-        let message = verify::construct_tls13_server_verify_message(
-            &self
-                .handshake
-                .transcript
-                .get_current_hash(),
-        );
-
-        let signer = signing_key
-            .choose_scheme(schemes)
-            .ok_or_else(|| hs::incompatible(conn, "no overlapping sigschemes"))?;
-
-        let scheme = signer.get_scheme();
-        let sig = signer.sign(&message)?;
-
-        let cv = DigitallySignedStruct::new(scheme, sig);
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateVerify,
-                payload: HandshakePayload::CertificateVerify(cv),
-            }),
-        };
-
-        trace!("sending certificate-verify {:?}", m);
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, true);
-        Ok(())
-    }
-
     fn emit_finished_tls13(
         &mut self,
         conn: &mut ServerConnection,
@@ -387,7 +348,12 @@ impl CompleteClientHelloHandling {
                 ocsp_response,
                 sct_list,
             );
-            self.emit_certificate_verify_tls13(conn, &*server_key.key, &sigschemes_ext)?;
+            emit_certificate_verify_tls13(
+                &mut self.handshake,
+                conn,
+                &*server_key.key,
+                &sigschemes_ext,
+            )?;
             client_auth
         } else {
             false
@@ -703,6 +669,39 @@ fn emit_certificate_tls13(
     trace!("sending certificate {:?}", c);
     handshake.transcript.add_message(&c);
     sess.common.send_msg(c, true);
+}
+
+fn emit_certificate_verify_tls13(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+    signing_key: &dyn sign::SigningKey,
+    schemes: &[SignatureScheme],
+) -> Result<(), Error> {
+    let message =
+        verify::construct_tls13_server_verify_message(&handshake.transcript.get_current_hash());
+
+    let signer = signing_key
+        .choose_scheme(schemes)
+        .ok_or_else(|| hs::incompatible(conn, "no overlapping sigschemes"))?;
+
+    let scheme = signer.get_scheme();
+    let sig = signer.sign(&message)?;
+
+    let cv = DigitallySignedStruct::new(scheme, sig);
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateVerify,
+            payload: HandshakePayload::CertificateVerify(cv),
+        }),
+    };
+
+    trace!("sending certificate-verify {:?}", m);
+    handshake.transcript.add_message(&m);
+    conn.common.send_msg(m, true);
+    Ok(())
 }
 
 pub struct ExpectCertificate {
