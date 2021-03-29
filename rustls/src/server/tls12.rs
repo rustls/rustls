@@ -22,7 +22,7 @@ use crate::sign;
 use crate::verify;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKxDetails};
+use crate::server::common::{HandshakeDetails, ServerKxDetails};
 use crate::server::hs;
 
 use ring::constant_time;
@@ -277,7 +277,7 @@ impl hs::State for ExpectCertificate {
                         err
                     })?;
 
-                Some(ClientCertDetails::new(cert_chain))
+                Some(cert_chain)
             }
         };
 
@@ -300,7 +300,7 @@ pub struct ExpectClientKx {
     pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
     pub server_kx: ServerKxDetails,
-    pub client_cert: Option<ClientCertDetails>,
+    pub client_cert: Option<Vec<Certificate>>,
     pub send_ticket: bool,
 }
 
@@ -378,7 +378,7 @@ pub struct ExpectCertificateVerify {
     secrets: ConnectionSecrets,
     handshake: HandshakeDetails,
     using_ems: bool,
-    client_cert: ClientCertDetails,
+    client_cert: Vec<Certificate>,
     send_ticket: bool,
 }
 
@@ -398,7 +398,7 @@ impl hs::State for ExpectCertificateVerify {
                 .handshake
                 .transcript
                 .take_handshake_buf();
-            let certs = &self.client_cert.cert_chain;
+            let certs = &self.client_cert;
 
             conn.config
                 .get_verifier()
@@ -412,7 +412,7 @@ impl hs::State for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        conn.client_cert_chain = Some(self.client_cert.cert_chain);
+        conn.client_cert_chain = Some(self.client_cert);
 
         self.handshake
             .transcript

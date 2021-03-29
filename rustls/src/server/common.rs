@@ -1,5 +1,4 @@
 use crate::hash_hs;
-use crate::key;
 use crate::kx;
 use crate::msgs::handshake::SessionID;
 
@@ -24,15 +23,5 @@ pub struct ServerKxDetails {
 impl ServerKxDetails {
     pub fn new(kx: kx::KeyExchange) -> ServerKxDetails {
         ServerKxDetails { kx }
-    }
-}
-
-pub struct ClientCertDetails {
-    pub cert_chain: Vec<key::Certificate>,
-}
-
-impl ClientCertDetails {
-    pub fn new(chain: Vec<key::Certificate>) -> ClientCertDetails {
-        ClientCertDetails { cert_chain: chain }
     }
 }

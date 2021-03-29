@@ -44,7 +44,7 @@ use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension, quic};
 
-use crate::server::common::{ClientCertDetails, HandshakeDetails};
+use crate::server::common::HandshakeDetails;
 use crate::server::hs;
 
 use ring::constant_time;
@@ -742,7 +742,7 @@ impl hs::State for ExpectCertificate {
             ));
         }
 
-        let cert_chain = certp.convert();
+        let client_cert = certp.convert();
 
         let mandatory = conn
             .config
@@ -755,7 +755,7 @@ impl hs::State for ExpectCertificate {
                 Error::General("client rejected by client_auth_mandatory".into())
             })?;
 
-        let (end_entity, intermediates) = match cert_chain.split_first() {
+        let (end_entity, intermediates) = match client_cert.split_first() {
             None => {
                 if !mandatory {
                     debug!("client auth requested but no certificate supplied");
@@ -788,7 +788,6 @@ impl hs::State for ExpectCertificate {
                 err
             })?;
 
-        let client_cert = ClientCertDetails::new(cert_chain);
         Ok(Box::new(ExpectCertificateVerify {
             suite: self.suite,
             handshake: self.handshake,
@@ -806,7 +805,7 @@ pub struct ExpectCertificateVerify {
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: ClientCertDetails,
+    client_cert: Vec<Certificate>,
     send_ticket: bool,
     hash_at_server_fin: Digest,
 }
@@ -830,7 +829,7 @@ impl hs::State for ExpectCertificateVerify {
             self.handshake
                 .transcript
                 .abandon_client_auth();
-            let certs = &self.client_cert.cert_chain;
+            let certs = &self.client_cert;
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
             conn.config
@@ -845,7 +844,7 @@ impl hs::State for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        conn.client_cert_chain = Some(self.client_cert.cert_chain);
+        conn.client_cert_chain = Some(self.client_cert);
 
         self.handshake
             .transcript
