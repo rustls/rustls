@@ -84,18 +84,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn into_expect_certificate(
-        self,
-        key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    ) -> hs::NextState {
-        Box::new(ExpectCertificate {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn into_expect_finished(
         self,
         key_schedule: KeyScheduleTrafficWithClientFinishedPending,
@@ -716,7 +704,12 @@ impl CompleteClientHelloHandling {
         let key_schedule_traffic = self.emit_finished_tls13(sess, key_schedule);
 
         if doing_client_auth {
-            Ok(self.into_expect_certificate(key_schedule_traffic))
+            Ok(Box::new(ExpectCertificate {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule: key_schedule_traffic,
+                send_ticket: self.send_ticket,
+            }))
         } else {
             Ok(self.into_expect_finished(key_schedule_traffic))
         }
