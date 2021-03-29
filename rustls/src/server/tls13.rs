@@ -716,18 +716,6 @@ pub struct ExpectCertificate {
     pub send_ticket: bool,
 }
 
-impl ExpectCertificate {
-    fn into_expect_certificate_verify(self, cert: ClientCertDetails) -> hs::NextState {
-        Box::new(ExpectCertificateVerify {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule: self.key_schedule,
-            client_cert: cert,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -795,8 +783,14 @@ impl hs::State for ExpectCertificate {
                 Err(err)
             })?;
 
-        let cert = ClientCertDetails::new(cert_chain);
-        Ok(self.into_expect_certificate_verify(cert))
+        let client_cert = ClientCertDetails::new(cert_chain);
+        Ok(Box::new(ExpectCertificateVerify {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            key_schedule: self.key_schedule,
+            client_cert,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
