@@ -883,17 +883,6 @@ pub struct ExpectFinished {
 }
 
 impl ExpectFinished {
-    fn into_expect_traffic(
-        fin: verify::FinishedMessageVerified,
-        ks: KeyScheduleTraffic,
-    ) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            key_schedule: ks,
-            want_write_key_update: false,
-            _fin_verified: fin,
-        })
-    }
-
     fn emit_ticket(
         handshake: &mut HandshakeDetails,
         sess: &mut ServerSessionImpl,
@@ -1021,7 +1010,11 @@ impl hs::State for ExpectFinished {
             }
         }
 
-        Ok(Self::into_expect_traffic(fin, key_schedule_traffic))
+        Ok(Box::new(ExpectTraffic {
+            key_schedule: key_schedule_traffic,
+            want_write_key_update: false,
+            _fin_verified: fin,
+        }))
     }
 }
 
