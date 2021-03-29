@@ -9,7 +9,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::{Compression, ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::HandshakePayload;
+use crate::msgs::handshake::{CertificateStatus, HandshakePayload};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, ServerHelloPayload};
 use crate::msgs::handshake::{NewSessionTicketPayload, Random};
 use crate::msgs::message::{Message, MessagePayload};
@@ -78,6 +78,26 @@ pub(super) fn emit_certificate(
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
             payload: HandshakePayload::Certificate(cert_chain.to_owned()),
+        }),
+    };
+
+    handshake.transcript.add_message(&c);
+    conn.common.send_msg(c, false);
+}
+
+pub(super) fn emit_cert_status(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+    ocsp: &[u8],
+) {
+    let st = CertificateStatus::new(ocsp.to_owned());
+
+    let c = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateStatus,
+            payload: HandshakePayload::CertificateStatus(st),
         }),
     };
 
