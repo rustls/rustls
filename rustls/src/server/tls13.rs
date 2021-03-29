@@ -83,58 +83,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn emit_certificate_tls13(
-        &mut self,
-        conn: &mut ServerConnection,
-        cert_chain: &[Certificate],
-        ocsp_response: Option<&[u8]>,
-        sct_list: Option<&[u8]>,
-    ) {
-        let mut cert_entries = vec![];
-        for cert in cert_chain {
-            let entry = CertificateEntry {
-                cert: cert.to_owned(),
-                exts: Vec::new(),
-            };
-
-            cert_entries.push(entry);
-        }
-
-        if let Some(end_entity_cert) = cert_entries.first_mut() {
-            // Apply OCSP response to first certificate (we don't support OCSP
-            // except for leaf certs).
-            if let Some(ocsp) = ocsp_response {
-                let cst = CertificateStatus::new(ocsp.to_owned());
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::CertificateStatus(cst));
-            }
-
-            // Likewise, SCT
-            if let Some(sct_list) = sct_list {
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::make_sct(sct_list.to_owned()));
-            }
-        }
-
-        let cert_body = CertificatePayloadTLS13::new(cert_entries);
-        let c = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::CertificateTLS13(cert_body),
-            }),
-        };
-
-        trace!("sending certificate {:?}", c);
-        self.handshake
-            .transcript
-            .add_message(&c);
-        conn.common.send_msg(c, true);
-    }
-
     fn emit_certificate_verify_tls13(
         &mut self,
         conn: &mut ServerConnection,
@@ -432,7 +380,13 @@ impl CompleteClientHelloHandling {
 
         let doing_client_auth = if full_handshake {
             let client_auth = emit_certificate_req_tls13(&mut self.handshake, conn)?;
-            self.emit_certificate_tls13(conn, &server_key.cert, ocsp_response, sct_list);
+            emit_certificate_tls13(
+                &mut self.handshake,
+                conn,
+                &server_key.cert,
+                ocsp_response,
+                sct_list,
+            );
             self.emit_certificate_verify_tls13(conn, &*server_key.key, &sigschemes_ext)?;
             client_auth
         } else {
@@ -700,6 +654,57 @@ fn emit_certificate_req_tls13(
     conn.common.send_msg(m, true);
     Ok(true)
 }
+
+fn emit_certificate_tls13(
+    handshake: &mut HandshakeDetails,
+    sess: &mut ServerConnection,
+    cert_chain: &[Certificate],
+    ocsp_response: Option<&[u8]>,
+    sct_list: Option<&[u8]>,
+) {
+    let mut cert_entries = vec![];
+    for cert in cert_chain {
+        let entry = CertificateEntry {
+            cert: cert.to_owned(),
+            exts: Vec::new(),
+        };
+
+        cert_entries.push(entry);
+    }
+
+    if let Some(end_entity_cert) = cert_entries.first_mut() {
+        // Apply OCSP response to first certificate (we don't support OCSP
+        // except for leaf certs).
+        if let Some(ocsp) = ocsp_response {
+            let cst = CertificateStatus::new(ocsp.to_owned());
+            end_entity_cert
+                .exts
+                .push(CertificateExtension::CertificateStatus(cst));
+        }
+
+        // Likewise, SCT
+        if let Some(sct_list) = sct_list {
+            end_entity_cert
+                .exts
+                .push(CertificateExtension::make_sct(sct_list.to_owned()));
+        }
+    }
+
+    let cert_body = CertificatePayloadTLS13::new(cert_entries);
+    let c = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTLS13(cert_body),
+        }),
+    };
+
+    trace!("sending certificate {:?}", c);
+    handshake.transcript.add_message(&c);
+    sess.common.send_msg(c, true);
+}
+
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
