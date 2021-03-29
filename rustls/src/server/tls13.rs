@@ -55,6 +55,7 @@ pub struct CompleteClientHelloHandling {
     pub randoms: ConnectionRandoms,
     pub done_retry: bool,
     pub send_ticket: bool,
+    pub extra_exts: Vec<ServerExtension>,
 }
 
 impl CompleteClientHelloHandling {
@@ -177,6 +178,7 @@ impl CompleteClientHelloHandling {
                         using_ems: false,
                         done_retry: true,
                         send_ticket: self.send_ticket,
+                        extra_exts: self.extra_exts,
                     }));
                 }
 
@@ -270,6 +272,7 @@ impl CompleteClientHelloHandling {
             &mut sct_list,
             client_hello,
             resumedata.as_ref(),
+            self.extra_exts,
         )?;
 
         let doing_client_auth = if full_handshake {
@@ -482,6 +485,7 @@ fn emit_encrypted_extensions(
     sct_list: &mut Option<&[u8]>,
     hello: &ClientHelloPayload,
     resumedata: Option<&persist::ServerSessionValue>,
+    extra_exts: Vec<ServerExtension>,
 ) -> Result<(), Error> {
     let mut ep = hs::ExtensionProcessing::new();
     ep.process_common(
@@ -491,7 +495,7 @@ fn emit_encrypted_extensions(
         sct_list,
         hello,
         resumedata,
-        &handshake,
+        extra_exts,
     )?;
 
     let ee = Message {

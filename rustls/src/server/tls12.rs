@@ -13,7 +13,8 @@ use crate::msgs::enums::{Compression, ContentType, HandshakeType, ProtocolVersio
 use crate::msgs::handshake::{CertificateRequestPayload, NewSessionTicketPayload, Random};
 use crate::msgs::handshake::{CertificateStatus, DigitallySignedStruct, ECDHEServerKeyExchange};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, ServerHelloPayload};
-use crate::msgs::handshake::{HandshakePayload, ServerECDHParams, ServerKeyExchangePayload};
+use crate::msgs::handshake::{HandshakePayload, ServerECDHParams};
+use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerConnection;
@@ -36,6 +37,7 @@ pub(super) fn emit_server_hello(
     hello: &ClientHelloPayload,
     resumedata: Option<&persist::ServerSessionValue>,
     randoms: &ConnectionRandoms,
+    extra_exts: Vec<ServerExtension>,
 ) -> Result<bool, Error> {
     let mut ep = hs::ExtensionProcessing::new();
     ep.process_common(
@@ -45,7 +47,7 @@ pub(super) fn emit_server_hello(
         sct_list,
         hello,
         resumedata,
-        &handshake,
+        extra_exts,
     )?;
     ep.process_tls12(conn, hello, using_ems);
 
@@ -196,10 +198,7 @@ pub(super) fn emit_certificate_req(
     Ok(true)
 }
 
-pub(super) fn emit_server_hello_done(
-    handshake: &mut HandshakeDetails,
-    conn: &mut ServerConnection,
-) {
+pub(super) fn emit_server_hello_done(handshake: &mut HandshakeDetails, conn: &mut ServerConnection) {
     let m = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
