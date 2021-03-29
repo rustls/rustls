@@ -7,8 +7,7 @@ use crate::log::{debug, trace};
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ExtensionType};
 use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat};
-use crate::msgs::enums::{ClientCertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::CertificateRequestPayload;
+use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::{ClientExtension, HandshakeMessagePayload};
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
@@ -330,50 +329,6 @@ impl ExpectClientHello {
         }
 
         ech
-    }
-
-    fn emit_certificate_req(&mut self, conn: &mut ServerConnection) -> Result<bool, Error> {
-        let client_auth = conn.config.get_verifier();
-
-        if !client_auth.offer_client_auth() {
-            return Ok(false);
-        }
-
-        let verify_schemes = client_auth.supported_verify_schemes();
-
-        let names = client_auth
-            .client_auth_root_subjects(conn.get_sni())
-            .ok_or_else(|| {
-                debug!("could not determine root subjects based on SNI");
-                conn.common
-                    .send_fatal_alert(AlertDescription::AccessDenied);
-                Error::General("client rejected by client_auth_root_subjects".into())
-            })?;
-
-        let cr = CertificateRequestPayload {
-            certtypes: vec![
-                ClientCertificateType::RSASign,
-                ClientCertificateType::ECDSASign,
-            ],
-            sigschemes: verify_schemes,
-            canames: names,
-        };
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateRequest,
-                payload: HandshakePayload::CertificateRequest(cr),
-            }),
-        };
-
-        trace!("Sending CertificateRequest {:?}", m);
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, false);
-        Ok(true)
     }
 
     fn emit_server_hello_done(&mut self, conn: &mut ServerConnection) {
@@ -788,7 +743,7 @@ impl State for ExpectClientHello {
             &*certkey.key,
             &randoms,
         )?;
-        let doing_client_auth = self.emit_certificate_req(conn)?;
+        let doing_client_auth = tls12::emit_certificate_req(&mut self.handshake, conn)?;
         self.emit_server_hello_done(conn);
 
         let server_kx = ServerKxDetails::new(kx);
