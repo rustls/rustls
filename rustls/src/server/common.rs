@@ -3,12 +3,10 @@ use crate::key;
 use crate::kx;
 use crate::msgs::handshake::SessionID;
 
-use ring::digest;
 use std::mem;
 
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
-    pub hash_at_server_fin: Option<digest::Digest>,
     pub session_id: SessionID,
 }
 
@@ -16,7 +14,6 @@ impl HandshakeDetails {
     pub fn new() -> HandshakeDetails {
         HandshakeDetails {
             transcript: hash_hs::HandshakeHash::new(),
-            hash_at_server_fin: None,
             session_id: SessionID::empty(),
         }
     }
