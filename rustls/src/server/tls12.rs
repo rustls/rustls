@@ -2,20 +2,24 @@ use crate::check::check_message;
 use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::key::Certificate;
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::{AlertDescription, SignatureScheme};
 use crate::msgs::enums::{Compression, ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::{CertificateStatus, HandshakePayload};
+use crate::msgs::handshake::{CertificateStatus, DigitallySignedStruct, ECDHEServerKeyExchange};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, ServerHelloPayload};
+use crate::msgs::handshake::{HandshakePayload, ServerECDHParams, ServerKeyExchangePayload};
 use crate::msgs::handshake::{NewSessionTicketPayload, Random};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerConnection;
-use crate::{verify, SupportedCipherSuite};
+use crate::sign;
+use crate::verify;
+use crate::SupportedCipherSuite;
 
 use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKxDetails};
 use crate::server::hs;
@@ -103,6 +107,48 @@ pub(super) fn emit_cert_status(
 
     handshake.transcript.add_message(&c);
     conn.common.send_msg(c, false);
+}
+
+pub(super) fn emit_server_kx(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+    sigschemes: Vec<SignatureScheme>,
+    skxg: &'static kx::SupportedKxGroup,
+    signing_key: &dyn sign::SigningKey,
+    randoms: &ConnectionRandoms,
+) -> Result<kx::KeyExchange, Error> {
+    let kx = kx::KeyExchange::start(skxg)
+        .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
+    let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
+
+    let mut msg = Vec::new();
+    msg.extend(&randoms.client);
+    msg.extend(&randoms.server);
+    secdh.encode(&mut msg);
+
+    let signer = signing_key
+        .choose_scheme(&sigschemes)
+        .ok_or_else(|| Error::General("incompatible signing key".to_string()))?;
+    let sigscheme = signer.get_scheme();
+    let sig = signer.sign(&msg)?;
+
+    let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
+        params: secdh,
+        dss: DigitallySignedStruct::new(sigscheme, sig),
+    });
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(skx),
+        }),
+    };
+
+    handshake.transcript.add_message(&m);
+    conn.common.send_msg(m, false);
+    Ok(kx)
 }
 
 // --- Process client's Certificate for client auth ---
