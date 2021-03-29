@@ -83,45 +83,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn emit_hello_retry_request(
-        &mut self,
-        suite: &'static SupportedCipherSuite,
-        conn: &mut ServerConnection,
-        group: NamedGroup,
-    ) {
-        let mut req = HelloRetryRequest {
-            legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: SessionID::empty(),
-            cipher_suite: suite.suite,
-            extensions: Vec::new(),
-        };
-
-        req.extensions
-            .push(HelloRetryExtension::KeyShare(group));
-        req.extensions
-            .push(HelloRetryExtension::SupportedVersions(
-                ProtocolVersion::TLSv1_3,
-            ));
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::HelloRetryRequest,
-                payload: HandshakePayload::HelloRetryRequest(req),
-            }),
-        };
-
-        trace!("Requesting retry {:?}", m);
-        self.handshake
-            .transcript
-            .rollup_for_hrr();
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, false);
-    }
-
     fn emit_encrypted_extensions(
         &mut self,
         conn: &mut ServerConnection,
@@ -453,7 +414,7 @@ impl CompleteClientHelloHandling {
                         return Err(hs::illegal_param(conn, "did not follow retry request"));
                     }
 
-                    self.emit_hello_retry_request(suite, conn, group.name);
+                    emit_hello_retry_request(&mut self.handshake, suite, conn, group.name);
                     emit_fake_ccs(conn);
                     return Ok(Box::new(hs::ExpectClientHello {
                         handshake: self.handshake,
@@ -700,6 +661,41 @@ fn emit_fake_ccs(conn: &mut ServerConnection) {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
+    conn.common.send_msg(m, false);
+}
+
+fn emit_hello_retry_request(
+    handshake: &mut HandshakeDetails,
+    suite: &'static SupportedCipherSuite,
+    conn: &mut ServerConnection,
+    group: NamedGroup,
+) {
+    let mut req = HelloRetryRequest {
+        legacy_version: ProtocolVersion::TLSv1_2,
+        session_id: SessionID::empty(),
+        cipher_suite: suite.suite,
+        extensions: Vec::new(),
+    };
+
+    req.extensions
+        .push(HelloRetryExtension::KeyShare(group));
+    req.extensions
+        .push(HelloRetryExtension::SupportedVersions(
+            ProtocolVersion::TLSv1_3,
+        ));
+
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::HelloRetryRequest,
+            payload: HandshakePayload::HelloRetryRequest(req),
+        }),
+    };
+
+    trace!("Requesting retry {:?}", m);
+    handshake.transcript.rollup_for_hrr();
+    handshake.transcript.add_message(&m);
     conn.common.send_msg(m, false);
 }
 
