@@ -84,15 +84,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn into_expect_retried_client_hello(self) -> hs::NextState {
-        Box::new(hs::ExpectClientHello {
-            handshake: self.handshake,
-            using_ems: false,
-            done_retry: true,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn into_expect_certificate(
         self,
         key_schedule: KeyScheduleTrafficWithClientFinishedPending,
@@ -616,7 +607,12 @@ impl CompleteClientHelloHandling {
 
                     self.emit_hello_retry_request(suite, sess, group.name);
                     self.emit_fake_ccs(sess);
-                    return Ok(self.into_expect_retried_client_hello());
+                    return Ok(Box::new(hs::ExpectClientHello {
+                        handshake: self.handshake,
+                        using_ems: false,
+                        done_retry: true,
+                        send_ticket: self.send_ticket,
+                    }));
                 }
 
                 return Err(hs::incompatible(sess, "no kx group overlap with client"));
