@@ -1,6 +1,7 @@
 use crate::check::check_message;
 use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
+use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -64,6 +65,24 @@ pub(super) fn emit_server_hello(
     handshake.transcript.add_message(&sh);
     conn.common.send_msg(sh, false);
     Ok(ep.send_ticket)
+}
+
+pub(super) fn emit_certificate(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+    cert_chain: &[Certificate],
+) {
+    let c = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::Certificate(cert_chain.to_owned()),
+        }),
+    };
+
+    handshake.transcript.add_message(&c);
+    conn.common.send_msg(c, false);
 }
 
 // --- Process client's Certificate for client auth ---
