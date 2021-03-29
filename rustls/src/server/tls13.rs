@@ -83,118 +83,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn emit_server_hello(
-        &mut self,
-        suite: &'static SupportedCipherSuite,
-        conn: &mut ServerConnection,
-        session_id: &SessionID,
-        share: &KeyShareEntry,
-        chosen_psk_idx: Option<usize>,
-        resuming_psk: Option<&[u8]>,
-    ) -> Result<KeyScheduleHandshake, Error> {
-        let mut extensions = Vec::new();
-
-        // Do key exchange
-        let kxr = kx::KeyExchange::choose(share.group, &conn.config.kx_groups)
-            .and_then(kx::KeyExchange::start)
-            .and_then(|kx| kx.complete(&share.payload.0))
-            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
-
-        let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
-        extensions.push(ServerExtension::KeyShare(kse));
-        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
-
-        if let Some(psk_idx) = chosen_psk_idx {
-            extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
-        }
-
-        let sh = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&self.randoms.server),
-                    session_id: *session_id,
-                    cipher_suite: suite.suite,
-                    compression_method: Compression::Null,
-                    extensions,
-                }),
-            }),
-        };
-
-        hs::check_aligned_handshake(conn)?;
-
-        #[cfg(feature = "quic")]
-        let client_hello_hash = self
-            .handshake
-            .transcript
-            .get_hash_given(suite.get_hash(), &[]);
-
-        trace!("sending server hello {:?}", sh);
-        self.handshake
-            .transcript
-            .add_message(&sh);
-        conn.common.send_msg(sh, false);
-
-        // Start key schedule
-        let mut key_schedule = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
-
-            #[cfg(feature = "quic")]
-            {
-                if conn.common.protocol == Protocol::Quic {
-                    let client_early_traffic_secret = early_key_schedule
-                        .client_early_traffic_secret(
-                            &client_hello_hash,
-                            &*conn.config.key_log,
-                            &self.randoms.client,
-                        );
-                    // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
-                    // before the application can see.
-                    conn.common.quic.early_secret = Some(client_early_traffic_secret);
-                }
-            }
-
-            early_key_schedule.into_handshake(&kxr.shared_secret)
-        } else {
-            KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
-        };
-
-        let handshake_hash = self
-            .handshake
-            .transcript
-            .get_current_hash();
-        let write_key = key_schedule.server_handshake_traffic_secret(
-            &handshake_hash,
-            &*conn.config.key_log,
-            &self.randoms.client,
-        );
-        conn.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-
-        let read_key = key_schedule.client_handshake_traffic_secret(
-            &handshake_hash,
-            &*conn.config.key_log,
-            &self.randoms.client,
-        );
-        conn.common
-            .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-
-        #[cfg(feature = "quic")]
-        {
-            conn.common.quic.hs_secrets = Some(quic::Secrets {
-                client: read_key,
-                server: write_key,
-            });
-        }
-
-        Ok(key_schedule)
-    }
-
     fn emit_fake_ccs(&mut self, conn: &mut ServerConnection) {
         if conn.common.is_quic() {
             return;
@@ -651,7 +539,9 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(chm);
-        let key_schedule = self.emit_server_hello(
+        let key_schedule = emit_server_hello(
+            &mut self.handshake,
+            &self.randoms,
             suite,
             conn,
             &client_hello.session_id,
@@ -705,6 +595,112 @@ impl CompleteClientHelloHandling {
             }))
         }
     }
+}
+
+fn emit_server_hello(
+    handshake: &mut HandshakeDetails,
+    randoms: &ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    sess: &mut ServerConnection,
+    session_id: &SessionID,
+    share: &KeyShareEntry,
+    chosen_psk_idx: Option<usize>,
+    resuming_psk: Option<&[u8]>,
+) -> Result<KeyScheduleHandshake, Error> {
+    let mut extensions = Vec::new();
+
+    // Do key exchange
+    let kxr = kx::KeyExchange::choose(share.group, &sess.config.kx_groups)
+        .and_then(kx::KeyExchange::start)
+        .and_then(|kx| kx.complete(&share.payload.0))
+        .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
+
+    let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
+    extensions.push(ServerExtension::KeyShare(kse));
+    extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
+
+    if let Some(psk_idx) = chosen_psk_idx {
+        extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
+    }
+
+    let sh = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ServerHello,
+            payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                legacy_version: ProtocolVersion::TLSv1_2,
+                random: Random::from_slice(&randoms.server),
+                session_id: *session_id,
+                cipher_suite: suite.suite,
+                compression_method: Compression::Null,
+                extensions,
+            }),
+        }),
+    };
+
+    hs::check_aligned_handshake(sess)?;
+
+    #[cfg(feature = "quic")]
+    let client_hello_hash = handshake
+        .transcript
+        .get_hash_given(suite.get_hash(), &[]);
+
+    trace!("sending server hello {:?}", sh);
+    handshake.transcript.add_message(&sh);
+    sess.common.send_msg(sh, false);
+
+    // Start key schedule
+    let mut key_schedule = if let Some(psk) = resuming_psk {
+        let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
+
+        #[cfg(feature = "quic")]
+        {
+            if sess.common.protocol == Protocol::Quic {
+                let client_early_traffic_secret = early_key_schedule.client_early_traffic_secret(
+                    &client_hello_hash,
+                    &*sess.config.key_log,
+                    &randoms.client,
+                );
+                // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
+                // before the application can see.
+                sess.common.quic.early_secret = Some(client_early_traffic_secret);
+            }
+        }
+
+        early_key_schedule.into_handshake(&kxr.shared_secret)
+    } else {
+        KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
+    };
+
+    let handshake_hash = handshake.transcript.get_current_hash();
+    let write_key = key_schedule.server_handshake_traffic_secret(
+        &handshake_hash,
+        &*sess.config.key_log,
+        &randoms.client,
+    );
+    sess.common
+        .record_layer
+        .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+
+    let read_key = key_schedule.client_handshake_traffic_secret(
+        &handshake_hash,
+        &*sess.config.key_log,
+        &randoms.client,
+    );
+    sess.common
+        .record_layer
+        .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+
+    #[cfg(feature = "quic")]
+    {
+        sess.common.quic.hs_secrets = Some(quic::Secrets {
+            client: read_key,
+            server: write_key,
+        });
+    }
+
+    Ok(key_schedule)
 }
 
 pub struct ExpectCertificate {
