@@ -717,15 +717,6 @@ pub struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn into_expect_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            key_schedule: self.key_schedule,
-            randoms: self.randoms,
-            handshake: self.handshake,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn into_expect_certificate_verify(self, cert: ClientCertDetails) -> hs::NextState {
         Box::new(ExpectCertificateVerify {
             handshake: self.handshake,
@@ -780,7 +771,12 @@ impl hs::State for ExpectCertificate {
                     self.handshake
                         .transcript
                         .abandon_client_auth();
-                    return Ok(self.into_expect_finished());
+                    return Ok(Box::new(ExpectFinished {
+                        key_schedule: self.key_schedule,
+                        randoms: self.randoms,
+                        handshake: self.handshake,
+                        send_ticket: self.send_ticket,
+                    }));
                 }
 
                 sess.common
