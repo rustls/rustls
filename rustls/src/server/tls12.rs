@@ -196,6 +196,23 @@ pub(super) fn emit_certificate_req(
     Ok(true)
 }
 
+pub(super) fn emit_server_hello_done(
+    handshake: &mut HandshakeDetails,
+    conn: &mut ServerConnection,
+) {
+    let m = Message {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ServerHelloDone,
+            payload: HandshakePayload::ServerHelloDone,
+        }),
+    };
+
+    handshake.transcript.add_message(&m);
+    conn.common.send_msg(m, false);
+}
+
 // --- Process client's Certificate for client auth ---
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
