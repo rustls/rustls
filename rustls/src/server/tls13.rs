@@ -84,18 +84,6 @@ impl CompleteClientHelloHandling {
         constant_time::verify_slices_are_equal(real_binder.as_ref(), binder).is_ok()
     }
 
-    fn into_expect_finished(
-        self,
-        key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    ) -> hs::NextState {
-        Box::new(ExpectFinished {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            key_schedule,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn emit_server_hello(
         &mut self,
         suite: &'static SupportedCipherSuite,
@@ -711,7 +699,12 @@ impl CompleteClientHelloHandling {
                 send_ticket: self.send_ticket,
             }))
         } else {
-            Ok(self.into_expect_finished(key_schedule_traffic))
+            Ok(Box::new(ExpectFinished {
+                handshake: self.handshake,
+                randoms: self.randoms,
+                key_schedule: key_schedule_traffic,
+                send_ticket: self.send_ticket,
+            }))
         }
     }
 }
