@@ -22,7 +22,7 @@ use crate::sign;
 use crate::verify;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::{HandshakeDetails, ServerKxDetails};
+use crate::server::common::HandshakeDetails;
 use crate::server::hs;
 
 use ring::constant_time;
@@ -221,7 +221,7 @@ pub struct ExpectCertificate {
     pub randoms: ConnectionRandoms,
     pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
-    pub server_kx: ServerKxDetails,
+    pub server_kx: kx::KeyExchange,
     pub send_ticket: bool,
 }
 
@@ -299,7 +299,7 @@ pub struct ExpectClientKx {
     pub randoms: ConnectionRandoms,
     pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
-    pub server_kx: ServerKxDetails,
+    pub server_kx: kx::KeyExchange,
     pub client_cert: Option<Vec<Certificate>>,
     pub send_ticket: bool,
 }
@@ -323,7 +323,6 @@ impl hs::State for ExpectClientKx {
         // resulting premaster secret.
         let kxd = self
             .server_kx
-            .kx
             .server_complete(&client_kx.0)
             .ok_or_else(|| {
                 conn.common
