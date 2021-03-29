@@ -2,7 +2,6 @@
 use crate::conn::Protocol;
 use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
-use crate::key::Certificate;
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -336,22 +335,6 @@ impl ExpectClientHello {
         }
 
         ech
-    }
-
-    fn emit_certificate(&mut self, conn: &mut ServerConnection, cert_chain: &[Certificate]) {
-        let c = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
-            }),
-        };
-
-        self.handshake
-            .transcript
-            .add_message(&c);
-        conn.common.send_msg(c, false);
     }
 
     fn emit_cert_status(&mut self, conn: &mut ServerConnection, ocsp: &[u8]) {
@@ -860,7 +843,7 @@ impl State for ExpectClientHello {
             None,
             &randoms,
         )?;
-        self.emit_certificate(conn, &certkey.cert);
+        tls12::emit_certificate(&mut self.handshake, conn, &certkey.cert);
         if let Some(ocsp_response) = ocsp_response {
             self.emit_cert_status(conn, ocsp_response);
         }
