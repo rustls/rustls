@@ -845,7 +845,7 @@ impl hs::State for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        conn.client_cert_chain = Some(self.client_cert.take_chain());
+        conn.client_cert_chain = Some(self.client_cert.cert_chain);
 
         self.handshake
             .transcript

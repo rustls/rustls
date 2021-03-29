@@ -3,8 +3,6 @@ use crate::key;
 use crate::kx;
 use crate::msgs::handshake::SessionID;
 
-use std::mem;
-
 pub struct HandshakeDetails {
     pub transcript: hash_hs::HandshakeHash,
     pub session_id: SessionID,
@@ -36,9 +34,5 @@ pub struct ClientCertDetails {
 impl ClientCertDetails {
     pub fn new(chain: Vec<key::Certificate>) -> ClientCertDetails {
         ClientCertDetails { cert_chain: chain }
-    }
-
-    pub fn take_chain(&mut self) -> Vec<key::Certificate> {
-        mem::take(&mut self.cert_chain)
     }
 }
