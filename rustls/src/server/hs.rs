@@ -19,7 +19,7 @@ use crate::server::{ClientHello, ServerConfig, ServerConnection};
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::{HandshakeDetails, ServerKxDetails};
+use crate::server::common::HandshakeDetails;
 use crate::server::{tls12, tls13};
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -723,7 +723,7 @@ impl State for ExpectClientHello {
         if let Some(ocsp_response) = ocsp_response {
             tls12::emit_cert_status(&mut self.handshake, conn, ocsp_response);
         }
-        let kx = tls12::emit_server_kx(
+        let server_kx = tls12::emit_server_kx(
             &mut self.handshake,
             conn,
             sigschemes,
@@ -734,7 +734,6 @@ impl State for ExpectClientHello {
         let doing_client_auth = tls12::emit_certificate_req(&mut self.handshake, conn)?;
         tls12::emit_server_hello_done(&mut self.handshake, conn);
 
-        let server_kx = ServerKxDetails::new(kx);
         if doing_client_auth {
             Ok(Box::new(tls12::ExpectCertificate {
                 handshake: self.handshake,
