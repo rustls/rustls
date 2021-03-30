@@ -6,12 +6,13 @@ use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "logging")]
 use crate::log::trace;
+#[cfg(feature = "quic")]
+use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::CipherSuite;
+use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{AlertDescription, HandshakeType};
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::{CertificatePayload, ClientExtension};
 use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -506,11 +507,6 @@ impl ClientConnection {
         Ok(())
     }
 
-    fn reject_renegotiation_attempt(&mut self) {
-        self.common
-            .send_warning_alert(AlertDescription::NoRenegotiation);
-    }
-
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
@@ -521,7 +517,8 @@ impl ClientConnection {
             && !self.common.is_tls13()
             && !self.is_handshaking()
         {
-            self.reject_renegotiation_attempt();
+            self.common
+                .reject_renegotiation_attempt();
             return Ok(());
         }
 

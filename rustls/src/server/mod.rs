@@ -5,8 +5,10 @@ use crate::error::Error;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
+#[cfg(feature = "quic")]
+use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
+use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::Message;
 use crate::sign;
@@ -382,7 +384,7 @@ impl ServerConnection {
             && msg.is_handshake_type(HandshakeType::ClientHello)
         {
             self.common
-                .send_warning_alert(AlertDescription::NoRenegotiation);
+                .reject_renegotiation_attempt();
             return Ok(());
         }
 
