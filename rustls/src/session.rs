@@ -265,7 +265,7 @@ impl SessionRandoms {
         assert!(self.we_are_client);
         // both the server random and TLS12_DOWNGRADE_SENTINEL are
         // public values and don't require constant time comparison
-        &self.server[24..] == TLS12_DOWNGRADE_SENTINEL
+        self.server[24..] == TLS12_DOWNGRADE_SENTINEL
     }
 }
 
@@ -481,10 +481,7 @@ impl SessionCommon {
     }
 
     pub fn is_tls13(&self) -> bool {
-        match self.negotiated_version {
-            Some(ProtocolVersion::TLSv1_3) => true,
-            _ => false,
-        }
+        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
     pub fn process_msg(

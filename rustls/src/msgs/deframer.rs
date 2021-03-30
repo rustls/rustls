@@ -124,7 +124,7 @@ impl MessageDeframer {
 
             self.buf
                 .copy_within(taken..self.used, 0);
-            self.used = self.used - taken;
+            self.used -= taken;
         } else if taken == self.used {
             self.used = 0;
         }

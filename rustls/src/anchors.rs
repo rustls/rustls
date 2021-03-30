@@ -29,10 +29,7 @@ impl OwnedTrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
             spki: &self.spki,
-            name_constraints: self
-                .name_constraints
-                .as_ref()
-                .map(Vec::as_slice),
+            name_constraints: self.name_constraints.as_deref(),
         }
     }
 }
@@ -115,7 +112,7 @@ impl RootCertStore {
     /// include ancient or syntactically invalid certificates.
     ///
     /// Returns the number of certificates added, and the number that were ignored.
-    pub fn add_parsable_certificates(&mut self, der_certs: &Vec<Vec<u8>>) -> (usize, usize) {
+    pub fn add_parsable_certificates(&mut self, der_certs: &[Vec<u8>]) -> (usize, usize) {
         let mut valid_count = 0;
         let mut invalid_count = 0;
 

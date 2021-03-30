@@ -330,7 +330,7 @@ impl ConvertServerNameList for ServerNameRequest {
 
         self.iter()
             .filter_map(only_dns_hostnames)
-            .nth(0)
+            .next()
     }
 }
 

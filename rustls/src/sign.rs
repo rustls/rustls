@@ -69,7 +69,7 @@ impl CertifiedKey {
 
     /// Steal ownership of the certificate chain.
     pub fn take_cert(&mut self) -> Vec<key::Certificate> {
-        mem::replace(&mut self.cert, Vec::new())
+        mem::take(&mut self.cert)
     }
 
     /// Check the certificate chain for validity:
