@@ -242,7 +242,7 @@ pub fn start_handshake_traffic(
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
-    hs::check_aligned_handshake(conn)?;
+    conn.common.check_aligned_handshake()?;
 
     let hash_at_client_recvd_server_hello = transcript.get_current_hash();
 
@@ -997,7 +997,7 @@ impl hs::State for ExpectFinished {
         emit_finished_tls13(&mut st.transcript, &key_schedule_finished, conn);
 
         /* Now move to our application traffic keys. */
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         /* Traffic from server is now decrypted with application data keys. */
         let read_key = key_schedule_finished.server_application_traffic_secret(
@@ -1153,7 +1153,7 @@ impl ExpectTraffic {
         }
 
         // Mustn't be interleaved with other handshake messages.
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         match kur {
             KeyUpdateRequest::UpdateNotRequested => {}

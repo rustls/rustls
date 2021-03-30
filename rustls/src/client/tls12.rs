@@ -525,7 +525,7 @@ impl hs::State for ExpectServerDone {
         )?;
         st.transcript.add_message(&m);
 
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.dns_name);
@@ -694,7 +694,7 @@ impl hs::State for ExpectCcs {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         // nb. msgs layer validates trivial contents of CCS
         conn.common
@@ -838,7 +838,7 @@ impl hs::State for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         // Work out what verify_data we expect.
         let vh = st.transcript.get_current_hash();

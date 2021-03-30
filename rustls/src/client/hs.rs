@@ -57,18 +57,6 @@ pub fn illegal_param(conn: &mut ClientConnection, why: &str) -> Error {
     Error::PeerMisbehavedError(why.to_string())
 }
 
-pub fn check_aligned_handshake(conn: &mut ClientConnection) -> Result<(), Error> {
-    if !conn.common.handshake_joiner.is_empty() {
-        conn.common
-            .send_fatal_alert(AlertDescription::UnexpectedMessage);
-        Err(Error::PeerMisbehavedError(
-            "key epoch or handshake flight with pending fragment".to_string(),
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 fn find_session(
     conn: &mut ClientConnection,
     dns_name: webpki::DnsNameRef,
@@ -766,7 +754,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         )?;
         trace!("Got HRR {:?}", hrr);
 
-        check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         let cookie = hrr.get_cookie();
         let req_group = hrr.get_requested_key_share_group();
