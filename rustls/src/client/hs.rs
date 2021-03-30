@@ -554,8 +554,13 @@ impl State for ExpectServerHello {
             })?;
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
-        if !sess.common.set_suite(suite) {
-            return Err(illegal_param(sess, "server varied selected ciphersuite"));
+        match sess.common.suite {
+            Some(prev_suite) if prev_suite != suite => {
+                return Err(illegal_param(sess, "server varied selected ciphersuite"));
+            }
+            _ => {
+                sess.common.suite = Some(suite);
+            }
         }
 
         if !suite.usable_for_version(version) {
@@ -831,7 +836,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
 
         // HRR selects the ciphersuite.
-        sess.common.set_suite(cs);
+        sess.common.suite = Some(cs);
 
         // This is the draft19 change where the transcript became a tree
         self.next

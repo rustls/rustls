@@ -732,7 +732,7 @@ impl State for ExpectClientHello {
         .ok_or_else(|| incompatible(sess, "no ciphersuites in common"))?;
 
         debug!("decided upon suite {:?}", ciphersuite);
-        sess.common.set_suite(ciphersuite);
+        sess.common.suite = Some(ciphersuite);
 
         // Start handshake hash.
         let starting_hash = sess

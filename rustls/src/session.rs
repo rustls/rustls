@@ -436,7 +436,7 @@ pub struct SessionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
     pub record_layer: record_layer::RecordLayer,
-    suite: Option<&'static SupportedCipherSuite>,
+    pub suite: Option<&'static SupportedCipherSuite>,
     pub alpn_protocol: Option<Vec<u8>>,
     peer_eof: bool,
     pub traffic: bool,
@@ -538,20 +538,6 @@ impl SessionCommon {
 
     pub fn get_suite_assert(&self) -> &'static SupportedCipherSuite {
         self.suite.as_ref().unwrap()
-    }
-
-    pub fn set_suite(&mut self, suite: &'static SupportedCipherSuite) -> bool {
-        match self.suite {
-            None => {
-                self.suite = Some(suite);
-                true
-            }
-            Some(s) if s == suite => {
-                self.suite = Some(suite);
-                true
-            }
-            _ => false,
-        }
     }
 
     pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
