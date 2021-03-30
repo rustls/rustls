@@ -31,8 +31,6 @@ use crate::SupportedCipherSuite;
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
 
-use webpki;
-
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, Error>;
 

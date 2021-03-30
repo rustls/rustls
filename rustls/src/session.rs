@@ -16,12 +16,12 @@ use crate::rand;
 use crate::record_layer;
 use crate::suites::SupportedCipherSuite;
 use crate::vecbuf::ChunkVecBuffer;
-use ring;
-use std::io::{Read, Write};
 
 use ring::digest::Digest;
+
 use std::collections::VecDeque;
 use std::io;
+use std::io::{Read, Write};
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {

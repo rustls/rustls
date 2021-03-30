@@ -27,7 +27,6 @@ use crate::client::hs;
 
 use ring::constant_time;
 use std::mem;
-use webpki;
 
 pub struct ExpectCertificate {
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,

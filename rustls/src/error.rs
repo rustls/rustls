@@ -1,9 +1,8 @@
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::rand;
-use sct;
+
 use std::error::Error as StdError;
 use std::fmt;
-use webpki;
 
 /// The reason WebPKI operation was performed, used in [`TLSError`].
 #[derive(Debug, PartialEq, Clone)]

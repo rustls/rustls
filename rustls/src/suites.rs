@@ -4,7 +4,6 @@ use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, Signatu
 use crate::msgs::handshake::DecomposedSignatureScheme;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 
-use ring;
 use std::fmt;
 
 /// Bulk symmetric encryption scheme used by a cipher suite.

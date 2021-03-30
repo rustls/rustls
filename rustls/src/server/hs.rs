@@ -28,8 +28,6 @@ use crate::sign;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use webpki;
-
 use crate::server::common::{HandshakeDetails, ServerKXDetails};
 use crate::server::{tls12, tls13};
 

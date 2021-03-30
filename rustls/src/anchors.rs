@@ -1,5 +1,3 @@
-use webpki;
-
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};

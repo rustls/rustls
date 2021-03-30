@@ -4,7 +4,6 @@ use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
-use webpki;
 
 use std::collections;
 use std::sync::{Arc, Mutex};

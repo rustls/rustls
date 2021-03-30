@@ -11,8 +11,6 @@ use crate::sign;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::verify;
 
-use webpki;
-
 use std::fmt;
 use std::io::{self, IoSlice};
 use std::sync::Arc;
