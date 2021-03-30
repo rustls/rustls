@@ -188,7 +188,10 @@ pub fn start_handshake_traffic(
 
     let our_key_share = hello
         .find_key_share_and_discard_others(their_key_share.group)
-        .ok_or_else(|| hs::illegal_param(conn, "wrong group for key share"))?;
+        .ok_or_else(|| {
+            conn.common
+                .illegal_param("wrong group for key share")
+        })?;
     let shared = our_key_share
         .complete(&their_key_share.payload.0)
         .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
@@ -199,23 +202,23 @@ pub fn start_handshake_traffic(
                 .supported_cipher_suite()
                 .can_resume_to(suite)
             {
-                return Err(hs::illegal_param(
-                    conn,
-                    "server resuming incompatible suite",
-                ));
+                return Err(conn
+                    .common
+                    .illegal_param("server resuming incompatible suite"));
             }
 
             // If the server varies the suite here, we will have encrypted early data with
             // the wrong suite.
             if conn.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
-                return Err(hs::illegal_param(
-                    conn,
-                    "server varied suite with early data",
-                ));
+                return Err(conn
+                    .common
+                    .illegal_param("server varied suite with early data"));
             }
 
             if selected_psk != 0 {
-                return Err(hs::illegal_param(conn, "server selected invalid psk"));
+                return Err(conn
+                    .common
+                    .illegal_param("server selected invalid psk"));
             }
 
             debug!("Resuming using PSK");

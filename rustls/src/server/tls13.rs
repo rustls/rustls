@@ -124,7 +124,9 @@ mod client_hello {
             )?;
 
             if client_hello.compression_methods.len() != 1 {
-                return Err(hs::illegal_param(conn, "client offered wrong compressions"));
+                return Err(conn
+                    .common
+                    .illegal_param("client offered wrong compressions"));
             }
 
             let groups_ext = client_hello
@@ -144,7 +146,9 @@ mod client_hello {
                 .ok_or_else(|| hs::incompatible(conn, "client didn't send keyshares"))?;
 
             if client_hello.has_keyshare_extension_with_duplicates() {
-                return Err(hs::illegal_param(conn, "client sent duplicate keyshares"));
+                return Err(conn
+                    .common
+                    .illegal_param("client sent duplicate keyshares"));
             }
 
             // choose a share that we support
@@ -176,7 +180,9 @@ mod client_hello {
 
                     if let Some(group) = retry_group_maybe {
                         if self.done_retry {
-                            return Err(hs::illegal_param(conn, "did not follow retry request"));
+                            return Err(conn
+                                .common
+                                .illegal_param("did not follow retry request"));
                         }
 
                         emit_hello_retry_request(&mut self.handshake, suite, conn, group.name);
@@ -198,7 +204,9 @@ mod client_hello {
             let mut resumedata = None;
             if let Some(psk_offer) = client_hello.get_psk() {
                 if !client_hello.check_psk_ext_is_last() {
-                    return Err(hs::illegal_param(conn, "psk extension in wrong position"));
+                    return Err(conn
+                        .common
+                        .illegal_param("psk extension in wrong position"));
                 }
 
                 if psk_offer.binders.is_empty() {
@@ -206,10 +214,9 @@ mod client_hello {
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
-                    return Err(hs::illegal_param(
-                        conn,
-                        "psk extension mismatched ids/binders",
-                    ));
+                    return Err(conn
+                        .common
+                        .illegal_param("psk extension mismatched ids/binders"));
                 }
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {

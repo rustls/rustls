@@ -233,7 +233,9 @@ mod client_hello {
             debug!("Resuming connion");
 
             if resumedata.extended_ms && !self.using_ems {
-                return Err(hs::illegal_param(conn, "refusing to resume without ems"));
+                return Err(conn
+                    .common
+                    .illegal_param("refusing to resume without ems"));
             }
 
             self.handshake.session_id = *id;

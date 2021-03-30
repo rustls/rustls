@@ -49,12 +49,6 @@ fn bad_version(conn: &mut ServerConnection, why: &str) -> Error {
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub fn illegal_param(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::IllegalParameter);
-    Error::PeerMisbehavedError(why.to_string())
-}
-
 pub fn decode_error(conn: &mut ServerConnection, why: &str) -> Error {
     conn.common
         .send_fatal_alert(AlertDescription::DecodeError);
@@ -359,10 +353,9 @@ impl State for ExpectClientHello {
                 if let Some(hostname) = sni.get_single_hostname() {
                     Some(hostname.into())
                 } else {
-                    return Err(illegal_param(
-                        conn,
-                        "ClientHello SNI did not contain a hostname",
-                    ));
+                    return Err(conn
+                        .common
+                        .illegal_param("ClientHello SNI did not contain a hostname"));
                 }
             }
             None => None,
