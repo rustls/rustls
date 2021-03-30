@@ -349,6 +349,7 @@ pub struct ServerSession {
     resumption_data: Vec<u8>,
     state: Option<Box<dyn hs::State + Send + Sync>>,
     client_cert_chain: Option<Vec<key::Certificate>>,
+    #[allow(dead_code)] // #[cfg(feature = "quic")] only
     /// Whether to reject early data even if it would otherwise be accepted
     reject_early_data: bool,
 }
@@ -490,8 +491,9 @@ impl ServerSession {
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
+        if let Some(st) = st.as_mut() {
+            st.perhaps_write_key_update(self);
+        }
         self.state = st;
         self.common.send_some_plaintext(buf)
     }
@@ -570,7 +572,7 @@ impl Session for ServerSession {
     fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         self.client_cert_chain
             .as_ref()
-            .map(|chain| chain.iter().cloned().collect())
+            .map(|chain| chain.to_vec())
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -589,7 +591,7 @@ impl Session for ServerSession {
     ) -> Result<(), Error> {
         self.state
             .as_ref()
-            .ok_or_else(|| Error::HandshakeNotComplete)
+            .ok_or(Error::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
