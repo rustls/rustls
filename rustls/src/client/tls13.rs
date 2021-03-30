@@ -39,7 +39,6 @@ use crate::client::hs;
 
 use ring::constant_time;
 use ring::digest::Digest;
-use webpki;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[

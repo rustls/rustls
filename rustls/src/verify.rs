@@ -1,8 +1,5 @@
-use sct;
-use std;
 use std::sync::Arc;
 use std::time::SystemTime;
-use webpki;
 
 use crate::anchors::OwnedTrustAnchor;
 use crate::anchors::{DistinguishedNames, RootCertStore};
@@ -13,6 +10,7 @@ use crate::key::Certificate;
 use crate::log::{debug, trace, warn};
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::DigitallySignedStruct;
+
 use ring::digest::Digest;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];

@@ -13,8 +13,6 @@ use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{quic, session::Protocol};
 
-use webpki;
-
 use std::fmt;
 use std::io::{self, IoSlice};
 use std::sync::Arc;

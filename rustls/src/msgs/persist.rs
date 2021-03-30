@@ -3,10 +3,8 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
-
-use webpki;
-
 use crate::SupportedCipherSuite;
+
 use std::cmp;
 use std::mem;
 

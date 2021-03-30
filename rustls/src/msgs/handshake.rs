@@ -16,7 +16,6 @@ use crate::log::warn;
 
 use std::collections;
 use std::fmt;
-use webpki;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
