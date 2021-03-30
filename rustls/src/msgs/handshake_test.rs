@@ -96,6 +96,17 @@ fn can_roundtrip_single_sni() {
 }
 
 #[test]
+fn can_round_trip_mixed_case_sni() {
+    let bytes = [0, 0, 0, 7, 0, 5, 0, 0, 2, 0x4c, 0x6f];
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd).unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
 fn can_roundtrip_other_sni_name_types() {
     let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 02, 0x6c, 0x6f];
     let mut rd = Reader::init(&bytes);
