@@ -15,4 +15,4 @@ if [ ! -x $ADMIN/rustfmt/target/release/cargo-fmt ] ; then
 fi
 
 cd $PREV
-PATH=$ADMIN/rustfmt/target/release/:$PATH cargo-fmt
+PATH=$ADMIN/rustfmt/target/release/:$PATH cargo-fmt "$@"
