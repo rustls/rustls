@@ -717,6 +717,10 @@ impl ConnectionCommon {
         rc
     }
 
+    pub(crate) fn reject_renegotiation_attempt(&mut self) {
+        self.send_warning_alert(AlertDescription::NoRenegotiation);
+    }
+
     pub fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
             // Reject unknown AlertLevels.
