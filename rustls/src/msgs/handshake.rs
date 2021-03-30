@@ -243,35 +243,38 @@ impl DecomposedSignatureScheme for SignatureScheme {
 
 #[derive(Clone, Debug)]
 pub enum ServerNamePayload {
-    HostName(webpki::DNSName),
+    // Stored twice, bytes so we can round-trip, and DNSName for use
+    HostName((PayloadU16, webpki::DNSName)),
     Unknown(Payload),
 }
 
 impl ServerNamePayload {
-    fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
-        let len = u16::read(r)? as usize;
-        let name = r.take(len)?;
-        let dns_name = match webpki::DNSNameRef::try_from_ascii(name) {
-            Ok(dns_name) => dns_name,
-            Err(_) => {
-                warn!("Illegal SNI hostname received {:?}", name);
-                return None;
-            }
+    pub fn new_hostname(hostname: webpki::DNSName) -> ServerNamePayload {
+        let raw = {
+            let s: &str = hostname.as_ref().into();
+            PayloadU16::new(s.as_bytes().into())
         };
-        Some(ServerNamePayload::HostName(dns_name.into()))
+        ServerNamePayload::HostName((raw, hostname))
     }
 
-    fn encode_hostname(name: webpki::DNSNameRef, bytes: &mut Vec<u8>) {
-        let dns_name_str: &str = name.into();
-        (dns_name_str.len() as u16).encode(bytes);
-        bytes.extend_from_slice(dns_name_str.as_bytes());
+    fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
+        let raw = PayloadU16::read(r)?;
+
+        let dns_name = {
+            match webpki::DNSNameRef::try_from_ascii(&raw.0) {
+                Ok(dns_name) => dns_name.into(),
+                Err(_) => {
+                    warn!("Illegal SNI hostname received {:?}", raw.0);
+                    return None;
+                }
+            }
+        };
+        Some(ServerNamePayload::HostName((raw, dns_name)))
     }
 
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            ServerNamePayload::HostName(ref r) => {
-                ServerNamePayload::encode_hostname(r.as_ref(), bytes)
-            }
+            ServerNamePayload::HostName((ref r, _)) => r.encode(bytes),
             ServerNamePayload::Unknown(ref r) => r.encode(bytes),
         }
     }
@@ -324,7 +327,7 @@ impl ConvertServerNameList for ServerNameRequest {
 
     fn get_single_hostname(&self) -> Option<webpki::DNSNameRef> {
         fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DNSNameRef> {
-            if let ServerNamePayload::HostName(ref dns) = name.payload {
+            if let ServerNamePayload::HostName((_, ref dns)) = name.payload {
                 Some(dns.as_ref())
             } else {
                 None
@@ -707,7 +710,7 @@ impl ClientExtension {
     pub fn make_sni(dns_name: webpki::DNSNameRef) -> ClientExtension {
         let name = ServerName {
             typ: ServerNameType::HostName,
-            payload: ServerNamePayload::HostName(trim_hostname_trailing_dot_for_sni(dns_name)),
+            payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
         };
 
         ClientExtension::ServerName(vec![name])
