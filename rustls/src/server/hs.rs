@@ -79,22 +79,6 @@ pub fn can_resume(
         && &resumedata.sni == sni
 }
 
-// Changing the keys must not span any fragmented handshake
-// messages.  Otherwise the defragmented messages will have
-// been protected with two different record layer protections,
-// which is illegal.  Not mentioned in RFC.
-pub fn check_aligned_handshake(conn: &mut ServerConnection) -> Result<(), Error> {
-    if !conn.common.handshake_joiner.is_empty() {
-        conn.common
-            .send_fatal_alert(AlertDescription::UnexpectedMessage);
-        Err(Error::PeerMisbehavedError(
-            "key epoch or handshake flight with pending fragment".to_string(),
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 #[derive(Default)]
 pub struct ExtensionProcessing {
     // extensions to reply with
@@ -331,7 +315,7 @@ impl State for ExpectClientHello {
         }
 
         // No handshake messages should follow this one in this flight.
-        check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.get_versions_extension();

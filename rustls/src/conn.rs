@@ -653,6 +653,21 @@ impl ConnectionCommon {
         Ok(Some(MessageType::Data(msg)))
     }
 
+    // Changing the keys must not span any fragmented handshake
+    // messages.  Otherwise the defragmented messages will have
+    // been protected with two different record layer protections,
+    // which is illegal.  Not mentioned in RFC.
+    pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
+        if !self.handshake_joiner.is_empty() {
+            self.send_fatal_alert(AlertDescription::UnexpectedMessage);
+            Err(Error::PeerMisbehavedError(
+                "key epoch or handshake flight with pending fragment".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.suite
     }

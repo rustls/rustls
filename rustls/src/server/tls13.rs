@@ -308,7 +308,7 @@ mod client_hello {
                 false
             };
 
-            hs::check_aligned_handshake(conn)?;
+            conn.common.check_aligned_handshake()?;
             let (key_schedule_traffic, hash_at_server_fin) = emit_finished_tls13(
                 &mut self.handshake,
                 self.suite,
@@ -382,7 +382,7 @@ mod client_hello {
             }),
         };
 
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         #[cfg(feature = "quic")]
         let client_hello_hash = handshake
@@ -1002,7 +1002,7 @@ impl hs::State for ExpectFinished {
             .transcript
             .add_message(&m);
 
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         // Install keying to read future messages.
         let read_key = self
@@ -1073,7 +1073,7 @@ impl ExpectTraffic {
             }
         }
 
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         match kur {
             KeyUpdateRequest::UpdateNotRequested => {}

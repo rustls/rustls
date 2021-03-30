@@ -689,7 +689,7 @@ impl hs::State for ExpectCcs {
 
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         conn.common
             .record_layer
@@ -811,7 +811,7 @@ impl hs::State for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        hs::check_aligned_handshake(conn)?;
+        conn.common.check_aligned_handshake()?;
 
         let vh = self
             .handshake
