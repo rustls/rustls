@@ -369,7 +369,7 @@ impl KeySchedule {
         T: for<'a> From<hkdf::Okm<'a, L>>,
         L: hkdf::KeyType,
     {
-        hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash.as_ref())
+        hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash)
     }
 
     fn derive_logged_secret(
