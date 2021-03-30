@@ -402,7 +402,7 @@ impl hs::State for ExpectCertificateRequest {
                 .key
                 .choose_scheme(&certreq.sigschemes);
 
-            if let Some(_) = &maybe_signer {
+            if maybe_signer.is_some() {
                 debug!("Attempting client auth");
                 client_auth.cert = Some(certkey.take_cert());
             }
@@ -734,7 +734,7 @@ fn save_session(
 ) {
     // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
     // original ticket again.
-    let mut ticket = mem::replace(&mut recvd_ticket.new_ticket, Vec::new());
+    let mut ticket = mem::take(&mut recvd_ticket.new_ticket);
 
     if ticket.is_empty() {
         if let Some(resuming_session) = &mut resuming_session {

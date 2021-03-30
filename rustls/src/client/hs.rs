@@ -166,7 +166,7 @@ impl InitialState {
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         let may_send_sct_list = sess.config.verifier.request_scts();
-        emit_client_hello_for_retry(
+        Ok(emit_client_hello_for_retry(
             sess,
             self.resuming_session,
             randoms,
@@ -180,7 +180,7 @@ impl InitialState {
             self.extra_exts,
             may_send_sct_list,
             None,
-        )
+        ))
     }
 }
 
@@ -224,7 +224,7 @@ fn emit_client_hello_for_retry(
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<&'static SupportedCipherSuite>,
-) -> NextStateOrError {
+) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
         (resuming.ticket.0.clone(), resuming.version)
@@ -341,14 +341,14 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let session_id = session_id.unwrap_or(SessionID::empty());
+    let session_id = session_id.unwrap_or_else(SessionID::empty);
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: session_id,
+            session_id,
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -409,18 +409,18 @@ fn emit_client_hello_for_retry(
         randoms,
         using_ems,
         transcript,
-        hello,
-        session_id: session_id,
         early_key_schedule,
+        hello,
+        session_id,
         sent_tls13_fake_ccs,
         suite,
     };
 
-    Ok(if support_tls13 && retryreq.is_none() {
+    if support_tls13 && retryreq.is_none() {
         Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
-    })
+    }
 }
 
 pub fn process_alpn_protocol(sess: &mut ClientSession, proto: Option<&[u8]>) -> Result<(), Error> {
@@ -586,7 +586,7 @@ impl State for ExpectServerHello {
                 self.dns_name.as_ref(),
                 &mut self.transcript,
                 &mut self.hello,
-                &mut self.randoms,
+                &self.randoms,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
 
@@ -769,12 +769,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks for us to retry on an unsupported group.
         if let Some(group) = req_group {
-            if sess
+            if !sess
                 .config
                 .kx_groups
                 .iter()
-                .find(|skxg| skxg.name == group)
-                .is_none()
+                .any(|skxg| skxg.name == group)
             {
                 return Err(illegal_param(sess, "server requested hrr with bad group"));
             }
@@ -853,7 +852,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .next
             .hello
             .server_may_send_sct_list();
-        emit_client_hello_for_retry(
+        Ok(emit_client_hello_for_retry(
             sess,
             self.next.resuming_session,
             self.next.randoms,
@@ -867,7 +866,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.extra_exts,
             may_send_sct_list,
             Some(cs),
-        )
+        ))
     }
 }
 
