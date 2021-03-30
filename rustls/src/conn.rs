@@ -668,6 +668,11 @@ impl ConnectionCommon {
         }
     }
 
+    pub fn illegal_param(&mut self, why: &str) -> Error {
+        self.send_fatal_alert(AlertDescription::IllegalParameter);
+        Error::PeerMisbehavedError(why.to_string())
+    }
+
     pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.suite
     }

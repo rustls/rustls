@@ -51,12 +51,6 @@ pub trait State {
     fn perhaps_write_key_update(&mut self, _conn: &mut ClientConnection) {}
 }
 
-pub fn illegal_param(conn: &mut ClientConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::IllegalParameter);
-    Error::PeerMisbehavedError(why.to_string())
-}
-
 fn find_session(
     conn: &mut ClientConnection,
     dns_name: webpki::DnsNameRef,
@@ -433,7 +427,9 @@ pub fn process_alpn_protocol(
             .alpn_protocols
             .contains(alpn_protocol)
         {
-            return Err(illegal_param(conn, "server sent non-offered ALPN protocol"));
+            return Err(conn
+                .common
+                .illegal_param("server sent non-offered ALPN protocol"));
         }
     }
 
@@ -483,10 +479,9 @@ impl State for ExpectServerHello {
                     .get_supported_versions()
                     .is_some()
                 {
-                    return Err(illegal_param(
-                        conn,
-                        "server chose v1.2 using v1.3 extension",
-                    ));
+                    return Err(conn
+                        .common
+                        .illegal_param("server chose v1.2 using v1.3 extension"));
                 }
 
                 TLSv1_2
@@ -501,7 +496,9 @@ impl State for ExpectServerHello {
         };
 
         if server_hello.compression_method != Compression::Null {
-            return Err(illegal_param(conn, "server chose non-Null compression"));
+            return Err(conn
+                .common
+                .illegal_param("server chose non-Null compression"));
         }
 
         if server_hello.has_duplicate_extension() {
@@ -554,7 +551,9 @@ impl State for ExpectServerHello {
 
         match self.suite {
             Some(prev_suite) if prev_suite != suite => {
-                return Err(illegal_param(conn, "server varied selected ciphersuite"));
+                return Err(conn
+                    .common
+                    .illegal_param("server varied selected ciphersuite"));
             }
             _ => {
                 debug!("Using ciphersuite {:?}", suite);
@@ -564,10 +563,9 @@ impl State for ExpectServerHello {
         }
 
         if !suite.usable_for_version(version) {
-            return Err(illegal_param(
-                conn,
-                "server chose unusable ciphersuite for version",
-            ));
+            return Err(conn
+                .common
+                .illegal_param("server chose unusable ciphersuite for version"));
         }
 
         // Start our handshake hash, and input the server-hello.
@@ -618,10 +616,9 @@ impl State for ExpectServerHello {
                 .randoms
                 .has_tls12_downgrade_marker()
         {
-            return Err(illegal_param(
-                conn,
-                "downgrade to TLS1.2 when TLS1.3 is supported",
-            ));
+            return Err(conn
+                .common
+                .illegal_param("downgrade to TLS1.2 when TLS1.3 is supported"));
         }
 
         // Doing EMS?
@@ -766,7 +763,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 .map(|g| self.next.hello.has_key_share(g))
                 .unwrap_or(false)
         {
-            return Err(illegal_param(conn, "server requested hrr with our group"));
+            return Err(conn
+                .common
+                .illegal_param("server requested hrr with our group"));
         }
 
         // Or asks for us to retry on an unsupported group.
@@ -777,17 +776,18 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 .iter()
                 .any(|skxg| skxg.name == group)
             {
-                return Err(illegal_param(conn, "server requested hrr with bad group"));
+                return Err(conn
+                    .common
+                    .illegal_param("server requested hrr with bad group"));
             }
         }
 
         // Or has an empty cookie.
         if let Some(cookie) = cookie {
             if cookie.0.is_empty() {
-                return Err(illegal_param(
-                    conn,
-                    "server requested hrr with empty cookie",
-                ));
+                return Err(conn
+                    .common
+                    .illegal_param("server requested hrr with empty cookie"));
             }
         }
 
@@ -802,12 +802,16 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or has the same extensions more than once
         if hrr.has_duplicate_extension() {
-            return Err(illegal_param(conn, "server send duplicate hrr extensions"));
+            return Err(conn
+                .common
+                .illegal_param("server send duplicate hrr extensions"));
         }
 
         // Or asks us to change nothing.
         if cookie.is_none() && req_group.is_none() {
-            return Err(illegal_param(conn, "server requested hrr with no changes"));
+            return Err(conn
+                .common
+                .illegal_param("server requested hrr with no changes"));
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
@@ -816,10 +820,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 conn.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
             _ => {
-                return Err(illegal_param(
-                    conn,
-                    "server requested unsupported version in hrr",
-                ));
+                return Err(conn
+                    .common
+                    .illegal_param("server requested unsupported version in hrr"));
             }
         }
 
@@ -830,10 +833,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let cs = match maybe_cs {
             Some(cs) => cs,
             None => {
-                return Err(illegal_param(
-                    conn,
-                    "server requested unsupported cs in hrr",
-                ));
+                return Err(conn
+                    .common
+                    .illegal_param("server requested unsupported cs in hrr"));
             }
         };
 
