@@ -537,16 +537,6 @@ enum Limit {
     No,
 }
 
-/// For TLS1.3 middlebox compatibility mode, how to handle
-/// a received ChangeCipherSpec message.
-pub enum MiddleboxCcs {
-    /// process the message as normal
-    Process,
-
-    /// just ignore it
-    Drop,
-}
-
 pub struct ConnectionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
@@ -614,10 +604,21 @@ impl ConnectionCommon {
     }
 
     pub fn process_msg(&mut self, mut msg: Message) -> Result<Option<MessageType>, Error> {
-        // TLS1.3: drop CCS at any time during handshaking
-        if let MiddleboxCcs::Drop = self.filter_tls13_ccs(&msg)? {
-            trace!("Dropping CCS");
-            return Ok(None);
+        // pass message to handshake state machine if any of these are true:
+        // - TLS1.2 (where it's part of the state machine),
+        // - prior to determining the version (it's illegal as a first message)
+        // - if it's not a CCS at all
+        // - if we've finished the handshake
+        if msg.is_content_type(ContentType::ChangeCipherSpec) && !self.traffic && self.is_tls13() {
+            if self.received_middlebox_ccs {
+                return Err(Error::PeerMisbehavedError(
+                    "illegal middlebox CCS received".into(),
+                ));
+            } else {
+                self.received_middlebox_ccs = true;
+                trace!("Dropping CCS");
+                return Ok(None);
+            }
         }
 
         // Decrypt if demanded by current state.
@@ -660,26 +661,6 @@ impl ConnectionCommon {
         self.alpn_protocol
             .as_ref()
             .map(AsRef::as_ref)
-    }
-
-    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCcs, Error> {
-        // pass message to handshake state machine if any of these are true:
-        // - TLS1.2 (where it's part of the state machine),
-        // - prior to determining the version (it's illegal as a first message)
-        // - if it's not a CCS at all
-        // - if we've finished the handshake
-        if !self.is_tls13() || !msg.is_content_type(ContentType::ChangeCipherSpec) || self.traffic {
-            return Ok(MiddleboxCcs::Process);
-        }
-
-        if self.received_middlebox_ccs {
-            Err(Error::PeerMisbehavedError(
-                "illegal middlebox CCS received".into(),
-            ))
-        } else {
-            self.received_middlebox_ccs = true;
-            Ok(MiddleboxCcs::Drop)
-        }
     }
 
     pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, Error> {
