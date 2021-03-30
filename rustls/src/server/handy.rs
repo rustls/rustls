@@ -141,7 +141,7 @@ pub struct ResolvesServerCertUsingSni {
 impl ResolvesServerCertUsingSni {
     /// Create a new and empty (i.e., knows no certificates) resolver.
     pub fn new() -> ResolvesServerCertUsingSni {
-        ResolvesServerCertUsingSni {
+        Self {
             by_name: collections::HashMap::new(),
         }
     }

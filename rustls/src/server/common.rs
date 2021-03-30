@@ -44,6 +44,6 @@ impl ClientCertDetails {
     }
 
     pub fn take_chain(&mut self) -> Vec<key::Certificate> {
-        mem::replace(&mut self.cert_chain, Vec::new())
+        mem::take(&mut self.cert_chain)
     }
 }

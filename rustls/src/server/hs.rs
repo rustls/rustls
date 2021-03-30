@@ -697,10 +697,7 @@ impl State for ExpectClientHello {
             trace!("sig schemes {:?}", sigschemes_ext);
             trace!("alpn protocols {:?}", alpn_protocols);
 
-            let alpn_slices = alpn_protocols
-                .as_ref()
-                .map(|vec| vec.as_slice());
-
+            let alpn_slices = alpn_protocols.as_deref();
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
             let certkey = sess
@@ -815,30 +812,30 @@ impl State for ExpectClientHello {
         //
         let mut ticket_received = false;
 
-        if let Some(ticket_ext) = client_hello.get_ticket_extension() {
-            if let ClientExtension::SessionTicketOffer(ref ticket) = *ticket_ext {
-                ticket_received = true;
-                debug!("Ticket received");
+        if let Some(ClientExtension::SessionTicketOffer(ref ticket)) =
+            client_hello.get_ticket_extension()
+        {
+            ticket_received = true;
+            debug!("Ticket received");
 
-                if let Some(resume) = sess
-                    .config
-                    .ticketer
-                    .decrypt(&ticket.0)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
-                    .and_then(|resumedata| can_resume(suite, &sess.sni, self.using_ems, resumedata))
-                {
-                    return self.start_resumption(
-                        sess,
-                        client_hello,
-                        suite,
-                        sni.as_ref(),
-                        &client_hello.session_id,
-                        resume,
-                        &randoms,
-                    );
-                } else {
-                    debug!("Ticket didn't decrypt");
-                }
+            if let Some(resume) = sess
+                .config
+                .ticketer
+                .decrypt(&ticket.0)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+                .and_then(|resumedata| can_resume(suite, &sni, self.using_ems, resumedata))
+            {
+                return self.start_resumption(
+                    sess,
+                    client_hello,
+                    suite,
+                    sni.as_ref(),
+                    &client_hello.session_id,
+                    resume,
+                    &randoms,
+                );
+            } else {
+                debug!("Ticket didn't decrypt");
             }
         }
 

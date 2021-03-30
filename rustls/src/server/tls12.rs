@@ -74,9 +74,9 @@ impl hs::State for ExpectCertificate {
                 sess.config
                     .verifier
                     .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
-                    .or_else(|err| {
+                    .map_err(|err| {
                         hs::incompatible(sess, "certificate invalid");
-                        Err(err)
+                        err
                     })?;
 
                 Some(ClientCertDetails::new(cert_chain))
