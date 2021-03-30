@@ -63,8 +63,8 @@ impl CertifiedKey {
     }
 
     /// The end-entity certificate.
-    pub fn end_entity_cert(&self) -> Result<&key::Certificate, ()> {
-        self.cert.get(0).ok_or(())
+    pub fn end_entity_cert(&self) -> Result<&key::Certificate, SignError> {
+        self.cert.get(0).ok_or(SignError(()))
     }
 
     /// Steal ownership of the certificate chain.
@@ -85,9 +85,11 @@ impl CertifiedKey {
         name: Option<webpki::DNSNameRef>,
     ) -> Result<(), Error> {
         // Always reject an empty certificate chain.
-        let end_entity_cert = self.end_entity_cert().map_err(|()| {
-            Error::General("No end-entity certificate in certificate chain".to_string())
-        })?;
+        let end_entity_cert = self
+            .end_entity_cert()
+            .map_err(|SignError(())| {
+                Error::General("No end-entity certificate in certificate chain".to_string())
+            })?;
 
         // Reject syntactically-invalid end-entity certificates.
         let end_entity_cert =
@@ -123,7 +125,7 @@ impl CertifiedKey {
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> {
+pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(rsa) = RsaSigningKey::new(der) {
         Ok(Arc::new(rsa))
     } else if let Ok(ecdsa) = any_ecdsa_type(der) {
@@ -134,7 +136,7 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, 
 }
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> {
+pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(ecdsa_p256) = ECDSASigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -151,18 +153,18 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> 
         return Ok(Arc::new(ecdsa_p384));
     }
 
-    Err(())
+    Err(SignError(()))
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, ()> {
+pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
         return Ok(Arc::new(ed25519));
     }
 
     // TODO: Add support for Ed448
 
-    Err(())
+    Err(SignError(()))
 }
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS
@@ -182,11 +184,11 @@ static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
 impl RsaSigningKey {
     /// Make a new `RSASigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &key::PrivateKey) -> Result<RsaSigningKey, ()> {
+    pub fn new(der: &key::PrivateKey) -> Result<RsaSigningKey, SignError> {
         RsaKeyPair::from_der(&der.0)
             .or_else(|_| RsaKeyPair::from_pkcs8(&der.0))
             .map(|s| RsaSigningKey { key: Arc::new(s) })
-            .map_err(|_| ())
+            .map_err(|_| SignError(()))
     }
 }
 
@@ -338,13 +340,16 @@ struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    pub fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Ed25519SigningKey, ()> {
+    pub fn new(
+        der: &key::PrivateKey,
+        scheme: SignatureScheme,
+    ) -> Result<Ed25519SigningKey, SignError> {
         Ed25519KeyPair::from_pkcs8_maybe_unchecked(&der.0)
             .map(|kp| Ed25519SigningKey {
                 key: Arc::new(kp),
                 scheme,
             })
-            .map_err(|_| ())
+            .map_err(|_| SignError(()))
     }
 }
 
@@ -393,3 +398,7 @@ pub fn supported_sign_tls13() -> &'static [SignatureScheme] {
         SignatureScheme::ED25519,
     ]
 }
+
+/// Errors while signing
+#[derive(Debug)]
+pub struct SignError(());
