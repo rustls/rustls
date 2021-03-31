@@ -57,8 +57,8 @@ pub trait QuicExt {
 
     /// Compute the keys to use following a 1-RTT key update
     ///
-    /// Must not be called until the handshake is complete
-    fn next_1rtt_keys(&mut self) -> PacketKeySet;
+    /// Will return `None` until the handshake is complete.
+    fn next_1rtt_keys(&mut self) -> Option<PacketKeySet>;
 }
 
 impl QuicExt for ServerSession {
@@ -90,7 +90,7 @@ impl QuicExt for ServerSession {
         self.common.quic.alert
     }
 
-    fn next_1rtt_keys(&mut self) -> PacketKeySet {
+    fn next_1rtt_keys(&mut self) -> Option<PacketKeySet> {
         next_1rtt_keys(&mut self.common)
     }
 }
@@ -240,36 +240,35 @@ pub(crate) fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Ke
             }
         }
     }
+
+    let suite = this.get_suite()?;
     if let Some(secrets) = this.quic.hs_secrets.take() {
-        return Some(Keys::new(this.get_suite_assert(), this.is_client, &secrets));
+        return Some(Keys::new(suite, this.is_client, &secrets));
     }
+
     if let Some(secrets) = this.quic.traffic_secrets.as_ref() {
         if !this.quic.returned_traffic_keys {
             this.quic.returned_traffic_keys = true;
-            return Some(Keys::new(this.get_suite_assert(), this.is_client, &secrets));
+            return Some(Keys::new(suite, this.is_client, &secrets));
         }
     }
+
     None
 }
 
-pub(crate) fn next_1rtt_keys(this: &mut SessionCommon) -> PacketKeySet {
-    let hkdf_alg = this.get_suite_assert().hkdf_algorithm;
-    let secrets = this
-        .quic
-        .traffic_secrets
-        .as_ref()
-        .expect("traffic keys not yet available");
-
-    let next = next_1rtt_secrets(hkdf_alg, secrets);
+pub(crate) fn next_1rtt_keys(this: &mut SessionCommon) -> Option<PacketKeySet> {
+    let suite = this.get_suite()?;
+    let secrets = this.quic.traffic_secrets.as_ref()?;
+    let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);
 
     let (local, remote) = next.local_remote(this.is_client);
     let keys = PacketKeySet {
-        local: PacketKey::new(this.get_suite_assert(), local),
-        remote: PacketKey::new(this.get_suite_assert(), remote),
+        local: PacketKey::new(suite, local),
+        remote: PacketKey::new(suite, remote),
     };
 
     this.quic.traffic_secrets = Some(next);
-    keys
+    Some(keys)
 }
 
 fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {
