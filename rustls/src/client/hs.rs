@@ -26,7 +26,6 @@ use crate::msgs::persist;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::ticketer;
 use crate::verify;
-use crate::SupportedCipherSuite;
 
 use crate::client::common::HandshakeDetails;
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
@@ -211,13 +210,6 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: Vec<ClientExtension>,
 }
 
-pub fn compatible_suite(sess: &ClientSession, resuming_suite: &SupportedCipherSuite) -> bool {
-    match sess.common.get_suite() {
-        Some(suite) => suite.can_resume_to(&resuming_suite),
-        None => true,
-    }
-}
-
 fn emit_client_hello_for_retry(
     sess: &mut ClientSession,
     handshake: HandshakeDetails,
@@ -320,13 +312,17 @@ fn emit_client_hello_for_retry(
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
     {
-        match handshake.resuming_session.as_ref() {
-            Some(resuming) if compatible_suite(sess, resuming.supported_cipher_suite()) => {
+        handshake
+            .resuming_session
+            .as_ref()
+            .filter(|resuming| match sess.common.get_suite() {
+                Some(suite) => suite.can_resume_to(&resuming.supported_cipher_suite()),
+                None => true,
+            })
+            .map(|resuming| {
                 tls13::prepare_resumption(sess, ticket, resuming, &mut exts, retryreq.is_some());
-                Some(resuming)
-            }
-            _ => None,
-        }
+                resuming
+            })
     } else if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
