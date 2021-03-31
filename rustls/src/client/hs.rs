@@ -158,7 +158,7 @@ impl InitialState {
                 // we're  doing an abbreviated handshake.  See section 3.4 in
                 // RFC5077.
                 if !resuming.ticket.0.is_empty() {
-                    resuming.set_session_id(Some(random_sessionid()?));
+                    resuming.set_session_id(random_sessionid()?);
                 }
                 session_id = resuming.session_id;
             }

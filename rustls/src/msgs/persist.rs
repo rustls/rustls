@@ -171,8 +171,8 @@ impl ClientSessionValueWithResolvedCipherSuite {
         self.supported_cipher_suite
     }
 
-    pub fn set_session_id(&mut self, id: Option<SessionID>) {
-        self.value.session_id = id;
+    pub fn set_session_id(&mut self, id: SessionID) {
+        self.value.session_id = Some(id);
     }
 
     pub fn set_extended_ms_used(&mut self) {
