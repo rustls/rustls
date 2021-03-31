@@ -142,15 +142,11 @@ pub fn choose_kx_groups(
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
 pub fn fill_in_psk_binder(
-    handshake: &HandshakeDetails,
+    resuming: &persist::ClientSessionValueWithResolvedCipherSuite,
     transcript: &HandshakeHash,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
-    let resuming = handshake
-        .resuming_session
-        .as_ref()
-        .unwrap();
     let suite = resuming.supported_cipher_suite();
     let hkdf_alg = suite.hkdf_algorithm;
     let suite_hash = suite.get_hash();
@@ -299,20 +295,11 @@ pub fn start_handshake_traffic(
 pub fn prepare_resumption(
     sess: &mut ClientSession,
     ticket: Vec<u8>,
-    handshake: &HandshakeDetails,
+    resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
     exts: &mut Vec<ClientExtension>,
     doing_retry: bool,
-) -> bool {
-    let resuming_session = match handshake.resuming_session.as_ref() {
-        Some(resuming_session) => resuming_session,
-        None => {
-            return false;
-        }
-    };
+) {
     let resuming_suite = resuming_session.supported_cipher_suite();
-    if !hs::compatible_suite(sess, resuming_suite) {
-        return false;
-    };
 
     sess.resumption_ciphersuite = Some(resuming_suite);
     // The EarlyData extension MUST be supplied together with the
@@ -337,8 +324,43 @@ pub fn prepare_resumption(
     let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
     let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
     exts.push(ClientExtension::PresharedKey(psk_ext));
+}
 
-    true
+pub fn derive_early_traffic_secret(
+    sess: &mut ClientSession,
+    resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
+    early_key_schedule: &KeyScheduleEarly,
+    sent_tls13_fake_ccs: &mut bool,
+    transcript: &HandshakeHash,
+    client_random: &[u8; 32],
+) {
+    // For middlebox compatibility
+    emit_fake_ccs(sent_tls13_fake_ccs, sess);
+
+    let resuming_suite = resuming_session.supported_cipher_suite();
+
+    let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
+    let client_early_traffic_secret = early_key_schedule.client_early_traffic_secret(
+        &client_hello_hash,
+        &*sess.config.key_log,
+        client_random,
+    );
+    // Set early data encryption key
+    sess.common
+        .record_layer
+        .set_message_encrypter(cipher::new_tls13_write(
+            resuming_suite,
+            &client_early_traffic_secret,
+        ));
+
+    #[cfg(feature = "quic")]
+    {
+        sess.common.quic.early_secret = Some(client_early_traffic_secret);
+    }
+
+    // Now the client can send encrypted early data
+    sess.common.early_traffic = true;
+    trace!("Starting early data traffic");
 }
 
 pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, sess: &mut ClientSession) {

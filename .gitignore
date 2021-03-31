@@ -4,3 +4,4 @@ target/
 *.gcno
 *.info
 sslkeylogfile.txt
+admin/rustfmt

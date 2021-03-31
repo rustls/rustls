@@ -27,7 +27,7 @@ use crate::rand;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::ticketer;
 use crate::verify;
-use crate::{cipher, SupportedCipherSuite};
+use crate::SupportedCipherSuite;
 
 use crate::client::common::HandshakeDetails;
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
@@ -227,7 +227,7 @@ pub fn compatible_suite(sess: &ClientSession, resuming_suite: &SupportedCipherSu
 
 fn emit_client_hello_for_retry(
     sess: &mut ClientSession,
-    mut handshake: HandshakeDetails,
+    handshake: HandshakeDetails,
     randoms: SessionRandoms,
     using_ems: bool,
     mut transcript: HandshakeHash,
@@ -327,7 +327,13 @@ fn emit_client_hello_for_retry(
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
     {
-        tls13::prepare_resumption(sess, ticket, &handshake, &mut exts, retryreq.is_some())
+        match handshake.resuming_session.as_ref() {
+            Some(resuming) if compatible_suite(sess, resuming.supported_cipher_suite()) => {
+                tls13::prepare_resumption(sess, ticket, resuming, &mut exts, retryreq.is_some());
+                Some(resuming)
+            }
+            _ => None,
+        }
     } else if sess.config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
@@ -335,9 +341,9 @@ fn emit_client_hello_for_retry(
         } else {
             exts.push(ClientExtension::SessionTicketOffer(Payload::new(ticket)));
         }
-        false
+        None
     } else {
-        false
+        None
     };
 
     // Note what extensions we sent.
@@ -358,12 +364,9 @@ fn emit_client_hello_for_retry(
         }),
     };
 
-    let early_key_schedule = if fill_in_binder {
-        Some(tls13::fill_in_psk_binder(
-            &mut handshake,
-            &mut transcript,
-            &mut chp,
-        ))
+    let early_key_schedule = if let Some(resuming) = fill_in_binder {
+        let schedule = tls13::fill_in_psk_binder(&resuming, &transcript, &mut chp);
+        Some((resuming, schedule))
     } else {
         None
     };
@@ -393,43 +396,21 @@ fn emit_client_hello_for_retry(
     sess.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    if sess.early_data.is_enabled() {
-        // For middlebox compatibility
-        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, sess);
-
-        // It is safe to call unwrap() because fill_in_binder is true.
-        let resuming_suite = handshake
-            .resuming_session
-            .as_ref()
-            .map(|resume| resume.supported_cipher_suite())
-            .unwrap();
-
-        let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
-        let client_early_traffic_secret = early_key_schedule
-            .as_ref()
-            .unwrap()
-            .client_early_traffic_secret(
-                &client_hello_hash,
-                &*sess.config.key_log,
-                &randoms.client,
-            );
-        // Set early data encryption key
-        sess.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(
-                resuming_suite,
-                &client_early_traffic_secret,
-            ));
-
-        #[cfg(feature = "quic")]
-        {
-            sess.common.quic.early_secret = Some(client_early_traffic_secret);
+    let early_key_schedule = early_key_schedule.map(|(resuming, schedule)| {
+        if !sess.early_data.is_enabled() {
+            return schedule;
         }
 
-        // Now the client can send encrypted early data
-        sess.common.early_traffic = true;
-        trace!("Starting early data traffic");
-    }
+        tls13::derive_early_traffic_secret(
+            sess,
+            resuming,
+            &schedule,
+            &mut sent_tls13_fake_ccs,
+            &transcript,
+            &randoms.client,
+        );
+        schedule
+    });
 
     let next = ExpectServerHello {
         handshake,

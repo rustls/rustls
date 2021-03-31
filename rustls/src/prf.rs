@@ -1,7 +1,5 @@
 use ring::hmac;
 
-use std::io::Write;
-
 fn concat_sign(key: &hmac::Key, a: &[u8], b: &[u8]) -> hmac::Tag {
     let mut ctx = hmac::Context::with_key(key);
     ctx.update(a);
@@ -14,16 +12,11 @@ fn p(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], seed: &[u8]) {
 
     // A(1)
     let mut current_a = hmac::sign(&hmac_key, seed);
-
-    let mut offs = 0;
-
-    while offs < out.len() {
+    let chunk_size = alg.digest_algorithm().output_len;
+    for chunk in out.chunks_mut(chunk_size) {
         // P_hash[i] = HMAC_hash(secret, A(i) + seed)
         let p_term = concat_sign(&hmac_key, current_a.as_ref(), seed);
-        offs += out[offs..]
-            .as_mut()
-            .write(p_term.as_ref())
-            .unwrap();
+        chunk.copy_from_slice(&p_term.as_ref()[..chunk.len()]);
 
         // A(i+1) = HMAC_hash(secret, A(i))
         current_a = hmac::sign(&hmac_key, current_a.as_ref());

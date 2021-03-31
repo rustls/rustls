@@ -340,57 +340,6 @@ impl ExpectClientHello {
         ech
     }
 
-    fn into_expect_tls12_ccs(self, secrets: SessionSecrets) -> NextState {
-        Box::new(tls12::ExpectCCS {
-            secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: true,
-            send_ticket: self.send_ticket,
-        })
-    }
-
-    fn into_complete_tls13_client_hello_handling(
-        self,
-        randoms: SessionRandoms,
-    ) -> tls13::CompleteClientHelloHandling {
-        tls13::CompleteClientHelloHandling {
-            handshake: self.handshake,
-            randoms,
-            done_retry: self.done_retry,
-            send_ticket: self.send_ticket,
-        }
-    }
-
-    fn into_expect_tls12_certificate(
-        self,
-        randoms: SessionRandoms,
-        kx: kx::KeyExchange,
-    ) -> NextState {
-        Box::new(tls12::ExpectCertificate {
-            handshake: self.handshake,
-            randoms,
-            using_ems: self.using_ems,
-            server_kx: ServerKXDetails::new(kx),
-            send_ticket: self.send_ticket,
-        })
-    }
-
-    fn into_expect_tls12_client_kx(
-        self,
-        randoms: SessionRandoms,
-        kx: kx::KeyExchange,
-    ) -> NextState {
-        Box::new(tls12::ExpectClientKX {
-            handshake: self.handshake,
-            randoms,
-            using_ems: self.using_ems,
-            server_kx: ServerKXDetails::new(kx),
-            client_cert: None,
-            send_ticket: self.send_ticket,
-        })
-    }
-
     fn emit_server_hello(
         &mut self,
         sess: &mut ServerSessionImpl,
@@ -623,7 +572,13 @@ impl ExpectClientHello {
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
-        Ok(self.into_expect_tls12_ccs(secrets))
+        Ok(Box::new(tls12::ExpectCCS {
+            secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            resuming: true,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -810,9 +765,13 @@ impl State for ExpectClientHello {
             .write_slice(&mut randoms.client);
 
         if sess.common.is_tls13() {
-            return self
-                .into_complete_tls13_client_hello_handling(randoms)
-                .handle_client_hello(ciphersuite, sess, &certkey, &m);
+            return tls13::CompleteClientHelloHandling {
+                handshake: self.handshake,
+                randoms,
+                done_retry: self.done_retry,
+                send_ticket: self.send_ticket,
+            }
+            .handle_client_hello(ciphersuite, sess, &certkey, &m);
         }
 
         // -- TLS1.2 only from hereon in --
@@ -962,10 +921,24 @@ impl State for ExpectClientHello {
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 
+        let server_kx = ServerKXDetails::new(kx);
         if doing_client_auth {
-            Ok(self.into_expect_tls12_certificate(randoms, kx))
+            Ok(Box::new(tls12::ExpectCertificate {
+                handshake: self.handshake,
+                randoms,
+                using_ems: self.using_ems,
+                server_kx,
+                send_ticket: self.send_ticket,
+            }))
         } else {
-            Ok(self.into_expect_tls12_client_kx(randoms, kx))
+            Ok(Box::new(tls12::ExpectClientKX {
+                handshake: self.handshake,
+                randoms,
+                using_ems: self.using_ems,
+                server_kx,
+                client_cert: None,
+                send_ticket: self.send_ticket,
+            }))
         }
     }
 }

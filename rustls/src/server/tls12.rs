@@ -30,19 +30,6 @@ pub struct ExpectCertificate {
     pub send_ticket: bool,
 }
 
-impl ExpectCertificate {
-    fn into_expect_tls12_client_kx(self, cert: Option<ClientCertDetails>) -> hs::NextState {
-        Box::new(ExpectClientKX {
-            handshake: self.handshake,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            server_kx: self.server_kx,
-            client_cert: cert,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
@@ -69,33 +56,41 @@ impl hs::State for ExpectCertificate {
 
         trace!("certs {:?}", cert_chain);
 
-        let (end_entity, intermediates) = match cert_chain.split_first() {
-            None => {
-                if !mandatory {
-                    debug!("client auth requested but no certificate supplied");
-                    self.handshake
-                        .transcript
-                        .abandon_client_auth();
-                    return Ok(self.into_expect_tls12_client_kx(None));
-                }
+        let client_cert = match cert_chain.split_first() {
+            None if mandatory => {
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
                 return Err(TlsError::NoCertificatesPresented);
             }
-            Some(chain) => chain,
+            None => {
+                debug!("client auth requested but no certificate supplied");
+                self.handshake
+                    .transcript
+                    .abandon_client_auth();
+                None
+            }
+            Some((end_entity, intermediates)) => {
+                let now = std::time::SystemTime::now();
+                sess.config
+                    .verifier
+                    .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
+                    .or_else(|err| {
+                        hs::incompatible(sess, "certificate invalid");
+                        Err(err)
+                    })?;
+
+                Some(ClientCertDetails::new(cert_chain.clone()))
+            }
         };
 
-        let now = std::time::SystemTime::now();
-        sess.config
-            .verifier
-            .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
-            .or_else(|err| {
-                hs::incompatible(sess, "certificate invalid");
-                Err(err)
-            })?;
-
-        let cert = ClientCertDetails::new(cert_chain.clone());
-        Ok(self.into_expect_tls12_client_kx(Some(cert)))
+        Ok(Box::new(ExpectClientKX {
+            handshake: self.handshake,
+            randoms: self.randoms,
+            using_ems: self.using_ems,
+            server_kx: self.server_kx,
+            client_cert,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -183,18 +178,6 @@ pub struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl ExpectCertificateVerify {
-    fn into_expect_tls12_ccs(self) -> hs::NextState {
-        Box::new(ExpectCCS {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: false,
-            send_ticket: self.send_ticket,
-        })
-    }
-}
-
 impl hs::State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
@@ -230,7 +213,13 @@ impl hs::State for ExpectCertificateVerify {
         self.handshake
             .transcript
             .add_message(&m);
-        Ok(self.into_expect_tls12_ccs())
+        Ok(Box::new(ExpectCCS {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            resuming: false,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -241,18 +230,6 @@ pub struct ExpectCCS {
     pub using_ems: bool,
     pub resuming: bool,
     pub send_ticket: bool,
-}
-
-impl ExpectCCS {
-    fn into_expect_tls12_finished(self) -> hs::NextState {
-        Box::new(ExpectFinished {
-            secrets: self.secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: self.resuming,
-            send_ticket: self.send_ticket,
-        })
-    }
 }
 
 impl hs::State for ExpectCCS {
@@ -266,7 +243,13 @@ impl hs::State for ExpectCCS {
         sess.common
             .record_layer
             .start_decrypting();
-        Ok(self.into_expect_tls12_finished())
+        Ok(Box::new(ExpectFinished {
+            secrets: self.secrets,
+            handshake: self.handshake,
+            using_ems: self.using_ems,
+            resuming: self.resuming,
+            send_ticket: self.send_ticket,
+        }))
     }
 }
 
@@ -368,15 +351,6 @@ pub struct ExpectFinished {
     send_ticket: bool,
 }
 
-impl ExpectFinished {
-    fn into_expect_tls12_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
-        Box::new(ExpectTraffic {
-            secrets: self.secrets,
-            _fin_verified: fin,
-        })
-    }
-}
-
 impl hs::State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
@@ -394,13 +368,14 @@ impl hs::State for ExpectFinished {
             .get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
-        let fin = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-            .map_err(|_| {
-                sess.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
-                TlsError::DecryptError
-            })
-            .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let _fin_verified =
+            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+                .map_err(|_| {
+                    sess.common
+                        .send_fatal_alert(AlertDescription::DecryptError);
+                    TlsError::DecryptError
+                })
+                .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Save session, perhaps
         if !self.resuming {
@@ -435,7 +410,10 @@ impl hs::State for ExpectFinished {
         }
 
         sess.common.start_traffic();
-        Ok(self.into_expect_tls12_traffic(fin))
+        Ok(Box::new(ExpectTraffic {
+            secrets: self.secrets,
+            _fin_verified,
+        }))
     }
 }
 
