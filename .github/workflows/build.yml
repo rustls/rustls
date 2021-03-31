@@ -187,7 +187,7 @@ jobs:
       - name: Install rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2021-03-30
           override: true
           default: true
       - name: Check formatting
