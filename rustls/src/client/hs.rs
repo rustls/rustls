@@ -26,6 +26,7 @@ use crate::msgs::persist;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::ticketer;
 use crate::verify;
+use crate::SupportedCipherSuite;
 
 use crate::client::common::HandshakeDetails;
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
@@ -181,6 +182,7 @@ impl InitialState {
             self.dns_name,
             self.extra_exts,
             may_send_sct_list,
+            None,
         )
     }
 }
@@ -203,6 +205,7 @@ struct ExpectServerHello {
     hello: ClientHelloDetails,
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
+    suite: Option<&'static SupportedCipherSuite>,
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
@@ -223,6 +226,7 @@ fn emit_client_hello_for_retry(
     dns_name: webpki::DNSName,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
+    suite: Option<&'static SupportedCipherSuite>,
 ) -> NextStateOrError {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
@@ -315,7 +319,7 @@ fn emit_client_hello_for_retry(
         handshake
             .resuming_session
             .as_ref()
-            .filter(|resuming| match sess.common.get_suite() {
+            .filter(|resuming| match suite {
                 Some(suite) => suite.can_resume_to(&resuming.supported_cipher_suite()),
                 None => true,
             })
@@ -413,6 +417,7 @@ fn emit_client_hello_for_retry(
         session_id: session_id,
         early_key_schedule,
         sent_tls13_fake_ccs,
+        suite,
     };
 
     Ok(if support_tls13 && retryreq.is_none() {
@@ -549,12 +554,13 @@ impl State for ExpectServerHello {
                 Error::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
             })?;
 
-        debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
-        match sess.common.suite {
+        match self.suite {
             Some(prev_suite) if prev_suite != suite => {
                 return Err(illegal_param(sess, "server varied selected ciphersuite"));
             }
             _ => {
+                debug!("Using ciphersuite {:?}", suite);
+                self.suite = Some(suite);
                 sess.common.suite = Some(suite);
             }
         }
@@ -592,6 +598,7 @@ impl State for ExpectServerHello {
                 handshake: self.handshake,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
+                suite,
                 transcript: self.transcript,
                 key_schedule,
                 hello: self.hello,
@@ -863,6 +870,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.dns_name,
             self.extra_exts,
             may_send_sct_list,
+            Some(cs),
         )
     }
 }

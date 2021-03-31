@@ -14,7 +14,7 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerSession;
 use crate::session::{SessionRandoms, SessionSecrets};
-use crate::verify;
+use crate::{verify, SupportedCipherSuite};
 
 use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKXDetails};
 use crate::server::hs;
@@ -25,6 +25,7 @@ use ring::constant_time;
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
+    pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
     pub server_kx: ServerKXDetails,
     pub send_ticket: bool,
@@ -85,6 +86,7 @@ impl hs::State for ExpectCertificate {
         Ok(Box::new(ExpectClientKX {
             handshake: self.handshake,
             randoms: self.randoms,
+            suite: self.suite,
             using_ems: self.using_ems,
             server_kx: self.server_kx,
             client_cert,
@@ -97,6 +99,7 @@ impl hs::State for ExpectCertificate {
 pub struct ExpectClientKX {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
+    pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
     pub server_kx: ServerKXDetails,
     pub client_cert: Option<ClientCertDetails>,
@@ -126,15 +129,19 @@ impl hs::State for ExpectClientKX {
                 Error::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
-        let suite = sess.common.get_suite_assert();
         let secrets = if self.using_ems {
             let handshake_hash = self
                 .handshake
                 .transcript
                 .get_current_hash();
-            SessionSecrets::new_ems(&self.randoms, &handshake_hash, suite, &kxd.shared_secret)
+            SessionSecrets::new_ems(
+                &self.randoms,
+                &handshake_hash,
+                self.suite,
+                &kxd.shared_secret,
+            )
         } else {
-            SessionSecrets::new(&self.randoms, suite, &kxd.shared_secret)
+            SessionSecrets::new(&self.randoms, self.suite, &kxd.shared_secret)
         };
         sess.config.key_log.log(
             "CLIENT_RANDOM",
