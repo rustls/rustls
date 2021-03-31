@@ -21,5 +21,6 @@ case $OSTYPE in darwin*) set +e ;; esac
      -shim-config ../../../../config.json \
      -pipe \
      -allow-unimplemented \
-     -test.timeout 60s)
+     -test.timeout 60s \
+     "$@") # you can pass in `-test "Foo;Bar"` to run specific tests
 true
