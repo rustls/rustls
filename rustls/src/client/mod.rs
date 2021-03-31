@@ -771,7 +771,7 @@ impl quic::QuicExt for ClientSession {
         self.common.quic.alert
     }
 
-    fn next_1rtt_keys(&mut self) -> quic::PacketKeySet {
+    fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
         quic::next_1rtt_keys(&mut self.common)
     }
 }
