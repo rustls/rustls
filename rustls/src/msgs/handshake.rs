@@ -864,7 +864,7 @@ impl Codec for ClientHelloPayload {
         let mut ret = ClientHelloPayload {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
-            session_id: Some(SessionID::read(r)?),
+            session_id: SessionID::read(r),
             cipher_suites: codec::read_vec_u16::<CipherSuite>(r)?,
             compression_methods: codec::read_vec_u8::<Compression>(r)?,
             extensions: Vec::new(),
@@ -1107,7 +1107,7 @@ impl Codec for HelloRetryRequest {
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
-        let session_id = Some(SessionID::read(r)?);
+        let session_id = SessionID::read(r);
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
@@ -1207,7 +1207,7 @@ impl Codec for ServerHelloPayload {
 
     // minus version and random, which have already been read.
     fn read(r: &mut Reader) -> Option<ServerHelloPayload> {
-        let session_id = Some(SessionID::read(r)?);
+        let session_id = SessionID::read(r);
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
