@@ -116,6 +116,7 @@ fn random_sessionid() -> Result<SessionID, rand::GetRandomFailed> {
     let mut random_id = [0u8; 32];
     rand::fill_random(&mut random_id)?;
     let id: &[u8] = &random_id;
+    // TODO: fix this unwrap
     Ok(SessionID::try_from(id).unwrap())
 }
 
