@@ -536,10 +536,6 @@ impl SessionCommon {
         self.suite
     }
 
-    pub fn get_suite_assert(&self) -> &'static SupportedCipherSuite {
-        self.suite.as_ref().unwrap()
-    }
-
     pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
         self.alpn_protocol
             .as_ref()

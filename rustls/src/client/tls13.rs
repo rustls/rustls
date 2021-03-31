@@ -418,6 +418,7 @@ pub struct ExpectEncryptedExtensions {
     pub handshake: HandshakeDetails,
     pub dns_name: webpki::DNSName,
     pub randoms: SessionRandoms,
+    pub suite: &'static SupportedCipherSuite,
     pub transcript: HandshakeHash,
     pub key_schedule: KeyScheduleHandshake,
     pub hello: ClientHelloDetails,
@@ -458,7 +459,6 @@ impl hs::State for ExpectEncryptedExtensions {
 
             if was_early_traffic && !sess.common.early_traffic {
                 // If no early traffic, set the encryption key for handshakes
-                let suite = sess.common.get_suite_assert();
                 let write_key = self
                     .key_schedule
                     .client_handshake_traffic_secret(
@@ -468,7 +468,7 @@ impl hs::State for ExpectEncryptedExtensions {
                     );
                 sess.common
                     .record_layer
-                    .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+                    .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
             }
 
             sess.server_cert_chain = resuming_session
@@ -482,6 +482,7 @@ impl hs::State for ExpectEncryptedExtensions {
             Ok(Box::new(ExpectFinished {
                 dns_name: self.dns_name,
                 randoms: self.randoms,
+                suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
@@ -497,6 +498,7 @@ impl hs::State for ExpectEncryptedExtensions {
             Ok(Box::new(ExpectCertificateOrCertReq {
                 dns_name: self.dns_name,
                 randoms: self.randoms,
+                suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.hello.server_may_send_sct_list(),
@@ -509,6 +511,7 @@ impl hs::State for ExpectEncryptedExtensions {
 struct ExpectCertificate {
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
+    suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
@@ -565,6 +568,7 @@ impl hs::State for ExpectCertificate {
         Ok(Box::new(ExpectCertificateVerify {
             dns_name: self.dns_name,
             randoms: self.randoms,
+            suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             server_cert,
@@ -577,6 +581,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateOrCertReq {
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
+    suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
@@ -597,6 +602,7 @@ impl hs::State for ExpectCertificateOrCertReq {
             Box::new(ExpectCertificate {
                 dns_name: self.dns_name,
                 randoms: self.randoms,
+                suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.may_send_sct_list,
@@ -608,6 +614,7 @@ impl hs::State for ExpectCertificateOrCertReq {
             Box::new(ExpectCertificateRequest {
                 dns_name: self.dns_name,
                 randoms: self.randoms,
+                suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.may_send_sct_list,
@@ -622,6 +629,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 struct ExpectCertificateVerify {
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
+    suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
@@ -696,6 +704,7 @@ impl hs::State for ExpectCertificateVerify {
         Ok(Box::new(ExpectFinished {
             dns_name: self.dns_name,
             randoms: self.randoms,
+            suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
@@ -712,6 +721,7 @@ impl hs::State for ExpectCertificateVerify {
 struct ExpectCertificateRequest {
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
+    suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
@@ -785,6 +795,7 @@ impl hs::State for ExpectCertificateRequest {
         Ok(Box::new(ExpectCertificate {
             dns_name: self.dns_name,
             randoms: self.randoms,
+            suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             may_send_sct_list: self.may_send_sct_list,
@@ -905,6 +916,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, sess: &mut Clien
 struct ExpectFinished {
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
+    suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -932,7 +944,6 @@ impl hs::State for ExpectFinished {
             })
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
-        let suite = sess.common.get_suite_assert();
         let maybe_write_key = if sess.common.early_traffic {
             /* Derive the client-to-server encryption key before key schedule update */
             let key = st
@@ -958,7 +969,7 @@ impl hs::State for ExpectFinished {
             sess.early_data.finished();
             sess.common
                 .record_layer
-                .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+                .set_message_encrypter(cipher::new_tls13_write(st.suite, &write_key));
         }
 
         /* Send our authentication/finished messages.  These are still encrypted
@@ -984,7 +995,7 @@ impl hs::State for ExpectFinished {
         );
         sess.common
             .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+            .set_message_decrypter(cipher::new_tls13_read(st.suite, &read_key));
 
         key_schedule_finished.exporter_master_secret(
             &hash_after_handshake,
@@ -999,13 +1010,14 @@ impl hs::State for ExpectFinished {
         );
         sess.common
             .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+            .set_message_encrypter(cipher::new_tls13_write(st.suite, &write_key));
 
         let key_schedule_traffic = key_schedule_finished.into_traffic();
         sess.common.start_traffic();
 
         let st = ExpectTraffic {
             dns_name: st.dns_name,
+            suite: st.suite,
             transcript: st.transcript,
             key_schedule: key_schedule_traffic,
             want_write_key_update: false,
@@ -1034,6 +1046,7 @@ impl hs::State for ExpectFinished {
 // and application data.
 struct ExpectTraffic {
     dns_name: webpki::DNSName,
+    suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
@@ -1055,7 +1068,7 @@ impl ExpectTraffic {
 
         let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
             ProtocolVersion::TLSv1_3,
-            sess.common.get_suite_assert(),
+            self.suite,
             &SessionID::empty(),
             nst.ticket.0.clone(),
             secret,
@@ -1143,10 +1156,9 @@ impl ExpectTraffic {
         let new_read_key = self
             .key_schedule
             .next_server_application_traffic_secret();
-        let suite = sess.common.get_suite_assert();
         sess.common
             .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(suite, &new_read_key));
+            .set_message_decrypter(cipher::new_tls13_read(self.suite, &new_read_key));
 
         Ok(())
     }
@@ -1201,10 +1213,9 @@ impl hs::State for ExpectTraffic {
             let write_key = self
                 .key_schedule
                 .next_client_application_traffic_secret();
-            let scs = sess.common.get_suite_assert();
             sess.common
                 .record_layer
-                .set_message_encrypter(cipher::new_tls13_write(scs, &write_key));
+                .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
         }
     }
 }
