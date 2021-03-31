@@ -319,9 +319,10 @@ fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
     assert_eq!(expect.len(), reader.read(&mut buf).unwrap());
     assert_eq!(expect.to_vec(), buf);
 
-    let err = reader.read(&mut buf);
-    assert!(err.is_err());
-    assert_eq!(err.err().unwrap().kind(), io::ErrorKind::ConnectionAborted);
+    let err = reader.read(&mut buf).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::ConnectionAborted);
+    assert!(rustls::is_close_notify(&err));
+    assert_eq!(err.to_string(), "received fatal alert: CloseNotify");
 }
 
 #[test]

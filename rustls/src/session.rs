@@ -456,6 +456,19 @@ pub struct SessionCommon {
     pub(crate) quic: Quic,
 }
 
+/// Return true if the provided io::Error is the result of receiving a close_notify
+/// alert from the peer. Users should treat this as a clean shutdown of the connection.
+pub fn is_close_notify(err: &io::Error) -> bool {
+    let inner = match err.get_ref() {
+        Some(inner) => inner,
+        None => return false,
+    };
+    match inner.downcast_ref::<TlsError>() {
+        Some(TlsError::AlertReceived(AlertDescription::CloseNotify)) => true,
+        _ => false,
+    }
+}
+
 impl SessionCommon {
     pub fn new(mtu: Option<usize>, client: bool) -> SessionCommon {
         SessionCommon {
@@ -835,7 +848,7 @@ impl SessionCommon {
         if len == 0 && self.connection_at_eof() && self.received_plaintext.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
-                "CloseNotify alert received",
+                TlsError::AlertReceived(AlertDescription::CloseNotify),
             ));
         }
 
