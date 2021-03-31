@@ -33,6 +33,8 @@ use crate::client::common::HandshakeDetails;
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
 
+use std::convert::TryFrom;
+
 use webpki;
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -113,7 +115,8 @@ fn find_session(
 fn random_sessionid() -> Result<SessionID, rand::GetRandomFailed> {
     let mut random_id = [0u8; 32];
     rand::fill_random(&mut random_id)?;
-    Ok(SessionID::new(&random_id))
+    let id: &[u8] = &random_id;
+    Ok(SessionID::try_from(id).unwrap())
 }
 
 struct InitialState {
@@ -698,7 +701,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectNewTicket {
                         secrets,
                         handshake: self.handshake,
-                        session_id,
+                        session_id: Some(session_id),
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -710,7 +713,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectCCS {
                         secrets,
                         handshake: self.handshake,
-                        session_id,
+                        session_id: Some(session_id),
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -728,7 +731,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
-            session_id: session_id.ok_or(TlsError::HandshakeNotComplete)?,
+            session_id: session_id,
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,

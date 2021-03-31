@@ -5,6 +5,7 @@ use super::handshake::*;
 use crate::key::Certificate;
 use webpki::DNSNameRef;
 
+use std::convert::TryFrom;
 use std::mem;
 
 #[test]
@@ -40,8 +41,10 @@ fn rejects_sessionid_with_bad_length() {
 
 #[test]
 fn sessionid_with_different_lengths_are_unequal() {
-    let a = SessionID::new(&[1u8]);
-    let b = SessionID::new(&[1u8, 2u8]);
+    let id_a: &[u8] = &[1u8];
+    let a = SessionID::try_from(id_a);
+    let id_b: &[u8] = &[1u8, 2u8];
+    let b = SessionID::try_from(id_b);
     assert_eq!(a, a);
     assert_eq!(b, b);
     assert_ne!(a, b);
@@ -55,7 +58,8 @@ fn accepts_short_sessionid() {
     println!("{:?}", sess);
 
     assert_eq!(sess.len(), 1);
-    assert_eq!(sess, SessionID::new(&[1u8]));
+    let id: &[u8] = &[1u8];
+    assert_eq!(Some(sess), SessionID::try_from(id).ok());
     assert_eq!(rd.any_left(), false);
 }
 
@@ -63,11 +67,12 @@ fn accepts_short_sessionid() {
 fn accepts_empty_sessionid() {
     let bytes = [0; 1];
     let mut rd = Reader::init(&bytes);
-    let sess = SessionID::read(&mut rd).unwrap();
+    let sess = SessionID::read(&mut rd);
     println!("{:?}", sess);
 
-    assert_eq!(sess.len(), 0);
-    assert_eq!(sess, SessionID::new(&[]));
+    assert_eq!(sess, None);
+    let empty: &[u8] = &[];
+    assert_eq!(None, SessionID::try_from(empty).ok());
     assert_eq!(rd.any_left(), false);
 }
 

@@ -32,6 +32,7 @@ use webpki;
 use crate::server::common::{HandshakeDetails, ServerKXDetails};
 use crate::server::{tls12, tls13};
 
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -852,7 +853,8 @@ impl State for ExpectClientHello {
             if self.handshake.session_id.is_none() {
                 let mut bytes = [0u8; 32];
                 rand::fill_random(&mut bytes)?;
-                self.handshake.session_id = Some(SessionID::new(&bytes));
+                let id: &[u8] = &bytes;
+                self.handshake.session_id = SessionID::try_from(id).ok();
             }
 
             // Perhaps resume?  If we received a ticket, the sessionid

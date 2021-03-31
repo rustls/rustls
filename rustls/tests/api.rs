@@ -2441,6 +2441,7 @@ fn tls13_stateful_resumption() {
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
+    println!("resume_c2s: {}, full_c2s: {}", resume_c2s, resume_s2c);
     assert!(resume_c2s > full_c2s);
     assert!(resume_s2c < full_s2c);
     assert_eq!(storage.puts(), 2);
