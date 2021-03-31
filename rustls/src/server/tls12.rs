@@ -378,19 +378,17 @@ impl hs::State for ExpectFinished {
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Save session, perhaps
-        if !self.resuming {
-            if let Some(session_id) = self.handshake.session_id {
-                let value = get_server_session_value_tls12(&self.secrets, self.using_ems, sess);
+        if let (Some(session_id), false) = (self.handshake.session_id, self.resuming) {
+            let value = get_server_session_value_tls12(&self.secrets, self.using_ems, sess);
 
-                let worked = sess
-                    .config
-                    .session_storage
-                    .put(session_id.get_encoding(), value.get_encoding());
-                if worked {
-                    debug!("Session saved");
-                } else {
-                    debug!("Session not saved");
-                }
+            let worked = sess
+                .config
+                .session_storage
+                .put(session_id.get_encoding(), value.get_encoding());
+            if worked {
+                debug!("Session saved");
+            } else {
+                debug!("Session not saved");
             }
         }
 
