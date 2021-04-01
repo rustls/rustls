@@ -103,7 +103,7 @@ pub trait ResolvesServerCert: Send + Sync {
 /// A struct representing the received Client Hello
 pub struct ClientHello<'a> {
     server_name: Option<webpki::DNSNameRef<'a>>,
-    sigschemes: &'a [SignatureScheme],
+    signature_schemes: &'a [SignatureScheme],
     alpn: Option<&'a [&'a [u8]]>,
 }
 
@@ -111,12 +111,12 @@ impl<'a> ClientHello<'a> {
     /// Creates a new ClientHello
     fn new(
         server_name: Option<webpki::DNSNameRef<'a>>,
-        sigschemes: &'a [SignatureScheme],
+        signature_schemes: &'a [SignatureScheme],
         alpn: Option<&'a [&'a [u8]]>,
     ) -> Self {
         ClientHello {
             server_name,
-            sigschemes,
+            signature_schemes,
             alpn,
         }
     }
@@ -131,8 +131,8 @@ impl<'a> ClientHello<'a> {
     /// Get the compatible signature schemes.
     ///
     /// Returns standard-specified default if the client omitted this extension.
-    pub fn sigschemes(&self) -> &[SignatureScheme] {
-        self.sigschemes
+    pub fn signature_schemes(&self) -> &[SignatureScheme] {
+        self.signature_schemes
     }
 
     /// Get the alpn.
