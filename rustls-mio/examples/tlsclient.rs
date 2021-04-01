@@ -497,7 +497,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if !args.flag_suite.is_empty() {
-        config.ciphersuites = lookup_suites(&args.flag_suite);
+        config.cipher_suites = lookup_suites(&args.flag_suite);
     }
 
     if !args.flag_protover.is_empty() {

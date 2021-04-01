@@ -591,7 +591,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         .expect("bad certificates/private key");
 
     if !args.flag_suite.is_empty() {
-        config.ciphersuites = lookup_suites(&args.flag_suite);
+        config.cipher_suites = lookup_suites(&args.flag_suite);
     }
 
     if !args.flag_protover.is_empty() {

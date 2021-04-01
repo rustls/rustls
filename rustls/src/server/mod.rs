@@ -150,7 +150,7 @@ impl<'a> ClientHello<'a> {
 #[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
-    pub ciphersuites: Vec<&'static SupportedCipherSuite>,
+    pub cipher_suites: Vec<&'static SupportedCipherSuite>,
 
     /// List of supported key exchange groups.
     ///
@@ -211,7 +211,7 @@ impl ServerConfig {
     /// default, requiring client authentication, requires additional
     /// configuration that we cannot provide reasonable defaults for.
     pub fn new(client_cert_verifier: Arc<dyn verify::ClientCertVerifier>) -> ServerConfig {
-        ServerConfig::with_ciphersuites(client_cert_verifier, DEFAULT_CIPHERSUITES)
+        ServerConfig::with_cipher_suites(client_cert_verifier, DEFAULT_CIPHERSUITES)
     }
 
     /// Make a `ServerConfig` with a custom set of ciphersuites,
@@ -227,12 +227,12 @@ impl ServerConfig {
     /// We don't provide a default for `client_cert_verifier` because the safest
     /// default, requiring client authentication, requires additional
     /// configuration that we cannot provide reasonable defaults for.
-    pub fn with_ciphersuites(
+    pub fn with_cipher_suites(
         client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> ServerConfig {
         ServerConfig {
-            ciphersuites: ciphersuites.to_vec(),
+            cipher_suites: cipher_suites.to_vec(),
             kx_groups: ALL_KX_GROUPS.to_vec(),
             ignore_client_order: false,
             mtu: None,
@@ -255,7 +255,7 @@ impl ServerConfig {
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(&v)
             && self
-                .ciphersuites
+                .cipher_suites
                 .iter()
                 .any(|cs| cs.usable_for_version(v))
     }
