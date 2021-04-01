@@ -439,7 +439,7 @@ impl ServerSession {
     ///
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
-    pub fn get_sni_hostname(&self) -> Option<&str> {
+    pub fn sni_hostname(&self) -> Option<&str> {
         self.get_sni()
             .map(|s| s.as_ref().into())
     }
