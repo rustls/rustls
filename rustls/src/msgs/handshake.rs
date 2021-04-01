@@ -890,7 +890,11 @@ impl Codec for ClientHelloPayload {
             ret.extensions = codec::read_vec_u16::<ClientExtension>(r)?;
         }
 
-        Some(ret)
+        if r.any_left() || ret.extensions.is_empty() {
+            None
+        } else {
+            Some(ret)
+        }
     }
 }
 
@@ -1221,10 +1225,7 @@ impl Codec for ServerHelloPayload {
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);
-
-        if !self.extensions.is_empty() {
-            codec::encode_vec_u16(bytes, &self.extensions);
-        }
+        codec::encode_vec_u16(bytes, &self.extensions);
     }
 
     // minus version and random, which have already been read.
@@ -1232,21 +1233,22 @@ impl Codec for ServerHelloPayload {
         let session_id = SessionID::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
+        let extensions = codec::read_vec_u16::<ServerExtension>(r)?;
 
-        let mut ret = ServerHelloPayload {
+        let ret = ServerHelloPayload {
             legacy_version: ProtocolVersion::Unknown(0),
             random: ZERO_RANDOM.clone(),
             session_id,
             cipher_suite: suite,
             compression_method: compression,
-            extensions: Vec::new(),
+            extensions,
         };
 
         if r.any_left() {
-            ret.extensions = codec::read_vec_u16::<ServerExtension>(r)?;
+            None
+        } else {
+            Some(ret)
         }
-
-        Some(ret)
     }
 }
 
