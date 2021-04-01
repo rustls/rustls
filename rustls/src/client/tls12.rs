@@ -1,6 +1,6 @@
 use crate::check::check_message;
 use crate::client::ClientSession;
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -216,7 +216,7 @@ impl hs::State for ExpectServerKX {
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecodeError);
-                TlsError::CorruptMessagePayload(ContentType::Handshake)
+                Error::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
         // Save the signature and signed parameters for later verification.
@@ -293,7 +293,7 @@ fn emit_certverify(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
     sess: &mut ClientSession,
-) -> Result<(), TlsError> {
+) -> Result<(), Error> {
     let signer = match client_auth.signer.take() {
         None => {
             trace!("Not sending CertificateVerify, no key");
@@ -532,7 +532,7 @@ impl hs::State for ExpectServerDone {
             .server_cert
             .cert_chain
             .split_first()
-            .ok_or(TlsError::NoCertificatesPresented)?;
+            .ok_or(Error::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
         let cert_verified = sess
             .config
@@ -564,7 +564,7 @@ impl hs::State for ExpectServerDone {
                     sig.scheme.sign(),
                     suite.sign
                 );
-                return Err(TlsError::PeerMisbehavedError(error_message));
+                return Err(Error::PeerMisbehavedError(error_message));
             }
 
             sess.config
@@ -581,7 +581,7 @@ impl hs::State for ExpectServerDone {
 
         // 5a.
         let kxd = kx::KeyExchange::client_ecdhe(&st.server_kx.kx_params, &sess.config.kx_groups)
-            .ok_or_else(|| TlsError::PeerMisbehavedError("key exchange failed".to_string()))?;
+            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
         emit_clientkx(&mut st.transcript, sess, &kxd);
@@ -808,7 +808,7 @@ impl hs::State for ExpectFinished {
                 .map_err(|_| {
                     sess.common
                         .send_fatal_alert(AlertDescription::DecryptError);
-                    TlsError::DecryptError
+                    Error::DecryptError
                 })
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -864,7 +864,7 @@ impl hs::State for ExpectTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.secrets
             .export_keying_material(output, label, context);
         Ok(())

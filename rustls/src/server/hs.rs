@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key::Certificate;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -35,7 +35,7 @@ use crate::server::{tls12, tls13};
 use std::sync::Arc;
 
 pub type NextState = Box<dyn State + Send + Sync>;
-pub type NextStateOrError = Result<NextState, TlsError>;
+pub type NextStateOrError = Result<NextState, Error>;
 
 pub trait State {
     fn handle(self: Box<Self>, sess: &mut ServerSession, m: Message) -> NextStateOrError;
@@ -45,35 +45,35 @@ pub trait State {
         _output: &mut [u8],
         _label: &[u8],
         _context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
-        Err(TlsError::HandshakeNotComplete)
+    ) -> Result<(), Error> {
+        Err(Error::HandshakeNotComplete)
     }
 
     fn perhaps_write_key_update(&mut self, _sess: &mut ServerSession) {}
 }
 
-pub fn incompatible(sess: &mut ServerSession, why: &str) -> TlsError {
+pub fn incompatible(sess: &mut ServerSession, why: &str) -> Error {
     sess.common
         .send_fatal_alert(AlertDescription::HandshakeFailure);
-    TlsError::PeerIncompatibleError(why.to_string())
+    Error::PeerIncompatibleError(why.to_string())
 }
 
-fn bad_version(sess: &mut ServerSession, why: &str) -> TlsError {
+fn bad_version(sess: &mut ServerSession, why: &str) -> Error {
     sess.common
         .send_fatal_alert(AlertDescription::ProtocolVersion);
-    TlsError::PeerIncompatibleError(why.to_string())
+    Error::PeerIncompatibleError(why.to_string())
 }
 
-pub fn illegal_param(sess: &mut ServerSession, why: &str) -> TlsError {
+pub fn illegal_param(sess: &mut ServerSession, why: &str) -> Error {
     sess.common
         .send_fatal_alert(AlertDescription::IllegalParameter);
-    TlsError::PeerMisbehavedError(why.to_string())
+    Error::PeerMisbehavedError(why.to_string())
 }
 
-pub fn decode_error(sess: &mut ServerSession, why: &str) -> TlsError {
+pub fn decode_error(sess: &mut ServerSession, why: &str) -> Error {
     sess.common
         .send_fatal_alert(AlertDescription::DecodeError);
-    TlsError::PeerMisbehavedError(why.to_string())
+    Error::PeerMisbehavedError(why.to_string())
 }
 
 pub fn can_resume(
@@ -117,11 +117,11 @@ fn same_dns_name_or_both_none(a: Option<&webpki::DNSName>, b: Option<&webpki::DN
 // messages.  Otherwise the defragmented messages will have
 // been protected with two different record layer protections,
 // which is illegal.  Not mentioned in RFC.
-pub fn check_aligned_handshake(sess: &mut ServerSession) -> Result<(), TlsError> {
+pub fn check_aligned_handshake(sess: &mut ServerSession) -> Result<(), Error> {
     if !sess.common.handshake_joiner.is_empty() {
         sess.common
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
-        Err(TlsError::PeerMisbehavedError(
+        Err(Error::PeerMisbehavedError(
             "key epoch or handshake flight with pending fragment".to_string(),
         ))
     } else {
@@ -157,7 +157,7 @@ impl ExtensionProcessing {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         handshake: &HandshakeDetails,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &sess.config.alpn_protocols;
         let maybe_their_protocols = hello.get_alpn_extension();
@@ -168,7 +168,7 @@ impl ExtensionProcessing {
                 .iter()
                 .any(|protocol| protocol.is_empty())
             {
-                return Err(TlsError::PeerMisbehavedError(
+                return Err(Error::PeerMisbehavedError(
                     "client offered empty ALPN protocol".to_string(),
                 ));
             }
@@ -188,7 +188,7 @@ impl ExtensionProcessing {
                     if sess.common.protocol == Protocol::Quic && !our_protocols.is_empty() {
                         sess.common
                             .send_fatal_alert(AlertDescription::NoApplicationProtocol);
-                        return Err(TlsError::NoApplicationProtocol);
+                        return Err(Error::NoApplicationProtocol);
                     }
                 }
             }
@@ -343,7 +343,7 @@ impl ExpectClientHello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         randoms: &SessionRandoms,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let mut ep = ExtensionProcessing::new();
         ep.process_common(
             sess,
@@ -422,9 +422,9 @@ impl ExpectClientHello {
         skxg: &'static kx::SupportedKxGroup,
         signing_key: &Arc<Box<dyn sign::SigningKey>>,
         randoms: &SessionRandoms,
-    ) -> Result<kx::KeyExchange, TlsError> {
+    ) -> Result<kx::KeyExchange, Error> {
         let kx = kx::KeyExchange::start(skxg)
-            .ok_or_else(|| TlsError::PeerMisbehavedError("key exchange failed".to_string()))?;
+            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
         let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();
@@ -434,7 +434,7 @@ impl ExpectClientHello {
 
         let signer = signing_key
             .choose_scheme(&sigschemes)
-            .ok_or_else(|| TlsError::General("incompatible signing key".to_string()))?;
+            .ok_or_else(|| Error::General("incompatible signing key".to_string()))?;
         let sigscheme = signer.get_scheme();
         let sig = signer.sign(&msg)?;
 
@@ -459,7 +459,7 @@ impl ExpectClientHello {
         Ok(kx)
     }
 
-    fn emit_certificate_req(&mut self, sess: &mut ServerSession) -> Result<bool, TlsError> {
+    fn emit_certificate_req(&mut self, sess: &mut ServerSession) -> Result<bool, Error> {
         let client_auth = sess.config.get_verifier();
 
         if !client_auth.offer_client_auth() {
@@ -474,7 +474,7 @@ impl ExpectClientHello {
                 debug!("could not determine root subjects based on SNI");
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
-                TlsError::General("client rejected by client_auth_root_subjects".into())
+                Error::General("client rejected by client_auth_root_subjects".into())
             })?;
 
         let cr = CertificateRequestPayload {
@@ -594,7 +594,7 @@ impl State for ExpectClientHello {
         {
             sess.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TlsError::PeerIncompatibleError(
+            return Err(Error::PeerIncompatibleError(
                 "client did not offer Null compression".to_string(),
             ));
         }
@@ -707,7 +707,7 @@ impl State for ExpectClientHello {
             certkey.ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
-                TlsError::General("no server certificate chain resolved".to_string())
+                Error::General("no server certificate chain resolved".to_string())
             })?
         };
 
@@ -747,7 +747,7 @@ impl State for ExpectClientHello {
         {
             sess.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TlsError::PeerIncompatibleError(
+            return Err(Error::PeerIncompatibleError(
                 "hash differed on retry".to_string(),
             ));
         }
@@ -790,7 +790,7 @@ impl State for ExpectClientHello {
         if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
             sess.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(TlsError::PeerIncompatibleError(
+            return Err(Error::PeerIncompatibleError(
                 "client didn't support uncompressed ec points".to_string(),
             ));
         }

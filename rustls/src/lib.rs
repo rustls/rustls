@@ -275,7 +275,7 @@ pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage}
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
-pub use crate::error::TlsError;
+pub use crate::error::Error;
 pub use crate::error::WebPKIOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
@@ -362,4 +362,4 @@ pub type ResolvesServerCertUsingSNI = ResolvesServerCertUsingSni;
 pub type WebPKIVerifier = WebPkiVerifier;
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use TlsError")]
-pub type TLSError = TlsError;
+pub type TLSError = Error;

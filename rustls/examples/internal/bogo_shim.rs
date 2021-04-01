@@ -197,7 +197,7 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         _intermediates: &[rustls::Certificate],
         _sni: Option<&webpki::DNSName>,
         _now: SystemTime,
-    ) -> Result<rustls::ClientCertVerified, rustls::TlsError> {
+    ) -> Result<rustls::ClientCertVerified, rustls::Error> {
         Ok(rustls::ClientCertVerified::assertion())
     }
 }
@@ -215,7 +215,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
-    ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
+    ) -> Result<rustls::ServerCertVerified, rustls::Error> {
         Ok(rustls::ServerCertVerified::assertion())
     }
 
@@ -490,49 +490,49 @@ fn quit_err(why: &str) -> ! {
     process::exit(1)
 }
 
-fn handle_err(err: rustls::TlsError) -> ! {
+fn handle_err(err: rustls::Error) -> ! {
     use rustls::internal::msgs::enums::{AlertDescription, ContentType};
-    use rustls::TlsError;
+    use rustls::Error;
     use std::{thread, time};
 
     println!("TLS error: {:?}", err);
     thread::sleep(time::Duration::from_millis(100));
 
     match err {
-        TlsError::InappropriateHandshakeMessage { .. } | TlsError::InappropriateMessage { .. } => {
+        Error::InappropriateHandshakeMessage { .. } | Error::InappropriateMessage { .. } => {
             quit(":UNEXPECTED_MESSAGE:")
         }
-        TlsError::AlertReceived(AlertDescription::RecordOverflow) => {
+        Error::AlertReceived(AlertDescription::RecordOverflow) => {
             quit(":TLSV1_ALERT_RECORD_OVERFLOW:")
         }
-        TlsError::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
-        TlsError::AlertReceived(AlertDescription::ProtocolVersion) => quit(":WRONG_VERSION:"),
-        TlsError::AlertReceived(AlertDescription::InternalError) => {
+        Error::AlertReceived(AlertDescription::HandshakeFailure) => quit(":HANDSHAKE_FAILURE:"),
+        Error::AlertReceived(AlertDescription::ProtocolVersion) => quit(":WRONG_VERSION:"),
+        Error::AlertReceived(AlertDescription::InternalError) => {
             quit(":PEER_ALERT_INTERNAL_ERROR:")
         }
-        TlsError::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
-        TlsError::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
+        Error::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
+        Error::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
             quit(":BAD_CHANGE_CIPHER_SPEC:")
         }
-        TlsError::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
-        TlsError::CorruptMessagePayload(ContentType::Unknown(42)) => quit(":GARBAGE:"),
-        TlsError::CorruptMessage => quit(":GARBAGE:"),
-        TlsError::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
-        TlsError::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
-        TlsError::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
-        TlsError::NoCertificatesPresented => quit(":NO_CERTS:"),
-        TlsError::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
-        TlsError::AlertReceived(AlertDescription::DecompressionFailure) => {
+        Error::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
+        Error::CorruptMessagePayload(ContentType::Unknown(42)) => quit(":GARBAGE:"),
+        Error::CorruptMessage => quit(":GARBAGE:"),
+        Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
+        Error::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
+        Error::NoCertificatesPresented => quit(":NO_CERTS:"),
+        Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
+        Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        TlsError::WebPKIError(webpki::Error::BadDER, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
-        TlsError::WebPKIError(webpki::Error::InvalidSignatureForPublicKey, ..) => {
+        Error::WebPKIError(webpki::Error::BadDER, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
+        Error::WebPKIError(webpki::Error::InvalidSignatureForPublicKey, ..) => {
             quit(":BAD_SIGNATURE:")
         }
-        TlsError::WebPKIError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey, ..) => {
+        Error::WebPKIError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey, ..) => {
             quit(":WRONG_SIGNATURE_TYPE:")
         }
-        TlsError::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
+        Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
             println_err!("unhandled error: {:?}", err);
             quit(":FIXME:")

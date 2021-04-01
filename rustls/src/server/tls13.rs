@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key::Certificate;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
@@ -92,14 +92,14 @@ impl CompleteClientHelloHandling {
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
-    ) -> Result<KeyScheduleHandshake, TlsError> {
+    ) -> Result<KeyScheduleHandshake, Error> {
         let mut extensions = Vec::new();
 
         // Do key exchange
         let kxr = kx::KeyExchange::choose(share.group, &sess.config.kx_groups)
             .and_then(kx::KeyExchange::start)
             .and_then(|kx| kx.complete(&share.payload.0))
-            .ok_or_else(|| TlsError::PeerMisbehavedError("key exchange failed".to_string()))?;
+            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
         extensions.push(ServerExtension::KeyShare(kse));
@@ -254,7 +254,7 @@ impl CompleteClientHelloHandling {
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
             sess,
@@ -282,7 +282,7 @@ impl CompleteClientHelloHandling {
         Ok(())
     }
 
-    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSession) -> Result<bool, TlsError> {
+    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSession) -> Result<bool, Error> {
         if !sess.config.verifier.offer_client_auth() {
             return Ok(false);
         }
@@ -307,7 +307,7 @@ impl CompleteClientHelloHandling {
                 debug!("could not determine root subjects based on SNI");
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
-                TlsError::General("client rejected by client_auth_root_subjects".into())
+                Error::General("client rejected by client_auth_root_subjects".into())
             })?;
 
         if !names.is_empty() {
@@ -389,7 +389,7 @@ impl CompleteClientHelloHandling {
         sess: &mut ServerSession,
         signing_key: &Arc<Box<dyn sign::SigningKey>>,
         schemes: &[SignatureScheme],
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let message = verify::construct_tls13_server_verify_message(
             &self
                 .handshake
@@ -623,7 +623,7 @@ impl CompleteClientHelloHandling {
                 {
                     sess.common
                         .send_fatal_alert(AlertDescription::DecryptError);
-                    return Err(TlsError::PeerMisbehavedError(
+                    return Err(Error::PeerMisbehavedError(
                         "client sent wrong binder".to_string(),
                     ));
                 }
@@ -727,7 +727,7 @@ impl hs::State for ExpectCertificate {
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp.any_entry_has_extension() {
-            return Err(TlsError::PeerMisbehavedError(
+            return Err(Error::PeerMisbehavedError(
                 "client sent unsolicited cert extension".to_string(),
             ));
         }
@@ -742,7 +742,7 @@ impl hs::State for ExpectCertificate {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
-                TlsError::General("client rejected by client_auth_mandatory".into())
+                Error::General("client rejected by client_auth_mandatory".into())
             })?;
 
         let (end_entity, intermediates) = match cert_chain.split_first() {
@@ -762,7 +762,7 @@ impl hs::State for ExpectCertificate {
 
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
-                return Err(TlsError::NoCertificatesPresented);
+                return Err(Error::NoCertificatesPresented);
             }
             Some(chain) => chain,
         };
@@ -948,7 +948,7 @@ impl hs::State for ExpectFinished {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecryptError);
                 warn!("Finished wrong");
-                TlsError::DecryptError
+                Error::DecryptError
             })
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -1011,7 +1011,7 @@ pub struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, sess: &mut ServerSession, mut m: Message) -> Result<(), TlsError> {
+    fn handle_traffic(&self, sess: &mut ServerSession, mut m: Message) -> Result<(), Error> {
         sess.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
         Ok(())
@@ -1021,7 +1021,7 @@ impl ExpectTraffic {
         &mut self,
         sess: &mut ServerSession,
         kur: &KeyUpdateRequest,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = sess.common.protocol {
@@ -1029,7 +1029,7 @@ impl ExpectTraffic {
                     .send_fatal_alert(AlertDescription::UnexpectedMessage);
                 let msg = "KeyUpdate received in QUIC connection".to_string();
                 warn!("{}", msg);
-                return Err(TlsError::PeerMisbehavedError(msg));
+                return Err(Error::PeerMisbehavedError(msg));
             }
         }
 
@@ -1043,7 +1043,7 @@ impl ExpectTraffic {
             _ => {
                 sess.common
                     .send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(TlsError::CorruptMessagePayload(ContentType::Handshake));
+                return Err(Error::CorruptMessagePayload(ContentType::Handshake));
             }
         }
 
@@ -1084,7 +1084,7 @@ impl hs::State for ExpectTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.key_schedule
             .export_keying_material(output, label, context)
     }
@@ -1125,7 +1125,7 @@ impl hs::State for ExpectQUICTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.key_schedule
             .export_keying_material(output, label, context)
     }

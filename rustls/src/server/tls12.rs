@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::error::TlsError;
+use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -47,7 +47,7 @@ impl hs::State for ExpectCertificate {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
-                TlsError::General("client rejected by client_auth_mandatory".into())
+                Error::General("client rejected by client_auth_mandatory".into())
             })?;
 
         trace!("certs {:?}", cert_chain);
@@ -56,7 +56,7 @@ impl hs::State for ExpectCertificate {
             None if mandatory => {
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
-                return Err(TlsError::NoCertificatesPresented);
+                return Err(Error::NoCertificatesPresented);
             }
             None => {
                 debug!("client auth requested but no certificate supplied");
@@ -120,7 +120,7 @@ impl hs::State for ExpectClientKX {
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecodeError);
-                TlsError::CorruptMessagePayload(ContentType::Handshake)
+                Error::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
         let suite = sess.common.get_suite_assert();
@@ -357,7 +357,7 @@ impl hs::State for ExpectFinished {
                 .map_err(|_| {
                     sess.common
                         .send_fatal_alert(AlertDescription::DecryptError);
-                    TlsError::DecryptError
+                    Error::DecryptError
                 })
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -420,7 +420,7 @@ impl hs::State for ExpectTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.secrets
             .export_keying_material(output, label, context);
         Ok(())

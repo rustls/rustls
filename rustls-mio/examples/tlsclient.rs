@@ -458,7 +458,7 @@ mod danger {
             _scts: &mut dyn Iterator<Item = &[u8]>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
-        ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
+        ) -> Result<rustls::ServerCertVerified, rustls::Error> {
             Ok(rustls::ServerCertVerified::assertion())
         }
     }

@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "logging")]
@@ -251,7 +251,7 @@ impl ClientConfig {
         &mut self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         self.client_auth_cert_resolver = Arc::new(resolver);
         Ok(())
@@ -422,7 +422,7 @@ impl ClientSession {
     pub fn new(
         config: &Arc<ClientConfig>,
         hostname: webpki::DNSNameRef,
-    ) -> Result<ClientSession, TlsError> {
+    ) -> Result<ClientSession, Error> {
         let mut new = Self::from_config(config);
         new.start_handshake(hostname.into(), vec![])?;
         Ok(new)
@@ -478,7 +478,7 @@ impl ClientSession {
         &mut self,
         dns_name: webpki::DNSName,
         extra_exts: Vec<ClientExtension>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
         Ok(())
     }
@@ -504,7 +504,7 @@ impl ClientSession {
             .find(|&scs| scs.suite == suite)
     }
 
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
+    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -517,7 +517,7 @@ impl ClientSession {
         Ok(())
     }
 
-    fn reject_renegotiation_attempt(&mut self) -> Result<(), TlsError> {
+    fn reject_renegotiation_attempt(&mut self) -> Result<(), Error> {
         self.common
             .send_warning_alert(AlertDescription::NoRenegotiation);
         Ok(())
@@ -530,8 +530,8 @@ impl ClientSession {
 
     fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
         match rc {
-            Err(TlsError::InappropriateMessage { .. })
-            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
+            Err(Error::InappropriateMessage { .. })
+            | Err(Error::InappropriateHandshakeMessage { .. }) => {
                 self.queue_unexpected_alert();
             }
             _ => {}
@@ -542,7 +542,7 @@ impl ClientSession {
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
+    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if msg.is_handshake_type(HandshakeType::HelloRequest)
@@ -590,13 +590,13 @@ impl Session for ClientSession {
         self.common.write_tls(wr)
     }
 
-    fn process_new_packets(&mut self) -> Result<(), TlsError> {
+    fn process_new_packets(&mut self) -> Result<(), Error> {
         if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
 
         if self.common.message_deframer.desynced {
-            return Err(TlsError::CorruptMessage);
+            return Err(Error::CorruptMessage);
         }
 
         while let Some(msg) = self
@@ -676,10 +676,10 @@ impl Session for ClientSession {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.state
             .as_ref()
-            .ok_or_else(|| TlsError::HandshakeNotComplete)
+            .ok_or_else(|| Error::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 

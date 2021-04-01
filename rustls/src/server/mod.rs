@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -287,7 +287,7 @@ impl ServerConfig {
         &mut self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
         self.cert_resolver = Arc::new(resolver);
         Ok(())
@@ -310,7 +310,7 @@ impl ServerConfig {
         key_der: key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let resolver =
             handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp, scts)?;
         self.cert_resolver = Arc::new(resolver);
@@ -376,7 +376,7 @@ impl ServerSession {
         }
     }
 
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
+    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
         if self.common.traffic
             && !self.common.is_tls13()
             && msg.is_handshake_type(HandshakeType::ClientHello)
@@ -396,8 +396,8 @@ impl ServerSession {
 
     fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
         match rc {
-            Err(TlsError::InappropriateMessage { .. })
-            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
+            Err(Error::InappropriateMessage { .. })
+            | Err(Error::InappropriateHandshakeMessage { .. }) => {
                 self.queue_unexpected_alert();
             }
             _ => {}
@@ -410,7 +410,7 @@ impl ServerSession {
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
+    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -510,13 +510,13 @@ impl Session for ServerSession {
         self.common.write_tls(wr)
     }
 
-    fn process_new_packets(&mut self) -> Result<(), TlsError> {
+    fn process_new_packets(&mut self) -> Result<(), Error> {
         if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
 
         if self.common.message_deframer.desynced {
-            return Err(TlsError::CorruptMessage);
+            return Err(Error::CorruptMessage);
         }
 
         while let Some(msg) = self
@@ -589,10 +589,10 @@ impl Session for ServerSession {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.state
             .as_ref()
-            .ok_or_else(|| TlsError::HandshakeNotComplete)
+            .ok_or_else(|| Error::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 

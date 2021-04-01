@@ -1,5 +1,5 @@
 use crate::cipher;
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
@@ -67,7 +67,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     ///
     /// Success from this function can mean new plaintext is available:
     /// obtain it using `read`.
-    fn process_new_packets(&mut self) -> Result<(), TlsError>;
+    fn process_new_packets(&mut self) -> Result<(), Error>;
 
     /// Returns true if the caller should call `read_tls` as soon
     /// as possible.
@@ -140,7 +140,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError>;
+    ) -> Result<(), Error>;
 
     /// Retrieves the ciphersuite agreed with the peer.
     ///
@@ -443,7 +443,7 @@ pub struct SessionCommon {
     pub early_traffic: bool,
     sent_fatal_alert: bool,
     received_middlebox_ccs: bool,
-    pub error: Option<TlsError>,
+    pub error: Option<Error>,
     pub message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
@@ -493,7 +493,7 @@ impl SessionCommon {
         &mut self,
         mut msg: Message,
         ignore_corrupt_payload: bool,
-    ) -> Result<Option<MessageType>, TlsError> {
+    ) -> Result<Option<MessageType>, Error> {
         // TLS1.3: drop CCS at any time during handshaking
         if let MiddleboxCCS::Drop = self.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
@@ -513,7 +513,7 @@ impl SessionCommon {
                 .take_message(msg)
                 .ok_or_else(|| {
                     self.send_fatal_alert(AlertDescription::DecodeError);
-                    TlsError::CorruptMessagePayload(ContentType::Handshake)
+                    Error::CorruptMessagePayload(ContentType::Handshake)
                 })?;
             return Ok(Some(MessageType::Handshake));
         }
@@ -521,7 +521,7 @@ impl SessionCommon {
         // Now we can fully parse the message payload. We only return an error
         // on the client, or we fail a bogo test (WrongMessageType-TLS13-ServerHello-TLS).
         if !msg.decode_payload() && !ignore_corrupt_payload {
-            return Err(TlsError::CorruptMessagePayload(msg.typ));
+            return Err(Error::CorruptMessagePayload(msg.typ));
         }
 
         // For alerts, we have separate logic.
@@ -560,7 +560,7 @@ impl SessionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, TlsError> {
+    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
@@ -571,7 +571,7 @@ impl SessionCommon {
         }
 
         if self.received_middlebox_ccs {
-            Err(TlsError::PeerMisbehavedError(
+            Err(Error::PeerMisbehavedError(
                 "illegal middlebox CCS received".into(),
             ))
         } else {
@@ -580,7 +580,7 @@ impl SessionCommon {
         }
     }
 
-    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TlsError> {
+    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, Error> {
         if self
             .record_layer
             .wants_close_before_decrypt()
@@ -589,7 +589,7 @@ impl SessionCommon {
         }
 
         let rc = self.record_layer.decrypt_incoming(encr);
-        if let Err(TlsError::PeerSentOversizedRecord) = rc {
+        if let Err(Error::PeerSentOversizedRecord) = rc {
             self.send_fatal_alert(AlertDescription::RecordOverflow);
         }
         rc
@@ -604,7 +604,7 @@ impl SessionCommon {
         self.sendable_tls.set_limit(limit);
     }
 
-    pub fn process_alert(&mut self, msg: Message) -> Result<(), TlsError> {
+    pub fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
             // Reject unknown AlertLevels.
             if let AlertLevel::Unknown(_) = alert.level {
@@ -630,9 +630,9 @@ impl SessionCommon {
             }
 
             error!("TLS alert received: {:#?}", msg);
-            Err(TlsError::AlertReceived(alert.description))
+            Err(Error::AlertReceived(alert.description))
         } else {
-            Err(TlsError::CorruptMessagePayload(ContentType::Alert))
+            Err(Error::CorruptMessagePayload(ContentType::Alert))
         }
     }
 

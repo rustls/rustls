@@ -6,7 +6,7 @@ use webpki;
 
 use crate::anchors::OwnedTrustAnchor;
 use crate::anchors::{DistinguishedNames, RootCertStore};
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::error::WebPKIOp;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
@@ -96,7 +96,7 @@ pub trait ServerCertVerifier: Send + Sync {
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
-    ) -> Result<ServerCertVerified, TlsError>;
+    ) -> Result<ServerCertVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -122,7 +122,7 @@ pub trait ServerCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TlsError> {
+    ) -> Result<HandshakeSignatureValid, Error> {
         verify_signed_struct(message, cert, dss)
     }
 
@@ -142,7 +142,7 @@ pub trait ServerCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TlsError> {
+    ) -> Result<HandshakeSignatureValid, Error> {
         verify_tls13(message, cert, dss)
     }
 
@@ -213,7 +213,7 @@ pub trait ClientCertVerifier: Send + Sync {
         intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         now: SystemTime,
-    ) -> Result<ClientCertVerified, TlsError>;
+    ) -> Result<ClientCertVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -239,7 +239,7 @@ pub trait ClientCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TlsError> {
+    ) -> Result<HandshakeSignatureValid, Error> {
         verify_signed_struct(message, cert, dss)
     }
 
@@ -260,7 +260,7 @@ pub trait ClientCertVerifier: Send + Sync {
         message: &[u8],
         cert: &Certificate,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TlsError> {
+    ) -> Result<HandshakeSignatureValid, Error> {
         verify_tls13(message, cert, dss)
     }
 
@@ -290,10 +290,9 @@ impl ServerCertVerifier for WebPkiVerifier {
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
-    ) -> Result<ServerCertVerified, TlsError> {
+    ) -> Result<ServerCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
-        let webpki_now =
-            webpki::Time::try_from(now).map_err(|_| TlsError::FailedToGetCurrentTime)?;
+        let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
@@ -302,7 +301,7 @@ impl ServerCertVerifier for WebPkiVerifier {
                 &chain,
                 webpki_now,
             )
-            .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateServerCert))
+            .map_err(|e| Error::WebPKIError(e, WebPKIOp::ValidateServerCert))
             .map(|_| cert)?;
 
         verify_scts(end_entity, now, scts, &self.ct_logs)?;
@@ -312,7 +311,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         }
 
         cert.verify_is_valid_for_dns_name(dns_name)
-            .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateForDNSName))
+            .map_err(|e| Error::WebPKIError(e, WebPKIOp::ValidateForDNSName))
             .map(|_| ServerCertVerified::assertion())
     }
 }
@@ -362,10 +361,10 @@ fn prepare<'a, 'b>(
     end_entity: &'a Certificate,
     intermediates: &'a [Certificate],
     roots: &'b RootCertStore,
-) -> Result<CertChainAndRoots<'a, 'b>, TlsError> {
+) -> Result<CertChainAndRoots<'a, 'b>, Error> {
     // EE cert must appear first.
     let cert = webpki::EndEntityCert::from(&end_entity.0)
-        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     let intermediates: Vec<&'a [u8]> = intermediates
         .iter()
@@ -418,16 +417,16 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         intermediates: &[Certificate],
         _sni: Option<&webpki::DNSName>,
         now: SystemTime,
-    ) -> Result<ClientCertVerified, TlsError> {
+    ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
-        let now = webpki::Time::try_from(now).map_err(|_| TlsError::FailedToGetCurrentTime)?;
+        let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
             &webpki::TLSClientTrustAnchors(&trustroots),
             &chain,
             now,
         )
-        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ValidateClientCert))
+        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ValidateClientCert))
         .map(|_| ClientCertVerified::assertion())
     }
 }
@@ -476,7 +475,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         now: SystemTime,
-    ) -> Result<ClientCertVerified, TlsError> {
+    ) -> Result<ClientCertVerified, Error> {
         self.inner
             .verify_client_cert(end_entity, intermediates, sni, now)
     }
@@ -510,7 +509,7 @@ impl ClientCertVerifier for NoClientAuth {
         _intermediates: &[Certificate],
         _sni: Option<&webpki::DNSName>,
         _now: SystemTime,
-    ) -> Result<ClientCertVerified, TlsError> {
+    ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
     }
 }
@@ -530,7 +529,7 @@ static RSA_PSS_SHA256: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA256
 static RSA_PSS_SHA384: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
 static RSA_PSS_SHA512: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
 
-fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TlsError> {
+fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, Error> {
     match scheme {
         // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
         SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
@@ -548,7 +547,7 @@ fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, TlsErr
 
         _ => {
             let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
-            Err(TlsError::PeerMisbehavedError(error_msg))
+            Err(Error::PeerMisbehavedError(error_msg))
         }
     }
 }
@@ -575,19 +574,19 @@ fn verify_signed_struct(
     message: &[u8],
     cert: &Certificate,
     dss: &DigitallySignedStruct,
-) -> Result<HandshakeSignatureValid, TlsError> {
+) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
-        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::VerifySignature))
+        .map_err(|e| Error::WebPKIError(e, WebPKIOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
 fn convert_alg_tls13(
     scheme: SignatureScheme,
-) -> Result<&'static webpki::SignatureAlgorithm, TlsError> {
+) -> Result<&'static webpki::SignatureAlgorithm, Error> {
     use crate::msgs::enums::SignatureScheme::*;
 
     match scheme {
@@ -599,7 +598,7 @@ fn convert_alg_tls13(
         RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => {
             let error_msg = format!("received unsupported sig scheme {:?}", scheme);
-            Err(TlsError::PeerMisbehavedError(error_msg))
+            Err(Error::PeerMisbehavedError(error_msg))
         }
     }
 }
@@ -629,25 +628,25 @@ fn verify_tls13(
     msg: &[u8],
     cert: &Certificate,
     dss: &DigitallySignedStruct,
-) -> Result<HandshakeSignatureValid, TlsError> {
+) -> Result<HandshakeSignatureValid, Error> {
     let alg = convert_alg_tls13(dss.scheme)?;
 
 
     let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, &msg, &dss.sig.0)
-        .map_err(|e| TlsError::WebPKIError(e, WebPKIOp::VerifySignature))
+        .map_err(|e| Error::WebPKIError(e, WebPKIOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
-fn unix_time_millis(now: SystemTime) -> Result<u64, TlsError> {
+fn unix_time_millis(now: SystemTime) -> Result<u64, Error> {
     now.duration_since(std::time::UNIX_EPOCH)
         .map(|dur| dur.as_secs())
-        .map_err(|_| TlsError::FailedToGetCurrentTime)
+        .map_err(|_| Error::FailedToGetCurrentTime)
         .and_then(|secs| {
             secs.checked_mul(1000)
-                .ok_or(TlsError::FailedToGetCurrentTime)
+                .ok_or(Error::FailedToGetCurrentTime)
         })
 }
 
@@ -656,7 +655,7 @@ fn verify_scts(
     now: SystemTime,
     scts: &mut dyn Iterator<Item = &[u8]>,
     logs: &[&sct::Log],
-) -> Result<(), TlsError> {
+) -> Result<(), Error> {
     if logs.is_empty() {
         return Ok(());
     }
@@ -675,7 +674,7 @@ fn verify_scts(
             }
             Err(e) => {
                 if e.should_be_fatal() {
-                    return Err(TlsError::InvalidSCT(e));
+                    return Err(Error::InvalidSCT(e));
                 }
                 debug!("SCT ignored because {:?}", e);
                 last_sct_error = Some(e);
@@ -687,7 +686,7 @@ fn verify_scts(
      * but couldn't verify any of them, fail the handshake. */
     if let Some(last_sct_error) = last_sct_error {
         warn!("No valid SCTs provided");
-        return Err(TlsError::InvalidSCT(last_sct_error));
+        return Err(Error::InvalidSCT(last_sct_error));
     }
 
     Ok(())
