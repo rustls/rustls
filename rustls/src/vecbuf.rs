@@ -88,7 +88,9 @@ impl ChunkVecBuffer {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
-            let used = self.chunks[0].as_slice().read(&mut buf[offs..])?;
+            let used = self.chunks[0]
+                .as_slice()
+                .read(&mut buf[offs..])?;
 
             self.consume(used);
             offs += used;
