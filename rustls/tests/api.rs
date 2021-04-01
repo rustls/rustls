@@ -393,7 +393,7 @@ struct ServerCheckCertResolve {
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
-        if client_hello.sigschemes().len() == 0 {
+        if client_hello.signature_schemes().len() == 0 {
             panic!("no signature schemes shared by client");
         }
 
@@ -406,11 +406,11 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         }
 
         if let Some(expected_sigalgs) = &self.expected_sigalgs {
-            if expected_sigalgs != &client_hello.sigschemes() {
+            if expected_sigalgs != &client_hello.signature_schemes() {
                 panic!(
                     "unexpected signature schemes (wanted {:?} got {:?})",
                     self.expected_sigalgs,
-                    client_hello.sigschemes()
+                    client_hello.signature_schemes()
                 );
             }
         }
