@@ -91,7 +91,7 @@ fn find_session(
 
     let mut reader = Reader::init(&value[..]);
     let result = persist::ClientSessionValue::read(&mut reader)
-        .and_then(|csv| csv.resolve_cipher_suite(&sess.config.ciphersuites));
+        .and_then(|csv| csv.resolve_cipher_suite(&sess.config.cipher_suites));
     if let Some(result) = result {
         if result.has_expired(ticketer::timebase()) {
             None

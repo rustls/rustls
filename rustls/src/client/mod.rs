@@ -81,7 +81,7 @@ pub trait ResolvesClientCert: Send + Sync {
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
-    pub ciphersuites: Vec<&'static SupportedCipherSuite>,
+    pub cipher_suites: Vec<&'static SupportedCipherSuite>,
 
     /// List of supported key exchange algorithms, in preference order -- the
     /// first elemnt is the highest priority.
@@ -149,10 +149,10 @@ impl ClientConfig {
     pub fn new(
         root_store: RootCertStore,
         ct_logs: &'static [&'static sct::Log],
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> Self {
         let verifier = verify::WebPkiVerifier::new(root_store, ct_logs);
-        Self::new_(Arc::new(verifier), ciphersuites)
+        Self::new_(Arc::new(verifier), cipher_suites)
     }
 
     /// Make a `ClientConfig` with a custom certificate verifier.
@@ -168,17 +168,17 @@ impl ClientConfig {
     #[cfg(feature = "dangerous_configuration")]
     pub fn new_dangerous(
         verifier: Arc<dyn verify::ServerCertVerifier>,
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> Self {
-        Self::new_(verifier, ciphersuites)
+        Self::new_(verifier, cipher_suites)
     }
 
     fn new_(
         verifier: Arc<dyn verify::ServerCertVerifier>,
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> Self {
         Self {
-            ciphersuites: ciphersuites.to_vec(),
+            cipher_suites: cipher_suites.to_vec(),
             kx_groups: ALL_KX_GROUPS.to_vec(),
             alpn_protocols: Vec::new(),
             session_persistence: handy::ClientSessionMemoryCache::new(32),
@@ -200,7 +200,7 @@ impl ClientConfig {
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(&v)
             && self
-                .ciphersuites
+                .cipher_suites
                 .iter()
                 .any(|cs| cs.usable_for_version(v))
     }
@@ -486,7 +486,7 @@ impl ClientSession {
     fn get_cipher_suites(&self) -> Vec<CipherSuite> {
         let mut ret = Vec::new();
 
-        for cs in &self.config.ciphersuites {
+        for cs in &self.config.cipher_suites {
             ret.push(cs.suite);
         }
 
@@ -498,7 +498,7 @@ impl ClientSession {
 
     fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
         self.config
-            .ciphersuites
+            .cipher_suites
             .iter()
             .copied()
             .find(|&scs| scs.suite == suite)
