@@ -709,7 +709,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -737,7 +737,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: Some(vec![]),
             };
@@ -848,7 +848,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_unreachable,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -886,7 +886,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_err,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -918,7 +918,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: None,
                 offered_schemes: None,
             };
