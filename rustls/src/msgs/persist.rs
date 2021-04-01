@@ -99,7 +99,7 @@ impl Codec for ClientSessionValue {
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
         let v = ProtocolVersion::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
-        let sid = SessionID::read(r)?;
+        let session_id = SessionID::read(r);
         let ticket = PayloadU16::read(r)?;
         let ms = PayloadU8::read(r)?;
         let epoch = u64::read(r)?;
@@ -112,7 +112,7 @@ impl Codec for ClientSessionValue {
         Some(ClientSessionValue {
             version: v,
             cipher_suite,
-            session_id: Some(sid),
+            session_id,
             ticket,
             master_secret: ms,
             epoch,
