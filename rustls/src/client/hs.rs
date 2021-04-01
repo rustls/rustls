@@ -2,7 +2,7 @@
 use crate::bs_debug;
 use crate::check::check_message;
 use crate::client::ClientSession;
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::KeyScheduleEarly;
 #[cfg(feature = "logging")]
@@ -36,7 +36,7 @@ use crate::client::{tls12, tls13};
 use webpki;
 
 pub type NextState = Box<dyn State + Send + Sync>;
-pub type NextStateOrError = Result<NextState, TlsError>;
+pub type NextStateOrError = Result<NextState, Error>;
 
 pub trait State {
     /// Each handle() implementation consumes a whole TLS message, and returns
@@ -48,24 +48,24 @@ pub trait State {
         _output: &mut [u8],
         _label: &[u8],
         _context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
-        Err(TlsError::HandshakeNotComplete)
+    ) -> Result<(), Error> {
+        Err(Error::HandshakeNotComplete)
     }
 
     fn perhaps_write_key_update(&mut self, _sess: &mut ClientSession) {}
 }
 
-pub fn illegal_param(sess: &mut ClientSession, why: &str) -> TlsError {
+pub fn illegal_param(sess: &mut ClientSession, why: &str) -> Error {
     sess.common
         .send_fatal_alert(AlertDescription::IllegalParameter);
-    TlsError::PeerMisbehavedError(why.to_string())
+    Error::PeerMisbehavedError(why.to_string())
 }
 
-pub fn check_aligned_handshake(sess: &mut ClientSession) -> Result<(), TlsError> {
+pub fn check_aligned_handshake(sess: &mut ClientSession) -> Result<(), Error> {
     if !sess.common.handshake_joiner.is_empty() {
         sess.common
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
-        Err(TlsError::PeerMisbehavedError(
+        Err(Error::PeerMisbehavedError(
             "key epoch or handshake flight with pending fragment".to_string(),
         ))
     } else {
@@ -433,10 +433,7 @@ fn emit_client_hello_for_retry(
     })
 }
 
-pub fn process_alpn_protocol(
-    sess: &mut ClientSession,
-    proto: Option<&[u8]>,
-) -> Result<(), TlsError> {
+pub fn process_alpn_protocol(sess: &mut ClientSession, proto: Option<&[u8]>) -> Result<(), Error> {
     sess.common.alpn_protocol = proto.map(ToOwned::to_owned);
 
     if let Some(alpn_protocol) = &sess.common.alpn_protocol {
@@ -486,7 +483,7 @@ impl State for ExpectServerHello {
                 if sess.early_data.is_enabled() && sess.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
-                    return Err(TlsError::PeerMisbehavedError(
+                    return Err(Error::PeerMisbehavedError(
                         "server chose v1.2 when offering 0-rtt".to_string(),
                     ));
                 }
@@ -506,7 +503,7 @@ impl State for ExpectServerHello {
             _ => {
                 sess.common
                     .send_fatal_alert(AlertDescription::ProtocolVersion);
-                return Err(TlsError::PeerIncompatibleError(
+                return Err(Error::PeerIncompatibleError(
                     "server does not support TLS v1.2/v1.3".to_string(),
                 ));
             }
@@ -519,7 +516,7 @@ impl State for ExpectServerHello {
         if server_hello.has_duplicate_extension() {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(TlsError::PeerMisbehavedError(
+            return Err(Error::PeerMisbehavedError(
                 "server sent duplicate extensions".to_string(),
             ));
         }
@@ -531,7 +528,7 @@ impl State for ExpectServerHello {
         {
             sess.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(TlsError::PeerMisbehavedError(
+            return Err(Error::PeerMisbehavedError(
                 "server sent unsolicited extension".to_string(),
             ));
         }
@@ -549,7 +546,7 @@ impl State for ExpectServerHello {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 sess.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
-                return Err(TlsError::PeerMisbehavedError(
+                return Err(Error::PeerMisbehavedError(
                     "server does not support uncompressed points".to_string(),
                 ));
             }
@@ -560,7 +557,7 @@ impl State for ExpectServerHello {
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
-                TlsError::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
+                Error::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
             })?;
 
         debug!("Using ciphersuite {:?}", server_hello.cipher_suite);
@@ -657,7 +654,7 @@ impl State for ExpectServerHello {
 
             if sct_list_is_invalid(sct_list) {
                 let error_msg = "server sent invalid SCT list".to_string();
-                return Err(TlsError::PeerMisbehavedError(error_msg));
+                return Err(Error::PeerMisbehavedError(error_msg));
             }
             Some(sct_list.clone())
         } else {
@@ -672,13 +669,13 @@ impl State for ExpectServerHello {
                 // Is the server telling lies about the ciphersuite?
                 if resuming.supported_cipher_suite() != suite {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
-                    return Err(TlsError::PeerMisbehavedError(error_msg));
+                    return Err(Error::PeerMisbehavedError(error_msg));
                 }
 
                 // And about EMS support?
                 if resuming.extended_ms != self.using_ems {
                     let error_msg = "server varied ems support over resume".to_string();
-                    return Err(TlsError::PeerMisbehavedError(error_msg));
+                    return Err(Error::PeerMisbehavedError(error_msg));
                 }
 
                 let secrets =
@@ -800,7 +797,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         if hrr.has_unknown_extension() {
             sess.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(TlsError::PeerIncompatibleError(
+            return Err(Error::PeerIncompatibleError(
                 "server sent hrr with unhandled extension".to_string(),
             ));
         }
@@ -892,13 +889,13 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub fn send_cert_error_alert(sess: &mut ClientSession, err: TlsError) -> TlsError {
+pub fn send_cert_error_alert(sess: &mut ClientSession, err: Error) -> Error {
     match err {
-        TlsError::WebPKIError(webpki::Error::BadDER, _) => {
+        Error::WebPKIError(webpki::Error::BadDER, _) => {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }
-        TlsError::PeerMisbehavedError(_) => {
+        Error::PeerMisbehavedError(_) => {
             sess.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
         }

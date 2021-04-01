@@ -1,5 +1,5 @@
 use crate::client;
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key;
 use crate::msgs::enums::SignatureScheme;
 use crate::sign;
@@ -89,9 +89,9 @@ impl AlwaysResolvesClientCert {
     pub fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesClientCert, TlsError> {
+    ) -> Result<AlwaysResolvesClientCert, Error> {
         let key = sign::any_supported_type(priv_key)
-            .map_err(|_| TlsError::General("invalid private key".into()))?;
+            .map_err(|_| Error::General("invalid private key".into()))?;
         Ok(AlwaysResolvesClientCert(sign::CertifiedKey::new(
             chain,
             Arc::new(key),

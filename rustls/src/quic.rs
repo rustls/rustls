@@ -1,6 +1,6 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::client::{ClientConfig, ClientSession};
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
@@ -44,7 +44,7 @@ pub trait QuicExt {
     /// Consume unencrypted TLS handshake data.
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError>;
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error>;
 
     /// Emit unencrypted TLS handshake data.
     ///
@@ -78,7 +78,7 @@ impl QuicExt for ClientSession {
         ))
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         read_hs(&mut self.common, plaintext)?;
         self.process_new_handshake_messages()
     }
@@ -112,7 +112,7 @@ impl QuicExt for ServerSession {
         ))
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), TlsError> {
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         read_hs(&mut self.common, plaintext)?;
         self.process_new_handshake_messages()
     }
@@ -249,7 +249,7 @@ impl Keys {
     }
 }
 
-fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TlsError> {
+fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), Error> {
     if this
         .handshake_joiner
         .take_message(Message {
@@ -260,7 +260,7 @@ fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), TlsError> {
         .is_none()
     {
         this.quic.alert = Some(AlertDescription::DecodeError);
-        return Err(TlsError::CorruptMessage);
+        return Err(Error::CorruptMessage);
     }
     Ok(())
 }
@@ -324,7 +324,7 @@ pub trait ClientQuicExt {
         quic_version: Version,
         hostname: webpki::DNSNameRef,
         params: Vec<u8>,
-    ) -> Result<ClientSession, TlsError> {
+    ) -> Result<ClientSession, Error> {
         assert!(
             config
                 .versions

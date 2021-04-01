@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key;
 use crate::server;
 use crate::server::ClientHello;
@@ -110,9 +110,9 @@ impl AlwaysResolvesChain {
     pub fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesChain, TlsError> {
+    ) -> Result<AlwaysResolvesChain, Error> {
         let key = sign::any_supported_type(priv_key)
-            .map_err(|_| TlsError::General("invalid private key".into()))?;
+            .map_err(|_| Error::General("invalid private key".into()))?;
         Ok(AlwaysResolvesChain(sign::CertifiedKey::new(
             chain,
             Arc::new(key),
@@ -128,7 +128,7 @@ impl AlwaysResolvesChain {
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,
-    ) -> Result<AlwaysResolvesChain, TlsError> {
+    ) -> Result<AlwaysResolvesChain, Error> {
         let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
@@ -165,9 +165,9 @@ impl ResolvesServerCertUsingSni {
     /// This function fails if `name` is not a valid DNS name, or if
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
-    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), TlsError> {
+    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
         let checked_name = webpki::DNSNameRef::try_from_ascii_str(name)
-            .map_err(|_| TlsError::General("Bad DNS name".into()))?;
+            .map_err(|_| Error::General("Bad DNS name".into()))?;
 
         ck.cross_check_end_entity_cert(Some(checked_name))?;
         self.by_name.insert(name.into(), ck);

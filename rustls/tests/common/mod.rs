@@ -5,8 +5,8 @@ use rustls;
 use rustls_pemfile;
 
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
+use rustls::Error;
 use rustls::Session;
-use rustls::TlsError;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
 use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientSession};
@@ -325,7 +325,7 @@ impl Iterator for AllClientVersions {
 
 #[cfg(feature = "dangerous_configuration")]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<ClientCertVerified, TlsError>,
+    pub verified: fn() -> Result<ClientCertVerified, Error>,
     pub subjects: Option<DistinguishedNames>,
     pub mandatory: Option<bool>,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
@@ -354,7 +354,7 @@ impl ClientCertVerifier for MockClientVerifier {
         _intermediates: &[Certificate],
         sni: Option<&webpki::DNSName>,
         _now: std::time::SystemTime,
-    ) -> Result<ClientCertVerified, TlsError> {
+    ) -> Result<ClientCertVerified, Error> {
         assert!(sni.is_some());
         (self.verified)()
     }
@@ -370,8 +370,8 @@ impl ClientCertVerifier for MockClientVerifier {
 
 #[derive(PartialEq, Debug)]
 pub enum TLSErrorFromPeer {
-    Client(TlsError),
-    Server(TlsError),
+    Client(Error),
+    Server(Error),
 }
 
 pub fn do_handshake_until_error(

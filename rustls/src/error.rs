@@ -1,7 +1,7 @@
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::rand;
 use sct;
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
 use webpki;
 
@@ -35,7 +35,7 @@ impl fmt::Display for WebPKIOp {
 
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
-pub enum TlsError {
+pub enum Error {
     /// We received a TLS message that isn't valid right now.
     /// `expect_types` lists the message types we can expect right now.
     /// `got_type` is the type we found.  This error is typically
@@ -115,10 +115,10 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
         .join(" or ")
 }
 
-impl fmt::Display for TlsError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TlsError::InappropriateMessage {
+            Error::InappropriateMessage {
                 ref expect_types,
                 ref got_type,
             } => write!(
@@ -127,7 +127,7 @@ impl fmt::Display for TlsError {
                 got_type,
                 join::<ContentType>(expect_types)
             ),
-            TlsError::InappropriateHandshakeMessage {
+            Error::InappropriateHandshakeMessage {
                 ref expect_types,
                 ref got_type,
             } => write!(
@@ -136,32 +136,32 @@ impl fmt::Display for TlsError {
                 got_type,
                 join::<HandshakeType>(expect_types)
             ),
-            TlsError::CorruptMessagePayload(ref typ) => {
+            Error::CorruptMessagePayload(ref typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
-            TlsError::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
-            TlsError::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
-            TlsError::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            TlsError::WebPKIError(ref err, ref reason) => {
+            Error::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
+            Error::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
+            Error::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
+            Error::WebPKIError(ref err, ref reason) => {
                 write!(f, "certificate error in operation: {}: {:?}", reason, err)
             }
-            TlsError::CorruptMessage => write!(f, "received corrupt message"),
-            TlsError::NoCertificatesPresented => write!(f, "peer sent no certificates"),
-            TlsError::DecryptError => write!(f, "cannot decrypt peer's message"),
-            TlsError::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
-            TlsError::HandshakeNotComplete => write!(f, "handshake not complete"),
-            TlsError::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
-            TlsError::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
-            TlsError::FailedToGetCurrentTime => write!(f, "failed to get current time"),
-            TlsError::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
-            TlsError::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
+            Error::CorruptMessage => write!(f, "received corrupt message"),
+            Error::NoCertificatesPresented => write!(f, "peer sent no certificates"),
+            Error::DecryptError => write!(f, "cannot decrypt peer's message"),
+            Error::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
+            Error::HandshakeNotComplete => write!(f, "handshake not complete"),
+            Error::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            Error::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
+            Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
+            Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
 }
 
-impl Error for TlsError {}
+impl StdError for Error {}
 
-impl From<rand::GetRandomFailed> for TlsError {
+impl From<rand::GetRandomFailed> for Error {
     fn from(_: rand::GetRandomFailed) -> Self {
         Self::FailedToGetRandomBytes
     }
@@ -171,39 +171,39 @@ impl From<rand::GetRandomFailed> for TlsError {
 mod tests {
     #[test]
     fn smoke() {
-        use super::TlsError;
+        use super::Error;
         use super::WebPKIOp;
         use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
         use webpki;
 
         let all = vec![
-            TlsError::InappropriateMessage {
+            Error::InappropriateMessage {
                 expect_types: vec![ContentType::Alert],
                 got_type: ContentType::Handshake,
             },
-            TlsError::InappropriateHandshakeMessage {
+            Error::InappropriateHandshakeMessage {
                 expect_types: vec![HandshakeType::ClientHello, HandshakeType::Finished],
                 got_type: HandshakeType::ServerHello,
             },
-            TlsError::CorruptMessage,
-            TlsError::CorruptMessagePayload(ContentType::Alert),
-            TlsError::NoCertificatesPresented,
-            TlsError::DecryptError,
-            TlsError::PeerIncompatibleError("no tls1.2".to_string()),
-            TlsError::PeerMisbehavedError("inconsistent something".to_string()),
-            TlsError::AlertReceived(AlertDescription::ExportRestriction),
-            TlsError::WebPKIError(
+            Error::CorruptMessage,
+            Error::CorruptMessagePayload(ContentType::Alert),
+            Error::NoCertificatesPresented,
+            Error::DecryptError,
+            Error::PeerIncompatibleError("no tls1.2".to_string()),
+            Error::PeerMisbehavedError("inconsistent something".to_string()),
+            Error::AlertReceived(AlertDescription::ExportRestriction),
+            Error::WebPKIError(
                 webpki::Error::ExtensionValueInvalid,
                 WebPKIOp::ParseEndEntity,
             ),
-            TlsError::InvalidSCT(sct::Error::MalformedSCT),
-            TlsError::General("undocumented error".to_string()),
-            TlsError::FailedToGetCurrentTime,
-            TlsError::FailedToGetRandomBytes,
-            TlsError::HandshakeNotComplete,
-            TlsError::PeerSentOversizedRecord,
-            TlsError::NoApplicationProtocol,
+            Error::InvalidSCT(sct::Error::MalformedSCT),
+            Error::General("undocumented error".to_string()),
+            Error::FailedToGetCurrentTime,
+            Error::FailedToGetRandomBytes,
+            Error::HandshakeNotComplete,
+            Error::PeerSentOversizedRecord,
+            Error::NoApplicationProtocol,
         ];
 
         for err in all {

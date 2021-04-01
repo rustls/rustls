@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::enums::{ContentType, HandshakeType};
@@ -13,11 +13,11 @@ macro_rules! require_handshake_msg(
     match $m.payload {
         MessagePayload::Handshake(ref hsp) => match hsp.payload {
             $payload_type(ref hm) => Ok(hm),
-            _ => Err(TlsError::InappropriateHandshakeMessage {
+            _ => Err(Error::InappropriateHandshakeMessage {
                      expect_types: vec![ $handshake_type ],
                      got_type: hsp.typ})
         }
-        _ => Err(TlsError::InappropriateMessage {
+        _ => Err(Error::InappropriateMessage {
                  expect_types: vec![ ContentType::Handshake ],
                  got_type: $m.typ})
     }
@@ -30,11 +30,11 @@ macro_rules! require_handshake_msg_mut(
     match $m.payload {
         MessagePayload::Handshake(hsp) => match hsp.payload {
             $payload_type(hm) => Ok(hm),
-            _ => Err(TlsError::InappropriateHandshakeMessage {
+            _ => Err(Error::InappropriateHandshakeMessage {
                      expect_types: vec![ $handshake_type ],
                      got_type: hsp.typ})
         }
-        _ => Err(TlsError::InappropriateMessage {
+        _ => Err(Error::InappropriateMessage {
                  expect_types: vec![ ContentType::Handshake ],
                  got_type: $m.typ})
     }
@@ -50,13 +50,13 @@ pub fn check_message(
     m: &Message,
     content_types: &[ContentType],
     handshake_types: &[HandshakeType],
-) -> Result<(), TlsError> {
+) -> Result<(), Error> {
     if !content_types.contains(&m.typ) {
         warn!(
             "Received a {:?} message while expecting {:?}",
             m.typ, content_types
         );
-        return Err(TlsError::InappropriateMessage {
+        return Err(Error::InappropriateMessage {
             expect_types: content_types.to_vec(),
             got_type: m.typ,
         });
@@ -68,7 +68,7 @@ pub fn check_message(
                 "Received a {:?} handshake message while expecting {:?}",
                 hsp.typ, handshake_types
             );
-            return Err(TlsError::InappropriateHandshakeMessage {
+            return Err(Error::InappropriateHandshakeMessage {
                 expect_types: handshake_types.to_vec(),
                 got_type: hsp.typ,
             });
