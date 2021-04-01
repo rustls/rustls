@@ -74,7 +74,7 @@ pub trait ProducesTickets: Send + Sync {
     ///
     /// The objective is to limit damage to forward secrecy caused
     /// by tickets, not just limiting their lifetime.
-    fn get_lifetime(&self) -> u32;
+    fn lifetime(&self) -> u32;
 
     /// Encrypt and authenticate `plain`, returning the resulting
     /// ticket.  Return None if `plain` cannot be encrypted for

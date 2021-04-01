@@ -281,7 +281,7 @@ pub fn emit_ticket(
         .ticketer
         .encrypt(&plain)
         .unwrap_or_else(Vec::new);
-    let ticket_lifetime = sess.config.ticketer.get_lifetime();
+    let ticket_lifetime = sess.config.ticketer.lifetime();
 
     let m = Message {
         typ: ContentType::Handshake,

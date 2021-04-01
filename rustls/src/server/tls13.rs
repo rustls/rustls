@@ -886,7 +886,7 @@ impl ExpectFinished {
                 Some(t) => t,
                 None => return Ok(()),
             };
-            (ticket, sess.config.ticketer.get_lifetime())
+            (ticket, sess.config.ticketer.lifetime())
         } else {
             let id = rand::random_vec(32)?;
             let stored = sess

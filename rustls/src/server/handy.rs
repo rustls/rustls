@@ -81,7 +81,7 @@ impl server::ProducesTickets for NeverProducesTickets {
     fn enabled(&self) -> bool {
         false
     }
-    fn get_lifetime(&self) -> u32 {
+    fn lifetime(&self) -> u32 {
         0
     }
     fn encrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
@@ -271,7 +271,7 @@ mod test {
     fn test_neverproducestickets_does_nothing() {
         let npt = NeverProducesTickets {};
         assert_eq!(false, npt.enabled());
-        assert_eq!(0, npt.get_lifetime());
+        assert_eq!(0, npt.lifetime());
         assert_eq!(None, npt.encrypt(&[]));
         assert_eq!(None, npt.decrypt(&[]));
     }
