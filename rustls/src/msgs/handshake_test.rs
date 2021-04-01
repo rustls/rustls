@@ -85,6 +85,48 @@ fn can_roundtrip_unknown_client_ext() {
 }
 
 #[test]
+fn refuses_client_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    let mut rd = Reader::init(&bytes);
+    assert!(ClientExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_server_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    let mut rd = Reader::init(&bytes);
+    assert!(ServerExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_certificate_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x12, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(CertificateExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_certificate_req_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff];
+    let mut rd = Reader::init(&bytes);
+    assert!(CertReqExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_helloreq_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x2b, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(HelloRetryExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_newsessionticket_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(NewSessionTicketExtension::read(&mut rd).is_none());
+}
+
+#[test]
 fn can_roundtrip_single_sni() {
     let bytes = [0, 0, 0, 7, 0, 5, 0, 0, 2, 0x6c, 0x6f];
     let mut rd = Reader::init(&bytes);

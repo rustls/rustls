@@ -632,7 +632,7 @@ impl Codec for ClientExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::ECPointFormats => {
                 ClientExtension::ECPointFormats(ECPointFormatList::read(&mut sub)?)
             }
@@ -686,7 +686,13 @@ impl Codec for ClientExtension {
             }
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -790,7 +796,7 @@ impl Codec for ServerExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::ECPointFormats => {
                 ServerExtension::ECPointFormats(ECPointFormatList::read(&mut sub)?)
             }
@@ -821,7 +827,13 @@ impl Codec for ServerExtension {
             }
             ExtensionType::EarlyData => ServerExtension::EarlyData,
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1081,14 +1093,20 @@ impl Codec for HelloRetryExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::KeyShare => HelloRetryExtension::KeyShare(NamedGroup::read(&mut sub)?),
             ExtensionType::Cookie => HelloRetryExtension::Cookie(PayloadU16::read(&mut sub)?),
             ExtensionType::SupportedVersions => {
                 HelloRetryExtension::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
             _ => HelloRetryExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1358,7 +1376,7 @@ impl Codec for CertificateExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::StatusRequest => {
                 let st = CertificateStatus::read(&mut sub)?;
                 CertificateExtension::CertificateStatus(st)
@@ -1368,7 +1386,13 @@ impl Codec for CertificateExtension {
                 CertificateExtension::SignedCertificateTimestamp(scts)
             }
             _ => CertificateExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1852,7 +1876,7 @@ impl Codec for CertReqExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::SignatureAlgorithms => {
                 let schemes = SupportedSignatureSchemes::read(&mut sub)?;
                 if schemes.is_empty() {
@@ -1865,7 +1889,13 @@ impl Codec for CertReqExtension {
                 CertReqExtension::AuthorityNames(cas)
             }
             _ => CertReqExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1986,10 +2016,16 @@ impl Codec for NewSessionTicketExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::EarlyData => NewSessionTicketExtension::EarlyData(u32::read(&mut sub)?),
             _ => NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
