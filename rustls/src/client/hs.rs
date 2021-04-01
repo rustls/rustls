@@ -23,7 +23,6 @@ use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::rand;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::ticketer;
 use crate::verify;
@@ -110,12 +109,6 @@ fn find_session(
     }
 }
 
-fn random_sessionid() -> Result<SessionID, rand::GetRandomFailed> {
-    let mut random_id = [0u8; 32];
-    rand::fill_random(&mut random_id)?;
-    Ok(SessionID::new(&random_id))
-}
-
 struct InitialState {
     handshake: HandshakeDetails,
     dns_name: webpki::DNSName,
@@ -158,7 +151,7 @@ impl InitialState {
                 // we're  doing an abbreviated handshake.  See section 3.4 in
                 // RFC5077.
                 if !resuming.ticket.0.is_empty() {
-                    resuming.set_session_id(random_sessionid()?);
+                    resuming.set_session_id(SessionID::random()?);
                 }
                 session_id = Some(resuming.session_id);
             }
@@ -169,7 +162,7 @@ impl InitialState {
         // https://tools.ietf.org/html/rfc8446#appendix-D.4
         // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
         if session_id.is_none() && !sess.common.is_quic() {
-            session_id = Some(random_sessionid()?);
+            session_id = Some(SessionID::random()?);
         }
 
         let randoms = SessionRandoms::for_client()?;
