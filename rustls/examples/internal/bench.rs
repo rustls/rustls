@@ -160,62 +160,62 @@ impl BenchmarkParam {
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::ciphersuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::cipher_suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::ciphersuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        &rustls::cipher_suites::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::ciphersuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        &rustls::cipher_suites::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS13_CHACHA20_POLY1305_SHA256,
+        &rustls::cipher_suites::TLS13_CHACHA20_POLY1305_SHA256,
         ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS13_AES_256_GCM_SHA384,
+        &rustls::cipher_suites::TLS13_AES_256_GCM_SHA384,
         ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::ciphersuite::TLS13_AES_128_GCM_SHA256,
+        &rustls::cipher_suites::TLS13_AES_128_GCM_SHA256,
         ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::ciphersuite::TLS13_AES_128_GCM_SHA256,
+        &rustls::cipher_suites::TLS13_AES_128_GCM_SHA256,
         ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::ED25519,
-        &rustls::ciphersuite::TLS13_AES_128_GCM_SHA256,
+        &rustls::cipher_suites::TLS13_AES_128_GCM_SHA256,
         ProtocolVersion::TLSv1_3,
     ),
 ];

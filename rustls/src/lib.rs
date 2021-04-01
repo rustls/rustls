@@ -301,7 +301,7 @@ pub use crate::verify::{
 /// All defined ciphersuites appear in this module.
 ///
 /// ALL_CIPHERSUITES is provided as an array of all of these values.
-pub mod ciphersuite {
+pub mod cipher_suites {
     pub use crate::suites::TLS13_AES_128_GCM_SHA256;
     pub use crate::suites::TLS13_AES_256_GCM_SHA384;
     pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
