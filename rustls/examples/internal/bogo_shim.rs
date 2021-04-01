@@ -669,7 +669,7 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 quit_err("Early data was accepted, but we expect the opposite");
             }
             if opts.expect_version == 0x0304 {
-                match sess.get_protocol_version() {
+                match sess.protocol_version() {
                     Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Unknown(0x7f17)) => {}
                     _ => quit_err("wrong protocol version"),
                 }

@@ -570,17 +570,17 @@ impl Session for ServerSession {
         self.common.send_close_notify()
     }
 
-    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         self.client_cert_chain
             .as_ref()
             .map(|chain| chain.iter().cloned().collect())
     }
 
-    fn get_alpn_protocol(&self) -> Option<&[u8]> {
+    fn alpn_protocol(&self) -> Option<&[u8]> {
         self.common.get_alpn_protocol()
     }
 
-    fn get_protocol_version(&self) -> Option<ProtocolVersion> {
+    fn protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
     }
 
@@ -596,7 +596,7 @@ impl Session for ServerSession {
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
-    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+    fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common.get_suite()
     }
 }
