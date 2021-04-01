@@ -408,7 +408,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         _sni: Option<&webpki::DNSName>,
     ) -> Option<DistinguishedNames> {
-        Some(self.roots.get_subjects())
+        Some(self.roots.subjects())
     }
 
     fn verify_client_cert(
