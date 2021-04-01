@@ -59,7 +59,7 @@ impl ProducesTickets for AEADTicketer {
     fn enabled(&self) -> bool {
         true
     }
-    fn get_lifetime(&self) -> u32 {
+    fn lifetime(&self) -> u32 {
         self.lifetime
     }
 
@@ -169,7 +169,7 @@ impl TicketSwitcher {
 }
 
 impl ProducesTickets for TicketSwitcher {
-    fn get_lifetime(&self) -> u32 {
+    fn lifetime(&self) -> u32 {
         self.lifetime * 2
     }
 
