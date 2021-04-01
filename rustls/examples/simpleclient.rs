@@ -40,7 +40,7 @@ fn main() {
     .unwrap();
     let ciphersuite = tls
         .sess
-        .get_negotiated_ciphersuite()
+        .negotiated_cipher_suite()
         .unwrap();
     writeln!(
         &mut std::io::stderr(),

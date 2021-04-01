@@ -108,19 +108,19 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>>;
+    fn peer_certificates(&self) -> Option<Vec<key::Certificate>>;
 
     /// Retrieves the protocol agreed with the peer via ALPN.
     ///
     /// A return value of None after handshake completion
     /// means no protocol was agreed (because no protocols
     /// were offered or accepted by the peer).
-    fn get_alpn_protocol(&self) -> Option<&[u8]>;
+    fn alpn_protocol(&self) -> Option<&[u8]>;
 
     /// Retrieves the protocol version agreed with the peer.
     ///
     /// This returns None until the version is agreed.
-    fn get_protocol_version(&self) -> Option<ProtocolVersion>;
+    fn protocol_version(&self) -> Option<ProtocolVersion>;
 
     /// Derives key material from the agreed session secrets.
     ///
@@ -145,7 +145,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// Retrieves the ciphersuite agreed with the peer.
     ///
     /// This returns None until the ciphersuite is agreed.
-    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite>;
+    fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite>;
 
     /// This function uses `io` to complete any outstanding IO for
     /// this session.

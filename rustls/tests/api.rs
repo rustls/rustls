@@ -45,11 +45,11 @@ fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: O
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(client.get_alpn_protocol(), None);
-        assert_eq!(server.get_alpn_protocol(), None);
+        assert_eq!(client.alpn_protocol(), None);
+        assert_eq!(server.alpn_protocol(), None);
         do_handshake(&mut client, &mut server);
-        assert_eq!(client.get_alpn_protocol(), agreed);
-        assert_eq!(server.get_alpn_protocol(), agreed);
+        assert_eq!(client.alpn_protocol(), agreed);
+        assert_eq!(server.alpn_protocol(), agreed);
     }
 }
 
@@ -105,15 +105,15 @@ fn version_test(
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    assert_eq!(client.get_protocol_version(), None);
-    assert_eq!(server.get_protocol_version(), None);
+    assert_eq!(client.protocol_version(), None);
+    assert_eq!(server.protocol_version(), None);
     if result.is_none() {
         let err = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(err.is_err(), true);
     } else {
         do_handshake(&mut client, &mut server);
-        assert_eq!(client.get_protocol_version(), result);
-        assert_eq!(server.get_protocol_version(), result);
+        assert_eq!(client.protocol_version(), result);
+        assert_eq!(server.protocol_version(), result);
     }
 }
 
@@ -238,7 +238,7 @@ fn client_can_get_server_cert() {
                 make_pair_for_configs(client_config, make_server_config(*kt));
             do_handshake(&mut client, &mut server);
 
-            let certs = client.get_peer_certificates();
+            let certs = client.peer_certificates();
             assert_eq!(certs, Some(kt.get_chain()));
         }
     }
@@ -253,13 +253,13 @@ fn client_can_get_server_cert_after_resumption() {
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
 
-            let original_certs = client.get_peer_certificates();
+            let original_certs = client.peer_certificates();
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
 
-            let resumed_certs = client.get_peer_certificates();
+            let resumed_certs = client.peer_certificates();
 
             assert_eq!(original_certs, resumed_certs);
         }
@@ -281,7 +281,7 @@ fn server_can_get_client_cert() {
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
 
-            let certs = server.get_peer_certificates();
+            let certs = server.peer_certificates();
             assert_eq!(certs, Some(kt.get_chain()));
         }
     }
@@ -302,12 +302,12 @@ fn server_can_get_client_cert_after_resumption() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &server_config);
             do_handshake(&mut client, &mut server);
-            let original_certs = server.get_peer_certificates();
+            let original_certs = server.peer_certificates();
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &server_config);
             do_handshake(&mut client, &mut server);
-            let resumed_certs = server.get_peer_certificates();
+            let resumed_certs = server.peer_certificates();
             assert_eq!(original_certs, resumed_certs);
         }
     }
@@ -1896,10 +1896,10 @@ fn do_suite_test(
     );
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    assert_eq!(None, client.get_negotiated_ciphersuite());
-    assert_eq!(None, server.get_negotiated_ciphersuite());
-    assert_eq!(None, client.get_protocol_version());
-    assert_eq!(None, server.get_protocol_version());
+    assert_eq!(None, client.negotiated_cipher_suite());
+    assert_eq!(None, server.negotiated_cipher_suite());
+    assert_eq!(None, client.protocol_version());
+    assert_eq!(None, server.protocol_version());
     assert_eq!(true, client.is_handshaking());
     assert_eq!(true, server.is_handshaking());
 
@@ -1908,16 +1908,16 @@ fn do_suite_test(
 
     assert_eq!(true, client.is_handshaking());
     assert_eq!(true, server.is_handshaking());
-    assert_eq!(None, client.get_protocol_version());
-    assert_eq!(Some(expect_version), server.get_protocol_version());
-    assert_eq!(None, client.get_negotiated_ciphersuite());
-    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+    assert_eq!(None, client.protocol_version());
+    assert_eq!(Some(expect_version), server.protocol_version());
+    assert_eq!(None, client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut server, &mut client);
     client.process_new_packets().unwrap();
 
-    assert_eq!(Some(expect_suite), client.get_negotiated_ciphersuite());
-    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
@@ -1926,10 +1926,10 @@ fn do_suite_test(
 
     assert_eq!(false, client.is_handshaking());
     assert_eq!(false, server.is_handshaking());
-    assert_eq!(Some(expect_version), client.get_protocol_version());
-    assert_eq!(Some(expect_version), server.get_protocol_version());
-    assert_eq!(Some(expect_suite), client.get_negotiated_ciphersuite());
-    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_version), client.protocol_version());
+    assert_eq!(Some(expect_version), server.protocol_version());
+    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 }
 
 fn find_suite(suite: CipherSuite) -> &'static SupportedCipherSuite {
@@ -2433,7 +2433,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2448,7 +2448,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 1);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2463,7 +2463,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 2);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2490,7 +2490,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2505,7 +2505,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2520,7 +2520,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2633,7 +2633,7 @@ mod test_quic {
         .unwrap();
         assert!(
             client
-                .get_negotiated_ciphersuite()
+                .negotiated_cipher_suite()
                 .is_some()
         );
         let mut server =
