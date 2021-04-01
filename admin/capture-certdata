@@ -1,7 +1,7 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 import subprocess
-import re
+import base64
 from os import path
 
 SITES = dict(
@@ -19,39 +19,37 @@ SITES = dict(
     stackoverflow = 'stackoverflow.com',
 )
 
-def extract_certs(line):
-    if 'Server cert is [' not in line:
-        return None
+def extract_certs(lines):
+    buffer = None
 
-    chain = []
-    for certm in re.finditer('Certificate\(\[([\d, ]+)\]\)', line):
-        bytes = certm.group(1).split(', ')
-        bytes = map(int, bytes)
-        cert = ''.join(map(chr, bytes))
-        chain.append(cert)
-    return chain
+    for l in lines:
+        if b'-----BEGIN CERT' in l:
+            buffer = b''
+        elif b'-----END CERT' in l and buffer is not None:
+            yield base64.b64decode(buffer)
+            buffer = None
+        elif buffer is not None:
+            buffer += l
 
 def collect(hostname):
     subp = subprocess.Popen([
-        './target/debug/examples/tlsclient',
-        '--verbose',
-        '--http',
-        hostname],
+        'openssl',
+        's_client',
+        '-showcerts',
+        '-connect',
+        hostname + ':443',
+        ],
         stderr = subprocess.PIPE,
-        stdout = subprocess.PIPE)
-    stdout, stderr = subp.communicate()
+        stdout = subprocess.PIPE,
+        stdin = subprocess.PIPE)
+    stdout, stderr = subp.communicate('')
 
-    certs = None
-
-    for line in stderr.splitlines():
-        found = extract_certs(line)
-        if found:
-            certs = found
-
+    stdout = stdout.splitlines()
+    certs = list(extract_certs(stdout))
     return certs
 
 if __name__ == '__main__':
-    certfile = lambda name, i: 'src/testdata/cert-%s.%d.der' % (name, i)
+    certfile = lambda name, i: 'rustls/src/testdata/cert-%s.%d.der' % (name, i)
 
     for name, hostname in SITES.items():
         if path.exists(certfile(name, 0)):
@@ -59,18 +57,6 @@ if __name__ == '__main__':
         certchain = collect(hostname)
 
         for i, cert in enumerate(certchain):
-            open(certfile(name, i), 'w').write(cert)
+            open(certfile(name, i), 'wb').write(cert)
+            print('wrote', certfile(name, i))
 
-        print '#[test]'
-        print 'fn test_%s_cert() {' % name
-
-        for i in range(len(certchain)):
-            print '    let cert%d = key::Certificate(include_bytes!("testdata/cert-%s.%d.der").to_vec());' % (i, name, i)
-        print '    let chain = [ %s ];' % (', '.join('cert%d' % i for i in range(len(certchain))))
-        print '    let mut anchors = anchors::RootCertStore::empty();'
-        print '    anchors.add_trust_anchors(&webpki_roots::ROOTS);'
-        print '    bench(100, "verify_server_cert(%s)", ' % name
-        print '          || (),'
-        print '          |_| verify::verify_server_cert(&anchors, &chain[..], "%s", &[]).unwrap());' % hostname
-        print '}'
-        print

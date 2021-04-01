@@ -53,6 +53,7 @@ fn test_arstechnica_cert() {
             include_bytes!("testdata/cert-arstechnica.0.der"),
             include_bytes!("testdata/cert-arstechnica.1.der"),
             include_bytes!("testdata/cert-arstechnica.2.der"),
+            include_bytes!("testdata/cert-arstechnica.3.der"),
         ],
     )
     .bench(100)
@@ -66,7 +67,6 @@ fn test_servo_cert() {
         &[
             include_bytes!("testdata/cert-servo.0.der"),
             include_bytes!("testdata/cert-servo.1.der"),
-            include_bytes!("testdata/cert-servo.2.der"),
         ],
     )
     .bench(100)
@@ -106,7 +106,6 @@ fn test_google_cert() {
         &[
             include_bytes!("testdata/cert-google.0.der"),
             include_bytes!("testdata/cert-google.1.der"),
-            include_bytes!("testdata/cert-google.1.der"),
         ],
     )
     .bench(100)
@@ -120,7 +119,7 @@ fn test_hn_cert() {
         &[
             include_bytes!("testdata/cert-hn.0.der"),
             include_bytes!("testdata/cert-hn.1.der"),
-            include_bytes!("testdata/cert-hn.1.der"),
+            include_bytes!("testdata/cert-hn.2.der"),
         ],
     )
     .bench(100)
@@ -174,7 +173,6 @@ fn test_wapo_cert() {
         &[
             include_bytes!("testdata/cert-wapo.0.der"),
             include_bytes!("testdata/cert-wapo.1.der"),
-            include_bytes!("testdata/cert-wapo.2.der"),
         ],
     )
     .bench(100)
@@ -201,7 +199,7 @@ impl Context {
                 .copied()
                 .map(|bytes| key::Certificate(bytes.to_vec()))
                 .collect(),
-            now: SystemTime::UNIX_EPOCH + Duration::from_secs(1500000000),
+            now: SystemTime::UNIX_EPOCH + Duration::from_secs(1617300000),
         }
     }
 
