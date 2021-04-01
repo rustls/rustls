@@ -12,13 +12,13 @@ use std::fmt;
 #[derive(Debug, PartialEq)]
 pub enum BulkAlgorithm {
     /// AES with 128-bit keys in Galois counter mode.
-    AES_128_GCM,
+    Aes128Gcm,
 
     /// AES with 256-bit keys in Galois counter mode.
-    AES_256_GCM,
+    Aes256Gcm,
 
     /// Chacha20 for confidentiality with poly1305 for authenticity.
-    CHACHA20_POLY1305,
+    Chacha20Poly1305,
 }
 
 /// A cipher suite supported by rustls.
@@ -180,7 +180,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: Some(TLS12_ECDSA_SCHEMES),
-        bulk: BulkAlgorithm::CHACHA20_POLY1305,
+        bulk: BulkAlgorithm::Chacha20Poly1305,
         hash: HashAlgorithm::SHA256,
         enc_key_len: 32,
         fixed_iv_len: 12,
@@ -197,7 +197,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: Some(TLS12_RSA_SCHEMES),
-        bulk: BulkAlgorithm::CHACHA20_POLY1305,
+        bulk: BulkAlgorithm::Chacha20Poly1305,
         hash: HashAlgorithm::SHA256,
         enc_key_len: 32,
         fixed_iv_len: 12,
@@ -213,7 +213,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
     sign: Some(TLS12_RSA_SCHEMES),
-    bulk: BulkAlgorithm::AES_128_GCM,
+    bulk: BulkAlgorithm::Aes128Gcm,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 16,
     fixed_iv_len: 4,
@@ -229,7 +229,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
     sign: Some(TLS12_RSA_SCHEMES),
-    bulk: BulkAlgorithm::AES_256_GCM,
+    bulk: BulkAlgorithm::Aes256Gcm,
     hash: HashAlgorithm::SHA384,
     enc_key_len: 32,
     fixed_iv_len: 4,
@@ -245,7 +245,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::ECDHE,
     sign: Some(TLS12_ECDSA_SCHEMES),
-    bulk: BulkAlgorithm::AES_128_GCM,
+    bulk: BulkAlgorithm::Aes128Gcm,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 16,
     fixed_iv_len: 4,
@@ -261,7 +261,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::ECDHE,
     sign: Some(TLS12_ECDSA_SCHEMES),
-    bulk: BulkAlgorithm::AES_256_GCM,
+    bulk: BulkAlgorithm::Aes256Gcm,
     hash: HashAlgorithm::SHA384,
     enc_key_len: 32,
     fixed_iv_len: 4,
@@ -277,7 +277,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
     sign: None,
-    bulk: BulkAlgorithm::CHACHA20_POLY1305,
+    bulk: BulkAlgorithm::Chacha20Poly1305,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 32,
     fixed_iv_len: 12,
@@ -293,7 +293,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
     kx: KeyExchangeAlgorithm::BulkOnly,
     sign: None,
-    bulk: BulkAlgorithm::AES_256_GCM,
+    bulk: BulkAlgorithm::Aes256Gcm,
     hash: HashAlgorithm::SHA384,
     enc_key_len: 32,
     fixed_iv_len: 12,
@@ -309,7 +309,7 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
     suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
     kx: KeyExchangeAlgorithm::BulkOnly,
     sign: None,
-    bulk: BulkAlgorithm::AES_128_GCM,
+    bulk: BulkAlgorithm::Aes128Gcm,
     hash: HashAlgorithm::SHA256,
     enc_key_len: 16,
     fixed_iv_len: 12,

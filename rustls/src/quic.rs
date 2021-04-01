@@ -141,9 +141,9 @@ pub struct DirectionalKeys {
 impl DirectionalKeys {
     fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
         let hp_alg = match suite.bulk {
-            BulkAlgorithm::AES_128_GCM => &aead::quic::AES_128,
-            BulkAlgorithm::AES_256_GCM => &aead::quic::AES_256,
-            BulkAlgorithm::CHACHA20_POLY1305 => &aead::quic::CHACHA20,
+            BulkAlgorithm::Aes128Gcm => &aead::quic::AES_128,
+            BulkAlgorithm::Aes256Gcm => &aead::quic::AES_256,
+            BulkAlgorithm::Chacha20Poly1305 => &aead::quic::CHACHA20,
         };
 
         Self {
