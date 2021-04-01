@@ -9,6 +9,7 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType}
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
+use crate::rand;
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -142,15 +143,10 @@ impl Codec for SessionID {
 }
 
 impl SessionID {
-    pub fn new(bytes: &[u8]) -> SessionID {
-        debug_assert!(bytes.len() <= 32);
-        let mut d = [0u8; 32];
-        d[..bytes.len()].clone_from_slice(&bytes[..]);
-
-        SessionID {
-            data: d,
-            len: bytes.len(),
-        }
+    pub fn random() -> Result<Self, rand::GetRandomFailed> {
+        let mut data = [0u8; 32];
+        rand::fill_random(&mut data)?;
+        Ok(Self { data, len: 32 })
     }
 
     pub fn empty() -> SessionID {

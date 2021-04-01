@@ -40,8 +40,8 @@ fn rejects_sessionid_with_bad_length() {
 
 #[test]
 fn sessionid_with_different_lengths_are_unequal() {
-    let a = SessionID::new(&[1u8]);
-    let b = SessionID::new(&[1u8, 2u8]);
+    let a = SessionID::read(&mut Reader::init(&[1u8, 1])).unwrap();
+    let b = SessionID::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
     assert_eq!(a, a);
     assert_eq!(b, b);
     assert_ne!(a, b);
@@ -56,7 +56,6 @@ fn accepts_short_sessionid() {
 
     assert_eq!(sess.is_empty(), false);
     assert_eq!(sess.len(), 1);
-    assert_eq!(sess, SessionID::new(&[1u8]));
     assert_eq!(rd.any_left(), false);
 }
 
@@ -69,7 +68,6 @@ fn accepts_empty_sessionid() {
 
     assert_eq!(sess.is_empty(), true);
     assert_eq!(sess.len(), 0);
-    assert_eq!(sess, SessionID::new(&[]));
     assert_eq!(rd.any_left(), false);
 }
 

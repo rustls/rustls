@@ -20,7 +20,6 @@ use crate::msgs::handshake::{HandshakeMessagePayload, Random, ServerHelloPayload
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::rand;
 use crate::server::{ClientHello, ServerConfig, ServerSession};
 #[cfg(feature = "quic")]
 use crate::session::Protocol;
@@ -843,9 +842,7 @@ impl State for ExpectClientHello {
         // If we're not offered a ticket or a potential session ID,
         // allocate a session ID.
         if self.handshake.session_id.is_empty() && !ticket_received {
-            let mut bytes = [0u8; 32];
-            rand::fill_random(&mut bytes)?;
-            self.handshake.session_id = SessionID::new(&bytes);
+            self.handshake.session_id = SessionID::random()?;
         }
 
         // Perhaps resume?  If we received a ticket, the sessionid
