@@ -688,11 +688,7 @@ impl Codec for ClientExtension {
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -829,11 +825,7 @@ impl Codec for ServerExtension {
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -1106,11 +1098,7 @@ impl Codec for HelloRetryExtension {
             _ => HelloRetryExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -1244,11 +1232,7 @@ impl Codec for ServerHelloPayload {
             extensions,
         };
 
-        if r.any_left() {
-            None
-        } else {
-            Some(ret)
-        }
+        if r.any_left() { None } else { Some(ret) }
     }
 }
 
@@ -1390,11 +1374,7 @@ impl Codec for CertificateExtension {
             _ => CertificateExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -1893,11 +1873,7 @@ impl Codec for CertReqExtension {
             _ => CertReqExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -2023,11 +1999,7 @@ impl Codec for NewSessionTicketExtension {
             _ => NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
