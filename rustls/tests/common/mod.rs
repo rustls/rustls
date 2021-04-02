@@ -369,7 +369,7 @@ impl ClientCertVerifier for MockClientVerifier {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum TLSErrorFromPeer {
+pub enum ErrorFromPeer {
     Client(Error),
     Server(Error),
 }
@@ -377,16 +377,16 @@ pub enum TLSErrorFromPeer {
 pub fn do_handshake_until_error(
     client: &mut ClientSession,
     server: &mut ServerSession,
-) -> Result<(), TLSErrorFromPeer> {
+) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
         server
             .process_new_packets()
-            .map_err(|err| TLSErrorFromPeer::Server(err))?;
+            .map_err(|err| ErrorFromPeer::Server(err))?;
         transfer(server, client);
         client
             .process_new_packets()
-            .map_err(|err| TLSErrorFromPeer::Client(err))?;
+            .map_err(|err| ErrorFromPeer::Client(err))?;
     }
 
     Ok(())
@@ -395,25 +395,25 @@ pub fn do_handshake_until_error(
 pub fn do_handshake_until_both_error(
     client: &mut ClientSession,
     server: &mut ServerSession,
-) -> Result<(), Vec<TLSErrorFromPeer>> {
+) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
-        Err(server_err @ TLSErrorFromPeer::Server(_)) => {
+        Err(server_err @ ErrorFromPeer::Server(_)) => {
             let mut errors = vec![server_err];
             transfer(server, client);
             let client_err = client
                 .process_new_packets()
-                .map_err(|err| TLSErrorFromPeer::Client(err))
+                .map_err(|err| ErrorFromPeer::Client(err))
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
             Err(errors)
         }
 
-        Err(client_err @ TLSErrorFromPeer::Client(_)) => {
+        Err(client_err @ ErrorFromPeer::Client(_)) => {
             let mut errors = vec![client_err];
             transfer(client, server);
             let server_err = server
                 .process_new_packets()
-                .map_err(|err| TLSErrorFromPeer::Server(err))
+                .map_err(|err| ErrorFromPeer::Server(err))
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
             Err(errors)

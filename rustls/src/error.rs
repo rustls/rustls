@@ -4,7 +4,7 @@ use crate::rand;
 use std::error::Error as StdError;
 use std::fmt;
 
-/// The reason WebPKI operation was performed, used in [`TLSError`].
+/// The reason WebPKI operation was performed, used in [`Error`].
 #[derive(Debug, PartialEq, Clone)]
 #[non_exhaustive]
 pub enum WebPkiOp {

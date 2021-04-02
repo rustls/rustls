@@ -590,7 +590,7 @@ fn client_checks_server_certificate_with_given_name() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
-                Err(TLSErrorFromPeer::Client(Error::WebPkiError(
+                Err(ErrorFromPeer::Client(Error::WebPkiError(
                     webpki::Error::CertNotValidForName,
                     WebPkiOp::ValidateForDnsName,
                 )))
@@ -661,7 +661,7 @@ fn client_cert_resolve() {
 
             assert_eq!(
                 do_handshake_until_error(&mut client, &mut server),
-                Err(TLSErrorFromPeer::Server(Error::NoCertificatesPresented))
+                Err(ErrorFromPeer::Server(Error::NoCertificatesPresented))
             );
         }
     }
@@ -756,7 +756,7 @@ mod test_clientverifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(
                     err,
-                    Err(TLSErrorFromPeer::Client(Error::CorruptMessagePayload(
+                    Err(ErrorFromPeer::Client(Error::CorruptMessagePayload(
                         ContentType::Handshake
                     )))
                 );
@@ -791,12 +791,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(Error::General(
+                        ErrorFromPeer::Server(Error::General(
                             "client rejected by client_auth_root_subjects".into()
                         )),
-                        TLSErrorFromPeer::Client(Error::AlertReceived(
-                            AlertDescription::AccessDenied
-                        ))
+                        ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied))
                     ])
                 );
             }
@@ -830,12 +828,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(Error::General(
+                        ErrorFromPeer::Server(Error::General(
                             "client rejected by client_auth_root_subjects".into()
                         )),
-                        TLSErrorFromPeer::Client(Error::AlertReceived(
-                            AlertDescription::AccessDenied
-                        ))
+                        ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied))
                     ])
                 );
             }
@@ -870,8 +866,8 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(Error::NoCertificatesPresented),
-                        TLSErrorFromPeer::Client(Error::AlertReceived(
+                        ErrorFromPeer::Server(Error::NoCertificatesPresented),
+                        ErrorFromPeer::Client(Error::AlertReceived(
                             AlertDescription::CertificateRequired
                         ))
                     ])
@@ -881,7 +877,7 @@ mod test_clientverifier {
     }
 
     #[test]
-    // Triple checks we propagate the TLSError through
+    // Triple checks we propagate the rustls::Error through
     fn client_verifier_fails_properly() {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
@@ -906,7 +902,7 @@ mod test_clientverifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(
                     err,
-                    Err(TLSErrorFromPeer::Server(Error::General("test err".into())))
+                    Err(ErrorFromPeer::Server(Error::General("test err".into())))
                 );
             }
         }
@@ -939,12 +935,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(Error::General(
+                        ErrorFromPeer::Server(Error::General(
                             "client rejected by client_auth_mandatory".into()
                         )),
-                        TLSErrorFromPeer::Client(Error::AlertReceived(
-                            AlertDescription::AccessDenied
-                        ))
+                        ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied))
                     ])
                 );
             }
@@ -1755,7 +1749,7 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client2, &mut server2);
     assert_eq!(
         err,
-        Err(TLSErrorFromPeer::Server(Error::General(
+        Err(ErrorFromPeer::Server(Error::General(
             "no server certificate chain resolved".into()
         )))
     );

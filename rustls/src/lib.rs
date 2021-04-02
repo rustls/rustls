@@ -366,6 +366,7 @@ pub use crate::verify::{
 /// This is the rustls manual.
 pub mod manual;
 
+/** Type renames. */
 #[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use ResolvesServerCertUsingSni")]

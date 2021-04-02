@@ -321,7 +321,7 @@ pub struct WebPkiVerifier {
 }
 
 impl WebPkiVerifier {
-    /// Constructs a new `WebPKIVerifier`.
+    /// Constructs a new `WebPkiVerifier`.
     ///
     /// `roots` is the set of trust anchors to trust for issuing server certs.
     ///

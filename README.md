@@ -27,6 +27,23 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     pass the end-entity and intermediate certificates separately.  This means rustls deals with the case
     where the certificate chain is empty, rather than leaving that to ServerCertVerifier/ClientCertVerifier
     implementation.
+  - There are now 30% fewer unreachable unwraps in the core crate thanks to large refactoring efforts.
+  - *Breaking API change*: the `WebPkiError` variant of `rustls::Error` now includes which operation failed.
+  - *Breaking API changes*: These public API items have been renamed to meet naming guidelines:
+    - `rustls::TLSError` to `rustls::Error`.
+    - `rustls::ResolvesServerCertUsingSNI` to `rustls::ResolvesServerCertUsingSni`.
+    - `rustls::WebPKIVerifier` to `rustls::WebPkiVerifier`.
+    - `rustls::ciphersuites` to `rustls::cipher_suites`.
+    - `rustls::ClientHello::sigschemes` to `rustls::ClientHello::signature_schemes`.
+    - `rustls::RootCertStore::get_subjects` to `rustls::RootCertStore::subjects`.
+    - `rustls::ServerSession` to `rustls::ServerConnection`.
+    - `rustls::ClientSession` to `rustls::ClientConnection`.
+    - `rustls::ServerSession::get_sni_hostname` to `rustls::ServerConnection::sni_hostname`.
+    - `rustls::ClientConfig::ciphersuites` to `rustls::ClientConfig::cipher_suites`.
+    - `rustls::ServerConfig::ciphersuites` to `rustls::ServerConfig::cipher_suites`.
+    - `rustls::ProducesTickets::get_lifetime` to `rustls::ProducesTickets::lifetime`.
+    - `rustls::Session`: `get_peer_certificates` to `peer_certificates`, `get_alpn_protocol` to `alpn_protocol`,
+      `get_protocol_version` to `protocol_version`, `get_negotiated_ciphersuite` to `negotiated_cipher_suite`.
 * 0.19.0 (2020-11-22):
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.
