@@ -13,9 +13,9 @@ use rustls;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::sign;
 use rustls::ClientHello;
+use rustls::Error;
 use rustls::KeyLog;
 use rustls::Session;
-use rustls::TlsError;
 use rustls::WebPKIOp;
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
@@ -45,11 +45,11 @@ fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: O
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(client.get_alpn_protocol(), None);
-        assert_eq!(server.get_alpn_protocol(), None);
+        assert_eq!(client.alpn_protocol(), None);
+        assert_eq!(server.alpn_protocol(), None);
         do_handshake(&mut client, &mut server);
-        assert_eq!(client.get_alpn_protocol(), agreed);
-        assert_eq!(server.get_alpn_protocol(), agreed);
+        assert_eq!(client.alpn_protocol(), agreed);
+        assert_eq!(server.alpn_protocol(), agreed);
     }
 }
 
@@ -105,15 +105,15 @@ fn version_test(
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    assert_eq!(client.get_protocol_version(), None);
-    assert_eq!(server.get_protocol_version(), None);
+    assert_eq!(client.protocol_version(), None);
+    assert_eq!(server.protocol_version(), None);
     if result.is_none() {
         let err = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(err.is_err(), true);
     } else {
         do_handshake(&mut client, &mut server);
-        assert_eq!(client.get_protocol_version(), result);
-        assert_eq!(server.get_protocol_version(), result);
+        assert_eq!(client.protocol_version(), result);
+        assert_eq!(server.protocol_version(), result);
     }
 }
 
@@ -238,7 +238,7 @@ fn client_can_get_server_cert() {
                 make_pair_for_configs(client_config, make_server_config(*kt));
             do_handshake(&mut client, &mut server);
 
-            let certs = client.get_peer_certificates();
+            let certs = client.peer_certificates();
             assert_eq!(certs, Some(kt.get_chain()));
         }
     }
@@ -253,13 +253,13 @@ fn client_can_get_server_cert_after_resumption() {
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
 
-            let original_certs = client.get_peer_certificates();
+            let original_certs = client.peer_certificates();
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
 
-            let resumed_certs = client.get_peer_certificates();
+            let resumed_certs = client.peer_certificates();
 
             assert_eq!(original_certs, resumed_certs);
         }
@@ -281,7 +281,7 @@ fn server_can_get_client_cert() {
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
 
-            let certs = server.get_peer_certificates();
+            let certs = server.peer_certificates();
             assert_eq!(certs, Some(kt.get_chain()));
         }
     }
@@ -302,12 +302,12 @@ fn server_can_get_client_cert_after_resumption() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &server_config);
             do_handshake(&mut client, &mut server);
-            let original_certs = server.get_peer_certificates();
+            let original_certs = server.peer_certificates();
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &server_config);
             do_handshake(&mut client, &mut server);
-            let resumed_certs = server.get_peer_certificates();
+            let resumed_certs = server.peer_certificates();
             assert_eq!(original_certs, resumed_certs);
         }
     }
@@ -393,7 +393,7 @@ struct ServerCheckCertResolve {
 
 impl ResolvesServerCert for ServerCheckCertResolve {
     fn resolve(&self, client_hello: ClientHello) -> Option<sign::CertifiedKey> {
-        if client_hello.sigschemes().len() == 0 {
+        if client_hello.signature_schemes().len() == 0 {
             panic!("no signature schemes shared by client");
         }
 
@@ -406,11 +406,11 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         }
 
         if let Some(expected_sigalgs) = &self.expected_sigalgs {
-            if expected_sigalgs != &client_hello.sigschemes() {
+            if expected_sigalgs != &client_hello.signature_schemes() {
                 panic!(
                     "unexpected signature schemes (wanted {:?} got {:?})",
                     self.expected_sigalgs,
-                    client_hello.sigschemes()
+                    client_hello.signature_schemes()
                 );
             }
         }
@@ -497,7 +497,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
     expected_sigalgs: Vec<SignatureScheme>,
 ) {
     let mut client_config = make_client_config(kt);
-    client_config.ciphersuites = vec![find_suite(suite)];
+    client_config.cipher_suites = vec![find_suite(suite)];
 
     let mut server_config = make_server_config(kt);
 
@@ -590,7 +590,7 @@ fn client_checks_server_certificate_with_given_name() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
-                Err(TLSErrorFromPeer::Client(TlsError::WebPKIError(
+                Err(TLSErrorFromPeer::Client(Error::WebPKIError(
                     webpki::Error::CertNotValidForName,
                     WebPKIOp::ValidateForDNSName,
                 )))
@@ -661,7 +661,7 @@ fn client_cert_resolve() {
 
             assert_eq!(
                 do_handshake_until_error(&mut client, &mut server),
-                Err(TLSErrorFromPeer::Server(TlsError::NoCertificatesPresented))
+                Err(TLSErrorFromPeer::Server(Error::NoCertificatesPresented))
             );
         }
     }
@@ -689,18 +689,18 @@ mod test_clientverifier {
     use rustls::internal::msgs::enums::ContentType;
 
     // Client is authorized!
-    fn ver_ok() -> Result<ClientCertVerified, TlsError> {
+    fn ver_ok() -> Result<ClientCertVerified, Error> {
         Ok(rustls::ClientCertVerified::assertion())
     }
 
     // Use when we shouldn't even attempt verification
-    fn ver_unreachable() -> Result<ClientCertVerified, TlsError> {
+    fn ver_unreachable() -> Result<ClientCertVerified, Error> {
         unreachable!()
     }
 
     // Verifier that returns an error that we can expect
-    fn ver_err() -> Result<ClientCertVerified, TlsError> {
-        Err(TlsError::General("test err".to_string()))
+    fn ver_err() -> Result<ClientCertVerified, Error> {
+        Err(Error::General("test err".to_string()))
     }
 
     #[test]
@@ -709,7 +709,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -737,7 +737,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: Some(vec![]),
             };
@@ -756,7 +756,7 @@ mod test_clientverifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(
                     err,
-                    Err(TLSErrorFromPeer::Client(TlsError::CorruptMessagePayload(
+                    Err(TLSErrorFromPeer::Client(Error::CorruptMessagePayload(
                         ContentType::Handshake
                     )))
                 );
@@ -791,10 +791,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TlsError::General(
+                        TLSErrorFromPeer::Server(Error::General(
                             "client rejected by client_auth_root_subjects".into()
                         )),
-                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
+                        TLSErrorFromPeer::Client(Error::AlertReceived(
                             AlertDescription::AccessDenied
                         ))
                     ])
@@ -830,10 +830,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TlsError::General(
+                        TLSErrorFromPeer::Server(Error::General(
                             "client rejected by client_auth_root_subjects".into()
                         )),
-                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
+                        TLSErrorFromPeer::Client(Error::AlertReceived(
                             AlertDescription::AccessDenied
                         ))
                     ])
@@ -848,7 +848,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_unreachable,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -870,8 +870,8 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TlsError::NoCertificatesPresented),
-                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
+                        TLSErrorFromPeer::Server(Error::NoCertificatesPresented),
+                        TLSErrorFromPeer::Client(Error::AlertReceived(
                             AlertDescription::CertificateRequired
                         ))
                     ])
@@ -886,7 +886,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_err,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -906,9 +906,7 @@ mod test_clientverifier {
                 let err = do_handshake_until_error(&mut client, &mut server);
                 assert_eq!(
                     err,
-                    Err(TLSErrorFromPeer::Server(TlsError::General(
-                        "test err".into()
-                    )))
+                    Err(TLSErrorFromPeer::Server(Error::General("test err".into())))
                 );
             }
         }
@@ -920,7 +918,7 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).get_subjects()),
+                subjects: Some(get_client_root_store(*kt).subjects()),
                 mandatory: None,
                 offered_schemes: None,
             };
@@ -941,10 +939,10 @@ mod test_clientverifier {
                 assert_eq!(
                     errs,
                     Err(vec![
-                        TLSErrorFromPeer::Server(TlsError::General(
+                        TLSErrorFromPeer::Server(Error::General(
                             "client rejected by client_auth_mandatory".into()
                         )),
-                        TLSErrorFromPeer::Client(TlsError::AlertReceived(
+                        TLSErrorFromPeer::Client(Error::AlertReceived(
                             AlertDescription::AccessDenied
                         ))
                     ])
@@ -1149,7 +1147,7 @@ struct OtherSession<'a> {
     pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
     pub short_writes: bool,
-    pub last_error: Option<rustls::TlsError>,
+    pub last_error: Option<rustls::Error>,
 }
 
 impl<'a> OtherSession<'a> {
@@ -1537,12 +1535,12 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::RSA;
     let mut server_config = make_server_config(kt);
-    server_config.ciphersuites = vec![find_suite(
+    server_config.cipher_suites = vec![find_suite(
         CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     )];
 
     let mut client_config = make_client_config(kt);
-    client_config.ciphersuites = vec![find_suite(
+    client_config.cipher_suites = vec![find_suite(
         CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     )];
 
@@ -1680,9 +1678,9 @@ fn server_exposes_offered_sni() {
                 .unwrap();
         let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
 
-        assert_eq!(None, server.get_sni_hostname());
+        assert_eq!(None, server.sni_hostname());
         do_handshake(&mut client, &mut server);
-        assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+        assert_eq!(Some("second.testserver.com"), server.sni_hostname());
     }
 }
 
@@ -1696,9 +1694,9 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
                 .unwrap();
         let mut server = ServerSession::new(&Arc::new(make_server_config(kt)));
 
-        assert_eq!(None, server.get_sni_hostname());
+        assert_eq!(None, server.sni_hostname());
         do_handshake(&mut client, &mut server);
-        assert_eq!(Some("second.testserver.com"), server.get_sni_hostname());
+        assert_eq!(Some("second.testserver.com"), server.sni_hostname());
     }
 }
 
@@ -1716,15 +1714,15 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         let mut client =
             ClientSession::new(&Arc::new(client_config), dns_name("thisdoesNOTexist.com")).unwrap();
 
-        assert_eq!(None, server.get_sni_hostname());
+        assert_eq!(None, server.sni_hostname());
         transfer(&mut client, &mut server);
         assert_eq!(
             server.process_new_packets(),
-            Err(TlsError::General(
+            Err(Error::General(
                 "no server certificate chain resolved".to_string()
             ))
         );
-        assert_eq!(Some("thisdoesnotexist.com"), server.get_sni_hostname());
+        assert_eq!(Some("thisdoesnotexist.com"), server.sni_hostname());
     }
 }
 
@@ -1757,7 +1755,7 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client2, &mut server2);
     assert_eq!(
         err,
-        Err(TLSErrorFromPeer::Server(TlsError::General(
+        Err(TLSErrorFromPeer::Server(Error::General(
             "no server certificate chain resolved".into()
         )))
     );
@@ -1778,7 +1776,7 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(TlsError::General(
+        Err(Error::General(
             "The server certificate is not valid for the given name".into()
         )),
         resolver.add(
@@ -1787,7 +1785,7 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(TlsError::General("Bad DNS name".into())),
+        Err(Error::General("Bad DNS name".into())),
         resolver.add(
             "not ascii 🦀",
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
@@ -1803,7 +1801,7 @@ fn sni_resolver_rejects_bad_certs() {
     let signing_key: Arc<Box<dyn sign::SigningKey>> = Arc::new(Box::new(signing_key));
 
     assert_eq!(
-        Err(TlsError::General(
+        Err(Error::General(
             "No end-entity certificate in certificate chain".into()
         )),
         resolver.add(
@@ -1814,7 +1812,7 @@ fn sni_resolver_rejects_bad_certs() {
 
     let bad_chain = vec![rustls::Certificate(vec![0xa0])];
     assert_eq!(
-        Err(TlsError::General(
+        Err(Error::General(
             "End-entity certificate in certificate chain is syntactically invalid".into()
         )),
         resolver.add(
@@ -1831,11 +1829,11 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_eq!(
-        Err(TlsError::HandshakeNotComplete),
+        Err(Error::HandshakeNotComplete),
         client.export_keying_material(&mut client_secret, b"label", Some(b"context"))
     );
     assert_eq!(
-        Err(TlsError::HandshakeNotComplete),
+        Err(Error::HandshakeNotComplete),
         server.export_keying_material(&mut server_secret, b"label", Some(b"context"))
     );
     do_handshake(&mut client, &mut server);
@@ -1896,10 +1894,10 @@ fn do_suite_test(
     );
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    assert_eq!(None, client.get_negotiated_ciphersuite());
-    assert_eq!(None, server.get_negotiated_ciphersuite());
-    assert_eq!(None, client.get_protocol_version());
-    assert_eq!(None, server.get_protocol_version());
+    assert_eq!(None, client.negotiated_cipher_suite());
+    assert_eq!(None, server.negotiated_cipher_suite());
+    assert_eq!(None, client.protocol_version());
+    assert_eq!(None, server.protocol_version());
     assert_eq!(true, client.is_handshaking());
     assert_eq!(true, server.is_handshaking());
 
@@ -1908,16 +1906,16 @@ fn do_suite_test(
 
     assert_eq!(true, client.is_handshaking());
     assert_eq!(true, server.is_handshaking());
-    assert_eq!(None, client.get_protocol_version());
-    assert_eq!(Some(expect_version), server.get_protocol_version());
-    assert_eq!(None, client.get_negotiated_ciphersuite());
-    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+    assert_eq!(None, client.protocol_version());
+    assert_eq!(Some(expect_version), server.protocol_version());
+    assert_eq!(None, client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut server, &mut client);
     client.process_new_packets().unwrap();
 
-    assert_eq!(Some(expect_suite), client.get_negotiated_ciphersuite());
-    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
@@ -1926,10 +1924,10 @@ fn do_suite_test(
 
     assert_eq!(false, client.is_handshaking());
     assert_eq!(false, server.is_handshaking());
-    assert_eq!(Some(expect_version), client.get_protocol_version());
-    assert_eq!(Some(expect_version), server.get_protocol_version());
-    assert_eq!(Some(expect_suite), client.get_negotiated_ciphersuite());
-    assert_eq!(Some(expect_suite), server.get_negotiated_ciphersuite());
+    assert_eq!(Some(expect_version), client.protocol_version());
+    assert_eq!(Some(expect_version), server.protocol_version());
+    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 }
 
 fn find_suite(suite: CipherSuite) -> &'static SupportedCipherSuite {
@@ -2013,7 +2011,7 @@ fn negotiated_ciphersuite_client() {
         let (version, kt, suite) = *item;
         let scs = find_suite(suite);
         let mut client_config = make_client_config(kt);
-        client_config.ciphersuites = vec![scs];
+        client_config.cipher_suites = vec![scs];
         client_config.versions = vec![version];
 
         do_suite_test(client_config, make_server_config(kt), scs, version);
@@ -2026,7 +2024,7 @@ fn negotiated_ciphersuite_server() {
         let (version, kt, suite) = *item;
         let scs = find_suite(suite);
         let mut server_config = make_server_config(kt);
-        server_config.ciphersuites = vec![scs];
+        server_config.cipher_suites = vec![scs];
         server_config.versions = vec![version];
 
         do_suite_test(make_client_config(kt), server_config, scs, version);
@@ -2433,7 +2431,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2449,7 +2447,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 1);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2464,7 +2462,7 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 2);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2491,7 +2489,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2506,7 +2504,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2521,7 +2519,7 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .get_peer_certificates()
+            .peer_certificates()
             .map(|certs| certs.len()),
         Some(3)
     );
@@ -2532,10 +2530,7 @@ mod test_quic {
     use super::*;
 
     // Returns the sender's next secrets to use, or the receiver's error.
-    fn step(
-        send: &mut dyn Session,
-        recv: &mut dyn Session,
-    ) -> Result<Option<quic::Keys>, TlsError> {
+    fn step(send: &mut dyn Session, recv: &mut dyn Session) -> Result<Option<quic::Keys>, Error> {
         let mut buf = Vec::new();
         let secrets = loop {
             let prev = buf.len();
@@ -2634,7 +2629,7 @@ mod test_quic {
         .unwrap();
         assert!(
             client
-                .get_negotiated_ciphersuite()
+                .negotiated_cipher_suite()
                 .is_some()
         );
         let mut server =
@@ -2737,7 +2732,7 @@ mod test_quic {
                 step(&mut client, &mut server)
                     .err()
                     .unwrap(),
-                TlsError::NoApplicationProtocol
+                Error::NoApplicationProtocol
             );
 
             assert_eq!(
@@ -3005,7 +3000,7 @@ fn test_server_rejects_duplicate_sni_names() {
     transfer_altered(&mut client, duplicate_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(TlsError::PeerMisbehavedError(
+        Err(Error::PeerMisbehavedError(
             "ClientHello SNI contains duplicate name types".into()
         ))
     );
@@ -3029,7 +3024,7 @@ fn test_server_rejects_empty_sni_extension() {
     transfer_altered(&mut client, empty_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(TlsError::PeerMisbehavedError(
+        Err(Error::PeerMisbehavedError(
             "ClientHello SNI did not contain a hostname".into()
         ))
     );
@@ -3056,7 +3051,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
     transfer_altered(&mut client, different_kx_group, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(TlsError::PeerIncompatibleError(
+        Err(Error::PeerIncompatibleError(
             "no kx group overlap with client".into()
         ))
     );

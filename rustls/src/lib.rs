@@ -239,6 +239,7 @@ mod cipher;
 mod error;
 mod hash_hs;
 mod key_schedule;
+mod limited_cache;
 mod prf;
 mod rand;
 mod record_layer;
@@ -275,7 +276,7 @@ pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage}
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
-pub use crate::error::TlsError;
+pub use crate::error::Error;
 pub use crate::error::WebPKIOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
@@ -301,7 +302,7 @@ pub use crate::verify::{
 /// All defined ciphersuites appear in this module.
 ///
 /// ALL_CIPHERSUITES is provided as an array of all of these values.
-pub mod ciphersuite {
+pub mod cipher_suites {
     pub use crate::suites::TLS13_AES_128_GCM_SHA256;
     pub use crate::suites::TLS13_AES_256_GCM_SHA384;
     pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
@@ -362,4 +363,4 @@ pub type ResolvesServerCertUsingSNI = ResolvesServerCertUsingSni;
 pub type WebPKIVerifier = WebPkiVerifier;
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use TlsError")]
-pub type TLSError = TlsError;
+pub type TLSError = Error;

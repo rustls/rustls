@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "logging")]
@@ -10,6 +10,10 @@ use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
+#[cfg(feature = "quic")]
+use crate::quic;
+#[cfg(feature = "quic")]
+use crate::session::Protocol;
 use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -81,7 +85,7 @@ pub trait ResolvesClientCert: Send + Sync {
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
-    pub ciphersuites: Vec<&'static SupportedCipherSuite>,
+    pub cipher_suites: Vec<&'static SupportedCipherSuite>,
 
     /// List of supported key exchange algorithms, in preference order -- the
     /// first elemnt is the highest priority.
@@ -149,10 +153,10 @@ impl ClientConfig {
     pub fn new(
         root_store: RootCertStore,
         ct_logs: &'static [&'static sct::Log],
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> Self {
         let verifier = verify::WebPkiVerifier::new(root_store, ct_logs);
-        Self::new_(Arc::new(verifier), ciphersuites)
+        Self::new_(Arc::new(verifier), cipher_suites)
     }
 
     /// Make a `ClientConfig` with a custom certificate verifier.
@@ -168,17 +172,17 @@ impl ClientConfig {
     #[cfg(feature = "dangerous_configuration")]
     pub fn new_dangerous(
         verifier: Arc<dyn verify::ServerCertVerifier>,
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> Self {
-        Self::new_(verifier, ciphersuites)
+        Self::new_(verifier, cipher_suites)
     }
 
     fn new_(
         verifier: Arc<dyn verify::ServerCertVerifier>,
-        ciphersuites: &[&'static SupportedCipherSuite],
+        cipher_suites: &[&'static SupportedCipherSuite],
     ) -> Self {
         Self {
-            ciphersuites: ciphersuites.to_vec(),
+            cipher_suites: cipher_suites.to_vec(),
             kx_groups: ALL_KX_GROUPS.to_vec(),
             alpn_protocols: Vec::new(),
             session_persistence: handy::ClientSessionMemoryCache::new(32),
@@ -200,7 +204,7 @@ impl ClientConfig {
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(&v)
             && self
-                .ciphersuites
+                .cipher_suites
                 .iter()
                 .any(|cs| cs.usable_for_version(v))
     }
@@ -251,7 +255,7 @@ impl ClientConfig {
         &mut self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         self.client_auth_cert_resolver = Arc::new(resolver);
         Ok(())
@@ -401,12 +405,12 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 /// This represents a single TLS client session.
 pub struct ClientSession {
-    pub(crate) config: Arc<ClientConfig>,
-    pub(crate) common: SessionCommon,
-    pub(crate) state: Option<hs::NextState>,
-    pub(crate) server_cert_chain: CertificatePayload,
-    pub(crate) early_data: EarlyData,
-    pub(crate) resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+    config: Arc<ClientConfig>,
+    common: SessionCommon,
+    state: Option<hs::NextState>,
+    server_cert_chain: CertificatePayload,
+    early_data: EarlyData,
+    resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
 }
 
 impl fmt::Debug for ClientSession {
@@ -422,13 +426,13 @@ impl ClientSession {
     pub fn new(
         config: &Arc<ClientConfig>,
         hostname: webpki::DNSNameRef,
-    ) -> Result<ClientSession, TlsError> {
+    ) -> Result<ClientSession, Error> {
         let mut new = Self::from_config(config);
         new.start_handshake(hostname.into(), vec![])?;
         Ok(new)
     }
 
-    pub(crate) fn from_config(config: &Arc<ClientConfig>) -> Self {
+    fn from_config(config: &Arc<ClientConfig>) -> Self {
         ClientSession {
             config: config.clone(),
             common: SessionCommon::new(config.mtu, true),
@@ -474,11 +478,11 @@ impl ClientSession {
         self.early_data.is_accepted()
     }
 
-    pub(crate) fn start_handshake(
+    fn start_handshake(
         &mut self,
         dns_name: webpki::DNSName,
         extra_exts: Vec<ClientExtension>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
         Ok(())
     }
@@ -486,7 +490,7 @@ impl ClientSession {
     fn get_cipher_suites(&self) -> Vec<CipherSuite> {
         let mut ret = Vec::new();
 
-        for cs in &self.config.ciphersuites {
+        for cs in &self.config.cipher_suites {
             ret.push(cs.suite);
         }
 
@@ -498,13 +502,13 @@ impl ClientSession {
 
     fn find_cipher_suite(&self, suite: CipherSuite) -> Option<&'static SupportedCipherSuite> {
         self.config
-            .ciphersuites
+            .cipher_suites
             .iter()
             .copied()
             .find(|&scs| scs.suite == suite)
     }
 
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), TlsError> {
+    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -517,7 +521,7 @@ impl ClientSession {
         Ok(())
     }
 
-    fn reject_renegotiation_attempt(&mut self) -> Result<(), TlsError> {
+    fn reject_renegotiation_attempt(&mut self) -> Result<(), Error> {
         self.common
             .send_warning_alert(AlertDescription::NoRenegotiation);
         Ok(())
@@ -530,8 +534,8 @@ impl ClientSession {
 
     fn maybe_send_unexpected_alert(&mut self, rc: hs::NextStateOrError) -> hs::NextStateOrError {
         match rc {
-            Err(TlsError::InappropriateMessage { .. })
-            | Err(TlsError::InappropriateHandshakeMessage { .. }) => {
+            Err(Error::InappropriateMessage { .. })
+            | Err(Error::InappropriateHandshakeMessage { .. }) => {
                 self.queue_unexpected_alert();
             }
             _ => {}
@@ -542,7 +546,7 @@ impl ClientSession {
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), TlsError> {
+    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if msg.is_handshake_type(HandshakeType::HelloRequest)
@@ -590,13 +594,13 @@ impl Session for ClientSession {
         self.common.write_tls(wr)
     }
 
-    fn process_new_packets(&mut self) -> Result<(), TlsError> {
+    fn process_new_packets(&mut self) -> Result<(), Error> {
         if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
 
         if self.common.message_deframer.desynced {
-            return Err(TlsError::CorruptMessage);
+            return Err(Error::CorruptMessage);
         }
 
         while let Some(msg) = self
@@ -650,7 +654,7 @@ impl Session for ClientSession {
         self.common.send_close_notify()
     }
 
-    fn get_peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         if self.server_cert_chain.is_empty() {
             return None;
         }
@@ -663,11 +667,11 @@ impl Session for ClientSession {
         )
     }
 
-    fn get_alpn_protocol(&self) -> Option<&[u8]> {
+    fn alpn_protocol(&self) -> Option<&[u8]> {
         self.common.get_alpn_protocol()
     }
 
-    fn get_protocol_version(&self) -> Option<ProtocolVersion> {
+    fn protocol_version(&self) -> Option<ProtocolVersion> {
         self.common.negotiated_version
     }
 
@@ -676,14 +680,14 @@ impl Session for ClientSession {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.state
             .as_ref()
-            .ok_or_else(|| TlsError::HandshakeNotComplete)
+            .ok_or_else(|| Error::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
-    fn get_negotiated_ciphersuite(&self) -> Option<&'static SupportedCipherSuite> {
+    fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common
             .get_suite()
             .or(self.resumption_ciphersuite)
@@ -736,3 +740,71 @@ impl io::Write for ClientSession {
         Ok(())
     }
 }
+
+#[cfg(feature = "quic")]
+impl quic::QuicExt for ClientSession {
+    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.common
+            .quic
+            .params
+            .as_ref()
+            .map(|v| v.as_ref())
+    }
+
+    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+        Some(quic::DirectionalKeys::new(
+            self.resumption_ciphersuite?,
+            self.common.quic.early_secret.as_ref()?,
+        ))
+    }
+
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        quic::read_hs(&mut self.common, plaintext)?;
+        self.process_new_handshake_messages()
+    }
+
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
+        quic::write_hs(&mut self.common, buf)
+    }
+
+    fn get_alert(&self) -> Option<AlertDescription> {
+        self.common.quic.alert
+    }
+
+    fn next_1rtt_keys(&mut self) -> quic::PacketKeySet {
+        quic::next_1rtt_keys(&mut self.common)
+    }
+}
+
+/// Methods specific to QUIC client sessions
+#[cfg(feature = "quic")]
+pub trait ClientQuicExt {
+    /// Make a new QUIC ClientSession. This differs from `ClientSession::new()`
+    /// in that it takes an extra argument, `params`, which contains the
+    /// TLS-encoded transport parameters to send.
+    fn new_quic(
+        config: &Arc<ClientConfig>,
+        quic_version: quic::Version,
+        hostname: webpki::DNSNameRef,
+        params: Vec<u8>,
+    ) -> Result<ClientSession, Error> {
+        assert!(
+            config
+                .versions
+                .iter()
+                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
+            "QUIC requires TLS version >= 1.3"
+        );
+        let ext = match quic_version {
+            quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
+            quic::Version::V1 => ClientExtension::TransportParameters(params),
+        };
+        let mut new = ClientSession::from_config(config);
+        new.common.protocol = Protocol::Quic;
+        new.start_handshake(hostname.into(), vec![ext])?;
+        Ok(new)
+    }
+}
+
+#[cfg(feature = "quic")]
+impl ClientQuicExt for ClientSession {}

@@ -458,7 +458,7 @@ mod danger {
             _scts: &mut dyn Iterator<Item = &[u8]>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
-        ) -> Result<rustls::ServerCertVerified, rustls::TlsError> {
+        ) -> Result<rustls::ServerCertVerified, rustls::Error> {
             Ok(rustls::ServerCertVerified::assertion())
         }
     }
@@ -497,7 +497,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if !args.flag_suite.is_empty() {
-        config.ciphersuites = lookup_suites(&args.flag_suite);
+        config.cipher_suites = lookup_suites(&args.flag_suite);
     }
 
     if !args.flag_protover.is_empty() {

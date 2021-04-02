@@ -1,4 +1,4 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key;
 use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 
@@ -26,7 +26,7 @@ pub trait SigningKey: Send + Sync {
 /// A thing that can sign a message.
 pub trait Signer: Send + Sync {
     /// Signs `message` using the selected scheme.
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TlsError>;
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
 
     /// Reveals which scheme will be used when you call `sign()`.
     fn get_scheme(&self) -> SignatureScheme;
@@ -87,16 +87,16 @@ impl CertifiedKey {
     pub fn cross_check_end_entity_cert(
         &self,
         name: Option<webpki::DNSNameRef>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         // Always reject an empty certificate chain.
         let end_entity_cert = self.end_entity_cert().map_err(|()| {
-            TlsError::General("No end-entity certificate in certificate chain".to_string())
+            Error::General("No end-entity certificate in certificate chain".to_string())
         })?;
 
         // Reject syntactically-invalid end-entity certificates.
         let end_entity_cert =
             webpki::EndEntityCert::from(end_entity_cert.as_ref()).map_err(|_| {
-                TlsError::General(
+                Error::General(
                     "End-entity certificate in certificate \
                                   chain is syntactically invalid"
                         .to_string(),
@@ -113,7 +113,7 @@ impl CertifiedKey {
                 .verify_is_valid_for_dns_name(name)
                 .is_err()
             {
-                return Err(TlsError::General(
+                return Err(Error::General(
                     "The server certificate is not \
                                              valid for the given name"
                         .to_string(),
@@ -238,14 +238,14 @@ impl RSASigner {
 }
 
 impl Signer for RSASigner {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TlsError> {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let mut sig = vec![0; self.key.public_modulus_len()];
 
         let rng = ring::rand::SystemRandom::new();
         self.key
             .sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
-            .map_err(|_| TlsError::General("signing failed".to_string()))
+            .map_err(|_| Error::General("signing failed".to_string()))
     }
 
     fn get_scheme(&self) -> SignatureScheme {
@@ -310,11 +310,11 @@ struct ECDSASigner {
 }
 
 impl Signer for ECDSASigner {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TlsError> {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let rng = ring::rand::SystemRandom::new();
         self.key
             .sign(&rng, message)
-            .map_err(|_| TlsError::General("signing failed".into()))
+            .map_err(|_| Error::General("signing failed".into()))
             .map(|sig| sig.as_ref().into())
     }
 
@@ -376,7 +376,7 @@ struct Ed25519Signer {
 }
 
 impl Signer for Ed25519Signer {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, TlsError> {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(self.key.sign(message).as_ref().into())
     }
 

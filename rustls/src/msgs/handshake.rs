@@ -9,6 +9,7 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType}
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
+use crate::rand;
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -145,6 +146,12 @@ impl Codec for SessionID {
 impl SessionID {
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn random() -> Result<Self, rand::GetRandomFailed> {
+        let mut data = [0u8; 32];
+        rand::fill_random(&mut data)?;
+        Ok(Self { data, len: 32 })
     }
 
     pub fn encode(session_id: Option<SessionID>, bytes: &mut Vec<u8>) {
@@ -637,7 +644,7 @@ impl Codec for ClientExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::ECPointFormats => {
                 ClientExtension::ECPointFormats(ECPointFormatList::read(&mut sub)?)
             }
@@ -691,7 +698,9 @@ impl Codec for ClientExtension {
             }
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -795,7 +804,7 @@ impl Codec for ServerExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::ECPointFormats => {
                 ServerExtension::ECPointFormats(ECPointFormatList::read(&mut sub)?)
             }
@@ -826,7 +835,9 @@ impl Codec for ServerExtension {
             }
             ExtensionType::EarlyData => ServerExtension::EarlyData,
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -883,7 +894,11 @@ impl Codec for ClientHelloPayload {
             ret.extensions = codec::read_vec_u16::<ClientExtension>(r)?;
         }
 
-        Some(ret)
+        if r.any_left() || ret.extensions.is_empty() {
+            None
+        } else {
+            Some(ret)
+        }
     }
 }
 
@@ -1086,14 +1101,16 @@ impl Codec for HelloRetryExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::KeyShare => HelloRetryExtension::KeyShare(NamedGroup::read(&mut sub)?),
             ExtensionType::Cookie => HelloRetryExtension::Cookie(PayloadU16::read(&mut sub)?),
             ExtensionType::SupportedVersions => {
                 HelloRetryExtension::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
             _ => HelloRetryExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -1208,10 +1225,7 @@ impl Codec for ServerHelloPayload {
         SessionID::encode(self.session_id, bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);
-
-        if !self.extensions.is_empty() {
-            codec::encode_vec_u16(bytes, &self.extensions);
-        }
+        codec::encode_vec_u16(bytes, &self.extensions);
     }
 
     // minus version and random, which have already been read.
@@ -1219,21 +1233,18 @@ impl Codec for ServerHelloPayload {
         let session_id = SessionID::read(r);
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
+        let extensions = codec::read_vec_u16::<ServerExtension>(r)?;
 
-        let mut ret = ServerHelloPayload {
+        let ret = ServerHelloPayload {
             legacy_version: ProtocolVersion::Unknown(0),
             random: ZERO_RANDOM.clone(),
             session_id,
             cipher_suite: suite,
             compression_method: compression,
-            extensions: Vec::new(),
+            extensions,
         };
 
-        if r.any_left() {
-            ret.extensions = codec::read_vec_u16::<ServerExtension>(r)?;
-        }
-
-        Some(ret)
+        if r.any_left() { None } else { Some(ret) }
     }
 }
 
@@ -1363,7 +1374,7 @@ impl Codec for CertificateExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::StatusRequest => {
                 let st = CertificateStatus::read(&mut sub)?;
                 CertificateExtension::CertificateStatus(st)
@@ -1373,7 +1384,9 @@ impl Codec for CertificateExtension {
                 CertificateExtension::SignedCertificateTimestamp(scts)
             }
             _ => CertificateExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -1857,7 +1870,7 @@ impl Codec for CertReqExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::SignatureAlgorithms => {
                 let schemes = SupportedSignatureSchemes::read(&mut sub)?;
                 if schemes.is_empty() {
@@ -1870,7 +1883,9 @@ impl Codec for CertReqExtension {
                 CertReqExtension::AuthorityNames(cas)
             }
             _ => CertReqExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 
@@ -1991,10 +2006,12 @@ impl Codec for NewSessionTicketExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        Some(match typ {
+        let ext = match typ {
             ExtensionType::EarlyData => NewSessionTicketExtension::EarlyData(u32::read(&mut sub)?),
             _ => NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
-        })
+        };
+
+        if sub.any_left() { None } else { Some(ext) }
     }
 }
 

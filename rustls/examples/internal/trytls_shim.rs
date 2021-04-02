@@ -7,9 +7,9 @@
 use webpki;
 use webpki_roots;
 
-use rustls::{ClientConfig, ClientSession, RootCertStore, Session, TlsError, DEFAULT_CIPHERSUITES};
+use rustls::{ClientConfig, ClientSession, Error, RootCertStore, Session, DEFAULT_CIPHERSUITES};
 use std::env;
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::net::TcpStream;
@@ -18,10 +18,10 @@ use std::sync::Arc;
 
 enum Verdict {
     Accept,
-    Reject(TlsError),
+    Reject(Error),
 }
 
-fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Error>> {
+fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn StdError>> {
     let mut root_store = RootCertStore::empty();
     match args.len() {
         3 => {
@@ -42,7 +42,11 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn Er
     Ok((args[1].clone(), port, config))
 }
 
-fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict, Box<dyn Error>> {
+fn communicate(
+    host: String,
+    port: u16,
+    config: ClientConfig,
+) -> Result<Verdict, Box<dyn StdError>> {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(&host).unwrap();
     let rc_config = Arc::new(config);
     let mut client = ClientSession::new(&rc_config, dns_name).unwrap();
@@ -61,9 +65,7 @@ fn communicate(host: String, port: u16, config: ClientConfig) -> Result<Verdict,
 
             if let Err(err) = client.process_new_packets() {
                 return match err {
-                    TlsError::WebPKIError(..) | TlsError::AlertReceived(_) => {
-                        Ok(Verdict::Reject(err))
-                    }
+                    Error::WebPKIError(..) | Error::AlertReceived(_) => Ok(Verdict::Reject(err)),
                     _ => Err(From::from(format!("{:?}", err))),
                 };
             }

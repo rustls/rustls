@@ -5,7 +5,6 @@ use super::handshake::*;
 use crate::key::Certificate;
 use webpki::DNSNameRef;
 
-use std::convert::TryFrom;
 use std::mem;
 
 #[test]
@@ -41,10 +40,8 @@ fn rejects_sessionid_with_bad_length() {
 
 #[test]
 fn sessionid_with_different_lengths_are_unequal() {
-    let id_a: &[u8] = &[1u8];
-    let a = SessionID::try_from(id_a);
-    let id_b: &[u8] = &[1u8, 2u8];
-    let b = SessionID::try_from(id_b);
+    let a = SessionID::read(&mut Reader::init(&[1u8, 1])).unwrap();
+    let b = SessionID::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
     assert_eq!(a, a);
     assert_eq!(b, b);
     assert_ne!(a, b);
@@ -58,8 +55,6 @@ fn accepts_short_sessionid() {
     println!("{:?}", sess);
 
     assert_eq!(sess.len(), 1);
-    let id: &[u8] = &[1u8];
-    assert_eq!(Some(sess), SessionID::try_from(id).ok());
     assert_eq!(rd.any_left(), false);
 }
 
@@ -70,9 +65,8 @@ fn accepts_empty_sessionid() {
     let sess = SessionID::read(&mut rd);
     println!("{:?}", sess);
 
+
     assert_eq!(sess, None);
-    let empty: &[u8] = &[];
-    assert_eq!(None, SessionID::try_from(empty).ok());
     assert_eq!(rd.any_left(), false);
 }
 
@@ -85,6 +79,48 @@ fn can_roundtrip_unknown_client_ext() {
     println!("{:?}", ext);
     assert_eq!(ext.get_type(), ExtensionType::Unknown(0x1234));
     assert_eq!(bytes.to_vec(), ext.get_encoding());
+}
+
+#[test]
+fn refuses_client_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    let mut rd = Reader::init(&bytes);
+    assert!(ClientExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_server_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    let mut rd = Reader::init(&bytes);
+    assert!(ServerExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_certificate_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x12, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(CertificateExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_certificate_req_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff];
+    let mut rd = Reader::init(&bytes);
+    assert!(CertReqExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_helloreq_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x2b, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(HelloRetryExtension::read(&mut rd).is_none());
+}
+
+#[test]
+fn refuses_newsessionticket_ext_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01];
+    let mut rd = Reader::init(&bytes);
+    assert!(NewSessionTicketExtension::read(&mut rd).is_none());
 }
 
 #[test]

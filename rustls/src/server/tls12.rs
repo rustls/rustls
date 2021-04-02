@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::error::TlsError;
+use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -12,7 +12,7 @@ use crate::msgs::handshake::HandshakePayload;
 use crate::msgs::handshake::NewSessionTicketPayload;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::ServerSessionImpl;
+use crate::server::ServerSession;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::verify;
 
@@ -31,16 +31,15 @@ pub struct ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
-        let cert_chain =
-            require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         self.handshake
             .transcript
             .add_message(&m);
+        let cert_chain = require_handshake_msg_move!(
+            m,
+            HandshakeType::Certificate,
+            HandshakePayload::Certificate
+        )?;
 
         // If we can't determine if the auth is mandatory, abort
         let mandatory = sess
@@ -51,7 +50,7 @@ impl hs::State for ExpectCertificate {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 sess.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
-                TlsError::General("client rejected by client_auth_mandatory".into())
+                Error::General("client rejected by client_auth_mandatory".into())
             })?;
 
         trace!("certs {:?}", cert_chain);
@@ -60,7 +59,7 @@ impl hs::State for ExpectCertificate {
             None if mandatory => {
                 sess.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
-                return Err(TlsError::NoCertificatesPresented);
+                return Err(Error::NoCertificatesPresented);
             }
             None => {
                 debug!("client auth requested but no certificate supplied");
@@ -79,7 +78,7 @@ impl hs::State for ExpectCertificate {
                         Err(err)
                     })?;
 
-                Some(ClientCertDetails::new(cert_chain.clone()))
+                Some(ClientCertDetails::new(cert_chain))
             }
         };
 
@@ -105,11 +104,7 @@ pub struct ExpectClientKX {
 }
 
 impl hs::State for ExpectClientKX {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
             HandshakeType::ClientKeyExchange,
@@ -128,7 +123,7 @@ impl hs::State for ExpectClientKX {
             .ok_or_else(|| {
                 sess.common
                     .send_fatal_alert(AlertDescription::DecodeError);
-                TlsError::CorruptMessagePayload(ContentType::Handshake)
+                Error::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
         let suite = sess.common.get_suite_assert();
@@ -179,11 +174,7 @@ pub struct ExpectCertificateVerify {
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
                 m,
@@ -233,7 +224,7 @@ pub struct ExpectCCS {
 }
 
 impl hs::State for ExpectCCS {
-    fn handle(self: Box<Self>, sess: &mut ServerSessionImpl, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
         // CCS should not be received interleaved with fragmented handshake-level
@@ -257,7 +248,7 @@ impl hs::State for ExpectCCS {
 fn get_server_session_value_tls12(
     secrets: &SessionSecrets,
     using_ems: bool,
-    sess: &ServerSessionImpl,
+    sess: &ServerSession,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
@@ -283,7 +274,7 @@ pub fn emit_ticket(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
     using_ems: bool,
-    sess: &mut ServerSessionImpl,
+    sess: &mut ServerSession,
 ) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -293,7 +284,7 @@ pub fn emit_ticket(
         .ticketer
         .encrypt(&plain)
         .unwrap_or_else(Vec::new);
-    let ticket_lifetime = sess.config.ticketer.get_lifetime();
+    let ticket_lifetime = sess.config.ticketer.lifetime();
 
     let m = Message {
         typ: ContentType::Handshake,
@@ -311,7 +302,7 @@ pub fn emit_ticket(
     sess.common.send_msg(m, false);
 }
 
-pub fn emit_ccs(sess: &mut ServerSessionImpl) {
+pub fn emit_ccs(sess: &mut ServerSession) {
     let m = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
@@ -324,7 +315,7 @@ pub fn emit_ccs(sess: &mut ServerSessionImpl) {
 pub fn emit_finished(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
-    sess: &mut ServerSessionImpl,
+    sess: &mut ServerSession,
 ) {
     let vh = handshake.transcript.get_current_hash();
     let verify_data = secrets.server_verify_data(&vh);
@@ -352,11 +343,7 @@ pub struct ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(
-        mut self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -373,7 +360,7 @@ impl hs::State for ExpectFinished {
                 .map_err(|_| {
                     sess.common
                         .send_fatal_alert(AlertDescription::DecryptError);
-                    TlsError::DecryptError
+                    Error::DecryptError
                 })
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -424,11 +411,7 @@ pub struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl hs::State for ExpectTraffic {
-    fn handle(
-        self: Box<Self>,
-        sess: &mut ServerSessionImpl,
-        mut m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, sess: &mut ServerSession, mut m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;
         sess.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
@@ -440,7 +423,7 @@ impl hs::State for ExpectTraffic {
         output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), TlsError> {
+    ) -> Result<(), Error> {
         self.secrets
             .export_keying_material(output, label, context);
         Ok(())

@@ -1,5 +1,5 @@
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::msgs::message::{BorrowMessage, Message};
 
 static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
@@ -29,8 +29,8 @@ pub struct RecordLayer {
 impl RecordLayer {
     pub fn new() -> RecordLayer {
         RecordLayer {
-            message_encrypter: MessageEncrypter::invalid(),
-            message_decrypter: MessageDecrypter::invalid(),
+            message_encrypter: <dyn MessageEncrypter>::invalid(),
+            message_decrypter: <dyn MessageDecrypter>::invalid(),
             write_seq: 0,
             read_seq: 0,
             encrypt_state: DirectionState::Invalid,
@@ -119,7 +119,7 @@ impl RecordLayer {
     /// `encr` is a decoded message allegedly received from the peer.
     /// If it can be decrypted, its decryption is returned.  Otherwise,
     /// an error is returned.
-    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, TlsError> {
+    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, Error> {
         debug_assert!(self.decrypt_state == DirectionState::Active);
         let seq = self.read_seq;
         self.read_seq += 1;

@@ -1,5 +1,6 @@
-use crate::error::TlsError;
+use crate::error::Error;
 use crate::key;
+use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
@@ -27,27 +28,17 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 /// in memory.  If enforces a limit on the number of stored sessions
 /// to bound memory usage.
 pub struct ServerSessionMemoryCache {
-    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
-    max_entries: usize,
+    cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
 }
 
 impl ServerSessionMemoryCache {
     /// Make a new ServerSessionMemoryCache.  `size` is the maximum
-    /// number of stored sessions.
+    /// number of stored sessions, and may be rounded-up for
+    /// efficiency.
     pub fn new(size: usize) -> Arc<ServerSessionMemoryCache> {
-        debug_assert!(size > 0);
         Arc::new(ServerSessionMemoryCache {
-            cache: Mutex::new(collections::HashMap::new()),
-            max_entries: size,
+            cache: Mutex::new(limited_cache::LimitedCache::new(size)),
         })
-    }
-
-    fn limit_size(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        while cache.len() > self.max_entries {
-            let k = cache.keys().next().unwrap().clone();
-            cache.remove(&k);
-        }
     }
 }
 
@@ -57,7 +48,6 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
             .lock()
             .unwrap()
             .insert(key, value);
-        self.limit_size();
         true
     }
 
@@ -81,7 +71,7 @@ impl server::ProducesTickets for NeverProducesTickets {
     fn enabled(&self) -> bool {
         false
     }
-    fn get_lifetime(&self) -> u32 {
+    fn lifetime(&self) -> u32 {
         0
     }
     fn encrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
@@ -110,9 +100,9 @@ impl AlwaysResolvesChain {
     pub fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesChain, TlsError> {
+    ) -> Result<AlwaysResolvesChain, Error> {
         let key = sign::any_supported_type(priv_key)
-            .map_err(|_| TlsError::General("invalid private key".into()))?;
+            .map_err(|_| Error::General("invalid private key".into()))?;
         Ok(AlwaysResolvesChain(sign::CertifiedKey::new(
             chain,
             Arc::new(key),
@@ -128,7 +118,7 @@ impl AlwaysResolvesChain {
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,
-    ) -> Result<AlwaysResolvesChain, TlsError> {
+    ) -> Result<AlwaysResolvesChain, Error> {
         let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
         if !ocsp.is_empty() {
             r.0.ocsp = Some(ocsp);
@@ -165,9 +155,9 @@ impl ResolvesServerCertUsingSni {
     /// This function fails if `name` is not a valid DNS name, or if
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
-    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), TlsError> {
+    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
         let checked_name = webpki::DNSNameRef::try_from_ascii_str(name)
-            .map_err(|_| TlsError::General("Bad DNS name".into()))?;
+            .map_err(|_| Error::General("Bad DNS name".into()))?;
 
         ck.cross_check_end_entity_cert(Some(checked_name))?;
         self.by_name.insert(name.into(), ck);
@@ -240,38 +230,27 @@ mod test {
 
     #[test]
     fn test_serversessionmemorycache_drops_to_maintain_size_invariant() {
-        let c = ServerSessionMemoryCache::new(4);
+        let c = ServerSessionMemoryCache::new(2);
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
         assert_eq!(c.put(vec![0x03], vec![0x04]), true);
         assert_eq!(c.put(vec![0x05], vec![0x06]), true);
         assert_eq!(c.put(vec![0x07], vec![0x08]), true);
         assert_eq!(c.put(vec![0x09], vec![0x0a]), true);
 
-        let mut count = 0;
-        if c.get(&[0x01]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x03]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x05]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x07]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x09]).is_some() {
-            count += 1;
-        }
+        let count = c.get(&[0x01]).iter().count()
+            + c.get(&[0x03]).iter().count()
+            + c.get(&[0x05]).iter().count()
+            + c.get(&[0x07]).iter().count()
+            + c.get(&[0x09]).iter().count();
 
-        assert_eq!(count, 4);
+        assert!(count < 5);
     }
 
     #[test]
     fn test_neverproducestickets_does_nothing() {
         let npt = NeverProducesTickets {};
         assert_eq!(false, npt.enabled());
-        assert_eq!(0, npt.get_lifetime());
+        assert_eq!(0, npt.lifetime());
         assert_eq!(None, npt.encrypt(&[]));
         assert_eq!(None, npt.decrypt(&[]));
     }

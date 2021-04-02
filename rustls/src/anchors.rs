@@ -76,7 +76,7 @@ impl RootCertStore {
     }
 
     /// Return the Subject Names for certificates in the container.
-    pub fn get_subjects(&self) -> DistinguishedNames {
+    pub fn subjects(&self) -> DistinguishedNames {
         let mut r = DistinguishedNames::new();
 
         for ota in &self.roots {

@@ -6,8 +6,6 @@ use crate::key::Certificate;
 use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
 use webpki::DNSNameRef;
 
-use std::convert::TryFrom;
-
 #[test]
 fn clientsessionkey_is_debug() {
     let name = DNSNameRef::try_from_ascii_str("hello").unwrap();
@@ -24,11 +22,10 @@ fn clientsessionkey_cannot_be_read() {
 
 #[test]
 fn clientsessionvalue_is_debug() {
-    let id: &[u8] = &[1u8];
     let csv = ClientSessionValueWithResolvedCipherSuite::new(
         ProtocolVersion::TLSv1_2,
         &TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        SessionID::try_from(id).ok(),
+        Some(SessionID::random().unwrap()),
         vec![],
         vec![1, 2, 3],
         &vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],
