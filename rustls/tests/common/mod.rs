@@ -5,13 +5,13 @@ use rustls;
 use rustls_pemfile;
 
 use rustls::internal::msgs::{codec::Codec, codec::Reader, message::Message};
+use rustls::Connection;
 use rustls::Error;
-use rustls::Session;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
 use rustls::{Certificate, PrivateKey};
-use rustls::{ClientConfig, ClientSession};
+use rustls::{ClientConfig, ClientConnection};
 use rustls::{ProtocolVersion, DEFAULT_CIPHERSUITES};
-use rustls::{ServerConfig, ServerSession};
+use rustls::{ServerConfig, ServerConnection};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::{
@@ -99,7 +99,7 @@ embed_files! {
     (RSA_INTER_REQ, "rsa", "inter.req");
 }
 
-pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
+pub fn transfer(left: &mut dyn Connection, right: &mut dyn Connection) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -126,7 +126,11 @@ pub fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> usize {
     total
 }
 
-pub fn transfer_altered<F>(left: &mut dyn Session, filter: F, right: &mut dyn Session) -> usize
+pub fn transfer_altered<F>(
+    left: &mut dyn Connection,
+    filter: F,
+    right: &mut dyn Connection,
+) -> usize
 where
     F: Fn(&mut Message),
 {
@@ -256,28 +260,31 @@ pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
     cfg
 }
 
-pub fn make_pair(kt: KeyType) -> (ClientSession, ServerSession) {
+pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
     make_pair_for_configs(make_client_config(kt), make_server_config(kt))
 }
 
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
-) -> (ClientSession, ServerSession) {
+) -> (ClientConnection, ServerConnection) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-) -> (ClientSession, ServerSession) {
+) -> (ClientConnection, ServerConnection) {
     (
-        ClientSession::new(client_config, dns_name("localhost")).unwrap(),
-        ServerSession::new(server_config),
+        ClientConnection::new(client_config, dns_name("localhost")).unwrap(),
+        ServerConnection::new(server_config),
     )
 }
 
-pub fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) -> (usize, usize) {
+pub fn do_handshake(
+    client: &mut ClientConnection,
+    server: &mut ServerConnection,
+) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client, server);
@@ -375,8 +382,8 @@ pub enum ErrorFromPeer {
 }
 
 pub fn do_handshake_until_error(
-    client: &mut ClientSession,
-    server: &mut ServerSession,
+    client: &mut ClientConnection,
+    server: &mut ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
@@ -393,8 +400,8 @@ pub fn do_handshake_until_error(
 }
 
 pub fn do_handshake_until_both_error(
-    client: &mut ClientSession,
-    server: &mut ServerSession,
+    client: &mut ClientConnection,
+    server: &mut ServerConnection,
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {

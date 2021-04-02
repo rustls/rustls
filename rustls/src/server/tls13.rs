@@ -1,4 +1,5 @@
 use crate::check::check_message;
+use crate::conn::ConnectionRandoms;
 use crate::error::Error;
 use crate::key::Certificate;
 use crate::key_schedule::{
@@ -36,13 +37,12 @@ use crate::msgs::handshake::SessionID;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::server::ServerSession;
-use crate::session::SessionRandoms;
+use crate::server::ServerConnection;
 use crate::sign;
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
-use crate::{msgs::handshake::NewSessionTicketExtension, quic, session::Protocol};
+use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension, quic};
 
 use crate::server::common::{ClientCertDetails, HandshakeDetails};
 use crate::server::hs;
@@ -52,7 +52,7 @@ use ring::constant_time;
 pub struct CompleteClientHelloHandling {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
-    pub randoms: SessionRandoms,
+    pub randoms: ConnectionRandoms,
     pub done_retry: bool,
     pub send_ticket: bool,
 }
@@ -86,7 +86,7 @@ impl CompleteClientHelloHandling {
     fn emit_server_hello(
         &mut self,
         suite: &'static SupportedCipherSuite,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         session_id: &SessionID,
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
@@ -95,7 +95,7 @@ impl CompleteClientHelloHandling {
         let mut extensions = Vec::new();
 
         // Do key exchange
-        let kxr = kx::KeyExchange::choose(share.group, &sess.config.kx_groups)
+        let kxr = kx::KeyExchange::choose(share.group, &conn.config.kx_groups)
             .and_then(kx::KeyExchange::start)
             .and_then(|kx| kx.complete(&share.payload.0))
             .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
@@ -124,7 +124,7 @@ impl CompleteClientHelloHandling {
             }),
         };
 
-        hs::check_aligned_handshake(sess)?;
+        hs::check_aligned_handshake(conn)?;
 
         #[cfg(feature = "quic")]
         let client_hello_hash = self
@@ -136,7 +136,7 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&sh);
-        sess.common.send_msg(sh, false);
+        conn.common.send_msg(sh, false);
 
         // Start key schedule
         let mut key_schedule = if let Some(psk) = resuming_psk {
@@ -144,16 +144,16 @@ impl CompleteClientHelloHandling {
 
             #[cfg(feature = "quic")]
             {
-                if sess.common.protocol == Protocol::Quic {
+                if conn.common.protocol == Protocol::Quic {
                     let client_early_traffic_secret = early_key_schedule
                         .client_early_traffic_secret(
                             &client_hello_hash,
-                            &*sess.config.key_log,
+                            &*conn.config.key_log,
                             &self.randoms.client,
                         );
                     // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
                     // before the application can see.
-                    sess.common.quic.early_secret = Some(client_early_traffic_secret);
+                    conn.common.quic.early_secret = Some(client_early_traffic_secret);
                 }
             }
 
@@ -168,25 +168,25 @@ impl CompleteClientHelloHandling {
             .get_current_hash();
         let write_key = key_schedule.server_handshake_traffic_secret(
             &handshake_hash,
-            &*sess.config.key_log,
+            &*conn.config.key_log,
             &self.randoms.client,
         );
-        sess.common
+        conn.common
             .record_layer
             .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
 
         let read_key = key_schedule.client_handshake_traffic_secret(
             &handshake_hash,
-            &*sess.config.key_log,
+            &*conn.config.key_log,
             &self.randoms.client,
         );
-        sess.common
+        conn.common
             .record_layer
             .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
 
         #[cfg(feature = "quic")]
         {
-            sess.common.quic.hs_secrets = Some(quic::Secrets {
+            conn.common.quic.hs_secrets = Some(quic::Secrets {
                 client: read_key,
                 server: write_key,
             });
@@ -195,8 +195,8 @@ impl CompleteClientHelloHandling {
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(&mut self, sess: &mut ServerSession) {
-        if sess.common.is_quic() {
+    fn emit_fake_ccs(&mut self, conn: &mut ServerConnection) {
+        if conn.common.is_quic() {
             return;
         }
         let m = Message {
@@ -204,13 +204,13 @@ impl CompleteClientHelloHandling {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        sess.common.send_msg(m, false);
+        conn.common.send_msg(m, false);
     }
 
     fn emit_hello_retry_request(
         &mut self,
         suite: &'static SupportedCipherSuite,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         group: NamedGroup,
     ) {
         let mut req = HelloRetryRequest {
@@ -243,12 +243,12 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&m);
-        sess.common.send_msg(m, false);
+        conn.common.send_msg(m, false);
     }
 
     fn emit_encrypted_extensions(
         &mut self,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -256,7 +256,7 @@ impl CompleteClientHelloHandling {
     ) -> Result<(), Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
-            sess,
+            conn,
             self.suite,
             ocsp_response,
             sct_list,
@@ -278,12 +278,12 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&ee);
-        sess.common.send_msg(ee, true);
+        conn.common.send_msg(ee, true);
         Ok(())
     }
 
-    fn emit_certificate_req_tls13(&mut self, sess: &mut ServerSession) -> Result<bool, Error> {
-        if !sess.config.verifier.offer_client_auth() {
+    fn emit_certificate_req_tls13(&mut self, conn: &mut ServerConnection) -> Result<bool, Error> {
+        if !conn.config.verifier.offer_client_auth() {
             return Ok(false);
         }
 
@@ -292,20 +292,20 @@ impl CompleteClientHelloHandling {
             extensions: Vec::new(),
         };
 
-        let schemes = sess
+        let schemes = conn
             .config
             .get_verifier()
             .supported_verify_schemes();
         cr.extensions
             .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = sess
+        let names = conn
             .config
             .verifier
-            .client_auth_root_subjects(sess.get_sni())
+            .client_auth_root_subjects(conn.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
-                sess.common
+                conn.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("client rejected by client_auth_root_subjects".into())
             })?;
@@ -328,13 +328,13 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&m);
-        sess.common.send_msg(m, true);
+        conn.common.send_msg(m, true);
         Ok(true)
     }
 
     fn emit_certificate_tls13(
         &mut self,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         cert_chain: &[Certificate],
         ocsp_response: Option<&[u8]>,
         sct_list: Option<&[u8]>,
@@ -381,12 +381,12 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&c);
-        sess.common.send_msg(c, true);
+        conn.common.send_msg(c, true);
     }
 
     fn emit_certificate_verify_tls13(
         &mut self,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
@@ -399,7 +399,7 @@ impl CompleteClientHelloHandling {
 
         let signer = signing_key
             .choose_scheme(schemes)
-            .ok_or_else(|| hs::incompatible(sess, "no overlapping sigschemes"))?;
+            .ok_or_else(|| hs::incompatible(conn, "no overlapping sigschemes"))?;
 
         let scheme = signer.get_scheme();
         let sig = signer.sign(&message)?;
@@ -419,13 +419,13 @@ impl CompleteClientHelloHandling {
         self.handshake
             .transcript
             .add_message(&m);
-        sess.common.send_msg(m, true);
+        conn.common.send_msg(m, true);
         Ok(())
     }
 
     fn emit_finished_tls13(
         &mut self,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         key_schedule: KeyScheduleHandshake,
     ) -> KeyScheduleTrafficWithClientFinishedPending {
         let handshake_hash = self
@@ -453,35 +453,35 @@ impl CompleteClientHelloHandling {
             .transcript
             .get_current_hash();
         self.handshake.hash_at_server_fin = Some(hash_at_server_fin);
-        sess.common.send_msg(m, true);
+        conn.common.send_msg(m, true);
 
         // Now move to application data keys.  Read key change is deferred until
         // the Finish message is received & validated.
         let mut key_schedule_traffic = key_schedule.into_traffic_with_client_finished_pending();
         let write_key = key_schedule_traffic.server_application_traffic_secret(
             &hash_at_server_fin,
-            &*sess.config.key_log,
+            &*conn.config.key_log,
             &self.randoms.client,
         );
-        sess.common
+        conn.common
             .record_layer
             .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
 
         key_schedule_traffic.exporter_master_secret(
             &hash_at_server_fin,
-            &*sess.config.key_log,
+            &*conn.config.key_log,
             &self.randoms.client,
         );
 
         let _read_key = key_schedule_traffic.client_application_traffic_secret(
             &hash_at_server_fin,
-            &*sess.config.key_log,
+            &*conn.config.key_log,
             &self.randoms.client,
         );
 
         #[cfg(feature = "quic")]
         {
-            sess.common.quic.traffic_secrets = Some(quic::Secrets {
+            conn.common.quic.traffic_secrets = Some(quic::Secrets {
                 client: _read_key,
                 server: write_key,
             });
@@ -492,16 +492,16 @@ impl CompleteClientHelloHandling {
 
     fn attempt_tls13_ticket_decryption(
         &mut self,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         ticket: &[u8],
     ) -> Option<persist::ServerSessionValue> {
-        if sess.config.ticketer.enabled() {
-            sess.config
+        if conn.config.ticketer.enabled() {
+            conn.config
                 .ticketer
                 .decrypt(ticket)
                 .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
         } else {
-            sess.config
+            conn.config
                 .session_storage
                 .take(ticket)
                 .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
@@ -511,7 +511,7 @@ impl CompleteClientHelloHandling {
     pub fn handle_client_hello(
         mut self,
         suite: &'static SupportedCipherSuite,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         server_key: &sign::CertifiedKey,
         chm: &Message,
     ) -> hs::NextStateOrError {
@@ -522,16 +522,16 @@ impl CompleteClientHelloHandling {
         )?;
 
         if client_hello.compression_methods.len() != 1 {
-            return Err(hs::illegal_param(sess, "client offered wrong compressions"));
+            return Err(hs::illegal_param(conn, "client offered wrong compressions"));
         }
 
         let groups_ext = client_hello
             .get_namedgroups_extension()
-            .ok_or_else(|| hs::incompatible(sess, "client didn't describe groups"))?;
+            .ok_or_else(|| hs::incompatible(conn, "client didn't describe groups"))?;
 
         let mut sigschemes_ext = client_hello
             .get_sigalgs_extension()
-            .ok_or_else(|| hs::incompatible(sess, "client didn't describe sigschemes"))?
+            .ok_or_else(|| hs::incompatible(conn, "client didn't describe sigschemes"))?
             .clone();
 
         let tls13_schemes = sign::supported_sign_tls13();
@@ -539,14 +539,14 @@ impl CompleteClientHelloHandling {
 
         let shares_ext = client_hello
             .get_keyshare_extension()
-            .ok_or_else(|| hs::incompatible(sess, "client didn't send keyshares"))?;
+            .ok_or_else(|| hs::incompatible(conn, "client didn't send keyshares"))?;
 
         if client_hello.has_keyshare_extension_with_duplicates() {
-            return Err(hs::illegal_param(sess, "client sent duplicate keyshares"));
+            return Err(hs::illegal_param(conn, "client sent duplicate keyshares"));
         }
 
         // choose a share that we support
-        let chosen_share = sess
+        let chosen_share = conn
             .config
             .kx_groups
             .iter()
@@ -561,7 +561,7 @@ impl CompleteClientHelloHandling {
             None => {
                 // We don't have a suitable key share.  Choose a suitable group and
                 // send a HelloRetryRequest.
-                let retry_group_maybe = sess
+                let retry_group_maybe = conn
                     .config
                     .kx_groups
                     .iter()
@@ -574,11 +574,11 @@ impl CompleteClientHelloHandling {
 
                 if let Some(group) = retry_group_maybe {
                     if self.done_retry {
-                        return Err(hs::illegal_param(sess, "did not follow retry request"));
+                        return Err(hs::illegal_param(conn, "did not follow retry request"));
                     }
 
-                    self.emit_hello_retry_request(suite, sess, group.name);
-                    self.emit_fake_ccs(sess);
+                    self.emit_hello_retry_request(suite, conn, group.name);
+                    self.emit_fake_ccs(conn);
                     return Ok(Box::new(hs::ExpectClientHello {
                         handshake: self.handshake,
                         using_ems: false,
@@ -587,7 +587,7 @@ impl CompleteClientHelloHandling {
                     }));
                 }
 
-                return Err(hs::incompatible(sess, "no kx group overlap with client"));
+                return Err(hs::incompatible(conn, "no kx group overlap with client"));
             }
         };
 
@@ -595,24 +595,24 @@ impl CompleteClientHelloHandling {
         let mut resumedata = None;
         if let Some(psk_offer) = client_hello.get_psk() {
             if !client_hello.check_psk_ext_is_last() {
-                return Err(hs::illegal_param(sess, "psk extension in wrong position"));
+                return Err(hs::illegal_param(conn, "psk extension in wrong position"));
             }
 
             if psk_offer.binders.is_empty() {
-                return Err(hs::decode_error(sess, "psk extension missing binder"));
+                return Err(hs::decode_error(conn, "psk extension missing binder"));
             }
 
             if psk_offer.binders.len() != psk_offer.identities.len() {
                 return Err(hs::illegal_param(
-                    sess,
+                    conn,
                     "psk extension mismatched ids/binders",
                 ));
             }
 
             for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                 let resume = match self
-                    .attempt_tls13_ticket_decryption(sess, &psk_id.identity.0)
-                    .and_then(|resumedata| hs::can_resume(self.suite, &sess.sni, false, resumedata))
+                    .attempt_tls13_ticket_decryption(conn, &psk_id.identity.0)
+                    .and_then(|resumedata| hs::can_resume(self.suite, &conn.sni, false, resumedata))
                 {
                     Some(resume) => resume,
                     None => continue,
@@ -620,7 +620,7 @@ impl CompleteClientHelloHandling {
 
                 if !self.check_binder(suite, chm, &resume.master_secret.0, &psk_offer.binders[i].0)
                 {
-                    sess.common
+                    conn.common
                         .send_fatal_alert(AlertDescription::DecryptError);
                     return Err(Error::PeerMisbehavedError(
                         "client sent wrong binder".to_string(),
@@ -643,8 +643,8 @@ impl CompleteClientHelloHandling {
         }
 
         if let Some(ref resume) = resumedata {
-            sess.received_resumption_data = Some(resume.application_data.0.clone());
-            sess.client_cert_chain = resume.client_cert_chain.clone();
+            conn.received_resumption_data = Some(resume.application_data.0.clone());
+            conn.client_cert_chain = resume.client_cert_chain.clone();
         }
 
         let full_handshake = resumedata.is_none();
@@ -653,7 +653,7 @@ impl CompleteClientHelloHandling {
             .add_message(chm);
         let key_schedule = self.emit_server_hello(
             suite,
-            sess,
+            conn,
             &client_hello.session_id,
             chosen_share,
             chosen_psk_index,
@@ -662,13 +662,13 @@ impl CompleteClientHelloHandling {
                 .map(|x| &x.master_secret.0[..]),
         )?;
         if !self.done_retry {
-            self.emit_fake_ccs(sess);
+            self.emit_fake_ccs(conn);
         }
 
         let (mut ocsp_response, mut sct_list) =
             (server_key.ocsp.as_deref(), server_key.sct_list.as_deref());
         self.emit_encrypted_extensions(
-            sess,
+            conn,
             &mut ocsp_response,
             &mut sct_list,
             client_hello,
@@ -676,16 +676,16 @@ impl CompleteClientHelloHandling {
         )?;
 
         let doing_client_auth = if full_handshake {
-            let client_auth = self.emit_certificate_req_tls13(sess)?;
-            self.emit_certificate_tls13(sess, &server_key.cert, ocsp_response, sct_list);
-            self.emit_certificate_verify_tls13(sess, &*server_key.key, &sigschemes_ext)?;
+            let client_auth = self.emit_certificate_req_tls13(conn)?;
+            self.emit_certificate_tls13(conn, &server_key.cert, ocsp_response, sct_list);
+            self.emit_certificate_verify_tls13(conn, &*server_key.key, &sigschemes_ext)?;
             client_auth
         } else {
             false
         };
 
-        hs::check_aligned_handshake(sess)?;
-        let key_schedule_traffic = self.emit_finished_tls13(sess, key_schedule);
+        hs::check_aligned_handshake(conn)?;
+        let key_schedule_traffic = self.emit_finished_tls13(conn, key_schedule);
 
         if doing_client_auth {
             Ok(Box::new(ExpectCertificate {
@@ -710,13 +710,17 @@ impl CompleteClientHelloHandling {
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
-    pub randoms: SessionRandoms,
+    pub randoms: ConnectionRandoms,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     pub send_ticket: bool,
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        conn: &mut ServerConnection,
+        m: Message,
+    ) -> hs::NextStateOrError {
         let certp = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
@@ -736,13 +740,13 @@ impl hs::State for ExpectCertificate {
 
         let cert_chain = certp.convert();
 
-        let mandatory = sess
+        let mandatory = conn
             .config
             .verifier
-            .client_auth_mandatory(sess.get_sni())
+            .client_auth_mandatory(conn.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
-                sess.common
+                conn.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("client rejected by client_auth_mandatory".into())
             })?;
@@ -763,7 +767,7 @@ impl hs::State for ExpectCertificate {
                     }));
                 }
 
-                sess.common
+                conn.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
                 return Err(Error::NoCertificatesPresented);
             }
@@ -771,11 +775,11 @@ impl hs::State for ExpectCertificate {
         };
 
         let now = std::time::SystemTime::now();
-        sess.config
+        conn.config
             .get_verifier()
-            .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
+            .verify_client_cert(end_entity, intermediates, conn.get_sni(), now)
             .map_err(|err| {
-                hs::incompatible(sess, "certificate invalid");
+                hs::incompatible(conn, "certificate invalid");
                 err
             })?;
 
@@ -794,14 +798,18 @@ impl hs::State for ExpectCertificate {
 pub struct ExpectCertificateVerify {
     handshake: HandshakeDetails,
     suite: &'static SupportedCipherSuite,
-    randoms: SessionRandoms,
+    randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     client_cert: ClientCertDetails,
     send_ticket: bool,
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        conn: &mut ServerConnection,
+        m: Message,
+    ) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
                 m,
@@ -818,19 +826,19 @@ impl hs::State for ExpectCertificateVerify {
             let certs = &self.client_cert.cert_chain;
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
-            sess.config
+            conn.config
                 .get_verifier()
                 .verify_tls13_signature(&msg, &certs[0], sig)
         };
 
         if let Err(e) = rc {
-            sess.common
+            conn.common
                 .send_fatal_alert(AlertDescription::AccessDenied);
             return Err(e);
         }
 
         trace!("client CertificateVerify OK");
-        sess.client_cert_chain = Some(self.client_cert.take_chain());
+        conn.client_cert_chain = Some(self.client_cert.take_chain());
 
         self.handshake
             .transcript
@@ -850,7 +858,7 @@ fn get_server_session_value(
     handshake: &mut HandshakeDetails,
     suite: &'static SupportedCipherSuite,
     key_schedule: &KeyScheduleTraffic,
-    sess: &ServerSession,
+    conn: &ServerConnection,
     nonce: &[u8],
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
@@ -860,20 +868,20 @@ fn get_server_session_value(
         key_schedule.resumption_master_secret_and_derive_ticket_psk(&handshake_hash, nonce);
 
     persist::ServerSessionValue::new(
-        sess.get_sni(),
+        conn.get_sni(),
         version,
         suite.suite,
         secret,
-        &sess.client_cert_chain,
-        sess.common.alpn_protocol.clone(),
-        sess.resumption_data.clone(),
+        &conn.client_cert_chain,
+        conn.common.alpn_protocol.clone(),
+        conn.resumption_data.clone(),
     )
 }
 
 pub struct ExpectFinished {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
-    pub randoms: SessionRandoms,
+    pub randoms: ConnectionRandoms,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     pub send_ticket: bool,
 }
@@ -882,23 +890,23 @@ impl ExpectFinished {
     fn emit_ticket(
         handshake: &mut HandshakeDetails,
         suite: &'static SupportedCipherSuite,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         key_schedule: &KeyScheduleTraffic,
     ) -> Result<(), rand::GetRandomFailed> {
         let nonce = rand::random_vec(32)?;
         let plain =
-            get_server_session_value(handshake, suite, key_schedule, sess, &nonce).get_encoding();
+            get_server_session_value(handshake, suite, key_schedule, conn, &nonce).get_encoding();
 
-        let stateless = sess.config.ticketer.enabled();
+        let stateless = conn.config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
-            let ticket = match sess.config.ticketer.encrypt(&plain) {
+            let ticket = match conn.config.ticketer.encrypt(&plain) {
                 Some(t) => t,
                 None => return Ok(()),
             };
-            (ticket, sess.config.ticketer.lifetime())
+            (ticket, conn.config.ticketer.lifetime())
         } else {
             let id = rand::random_vec(32)?;
-            let stored = sess
+            let stored = conn
                 .config
                 .session_storage
                 .put(id.clone(), plain);
@@ -915,11 +923,11 @@ impl ExpectFinished {
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
         #[cfg(feature = "quic")]
         {
-            if sess.config.max_early_data_size > 0 && sess.common.protocol == Protocol::Quic {
+            if conn.config.max_early_data_size > 0 && conn.common.protocol == Protocol::Quic {
                 payload
                     .exts
                     .push(NewSessionTicketExtension::EarlyData(
-                        sess.config.max_early_data_size,
+                        conn.config.max_early_data_size,
                     ));
             }
         }
@@ -934,13 +942,17 @@ impl ExpectFinished {
 
         trace!("sending new ticket {:?} (stateless: {})", m, stateless);
         handshake.transcript.add_message(&m);
-        sess.common.send_msg(m, true);
+        conn.common.send_msg(m, true);
         Ok(())
     }
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        conn: &mut ServerConnection,
+        m: Message,
+    ) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -954,7 +966,7 @@ impl hs::State for ExpectFinished {
 
         let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
             .map_err(|_| {
-                sess.common
+                conn.common
                     .send_fatal_alert(AlertDescription::DecryptError);
                 warn!("Finished wrong");
                 Error::DecryptError
@@ -967,7 +979,7 @@ impl hs::State for ExpectFinished {
             .transcript
             .add_message(&m);
 
-        hs::check_aligned_handshake(sess)?;
+        hs::check_aligned_handshake(conn)?;
 
         // Install keying to read future messages.
         let read_key = self
@@ -977,24 +989,24 @@ impl hs::State for ExpectFinished {
                     .hash_at_server_fin
                     .as_ref()
                     .unwrap(),
-                &*sess.config.key_log,
+                &*conn.config.key_log,
                 &self.randoms.client,
             );
-        sess.common
+        conn.common
             .record_layer
             .set_message_decrypter(cipher::new_tls13_read(self.suite, &read_key));
 
         let key_schedule_traffic = self.key_schedule.into_traffic();
 
         if self.send_ticket {
-            Self::emit_ticket(&mut self.handshake, self.suite, sess, &key_schedule_traffic)?;
+            Self::emit_ticket(&mut self.handshake, self.suite, conn, &key_schedule_traffic)?;
         }
 
-        sess.common.start_traffic();
+        conn.common.start_traffic();
 
         #[cfg(feature = "quic")]
         {
-            if sess.common.protocol == Protocol::Quic {
+            if conn.common.protocol == Protocol::Quic {
                 return Ok(Box::new(ExpectQUICTraffic {
                     key_schedule: key_schedule_traffic,
                     _fin_verified: fin,
@@ -1020,20 +1032,20 @@ pub struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, sess: &mut ServerSession, mut m: Message) {
-        sess.common
+    fn handle_traffic(&self, conn: &mut ServerConnection, mut m: Message) {
+        conn.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
     }
 
     fn handle_key_update(
         &mut self,
-        sess: &mut ServerSession,
+        conn: &mut ServerConnection,
         kur: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
         {
-            if let Protocol::Quic = sess.common.protocol {
-                sess.common
+            if let Protocol::Quic = conn.common.protocol {
+                conn.common
                     .send_fatal_alert(AlertDescription::UnexpectedMessage);
                 let msg = "KeyUpdate received in QUIC connection".to_string();
                 warn!("{}", msg);
@@ -1041,7 +1053,7 @@ impl ExpectTraffic {
             }
         }
 
-        hs::check_aligned_handshake(sess)?;
+        hs::check_aligned_handshake(conn)?;
 
         match kur {
             KeyUpdateRequest::UpdateNotRequested => {}
@@ -1049,7 +1061,7 @@ impl ExpectTraffic {
                 self.want_write_key_update = true;
             }
             _ => {
-                sess.common
+                conn.common
                     .send_fatal_alert(AlertDescription::IllegalParameter);
                 return Err(Error::CorruptMessagePayload(ContentType::Handshake));
             }
@@ -1059,7 +1071,7 @@ impl ExpectTraffic {
         let new_read_key = self
             .key_schedule
             .next_client_application_traffic_secret();
-        sess.common
+        conn.common
             .record_layer
             .set_message_decrypter(cipher::new_tls13_read(self.suite, &new_read_key));
 
@@ -1068,13 +1080,17 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        conn: &mut ServerConnection,
+        m: Message,
+    ) -> hs::NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
-            self.handle_traffic(sess, m);
+            self.handle_traffic(conn, m);
         } else if let Ok(key_update) =
             require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
         {
-            self.handle_key_update(sess, key_update)?;
+            self.handle_key_update(conn, key_update)?;
         } else {
             check_message(
                 &m,
@@ -1096,16 +1112,16 @@ impl hs::State for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    fn perhaps_write_key_update(&mut self, sess: &mut ServerSession) {
+    fn perhaps_write_key_update(&mut self, conn: &mut ServerConnection) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            sess.common
+            conn.common
                 .send_msg_encrypt(Message::build_key_update_notify());
 
             let write_key = self
                 .key_schedule
                 .next_server_application_traffic_secret();
-            sess.common
+            conn.common
                 .record_layer
                 .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
         }
@@ -1120,7 +1136,7 @@ pub struct ExpectQUICTraffic {
 
 #[cfg(feature = "quic")]
 impl hs::State for ExpectQUICTraffic {
-    fn handle(self: Box<Self>, _: &mut ServerSession, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, _: &mut ServerConnection, m: Message) -> hs::NextStateOrError {
         // reject all messages
         check_message(&m, &[], &[])?;
         unreachable!();

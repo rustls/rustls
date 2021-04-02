@@ -2,7 +2,7 @@
 /// it accepts the default configuration, loads some root certs, and then connects
 /// to google.com and issues a basic HTTP request.  The response is printed to stdout.
 ///
-/// It makes use of rustls::Stream to treat the underlying TLS session as a basic
+/// It makes use of rustls::Stream to treat the underlying TLS connection as a basic
 /// bi-directional stream -- the underlying IO is performed transparently.
 ///
 /// Note that `unwrap()` is used to deal with networking errors; this is not something
@@ -16,7 +16,7 @@ use rustls;
 use webpki;
 use webpki_roots;
 
-use rustls::{RootCertStore, Session};
+use rustls::{Connection, RootCertStore};
 
 fn main() {
     let mut root_store = RootCertStore::empty();
@@ -24,9 +24,9 @@ fn main() {
     let config = rustls::ClientConfig::new(root_store, &[], rustls::DEFAULT_CIPHERSUITES);
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("google.com").unwrap();
-    let mut sess = rustls::ClientSession::new(&Arc::new(config), dns_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(&Arc::new(config), dns_name).unwrap();
     let mut sock = TcpStream::connect("google.com:443").unwrap();
-    let mut tls = rustls::Stream::new(&mut sess, &mut sock);
+    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     tls.write(
         concat!(
             "GET / HTTP/1.1\r\n",
@@ -39,7 +39,7 @@ fn main() {
     )
     .unwrap();
     let ciphersuite = tls
-        .sess
+        .conn
         .negotiated_cipher_suite()
         .unwrap();
     writeln!(

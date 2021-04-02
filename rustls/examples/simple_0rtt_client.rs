@@ -9,9 +9,9 @@ use rustls::RootCertStore;
 use webpki;
 use webpki_roots;
 
-fn start_session(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
+fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain_name).unwrap();
-    let mut sess = rustls::ClientSession::new(config, dns_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(config, dns_name).unwrap();
     let mut sock = TcpStream::connect(format!("{}:443", domain_name)).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(
@@ -26,20 +26,20 @@ fn start_session(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     // If early data is available with this server, then early_data()
     // will yield Some(WriteEarlyData) and WriteEarlyData implements
     // io::Write.  Use this to send the request.
-    if let Some(mut early_data) = sess.early_data() {
+    if let Some(mut early_data) = conn.early_data() {
         early_data
             .write(request.as_bytes())
             .unwrap();
     }
 
-    let mut stream = rustls::Stream::new(&mut sess, &mut sock);
+    let mut stream = rustls::Stream::new(&mut conn, &mut sock);
 
     // Complete handshake.
     stream.flush().unwrap();
 
     // If we didn't send early data, or the server didn't accept it,
     // then send the request as normal.
-    if !stream.sess.is_early_data_accepted() {
+    if !stream.conn.is_early_data_accepted() {
         stream
             .write_all(request.as_bytes())
             .unwrap();
@@ -64,8 +64,8 @@ fn main() {
     config.enable_early_data = true;
     let config = Arc::new(config);
 
-    // Do two sessions. The first will be a normal request, the
+    // Do two connections. The first will be a normal request, the
     // second will use early data if the server supports it.
-    start_session(&config, "mesalink.io");
-    start_session(&config, "mesalink.io");
+    start_connection(&config, "mesalink.io");
+    start_connection(&config, "mesalink.io");
 }

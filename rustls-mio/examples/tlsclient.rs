@@ -22,7 +22,7 @@ use rustls;
 use webpki;
 use webpki_roots;
 
-use rustls::{RootCertStore, Session};
+use rustls::{Connection, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -32,7 +32,7 @@ struct TlsClient {
     socket: TcpStream,
     closing: bool,
     clean_closure: bool,
-    tls_session: rustls::ClientSession,
+    tls_conn: rustls::ClientConnection,
 }
 
 impl TlsClient {
@@ -45,7 +45,7 @@ impl TlsClient {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_session: rustls::ClientSession::new(&cfg, hostname).unwrap(),
+            tls_conn: rustls::ClientConnection::new(&cfg, hostname).unwrap(),
         }
     }
 
@@ -70,9 +70,7 @@ impl TlsClient {
     fn read_source_to_end(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
-        self.tls_session
-            .write_all(&buf)
-            .unwrap();
+        self.tls_conn.write_all(&buf).unwrap();
         Ok(len)
     }
 
@@ -80,9 +78,7 @@ impl TlsClient {
     fn do_read(&mut self) {
         // Read TLS data.  This fails if the underlying TCP connection
         // is broken.
-        let rc = self
-            .tls_session
-            .read_tls(&mut self.socket);
+        let rc = self.tls_conn.read_tls(&mut self.socket);
         if rc.is_err() {
             let error = rc.unwrap_err();
             if error.kind() == io::ErrorKind::WouldBlock {
@@ -104,7 +100,7 @@ impl TlsClient {
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let processed = self.tls_session.process_new_packets();
+        let processed = self.tls_conn.process_new_packets();
         if processed.is_err() {
             println!("TLS error: {:?}", processed.unwrap_err());
             self.closing = true;
@@ -117,7 +113,7 @@ impl TlsClient {
         // Read it and then write it to stdout.
         let mut plaintext = Vec::new();
         let rc = self
-            .tls_session
+            .tls_conn
             .read_to_end(&mut plaintext);
         if !plaintext.is_empty() {
             io::stdout()
@@ -137,7 +133,7 @@ impl TlsClient {
     }
 
     fn do_write(&mut self) {
-        self.tls_session
+        self.tls_conn
             .write_tls(&mut self.socket)
             .unwrap();
     }
@@ -161,8 +157,8 @@ impl TlsClient {
     /// Use wants_read/wants_write to register for different mio-level
     /// IO readiness events.
     fn event_set(&self) -> mio::Interest {
-        let rd = self.tls_session.wants_read();
-        let wr = self.tls_session.wants_write();
+        let rd = self.tls_conn.wants_read();
+        let wr = self.tls_conn.wants_write();
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE
@@ -179,17 +175,17 @@ impl TlsClient {
 }
 impl io::Write for TlsClient {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.tls_session.write(bytes)
+        self.tls_conn.write(bytes)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.tls_session.flush()
+        self.tls_conn.flush()
     }
 }
 
 impl io::Read for TlsClient {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.tls_session.read(bytes)
+        self.tls_conn.read(bytes)
     }
 }
 

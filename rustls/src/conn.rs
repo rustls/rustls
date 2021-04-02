@@ -23,8 +23,8 @@ use std::collections::VecDeque;
 use std::io;
 use std::io::{Read, Write};
 
-/// Generalises `ClientSession` and `ServerSession`
-pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
+/// Generalises `ClientConnection` and `ServerConnection`
+pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
@@ -46,7 +46,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// of bytes written to `wr`, number of bytes after encoding and
     /// encryption.
     ///
-    /// Note that after function return the session buffer maybe not
+    /// Note that after function return the connection buffer maybe not
     /// yet fully flushed. [`wants_write`] function can be used
     /// to check if output buffer is not empty.
     ///
@@ -56,11 +56,11 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// Processes any new packets read by a previous call to `read_tls`.
     ///
     /// Errors from this function relate to TLS protocol errors, and
-    /// are fatal to the session.  Future calls after an error will do
+    /// are fatal to the connection.  Future calls after an error will do
     /// no new work and will return the same error. After an error is
     /// received from process_new_packets, you should not call read_tls
     /// any more (it will fill up buffers to no purpose). However, you
-    /// may call the other methods on the session, including write,
+    /// may call the other methods on the connection, including write,
     /// send_close_notify, and write_tls. Most likely you will want to
     /// call write_tls to send any alerts queued by the error and then
     /// close the connection.
@@ -77,9 +77,9 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// as possible.
     fn wants_write(&self) -> bool;
 
-    /// Returns true if the session is currently perform the TLS
+    /// Returns true if the connection is currently performing the TLS
     /// handshake.  During this time plaintext written to the
-    /// session is buffered in memory.
+    /// connection is buffered in memory.
     fn is_handshaking(&self) -> bool;
 
     /// Sets a limit on the internal buffers used to buffer
@@ -122,7 +122,7 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     /// This returns None until the version is agreed.
     fn protocol_version(&self) -> Option<ProtocolVersion>;
 
-    /// Derives key material from the agreed session secrets.
+    /// Derives key material from the agreed connection secrets.
     ///
     /// This function fills in `output` with `output.len()` bytes of key
     /// material derived from the master session secret using `label`
@@ -148,14 +148,14 @@ pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
     fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite>;
 
     /// This function uses `io` to complete any outstanding IO for
-    /// this session.
+    /// this connection.
     ///
     /// This is a convenience function which solely uses other parts
     /// of the public API.
     ///
-    /// What this means depends on the session state:
+    /// What this means depends on the connection  state:
     ///
-    /// - If the session `is_handshaking()`, then IO is performed until
+    /// - If the connection `is_handshaking()`, then IO is performed until
     ///   the handshake is complete.
     /// - Otherwise, if `wants_write` is true, `write_tls` is invoked
     ///   until it is all written.
@@ -225,7 +225,7 @@ pub enum Protocol {
 }
 
 #[derive(Clone, Debug)]
-pub struct SessionRandoms {
+pub struct ConnectionRandoms {
     pub we_are_client: bool,
     pub client: [u8; 32],
     pub server: [u8; 32],
@@ -233,9 +233,9 @@ pub struct SessionRandoms {
 
 static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
-impl SessionRandoms {
-    pub fn for_server() -> Result<SessionRandoms, rand::GetRandomFailed> {
-        let mut ret = SessionRandoms {
+impl ConnectionRandoms {
+    pub fn for_server() -> Result<ConnectionRandoms, rand::GetRandomFailed> {
+        let mut ret = ConnectionRandoms {
             we_are_client: false,
             client: [0u8; 32],
             server: [0u8; 32],
@@ -245,8 +245,8 @@ impl SessionRandoms {
         Ok(ret)
     }
 
-    pub fn for_client() -> Result<SessionRandoms, rand::GetRandomFailed> {
-        let mut ret = SessionRandoms {
+    pub fn for_client() -> Result<ConnectionRandoms, rand::GetRandomFailed> {
+        let mut ret = ConnectionRandoms {
             we_are_client: true,
             client: [0u8; 32],
             server: [0u8; 32],
@@ -276,20 +276,20 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
     randoms
 }
 
-/// TLS1.2 per-session keying material
-pub struct SessionSecrets {
-    pub randoms: SessionRandoms,
+/// TLS1.2 per-connection keying material
+pub struct ConnectionSecrets {
+    pub randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     pub master_secret: [u8; 48],
 }
 
-impl SessionSecrets {
+impl ConnectionSecrets {
     pub fn new(
-        randoms: &SessionRandoms,
+        randoms: &ConnectionRandoms,
         suite: &'static SupportedCipherSuite,
         pms: &[u8],
-    ) -> SessionSecrets {
-        let mut ret = SessionSecrets {
+    ) -> ConnectionSecrets {
+        let mut ret = ConnectionSecrets {
             randoms: randoms.clone(),
             suite,
             master_secret: [0u8; 48],
@@ -307,12 +307,12 @@ impl SessionSecrets {
     }
 
     pub fn new_ems(
-        randoms: &SessionRandoms,
+        randoms: &ConnectionRandoms,
         hs_hash: &Digest,
         suite: &'static SupportedCipherSuite,
         pms: &[u8],
-    ) -> SessionSecrets {
-        let mut ret = SessionSecrets {
+    ) -> ConnectionSecrets {
+        let mut ret = ConnectionSecrets {
             randoms: randoms.clone(),
             master_secret: [0u8; 48],
             suite,
@@ -329,11 +329,11 @@ impl SessionSecrets {
     }
 
     pub fn new_resume(
-        randoms: &SessionRandoms,
+        randoms: &ConnectionRandoms,
         suite: &'static SupportedCipherSuite,
         master_secret: &[u8],
-    ) -> SessionSecrets {
-        let mut ret = SessionSecrets {
+    ) -> ConnectionSecrets {
+        let mut ret = ConnectionSecrets {
             randoms: randoms.clone(),
             suite,
             master_secret: [0u8; 48],
@@ -413,7 +413,7 @@ impl SessionSecrets {
     }
 }
 
-// --- Common (to client and server) session functions ---
+// --- Common (to client and server) connection functions ---
 
 enum Limit {
     Yes,
@@ -430,7 +430,7 @@ pub enum MiddleboxCcs {
     Drop,
 }
 
-pub struct SessionCommon {
+pub struct ConnectionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
     pub record_layer: record_layer::RecordLayer,
@@ -454,9 +454,9 @@ pub struct SessionCommon {
     pub(crate) quic: Quic,
 }
 
-impl SessionCommon {
-    pub fn new(mtu: Option<usize>, client: bool) -> SessionCommon {
-        SessionCommon {
+impl ConnectionCommon {
+    pub fn new(mtu: Option<usize>, client: bool) -> ConnectionCommon {
+        ConnectionCommon {
             negotiated_version: None,
             is_client: client,
             record_layer: record_layer::RecordLayer::new(),
@@ -713,7 +713,7 @@ impl SessionCommon {
     }
 
     /// Encrypt and send some plaintext `data`.  `limit` controls
-    /// whether the per-session buffer limits apply.
+    /// whether the per-connection buffer limits apply.
     ///
     /// Returns the number of bytes written from `data`: this might
     /// be less than `data.len()` if buffer limits were exceeded.
@@ -819,7 +819,7 @@ impl SessionCommon {
         Ok(len)
     }
 
-    pub fn start_encryption_tls12(&mut self, secrets: &SessionSecrets) {
+    pub fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets) {
         let (dec, enc) = cipher::new_tls12(secrets.suite(), secrets);
         self.record_layer
             .prepare_message_encrypter(enc);

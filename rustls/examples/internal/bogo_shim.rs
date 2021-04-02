@@ -554,12 +554,12 @@ fn flush(sess: &mut ClientOrServer, conn: &mut net::TcpStream) {
 }
 
 enum ClientOrServer {
-    Client(rustls::ClientSession),
-    Server(rustls::ServerSession),
+    Client(rustls::ClientConnection),
+    Server(rustls::ServerConnection),
 }
 
 impl Deref for ClientOrServer {
-    type Target = dyn rustls::Session;
+    type Target = dyn rustls::Connection;
 
     fn deref(&self) -> &Self::Target {
         match &self {
@@ -579,10 +579,10 @@ impl DerefMut for ClientOrServer {
 }
 
 impl ClientOrServer {
-    fn client(&mut self) -> &mut rustls::ClientSession {
+    fn client(&mut self) -> &mut rustls::ClientConnection {
         match self {
             ClientOrServer::Client(ref mut c) => c,
-            ClientOrServer::Server(_) => panic!("ClientSession required here"),
+            ClientOrServer::Server(_) => panic!("ClientConnection required here"),
         }
     }
 }
@@ -1036,9 +1036,9 @@ fn main() {
     ) -> ClientOrServer {
         if opts.server {
             let s = if opts.quic_transport_params.is_empty() {
-                rustls::ServerSession::new(scfg.as_ref().unwrap())
+                rustls::ServerConnection::new(scfg.as_ref().unwrap())
             } else {
-                rustls::ServerSession::new_quic(
+                rustls::ServerConnection::new_quic(
                     scfg.as_ref().unwrap(),
                     quic::Version::V1,
                     opts.quic_transport_params.clone(),
@@ -1048,9 +1048,9 @@ fn main() {
         } else {
             let dns_name = webpki::DNSNameRef::try_from_ascii_str(&opts.host_name).unwrap();
             let c = if opts.quic_transport_params.is_empty() {
-                rustls::ClientSession::new(ccfg.as_ref().unwrap(), dns_name)
+                rustls::ClientConnection::new(ccfg.as_ref().unwrap(), dns_name)
             } else {
-                rustls::ClientSession::new_quic(
+                rustls::ClientConnection::new_quic(
                     ccfg.as_ref().unwrap(),
                     quic::Version::V1,
                     dns_name,

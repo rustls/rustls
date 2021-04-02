@@ -1,3 +1,4 @@
+use crate::conn::{Connection, ConnectionCommon, MessageType};
 use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -10,15 +11,13 @@ use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::message::Message;
-#[cfg(feature = "quic")]
-use crate::quic;
-#[cfg(feature = "quic")]
-use crate::session::Protocol;
-use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::{key, RootCertStore};
+
+#[cfg(feature = "quic")]
+use crate::{conn::Protocol, quic};
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -375,11 +374,11 @@ impl EarlyData {
 
 /// Stub that implements io::Write and dispatches to `write_early_data`.
 pub struct WriteEarlyData<'a> {
-    sess: &'a mut ClientSession,
+    sess: &'a mut ClientConnection,
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(sess: &'a mut ClientSession) -> WriteEarlyData<'a> {
+    fn new(sess: &'a mut ClientConnection) -> WriteEarlyData<'a> {
         WriteEarlyData { sess }
     }
 
@@ -400,39 +399,40 @@ impl<'a> io::Write for WriteEarlyData<'a> {
     }
 }
 
-/// This represents a single TLS client session.
-pub struct ClientSession {
+/// This represents a single TLS client connection.
+pub struct ClientConnection {
     config: Arc<ClientConfig>,
-    common: SessionCommon,
+    common: ConnectionCommon,
     state: Option<hs::NextState>,
     server_cert_chain: CertificatePayload,
     early_data: EarlyData,
     resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
 }
 
-impl fmt::Debug for ClientSession {
+impl fmt::Debug for ClientConnection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientSession").finish()
+        f.debug_struct("ClientConnection")
+            .finish()
     }
 }
 
-impl ClientSession {
-    /// Make a new ClientSession.  `config` controls how
+impl ClientConnection {
+    /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(
         config: &Arc<ClientConfig>,
         hostname: webpki::DNSNameRef,
-    ) -> Result<ClientSession, Error> {
+    ) -> Result<ClientConnection, Error> {
         let mut new = Self::from_config(config);
         new.start_handshake(hostname.into(), vec![])?;
         Ok(new)
     }
 
     fn from_config(config: &Arc<ClientConfig>) -> Self {
-        ClientSession {
+        ClientConnection {
             config: config.clone(),
-            common: SessionCommon::new(config.mtu, true),
+            common: ConnectionCommon::new(config.mtu, true),
             state: None,
             server_cert_chain: Vec::new(),
             early_data: EarlyData::new(),
@@ -581,7 +581,7 @@ impl ClientSession {
     }
 }
 
-impl Session for ClientSession {
+impl Connection for ClientConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         self.common.read_tls(rd)
     }
@@ -686,10 +686,10 @@ impl Session for ClientSession {
     }
 }
 
-impl io::Read for ClientSession {
+impl io::Read for ClientConnection {
     /// Obtain plaintext data received from the peer over this TLS connection.
     ///
-    /// If the peer closes the TLS session cleanly, this fails with an error of
+    /// If the peer closes the TLS connection cleanly, this fails with an error of
     /// kind ErrorKind::ConnectionAborted once all the pending data has been read.
     /// No further data can be received on that connection, so the underlying TCP
     /// connection should closed too.
@@ -704,7 +704,7 @@ impl io::Read for ClientSession {
     }
 }
 
-impl io::Write for ClientSession {
+impl io::Write for ClientConnection {
     /// Send the plaintext `buf` to the peer, encrypting
     /// and authenticating it.  Once this function succeeds
     /// you should call `write_tls` which will output the
@@ -734,7 +734,7 @@ impl io::Write for ClientSession {
 }
 
 #[cfg(feature = "quic")]
-impl quic::QuicExt for ClientSession {
+impl quic::QuicExt for ClientConnection {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
@@ -771,7 +771,7 @@ impl quic::QuicExt for ClientSession {
 /// Methods specific to QUIC client sessions
 #[cfg(feature = "quic")]
 pub trait ClientQuicExt {
-    /// Make a new QUIC ClientSession. This differs from `ClientSession::new()`
+    /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
     fn new_quic(
@@ -779,7 +779,7 @@ pub trait ClientQuicExt {
         quic_version: quic::Version,
         hostname: webpki::DNSNameRef,
         params: Vec<u8>,
-    ) -> Result<ClientSession, Error> {
+    ) -> Result<ClientConnection, Error> {
         assert!(
             config
                 .versions
@@ -791,7 +791,7 @@ pub trait ClientQuicExt {
             quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
-        let mut new = ClientSession::from_config(config);
+        let mut new = ClientConnection::from_config(config);
         new.common.protocol = Protocol::Quic;
         new.start_handshake(hostname.into(), vec![ext])?;
         Ok(new)
@@ -799,4 +799,4 @@ pub trait ClientQuicExt {
 }
 
 #[cfg(feature = "quic")]
-impl ClientQuicExt for ClientSession {}
+impl ClientQuicExt for ClientConnection {}

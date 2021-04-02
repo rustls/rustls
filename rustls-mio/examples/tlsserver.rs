@@ -23,8 +23,8 @@ use rustls;
 use rustls_pemfile;
 
 use rustls::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
-    RootCertStore, Session,
+    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, Connection, NoClientAuth,
+    RootCertStore,
 };
 
 // Token for our listening socket.
@@ -48,7 +48,7 @@ enum ServerMode {
 /// connections, and a TLS server configuration.
 struct TlsServer {
     server: TcpListener,
-    connections: HashMap<mio::Token, Connection>,
+    connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
     tls_config: Arc<rustls::ServerConfig>,
     mode: ServerMode,
@@ -71,13 +71,13 @@ impl TlsServer {
                 Ok((socket, addr)) => {
                     debug!("Accepting new connection from {:?}", addr);
 
-                    let tls_session = rustls::ServerSession::new(&self.tls_config);
+                    let tls_conn = rustls::ServerConnection::new(&self.tls_config);
                     let mode = self.mode.clone();
 
                     let token = mio::Token(self.next_id);
                     self.next_id += 1;
 
-                    let mut connection = Connection::new(socket, token, mode, tls_session);
+                    let mut connection = OpenConnection::new(socket, token, mode, tls_conn);
                     connection.register(registry);
                     self.connections
                         .insert(token, connection);
@@ -113,15 +113,15 @@ impl TlsServer {
 /// This is a connection which has been accepted by the server,
 /// and is currently being served.
 ///
-/// It has a TCP-level stream, a TLS-level session, and some
+/// It has a TCP-level stream, a TLS-level connection state, and some
 /// other state/metadata.
-struct Connection {
+struct OpenConnection {
     socket: TcpStream,
     token: mio::Token,
     closing: bool,
     closed: bool,
     mode: ServerMode,
-    tls_session: rustls::ServerSession,
+    tls_conn: rustls::ServerConnection,
     back: Option<TcpStream>,
     sent_http_response: bool,
 }
@@ -153,21 +153,21 @@ fn try_read(r: io::Result<usize>) -> io::Result<Option<usize>> {
     }
 }
 
-impl Connection {
+impl OpenConnection {
     fn new(
         socket: TcpStream,
         token: mio::Token,
         mode: ServerMode,
-        tls_session: rustls::ServerSession,
-    ) -> Connection {
+        tls_conn: rustls::ServerConnection,
+    ) -> OpenConnection {
         let back = open_back(&mode);
-        Connection {
+        OpenConnection {
             socket,
             token,
             closing: false,
             closed: false,
             mode,
-            tls_session,
+            tls_conn,
             back,
             sent_http_response: false,
         }
@@ -212,9 +212,7 @@ impl Connection {
 
     fn do_tls_read(&mut self) {
         // Read some TLS data.
-        let rc = self
-            .tls_session
-            .read_tls(&mut self.socket);
+        let rc = self.tls_conn.read_tls(&mut self.socket);
         if rc.is_err() {
             let err = rc.unwrap_err();
 
@@ -234,7 +232,7 @@ impl Connection {
         }
 
         // Process newly-received TLS messages.
-        let processed = self.tls_session.process_new_packets();
+        let processed = self.tls_conn.process_new_packets();
         if processed.is_err() {
             error!("cannot process packet: {:?}", processed);
 
@@ -250,7 +248,7 @@ impl Connection {
         // Read and process all available plaintext.
         let mut buf = Vec::new();
 
-        let rc = self.tls_session.read_to_end(&mut buf);
+        let rc = self.tls_conn.read_to_end(&mut buf);
         if rc.is_err() {
             error!("plaintext read failed: {:?}", rc);
             self.closing = true;
@@ -289,7 +287,7 @@ impl Connection {
                 self.closing = true;
             }
             Some(len) => {
-                self.tls_session
+                self.tls_conn
                     .write_all(&buf[..len])
                     .unwrap();
             }
@@ -301,7 +299,7 @@ impl Connection {
     fn incoming_plaintext(&mut self, buf: &[u8]) {
         match self.mode {
             ServerMode::Echo => {
-                self.tls_session.write_all(buf).unwrap();
+                self.tls_conn.write_all(buf).unwrap();
             }
             ServerMode::Http => {
                 self.send_http_response_once();
@@ -320,16 +318,16 @@ impl Connection {
         let response =
             b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
-            self.tls_session
+            self.tls_conn
                 .write_all(response)
                 .unwrap();
             self.sent_http_response = true;
-            self.tls_session.send_close_notify();
+            self.tls_conn.send_close_notify();
         }
     }
 
     fn tls_write(&mut self) -> io::Result<usize> {
-        self.tls_session
+        self.tls_conn
             .write_tls(&mut self.socket)
     }
 
@@ -381,8 +379,8 @@ impl Connection {
     /// What IO events we're currently waiting for,
     /// based on wants_read/wants_write.
     fn event_set(&self) -> mio::Interest {
-        let rd = self.tls_session.wants_read();
-        let wr = self.tls_session.wants_write();
+        let rd = self.tls_conn.wants_read();
+        let wr = self.tls_conn.wants_write();
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE

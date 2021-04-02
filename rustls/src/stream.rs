@@ -1,48 +1,48 @@
-use crate::session::Session;
+use crate::conn::Connection;
 use std::io::{IoSlice, Read, Result, Write};
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// a Session `S` and an underlying transport `T`, such as a socket.
+/// a Connection `C` and an underlying transport `T`, such as a socket.
 ///
-/// This allows you to use a rustls Session like a normal stream.
+/// This allows you to use a rustls Connection like a normal stream.
 #[derive(Debug)]
-pub struct Stream<'a, S: 'a + Session + ?Sized, T: 'a + Read + Write + ?Sized> {
-    /// Our session
-    pub sess: &'a mut S,
+pub struct Stream<'a, C: 'a + Connection + ?Sized, T: 'a + Read + Write + ?Sized> {
+    /// Our TLS connection
+    pub conn: &'a mut C,
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
 }
 
-impl<'a, S, T> Stream<'a, S, T>
+impl<'a, C, T> Stream<'a, C, T>
 where
-    S: 'a + Session,
+    C: 'a + Connection,
     T: 'a + Read + Write,
 {
-    /// Make a new Stream using the Session `sess` and socket-like object
+    /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(sess: &'a mut S, sock: &'a mut T) -> Stream<'a, S, T> {
-        Stream { sess, sock }
+    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Stream<'a, C, T> {
+        Stream { conn, sock }
     }
 
     /// If we're handshaking, complete all the IO for that.
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
-        if self.sess.is_handshaking() {
-            self.sess.complete_io(self.sock)?;
+        if self.conn.is_handshaking() {
+            self.conn.complete_io(self.sock)?;
         }
 
-        if self.sess.wants_write() {
-            self.sess.complete_io(self.sock)?;
+        if self.conn.wants_write() {
+            self.conn.complete_io(self.sock)?;
         }
 
         Ok(())
     }
 }
 
-impl<'a, S, T> Read for Stream<'a, S, T>
+impl<'a, C, T> Read for Stream<'a, C, T>
 where
-    S: 'a + Session,
+    C: 'a + Connection,
     T: 'a + Read + Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -54,26 +54,26 @@ where
         // hit. Otherwise, we will prematurely signal EOF by returning 0. We
         // determine if EOF has actually been hit by checking if 0 bytes were
         // read from the underlying transport.
-        while self.sess.wants_read() && self.sess.complete_io(self.sock)?.0 != 0 {}
+        while self.conn.wants_read() && self.conn.complete_io(self.sock)?.0 != 0 {}
 
-        self.sess.read(buf)
+        self.conn.read(buf)
     }
 }
 
-impl<'a, S, T> Write for Stream<'a, S, T>
+impl<'a, C, T> Write for Stream<'a, C, T>
 where
-    S: 'a + Session,
+    C: 'a + Connection,
     T: 'a + Read + Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self.sess.write(buf)?;
+        let len = self.conn.write(buf)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = self.sess.complete_io(self.sock);
+        let _ = self.conn.complete_io(self.sock);
 
         Ok(len)
     }
@@ -81,12 +81,12 @@ where
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self.sess.write_vectored(bufs)?;
+        let len = self.conn.write_vectored(bufs)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = self.sess.complete_io(self.sock);
+        let _ = self.conn.complete_io(self.sock);
 
         Ok(len)
     }
@@ -94,40 +94,40 @@ where
     fn flush(&mut self) -> Result<()> {
         self.complete_prior_io()?;
 
-        self.sess.flush()?;
-        if self.sess.wants_write() {
-            self.sess.complete_io(self.sock)?;
+        self.conn.flush()?;
+        if self.conn.wants_write() {
+            self.conn.complete_io(self.sock)?;
         }
         Ok(())
     }
 }
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// and owning a Session `S` and an underlying blocking transport
+/// and owning a Connection `C` and an underlying blocking transport
 /// `T`, such as a socket.
 ///
-/// This allows you to use a rustls Session like a normal stream.
+/// This allows you to use a rustls Connection like a normal stream.
 #[derive(Debug)]
-pub struct StreamOwned<S: Session + Sized, T: Read + Write + Sized> {
-    /// Our session
-    pub sess: S,
+pub struct StreamOwned<C: Connection + Sized, T: Read + Write + Sized> {
+    /// Our conneciton
+    pub conn: C,
 
     /// The underlying transport, like a socket
     pub sock: T,
 }
 
-impl<S, T> StreamOwned<S, T>
+impl<C, T> StreamOwned<C, T>
 where
-    S: Session,
+    C: Connection,
     T: Read + Write,
 {
-    /// Make a new StreamOwned taking the Session `sess` and socket-like
+    /// Make a new StreamOwned taking the Connection `conn` and socket-like
     /// object `sock`.  This does not fail and does no IO.
     ///
-    /// This is the same as `Stream::new` except `sess` and `sock` are
+    /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(sess: S, sock: T) -> StreamOwned<S, T> {
-        StreamOwned { sess, sock }
+    pub fn new(conn: C, sock: T) -> StreamOwned<C, T> {
+        StreamOwned { conn, sock }
     }
 
     /// Get a reference to the underlying socket
@@ -141,22 +141,22 @@ where
     }
 }
 
-impl<'a, S, T> StreamOwned<S, T>
+impl<'a, C, T> StreamOwned<C, T>
 where
-    S: Session,
+    C: Connection,
     T: Read + Write,
 {
-    fn as_stream(&'a mut self) -> Stream<'a, S, T> {
+    fn as_stream(&'a mut self) -> Stream<'a, C, T> {
         Stream {
-            sess: &mut self.sess,
+            conn: &mut self.conn,
             sock: &mut self.sock,
         }
     }
 }
 
-impl<S, T> Read for StreamOwned<S, T>
+impl<C, T> Read for StreamOwned<C, T>
 where
-    S: Session,
+    C: Connection,
     T: Read + Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -164,9 +164,9 @@ where
     }
 }
 
-impl<S, T> Write for StreamOwned<S, T>
+impl<C, T> Write for StreamOwned<C, T>
 where
-    S: Session,
+    C: Connection,
     T: Read + Write,
 {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -181,23 +181,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::{Stream, StreamOwned};
-    use crate::client::ClientSession;
-    use crate::server::ServerSession;
-    use crate::session::Session;
+    use crate::client::ClientConnection;
+    use crate::conn::Connection;
+    use crate::server::ServerConnection;
     use std::net::TcpStream;
 
     #[test]
-    fn stream_can_be_created_for_session_and_tcpstream() {
-        type _Test<'a> = Stream<'a, dyn Session, TcpStream>;
+    fn stream_can_be_created_for_connection_and_tcpstream() {
+        type _Test<'a> = Stream<'a, dyn Connection, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ClientSession, TcpStream>;
+        type _Test = StreamOwned<ClientConnection, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ServerSession, TcpStream>;
+        type _Test = StreamOwned<ServerConnection, TcpStream>;
     }
 }

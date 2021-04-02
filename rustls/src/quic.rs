@@ -1,11 +1,11 @@
-pub use crate::client::ClientQuicExt;
 /// This module contains optional APIs for implementing QUIC TLS.
+pub use crate::client::ClientQuicExt;
+use crate::conn::ConnectionCommon;
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::message::{Message, MessagePayload};
 pub use crate::server::ServerQuicExt;
-use crate::session::SessionCommon;
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
 
 use ring::{aead, hkdf};
@@ -177,7 +177,7 @@ impl Keys {
     }
 }
 
-pub(crate) fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), Error> {
+pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(), Error> {
     if this
         .handshake_joiner
         .take_message(Message {
@@ -193,7 +193,7 @@ pub(crate) fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), 
     Ok(())
 }
 
-pub(crate) fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
+pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
     while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
         buf.extend_from_slice(&msg);
         if let Some(&(true, _)) = this.quic.hs_queue.front() {
@@ -219,7 +219,7 @@ pub(crate) fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Ke
     None
 }
 
-pub(crate) fn next_1rtt_keys(this: &mut SessionCommon) -> Option<PacketKeySet> {
+pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet> {
     let suite = this.get_suite()?;
     let secrets = this.quic.traffic_secrets.as_ref()?;
     let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);

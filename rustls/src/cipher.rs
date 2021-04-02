@@ -1,3 +1,4 @@
+use crate::conn::ConnectionSecrets;
 use crate::error::Error;
 use crate::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::msgs::codec;
@@ -5,7 +6,6 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
-use crate::session::SessionSecrets;
 use crate::suites::SupportedCipherSuite;
 
 use ring::{aead, hkdf};
@@ -115,7 +115,7 @@ pub fn build_tls12_chacha_encrypter(key: &[u8], iv: &[u8], _: &[u8]) -> Box<dyn 
 /// and the session's `secrets`.
 pub fn new_tls12(
     scs: &'static SupportedCipherSuite,
-    secrets: &SessionSecrets,
+    secrets: &ConnectionSecrets,
 ) -> MessageCipherPair {
     // Make a key block, and chop it up.
     // nb. we don't implement any ciphersuites with nonzero mac_key_len.
