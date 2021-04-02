@@ -32,11 +32,14 @@ pub struct ExpectCertificate {
 
 impl hs::State for ExpectCertificate {
     fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
-        let cert_chain =
-            require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
         self.handshake
             .transcript
             .add_message(&m);
+        let cert_chain = require_handshake_msg_move!(
+            m,
+            HandshakeType::Certificate,
+            HandshakePayload::Certificate
+        )?;
 
         // If we can't determine if the auth is mandatory, abort
         let mandatory = sess
@@ -75,7 +78,7 @@ impl hs::State for ExpectCertificate {
                         Err(err)
                     })?;
 
-                Some(ClientCertDetails::new(cert_chain.clone()))
+                Some(ClientCertDetails::new(cert_chain))
             }
         };
 

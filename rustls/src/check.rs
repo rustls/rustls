@@ -25,7 +25,7 @@ macro_rules! require_handshake_msg(
 );
 
 /// Like require_handshake_msg, but moves the payload out of $m.
-macro_rules! require_handshake_msg_mut(
+macro_rules! require_handshake_msg_move(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
     match $m.payload {
         MessagePayload::Handshake(hsp) => match hsp.payload {

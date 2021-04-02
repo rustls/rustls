@@ -44,12 +44,12 @@ pub struct ExpectCertificate {
 
 impl hs::State for ExpectCertificate {
     fn handle(mut self: Box<Self>, _sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
-        let server_cert_chain =
-            require_handshake_msg!(m, HandshakeType::Certificate, HandshakePayload::Certificate)?;
         self.transcript.add_message(&m);
-
-        // TODO(perf): Avoid this clone of a large object.
-        let server_cert_chain = server_cert_chain.clone();
+        let server_cert_chain = require_handshake_msg_move!(
+            m,
+            HandshakeType::Certificate,
+            HandshakePayload::Certificate
+        )?;
 
         if self.may_send_cert_status {
             Ok(Box::new(ExpectCertificateStatusOrServerKX {
@@ -99,7 +99,7 @@ struct ExpectCertificateStatus {
 impl hs::State for ExpectCertificateStatus {
     fn handle(mut self: Box<Self>, _sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
-        let server_cert_ocsp_response = require_handshake_msg_mut!(
+        let server_cert_ocsp_response = require_handshake_msg_move!(
             m,
             HandshakeType::CertificateStatus,
             HandshakePayload::CertificateStatus
@@ -702,7 +702,7 @@ impl hs::State for ExpectNewTicket {
     fn handle(mut self: Box<Self>, _sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
 
-        let nst = require_handshake_msg_mut!(
+        let nst = require_handshake_msg_move!(
             m,
             HandshakeType::NewSessionTicket,
             HandshakePayload::NewSessionTicket
