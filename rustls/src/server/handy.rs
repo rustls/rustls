@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::key;
+use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
@@ -27,27 +28,17 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 /// in memory.  If enforces a limit on the number of stored sessions
 /// to bound memory usage.
 pub struct ServerSessionMemoryCache {
-    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
-    max_entries: usize,
+    cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
 }
 
 impl ServerSessionMemoryCache {
     /// Make a new ServerSessionMemoryCache.  `size` is the maximum
-    /// number of stored sessions.
+    /// number of stored sessions, and may be rounded-up for
+    /// efficiency.
     pub fn new(size: usize) -> Arc<ServerSessionMemoryCache> {
-        debug_assert!(size > 0);
         Arc::new(ServerSessionMemoryCache {
-            cache: Mutex::new(collections::HashMap::new()),
-            max_entries: size,
+            cache: Mutex::new(limited_cache::LimitedCache::new(size)),
         })
-    }
-
-    fn limit_size(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        while cache.len() > self.max_entries {
-            let k = cache.keys().next().unwrap().clone();
-            cache.remove(&k);
-        }
     }
 }
 
@@ -57,7 +48,6 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
             .lock()
             .unwrap()
             .insert(key, value);
-        self.limit_size();
         true
     }
 
@@ -240,31 +230,20 @@ mod test {
 
     #[test]
     fn test_serversessionmemorycache_drops_to_maintain_size_invariant() {
-        let c = ServerSessionMemoryCache::new(4);
+        let c = ServerSessionMemoryCache::new(2);
         assert_eq!(c.put(vec![0x01], vec![0x02]), true);
         assert_eq!(c.put(vec![0x03], vec![0x04]), true);
         assert_eq!(c.put(vec![0x05], vec![0x06]), true);
         assert_eq!(c.put(vec![0x07], vec![0x08]), true);
         assert_eq!(c.put(vec![0x09], vec![0x0a]), true);
 
-        let mut count = 0;
-        if c.get(&[0x01]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x03]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x05]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x07]).is_some() {
-            count += 1;
-        }
-        if c.get(&[0x09]).is_some() {
-            count += 1;
-        }
+        let count = c.get(&[0x01]).iter().count()
+            + c.get(&[0x03]).iter().count()
+            + c.get(&[0x05]).iter().count()
+            + c.get(&[0x07]).iter().count()
+            + c.get(&[0x09]).iter().count();
 
-        assert_eq!(count, 4);
+        assert!(count < 5);
     }
 
     #[test]

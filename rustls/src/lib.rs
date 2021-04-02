@@ -239,6 +239,7 @@ mod cipher;
 mod error;
 mod hash_hs;
 mod key_schedule;
+mod limited_cache;
 mod prf;
 mod rand;
 mod record_layer;
