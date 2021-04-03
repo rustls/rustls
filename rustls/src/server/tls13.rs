@@ -1009,7 +1009,6 @@ impl hs::State for ExpectFinished {
             _fin_verified: fin,
         }))
     }
-
 }
 
 // --- Process traffic ---
