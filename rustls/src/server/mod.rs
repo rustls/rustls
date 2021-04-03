@@ -10,6 +10,8 @@ use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::verify;
+#[cfg(feature = "quic")]
+use crate::{quic, session::Protocol};
 
 use webpki;
 
@@ -343,7 +345,7 @@ impl ServerConfig {
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerSession {
     config: Arc<ServerConfig>,
-    pub(crate) common: SessionCommon,
+    common: SessionCommon,
     sni: Option<webpki::DNSName>,
     received_resumption_data: Option<Vec<u8>>,
     resumption_data: Vec<u8>,
@@ -360,10 +362,7 @@ impl ServerSession {
         Self::from_config(config, vec![])
     }
 
-    pub(crate) fn from_config(
-        config: &Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
-    ) -> Self {
+    fn from_config(config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
         ServerSession {
             config: config.clone(),
             common: SessionCommon::new(config.mtu, false),
@@ -410,7 +409,7 @@ impl ServerSession {
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
+    fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -653,3 +652,73 @@ impl fmt::Debug for ServerSession {
         f.debug_struct("ServerSession").finish()
     }
 }
+
+#[cfg(feature = "quic")]
+impl quic::QuicExt for ServerSession {
+    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.common
+            .quic
+            .params
+            .as_ref()
+            .map(|v| v.as_ref())
+    }
+
+    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+        Some(quic::DirectionalKeys::new(
+            self.common.get_suite()?,
+            self.common.quic.early_secret.as_ref()?,
+        ))
+    }
+
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        quic::read_hs(&mut self.common, plaintext)?;
+        self.process_new_handshake_messages()
+    }
+
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
+        quic::write_hs(&mut self.common, buf)
+    }
+
+    fn get_alert(&self) -> Option<AlertDescription> {
+        self.common.quic.alert
+    }
+
+    fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
+        quic::next_1rtt_keys(&mut self.common)
+    }
+}
+
+/// Methods specific to QUIC server sessions
+#[cfg(feature = "quic")]
+pub trait ServerQuicExt {
+    /// Make a new QUIC ServerSession. This differs from `ServerSession::new()`
+    /// in that it takes an extra argument, `params`, which contains the
+    /// TLS-encoded transport parameters to send.
+    fn new_quic(
+        config: &Arc<ServerConfig>,
+        quic_version: quic::Version,
+        params: Vec<u8>,
+    ) -> ServerSession {
+        assert!(
+            config
+                .versions
+                .iter()
+                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
+            "QUIC requires TLS version >= 1.3"
+        );
+        assert!(
+            config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
+            "QUIC sessions must set a max early data of 0 or 2^32-1"
+        );
+        let ext = match quic_version {
+            quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
+            quic::Version::V1 => ServerExtension::TransportParameters(params),
+        };
+        let mut new = ServerSession::from_config(config, vec![ext]);
+        new.common.protocol = Protocol::Quic;
+        new
+    }
+}
+
+#[cfg(feature = "quic")]
+impl ServerQuicExt for ServerSession {}
