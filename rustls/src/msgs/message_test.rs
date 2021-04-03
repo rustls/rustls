@@ -31,7 +31,7 @@ fn test_read_fuzz_corpus() {
         msg.decode_payload();
         let enc = msg.get_encoding();
         assert_eq!(bytes.to_vec(), enc);
-        assert_eq!(bytes[..rd.used()], enc);
+        assert_eq!(bytes[..rd.used()].to_vec(), enc);
     }
 }
 
