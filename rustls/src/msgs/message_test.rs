@@ -27,7 +27,7 @@ fn test_read_fuzz_corpus() {
 
         let mut rd = Reader::init(&bytes);
         let mut msg = Message::read(&mut rd).unwrap();
-        //println!("{:?}", msg);
+        println!("{:?}", msg);
         msg.decode_payload();
         let enc = msg.get_encoding();
         assert_eq!(bytes.to_vec(), enc);
