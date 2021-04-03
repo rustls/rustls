@@ -15,7 +15,6 @@ use crate::rand;
 use crate::log::warn;
 
 use std::collections;
-use std::convert::TryFrom;
 use std::fmt;
 use std::io::Write;
 use webpki;
@@ -158,25 +157,6 @@ impl SessionID {
         match session_id {
             Some(session_id) => session_id.encode(bytes),
             None => bytes.push(0u8),
-        }
-    }
-}
-
-impl TryFrom<&[u8]> for SessionID {
-    type Error = &'static str;
-
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        if bytes.len() == 0 {
-            Err("Zero-length SessionID")
-        } else {
-            debug_assert!(bytes.len() <= 32);
-            let mut d = [0u8; 32];
-            d[..bytes.len()].clone_from_slice(&bytes[..]);
-
-            Ok(SessionID {
-                data: d,
-                len: bytes.len(),
-            })
         }
     }
 }
