@@ -5,3 +5,7 @@ target/
 *.info
 sslkeylogfile.txt
 admin/rustfmt
+.DS_Store
+._.DS_Store
+**/.DS_Store
+**/._.DS_Store
