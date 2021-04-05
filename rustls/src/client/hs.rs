@@ -350,7 +350,7 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: session_id,
+            session_id: session_id.unwrap_or(SessionID::empty()),
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -661,7 +661,7 @@ impl State for ExpectServerHello {
         };
 
         match (&self.handshake.resuming_session, session_id) {
-            (Some(ref resuming), Some(session_id)) if resuming.session_id == Some(session_id) => {
+            (Some(ref resuming), session_id) if resuming.session_id == Some(session_id) => {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
@@ -726,7 +726,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
-            session_id: session_id,
+            session_id: Some(session_id),
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,

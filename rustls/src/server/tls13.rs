@@ -116,7 +116,7 @@ impl CompleteClientHelloHandling {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.randoms.server),
-                    session_id: *session_id,
+                    session_id: session_id.unwrap_or(SessionID::empty()),
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions,
@@ -654,7 +654,7 @@ impl CompleteClientHelloHandling {
         let key_schedule = self.emit_server_hello(
             suite,
             sess,
-            &client_hello.session_id,
+            &Some(client_hello.session_id),
             chosen_share,
             chosen_psk_index,
             resumedata
@@ -1009,7 +1009,6 @@ impl hs::State for ExpectFinished {
             _fin_verified: fin,
         }))
     }
-
 }
 
 // --- Process traffic ---

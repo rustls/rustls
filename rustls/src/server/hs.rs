@@ -369,7 +369,10 @@ impl ExpectClientHello {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&randoms.server),
-                    session_id: self.handshake.session_id,
+                    session_id: self
+                        .handshake
+                        .session_id
+                        .unwrap_or(SessionID::empty()),
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions: ep.exts,
@@ -835,7 +838,7 @@ impl State for ExpectClientHello {
                         client_hello,
                         suite,
                         sni.as_ref(),
-                        client_hello.session_id,
+                        Some(client_hello.session_id),
                         resume,
                         &randoms,
                     );
@@ -854,20 +857,20 @@ impl State for ExpectClientHello {
 
             // Perhaps resume?  If we received a ticket, the sessionid
             // does not correspond to a real session.
-            if let Some(session_id) = client_hello.session_id {
+            if !client_hello.session_id.is_empty() {
                 if let Some(resume) = sess
-                .config
-                .session_storage
-                .get(&session_id.get_encoding())
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                .and_then(|resumedata| can_resume(suite, &sess.sni, self.using_ems, resumedata))
+                    .config
+                    .session_storage
+                    .get(&client_hello.session_id.get_encoding())
+                    .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
+                    .and_then(|resumedata| can_resume(suite, &sess.sni, self.using_ems, resumedata))
                 {
                     return self.start_resumption(
                         sess,
                         client_hello,
                         suite,
                         sni.as_ref(),
-                        client_hello.session_id,
+                        Some(client_hello.session_id),
                         resume,
                         &randoms,
                     );

@@ -62,11 +62,12 @@ fn accepts_short_sessionid() {
 fn accepts_empty_sessionid() {
     let bytes = [0; 1];
     let mut rd = Reader::init(&bytes);
-    let sess = SessionID::read(&mut rd);
+    let sess = SessionID::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
+    assert_eq!(sess.is_empty(), true);
+    assert_eq!(sess.len(), 0);
 
-    assert_eq!(sess, None);
     assert_eq!(rd.any_left(), false);
 }
 
@@ -360,7 +361,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
     ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: Random::from_slice(&[0; 32]),
-        session_id: None,
+        session_id: SessionID::empty(),
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: vec![
@@ -758,7 +759,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
         random: Random::from_slice(&[0; 32]),
-        session_id: None,
+        session_id: SessionID::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
@@ -982,7 +983,7 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
 #[test]
 fn can_roundtrip_all_tls12_handshake_payloads() {
     for ref hm in get_all_tls12_handshake_payloads().iter() {
-        println!("{:?}", hm.typ);
+        println!("Here: {:?}", hm.typ);
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();
