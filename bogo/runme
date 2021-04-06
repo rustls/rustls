@@ -5,9 +5,7 @@
 
 set -xe
 
-if [ ! -e ../target/debug/examples/bogo_shim ] ; then
-  (cd ../rustls && cargo build --example bogo_shim --features dangerous_configuration,quic)
-fi
+cargo build --example bogo_shim --features dangerous_configuration,quic
 
 if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
   ./fetch-and-build
