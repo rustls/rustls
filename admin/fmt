@@ -4,7 +4,13 @@ set -xe
 ADMIN=$(dirname "$0")
 PREV=$(pwd)
 if [ ! -d $ADMIN/rustfmt ] ; then
-  git clone --depth 1 https://github.com/rust-lang/rustfmt $ADMIN/rustfmt
+  COMMIT=8829e455b722f1ba8ade915ad2687639a2abb2c3
+  cd $ADMIN
+  git init rustfmt
+  cd rustfmt
+  git fetch --depth=1 https://github.com/rust-lang/rustfmt $COMMIT
+  git checkout $COMMIT
+  cd ../..
 fi
 
 if [ ! -x $ADMIN/rustfmt/target/release/cargo-fmt ] ; then
