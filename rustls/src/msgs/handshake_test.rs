@@ -983,7 +983,6 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
 #[test]
 fn can_roundtrip_all_tls12_handshake_payloads() {
     for ref hm in get_all_tls12_handshake_payloads().iter() {
-        println!("Here: {:?}", hm.typ);
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();

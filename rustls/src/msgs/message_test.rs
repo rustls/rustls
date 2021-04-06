@@ -26,12 +26,9 @@ fn test_read_fuzz_corpus() {
         f.read_to_end(&mut bytes).unwrap();
 
         let mut rd = Reader::init(&bytes);
-        let mut msg = Message::read(&mut rd).unwrap();
+        let msg = Message::read(&mut rd).unwrap();
         println!("{:?}", msg);
-        msg.decode_payload();
-        let enc = msg.get_encoding();
-        assert_eq!(bytes.to_vec(), enc);
-        assert_eq!(bytes[..rd.used()].to_vec(), enc);
+        assert_eq!(bytes.to_vec(), msg.get_encoding());
     }
 }
 

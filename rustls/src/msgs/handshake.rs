@@ -143,6 +143,12 @@ impl Codec for SessionID {
 }
 
 impl SessionID {
+    pub fn random() -> Result<Self, rand::GetRandomFailed> {
+        let mut data = [0u8; 32];
+        rand::fill_random(&mut data)?;
+        Ok(Self { data, len: 32 })
+    }
+
     pub fn empty() -> SessionID {
         SessionID {
             data: [0u8; 32],
@@ -158,11 +164,6 @@ impl SessionID {
         self.len == 0
     }
 
-    pub fn random() -> Result<Self, rand::GetRandomFailed> {
-        let mut data = [0u8; 32];
-        rand::fill_random(&mut data)?;
-        Ok(Self { data, len: 32 })
-    }
 
     pub fn encode(session_id: Option<SessionID>, bytes: &mut Vec<u8>) {
         match session_id {
