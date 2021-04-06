@@ -23,6 +23,41 @@ use std::collections::VecDeque;
 use std::io;
 use std::io::{Read, Write};
 
+/// Values of this structure are returned from `Session::process_new_packets`
+/// and tell the caller the current I/O state of the TLS connection.
+#[derive(Debug, PartialEq)]
+pub struct IoState {
+    tls_bytes_to_write: usize,
+    plaintext_bytes_to_read: usize,
+    peer_has_closed: bool,
+}
+
+impl IoState {
+    /// How many bytes could be written by `write_tls` if called
+    /// right now.  A non-zero value implies `wants_write`.
+    pub fn tls_bytes_to_write(&self) -> usize {
+        self.tls_bytes_to_write
+    }
+
+    /// How many plaintext bytes could be obtained via `std::io::Read`
+    /// without further I/O.
+    pub fn plaintext_bytes_to_read(&self) -> usize {
+        self.plaintext_bytes_to_read
+    }
+
+    /// True if the peer has sent us a close_notify alert.  This is
+    /// the TLS mechanism to security half-close a TLS connection,
+    /// and signifies that the peer will not send any further data
+    /// on this connection.
+    ///
+    /// This is also signalled via returning `Ok(0)` from
+    /// `std::io::Read`, after all the received bytes have been
+    /// retrieved.
+    pub fn peer_has_closed(&self) -> bool {
+        self.peer_has_closed
+    }
+}
+
 /// Generalises `ClientConnection` and `ServerConnection`
 pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
     /// Read TLS content from `rd`.  This method does internal
@@ -63,11 +98,11 @@ pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
     /// may call the other methods on the connection, including write,
     /// send_close_notify, and write_tls. Most likely you will want to
     /// call write_tls to send any alerts queued by the error and then
-    /// close the connection.
+    /// close the underlying connection.
     ///
-    /// Success from this function can mean new plaintext is available:
-    /// obtain it using `read`.
-    fn process_new_packets(&mut self) -> Result<(), Error>;
+    /// Success from this function comes with some sundry state data
+    /// about the connection.
+    fn process_new_packets(&mut self) -> Result<IoState, Error>;
 
     /// Returns true if the caller should call `read_tls` as soon
     /// as possible.
@@ -479,6 +514,14 @@ impl ConnectionCommon {
             protocol: Protocol::Tls13,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
+        }
+    }
+
+    pub(crate) fn current_io_state(&self) -> IoState {
+        IoState {
+            tls_bytes_to_write: self.sendable_tls.len(),
+            plaintext_bytes_to_read: self.received_plaintext.len(),
+            peer_has_closed: self.peer_eof,
         }
     }
 

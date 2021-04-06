@@ -1,4 +1,4 @@
-use crate::conn::{Connection, ConnectionCommon, MessageType};
+use crate::conn::{Connection, ConnectionCommon, IoState, MessageType};
 use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -591,7 +591,7 @@ impl Connection for ClientConnection {
         self.common.write_tls(wr)
     }
 
-    fn process_new_packets(&mut self) -> Result<(), Error> {
+    fn process_new_packets(&mut self) -> Result<IoState, Error> {
         if let Some(ref err) = self.common.error {
             return Err(err.clone());
         }
@@ -622,7 +622,7 @@ impl Connection for ClientConnection {
             }
         }
 
-        Ok(())
+        Ok(self.common.current_io_state())
     }
 
     fn wants_read(&self) -> bool {

@@ -1221,6 +1221,26 @@ impl<'a> io::Write for OtherSession<'a> {
 }
 
 #[test]
+fn new_server_returns_initial_io_state() {
+    let (_, mut server) = make_pair(KeyType::RSA);
+    let io_state = server.process_new_packets().unwrap();
+    println!("IoState is Debug {:?}", io_state);
+    assert_eq!(io_state.plaintext_bytes_to_read(), 0);
+    assert_eq!(io_state.peer_has_closed(), false);
+    assert_eq!(io_state.tls_bytes_to_write(), 0);
+}
+
+#[test]
+fn new_client_returns_initial_io_state() {
+    let (mut client, _) = make_pair(KeyType::RSA);
+    let io_state = client.process_new_packets().unwrap();
+    println!("IoState is Debug {:?}", io_state);
+    assert_eq!(io_state.plaintext_bytes_to_read(), 0);
+    assert_eq!(io_state.peer_has_closed(), false);
+    assert!(io_state.tls_bytes_to_write() > 200);
+}
+
+#[test]
 fn client_complete_io_for_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
