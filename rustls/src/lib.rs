@@ -277,7 +277,7 @@ pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
 pub use crate::error::Error;
-pub use crate::error::WebPKIOp;
+pub use crate::error::WebPkiOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};

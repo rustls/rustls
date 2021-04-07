@@ -704,7 +704,7 @@ impl State for ExpectServerHello {
                         sig_verified,
                     }))
                 } else {
-                    Ok(Box::new(tls12::ExpectCCS {
+                    Ok(Box::new(tls12::ExpectCcs {
                         secrets,
                         resuming_session: self.resuming_session,
                         session_id: self.session_id,
@@ -888,7 +888,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
 
 pub fn send_cert_error_alert(sess: &mut ClientSession, err: Error) -> Error {
     match err {
-        Error::WebPKIError(webpki::Error::BadDER, _) => {
+        Error::WebPkiError(webpki::Error::BadDER, _) => {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }
