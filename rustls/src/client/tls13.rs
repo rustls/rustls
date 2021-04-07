@@ -1055,6 +1055,7 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
+    #[allow(clippy::unnecessary_wraps)] // returns Err for #[cfg(feature = "quic")]
     fn handle_new_ticket_tls13(
         &mut self,
         sess: &mut ClientSession,

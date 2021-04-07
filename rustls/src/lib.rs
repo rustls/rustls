@@ -214,7 +214,20 @@
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
 //   underneath.
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::ptr_arg))]
+// - too_many_arguments: some things just need a lot of state, wrapping it
+//   doesn't necessarily make it easier to follow what's going on
+// - new_ret_no_self: we sometimes return `Arc<Self>`, which seems fine
+// - single_component_path_imports: our top-level `use log` import causes
+//   a false positive, https://github.com/rust-lang/rust-clippy/issues/5210
+// - new_without_default: for internal constructors, the indirection is not
+//   helpful
+#![allow(
+    clippy::too_many_arguments,
+    clippy::new_ret_no_self,
+    clippy::ptr_arg,
+    clippy::single_component_path_imports,
+    clippy::new_without_default
+)]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -353,14 +366,17 @@ pub use crate::verify::{
 /// This is the rustls manual.
 pub mod manual;
 
+#[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use ResolvesServerCertUsingSni")]
 pub type ResolvesServerCertUsingSNI = ResolvesServerCertUsingSni;
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use WebPkiVerifier")]
 pub type WebPKIVerifier = WebPkiVerifier;
+#[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use TlsError")]
 pub type TLSError = Error;
