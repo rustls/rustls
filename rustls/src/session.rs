@@ -339,9 +339,7 @@ impl SessionSecrets {
             master_secret: [0u8; 48],
         };
         ret.master_secret
-            .as_mut()
-            .write_all(master_secret)
-            .unwrap();
+            .copy_from_slice(master_secret);
         ret
     }
 
