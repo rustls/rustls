@@ -7,8 +7,8 @@ use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
 use crate::session::SessionSecrets;
 use crate::suites::SupportedCipherSuite;
+
 use ring::{aead, hkdf};
-use std::io::Write;
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
@@ -197,14 +197,8 @@ impl MessageDecrypter for GCMMessageDecrypter {
 
         let nonce = {
             let mut nonce = [0u8; 12];
-            nonce
-                .as_mut()
-                .write_all(&self.dec_salt)
-                .unwrap();
-            nonce[4..]
-                .as_mut()
-                .write_all(&buf[..8])
-                .unwrap();
+            nonce[..4].copy_from_slice(&self.dec_salt);
+            nonce[4..].copy_from_slice(&buf[..8]);
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
@@ -272,10 +266,7 @@ impl GCMMessageDecrypter {
         };
 
         debug_assert_eq!(dec_iv.len(), 4);
-        ret.dec_salt
-            .as_mut()
-            .write_all(dec_iv)
-            .unwrap();
+        ret.dec_salt.copy_from_slice(dec_iv);
         ret
     }
 }
