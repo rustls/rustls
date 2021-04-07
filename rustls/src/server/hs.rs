@@ -372,7 +372,7 @@ impl ExpectClientHello {
                     session_id: self
                         .handshake
                         .session_id
-                        .unwrap_or(SessionID::empty()),
+                        .unwrap_or_else(SessionID::empty),
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions: ep.exts,

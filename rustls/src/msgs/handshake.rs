@@ -164,7 +164,6 @@ impl SessionID {
         self.len == 0
     }
 
-
     pub fn encode(session_id: Option<SessionID>, bytes: &mut Vec<u8>) {
         match session_id {
             Some(session_id) => session_id.encode(bytes),

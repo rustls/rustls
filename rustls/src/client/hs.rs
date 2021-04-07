@@ -350,7 +350,7 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: session_id.unwrap_or(SessionID::empty()),
+            session_id: session_id.unwrap_or_else(SessionID::empty),
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,

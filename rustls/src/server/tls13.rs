@@ -116,7 +116,7 @@ impl CompleteClientHelloHandling {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.randoms.server),
-                    session_id: session_id.unwrap_or(SessionID::empty()),
+                    session_id: session_id.unwrap_or_else(SessionID::empty),
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions,
