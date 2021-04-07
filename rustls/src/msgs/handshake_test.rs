@@ -798,7 +798,7 @@ fn can_clone_all_serverextensions() {
 fn get_sample_helloretryrequest() -> HelloRetryRequest {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
-        session_id: SessionID::empty(),
+        session_id: None,
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),
@@ -983,7 +983,6 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
 #[test]
 fn can_roundtrip_all_tls12_handshake_payloads() {
     for ref hm in get_all_tls12_handshake_payloads().iter() {
-        println!("{:?}", hm.typ);
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();

@@ -87,7 +87,7 @@ impl CompleteClientHelloHandling {
         &mut self,
         suite: &'static SupportedCipherSuite,
         sess: &mut ServerSession,
-        session_id: &SessionID,
+        session_id: &Option<SessionID>,
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
@@ -116,7 +116,7 @@ impl CompleteClientHelloHandling {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from_slice(&self.randoms.server),
-                    session_id: *session_id,
+                    session_id: session_id.unwrap_or(SessionID::empty()),
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions,
@@ -215,7 +215,7 @@ impl CompleteClientHelloHandling {
     ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: SessionID::empty(),
+            session_id: None,
             cipher_suite: suite.suite,
             extensions: Vec::new(),
         };
@@ -654,7 +654,7 @@ impl CompleteClientHelloHandling {
         let key_schedule = self.emit_server_hello(
             suite,
             sess,
-            &client_hello.session_id,
+            &Some(client_hello.session_id),
             chosen_share,
             chosen_psk_index,
             resumedata

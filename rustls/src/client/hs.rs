@@ -153,7 +153,7 @@ impl InitialState {
                 if !resuming.ticket.0.is_empty() {
                     resuming.set_session_id(SessionID::random()?);
                 }
-                session_id = Some(resuming.session_id);
+                session_id = resuming.session_id;
             }
             debug!("Resuming session");
         } else {
@@ -203,7 +203,7 @@ struct ExpectServerHello {
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     sent_tls13_fake_ccs: bool,
     suite: Option<&'static SupportedCipherSuite>,
 }
@@ -345,14 +345,12 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let session_id = session_id.unwrap_or(SessionID::empty());
-
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
             random: Random::from_slice(&randoms.client),
-            session_id: session_id,
+            session_id: session_id.unwrap_or(SessionID::empty()),
             cipher_suites: sess.get_cipher_suites(),
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -612,7 +610,7 @@ impl State for ExpectServerHello {
         server_hello
             .random
             .write_slice(&mut self.randoms.server);
-        self.session_id = server_hello.session_id;
+        let session_id = server_hello.session_id;
 
         // Look for TLS1.3 downgrade signal in server random
         if tls13_supported
@@ -662,9 +660,8 @@ impl State for ExpectServerHello {
             None
         };
 
-        // See if we're successfully resuming.
-        if let Some(ref resuming) = self.handshake.resuming_session {
-            if resuming.session_id == self.session_id {
+        match (&self.handshake.resuming_session, session_id) {
+            (Some(ref resuming), session_id) if resuming.session_id == Some(session_id) => {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
@@ -699,7 +696,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectNewTicket {
                         secrets,
                         handshake: self.handshake,
-                        session_id: self.session_id,
+                        session_id: Some(session_id),
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -711,7 +708,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectCCS {
                         secrets,
                         handshake: self.handshake,
-                        session_id: self.session_id,
+                        session_id: Some(session_id),
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -722,11 +719,14 @@ impl State for ExpectServerHello {
                     }))
                 };
             }
+            _ => {
+                debug!("Did not resume session.");
+            }
         }
 
         Ok(Box::new(tls12::ExpectCertificate {
             handshake: self.handshake,
-            session_id: self.session_id,
+            session_id: Some(session_id),
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
@@ -865,7 +865,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.transcript,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
-            Some(self.next.session_id),
+            self.next.session_id,
             Some(&hrr),
             self.next.dns_name,
             self.extra_exts,

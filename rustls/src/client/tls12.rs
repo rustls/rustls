@@ -31,7 +31,7 @@ use webpki;
 
 pub struct ExpectCertificate {
     pub handshake: HandshakeDetails,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub dns_name: webpki::DNSName,
     pub randoms: SessionRandoms,
     pub using_ems: bool,
@@ -85,7 +85,7 @@ impl hs::State for ExpectCertificate {
 
 struct ExpectCertificateStatus {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -133,7 +133,7 @@ impl hs::State for ExpectCertificateStatus {
 
 struct ExpectCertificateStatusOrServerKX {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -192,7 +192,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
 
 struct ExpectServerKX {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -359,7 +359,7 @@ fn emit_finished(
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -430,7 +430,7 @@ impl hs::State for ExpectCertificateRequest {
 
 struct ExpectServerDoneOrCertReq {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -486,7 +486,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 
 struct ExpectServerDone {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -649,7 +649,7 @@ impl hs::State for ExpectServerDone {
 pub struct ExpectCCS {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub dns_name: webpki::DNSName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
@@ -689,7 +689,7 @@ impl hs::State for ExpectCCS {
 pub struct ExpectNewTicket {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     pub dns_name: webpki::DNSName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
@@ -727,7 +727,7 @@ impl hs::State for ExpectNewTicket {
 fn save_session(
     secrets: &SessionSecrets,
     handshake: &mut HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSNameRef,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
@@ -743,7 +743,7 @@ fn save_session(
         }
     }
 
-    if session_id.is_empty() && ticket.is_empty() {
+    if session_id.is_none() && ticket.is_empty() {
         debug!("Session not saved: server didn't allocate id or ticket");
         return;
     }
@@ -754,7 +754,7 @@ fn save_session(
     let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
         ProtocolVersion::TLSv1_2,
         secrets.suite(),
-        &session_id,
+        session_id,
         ticket,
         master_secret,
         &sess.server_cert_chain,
@@ -778,7 +778,7 @@ fn save_session(
 
 struct ExpectFinished {
     handshake: HandshakeDetails,
-    session_id: SessionID,
+    session_id: Option<SessionID>,
     dns_name: webpki::DNSName,
     using_ems: bool,
     transcript: HandshakeHash,

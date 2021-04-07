@@ -54,7 +54,7 @@ impl ClientSessionKey {
 #[derive(Debug)]
 pub struct ClientSessionValue {
     pub version: ProtocolVersion,
-    pub session_id: SessionID,
+    pub session_id: Option<SessionID>,
     cipher_suite: CipherSuite,
     pub ticket: PayloadU16,
     pub master_secret: PayloadU8,
@@ -85,7 +85,7 @@ impl Codec for ClientSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
-        self.session_id.encode(bytes);
+        SessionID::encode(self.session_id, bytes);
         self.ticket.encode(bytes);
         self.master_secret.encode(bytes);
         self.epoch.encode(bytes);
@@ -99,7 +99,7 @@ impl Codec for ClientSessionValue {
     fn read(r: &mut Reader) -> Option<ClientSessionValue> {
         let v = ProtocolVersion::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
-        let sid = SessionID::read(r)?;
+        let session_id = SessionID::read(r);
         let ticket = PayloadU16::read(r)?;
         let ms = PayloadU8::read(r)?;
         let epoch = u64::read(r)?;
@@ -112,7 +112,7 @@ impl Codec for ClientSessionValue {
         Some(ClientSessionValue {
             version: v,
             cipher_suite,
-            session_id: sid,
+            session_id,
             ticket,
             master_secret: ms,
             epoch,
@@ -144,7 +144,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
     pub fn new(
         v: ProtocolVersion,
         cipher_suite: &'static SupportedCipherSuite,
-        sessid: &SessionID,
+        session_id: Option<SessionID>,
         ticket: Vec<u8>,
         ms: Vec<u8>,
         server_cert_chain: &CertificatePayload,
@@ -153,7 +153,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
             value: ClientSessionValue {
                 version: v,
                 cipher_suite: cipher_suite.suite,
-                session_id: *sessid,
+                session_id,
                 ticket: PayloadU16::new(ticket),
                 master_secret: PayloadU8::new(ms),
                 epoch: 0,
@@ -172,7 +172,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
     }
 
     pub fn set_session_id(&mut self, id: SessionID) {
-        self.value.session_id = id;
+        self.value.session_id = Some(id);
     }
 
     pub fn set_extended_ms_used(&mut self) {
