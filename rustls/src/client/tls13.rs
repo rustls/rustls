@@ -638,7 +638,7 @@ struct ExpectCertificateVerify {
 
 fn send_cert_error_alert(sess: &mut ClientSession, err: Error) -> Error {
     match err {
-        Error::WebPKIError(webpki::Error::BadDER, _) => {
+        Error::WebPkiError(webpki::Error::BadDER, _) => {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }

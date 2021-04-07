@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use crate::anchors::OwnedTrustAnchor;
 use crate::anchors::{DistinguishedNames, RootCertStore};
 use crate::error::Error;
-use crate::error::WebPKIOp;
+use crate::error::WebPkiOp;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -299,7 +299,7 @@ impl ServerCertVerifier for WebPkiVerifier {
                 &chain,
                 webpki_now,
             )
-            .map_err(|e| Error::WebPKIError(e, WebPKIOp::ValidateServerCert))
+            .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateServerCert))
             .map(|_| cert)?;
 
         verify_scts(end_entity, now, scts, &self.ct_logs)?;
@@ -309,7 +309,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         }
 
         cert.verify_is_valid_for_dns_name(dns_name)
-            .map_err(|e| Error::WebPKIError(e, WebPKIOp::ValidateForDNSName))
+            .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateForDnsName))
             .map(|_| ServerCertVerified::assertion())
     }
 }
@@ -362,7 +362,7 @@ fn prepare<'a, 'b>(
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
     // EE cert must appear first.
     let cert = webpki::EndEntityCert::from(&end_entity.0)
-        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
     let intermediates: Vec<&'a [u8]> = intermediates
         .iter()
@@ -424,7 +424,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
             &chain,
             now,
         )
-        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ValidateClientCert))
+        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateClientCert))
         .map(|_| ClientCertVerified::assertion())
     }
 }
@@ -575,10 +575,10 @@ fn verify_signed_struct(
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
-        .map_err(|e| Error::WebPKIError(e, WebPKIOp::VerifySignature))
+        .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
@@ -631,10 +631,10 @@ fn verify_tls13(
 
 
     let cert = webpki::EndEntityCert::from(&cert.0)
-        .map_err(|e| Error::WebPKIError(e, WebPKIOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, &msg, &dss.sig.0)
-        .map_err(|e| Error::WebPKIError(e, WebPKIOp::VerifySignature))
+        .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
@@ -672,7 +672,7 @@ fn verify_scts(
             }
             Err(e) => {
                 if e.should_be_fatal() {
-                    return Err(Error::InvalidSCT(e));
+                    return Err(Error::InvalidSct(e));
                 }
                 debug!("SCT ignored because {:?}", e);
                 last_sct_error = Some(e);
@@ -684,7 +684,7 @@ fn verify_scts(
      * but couldn't verify any of them, fail the handshake. */
     if let Some(last_sct_error) = last_sct_error {
         warn!("No valid SCTs provided");
-        return Err(Error::InvalidSCT(last_sct_error));
+        return Err(Error::InvalidSct(last_sct_error));
     }
 
     Ok(())

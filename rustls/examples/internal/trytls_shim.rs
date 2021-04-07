@@ -65,7 +65,7 @@ fn communicate(
 
             if let Err(err) = client.process_new_packets() {
                 return match err {
-                    Error::WebPKIError(..) | Error::AlertReceived(_) => Ok(Verdict::Reject(err)),
+                    Error::WebPkiError(..) | Error::AlertReceived(_) => Ok(Verdict::Reject(err)),
                     _ => Err(From::from(format!("{:?}", err))),
                 };
             }

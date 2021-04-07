@@ -422,7 +422,7 @@ enum Limit {
 
 /// For TLS1.3 middlebox compatibility mode, how to handle
 /// a received ChangeCipherSpec message.
-pub enum MiddleboxCCS {
+pub enum MiddleboxCcs {
     /// process the message as normal
     Process,
 
@@ -493,7 +493,7 @@ impl SessionCommon {
         ignore_corrupt_payload: bool,
     ) -> Result<Option<MessageType>, Error> {
         // TLS1.3: drop CCS at any time during handshaking
-        if let MiddleboxCCS::Drop = self.filter_tls13_ccs(&msg)? {
+        if let MiddleboxCcs::Drop = self.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
             return Ok(None);
         }
@@ -540,14 +540,14 @@ impl SessionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, Error> {
+    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCcs, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
         // - if it's not a CCS at all
         // - if we've finished the handshake
         if !self.is_tls13() || !msg.is_content_type(ContentType::ChangeCipherSpec) || self.traffic {
-            return Ok(MiddleboxCCS::Process);
+            return Ok(MiddleboxCcs::Process);
         }
 
         if self.received_middlebox_ccs {
@@ -556,7 +556,7 @@ impl SessionCommon {
             ))
         } else {
             self.received_middlebox_ccs = true;
-            Ok(MiddleboxCCS::Drop)
+            Ok(MiddleboxCcs::Drop)
         }
     }
 

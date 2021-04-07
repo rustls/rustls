@@ -24,13 +24,13 @@ impl HandshakeDetails {
     }
 }
 
-pub struct ServerKXDetails {
+pub struct ServerKxDetails {
     pub kx: kx::KeyExchange,
 }
 
-impl ServerKXDetails {
-    pub fn new(kx: kx::KeyExchange) -> ServerKXDetails {
-        ServerKXDetails { kx }
+impl ServerKxDetails {
+    pub fn new(kx: kx::KeyExchange) -> ServerKxDetails {
+        ServerKxDetails { kx }
     }
 }
 

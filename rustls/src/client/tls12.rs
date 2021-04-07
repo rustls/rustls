@@ -22,7 +22,7 @@ use crate::verify;
 use crate::SupportedCipherSuite;
 
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
-use crate::client::common::{ServerCertDetails, ServerKXDetails};
+use crate::client::common::{ServerCertDetails, ServerKxDetails};
 use crate::client::hs;
 
 use ring::constant_time;
@@ -51,7 +51,7 @@ impl hs::State for ExpectCertificate {
         )?;
 
         if self.may_send_cert_status {
-            Ok(Box::new(ExpectCertificateStatusOrServerKX {
+            Ok(Box::new(ExpectCertificateStatusOrServerKx {
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -67,7 +67,7 @@ impl hs::State for ExpectCertificate {
             let server_cert =
                 ServerCertDetails::new(server_cert_chain, vec![], self.server_cert_sct_list);
 
-            Ok(Box::new(ExpectServerKX {
+            Ok(Box::new(ExpectServerKx {
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -116,7 +116,7 @@ impl hs::State for ExpectCertificateStatus {
             self.server_cert_sct_list,
         );
 
-        Ok(Box::new(ExpectServerKX {
+        Ok(Box::new(ExpectServerKx {
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             dns_name: self.dns_name,
@@ -130,7 +130,7 @@ impl hs::State for ExpectCertificateStatus {
     }
 }
 
-struct ExpectCertificateStatusOrServerKX {
+struct ExpectCertificateStatusOrServerKx {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DNSName,
@@ -143,7 +143,7 @@ struct ExpectCertificateStatusOrServerKX {
     must_issue_new_ticket: bool,
 }
 
-impl hs::State for ExpectCertificateStatusOrServerKX {
+impl hs::State for ExpectCertificateStatusOrServerKx {
     fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         check_message(
             &m,
@@ -155,7 +155,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
         )?;
 
         if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
-            Box::new(ExpectServerKX {
+            Box::new(ExpectServerKx {
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -189,7 +189,7 @@ impl hs::State for ExpectCertificateStatusOrServerKX {
     }
 }
 
-struct ExpectServerKX {
+struct ExpectServerKx {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DNSName,
@@ -201,7 +201,7 @@ struct ExpectServerKX {
     must_issue_new_ticket: bool,
 }
 
-impl hs::State for ExpectServerKX {
+impl hs::State for ExpectServerKx {
     fn handle(mut self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
             m,
@@ -221,7 +221,7 @@ impl hs::State for ExpectServerKX {
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
         decoded_kx.encode_params(&mut kx_params);
-        let server_kx = ServerKXDetails::new(kx_params, decoded_kx.get_sig().unwrap());
+        let server_kx = ServerKxDetails::new(kx_params, decoded_kx.get_sig().unwrap());
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
@@ -365,7 +365,7 @@ struct ExpectCertificateRequest {
     transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
-    server_kx: ServerKXDetails,
+    server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
 }
 
@@ -436,7 +436,7 @@ struct ExpectServerDoneOrCertReq {
     transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
-    server_kx: ServerKXDetails,
+    server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
 }
 
@@ -492,7 +492,7 @@ struct ExpectServerDone {
     transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     server_cert: ServerCertDetails,
-    server_kx: ServerKXDetails,
+    server_kx: ServerKxDetails,
     client_auth: Option<ClientAuthDetails>,
     must_issue_new_ticket: bool,
 }
@@ -628,7 +628,7 @@ impl hs::State for ExpectServerDone {
                 sig_verified,
             }))
         } else {
-            Ok(Box::new(ExpectCCS {
+            Ok(Box::new(ExpectCcs {
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
@@ -645,7 +645,7 @@ impl hs::State for ExpectServerDone {
 }
 
 // -- Waiting for their CCS --
-pub struct ExpectCCS {
+pub struct ExpectCcs {
     pub secrets: SessionSecrets,
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     pub session_id: SessionID,
@@ -658,7 +658,7 @@ pub struct ExpectCCS {
     pub sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl hs::State for ExpectCCS {
+impl hs::State for ExpectCcs {
     fn handle(self: Box<Self>, sess: &mut ClientSession, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
         // CCS should not be received interleaved with fragmented handshake-level
@@ -707,7 +707,7 @@ impl hs::State for ExpectNewTicket {
             HandshakePayload::NewSessionTicket
         )?;
 
-        Ok(Box::new(ExpectCCS {
+        Ok(Box::new(ExpectCcs {
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,

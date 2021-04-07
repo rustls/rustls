@@ -137,7 +137,7 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, 
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
 pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
-    if let Ok(ecdsa_p256) = ECDSASigningKey::new(
+    if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
         &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
@@ -145,7 +145,7 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, Sign
         return Ok(Arc::new(ecdsa_p256));
     }
 
-    if let Ok(ecdsa_p384) = ECDSASigningKey::new(
+    if let Ok(ecdsa_p384) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP384_SHA384,
         &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
@@ -197,7 +197,7 @@ impl SigningKey for RsaSigningKey {
         ALL_RSA_SCHEMES
             .iter()
             .find(|scheme| offered.contains(scheme))
-            .map(|scheme| RSASigner::new(self.key.clone(), *scheme))
+            .map(|scheme| RsaSigner::new(self.key.clone(), *scheme))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -205,17 +205,18 @@ impl SigningKey for RsaSigningKey {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use RsaSigningKey")]
 pub type RSASigningKey = RsaSigningKey;
 
-struct RSASigner {
+struct RsaSigner {
     key: Arc<RsaKeyPair>,
     scheme: SignatureScheme,
     encoding: &'static dyn signature::RsaEncoding,
 }
 
-impl RSASigner {
+impl RsaSigner {
     fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
         let encoding: &dyn signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
@@ -227,7 +228,7 @@ impl RSASigner {
             _ => unreachable!(),
         };
 
-        Box::new(RSASigner {
+        Box::new(RsaSigner {
             key,
             scheme,
             encoding,
@@ -235,7 +236,7 @@ impl RSASigner {
     }
 }
 
-impl Signer for RSASigner {
+impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let mut sig = vec![0; self.key.public_modulus_len()];
 
@@ -262,21 +263,21 @@ impl Signer for RSASigner {
 /// different protocol versions.
 ///
 /// Currently this is only implemented for ECDSA keys.
-struct ECDSASigningKey {
+struct EcdsaSigningKey {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
 
-impl ECDSASigningKey {
+impl EcdsaSigningKey {
     /// Make a new `ECDSASigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
     pub fn new(
         der: &key::PrivateKey,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
-    ) -> Result<ECDSASigningKey, ()> {
+    ) -> Result<EcdsaSigningKey, ()> {
         EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
-            .map(|kp| ECDSASigningKey {
+            .map(|kp| EcdsaSigningKey {
                 key: Arc::new(kp),
                 scheme,
             })
@@ -284,10 +285,10 @@ impl ECDSASigningKey {
     }
 }
 
-impl SigningKey for ECDSASigningKey {
+impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
-            Some(Box::new(ECDSASigner {
+            Some(Box::new(EcdsaSigner {
                 key: self.key.clone(),
                 scheme: self.scheme,
             }))
@@ -302,12 +303,12 @@ impl SigningKey for ECDSASigningKey {
     }
 }
 
-struct ECDSASigner {
+struct EcdsaSigner {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
 
-impl Signer for ECDSASigner {
+impl Signer for EcdsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let rng = ring::rand::SystemRandom::new();
         self.key

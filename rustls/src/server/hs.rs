@@ -28,7 +28,7 @@ use crate::sign;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::{HandshakeDetails, ServerKXDetails};
+use crate::server::common::{HandshakeDetails, ServerKxDetails};
 use crate::server::{tls12, tls13};
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -569,7 +569,7 @@ impl ExpectClientHello {
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
-        Ok(Box::new(tls12::ExpectCCS {
+        Ok(Box::new(tls12::ExpectCcs {
             secrets,
             handshake: self.handshake,
             using_ems: self.using_ems,
@@ -909,7 +909,7 @@ impl State for ExpectClientHello {
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 
-        let server_kx = ServerKXDetails::new(kx);
+        let server_kx = ServerKxDetails::new(kx);
         if doing_client_auth {
             Ok(Box::new(tls12::ExpectCertificate {
                 handshake: self.handshake,
@@ -920,7 +920,7 @@ impl State for ExpectClientHello {
                 send_ticket: self.send_ticket,
             }))
         } else {
-            Ok(Box::new(tls12::ExpectClientKX {
+            Ok(Box::new(tls12::ExpectClientKx {
                 handshake: self.handshake,
                 randoms,
                 suite,

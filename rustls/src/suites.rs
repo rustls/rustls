@@ -60,8 +60,8 @@ pub struct SupportedCipherSuite {
 
     pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
     pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
-    pub(crate) build_tls12_encrypter: Option<cipher::BuildTLS12Encrypter>,
-    pub(crate) build_tls12_decrypter: Option<cipher::BuildTLS12Decrypter>,
+    pub(crate) build_tls12_encrypter: Option<cipher::BuildTls12Encrypter>,
+    pub(crate) build_tls12_decrypter: Option<cipher::BuildTls12Decrypter>,
 }
 
 impl PartialEq for SupportedCipherSuite {
