@@ -1,3 +1,5 @@
+#![allow(clippy::upper_case_acronyms)]
+
 #[macro_use]
 mod macros;
 

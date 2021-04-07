@@ -40,6 +40,7 @@ impl From<webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl<'a> Into<webpki::TrustAnchor<'a>> for &'a OwnedTrustAnchor {
     fn into(self) -> webpki::TrustAnchor<'a> {
         self.to_trust_anchor()
