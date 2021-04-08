@@ -33,8 +33,8 @@ use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{msgs::base::PayloadU16, quic, session::Protocol};
 
-use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::common::ServerCertDetails;
+use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::hs;
 
 use ring::constant_time;
