@@ -1,6 +1,6 @@
-use crate::conn::ConnectionRandoms;
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -37,24 +37,21 @@ pub trait State {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _conn: &mut ServerConnection) {}
+    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
-pub fn incompatible(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::HandshakeFailure);
+pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
+    common.send_fatal_alert(AlertDescription::HandshakeFailure);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-fn bad_version(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::ProtocolVersion);
+fn bad_version(common: &mut ConnectionCommon, why: &str) -> Error {
+    common.send_fatal_alert(AlertDescription::ProtocolVersion);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub fn decode_error(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::DecodeError);
+pub fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
+    common.send_fatal_alert(AlertDescription::DecodeError);
     Error::PeerMisbehavedError(why.to_string())
 }
 
@@ -211,7 +208,7 @@ impl ExtensionProcessing {
 
     pub(super) fn process_tls12(
         &mut self,
-        conn: &ServerConnection,
+        config: &ServerConfig,
         hello: &ClientHelloPayload,
         using_ems: bool,
     ) {
@@ -235,7 +232,7 @@ impl ExtensionProcessing {
         if hello
             .find_extension(ExtensionType::SessionTicket)
             .is_some()
-            && conn.config.ticketer.enabled()
+            && config.ticketer.enabled()
         {
             self.send_ticket = true;
             self.exts
@@ -308,7 +305,10 @@ impl State for ExpectClientHello {
         }
 
         if client_hello.has_duplicate_extension() {
-            return Err(decode_error(conn, "client sent duplicate extensions"));
+            return Err(decode_error(
+                &mut conn.common,
+                "client sent duplicate extensions",
+            ));
         }
 
         // No handshake messages should follow this one in this flight.
@@ -320,15 +320,18 @@ impl State for ExpectClientHello {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
-                return Err(bad_version(conn, "TLS1.2 not offered/enabled"));
+                return Err(bad_version(&mut conn.common, "TLS1.2 not offered/enabled"));
             } else {
                 ProtocolVersion::TLSv1_2
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
-            return Err(bad_version(conn, "Client does not support TLSv1_2"));
+            return Err(bad_version(
+                &mut conn.common,
+                "Client does not support TLSv1_2",
+            ));
         } else if !tls12_enabled && tls13_enabled {
             return Err(bad_version(
-                conn,
+                &mut conn.common,
                 "Server requires TLS1.3, but client omitted versions ext",
             ));
         } else {
@@ -348,7 +351,7 @@ impl State for ExpectClientHello {
             Some(sni) => {
                 if sni.has_duplicate_names_for_type() {
                     return Err(decode_error(
-                        conn,
+                        &mut conn.common,
                         "ClientHello SNI contains duplicate name types",
                     ));
                 }
@@ -442,7 +445,7 @@ impl State for ExpectClientHello {
                 &suitable_suites,
             )
         }
-        .ok_or_else(|| incompatible(conn, "no ciphersuites in common"))?;
+        .ok_or_else(|| incompatible(&mut conn.common, "no ciphersuites in common"))?;
 
         debug!("decided upon suite {:?}", suite);
         conn.common.suite = Some(suite);

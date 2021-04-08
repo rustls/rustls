@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::conn::{ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -70,10 +70,14 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| hs::incompatible(conn, "client didn't describe groups"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(&mut conn.common, "client didn't describe groups")
+                })?;
             let ecpoints_ext = client_hello
                 .get_ecpoints_extension()
-                .ok_or_else(|| hs::incompatible(conn, "client didn't describe ec points"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(&mut conn.common, "client didn't describe ec points")
+                })?;
 
             trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
@@ -151,7 +155,10 @@ mod client_hello {
                 .resolve_sig_schemes(&sigschemes_ext);
 
             if sigschemes.is_empty() {
-                return Err(hs::incompatible(conn, "no overlapping sigschemes"));
+                return Err(hs::incompatible(
+                    &mut conn.common,
+                    "no overlapping sigschemes",
+                ));
             }
 
             let group = conn
@@ -160,13 +167,13 @@ mod client_hello {
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(conn, "no supported group"))?;
+                .ok_or_else(|| hs::incompatible(&mut conn.common, "no supported group"))?;
 
             let ecpoint = ECPointFormatList::supported()
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(conn, "no supported point format"))?;
+                .ok_or_else(|| hs::incompatible(&mut conn.common, "no supported point format"))?;
 
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
@@ -192,20 +199,24 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.transcript, conn, server_key.get_cert());
+            emit_certificate(
+                &mut self.transcript,
+                &mut conn.common,
+                server_key.get_cert(),
+            );
             if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut self.transcript, conn, ocsp_response);
+                emit_cert_status(&mut self.transcript, &mut conn.common, ocsp_response);
             }
             let server_kx = emit_server_kx(
                 &mut self.transcript,
-                conn,
+                &mut conn.common,
                 sigschemes,
                 group,
                 server_key.get_key(),
                 &self.randoms,
             )?;
             let doing_client_auth = emit_certificate_req(&mut self.transcript, conn)?;
-            emit_server_hello_done(&mut self.transcript, conn);
+            emit_server_hello_done(&mut self.transcript, &mut conn.common);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -278,11 +289,11 @@ mod client_hello {
             if self.send_ticket {
                 emit_ticket(&secrets, &mut self.transcript, self.using_ems, conn);
             }
-            emit_ccs(conn);
+            emit_ccs(&mut conn.common);
             conn.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&secrets, &mut self.transcript, conn);
+            emit_finished(&secrets, &mut self.transcript, &mut conn.common);
 
             Ok(Box::new(ExpectCcs {
                 secrets,
@@ -318,7 +329,7 @@ mod client_hello {
             resumedata,
             extra_exts,
         )?;
-        ep.process_tls12(conn, hello, using_ems);
+        ep.process_tls12(&conn.config, hello, using_ems);
 
         let sh = Message {
             typ: ContentType::Handshake,
@@ -344,7 +355,7 @@ mod client_hello {
 
     fn emit_certificate(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        common: &mut ConnectionCommon,
         cert_chain: &[Certificate],
     ) {
         let c = Message {
@@ -357,10 +368,14 @@ mod client_hello {
         };
 
         transcript.add_message(&c);
-        conn.common.send_msg(c, false);
+        common.send_msg(c, false);
     }
 
-    fn emit_cert_status(transcript: &mut HandshakeHash, conn: &mut ServerConnection, ocsp: &[u8]) {
+    fn emit_cert_status(
+        transcript: &mut HandshakeHash,
+        common: &mut ConnectionCommon,
+        ocsp: &[u8],
+    ) {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
@@ -373,12 +388,12 @@ mod client_hello {
         };
 
         transcript.add_message(&c);
-        conn.common.send_msg(c, false);
+        common.send_msg(c, false);
     }
 
     fn emit_server_kx(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        common: &mut ConnectionCommon,
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
         signing_key: &dyn sign::SigningKey,
@@ -413,7 +428,7 @@ mod client_hello {
         };
 
         transcript.add_message(&m);
-        conn.common.send_msg(m, false);
+        common.send_msg(m, false);
         Ok(kx)
     }
 
@@ -462,7 +477,7 @@ mod client_hello {
         Ok(true)
     }
 
-    fn emit_server_hello_done(transcript: &mut HandshakeHash, conn: &mut ServerConnection) {
+    fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut ConnectionCommon) {
         let m = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -473,7 +488,7 @@ mod client_hello {
         };
 
         transcript.add_message(&m);
-        conn.common.send_msg(m, false);
+        common.send_msg(m, false);
     }
 }
 
@@ -532,7 +547,7 @@ impl hs::State for ExpectCertificate {
                     .verifier
                     .verify_client_cert(end_entity, intermediates, conn.data.get_sni(), now)
                     .or_else(|err| {
-                        hs::incompatible(conn, "certificate invalid");
+                        hs::incompatible(&mut conn.common, "certificate invalid");
                         Err(err)
                     })?;
 
@@ -766,20 +781,20 @@ fn emit_ticket(
     conn.common.send_msg(m, false);
 }
 
-fn emit_ccs(conn: &mut ServerConnection) {
+fn emit_ccs(common: &mut ConnectionCommon) {
     let m = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
 
-    conn.common.send_msg(m, false);
+    common.send_msg(m, false);
 }
 
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    conn: &mut ServerConnection,
+    common: &mut ConnectionCommon,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.server_verify_data(&vh);
@@ -795,7 +810,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    conn.common.send_msg(f, true);
+    common.send_msg(f, true);
 }
 
 struct ExpectFinished {
@@ -851,11 +866,11 @@ impl hs::State for ExpectFinished {
             if self.send_ticket {
                 emit_ticket(&self.secrets, &mut self.transcript, self.using_ems, conn);
             }
-            emit_ccs(conn);
+            emit_ccs(&mut conn.common);
             conn.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.transcript, conn);
+            emit_finished(&self.secrets, &mut self.transcript, &mut conn.common);
         }
 
         conn.common.start_traffic();

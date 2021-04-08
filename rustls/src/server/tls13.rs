@@ -1,5 +1,5 @@
 use crate::check::check_message;
-use crate::conn::ConnectionRandoms;
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -15,7 +15,7 @@ use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::server::ServerConnection;
+use crate::server::{ServerConfig, ServerConnection};
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
@@ -93,16 +93,16 @@ mod client_hello {
 
         fn attempt_tls13_ticket_decryption(
             &mut self,
-            conn: &mut ServerConnection,
+            config: &ServerConfig,
             ticket: &[u8],
         ) -> Option<persist::ServerSessionValue> {
-            if conn.config.ticketer.enabled() {
-                conn.config
+            if config.ticketer.enabled() {
+                config
                     .ticketer
                     .decrypt(ticket)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
             } else {
-                conn.config
+                config
                     .session_storage
                     .take(ticket)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
@@ -130,11 +130,15 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| hs::incompatible(conn, "client didn't describe groups"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(&mut conn.common, "client didn't describe groups")
+                })?;
 
             let mut sigschemes_ext = client_hello
                 .get_sigalgs_extension()
-                .ok_or_else(|| hs::incompatible(conn, "client didn't describe sigschemes"))?
+                .ok_or_else(|| {
+                    hs::incompatible(&mut conn.common, "client didn't describe sigschemes")
+                })?
                 .clone();
 
             let tls13_schemes = sign::supported_sign_tls13();
@@ -142,7 +146,9 @@ mod client_hello {
 
             let shares_ext = client_hello
                 .get_keyshare_extension()
-                .ok_or_else(|| hs::incompatible(conn, "client didn't send keyshares"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(&mut conn.common, "client didn't send keyshares")
+                })?;
 
             if client_hello.has_keyshare_extension_with_duplicates() {
                 return Err(conn
@@ -182,8 +188,13 @@ mod client_hello {
                                 .illegal_param("did not follow retry request"));
                         }
 
-                        emit_hello_retry_request(&mut self.transcript, suite, conn, group.name);
-                        emit_fake_ccs(conn);
+                        emit_hello_retry_request(
+                            &mut self.transcript,
+                            suite,
+                            &mut conn.common,
+                            group.name,
+                        );
+                        emit_fake_ccs(&mut conn.common);
                         return Ok(Box::new(hs::ExpectClientHello {
                             transcript: self.transcript,
                             session_id: SessionID::empty(),
@@ -194,7 +205,10 @@ mod client_hello {
                         }));
                     }
 
-                    return Err(hs::incompatible(conn, "no kx group overlap with client"));
+                    return Err(hs::incompatible(
+                        &mut conn.common,
+                        "no kx group overlap with client",
+                    ));
                 }
             };
 
@@ -208,7 +222,10 @@ mod client_hello {
                 }
 
                 if psk_offer.binders.is_empty() {
-                    return Err(hs::decode_error(conn, "psk extension missing binder"));
+                    return Err(hs::decode_error(
+                        &mut conn.common,
+                        "psk extension missing binder",
+                    ));
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
@@ -219,7 +236,7 @@ mod client_hello {
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                     let resume = match self
-                        .attempt_tls13_ticket_decryption(conn, &psk_id.identity.0)
+                        .attempt_tls13_ticket_decryption(&conn.config, &psk_id.identity.0)
                         .filter(|resumedata| {
                             hs::can_resume(self.suite, &conn.data.sni, false, resumedata)
                         }) {
@@ -275,7 +292,7 @@ mod client_hello {
                     .map(|x| &x.master_secret.0[..]),
             )?;
             if !self.done_retry {
-                emit_fake_ccs(conn);
+                emit_fake_ccs(&mut conn.common);
             }
 
             let (mut ocsp_response, mut sct_list) =
@@ -295,14 +312,14 @@ mod client_hello {
                 let client_auth = emit_certificate_req_tls13(&mut self.transcript, conn)?;
                 emit_certificate_tls13(
                     &mut self.transcript,
-                    conn,
+                    &mut conn.common,
                     server_key.get_cert(),
                     ocsp_response,
                     sct_list,
                 );
                 emit_certificate_verify_tls13(
                     &mut self.transcript,
-                    conn,
+                    &mut conn.common,
                     server_key.get_key(),
                     &sigschemes_ext,
                 )?;
@@ -448,8 +465,8 @@ mod client_hello {
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(conn: &mut ServerConnection) {
-        if conn.common.is_quic() {
+    fn emit_fake_ccs(common: &mut ConnectionCommon) {
+        if common.is_quic() {
             return;
         }
         let m = Message {
@@ -457,13 +474,13 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        conn.common.send_msg(m, false);
+        common.send_msg(m, false);
     }
 
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
-        conn: &mut ServerConnection,
+        common: &mut ConnectionCommon,
         group: NamedGroup,
     ) {
         let mut req = HelloRetryRequest {
@@ -492,7 +509,7 @@ mod client_hello {
         trace!("Requesting retry {:?}", m);
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        conn.common.send_msg(m, false);
+        common.send_msg(m, false);
     }
 
     fn emit_encrypted_extensions(
@@ -584,7 +601,7 @@ mod client_hello {
 
     fn emit_certificate_tls13(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        common: &mut ConnectionCommon,
         cert_chain: &[Certificate],
         ocsp_response: Option<&[u8]>,
         sct_list: Option<&[u8]>,
@@ -629,12 +646,12 @@ mod client_hello {
 
         trace!("sending certificate {:?}", c);
         transcript.add_message(&c);
-        conn.common.send_msg(c, true);
+        common.send_msg(c, true);
     }
 
     fn emit_certificate_verify_tls13(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        common: &mut ConnectionCommon,
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
@@ -642,7 +659,7 @@ mod client_hello {
 
         let signer = signing_key
             .choose_scheme(schemes)
-            .ok_or_else(|| hs::incompatible(conn, "no overlapping sigschemes"))?;
+            .ok_or_else(|| hs::incompatible(common, "no overlapping sigschemes"))?;
 
         let scheme = signer.get_scheme();
         let sig = signer.sign(&message)?;
@@ -660,7 +677,7 @@ mod client_hello {
 
         trace!("sending certificate-verify {:?}", m);
         transcript.add_message(&m);
-        conn.common.send_msg(m, true);
+        common.send_msg(m, true);
         Ok(())
     }
 
@@ -795,7 +812,7 @@ impl hs::State for ExpectCertificate {
             .get_verifier()
             .verify_client_cert(end_entity, intermediates, conn.data.get_sni(), now)
             .or_else(|err| {
-                hs::incompatible(conn, "certificate invalid");
+                hs::incompatible(&mut conn.common, "certificate invalid");
                 Err(err)
             })?;
 
@@ -1048,21 +1065,20 @@ impl ExpectTraffic {
 
     fn handle_key_update(
         &mut self,
-        conn: &mut ServerConnection,
+        common: &mut ConnectionCommon,
         kur: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
         {
-            if let Protocol::Quic = conn.common.protocol {
-                conn.common
-                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
+            if let Protocol::Quic = common.protocol {
+                common.send_fatal_alert(AlertDescription::UnexpectedMessage);
                 let msg = "KeyUpdate received in QUIC connection".to_string();
                 warn!("{}", msg);
                 return Err(Error::PeerMisbehavedError(msg));
             }
         }
 
-        conn.common.check_aligned_handshake()?;
+        common.check_aligned_handshake()?;
 
         match kur {
             KeyUpdateRequest::UpdateNotRequested => {}
@@ -1070,8 +1086,7 @@ impl ExpectTraffic {
                 self.want_write_key_update = true;
             }
             _ => {
-                conn.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter);
+                common.send_fatal_alert(AlertDescription::IllegalParameter);
                 return Err(Error::CorruptMessagePayload(ContentType::Handshake));
             }
         }
@@ -1080,7 +1095,7 @@ impl ExpectTraffic {
         let new_read_key = self
             .key_schedule
             .next_client_application_traffic_secret();
-        conn.common
+        common
             .record_layer
             .set_message_decrypter(cipher::new_tls13_read(self.suite, &new_read_key));
 
@@ -1099,7 +1114,7 @@ impl hs::State for ExpectTraffic {
         } else if let Ok(key_update) =
             require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
         {
-            self.handle_key_update(conn, key_update)?;
+            self.handle_key_update(&mut conn.common, key_update)?;
         } else {
             check_message(
                 &m,
@@ -1121,16 +1136,15 @@ impl hs::State for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    fn perhaps_write_key_update(&mut self, conn: &mut ServerConnection) {
+    fn perhaps_write_key_update(&mut self, common: &mut ConnectionCommon) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            conn.common
-                .send_msg_encrypt(Message::build_key_update_notify());
+            common.send_msg_encrypt(Message::build_key_update_notify());
 
             let write_key = self
                 .key_schedule
                 .next_server_application_traffic_secret();
-            conn.common
+            common
                 .record_layer
                 .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
         }
