@@ -272,19 +272,15 @@ pub fn start_handshake_traffic(
 
     #[cfg(feature = "quic")]
     {
-        let write_key = if conn.early_data.is_enabled() {
-            // Traffic secret wasn't computed and stored above, so do it here.
-            key_schedule.client_handshake_traffic_secret(
-                &hash_at_client_recvd_server_hello,
-                &*conn.config.key_log,
-                &randoms.client,
-            )
-        } else {
-            _maybe_write_key.unwrap()
-        };
         conn.common.quic.hs_secrets = Some(quic::Secrets {
-            client: write_key,
             server: read_key,
+            client: _maybe_write_key.unwrap_or_else(|| {
+                key_schedule.client_handshake_traffic_secret(
+                    &hash_at_client_recvd_server_hello,
+                    &*conn.config.key_log,
+                    &randoms.client,
+                )
+            }),
         });
     }
 
