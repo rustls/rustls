@@ -149,7 +149,7 @@ impl ExtensionProcessing {
                         && resume.version == conn.common.negotiated_version.unwrap()
                         && resume.cipher_suite == suite.suite
                         && resume.alpn.as_ref().map(|x| &x.0) == conn.common.alpn_protocol.as_ref()
-                        && !conn.reject_early_data
+                        && !conn.data.reject_early_data
                     {
                         self.exts
                             .push(ServerExtension::EarlyData);
@@ -368,9 +368,9 @@ impl State for ExpectClientHello {
         if let (Some(sni), false) = (&sni, self.done_retry) {
             // Save the SNI into the session.
             // The SNI hostname is immutable once set.
-            assert!(conn.sni.is_none());
-            conn.sni = Some(sni.clone());
-        } else if conn.sni != sni {
+            assert!(conn.data.sni.is_none());
+            conn.data.sni = Some(sni.clone());
+        } else if conn.data.sni != sni {
             return Err(Error::PeerIncompatibleError(
                 "SNI differed on retry".to_string(),
             ));

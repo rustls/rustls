@@ -348,14 +348,8 @@ impl ServerConfig {
 pub struct ServerConnection {
     config: Arc<ServerConfig>,
     common: ConnectionCommon,
-    sni: Option<webpki::DnsName>,
-    received_resumption_data: Option<Vec<u8>>,
-    resumption_data: Vec<u8>,
     state: Option<Box<dyn hs::State + Send + Sync>>,
-    client_cert_chain: Option<Vec<key::Certificate>>,
-    #[allow(dead_code)] // #[cfg(feature = "quic")] only
-    /// Whether to reject early data even if it would otherwise be accepted
-    reject_early_data: bool,
+    data: ServerConnectionData,
 }
 
 impl ServerConnection {
@@ -369,12 +363,8 @@ impl ServerConnection {
         ServerConnection {
             config: config.clone(),
             common: ConnectionCommon::new(config.mtu, false),
-            sni: None,
-            received_resumption_data: None,
-            resumption_data: Vec::new(),
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
-            client_cert_chain: None,
-            reject_early_data: false,
+            data: ServerConnectionData::default(),
         }
     }
 
@@ -433,7 +423,7 @@ impl ServerConnection {
     }
 
     fn get_sni(&self) -> Option<&webpki::DnsName> {
-        self.sni.as_ref()
+        self.data.sni.as_ref()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -442,7 +432,8 @@ impl ServerConnection {
     ///
     /// Returns `Some` iff a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.received_resumption_data
+        self.data
+            .received_resumption_data
             .as_ref()
             .map(|x| &x[..])
     }
@@ -457,7 +448,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) {
         assert!(data.len() < 2usize.pow(15));
-        self.resumption_data = data.into();
+        self.data.resumption_data = data.into();
     }
 
     /// Explicitly discard early data, notifying the client
@@ -470,7 +461,7 @@ impl ServerConnection {
             self.is_handshaking(),
             "cannot retroactively reject early data"
         );
-        self.reject_early_data = true;
+        self.data.reject_early_data = true;
     }
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
@@ -553,7 +544,8 @@ impl Connection for ServerConnection {
     }
 
     fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.client_cert_chain
+        self.data
+            .client_cert_chain
             .as_ref()
             .map(|chain| chain.to_vec())
     }
@@ -614,6 +606,16 @@ impl fmt::Debug for ServerConnection {
         f.debug_struct("ServerConnection")
             .finish()
     }
+}
+
+#[derive(Default)]
+struct ServerConnectionData {
+    sni: Option<webpki::DnsName>,
+    received_resumption_data: Option<Vec<u8>>,
+    resumption_data: Vec<u8>,
+    client_cert_chain: Option<Vec<key::Certificate>>,
+    /// Whether to reject early data even if it would otherwise be accepted
+    reject_early_data: bool,
 }
 
 #[cfg(feature = "quic")]
