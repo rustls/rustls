@@ -221,7 +221,7 @@ mod client_hello {
                     let resume = match self
                         .attempt_tls13_ticket_decryption(conn, &psk_id.identity.0)
                         .filter(|resumedata| {
-                            hs::can_resume(self.suite, &conn.sni, false, resumedata)
+                            hs::can_resume(self.suite, &conn.data.sni, false, resumedata)
                         }) {
                         Some(resume) => resume,
                         None => continue,
@@ -256,8 +256,8 @@ mod client_hello {
             }
 
             if let Some(ref resume) = resumedata {
-                conn.received_resumption_data = Some(resume.application_data.0.clone());
-                conn.client_cert_chain = resume.client_cert_chain.clone();
+                conn.data.received_resumption_data = Some(resume.application_data.0.clone());
+                conn.data.client_cert_chain = resume.client_cert_chain.clone();
             }
 
             let full_handshake = resumedata.is_none();
@@ -850,7 +850,7 @@ impl hs::State for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        conn.client_cert_chain = Some(self.client_cert);
+        conn.data.client_cert_chain = Some(self.client_cert);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -883,9 +883,9 @@ fn get_server_session_value(
         version,
         suite.suite,
         secret,
-        &conn.client_cert_chain,
+        &conn.data.client_cert_chain,
         conn.common.alpn_protocol.clone(),
-        conn.resumption_data.clone(),
+        conn.data.resumption_data.clone(),
     )
 }
 

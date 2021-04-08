@@ -135,7 +135,7 @@ mod client_hello {
                 .filter(|resumedata| {
                     hs::can_resume(
                         self.suite.supported_suite(),
-                        &conn.sni,
+                        &conn.data.sni,
                         self.using_ems,
                         resumedata,
                     )
@@ -273,7 +273,7 @@ mod client_hello {
             );
             conn.common
                 .start_encryption_tls12(&secrets);
-            conn.client_cert_chain = resumedata.client_cert_chain;
+            conn.data.client_cert_chain = resumedata.client_cert_chain;
 
             if self.send_ticket {
                 emit_ticket(&secrets, &mut self.transcript, self.using_ems, conn);
@@ -662,7 +662,7 @@ impl hs::State for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        conn.client_cert_chain = Some(self.client_cert);
+        conn.data.client_cert_chain = Some(self.client_cert);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
@@ -722,9 +722,9 @@ fn get_server_connion_value_tls12(
         version,
         secrets.suite().supported_suite().suite,
         secret,
-        &conn.client_cert_chain,
+        &conn.data.client_cert_chain,
         conn.common.alpn_protocol.clone(),
-        conn.resumption_data.clone(),
+        conn.data.resumption_data.clone(),
     );
 
     if using_ems {
