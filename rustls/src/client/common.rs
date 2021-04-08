@@ -52,8 +52,6 @@ impl ServerKXDetails {
     }
 }
 
-//  pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-
 pub struct ClientHelloDetails {
     pub sent_extensions: Vec<ExtensionType>,
     pub offered_key_shares: Vec<kx::KeyExchange>,
