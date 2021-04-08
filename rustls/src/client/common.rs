@@ -7,7 +7,6 @@ use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
-use crate::msgs::persist;
 use crate::sign;
 
 pub struct ServerCertDetails {
@@ -53,17 +52,7 @@ impl ServerKXDetails {
     }
 }
 
-pub struct HandshakeDetails {
-    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-}
-
-impl HandshakeDetails {
-    pub fn new() -> HandshakeDetails {
-        HandshakeDetails {
-            resuming_session: None,
-        }
-    }
-}
+//  pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
 
 pub struct ClientHelloDetails {
     pub sent_extensions: Vec<ExtensionType>,
