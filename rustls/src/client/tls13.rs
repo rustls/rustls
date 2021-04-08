@@ -33,8 +33,8 @@ use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{msgs::base::PayloadU16, quic, session::Protocol};
 
+use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::common::{HandshakeDetails, ServerCertDetails};
 use crate::client::hs;
 
 use ring::constant_time;
@@ -173,7 +173,7 @@ pub fn start_handshake_traffic(
     sess: &mut ClientSession,
     early_key_schedule: Option<KeyScheduleEarly>,
     server_hello: &ServerHelloPayload,
-    handshake: &mut HandshakeDetails,
+    resuming_session: &mut Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     dns_name: webpki::DNSNameRef,
     transcript: &mut HandshakeHash,
     hello: &mut ClientHelloDetails,
@@ -195,7 +195,7 @@ pub fn start_handshake_traffic(
         .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
     let mut key_schedule = if let Some(selected_psk) = server_hello.get_psk_index() {
-        if let Some(ref resuming) = handshake.resuming_session {
+        if let Some(ref resuming) = resuming_session {
             if !resuming
                 .supported_cipher_suite()
                 .can_resume_to(suite)
@@ -234,7 +234,7 @@ pub fn start_handshake_traffic(
         // Discard the early data key schedule.
         sess.early_data.rejected();
         sess.common.early_traffic = false;
-        handshake.resuming_session.take();
+        resuming_session.take();
         KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&shared.shared_secret)
     };
 
@@ -415,7 +415,7 @@ fn validate_encrypted_extensions(
 }
 
 pub struct ExpectEncryptedExtensions {
-    pub handshake: HandshakeDetails,
+    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     pub dns_name: webpki::DNSName,
     pub randoms: SessionRandoms,
     pub suite: &'static SupportedCipherSuite,
@@ -446,7 +446,7 @@ impl hs::State for ExpectEncryptedExtensions {
             }
         }
 
-        if let Some(resuming_session) = &self.handshake.resuming_session {
+        if let Some(resuming_session) = self.resuming_session {
             let was_early_traffic = sess.common.early_traffic;
             if was_early_traffic {
                 if exts.early_data_extension_offered() {
