@@ -554,7 +554,7 @@ mod client_hello {
         let names = conn
             .config
             .verifier
-            .client_auth_root_subjects(conn.get_sni())
+            .client_auth_root_subjects(conn.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
                 conn.common
@@ -760,7 +760,7 @@ impl hs::State for ExpectCertificate {
         let mandatory = conn
             .config
             .verifier
-            .client_auth_mandatory(conn.get_sni())
+            .client_auth_mandatory(conn.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 conn.common
@@ -793,10 +793,10 @@ impl hs::State for ExpectCertificate {
         let now = std::time::SystemTime::now();
         conn.config
             .get_verifier()
-            .verify_client_cert(end_entity, intermediates, conn.get_sni(), now)
-            .map_err(|err| {
+            .verify_client_cert(end_entity, intermediates, conn.data.get_sni(), now)
+            .or_else(|err| {
                 hs::incompatible(conn, "certificate invalid");
-                err
+                Err(err)
             })?;
 
         Ok(Box::new(ExpectCertificateVerify {
@@ -879,7 +879,7 @@ fn get_server_session_value(
         key_schedule.resumption_master_secret_and_derive_ticket_psk(&handshake_hash, nonce);
 
     persist::ServerSessionValue::new(
-        conn.get_sni(),
+        conn.data.get_sni(),
         version,
         suite.suite,
         secret,
