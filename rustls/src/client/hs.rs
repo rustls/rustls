@@ -28,7 +28,6 @@ use crate::ticketer;
 use crate::verify;
 use crate::SupportedCipherSuite;
 
-use crate::client::common::HandshakeDetails;
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
 
@@ -110,7 +109,7 @@ fn find_session(
 }
 
 struct InitialState {
-    handshake: HandshakeDetails,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     dns_name: webpki::DNSName,
     transcript: HandshakeHash,
     extra_exts: Vec<ClientExtension>,
@@ -119,7 +118,7 @@ struct InitialState {
 impl InitialState {
     fn new(dns_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
-            handshake: HandshakeDetails::new(),
+            resuming_session: None,
             dns_name,
             transcript: HandshakeHash::new(),
             extra_exts,
@@ -143,9 +142,9 @@ impl InitialState {
         }
 
         let mut session_id: Option<SessionID> = None;
-        self.handshake.resuming_session = find_session(sess, self.dns_name.as_ref());
+        self.resuming_session = find_session(sess, self.dns_name.as_ref());
 
-        if let Some(resuming) = &mut self.handshake.resuming_session {
+        if let Some(resuming) = &mut self.resuming_session {
             if resuming.version == ProtocolVersion::TLSv1_2 {
                 // If we have a ticket, we use the sessionid as a signal that
                 // we're  doing an abbreviated handshake.  See section 3.4 in
@@ -171,7 +170,7 @@ impl InitialState {
         let may_send_sct_list = sess.config.verifier.request_scts();
         emit_client_hello_for_retry(
             sess,
-            self.handshake,
+            self.resuming_session,
             randoms,
             false,
             self.transcript,
@@ -196,7 +195,7 @@ pub fn start_handshake(
 }
 
 struct ExpectServerHello {
-    handshake: HandshakeDetails,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     dns_name: webpki::DNSName,
     randoms: SessionRandoms,
     using_ems: bool,
@@ -215,7 +214,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 
 fn emit_client_hello_for_retry(
     sess: &mut ClientSession,
-    handshake: HandshakeDetails,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     randoms: SessionRandoms,
     using_ems: bool,
     mut transcript: HandshakeHash,
@@ -229,7 +228,7 @@ fn emit_client_hello_for_retry(
     suite: Option<&'static SupportedCipherSuite>,
 ) -> NextStateOrError {
     // Do we have a SessionID or ticket cached for this host?
-    let (ticket, resume_version) = if let Some(resuming) = &handshake.resuming_session {
+    let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
         (resuming.ticket.0.clone(), resuming.version)
     } else {
         (Vec::new(), ProtocolVersion::Unknown(0))
@@ -316,8 +315,7 @@ fn emit_client_hello_for_retry(
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
     {
-        handshake
-            .resuming_session
+        resuming_session
             .as_ref()
             .filter(|resuming| match suite {
                 Some(suite) => suite.can_resume_to(&resuming.supported_cipher_suite()),
@@ -408,7 +406,7 @@ fn emit_client_hello_for_retry(
     });
 
     let next = ExpectServerHello {
-        handshake,
+        resuming_session,
         dns_name,
         randoms,
         using_ems,
@@ -586,7 +584,7 @@ impl State for ExpectServerHello {
                 sess,
                 self.early_key_schedule.take(),
                 &server_hello,
-                &mut self.handshake,
+                &mut self.resuming_session,
                 self.dns_name.as_ref(),
                 &mut self.transcript,
                 &mut self.hello,
@@ -595,7 +593,7 @@ impl State for ExpectServerHello {
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, sess);
 
             return Ok(Box::new(tls13::ExpectEncryptedExtensions {
-                handshake: self.handshake,
+                resuming_session: self.resuming_session,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
                 suite,
@@ -663,7 +661,7 @@ impl State for ExpectServerHello {
         };
 
         // See if we're successfully resuming.
-        if let Some(ref resuming) = self.handshake.resuming_session {
+        if let Some(ref resuming) = self.resuming_session {
             if resuming.session_id == self.session_id {
                 debug!("Server agreed to resume");
 
@@ -698,7 +696,7 @@ impl State for ExpectServerHello {
                 return if must_issue_new_ticket {
                     Ok(Box::new(tls12::ExpectNewTicket {
                         secrets,
-                        handshake: self.handshake,
+                        resuming_session: self.resuming_session,
                         session_id: self.session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
@@ -710,7 +708,7 @@ impl State for ExpectServerHello {
                 } else {
                     Ok(Box::new(tls12::ExpectCCS {
                         secrets,
-                        handshake: self.handshake,
+                        resuming_session: self.resuming_session,
                         session_id: self.session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
@@ -725,7 +723,7 @@ impl State for ExpectServerHello {
         }
 
         Ok(Box::new(tls12::ExpectCertificate {
-            handshake: self.handshake,
+            resuming_session: self.resuming_session,
             session_id: self.session_id,
             dns_name: self.dns_name,
             randoms: self.randoms,
@@ -859,7 +857,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .server_may_send_sct_list();
         emit_client_hello_for_retry(
             sess,
-            self.next.handshake,
+            self.next.resuming_session,
             self.next.randoms,
             self.next.using_ems,
             self.next.transcript,
