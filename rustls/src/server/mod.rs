@@ -418,12 +418,9 @@ impl ServerConnection {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn sni_hostname(&self) -> Option<&str> {
-        self.get_sni()
+        self.data
+            .get_sni()
             .map(|s| s.as_ref().into())
-    }
-
-    fn get_sni(&self) -> Option<&webpki::DnsName> {
-        self.data.sni.as_ref()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -616,6 +613,12 @@ struct ServerConnectionData {
     client_cert_chain: Option<Vec<key::Certificate>>,
     /// Whether to reject early data even if it would otherwise be accepted
     reject_early_data: bool,
+}
+
+impl ServerConnectionData {
+    fn get_sni(&self) -> Option<&webpki::DnsName> {
+        self.sni.as_ref()
+    }
 }
 
 #[cfg(feature = "quic")]

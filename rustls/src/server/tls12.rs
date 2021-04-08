@@ -430,7 +430,7 @@ mod client_hello {
         let verify_schemes = client_auth.supported_verify_schemes();
 
         let names = client_auth
-            .client_auth_root_subjects(conn.get_sni())
+            .client_auth_root_subjects(conn.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
                 conn.common
@@ -505,7 +505,7 @@ impl hs::State for ExpectCertificate {
         let mandatory = conn
             .config
             .verifier
-            .client_auth_mandatory(conn.get_sni())
+            .client_auth_mandatory(conn.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 conn.common
@@ -530,10 +530,10 @@ impl hs::State for ExpectCertificate {
                 let now = std::time::SystemTime::now();
                 conn.config
                     .verifier
-                    .verify_client_cert(end_entity, intermediates, conn.get_sni(), now)
-                    .map_err(|err| {
+                    .verify_client_cert(end_entity, intermediates, conn.data.get_sni(), now)
+                    .or_else(|err| {
                         hs::incompatible(conn, "certificate invalid");
-                        err
+                        Err(err)
                     })?;
 
                 Some(cert_chain)
@@ -718,7 +718,7 @@ fn get_server_connion_value_tls12(
     let secret = secrets.get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(
-        conn.get_sni(),
+        conn.data.get_sni(),
         version,
         secrets.suite().supported_suite().suite,
         secret,
