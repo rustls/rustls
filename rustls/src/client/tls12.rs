@@ -592,7 +592,7 @@ impl hs::State for ExpectServerDone {
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
                 .map_err(|err| hs::send_cert_error_alert(conn, err))?
         };
-        conn.server_cert_chain = st.server_cert.cert_chain;
+        conn.data.server_cert_chain = st.server_cert.cert_chain;
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
@@ -802,7 +802,7 @@ fn save_session(
         &session_id,
         ticket,
         master_secret,
-        &conn.server_cert_chain,
+        &conn.data.server_cert_chain,
         time_now,
     );
     value.set_times(recvd_ticket.new_ticket_lifetime, 0);

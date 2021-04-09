@@ -382,7 +382,7 @@ fn emit_client_hello_for_retry(
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_key_schedule = early_key_schedule.map(|(resuming, schedule)| {
-        if !conn.early_data.is_enabled() {
+        if !conn.data.early_data.is_enabled() {
             return schedule;
         }
 
@@ -469,7 +469,7 @@ impl State for ExpectServerHello {
         let version = match server_version {
             TLSv1_3 if tls13_supported => TLSv1_3,
             TLSv1_2 if conn.config.supports_version(TLSv1_2) => {
-                if conn.early_data.is_enabled() && conn.common.early_traffic {
+                if conn.data.early_data.is_enabled() && conn.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
                     return Err(Error::PeerMisbehavedError(
@@ -693,7 +693,7 @@ impl State for ExpectServerHello {
 
                 // Since we're resuming, we verified the certificate and
                 // proof of possession in the prior session.
-                conn.server_cert_chain = resuming.server_cert_chain.clone();
+                conn.data.server_cert_chain = resuming.server_cert_chain.clone();
                 let cert_verified = verify::ServerCertVerified::assertion();
                 let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -857,8 +857,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
         self.next.transcript.add_message(&m);
 
         // Early data is not allowed after HelloRetryrequest
-        if conn.early_data.is_enabled() {
-            conn.early_data.rejected();
+        if conn.data.early_data.is_enabled() {
+            conn.data.early_data.rejected();
         }
 
         let may_send_sct_list = self

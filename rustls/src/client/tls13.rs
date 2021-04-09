@@ -209,7 +209,7 @@ pub fn start_handshake_traffic(
 
             // If the server varies the suite here, we will have encrypted early data with
             // the wrong suite.
-            if conn.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
+            if conn.data.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
                 return Err(conn
                     .common
                     .illegal_param("server varied suite with early data"));
@@ -234,7 +234,7 @@ pub fn start_handshake_traffic(
     } else {
         debug!("Not resuming");
         // Discard the early data key schedule.
-        conn.early_data.rejected();
+        conn.data.early_data.rejected();
         conn.common.early_traffic = false;
         resuming_session.take();
         KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&shared.shared_secret)
@@ -249,7 +249,7 @@ pub fn start_handshake_traffic(
 
     let hash_at_client_recvd_server_hello = transcript.get_current_hash();
 
-    let _maybe_write_key = if !conn.early_data.is_enabled() {
+    let _maybe_write_key = if !conn.data.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
         let write_key = key_schedule.client_handshake_traffic_secret(
             &hash_at_client_recvd_server_hello,
@@ -299,12 +299,13 @@ pub fn prepare_resumption(
 ) {
     let resuming_suite = resuming_session.supported_cipher_suite();
 
-    conn.resumption_ciphersuite = Some(resuming_suite);
+    conn.data.resumption_ciphersuite = Some(resuming_suite);
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size;
     if conn.config.enable_early_data && max_early_data_size > 0 && !doing_retry {
-        conn.early_data
+        conn.data
+            .early_data
             .enable(max_early_data_size as usize);
         exts.push(ClientExtension::EarlyData);
     }
@@ -453,9 +454,9 @@ impl hs::State for ExpectEncryptedExtensions {
             let was_early_traffic = conn.common.early_traffic;
             if was_early_traffic {
                 if exts.early_data_extension_offered() {
-                    conn.early_data.accepted();
+                    conn.data.early_data.accepted();
                 } else {
-                    conn.early_data.rejected();
+                    conn.data.early_data.rejected();
                     conn.common.early_traffic = false;
                 }
             }
@@ -474,7 +475,7 @@ impl hs::State for ExpectEncryptedExtensions {
                     .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
             }
 
-            conn.server_cert_chain = resuming_session
+            conn.data.server_cert_chain = resuming_session
                 .server_cert_chain
                 .clone();
 
@@ -709,7 +710,7 @@ impl hs::State for ExpectCertificateVerify {
             )
             .map_err(|err| send_cert_error_alert(conn, err))?;
 
-        conn.server_cert_chain = self.server_cert.cert_chain;
+        conn.data.server_cert_chain = self.server_cert.cert_chain;
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -981,7 +982,7 @@ impl hs::State for ExpectFinished {
         if let Some(write_key) = maybe_write_key {
             emit_end_of_early_data_tls13(&mut st.transcript, conn);
             conn.common.early_traffic = false;
-            conn.early_data.finished();
+            conn.data.early_data.finished();
             conn.common
                 .record_layer
                 .set_message_encrypter(cipher::new_tls13_write(st.suite, &write_key));
@@ -1089,7 +1090,7 @@ impl ExpectTraffic {
             &SessionID::empty(),
             nst.ticket.0.clone(),
             secret,
-            &conn.server_cert_chain,
+            &conn.data.server_cert_chain,
             time_now,
         );
         value.set_times(nst.lifetime, nst.age_add);
