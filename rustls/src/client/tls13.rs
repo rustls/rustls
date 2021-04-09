@@ -1,6 +1,6 @@
 use crate::check::check_message;
 use crate::client::ClientConnection;
-use crate::conn::ConnectionRandoms;
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::{
@@ -34,7 +34,7 @@ use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
 
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::hs;
+use crate::client::{hs, ClientConfig};
 
 use crate::ticketer::TimeBase;
 use ring::constant_time;
@@ -57,13 +57,12 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 ];
 
 pub fn validate_server_hello(
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
     for ext in &server_hello.extensions {
         if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
-            conn.common
-                .send_fatal_alert(AlertDescription::UnsupportedExtension);
+            common.send_fatal_alert(AlertDescription::UnsupportedExtension);
             return Err(Error::PeerMisbehavedError(
                 "server sent unexpected cleartext ext".to_string(),
             ));
@@ -73,27 +72,24 @@ pub fn validate_server_hello(
     Ok(())
 }
 
-fn find_kx_hint(conn: &ClientConnection, dns_name: webpki::DnsNameRef) -> Option<NamedGroup> {
+fn find_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef) -> Option<NamedGroup> {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
-    let maybe_value = conn
-        .config
-        .session_persistence
-        .get(&key_buf);
+    let maybe_value = config.session_persistence.get(&key_buf);
     maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
-fn save_kx_hint(conn: &mut ClientConnection, dns_name: webpki::DnsNameRef, group: NamedGroup) {
+fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: NamedGroup) {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
 
-    conn.config
+    config
         .session_persistence
         .put(key.get_encoding(), group.get_encoding());
 }
 
 pub fn choose_kx_groups(
-    conn: &ClientConnection,
+    config: &ClientConfig,
     exts: &mut Vec<ClientExtension>,
     hello: &mut ClientHelloDetails,
     dns_name: webpki::DnsNameRef,
@@ -107,9 +103,9 @@ pub fn choose_kx_groups(
     //
     let group = retryreq
         .and_then(|req| HelloRetryRequest::get_requested_key_share_group(req))
-        .or_else(|| find_kx_hint(conn, dns_name))
+        .or_else(|| find_kx_hint(config, dns_name))
         .unwrap_or_else(|| {
-            conn.config
+            config
                 .kx_groups
                 .get(0)
                 .expect("No kx groups configured")
@@ -129,7 +125,7 @@ pub fn choose_kx_groups(
             .offered_key_shares
             .push(already_offered_share);
     } else if let Some(key_share) =
-        kx::KeyExchange::choose(group, &conn.config.kx_groups).and_then(kx::KeyExchange::start)
+        kx::KeyExchange::choose(group, &config.kx_groups).and_then(kx::KeyExchange::start)
     {
         key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
         hello.offered_key_shares.push(key_share);
@@ -241,7 +237,7 @@ pub fn start_handshake_traffic(
     };
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(conn, dns_name, their_key_share.group);
+    save_kx_hint(&conn.config, dns_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -335,7 +331,7 @@ pub fn derive_early_traffic_secret(
     client_random: &[u8; 32],
 ) {
     // For middlebox compatibility
-    emit_fake_ccs(sent_tls13_fake_ccs, conn);
+    emit_fake_ccs(sent_tls13_fake_ccs, &mut conn.common);
 
     let resuming_suite = resuming_session.supported_cipher_suite();
 
@@ -363,8 +359,8 @@ pub fn derive_early_traffic_secret(
     trace!("Starting early data traffic");
 }
 
-pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, conn: &mut ClientConnection) {
-    if conn.common.is_quic() {
+pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut ConnectionCommon) {
+    if common.is_quic() {
         return;
     }
 
@@ -377,25 +373,23 @@ pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, conn: &mut ClientConnection
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
-    conn.common.send_msg(m, false);
+    common.send_msg(m, false);
 }
 
 fn validate_encrypted_extensions(
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
     hello: &ClientHelloDetails,
     exts: &EncryptedExtensions,
 ) -> Result<(), Error> {
     if exts.has_duplicate_extension() {
-        conn.common
-            .send_fatal_alert(AlertDescription::DecodeError);
+        common.send_fatal_alert(AlertDescription::DecodeError);
         return Err(Error::PeerMisbehavedError(
             "server sent duplicate encrypted extensions".to_string(),
         ));
     }
 
     if hello.server_sent_unsolicited_extensions(exts, &[]) {
-        conn.common
-            .send_fatal_alert(AlertDescription::UnsupportedExtension);
+        common.send_fatal_alert(AlertDescription::UnsupportedExtension);
         let msg = "server sent unsolicited encrypted extension".to_string();
         return Err(Error::PeerMisbehavedError(msg));
     }
@@ -404,8 +398,7 @@ fn validate_encrypted_extensions(
         if ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type())
             || DISALLOWED_TLS13_EXTS.contains(&ext.get_type())
         {
-            conn.common
-                .send_fatal_alert(AlertDescription::UnsupportedExtension);
+            common.send_fatal_alert(AlertDescription::UnsupportedExtension);
             let msg = "server sent inappropriate encrypted extension".to_string();
             return Err(Error::PeerMisbehavedError(msg));
         }
@@ -439,7 +432,7 @@ impl hs::State for ExpectEncryptedExtensions {
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
         self.transcript.add_message(&m);
 
-        validate_encrypted_extensions(conn, &self.hello, &exts)?;
+        validate_encrypted_extensions(&mut conn.common, &self.hello, &exts)?;
         hs::process_alpn_protocol(conn, exts.get_alpn_protocol())?;
 
         #[cfg(feature = "quic")]
@@ -645,19 +638,16 @@ struct ExpectCertificateVerify {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-fn send_cert_error_alert(conn: &mut ClientConnection, err: Error) -> Error {
+fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
     match err {
         Error::WebPkiError(webpki::Error::BadDer, _) => {
-            conn.common
-                .send_fatal_alert(AlertDescription::DecodeError);
+            common.send_fatal_alert(AlertDescription::DecodeError);
         }
         Error::PeerMisbehavedError(_) => {
-            conn.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
+            common.send_fatal_alert(AlertDescription::IllegalParameter);
         }
         _ => {
-            conn.common
-                .send_fatal_alert(AlertDescription::BadCertificate);
+            common.send_fatal_alert(AlertDescription::BadCertificate);
         }
     };
 
@@ -696,7 +686,7 @@ impl hs::State for ExpectCertificateVerify {
                 &self.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| send_cert_error_alert(conn, err))?;
+            .map_err(|err| send_cert_error_alert(&mut conn.common, err))?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.transcript.get_current_hash();
@@ -708,7 +698,7 @@ impl hs::State for ExpectCertificateVerify {
                 &self.server_cert.cert_chain[0],
                 &cert_verify,
             )
-            .map_err(|err| send_cert_error_alert(conn, err))?;
+            .map_err(|err| send_cert_error_alert(&mut conn.common, err))?;
 
         conn.data.server_cert_chain = self.server_cert.cert_chain;
         self.transcript.add_message(&m);
@@ -824,7 +814,7 @@ impl hs::State for ExpectCertificateRequest {
 fn emit_certificate_tls13(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
 ) {
     let context = client_auth
         .auth_context
@@ -853,13 +843,13 @@ fn emit_certificate_tls13(
         }),
     };
     transcript.add_message(&m);
-    conn.common.send_msg(m, true);
+    common.send_msg(m, true);
 }
 
 fn emit_certverify_tls13(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
 ) -> Result<(), Error> {
     let signer = match client_auth.signer.take() {
         Some(s) => s,
@@ -885,14 +875,14 @@ fn emit_certverify_tls13(
     };
 
     transcript.add_message(&m);
-    conn.common.send_msg(m, true);
+    common.send_msg(m, true);
     Ok(())
 }
 
 fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
     key_schedule: &KeyScheduleTrafficWithClientFinishedPending,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
 ) {
     let handshake_hash = transcript.get_current_hash();
     let verify_data = key_schedule.sign_client_finish(&handshake_hash);
@@ -908,11 +898,11 @@ fn emit_finished_tls13(
     };
 
     transcript.add_message(&m);
-    conn.common.send_msg(m, true);
+    common.send_msg(m, true);
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, conn: &mut ClientConnection) {
-    if conn.common.is_quic() {
+fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut ConnectionCommon) {
+    if common.is_quic() {
         return;
     }
 
@@ -926,7 +916,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, conn: &mut Clien
     };
 
     transcript.add_message(&m);
-    conn.common.send_msg(m, true);
+    common.send_msg(m, true);
 }
 
 struct ExpectFinished {
@@ -980,7 +970,7 @@ impl hs::State for ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if let Some(write_key) = maybe_write_key {
-            emit_end_of_early_data_tls13(&mut st.transcript, conn);
+            emit_end_of_early_data_tls13(&mut st.transcript, &mut conn.common);
             conn.common.early_traffic = false;
             conn.data.early_data.finished();
             conn.common
@@ -991,14 +981,14 @@ impl hs::State for ExpectFinished {
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate_tls13(&mut st.transcript, client_auth, conn);
-            emit_certverify_tls13(&mut st.transcript, client_auth, conn)?;
+            emit_certificate_tls13(&mut st.transcript, client_auth, &mut conn.common);
+            emit_certverify_tls13(&mut st.transcript, client_auth, &mut conn.common)?;
         }
 
         let mut key_schedule_finished = st
             .key_schedule
             .into_traffic_with_client_finished_pending();
-        emit_finished_tls13(&mut st.transcript, &key_schedule_finished, conn);
+        emit_finished_tls13(&mut st.transcript, &key_schedule_finished, &mut conn.common);
 
         /* Now move to our application traffic keys. */
         conn.common.check_aligned_handshake()?;
@@ -1142,14 +1132,13 @@ impl ExpectTraffic {
 
     fn handle_key_update(
         &mut self,
-        conn: &mut ClientConnection,
+        common: &mut ConnectionCommon,
         kur: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
         {
-            if let Protocol::Quic = conn.common.protocol {
-                conn.common
-                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
+            if let Protocol::Quic = common.protocol {
+                common.send_fatal_alert(AlertDescription::UnexpectedMessage);
                 let msg = "KeyUpdate received in QUIC connection".to_string();
                 warn!("{}", msg);
                 return Err(Error::PeerMisbehavedError(msg));
@@ -1157,7 +1146,7 @@ impl ExpectTraffic {
         }
 
         // Mustn't be interleaved with other handshake messages.
-        conn.common.check_aligned_handshake()?;
+        common.check_aligned_handshake()?;
 
         match kur {
             KeyUpdateRequest::UpdateNotRequested => {}
@@ -1165,8 +1154,7 @@ impl ExpectTraffic {
                 self.want_write_key_update = true;
             }
             _ => {
-                conn.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter);
+                common.send_fatal_alert(AlertDescription::IllegalParameter);
                 return Err(Error::CorruptMessagePayload(ContentType::Handshake));
             }
         }
@@ -1175,7 +1163,7 @@ impl ExpectTraffic {
         let new_read_key = self
             .key_schedule
             .next_server_application_traffic_secret();
-        conn.common
+        common
             .record_layer
             .set_message_decrypter(cipher::new_tls13_read(self.suite, &new_read_key));
 
@@ -1201,7 +1189,7 @@ impl hs::State for ExpectTraffic {
         } else if let Ok(ref key_update) =
             require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
         {
-            self.handle_key_update(conn, key_update)?;
+            self.handle_key_update(&mut conn.common, key_update)?;
         } else {
             check_message(
                 &m,
@@ -1223,16 +1211,15 @@ impl hs::State for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    fn perhaps_write_key_update(&mut self, conn: &mut ClientConnection) {
+    fn perhaps_write_key_update(&mut self, common: &mut ConnectionCommon) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            conn.common
-                .send_msg_encrypt(Message::build_key_update_notify());
+            common.send_msg_encrypt(Message::build_key_update_notify());
 
             let write_key = self
                 .key_schedule
                 .next_client_application_traffic_secret();
-            conn.common
+            common
                 .record_layer
                 .set_message_encrypter(cipher::new_tls13_write(self.suite, &write_key));
         }

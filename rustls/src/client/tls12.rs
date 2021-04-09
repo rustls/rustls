@@ -1,6 +1,6 @@
 use crate::check::check_message;
 use crate::client::ClientConnection;
-use crate::conn::{ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -260,7 +260,7 @@ impl hs::State for ExpectServerKx {
 fn emit_certificate(
     transcript: &mut HandshakeHash,
     cert_chain: CertificatePayload,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
 ) {
     let cert = Message {
         typ: ContentType::Handshake,
@@ -272,12 +272,12 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    conn.common.send_msg(cert, false);
+    common.send_msg(cert, false);
 }
 
 fn emit_clientkx(
     transcript: &mut HandshakeHash,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
     kxd: &kx::KeyExchangeResult,
 ) {
     let mut buf = Vec::new();
@@ -295,13 +295,13 @@ fn emit_clientkx(
     };
 
     transcript.add_message(&ckx);
-    conn.common.send_msg(ckx, false);
+    common.send_msg(ckx, false);
 }
 
 fn emit_certverify(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
 ) -> Result<(), Error> {
     let signer = match client_auth.signer.take() {
         None => {
@@ -327,24 +327,24 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    conn.common.send_msg(m, false);
+    common.send_msg(m, false);
     Ok(())
 }
 
-fn emit_ccs(conn: &mut ClientConnection) {
+fn emit_ccs(common: &mut ConnectionCommon) {
     let ccs = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
 
-    conn.common.send_msg(ccs, false);
+    common.send_msg(ccs, false);
 }
 
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    conn: &mut ClientConnection,
+    common: &mut ConnectionCommon,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
@@ -360,7 +360,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    conn.common.send_msg(f, true);
+    common.send_msg(f, true);
 }
 
 // --- Either a CertificateRequest, or a ServerHelloDone. ---
@@ -562,7 +562,7 @@ impl hs::State for ExpectServerDone {
                 &st.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| hs::send_cert_error_alert(conn, err))?;
+            .map_err(|err| hs::send_cert_error_alert(&mut conn.common, err))?;
 
         // 3.
         // Build up the contents of the signed message.
@@ -590,16 +590,16 @@ impl hs::State for ExpectServerDone {
             conn.config
                 .get_verifier()
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
-                .map_err(|err| hs::send_cert_error_alert(conn, err))?
+                .map_err(|err| hs::send_cert_error_alert(&mut conn.common, err))?
         };
         conn.data.server_cert_chain = st.server_cert.cert_chain;
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
             if let Some(cert_key) = &client_auth.certkey {
-                emit_certificate(&mut st.transcript, cert_key.cert.clone(), conn);
+                emit_certificate(&mut st.transcript, cert_key.cert.clone(), &mut conn.common);
             } else {
-                emit_certificate(&mut st.transcript, Vec::new(), conn);
+                emit_certificate(&mut st.transcript, Vec::new(), &mut conn.common);
             }
         }
 
@@ -617,17 +617,17 @@ impl hs::State for ExpectServerDone {
         let kxd = tls12::complete_ecdh(kx, &ecdh_params.public.0)?;
 
         // 5b.
-        emit_clientkx(&mut st.transcript, conn, &kxd);
+        emit_clientkx(&mut st.transcript, &mut conn.common, &kxd);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
         let handshake_hash = st.transcript.get_current_hash();
 
         // 5c.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut st.transcript, client_auth, conn)?;
+            emit_certverify(&mut st.transcript, client_auth, &mut conn.common)?;
         }
 
         // 5d.
-        emit_ccs(conn);
+        emit_ccs(&mut conn.common);
 
         // 5e. Now commit secrets.
         let secrets = if st.using_ems {
@@ -647,7 +647,7 @@ impl hs::State for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut st.transcript, conn);
+        emit_finished(&secrets, &mut st.transcript, &mut conn.common);
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -872,11 +872,11 @@ impl hs::State for ExpectFinished {
         );
 
         if st.resuming {
-            emit_ccs(conn);
+            emit_ccs(&mut conn.common);
             conn.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&st.secrets, &mut st.transcript, conn);
+            emit_finished(&st.secrets, &mut st.transcript, &mut conn.common);
         }
 
         conn.common.start_traffic();
