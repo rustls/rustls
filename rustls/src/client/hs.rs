@@ -697,7 +697,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectNewTicket {
                         secrets,
                         resuming_session: self.resuming_session,
-                        session_id: session_id,
+                        session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -709,7 +709,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectCcs {
                         secrets,
                         resuming_session: self.resuming_session,
-                        session_id: session_id,
+                        session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -727,7 +727,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             resuming_session: self.resuming_session,
-            session_id: session_id,
+            session_id,
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
