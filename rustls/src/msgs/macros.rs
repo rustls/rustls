@@ -27,7 +27,7 @@ macro_rules! enum_builder {
             }
 
             fn read(r: &mut Reader) -> Option<Self> {
-                u8::read(r).map(|x| $enum_name::from(x))
+                u8::read(r).map($enum_name::from)
             }
         }
         impl From<u8> for $enum_name {
@@ -66,7 +66,7 @@ macro_rules! enum_builder {
             }
 
             fn read(r: &mut Reader) -> Option<Self> {
-                u16::read(r).map(|x| $enum_name::from(x))
+                u16::read(r).map($enum_name::from)
             }
         }
         impl From<u16> for $enum_name {

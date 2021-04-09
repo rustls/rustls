@@ -5,7 +5,9 @@
 
 set -xe
 
-cargo build --example bogo_shim --features dangerous_configuration,quic
+if [ "x$USE_EXISTING_BOGO_SHIM" = "x" ] ; then
+  cargo build --example bogo_shim --features dangerous_configuration,quic
+fi
 
 if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
   ./fetch-and-build

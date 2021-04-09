@@ -10,7 +10,7 @@ use rustls;
 use webpki;
 use webpki_roots;
 
-use rustls::Session;
+use rustls::Connection;
 
 fn main() {
     let mut root_store = rustls::RootCertStore::empty();
@@ -22,9 +22,9 @@ fn main() {
     );
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("google.com").unwrap();
-    let mut sess = rustls::ClientSession::new(&Arc::new(config), dns_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(&Arc::new(config), dns_name).unwrap();
     let mut sock = TcpStream::connect("google.com:443").unwrap();
-    let mut tls = rustls::Stream::new(&mut sess, &mut sock);
+    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     tls.write(
         concat!(
             "GET / HTTP/1.1\r\n",
@@ -37,7 +37,7 @@ fn main() {
     )
     .unwrap();
     let ciphersuite = tls
-        .sess
+        .conn
         .negotiated_cipher_suite()
         .unwrap();
     writeln!(

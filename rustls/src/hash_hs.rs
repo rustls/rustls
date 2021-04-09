@@ -75,13 +75,10 @@ impl HandshakeHash {
 
     /// Hash/buffer a handshake message.
     pub fn add_message(&mut self, m: &Message) -> &mut HandshakeHash {
-        match m.payload {
-            MessagePayload::Handshake(ref hs) => {
-                let buf = hs.get_encoding();
-                self.update_raw(&buf);
-            }
-            _ => {}
-        };
+        if let MessagePayload::Handshake(hs) = &m.payload {
+            let buf = hs.get_encoding();
+            self.update_raw(&buf);
+        }
         self
     }
 
@@ -142,7 +139,7 @@ impl HandshakeHash {
     /// to empty.
     pub fn take_handshake_buf(&mut self) -> Vec<u8> {
         debug_assert!(self.client_auth_enabled);
-        mem::replace(&mut self.buffer, Vec::new())
+        mem::take(&mut self.buffer)
     }
 }
 

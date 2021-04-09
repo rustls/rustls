@@ -4,7 +4,6 @@ use crate::msgs::enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, Signatu
 use crate::msgs::handshake::DecomposedSignatureScheme;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 
-use ring;
 use std::fmt;
 
 /// Bulk symmetric encryption scheme used by a cipher suite.
@@ -61,8 +60,8 @@ pub struct SupportedCipherSuite {
 
     pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
     pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
-    pub(crate) build_tls12_encrypter: Option<cipher::BuildTLS12Encrypter>,
-    pub(crate) build_tls12_decrypter: Option<cipher::BuildTLS12Decrypter>,
+    pub(crate) build_tls12_encrypter: Option<cipher::BuildTls12Encrypter>,
+    pub(crate) build_tls12_decrypter: Option<cipher::BuildTls12Decrypter>,
 }
 
 impl PartialEq for SupportedCipherSuite {

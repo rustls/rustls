@@ -28,7 +28,7 @@ impl<'a> fmt::Debug for BsDebug<'a> {
             } else if c == b'\0' {
                 write!(fmt, "\\0")?;
                 // ASCII printable
-            } else if c >= 0x20 && c < 0x7f {
+            } else if (0x20..0x7f).contains(&c) {
                 write!(fmt, "{}", c as char)?;
             } else {
                 write!(fmt, "\\x{:02x}", c)?;

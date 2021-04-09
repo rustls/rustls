@@ -16,8 +16,6 @@ use crate::log::warn;
 
 use std::collections;
 use std::fmt;
-use std::io::Write;
-use webpki;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -84,9 +82,9 @@ impl Random {
         Random::read(&mut rd).unwrap()
     }
 
-    pub fn write_slice(&self, mut bytes: &mut [u8]) {
+    pub fn write_slice(&self, bytes: &mut [u8]) {
         let buf = self.get_encoding();
-        bytes.write_all(&buf).unwrap();
+        bytes.copy_from_slice(&buf);
     }
 }
 
@@ -339,7 +337,7 @@ impl ConvertServerNameList for ServerNameRequest {
 
         self.iter()
             .filter_map(only_dns_hostnames)
-            .nth(0)
+            .next()
     }
 }
 

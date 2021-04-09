@@ -4,7 +4,6 @@ use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
-use webpki;
 
 use std::collections;
 use std::sync::{Arc, Mutex};
@@ -142,7 +141,7 @@ pub struct ResolvesServerCertUsingSni {
 impl ResolvesServerCertUsingSni {
     /// Create a new and empty (i.e., knows no certificates) resolver.
     pub fn new() -> ResolvesServerCertUsingSni {
-        ResolvesServerCertUsingSni {
+        Self {
             by_name: collections::HashMap::new(),
         }
     }

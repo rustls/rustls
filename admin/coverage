@@ -86,7 +86,7 @@ for test in 'api'.split():
 
 # trytls/bogo
 #sh('cd trytls && ./runme')
-sh('cd bogo && ./runme')
+sh('cd bogo && env USE_EXISTING_BOGO_SHIM=1 ./runme')
 all_infos.append(lcov('tests.info'))
 
 merge('merged.info', all_infos)

@@ -2,8 +2,6 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
-use ring;
-
 /// The result of a key exchange.  This has our public key,
 /// and the agreed shared secret (also known as the "premaster secret"
 /// in TLS1.0-era protocols, and "Z" in TLS1.3).

@@ -16,13 +16,13 @@
 //! * Tunable MTU to make TLS messages match size of underlying transport.
 //! * Optional use of vectored IO to minimise system calls.
 //! * TLS1.2 session resumption.
-//! * TLS1.2 resumption via tickets (RFC5077).
+//! * TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
 //! * TLS1.3 resumption via tickets or session storage.
 //! * TLS1.3 0-RTT data for clients.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
-//! * Extended master secret support (RFC7627).
-//! * Exporters (RFC5705).
+//! * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
+//! * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 //! * OCSP stapling by servers.
 //! * SCT stapling by servers.
 //! * SCT verification by clients.
@@ -69,7 +69,7 @@
 //! IO.
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the `ServerSession` and `ClientSession` types.  You supply raw TLS traffic
+//! These are the `ServerConnection` and `ClientConnection` types.  You supply raw TLS traffic
 //! on the left (via the `read_tls()` and `write_tls()` methods) and then read/write the
 //! plaintext on the right:
 //!
@@ -78,9 +78,9 @@
 //!          ===                                   =========
 //!     read_tls()      +-----------------------+      io::Read
 //!                     |                       |
-//!           +--------->     ClientSession     +--------->
+//!           +--------->   ClientConnection    +--------->
 //!                     |          or           |
-//!           <---------+     ServerSession     <---------+
+//!           <---------+   ServerConnection    <---------+
 //!                     |                       |
 //!     write_tls()     +-----------------------+      io::Write
 //! ```
@@ -112,7 +112,7 @@
 //!     rustls::DEFAULT_CIPHERSUITES);
 //! ```
 //!
-//! Now we can make a session.  You need to provide the server's hostname so we
+//! Now we can make a connection.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
 //! ```no_run
@@ -128,7 +128,7 @@
 //! #     rustls::DEFAULT_CIPHERSUITES);
 //! let rc_config = Arc::new(config);
 //! let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
-//! let mut client = rustls::ClientSession::new(&rc_config, example_com);
+//! let mut client = rustls::ClientConnection::new(&rc_config, example_com);
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
@@ -140,14 +140,14 @@
 //! The return types of `read_tls()` and `write_tls()` only tell you if the IO worked.  No
 //! parsing or processing of the TLS messages is done.  After each `read_tls()` you should
 //! therefore call `client.process_new_packets()` which parses and processes the messages.
-//! Any error returned from `process_new_packets` is fatal to the session, and will tell you
+//! Any error returned from `process_new_packets` is fatal to the connection, and will tell you
 //! why.  For example, if the server's certificate is expired `process_new_packets` will
-//! return `Err(WebPKIError(CertExpired))`.  From this point on, `process_new_packets` will
-//! not do any new work and will return that error continually.
+//! return `Err(WebPkiError(CertExpired, ValidateServerCert))`.  From this point on,
+//! `process_new_packets` will not do any new work and will return that error continually.
 //!
 //! You can extract newly received data by calling `client.read()` (via the `io::Read`
 //! trait).  You can send data to the peer by calling `client.write()` (via the `io::Write`
-//! trait).  Note that `client.write()` buffers data you send if the TLS session is not
+//! trait).  Note that `client.write()` buffers data you send if the TLS connection is not
 //! yet established: this is useful for writing (say) a HTTP request, but don't write huge
 //! amounts of data.
 //!
@@ -214,7 +214,20 @@
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
 //   underneath.
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::ptr_arg))]
+// - too_many_arguments: some things just need a lot of state, wrapping it
+//   doesn't necessarily make it easier to follow what's going on
+// - new_ret_no_self: we sometimes return `Arc<Self>`, which seems fine
+// - single_component_path_imports: our top-level `use log` import causes
+//   a false positive, https://github.com/rust-lang/rust-clippy/issues/5210
+// - new_without_default: for internal constructors, the indirection is not
+//   helpful
+#![allow(
+    clippy::too_many_arguments,
+    clippy::new_ret_no_self,
+    clippy::ptr_arg,
+    clippy::single_component_path_imports,
+    clippy::new_without_default
+)]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -236,6 +249,7 @@ mod log {
 mod msgs;
 mod anchors;
 mod cipher;
+mod conn;
 mod error;
 mod hash_hs;
 mod key_schedule;
@@ -243,7 +257,6 @@ mod limited_cache;
 mod prf;
 mod rand;
 mod record_layer;
-mod session;
 mod stream;
 mod vecbuf;
 mod verify;
@@ -275,9 +288,10 @@ pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
-pub use crate::client::{ClientConfig, ClientSession, WriteEarlyData};
+pub use crate::client::{ClientConfig, ClientConnection, WriteEarlyData};
+pub use crate::conn::Connection;
 pub use crate::error::Error;
-pub use crate::error::WebPKIOp;
+pub use crate::error::WebPkiOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -288,8 +302,7 @@ pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::StoresServerSessions;
 pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
-pub use crate::server::{ServerConfig, ServerSession};
-pub use crate::session::Session;
+pub use crate::server::{ServerConfig, ServerConnection};
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES, DEFAULT_CIPHERSUITES,
@@ -333,11 +346,11 @@ pub mod quic;
 
 #[cfg(not(feature = "quic"))]
 // If QUIC support is disabled, just define a private module with an empty
-// trait to allow Session having QuicExt as a trait bound.
+// trait to allow Connection having QuicExt as a trait bound.
 mod quic {
     pub trait QuicExt {}
-    impl QuicExt for super::ClientSession {}
-    impl QuicExt for super::ServerSession {}
+    impl QuicExt for super::ClientConnection {}
+    impl QuicExt for super::ServerConnection {}
 }
 
 #[cfg(feature = "dangerous_configuration")]
@@ -353,14 +366,28 @@ pub use crate::verify::{
 /// This is the rustls manual.
 pub mod manual;
 
+/** Type renames. */
+#[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use ResolvesServerCertUsingSni")]
 pub type ResolvesServerCertUsingSNI = ResolvesServerCertUsingSni;
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use WebPkiVerifier")]
 pub type WebPKIVerifier = WebPkiVerifier;
+#[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use TlsError")]
 pub type TLSError = Error;
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use ClientConnection")]
+pub type ClientSession = ClientConnection;
+#[doc(hidden)]
+#[deprecated(since = "0.20.0", note = "Use ServerConnection")]
+pub type ServerSession = ServerConnection;
+
+/* Apologies: would make a trait alias here, but those remain unstable.
+pub trait Session = Connection;
+*/

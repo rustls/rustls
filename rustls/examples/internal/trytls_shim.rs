@@ -7,7 +7,9 @@
 use webpki;
 use webpki_roots;
 
-use rustls::{ClientConfig, ClientSession, Error, RootCertStore, Session, DEFAULT_CIPHERSUITES};
+use rustls::{
+    ClientConfig, ClientConnection, Connection, Error, RootCertStore, DEFAULT_CIPHERSUITES,
+};
 use std::env;
 use std::error::Error as StdError;
 use std::fs::File;
@@ -49,7 +51,7 @@ fn communicate(
 ) -> Result<Verdict, Box<dyn StdError>> {
     let dns_name = webpki::DNSNameRef::try_from_ascii_str(&host).unwrap();
     let rc_config = Arc::new(config);
-    let mut client = ClientSession::new(&rc_config, dns_name).unwrap();
+    let mut client = ClientConnection::new(&rc_config, dns_name).unwrap();
     let mut stream = TcpStream::connect((&*host, port))?;
 
     client.write_all(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")?;
@@ -65,7 +67,7 @@ fn communicate(
 
             if let Err(err) = client.process_new_packets() {
                 return match err {
-                    Error::WebPKIError(..) | Error::AlertReceived(_) => Ok(Verdict::Reject(err)),
+                    Error::WebPkiError(..) | Error::AlertReceived(_) => Ok(Verdict::Reject(err)),
                     _ => Err(From::from(format!("{:?}", err))),
                 };
             }

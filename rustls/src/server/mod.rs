@@ -1,3 +1,4 @@
+use crate::conn::{Connection, ConnectionCommon, MessageType};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
@@ -6,12 +7,11 @@ use crate::msgs::enums::SignatureScheme;
 use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::Message;
-use crate::session::{MessageType, Session, SessionCommon};
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::verify;
-
-use webpki;
+#[cfg(feature = "quic")]
+use crate::{conn::Protocol, quic};
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -337,36 +337,34 @@ impl ServerConfig {
     }
 }
 
-/// This represents a single TLS server session.
+/// This represents a single TLS server connection.
 ///
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
-pub struct ServerSession {
+pub struct ServerConnection {
     config: Arc<ServerConfig>,
-    pub(crate) common: SessionCommon,
+    common: ConnectionCommon,
     sni: Option<webpki::DNSName>,
     received_resumption_data: Option<Vec<u8>>,
     resumption_data: Vec<u8>,
     state: Option<Box<dyn hs::State + Send + Sync>>,
     client_cert_chain: Option<Vec<key::Certificate>>,
+    #[allow(dead_code)] // #[cfg(feature = "quic")] only
     /// Whether to reject early data even if it would otherwise be accepted
     reject_early_data: bool,
 }
 
-impl ServerSession {
-    /// Make a new ServerSession.  `config` controls how
+impl ServerConnection {
+    /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new(config: &Arc<ServerConfig>) -> ServerSession {
+    pub fn new(config: &Arc<ServerConfig>) -> ServerConnection {
         Self::from_config(config, vec![])
     }
 
-    pub(crate) fn from_config(
-        config: &Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
-    ) -> Self {
-        ServerSession {
+    fn from_config(config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+        ServerConnection {
             config: config.clone(),
-            common: SessionCommon::new(config.mtu, false),
+            common: ConnectionCommon::new(config.mtu, false),
             sni: None,
             received_resumption_data: None,
             resumption_data: Vec::new(),
@@ -410,7 +408,7 @@ impl ServerSession {
             .send_fatal_alert(AlertDescription::UnexpectedMessage);
     }
 
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
+    fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
         while let Some(msg) = self
             .common
             .handshake_joiner
@@ -493,14 +491,15 @@ impl ServerSession {
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
+        if let Some(st) = st.as_mut() {
+            st.perhaps_write_key_update(self);
+        }
         self.state = st;
         self.common.send_some_plaintext(buf)
     }
 }
 
-impl Session for ServerSession {
+impl Connection for ServerConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         self.common.read_tls(rd)
     }
@@ -573,7 +572,7 @@ impl Session for ServerSession {
     fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
         self.client_cert_chain
             .as_ref()
-            .map(|chain| chain.iter().cloned().collect())
+            .map(|chain| chain.to_vec())
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -592,7 +591,7 @@ impl Session for ServerSession {
     ) -> Result<(), Error> {
         self.state
             .as_ref()
-            .ok_or_else(|| Error::HandshakeNotComplete)
+            .ok_or(Error::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
@@ -601,7 +600,7 @@ impl Session for ServerSession {
     }
 }
 
-impl io::Read for ServerSession {
+impl io::Read for ServerConnection {
     /// Obtain plaintext data received from the peer over this TLS connection.
     ///
     /// If the peer closes the TLS session cleanly, this fails with an error of
@@ -619,7 +618,7 @@ impl io::Read for ServerSession {
     }
 }
 
-impl io::Write for ServerSession {
+impl io::Write for ServerConnection {
     /// Send the plaintext `buf` to the peer, encrypting
     /// and authenticating it.  Once this function succeeds
     /// you should call `write_tls` which will output the
@@ -648,8 +647,79 @@ impl io::Write for ServerSession {
     }
 }
 
-impl fmt::Debug for ServerSession {
+impl fmt::Debug for ServerConnection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ServerSession").finish()
+        f.debug_struct("ServerConnection")
+            .finish()
     }
 }
+
+#[cfg(feature = "quic")]
+impl quic::QuicExt for ServerConnection {
+    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+        self.common
+            .quic
+            .params
+            .as_ref()
+            .map(|v| v.as_ref())
+    }
+
+    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+        Some(quic::DirectionalKeys::new(
+            self.common.get_suite()?,
+            self.common.quic.early_secret.as_ref()?,
+        ))
+    }
+
+    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        quic::read_hs(&mut self.common, plaintext)?;
+        self.process_new_handshake_messages()
+    }
+
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
+        quic::write_hs(&mut self.common, buf)
+    }
+
+    fn get_alert(&self) -> Option<AlertDescription> {
+        self.common.quic.alert
+    }
+
+    fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
+        quic::next_1rtt_keys(&mut self.common)
+    }
+}
+
+/// Methods specific to QUIC server sessions
+#[cfg(feature = "quic")]
+pub trait ServerQuicExt {
+    /// Make a new QUIC ServerConnection. This differs from `ServerConnection::new()`
+    /// in that it takes an extra argument, `params`, which contains the
+    /// TLS-encoded transport parameters to send.
+    fn new_quic(
+        config: &Arc<ServerConfig>,
+        quic_version: quic::Version,
+        params: Vec<u8>,
+    ) -> ServerConnection {
+        assert!(
+            config
+                .versions
+                .iter()
+                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
+            "QUIC requires TLS version >= 1.3"
+        );
+        assert!(
+            config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
+            "QUIC sessions must set a max early data of 0 or 2^32-1"
+        );
+        let ext = match quic_version {
+            quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
+            quic::Version::V1 => ServerExtension::TransportParameters(params),
+        };
+        let mut new = ServerConnection::from_config(config, vec![ext]);
+        new.common.protocol = Protocol::Quic;
+        new
+    }
+}
+
+#[cfg(feature = "quic")]
+impl ServerQuicExt for ServerConnection {}

@@ -11,15 +11,15 @@ use std::time::{Duration, Instant};
 
 use rustls;
 use rustls::ClientSessionMemoryCache;
+use rustls::Connection;
 use rustls::NoClientSessionStorage;
 use rustls::NoServerSessionStorage;
 use rustls::ProtocolVersion;
 use rustls::ServerSessionMemoryCache;
-use rustls::Session;
 use rustls::Ticketer;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
-use rustls::{ClientConfig, ClientSession};
-use rustls::{ServerConfig, ServerSession};
+use rustls::{ClientConfig, ClientConnection};
+use rustls::{ServerConfig, ServerConnection};
 use rustls_pemfile;
 
 use webpki;
@@ -57,7 +57,7 @@ where
     f64::from(dur)
 }
 
-fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> f64 {
+fn transfer(left: &mut dyn Connection, right: &mut dyn Connection) -> f64 {
     let mut buf = [0u8; 262144];
     let mut read_time = 0f64;
 
@@ -94,7 +94,7 @@ fn transfer(left: &mut dyn Session, right: &mut dyn Session) -> f64 {
     }
 }
 
-fn drain(d: &mut dyn Session, expect_len: usize) {
+fn drain(d: &mut dyn Connection, expect_len: usize) {
     let mut left = expect_len;
     let mut buf = [0u8; 8192];
     loop {
@@ -366,8 +366,8 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
 
     for _ in 0..rounds {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-        let mut client = ClientSession::new(&client_config, dns_name).unwrap();
-        let mut server = ServerSession::new(&server_config);
+        let mut client = ClientConnection::new(&client_config, dns_name).unwrap();
+        let mut server = ServerConnection::new(&server_config);
 
         server_time += time(|| {
             transfer(&mut client, &mut server);
@@ -415,7 +415,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
     );
 }
 
-fn do_handshake_step(client: &mut ClientSession, server: &mut ServerSession) -> bool {
+fn do_handshake_step(client: &mut ClientConnection, server: &mut ServerConnection) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
         server.process_new_packets().unwrap();
@@ -427,7 +427,7 @@ fn do_handshake_step(client: &mut ClientSession, server: &mut ServerSession) -> 
     }
 }
 
-fn do_handshake(client: &mut ClientSession, server: &mut ServerSession) {
+fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
     while do_handshake_step(client, server) {}
 }
 
@@ -441,8 +441,8 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) 
     ));
 
     let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientSession::new(&client_config, dns_name).unwrap();
-    let mut server = ServerSession::new(&server_config);
+    let mut client = ClientConnection::new(&client_config, dns_name).unwrap();
+    let mut server = ServerConnection::new(&server_config);
 
     do_handshake(&mut client, &mut server);
 
@@ -492,7 +492,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) 
     );
 }
 
-fn bench_memory(params: &BenchmarkParam, session_count: u64) {
+fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     let client_config = Arc::new(make_client_config(params, ClientAuth::No, Resumption::No));
     let server_config = Arc::new(make_server_config(
         params,
@@ -501,16 +501,16 @@ fn bench_memory(params: &BenchmarkParam, session_count: u64) {
         None,
     ));
 
-    // The target here is to end up with session_count post-handshake
+    // The target here is to end up with conn_count post-handshake
     // server and client sessions.
-    let session_count = (session_count / 2) as usize;
-    let mut servers = Vec::with_capacity(session_count);
-    let mut clients = Vec::with_capacity(session_count);
+    let conn_count = (conn_count / 2) as usize;
+    let mut servers = Vec::with_capacity(conn_count);
+    let mut clients = Vec::with_capacity(conn_count);
 
-    for _i in 0..session_count {
-        servers.push(ServerSession::new(&server_config));
+    for _i in 0..conn_count {
+        servers.push(ServerConnection::new(&server_config));
         let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
-        clients.push(ClientSession::new(&client_config, dns_name).unwrap());
+        clients.push(ClientConnection::new(&client_config, dns_name).unwrap());
     }
 
     for _step in 0..5 {
@@ -604,7 +604,7 @@ fn selected_tests(mut args: env::Args) {
                     .next()
                     .map(|arg| {
                         arg.parse::<u64>()
-                            .expect("3rd arg must be session count integer")
+                            .expect("3rd arg must be connection count integer")
                     })
                     .unwrap_or(1000000);
                 for param in lookup_matching_benches(&suite).iter() {

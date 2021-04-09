@@ -1,15 +1,12 @@
-pub use crate::client::ClientQuicExt;
 /// This module contains optional APIs for implementing QUIC TLS.
+pub use crate::client::ClientQuicExt;
+use crate::conn::ConnectionCommon;
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::msgs::handshake::ServerExtension;
 use crate::msgs::message::{Message, MessagePayload};
-use crate::server::{ServerConfig, ServerSession};
-use crate::session::{Protocol, SessionCommon};
+pub use crate::server::ServerQuicExt;
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
-
-use std::sync::Arc;
 
 use ring::{aead, hkdf};
 
@@ -59,40 +56,6 @@ pub trait QuicExt {
     ///
     /// Will return `None` until the handshake is complete.
     fn next_1rtt_keys(&mut self) -> Option<PacketKeySet>;
-}
-
-impl QuicExt for ServerSession {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.common
-            .quic
-            .params
-            .as_ref()
-            .map(|v| v.as_ref())
-    }
-
-    fn get_0rtt_keys(&self) -> Option<DirectionalKeys> {
-        Some(DirectionalKeys::new(
-            self.common.get_suite()?,
-            self.common.quic.early_secret.as_ref()?,
-        ))
-    }
-
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        read_hs(&mut self.common, plaintext)?;
-        self.process_new_handshake_messages()
-    }
-
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
-        write_hs(&mut self.common, buf)
-    }
-
-    fn get_alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
-    }
-
-    fn next_1rtt_keys(&mut self) -> Option<PacketKeySet> {
-        next_1rtt_keys(&mut self.common)
-    }
 }
 
 /// Keys used to communicate in a single direction
@@ -214,7 +177,7 @@ impl Keys {
     }
 }
 
-pub(crate) fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), Error> {
+pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(), Error> {
     if this
         .handshake_joiner
         .take_message(Message {
@@ -230,7 +193,7 @@ pub(crate) fn read_hs(this: &mut SessionCommon, plaintext: &[u8]) -> Result<(), 
     Ok(())
 }
 
-pub(crate) fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
+pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
     while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
         buf.extend_from_slice(&msg);
         if let Some(&(true, _)) = this.quic.hs_queue.front() {
@@ -256,7 +219,7 @@ pub(crate) fn write_hs(this: &mut SessionCommon, buf: &mut Vec<u8>) -> Option<Ke
     None
 }
 
-pub(crate) fn next_1rtt_keys(this: &mut SessionCommon) -> Option<PacketKeySet> {
+pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet> {
     let suite = this.get_suite()?;
     let secrets = this.quic.traffic_secrets.as_ref()?;
     let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);
@@ -277,39 +240,6 @@ fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {
         server: hkdf_expand(&prev.server, hkdf_alg, b"quic ku", &[]),
     }
 }
-
-/// Methods specific to QUIC server sessions
-pub trait ServerQuicExt {
-    /// Make a new QUIC ServerSession. This differs from `ServerSession::new()`
-    /// in that it takes an extra argument, `params`, which contains the
-    /// TLS-encoded transport parameters to send.
-    fn new_quic(
-        config: &Arc<ServerConfig>,
-        quic_version: Version,
-        params: Vec<u8>,
-    ) -> ServerSession {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
-        assert!(
-            config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
-            "QUIC sessions must set a max early data of 0 or 2^32-1"
-        );
-        let ext = match quic_version {
-            Version::V1Draft => ServerExtension::TransportParametersDraft(params),
-            Version::V1 => ServerExtension::TransportParameters(params),
-        };
-        let mut new = ServerSession::from_config(config, vec![ext]);
-        new.common.protocol = Protocol::Quic;
-        new
-    }
-}
-
-impl ServerQuicExt for ServerSession {}
 
 /// QUIC protocol version
 ///
