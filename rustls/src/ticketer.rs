@@ -26,32 +26,19 @@ pub struct AeadTicketer {
 }
 
 impl AeadTicketer {
-    /// Make a new `AEADTicketer` using the given `alg`, `key` material
-    /// and advertised `lifetime_seconds`.  Note that `lifetime_seconds`
-    /// does not affect the lifetime of the key.  `key` must be the
-    /// right length for `alg` or this will panic.
-    pub fn new_custom(
-        alg: &'static aead::Algorithm,
-        key: &[u8],
-        lifetime_seconds: u32,
-    ) -> AeadTicketer {
-        let key = aead::UnboundKey::new(alg, key).unwrap();
-        AeadTicketer {
-            alg,
-            key: aead::LessSafeKey::new(key),
-            lifetime: lifetime_seconds,
-        }
-    }
-
     /// Make a ticketer with recommended configuration and a random key.
     pub fn new() -> Result<AeadTicketer, rand::GetRandomFailed> {
         let mut key = [0u8; 32];
         rand::fill_random(&mut key)?;
-        Ok(AeadTicketer::new_custom(
-            &aead::CHACHA20_POLY1305,
-            &key,
-            60 * 60 * 12,
-        ))
+
+        let alg = &aead::CHACHA20_POLY1305;
+        let key = aead::UnboundKey::new(alg, &key).unwrap();
+
+        Ok(AeadTicketer {
+           alg,
+           key: aead::LessSafeKey::new(key),
+           lifetime: 60 * 60 * 12,
+        })
     }
 }
 
