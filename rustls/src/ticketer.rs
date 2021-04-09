@@ -35,9 +35,9 @@ impl AeadTicketer {
         let key = aead::UnboundKey::new(alg, &key).unwrap();
 
         Ok(AeadTicketer {
-           alg,
-           key: aead::LessSafeKey::new(key),
-           lifetime: 60 * 60 * 12,
+            alg,
+            key: aead::LessSafeKey::new(key),
+            lifetime: 60 * 60 * 12,
         })
     }
 }
