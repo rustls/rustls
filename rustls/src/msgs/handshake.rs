@@ -161,13 +161,6 @@ impl SessionID {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
-
-    pub fn encode(session_id: Option<SessionID>, bytes: &mut Vec<u8>) {
-        match session_id {
-            Some(session_id) => session_id.encode(bytes),
-            None => bytes.push(0u8),
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -860,7 +853,7 @@ impl Codec for ClientHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
-        SessionID::encode(Some(self.session_id), bytes);
+        self.session_id.encode(bytes);
         codec::encode_vec_u16(bytes, &self.cipher_suites);
         codec::encode_vec_u8(bytes, &self.compression_methods);
 
@@ -1106,7 +1099,7 @@ impl Codec for HelloRetryExtension {
 #[derive(Debug)]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
-    pub session_id: Option<SessionID>,
+    pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
     pub extensions: Vec<HelloRetryExtension>,
 }
@@ -1115,14 +1108,14 @@ impl Codec for HelloRetryRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.legacy_version.encode(bytes);
         HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
-        SessionID::encode(self.session_id, bytes);
+        self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         Compression::Null.encode(bytes);
         codec::encode_vec_u16(bytes, &self.extensions);
     }
 
     fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
-        let session_id = SessionID::read(r);
+        let session_id = SessionID::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
@@ -1210,6 +1203,7 @@ impl Codec for ServerHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.legacy_version.encode(bytes);
         self.random.encode(bytes);
+
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);

@@ -215,7 +215,7 @@ impl CompleteClientHelloHandling {
     ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: None,
+            session_id: SessionID::empty(),
             cipher_suite: suite.suite,
             extensions: Vec::new(),
         };

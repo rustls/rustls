@@ -798,7 +798,7 @@ fn can_clone_all_serverextensions() {
 fn get_sample_helloretryrequest() -> HelloRetryRequest {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
-        session_id: None,
+        session_id: SessionID::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),

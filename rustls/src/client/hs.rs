@@ -150,7 +150,7 @@ impl InitialState {
                 if !resuming.ticket.0.is_empty() {
                     resuming.set_session_id(SessionID::random()?);
                 }
-                session_id = resuming.session_id;
+                session_id = Some(resuming.session_id);
             }
             debug!("Resuming session");
         } else {
@@ -662,7 +662,7 @@ impl State for ExpectServerHello {
         };
 
         match (&self.resuming_session, session_id) {
-            (Some(ref resuming), session_id) if resuming.session_id == Some(session_id) => {
+            (Some(ref resuming), session_id) if resuming.session_id == session_id => {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
@@ -697,7 +697,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectNewTicket {
                         secrets,
                         resuming_session: self.resuming_session,
-                        session_id: Some(session_id),
+                        session_id: session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -709,7 +709,7 @@ impl State for ExpectServerHello {
                     Ok(Box::new(tls12::ExpectCcs {
                         secrets,
                         resuming_session: self.resuming_session,
-                        session_id: Some(session_id),
+                        session_id: session_id,
                         dns_name: self.dns_name,
                         using_ems: self.using_ems,
                         transcript: self.transcript,
@@ -727,7 +727,7 @@ impl State for ExpectServerHello {
 
         Ok(Box::new(tls12::ExpectCertificate {
             resuming_session: self.resuming_session,
-            session_id: Some(session_id),
+            session_id: session_id,
             dns_name: self.dns_name,
             randoms: self.randoms,
             using_ems: self.using_ems,

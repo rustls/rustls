@@ -30,7 +30,7 @@ use std::mem;
 
 pub struct ExpectCertificate {
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub session_id: Option<SessionID>,
+    pub session_id: SessionID,
     pub dns_name: webpki::DNSName,
     pub randoms: ConnectionRandoms,
     pub using_ems: bool,
@@ -88,7 +88,7 @@ impl hs::State for ExpectCertificate {
 
 struct ExpectCertificateStatus {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -140,7 +140,7 @@ impl hs::State for ExpectCertificateStatus {
 
 struct ExpectCertificateStatusOrServerKx {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -199,7 +199,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
 
 struct ExpectServerKx {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -370,7 +370,7 @@ fn emit_finished(
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -445,7 +445,7 @@ impl hs::State for ExpectCertificateRequest {
 
 struct ExpectServerDoneOrCertReq {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -505,7 +505,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 
 struct ExpectServerDone {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -668,7 +668,7 @@ impl hs::State for ExpectServerDone {
 pub struct ExpectCcs {
     pub secrets: ConnectionSecrets,
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub session_id: Option<SessionID>,
+    pub session_id: SessionID,
     pub dns_name: webpki::DNSName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
@@ -708,7 +708,7 @@ impl hs::State for ExpectCcs {
 pub struct ExpectNewTicket {
     pub secrets: ConnectionSecrets,
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub session_id: Option<SessionID>,
+    pub session_id: SessionID,
     pub dns_name: webpki::DNSName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
@@ -750,7 +750,7 @@ impl hs::State for ExpectNewTicket {
 fn save_session(
     secrets: &ConnectionSecrets,
     mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSNameRef,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
@@ -766,7 +766,7 @@ fn save_session(
         }
     }
 
-    if session_id.is_none() && ticket.is_empty() {
+    if session_id.is_empty() && ticket.is_empty() {
         debug!("Session not saved: server didn't allocate id or ticket");
         return;
     }
@@ -801,7 +801,7 @@ fn save_session(
 
 struct ExpectFinished {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     dns_name: webpki::DNSName,
     using_ems: bool,
     transcript: HandshakeHash,
