@@ -603,16 +603,20 @@ impl Connection for ServerConnection {
 impl io::Read for ServerConnection {
     /// Obtain plaintext data received from the peer over this TLS connection.
     ///
-    /// If the peer closes the TLS session cleanly, this fails with an error of
-    /// kind ErrorKind::ConnectionAborted once all the pending data has been read.
-    /// No further data can be received on that connection, so the underlying TCP
-    /// connection should closed too.
+    /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
+    /// the pending data has been read. No further data can be received on that
+    /// connection, so the underlying TCP connection should half-closed too.
     ///
-    /// Note that support close notify varies in peer TLS libraries: many do not
+    /// Note that support `close_notify` varies in peer TLS libraries: many do not
     /// support it and uncleanly close the TCP connection (this might be
     /// vulnerable to truncation attacks depending on the application protocol).
-    /// This means applications using rustls must both handle ErrorKind::ConnectionAborted
-    /// from this function, *and* unexpected closure of the underlying TCP connection.
+    /// This means applications using rustls must both handle EOF
+    /// from this function, *and* unexpected EOF of the underlying TCP connection.
+    ///
+    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
+    ///
+    /// You may learn the number of bytes available at any time by inspecting
+    /// the return of `process_new_packets()`.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.common.read(buf)
     }

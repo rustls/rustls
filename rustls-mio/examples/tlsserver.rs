@@ -212,52 +212,47 @@ impl OpenConnection {
 
     fn do_tls_read(&mut self) {
         // Read some TLS data.
-        let rc = self.tls_conn.read_tls(&mut self.socket);
-        if rc.is_err() {
-            let err = rc.unwrap_err();
+        match self.tls_conn.read_tls(&mut self.socket) {
+            Err(err) => {
+                if let io::ErrorKind::WouldBlock = err.kind() {
+                    return;
+                }
 
-            if let io::ErrorKind::WouldBlock = err.kind() {
+                error!("read error {:?}", err);
+                self.closing = true;
                 return;
             }
-
-            error!("read error {:?}", err);
-            self.closing = true;
-            return;
-        }
-
-        if rc.unwrap() == 0 {
-            debug!("eof");
-            self.closing = true;
-            return;
-        }
+            Ok(0) => {
+                debug!("eof");
+                self.closing = true;
+                return;
+            }
+            Ok(_) => {}
+        };
 
         // Process newly-received TLS messages.
-        let processed = self.tls_conn.process_new_packets();
-        if processed.is_err() {
-            error!("cannot process packet: {:?}", processed);
+        if let Err(err) = self.tls_conn.process_new_packets() {
+            error!("cannot process packet: {:?}", err);
 
             // last gasp write to send any alerts
             self.do_tls_write_and_handle_error();
 
             self.closing = true;
-            return;
         }
     }
 
     fn try_plain_read(&mut self) {
         // Read and process all available plaintext.
-        let mut buf = Vec::new();
+        if let Ok(io_state) = self.tls_conn.process_new_packets() {
+            if io_state.plaintext_bytes_to_read() > 0 {
+                let mut buf = Vec::new();
+                buf.resize(io_state.plaintext_bytes_to_read(), 0u8);
 
-        let rc = self.tls_conn.read_to_end(&mut buf);
-        if rc.is_err() {
-            error!("plaintext read failed: {:?}", rc);
-            self.closing = true;
-            return;
-        }
+                self.tls_conn.read(&mut buf).unwrap();
 
-        if !buf.is_empty() {
-            debug!("plaintext read {:?}", buf.len());
-            self.incoming_plaintext(&buf);
+                debug!("plaintext read {:?}", buf.len());
+                self.incoming_plaintext(&buf);
+            }
         }
     }
 

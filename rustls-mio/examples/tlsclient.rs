@@ -78,55 +78,58 @@ impl TlsClient {
     fn do_read(&mut self) {
         // Read TLS data.  This fails if the underlying TCP connection
         // is broken.
-        let rc = self.tls_conn.read_tls(&mut self.socket);
-        if rc.is_err() {
-            let error = rc.unwrap_err();
-            if error.kind() == io::ErrorKind::WouldBlock {
+        match self.tls_conn.read_tls(&mut self.socket) {
+            Err(error) => {
+                if error.kind() == io::ErrorKind::WouldBlock {
+                    return;
+                }
+                println!("TLS read error: {:?}", error);
+                self.closing = true;
                 return;
             }
-            println!("TLS read error: {:?}", error);
-            self.closing = true;
-            return;
-        }
 
-        // If we're ready but there's no data: EOF.
-        if rc.unwrap() == 0 {
-            println!("EOF");
-            self.closing = true;
-            self.clean_closure = true;
-            return;
-        }
+            // If we're ready but there's no data: EOF.
+            Ok(0) => {
+                println!("EOF");
+                self.closing = true;
+                self.clean_closure = true;
+                return;
+            }
+
+            Ok(_) => {}
+        };
 
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let processed = self.tls_conn.process_new_packets();
-        if processed.is_err() {
-            println!("TLS error: {:?}", processed.unwrap_err());
-            self.closing = true;
-            return;
-        }
+        let io_state = match self.tls_conn.process_new_packets() {
+            Ok(io_state) => io_state,
+            Err(err) => {
+                println!("TLS error: {:?}", err);
+                self.closing = true;
+                return;
+            }
+        };
 
         // Having read some TLS data, and processed any new messages,
         // we might have new plaintext as a result.
         //
         // Read it and then write it to stdout.
-        let mut plaintext = Vec::new();
-        let rc = self
-            .tls_conn
-            .read_to_end(&mut plaintext);
-        if !plaintext.is_empty() {
+        if io_state.plaintext_bytes_to_read() > 0 {
+            let mut plaintext = Vec::new();
+            plaintext.resize(io_state.plaintext_bytes_to_read(), 0u8);
+            self.tls_conn
+                .read(&mut plaintext)
+                .unwrap();
             io::stdout()
                 .write_all(&plaintext)
                 .unwrap();
         }
 
-        // If that fails, the peer might have started a clean TLS-level
+        // If wethat fails, the peer might have started a clean TLS-level
         // session closure.
-        if rc.is_err() {
-            let err = rc.unwrap_err();
-            println!("Plaintext read error: {:?}", err);
-            self.clean_closure = err.kind() == io::ErrorKind::ConnectionAborted;
+        if io_state.peer_has_closed() {
+            self.clean_closure = true;
             self.closing = true;
             return;
         }
