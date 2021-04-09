@@ -16,7 +16,6 @@ use crate::log::warn;
 
 use std::collections;
 use std::fmt;
-use webpki;
 
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
@@ -331,7 +330,7 @@ impl ConvertServerNameList for ServerNameRequest {
 
         self.iter()
             .filter_map(only_dns_hostnames)
-            .nth(0)
+            .next()
     }
 }
 

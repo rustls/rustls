@@ -19,13 +19,13 @@ pub fn timebase() -> u64 {
 /// any *ring* `aead::Algorithm` to encrypt and authentication
 /// the ticket payload.  It does not enforce any lifetime
 /// constraint.
-pub struct AEADTicketer {
+pub struct AeadTicketer {
     alg: &'static aead::Algorithm,
     key: aead::LessSafeKey,
     lifetime: u32,
 }
 
-impl AEADTicketer {
+impl AeadTicketer {
     /// Make a new `AEADTicketer` using the given `alg`, `key` material
     /// and advertised `lifetime_seconds`.  Note that `lifetime_seconds`
     /// does not affect the lifetime of the key.  `key` must be the
@@ -34,9 +34,9 @@ impl AEADTicketer {
         alg: &'static aead::Algorithm,
         key: &[u8],
         lifetime_seconds: u32,
-    ) -> AEADTicketer {
+    ) -> AeadTicketer {
         let key = aead::UnboundKey::new(alg, key).unwrap();
-        AEADTicketer {
+        AeadTicketer {
             alg,
             key: aead::LessSafeKey::new(key),
             lifetime: lifetime_seconds,
@@ -44,10 +44,10 @@ impl AEADTicketer {
     }
 
     /// Make a ticketer with recommended configuration and a random key.
-    pub fn new() -> Result<AEADTicketer, rand::GetRandomFailed> {
+    pub fn new() -> Result<AeadTicketer, rand::GetRandomFailed> {
         let mut key = [0u8; 32];
         rand::fill_random(&mut key)?;
-        Ok(AEADTicketer::new_custom(
+        Ok(AeadTicketer::new_custom(
             &aead::CHACHA20_POLY1305,
             &key,
             60 * 60 * 12,
@@ -55,7 +55,7 @@ impl AEADTicketer {
     }
 }
 
-impl ProducesTickets for AEADTicketer {
+impl ProducesTickets for AeadTicketer {
     fn enabled(&self) -> bool {
         true
     }
@@ -208,7 +208,7 @@ impl ProducesTickets for TicketSwitcher {
 pub struct Ticketer {}
 
 fn generate_inner() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed> {
-    Ok(Box::new(AEADTicketer::new()?))
+    Ok(Box::new(AeadTicketer::new()?))
 }
 
 impl Ticketer {

@@ -107,6 +107,7 @@ impl MessageDeframer {
         }
     }
 
+    #[allow(clippy::comparison_chain)]
     fn buf_consume(&mut self, taken: usize) {
         if taken < self.used {
             /* Before:
@@ -124,7 +125,7 @@ impl MessageDeframer {
 
             self.buf
                 .copy_within(taken..self.used, 0);
-            self.used = self.used - taken;
+            self.used -= taken;
         } else if taken == self.used {
             self.used = 0;
         }

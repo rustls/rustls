@@ -39,7 +39,6 @@ use crate::client::hs;
 
 use ring::constant_time;
 use ring::digest::Digest;
-use webpki;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -639,7 +638,7 @@ struct ExpectCertificateVerify {
 
 fn send_cert_error_alert(sess: &mut ClientSession, err: Error) -> Error {
     match err {
-        Error::WebPKIError(webpki::Error::BadDER, _) => {
+        Error::WebPkiError(webpki::Error::BadDER, _) => {
             sess.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }
@@ -1056,6 +1055,7 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
+    #[allow(clippy::unnecessary_wraps)] // returns Err for #[cfg(feature = "quic")]
     fn handle_new_ticket_tls13(
         &mut self,
         sess: &mut ClientSession,

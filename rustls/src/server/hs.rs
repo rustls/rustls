@@ -28,9 +28,7 @@ use crate::sign;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use webpki;
-
-use crate::server::common::{HandshakeDetails, ServerKXDetails};
+use crate::server::common::{HandshakeDetails, ServerKxDetails};
 use crate::server::{tls12, tls13};
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -571,7 +569,7 @@ impl ExpectClientHello {
 
         assert!(same_dns_name_or_both_none(sni, sess.get_sni()));
 
-        Ok(Box::new(tls12::ExpectCCS {
+        Ok(Box::new(tls12::ExpectCcs {
             secrets,
             handshake: self.handshake,
             using_ems: self.using_ems,
@@ -699,10 +697,7 @@ impl State for ExpectClientHello {
             trace!("sig schemes {:?}", sigschemes_ext);
             trace!("alpn protocols {:?}", alpn_protocols);
 
-            let alpn_slices = alpn_protocols
-                .as_ref()
-                .map(|vec| vec.as_slice());
-
+            let alpn_slices = alpn_protocols.as_deref();
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
             let certkey = sess
@@ -817,30 +812,30 @@ impl State for ExpectClientHello {
         //
         let mut ticket_received = false;
 
-        if let Some(ticket_ext) = client_hello.get_ticket_extension() {
-            if let ClientExtension::SessionTicketOffer(ref ticket) = *ticket_ext {
-                ticket_received = true;
-                debug!("Ticket received");
+        if let Some(ClientExtension::SessionTicketOffer(ref ticket)) =
+            client_hello.get_ticket_extension()
+        {
+            ticket_received = true;
+            debug!("Ticket received");
 
-                if let Some(resume) = sess
-                    .config
-                    .ticketer
-                    .decrypt(&ticket.0)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
-                    .and_then(|resumedata| can_resume(suite, &sess.sni, self.using_ems, resumedata))
-                {
-                    return self.start_resumption(
-                        sess,
-                        client_hello,
-                        suite,
-                        sni.as_ref(),
-                        &client_hello.session_id,
-                        resume,
-                        &randoms,
-                    );
-                } else {
-                    debug!("Ticket didn't decrypt");
-                }
+            if let Some(resume) = sess
+                .config
+                .ticketer
+                .decrypt(&ticket.0)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+                .and_then(|resumedata| can_resume(suite, &sni, self.using_ems, resumedata))
+            {
+                return self.start_resumption(
+                    sess,
+                    client_hello,
+                    suite,
+                    sni.as_ref(),
+                    &client_hello.session_id,
+                    resume,
+                    &randoms,
+                );
+            } else {
+                debug!("Ticket didn't decrypt");
             }
         }
 
@@ -914,7 +909,7 @@ impl State for ExpectClientHello {
         let doing_client_auth = self.emit_certificate_req(sess)?;
         self.emit_server_hello_done(sess);
 
-        let server_kx = ServerKXDetails::new(kx);
+        let server_kx = ServerKxDetails::new(kx);
         if doing_client_auth {
             Ok(Box::new(tls12::ExpectCertificate {
                 handshake: self.handshake,
@@ -925,7 +920,7 @@ impl State for ExpectClientHello {
                 send_ticket: self.send_ticket,
             }))
         } else {
-            Ok(Box::new(tls12::ExpectClientKX {
+            Ok(Box::new(tls12::ExpectClientKx {
                 handshake: self.handshake,
                 randoms,
                 suite,

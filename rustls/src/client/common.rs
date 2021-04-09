@@ -30,22 +30,21 @@ impl ServerCertDetails {
 
     pub fn scts(&self) -> impl Iterator<Item = &[u8]> {
         self.scts
-            .as_ref()
-            .map(|v| v.as_slice())
+            .as_deref()
             .unwrap_or(&[])
             .iter()
             .map(|payload| payload.0.as_slice())
     }
 }
 
-pub struct ServerKXDetails {
+pub struct ServerKxDetails {
     pub kx_params: Vec<u8>,
     pub kx_sig: DigitallySignedStruct,
 }
 
-impl ServerKXDetails {
-    pub fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKXDetails {
-        ServerKXDetails {
+impl ServerKxDetails {
+    pub fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKxDetails {
+        ServerKxDetails {
             kx_params: params,
             kx_sig: sig,
         }

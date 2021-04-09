@@ -314,17 +314,14 @@ impl EarlyData {
     }
 
     fn is_enabled(&self) -> bool {
-        match self.state {
-            EarlyDataState::Ready | EarlyDataState::Accepted => true,
-            _ => false,
-        }
+        matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
     }
 
     fn is_accepted(&self) -> bool {
-        match self.state {
-            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished => true,
-            _ => false,
-        }
+        matches!(
+            self.state,
+            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
+        )
     }
 
     fn enable(&mut self, max_data: usize) {
@@ -521,10 +518,9 @@ impl ClientSession {
         Ok(())
     }
 
-    fn reject_renegotiation_attempt(&mut self) -> Result<(), Error> {
+    fn reject_renegotiation_attempt(&mut self) {
         self.common
             .send_warning_alert(AlertDescription::NoRenegotiation);
-        Ok(())
     }
 
     fn queue_unexpected_alert(&mut self) {
@@ -553,7 +549,8 @@ impl ClientSession {
             && !self.common.is_tls13()
             && !self.is_handshaking()
         {
-            return self.reject_renegotiation_attempt();
+            self.reject_renegotiation_attempt();
+            return Ok(());
         }
 
         let state = self.state.take().unwrap();
@@ -567,17 +564,17 @@ impl ClientSession {
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.early_data
             .check_write(data.len())
-            .and_then(|sz| {
-                Ok(self
-                    .common
-                    .send_early_plaintext(&data[..sz]))
+            .map(|sz| {
+                self.common
+                    .send_early_plaintext(&data[..sz])
             })
     }
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
-        st.as_mut()
-            .map(|st| st.perhaps_write_key_update(self));
+        if let Some(st) = st.as_mut() {
+            st.perhaps_write_key_update(self);
+        }
         self.state = st;
 
         self.common.send_some_plaintext(buf)
@@ -659,12 +656,7 @@ impl Session for ClientSession {
             return None;
         }
 
-        Some(
-            self.server_cert_chain
-                .iter()
-                .cloned()
-                .collect(),
-        )
+        Some(self.server_cert_chain.to_vec())
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -683,7 +675,7 @@ impl Session for ClientSession {
     ) -> Result<(), Error> {
         self.state
             .as_ref()
-            .ok_or_else(|| Error::HandshakeNotComplete)
+            .ok_or(Error::HandshakeNotComplete)
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 

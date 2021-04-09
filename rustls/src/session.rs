@@ -16,12 +16,12 @@ use crate::rand;
 use crate::record_layer;
 use crate::suites::SupportedCipherSuite;
 use crate::vecbuf::ChunkVecBuffer;
-use ring;
-use std::io::{Read, Write};
 
 use ring::digest::Digest;
+
 use std::collections::VecDeque;
 use std::io;
+use std::io::{Read, Write};
 
 /// Generalises `ClientSession` and `ServerSession`
 pub trait Session: quic::QuicExt + Read + Write + Send + Sync {
@@ -265,7 +265,7 @@ impl SessionRandoms {
         assert!(self.we_are_client);
         // both the server random and TLS12_DOWNGRADE_SENTINEL are
         // public values and don't require constant time comparison
-        &self.server[24..] == TLS12_DOWNGRADE_SENTINEL
+        self.server[24..] == TLS12_DOWNGRADE_SENTINEL
     }
 }
 
@@ -422,7 +422,7 @@ enum Limit {
 
 /// For TLS1.3 middlebox compatibility mode, how to handle
 /// a received ChangeCipherSpec message.
-pub enum MiddleboxCCS {
+pub enum MiddleboxCcs {
     /// process the message as normal
     Process,
 
@@ -481,10 +481,7 @@ impl SessionCommon {
     }
 
     pub fn is_tls13(&self) -> bool {
-        match self.negotiated_version {
-            Some(ProtocolVersion::TLSv1_3) => true,
-            _ => false,
-        }
+        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
     pub fn process_msg(
@@ -493,7 +490,7 @@ impl SessionCommon {
         ignore_corrupt_payload: bool,
     ) -> Result<Option<MessageType>, Error> {
         // TLS1.3: drop CCS at any time during handshaking
-        if let MiddleboxCCS::Drop = self.filter_tls13_ccs(&msg)? {
+        if let MiddleboxCcs::Drop = self.filter_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
             return Ok(None);
         }
@@ -540,14 +537,14 @@ impl SessionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCCS, Error> {
+    pub fn filter_tls13_ccs(&mut self, msg: &Message) -> Result<MiddleboxCcs, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
         // - if it's not a CCS at all
         // - if we've finished the handshake
         if !self.is_tls13() || !msg.is_content_type(ContentType::ChangeCipherSpec) || self.traffic {
-            return Ok(MiddleboxCCS::Process);
+            return Ok(MiddleboxCcs::Process);
         }
 
         if self.received_middlebox_ccs {
@@ -556,7 +553,7 @@ impl SessionCommon {
             ))
         } else {
             self.received_middlebox_ccs = true;
-            Ok(MiddleboxCCS::Drop)
+            Ok(MiddleboxCcs::Drop)
         }
     }
 

@@ -1,34 +1,33 @@
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::rand;
-use sct;
+
 use std::error::Error as StdError;
 use std::fmt;
-use webpki;
 
 /// The reason WebPKI operation was performed, used in [`TLSError`].
 #[derive(Debug, PartialEq, Clone)]
 #[non_exhaustive]
-pub enum WebPKIOp {
+pub enum WebPkiOp {
     /// Validate server certificate.
     ValidateServerCert,
     /// Validate client certificate.
     ValidateClientCert,
     /// Validate certificate for DNS name
-    ValidateForDNSName,
+    ValidateForDnsName,
     /// Parse end entity certificate.
     ParseEndEntity,
     /// Verify message signature using the certificate.
     VerifySignature,
 }
 
-impl fmt::Display for WebPKIOp {
+impl fmt::Display for WebPkiOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            WebPKIOp::ValidateServerCert => write!(f, "validate server certificate"),
-            WebPKIOp::ValidateClientCert => write!(f, "validate client certificate"),
-            WebPKIOp::ValidateForDNSName => write!(f, "validate certificate for DNS name"),
-            WebPKIOp::ParseEndEntity => write!(f, "parse end entity certificate"),
-            WebPKIOp::VerifySignature => write!(f, "verify signature"),
+            WebPkiOp::ValidateServerCert => write!(f, "validate server certificate"),
+            WebPkiOp::ValidateClientCert => write!(f, "validate client certificate"),
+            WebPkiOp::ValidateForDnsName => write!(f, "validate certificate for DNS name"),
+            WebPkiOp::ParseEndEntity => write!(f, "parse end entity certificate"),
+            WebPkiOp::VerifySignature => write!(f, "verify signature"),
         }
     }
 }
@@ -82,10 +81,10 @@ pub enum Error {
     AlertReceived(AlertDescription),
 
     /// The presented certificate chain is invalid.
-    WebPKIError(webpki::Error, WebPKIOp),
+    WebPkiError(webpki::Error, WebPkiOp),
 
     /// The presented SCT(s) were invalid.
-    InvalidSCT(sct::Error),
+    InvalidSct(sct::Error),
 
     /// A catch-all error for unlikely errors.
     General(String),
@@ -142,7 +141,7 @@ impl fmt::Display for Error {
             Error::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
             Error::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
             Error::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            Error::WebPKIError(ref err, ref reason) => {
+            Error::WebPkiError(ref err, ref reason) => {
                 write!(f, "certificate error in operation: {}: {:?}", reason, err)
             }
             Error::CorruptMessage => write!(f, "received corrupt message"),
@@ -151,7 +150,7 @@ impl fmt::Display for Error {
             Error::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
             Error::HandshakeNotComplete => write!(f, "handshake not complete"),
             Error::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
-            Error::InvalidSCT(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
+            Error::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
@@ -172,7 +171,7 @@ mod tests {
     #[test]
     fn smoke() {
         use super::Error;
-        use super::WebPKIOp;
+        use super::WebPkiOp;
         use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
         use webpki;
@@ -193,11 +192,11 @@ mod tests {
             Error::PeerIncompatibleError("no tls1.2".to_string()),
             Error::PeerMisbehavedError("inconsistent something".to_string()),
             Error::AlertReceived(AlertDescription::ExportRestriction),
-            Error::WebPKIError(
+            Error::WebPkiError(
                 webpki::Error::ExtensionValueInvalid,
-                WebPKIOp::ParseEndEntity,
+                WebPkiOp::ParseEndEntity,
             ),
-            Error::InvalidSCT(sct::Error::MalformedSCT),
+            Error::InvalidSct(sct::Error::MalformedSCT),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,

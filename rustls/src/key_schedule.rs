@@ -13,7 +13,7 @@ use ring::{
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SecretKind {
-    ResumptionPSKBinderKey,
+    ResumptionPskBinderKey,
     ClientEarlyTrafficSecret,
     ClientHandshakeTrafficSecret,
     ServerHandshakeTrafficSecret,
@@ -27,7 +27,7 @@ enum SecretKind {
 impl SecretKind {
     fn to_bytes(self) -> &'static [u8] {
         match self {
-            SecretKind::ResumptionPSKBinderKey => b"res binder",
+            SecretKind::ResumptionPskBinderKey => b"res binder",
             SecretKind::ClientEarlyTrafficSecret => b"c e traffic",
             SecretKind::ClientHandshakeTrafficSecret => b"c hs traffic",
             SecretKind::ServerHandshakeTrafficSecret => b"s hs traffic",
@@ -98,7 +98,7 @@ impl KeyScheduleEarly {
     pub fn resumption_psk_binder_key_and_sign_verify_data(&self, hs_hash: &Digest) -> hmac::Tag {
         let resumption_psk_binder_key = self
             .ks
-            .derive_for_empty_hash(SecretKind::ResumptionPSKBinderKey);
+            .derive_for_empty_hash(SecretKind::ResumptionPskBinderKey);
         self.ks
             .sign_verify_data(&resumption_psk_binder_key, hs_hash)
     }
@@ -369,7 +369,7 @@ impl KeySchedule {
         T: for<'a> From<hkdf::Okm<'a, L>>,
         L: hkdf::KeyType,
     {
-        hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash.as_ref())
+        hkdf_expand(&self.current, key_type, kind.to_bytes(), hs_hash)
     }
 
     fn derive_logged_secret(

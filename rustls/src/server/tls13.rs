@@ -774,9 +774,9 @@ impl hs::State for ExpectCertificate {
         sess.config
             .get_verifier()
             .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
-            .or_else(|err| {
+            .map_err(|err| {
                 hs::incompatible(sess, "certificate invalid");
-                Err(err)
+                err
             })?;
 
         let client_cert = ClientCertDetails::new(cert_chain);
@@ -1020,10 +1020,9 @@ pub struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, sess: &mut ServerSession, mut m: Message) -> Result<(), Error> {
+    fn handle_traffic(&self, sess: &mut ServerSession, mut m: Message) {
         sess.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
-        Ok(())
     }
 
     fn handle_key_update(
@@ -1071,7 +1070,7 @@ impl ExpectTraffic {
 impl hs::State for ExpectTraffic {
     fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
-            self.handle_traffic(sess, m)?;
+            self.handle_traffic(sess, m);
         } else if let Ok(key_update) =
             require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
         {

@@ -66,11 +66,11 @@ fn make_tls12_gcm_nonce(write_iv: &[u8], explicit: &[u8]) -> Iv {
     iv
 }
 
-pub type BuildTLS12Decrypter = fn(&[u8], &[u8]) -> Box<dyn MessageDecrypter>;
-pub type BuildTLS12Encrypter = fn(&[u8], &[u8], &[u8]) -> Box<dyn MessageEncrypter>;
+pub type BuildTls12Decrypter = fn(&[u8], &[u8]) -> Box<dyn MessageDecrypter>;
+pub type BuildTls12Encrypter = fn(&[u8], &[u8], &[u8]) -> Box<dyn MessageEncrypter>;
 
 pub fn build_tls12_gcm_128_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
-    Box::new(GCMMessageDecrypter::new(&aead::AES_128_GCM, key, iv))
+    Box::new(GcmMessageDecrypter::new(&aead::AES_128_GCM, key, iv))
 }
 
 pub fn build_tls12_gcm_128_encrypter(
@@ -79,11 +79,11 @@ pub fn build_tls12_gcm_128_encrypter(
     extra: &[u8],
 ) -> Box<dyn MessageEncrypter> {
     let nonce = make_tls12_gcm_nonce(iv, extra);
-    Box::new(GCMMessageEncrypter::new(&aead::AES_128_GCM, key, nonce))
+    Box::new(GcmMessageEncrypter::new(&aead::AES_128_GCM, key, nonce))
 }
 
 pub fn build_tls12_gcm_256_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
-    Box::new(GCMMessageDecrypter::new(&aead::AES_256_GCM, key, iv))
+    Box::new(GcmMessageDecrypter::new(&aead::AES_256_GCM, key, iv))
 }
 
 pub fn build_tls12_gcm_256_encrypter(
@@ -92,7 +92,7 @@ pub fn build_tls12_gcm_256_encrypter(
     extra: &[u8],
 ) -> Box<dyn MessageEncrypter> {
     let nonce = make_tls12_gcm_nonce(iv, extra);
-    Box::new(GCMMessageEncrypter::new(&aead::AES_256_GCM, key, nonce))
+    Box::new(GcmMessageEncrypter::new(&aead::AES_256_GCM, key, nonce))
 }
 
 pub fn build_tls12_chacha_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
@@ -156,7 +156,7 @@ pub fn new_tls13_read(
     let key = derive_traffic_key(secret, scs.aead_algorithm);
     let iv = derive_traffic_iv(secret);
 
-    Box::new(TLS13MessageDecrypter::new(key, iv))
+    Box::new(Tls13MessageDecrypter::new(key, iv))
 }
 
 pub fn new_tls13_write(
@@ -166,17 +166,17 @@ pub fn new_tls13_write(
     let key = derive_traffic_key(secret, scs.aead_algorithm);
     let iv = derive_traffic_iv(secret);
 
-    Box::new(TLS13MessageEncrypter::new(key, iv))
+    Box::new(Tls13MessageEncrypter::new(key, iv))
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
-pub struct GCMMessageEncrypter {
+pub struct GcmMessageEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
 /// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
-pub struct GCMMessageDecrypter {
+pub struct GcmMessageDecrypter {
     dec_key: aead::LessSafeKey,
     dec_salt: [u8; 4],
 }
@@ -184,7 +184,7 @@ pub struct GCMMessageDecrypter {
 const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
-impl MessageDecrypter for GCMMessageDecrypter {
+impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, Error> {
         let payload = msg
             .take_opaque_payload()
@@ -224,7 +224,7 @@ impl MessageDecrypter for GCMMessageDecrypter {
     }
 }
 
-impl MessageEncrypter for GCMMessageEncrypter {
+impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, Error> {
         let nonce = make_tls13_nonce(&self.iv, seq);
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
@@ -247,20 +247,20 @@ impl MessageEncrypter for GCMMessageEncrypter {
     }
 }
 
-impl GCMMessageEncrypter {
-    fn new(alg: &'static aead::Algorithm, enc_key: &[u8], iv: Iv) -> GCMMessageEncrypter {
+impl GcmMessageEncrypter {
+    fn new(alg: &'static aead::Algorithm, enc_key: &[u8], iv: Iv) -> GcmMessageEncrypter {
         let key = aead::UnboundKey::new(alg, enc_key).unwrap();
-        GCMMessageEncrypter {
+        GcmMessageEncrypter {
             enc_key: aead::LessSafeKey::new(key),
             iv,
         }
     }
 }
 
-impl GCMMessageDecrypter {
-    fn new(alg: &'static aead::Algorithm, dec_key: &[u8], dec_iv: &[u8]) -> GCMMessageDecrypter {
+impl GcmMessageDecrypter {
+    fn new(alg: &'static aead::Algorithm, dec_key: &[u8], dec_iv: &[u8]) -> GcmMessageDecrypter {
         let key = aead::UnboundKey::new(alg, dec_key).unwrap();
-        let mut ret = GCMMessageDecrypter {
+        let mut ret = GcmMessageDecrypter {
             dec_key: aead::LessSafeKey::new(key),
             dec_salt: [0u8; 4],
         };
@@ -308,12 +308,12 @@ impl From<hkdf::Okm<'_, IvLen>> for Iv {
     }
 }
 
-struct TLS13MessageEncrypter {
+struct Tls13MessageEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-struct TLS13MessageDecrypter {
+struct Tls13MessageDecrypter {
     dec_key: aead::LessSafeKey,
     iv: Iv,
 }
@@ -352,7 +352,7 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]> {
     ])
 }
 
-impl MessageEncrypter for TLS13MessageEncrypter {
+impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt(&self, msg: BorrowMessage, seq: u64) -> Result<Message, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
@@ -374,7 +374,7 @@ impl MessageEncrypter for TLS13MessageEncrypter {
     }
 }
 
-impl MessageDecrypter for TLS13MessageDecrypter {
+impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt(&self, mut msg: Message, seq: u64) -> Result<Message, Error> {
         let payload = msg
             .take_opaque_payload()
@@ -417,18 +417,18 @@ impl MessageDecrypter for TLS13MessageDecrypter {
     }
 }
 
-impl TLS13MessageEncrypter {
-    fn new(key: aead::UnboundKey, enc_iv: Iv) -> TLS13MessageEncrypter {
-        TLS13MessageEncrypter {
+impl Tls13MessageEncrypter {
+    fn new(key: aead::UnboundKey, enc_iv: Iv) -> Tls13MessageEncrypter {
+        Tls13MessageEncrypter {
             enc_key: aead::LessSafeKey::new(key),
             iv: enc_iv,
         }
     }
 }
 
-impl TLS13MessageDecrypter {
-    fn new(key: aead::UnboundKey, dec_iv: Iv) -> TLS13MessageDecrypter {
-        TLS13MessageDecrypter {
+impl Tls13MessageDecrypter {
+    fn new(key: aead::UnboundKey, dec_iv: Iv) -> Tls13MessageDecrypter {
+        Tls13MessageDecrypter {
             dec_key: aead::LessSafeKey::new(key),
             iv: dec_iv,
         }

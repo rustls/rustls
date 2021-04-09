@@ -3,10 +3,8 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
-
-use webpki;
-
 use crate::SupportedCipherSuite;
+
 use std::cmp;
 use std::mem;
 
@@ -161,7 +159,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
                 age_add: 0,
                 extended_ms: false,
                 max_early_data_size: 0,
-                server_cert_chain: server_cert_chain.clone(),
+                server_cert_chain: server_cert_chain.to_owned(),
             },
             supported_cipher_suite: cipher_suite,
         }

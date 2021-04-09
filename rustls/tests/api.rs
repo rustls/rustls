@@ -16,7 +16,7 @@ use rustls::ClientHello;
 use rustls::Error;
 use rustls::KeyLog;
 use rustls::Session;
-use rustls::WebPKIOp;
+use rustls::WebPkiOp;
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientSession, ResolvesClientCert};
 use rustls::{ResolvesServerCert, ServerConfig, ServerSession};
@@ -590,9 +590,9 @@ fn client_checks_server_certificate_with_given_name() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
-                Err(TLSErrorFromPeer::Client(Error::WebPKIError(
+                Err(TLSErrorFromPeer::Client(Error::WebPkiError(
                     webpki::Error::CertNotValidForName,
-                    WebPKIOp::ValidateForDNSName,
+                    WebPkiOp::ValidateForDnsName,
                 )))
             );
         }

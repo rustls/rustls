@@ -16,7 +16,7 @@ use crate::server::ServerSession;
 use crate::session::{SessionRandoms, SessionSecrets};
 use crate::{verify, SupportedCipherSuite};
 
-use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKXDetails};
+use crate::server::common::{ClientCertDetails, HandshakeDetails, ServerKxDetails};
 use crate::server::hs;
 
 use ring::constant_time;
@@ -27,7 +27,7 @@ pub struct ExpectCertificate {
     pub randoms: SessionRandoms,
     pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
-    pub server_kx: ServerKXDetails,
+    pub server_kx: ServerKxDetails,
     pub send_ticket: bool,
 }
 
@@ -74,16 +74,16 @@ impl hs::State for ExpectCertificate {
                 sess.config
                     .verifier
                     .verify_client_cert(end_entity, intermediates, sess.get_sni(), now)
-                    .or_else(|err| {
+                    .map_err(|err| {
                         hs::incompatible(sess, "certificate invalid");
-                        Err(err)
+                        err
                     })?;
 
                 Some(ClientCertDetails::new(cert_chain))
             }
         };
 
-        Ok(Box::new(ExpectClientKX {
+        Ok(Box::new(ExpectClientKx {
             handshake: self.handshake,
             randoms: self.randoms,
             suite: self.suite,
@@ -96,17 +96,17 @@ impl hs::State for ExpectCertificate {
 }
 
 // --- Process client's KeyExchange ---
-pub struct ExpectClientKX {
+pub struct ExpectClientKx {
     pub handshake: HandshakeDetails,
     pub randoms: SessionRandoms,
     pub suite: &'static SupportedCipherSuite,
     pub using_ems: bool,
-    pub server_kx: ServerKXDetails,
+    pub server_kx: ServerKxDetails,
     pub client_cert: Option<ClientCertDetails>,
     pub send_ticket: bool,
 }
 
-impl hs::State for ExpectClientKX {
+impl hs::State for ExpectClientKx {
     fn handle(mut self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
@@ -160,7 +160,7 @@ impl hs::State for ExpectClientKX {
                 send_ticket: self.send_ticket,
             }))
         } else {
-            Ok(Box::new(ExpectCCS {
+            Ok(Box::new(ExpectCcs {
                 secrets,
                 handshake: self.handshake,
                 using_ems: self.using_ems,
@@ -211,7 +211,7 @@ impl hs::State for ExpectCertificateVerify {
         self.handshake
             .transcript
             .add_message(&m);
-        Ok(Box::new(ExpectCCS {
+        Ok(Box::new(ExpectCcs {
             secrets: self.secrets,
             handshake: self.handshake,
             using_ems: self.using_ems,
@@ -222,7 +222,7 @@ impl hs::State for ExpectCertificateVerify {
 }
 
 // --- Process client's ChangeCipherSpec ---
-pub struct ExpectCCS {
+pub struct ExpectCcs {
     pub secrets: SessionSecrets,
     pub handshake: HandshakeDetails,
     pub using_ems: bool,
@@ -230,7 +230,7 @@ pub struct ExpectCCS {
     pub send_ticket: bool,
 }
 
-impl hs::State for ExpectCCS {
+impl hs::State for ExpectCcs {
     fn handle(self: Box<Self>, sess: &mut ServerSession, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
