@@ -391,10 +391,10 @@ impl hs::State for ExpectFinished {
         if let (Some(session_id), false) = (self.handshake.session_id, self.resuming) {
             let value = get_server_session_value_tls12(&self.secrets, self.using_ems, conn);
 
-            let worked = conn.config.session_storage.put(
-                session_id.get_encoding(),
-                value.get_encoding(),
-            );
+            let worked = conn
+                .config
+                .session_storage
+                .put(session_id.get_encoding(), value.get_encoding());
 
             if worked {
                 debug!("Session saved");
