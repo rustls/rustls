@@ -395,7 +395,7 @@ impl<'a> WriteEarlyData<'a> {
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.sess.early_data.bytes_left()
+        self.sess.data.early_data.bytes_left()
     }
 }
 
@@ -414,9 +414,7 @@ pub struct ClientConnection {
     config: Arc<ClientConfig>,
     common: ConnectionCommon,
     state: Option<hs::NextState>,
-    server_cert_chain: CertificatePayload,
-    early_data: EarlyData,
-    resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+    data: ClientConnectionData,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -444,9 +442,7 @@ impl ClientConnection {
             config: config.clone(),
             common: ConnectionCommon::new(config.mtu, true),
             state: None,
-            server_cert_chain: Vec::new(),
-            early_data: EarlyData::new(),
-            resumption_ciphersuite: None,
+            data: ClientConnectionData::new(),
         }
     }
 
@@ -469,7 +465,7 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-        if self.early_data.is_enabled() {
+        if self.data.early_data.is_enabled() {
             Some(WriteEarlyData::new(self))
         } else {
             None
@@ -482,7 +478,7 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.early_data.is_accepted()
+        self.data.early_data.is_accepted()
     }
 
     fn start_handshake(
@@ -533,7 +529,8 @@ impl ClientConnection {
     }
 
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.early_data
+        self.data
+            .early_data
             .check_write(data.len())
             .map(|sz| {
                 self.common
@@ -622,11 +619,11 @@ impl Connection for ClientConnection {
     }
 
     fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        if self.server_cert_chain.is_empty() {
+        if self.data.server_cert_chain.is_empty() {
             return None;
         }
 
-        Some(self.server_cert_chain.to_vec())
+        Some(self.data.server_cert_chain.to_vec())
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -652,7 +649,7 @@ impl Connection for ClientConnection {
     fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common
             .get_suite()
-            .or(self.resumption_ciphersuite)
+            .or(self.data.resumption_ciphersuite)
     }
 
     fn writer(&mut self) -> Writer {
@@ -682,6 +679,22 @@ impl PlaintextSink for ClientConnection {
     }
 }
 
+struct ClientConnectionData {
+    server_cert_chain: CertificatePayload,
+    early_data: EarlyData,
+    resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+}
+
+impl ClientConnectionData {
+    fn new() -> Self {
+        Self {
+            server_cert_chain: Vec::new(),
+            early_data: EarlyData::new(),
+            resumption_ciphersuite: None,
+        }
+    }
+}
+
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ClientConnection {
     fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
@@ -694,7 +707,7 @@ impl quic::QuicExt for ClientConnection {
 
     fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.resumption_ciphersuite?,
+            self.data.resumption_ciphersuite?,
             self.common.quic.early_secret.as_ref()?,
         ))
     }
