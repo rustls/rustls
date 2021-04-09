@@ -246,7 +246,7 @@ or
 
 ```
 $ cargo run --example tlsclient -- --http expired.badssl.com
-TLS error: WebPKIError(CertExpired)
+TLS error: WebPkiError(CertExpired, ValidateServerCert)
 Connection closed
 ```
 

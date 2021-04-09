@@ -16,13 +16,13 @@
 //! * Tunable MTU to make TLS messages match size of underlying transport.
 //! * Optional use of vectored IO to minimise system calls.
 //! * TLS1.2 session resumption.
-//! * TLS1.2 resumption via tickets (RFC5077).
+//! * TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
 //! * TLS1.3 resumption via tickets or session storage.
 //! * TLS1.3 0-RTT data for clients.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
-//! * Extended master secret support (RFC7627).
-//! * Exporters (RFC5705).
+//! * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
+//! * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 //! * OCSP stapling by servers.
 //! * SCT stapling by servers.
 //! * SCT verification by clients.
@@ -142,8 +142,8 @@
 //! therefore call `client.process_new_packets()` which parses and processes the messages.
 //! Any error returned from `process_new_packets` is fatal to the session, and will tell you
 //! why.  For example, if the server's certificate is expired `process_new_packets` will
-//! return `Err(WebPKIError(CertExpired))`.  From this point on, `process_new_packets` will
-//! not do any new work and will return that error continually.
+//! return `Err(WebPkiError(CertExpired, ValidateServerCert))`.  From this point on,
+//! `process_new_packets` will not do any new work and will return that error continually.
 //!
 //! You can extract newly received data by calling `client.read()` (via the `io::Read`
 //! trait).  You can send data to the peer by calling `client.write()` (via the `io::Write`
