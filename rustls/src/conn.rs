@@ -854,11 +854,13 @@ impl ConnectionCommon {
     pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = self.received_plaintext.read(buf)?;
 
-        if len == 0 && self.connection_at_eof() && self.received_plaintext.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                "CloseNotify alert received",
-            ));
+        if len == 0 && !buf.is_empty() {
+            // no bytes available:
+            // - if we received a close_notify, this is a genuine permanent EOF
+            // - otherwise say EWOULDBLOCK
+            if !self.connection_at_eof() {
+                return Err(io::ErrorKind::WouldBlock.into());
+            }
         }
 
         Ok(len)

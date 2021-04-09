@@ -54,7 +54,17 @@ where
         // hit. Otherwise, we will prematurely signal EOF by returning 0. We
         // determine if EOF has actually been hit by checking if 0 bytes were
         // read from the underlying transport.
-        while self.conn.wants_read() && self.conn.complete_io(self.sock)?.0 != 0 {}
+        while self.conn.wants_read() {
+            let at_eof = self.conn.complete_io(self.sock)?.0 == 0;
+            if at_eof {
+                if let Ok(io_state) = self.conn.process_new_packets() {
+                    if at_eof && io_state.plaintext_bytes_to_read() == 0 {
+                        return Ok(0);
+                    }
+                }
+                break;
+            }
+        }
 
         self.conn.read(buf)
     }

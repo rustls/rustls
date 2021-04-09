@@ -689,14 +689,15 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
 
         let mut buf = [0u8; 1024];
         let len = match sess.read(&mut buf[..opts.read_size]) {
-            Ok(len) => len,
-            Err(ref err) if err.kind() == io::ErrorKind::ConnectionAborted => {
+            Ok(0) => {
                 if opts.check_close_notify {
                     println!("close notify ok");
                 }
                 println!("EOF (tls)");
                 return;
             }
+            Ok(len) => len,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => 0,
             Err(err) => panic!("unhandled read error {:?}", err),
         };
 
