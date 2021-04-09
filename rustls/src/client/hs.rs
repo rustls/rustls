@@ -2,7 +2,7 @@
 use crate::bs_debug;
 use crate::check::check_message;
 use crate::client::ClientConnection;
-use crate::conn::{ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::KeyScheduleEarly;
@@ -50,7 +50,7 @@ pub trait State {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _conn: &mut ClientConnection) {}
+    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
 fn find_session(
@@ -266,7 +266,13 @@ fn emit_client_hello_for_retry(
     }
 
     if support_tls13 {
-        tls13::choose_kx_groups(conn, &mut exts, &mut hello, dns_name.as_ref(), retryreq);
+        tls13::choose_kx_groups(
+            &conn.config,
+            &mut exts,
+            &mut hello,
+            dns_name.as_ref(),
+            retryreq,
+        );
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
@@ -372,7 +378,7 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, conn);
+        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, &mut conn.common);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -578,7 +584,7 @@ impl State for ExpectServerHello {
                     .illegal_param("server chose unusable ciphersuite for version"));
             }
 
-            tls13::validate_server_hello(conn, &server_hello)?;
+            tls13::validate_server_hello(&mut conn.common, &server_hello)?;
             let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
                 suite,
                 conn,
@@ -590,7 +596,7 @@ impl State for ExpectServerHello {
                 &mut self.hello,
                 &self.randoms,
             )?;
-            tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, conn);
+            tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, &mut conn.common);
 
             return Ok(Box::new(tls13::ExpectEncryptedExtensions {
                 resuming_session: self.resuming_session,
@@ -899,19 +905,16 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub fn send_cert_error_alert(conn: &mut ClientConnection, err: Error) -> Error {
+pub fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
     match err {
         Error::WebPkiError(webpki::Error::BadDer, _) => {
-            conn.common
-                .send_fatal_alert(AlertDescription::DecodeError);
+            common.send_fatal_alert(AlertDescription::DecodeError);
         }
         Error::PeerMisbehavedError(_) => {
-            conn.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
+            common.send_fatal_alert(AlertDescription::IllegalParameter);
         }
         _ => {
-            conn.common
-                .send_fatal_alert(AlertDescription::BadCertificate);
+            common.send_fatal_alert(AlertDescription::BadCertificate);
         }
     };
 

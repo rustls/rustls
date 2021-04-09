@@ -541,7 +541,7 @@ impl ClientConnection {
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
         if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(self);
+            st.perhaps_write_key_update(&mut self.common);
         }
         self.state = st;
 
