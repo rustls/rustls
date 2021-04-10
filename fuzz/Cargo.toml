@@ -9,7 +9,7 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
-webpki = "0.21.4"
+webpki = "0.22"
 
 [dependencies.rustls]
 path = "../rustls"
