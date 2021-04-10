@@ -120,12 +120,11 @@ impl u24 {
     }
 }
 
-#[allow(clippy::from_over_into)]
 #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
-impl Into<usize> for u24 {
+impl From<u24> for usize {
     #[inline]
-    fn into(self) -> usize {
-        self.0 as usize
+    fn from(v: u24) -> usize {
+        v.0 as usize
     }
 }
 
