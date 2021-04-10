@@ -103,39 +103,45 @@ pub fn new_tls12(
     scs: &'static SupportedCipherSuite,
     secrets: &ConnectionSecrets,
 ) -> MessageCipherPair {
+    fn split_key<'a>(
+        key_block: &'a [u8],
+        alg: &'static aead::Algorithm,
+    ) -> (aead::LessSafeKey, &'a [u8]) {
+        // Might panic if the key block is too small.
+        let (key, rest) = key_block.split_at(alg.key_len());
+        // Won't panic because its only prerequisite is that `key` is `alg.key_len()` bytes long.
+        let key = aead::UnboundKey::new(alg, key).unwrap();
+        (aead::LessSafeKey::new(key), rest)
+    }
+
     // Make a key block, and chop it up.
     // nb. we don't implement any ciphersuites with nonzero mac_key_len.
-    let key_block = secrets.make_key_block(scs.key_block_len());
+    let key_block = secrets.make_key_block(scs);
 
-    let mut offs = 0;
-    let client_write_key = &key_block[offs..offs + scs.enc_key_len];
-    offs += scs.enc_key_len;
-    let server_write_key = &key_block[offs..offs + scs.enc_key_len];
-    offs += scs.enc_key_len;
-    let client_write_iv = &key_block[offs..offs + scs.fixed_iv_len];
-    offs += scs.fixed_iv_len;
-    let server_write_iv = &key_block[offs..offs + scs.fixed_iv_len];
-    offs += scs.fixed_iv_len;
+    let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
+    let (server_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
+    let (client_write_iv, key_block) = key_block.split_at(scs.fixed_iv_len);
+    let (server_write_iv, extra) = key_block.split_at(scs.fixed_iv_len);
 
-    let (write_key, write_iv) = if secrets.randoms.we_are_client {
-        (client_write_key, client_write_iv)
+    let (write_key, write_iv, read_key, read_iv) = if secrets.randoms.we_are_client {
+        (
+            client_write_key,
+            client_write_iv,
+            server_write_key,
+            server_write_iv,
+        )
     } else {
-        (server_write_key, server_write_iv)
+        (
+            server_write_key,
+            server_write_iv,
+            client_write_key,
+            client_write_iv,
+        )
     };
-    let write_key =
-        aead::LessSafeKey::new(aead::UnboundKey::new(scs.aead_algorithm, write_key).unwrap());
-
-    let (read_key, read_iv) = if secrets.randoms.we_are_client {
-        (server_write_key, server_write_iv)
-    } else {
-        (client_write_key, client_write_iv)
-    };
-    let read_key =
-        aead::LessSafeKey::new(aead::UnboundKey::new(scs.aead_algorithm, read_key).unwrap());
 
     (
         scs.build_tls12_decrypter.unwrap()(read_key, read_iv),
-        scs.build_tls12_encrypter.unwrap()(write_key, write_iv, &key_block[offs..]),
+        scs.build_tls12_encrypter.unwrap()(write_key, write_iv, extra),
     )
 }
 
