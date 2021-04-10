@@ -166,7 +166,7 @@ mod client_hello {
                 .resolve_sig_schemes(&sigschemes_ext);
 
             if sigschemes.is_empty() {
-                return Err(hs::incompatible(conn, "no supported sig scheme"));
+                return Err(hs::incompatible(conn, "no overlapping sigschemes"));
             }
 
             let group = conn
