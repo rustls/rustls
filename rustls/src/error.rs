@@ -196,7 +196,7 @@ mod tests {
                 webpki::Error::ExtensionValueInvalid,
                 WebPkiOp::ParseEndEntity,
             ),
-            Error::InvalidSct(sct::Error::MalformedSCT),
+            Error::InvalidSct(sct::Error::MalformedSct),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,

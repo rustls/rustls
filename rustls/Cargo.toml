@@ -13,8 +13,8 @@ autobenches = false
 
 [dependencies]
 log = { version = "0.4.4", optional = true }
-ring = "0.16.19"
-sct = "0.6.0"
+ring = "0.16.20"
+sct = "0.7.0"
 webpki = "0.21.4"
 
 [features]

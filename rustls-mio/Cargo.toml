@@ -17,11 +17,11 @@ quic = ["rustls/quic"]
 log = { version = "0.4.4", optional = true }
 rustls = { path = "../rustls" }
 rustls-pemfile = "0.2.0"
-sct = "0.6"
+sct = "0.7"
 webpki = "0.21.4"
 
 [dev-dependencies]
-ct-logs = "0.8"
+ct-logs = "0.9"
 docopt = "~1.1"
 env_logger = "0.8.2"
 mio = { version = "0.7", features = ["os-poll", "tcp"] }
