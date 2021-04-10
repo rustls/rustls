@@ -18,7 +18,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::io::BufReader;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net;
 use std::ops::{Deref, DerefMut};
 use std::process;
@@ -596,10 +596,11 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 .expect("0rtt not available")
                 .write(b"hello")
                 .expect("0rtt write failed");
-            sess.write_all(&b"hello"[len..])
+            sess.writer()
+                .write_all(&b"hello"[len..])
                 .unwrap();
         } else {
-            let _ = sess.write_all(b"hello");
+            let _ = sess.writer().write_all(b"hello");
         }
     }
 
@@ -658,7 +659,9 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 },
             )
             .unwrap();
-            sess.write_all(&export).unwrap();
+            sess.writer()
+                .write_all(&export)
+                .unwrap();
             sent_exporter = true;
         }
 
@@ -688,7 +691,10 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
         }
 
         let mut buf = [0u8; 1024];
-        let len = match sess.read(&mut buf[..opts.read_size]) {
+        let len = match sess
+            .reader()
+            .read(&mut buf[..opts.read_size])
+        {
             Ok(0) => {
                 if opts.check_close_notify {
                     println!("close notify ok");
@@ -710,7 +716,9 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
             *b ^= 0xff;
         }
 
-        sess.write_all(&buf[..len]).unwrap();
+        sess.writer()
+            .write_all(&buf[..len])
+            .unwrap();
     }
 }
 

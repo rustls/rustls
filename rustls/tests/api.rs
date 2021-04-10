@@ -179,13 +179,13 @@ fn buffered_client_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(5, client.write(b"hello").unwrap());
+        assert_eq!(5, client.writer().write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
         transfer(&mut client, &mut server);
         server.process_new_packets().unwrap();
 
-        check_read(&mut server, b"hello");
+        check_read(&mut server.reader(), b"hello");
     }
 }
 
@@ -197,13 +197,13 @@ fn buffered_server_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(5, server.write(b"hello").unwrap());
+        assert_eq!(5, server.writer().write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
         transfer(&mut server, &mut client);
         client.process_new_packets().unwrap();
 
-        check_read(&mut client, b"hello");
+        check_read(&mut client.reader(), b"hello");
     }
 }
 
@@ -215,8 +215,20 @@ fn buffered_both_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(12, server.write(b"from-server!").unwrap());
-        assert_eq!(12, client.write(b"from-client!").unwrap());
+        assert_eq!(
+            12,
+            server
+                .writer()
+                .write(b"from-server!")
+                .unwrap()
+        );
+        assert_eq!(
+            12,
+            client
+                .writer()
+                .write(b"from-client!")
+                .unwrap()
+        );
 
         do_handshake(&mut client, &mut server);
 
@@ -225,8 +237,8 @@ fn buffered_both_data_sent() {
         transfer(&mut client, &mut server);
         server.process_new_packets().unwrap();
 
-        check_read(&mut client, b"from-server!");
-        check_read(&mut server, b"from-client!");
+        check_read(&mut client.reader(), b"from-server!");
+        check_read(&mut server.reader(), b"from-client!");
     }
 }
 
@@ -334,17 +346,29 @@ fn server_close_notify() {
         do_handshake(&mut client, &mut server);
 
         // check that alerts don't overtake appdata
-        assert_eq!(12, server.write(b"from-server!").unwrap());
-        assert_eq!(12, client.write(b"from-client!").unwrap());
+        assert_eq!(
+            12,
+            server
+                .writer()
+                .write(b"from-server!")
+                .unwrap()
+        );
+        assert_eq!(
+            12,
+            client
+                .writer()
+                .write(b"from-client!")
+                .unwrap()
+        );
         server.send_close_notify();
 
         transfer(&mut server, &mut client);
         client.process_new_packets().unwrap();
-        check_read_and_close(&mut client, b"from-server!");
+        check_read_and_close(&mut client.reader(), b"from-server!");
 
         transfer(&mut client, &mut server);
         server.process_new_packets().unwrap();
-        check_read(&mut server, b"from-client!");
+        check_read(&mut server.reader(), b"from-client!");
     }
 }
 
@@ -364,17 +388,29 @@ fn client_close_notify() {
         do_handshake(&mut client, &mut server);
 
         // check that alerts don't overtake appdata
-        assert_eq!(12, server.write(b"from-server!").unwrap());
-        assert_eq!(12, client.write(b"from-client!").unwrap());
+        assert_eq!(
+            12,
+            server
+                .writer()
+                .write(b"from-server!")
+                .unwrap()
+        );
+        assert_eq!(
+            12,
+            client
+                .writer()
+                .write(b"from-client!")
+                .unwrap()
+        );
         client.send_close_notify();
 
         transfer(&mut client, &mut server);
         server.process_new_packets().unwrap();
-        check_read_and_close(&mut server, b"from-client!");
+        check_read_and_close(&mut server.reader(), b"from-client!");
 
         transfer(&mut server, &mut client);
         client.process_new_packets().unwrap();
-        check_read(&mut client, b"from-server!");
+        check_read(&mut client.reader(), b"from-server!");
     }
 }
 
@@ -991,12 +1027,14 @@ fn server_respects_buffer_limit_pre_handshake() {
 
     assert_eq!(
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         12
@@ -1006,7 +1044,7 @@ fn server_respects_buffer_limit_pre_handshake() {
     transfer(&mut server, &mut client);
     client.process_new_packets().unwrap();
 
-    check_read(&mut client, b"01234567890123456789012345678901");
+    check_read(&mut client.reader(), b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -1017,6 +1055,7 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
     assert_eq!(
         server
+            .writer()
             .write_vectored(&[
                 IoSlice::new(b"01234567890123456789"),
                 IoSlice::new(b"01234567890123456789")
@@ -1029,7 +1068,7 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
     transfer(&mut server, &mut client);
     client.process_new_packets().unwrap();
 
-    check_read(&mut client, b"01234567890123456789012345678901");
+    check_read(&mut client.reader(), b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -1042,12 +1081,14 @@ fn server_respects_buffer_limit_post_handshake() {
 
     assert_eq!(
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         6
@@ -1056,7 +1097,7 @@ fn server_respects_buffer_limit_post_handshake() {
     transfer(&mut server, &mut client);
     client.process_new_packets().unwrap();
 
-    check_read(&mut client, b"01234567890123456789012345");
+    check_read(&mut client.reader(), b"01234567890123456789012345");
 }
 
 #[test]
@@ -1067,12 +1108,14 @@ fn client_respects_buffer_limit_pre_handshake() {
 
     assert_eq!(
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         12
@@ -1082,7 +1125,7 @@ fn client_respects_buffer_limit_pre_handshake() {
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
-    check_read(&mut server, b"01234567890123456789012345678901");
+    check_read(&mut server.reader(), b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -1093,6 +1136,7 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
     assert_eq!(
         client
+            .writer()
             .write_vectored(&[
                 IoSlice::new(b"01234567890123456789"),
                 IoSlice::new(b"01234567890123456789")
@@ -1105,7 +1149,7 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
-    check_read(&mut server, b"01234567890123456789012345678901");
+    check_read(&mut server.reader(), b"01234567890123456789012345678901");
 }
 
 #[test]
@@ -1117,12 +1161,14 @@ fn client_respects_buffer_limit_post_handshake() {
 
     assert_eq!(
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         6
@@ -1131,7 +1177,7 @@ fn client_respects_buffer_limit_post_handshake() {
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
-    check_read(&mut server, b"01234567890123456789012345");
+    check_read(&mut server.reader(), b"01234567890123456789012345");
 }
 
 struct OtherSession<'a> {
@@ -1217,14 +1263,14 @@ impl<'a> io::Write for OtherSession<'a> {
 #[test]
 fn server_read_returns_wouldblock_when_no_data() {
     let (_, mut server) = make_pair(KeyType::RSA);
-    assert!(matches!(server.read(&mut [0u8; 1]),
+    assert!(matches!(server.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn client_read_returns_wouldblock_when_no_data() {
     let (mut client, _) = make_pair(KeyType::RSA);
-    assert!(matches!(client.read(&mut [0u8; 1]),
+    assert!(matches!(client.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
@@ -1280,9 +1326,11 @@ fn client_complete_io_for_write() {
         do_handshake(&mut client, &mut server);
 
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap();
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap();
         {
@@ -1292,7 +1340,10 @@ fn client_complete_io_for_write() {
             println!("{:?}", pipe.writevs);
             assert_eq!(pipe.writevs, vec![vec![42, 42]]);
         }
-        check_read(&mut server, b"0123456789012345678901234567890123456789");
+        check_read(
+            &mut server.reader(),
+            b"0123456789012345678901234567890123456789",
+        );
     }
 }
 
@@ -1304,6 +1355,7 @@ fn client_complete_io_for_read() {
         do_handshake(&mut client, &mut server);
 
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap();
         {
@@ -1312,7 +1364,7 @@ fn client_complete_io_for_read() {
             assert!(rdlen > 0 && wrlen == 0);
             assert_eq!(pipe.reads, 1);
         }
-        check_read(&mut client, b"01234567890123456789");
+        check_read(&mut client.reader(), b"01234567890123456789");
     }
 }
 
@@ -1350,9 +1402,11 @@ fn server_complete_io_for_write() {
         do_handshake(&mut client, &mut server);
 
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap();
         server
+            .writer()
             .write(b"01234567890123456789")
             .unwrap();
         {
@@ -1361,7 +1415,10 @@ fn server_complete_io_for_write() {
             assert!(rdlen == 0 && wrlen > 0);
             assert_eq!(pipe.writevs, vec![vec![42, 42]]);
         }
-        check_read(&mut client, b"0123456789012345678901234567890123456789");
+        check_read(
+            &mut client.reader(),
+            b"0123456789012345678901234567890123456789",
+        );
     }
 }
 
@@ -1373,6 +1430,7 @@ fn server_complete_io_for_read() {
         do_handshake(&mut client, &mut server);
 
         client
+            .writer()
             .write(b"01234567890123456789")
             .unwrap();
         {
@@ -1381,7 +1439,7 @@ fn server_complete_io_for_read() {
             assert!(rdlen > 0 && wrlen == 0);
             assert_eq!(pipe.reads, 1);
         }
-        check_read(&mut server, b"01234567890123456789");
+        check_read(&mut server.reader(), b"01234567890123456789");
     }
 }
 
@@ -1395,7 +1453,7 @@ fn client_stream_write() {
             let mut stream = Stream::new(&mut client, &mut pipe);
             assert_eq!(stream.write(b"hello").unwrap(), 5);
         }
-        check_read(&mut server, b"hello");
+        check_read(&mut server.reader(), b"hello");
     }
 }
 
@@ -1409,7 +1467,7 @@ fn client_streamowned_write() {
             let mut stream = StreamOwned::new(client, pipe);
             assert_eq!(stream.write(b"hello").unwrap(), 5);
         }
-        check_read(&mut server, b"hello");
+        check_read(&mut server.reader(), b"hello");
     }
 }
 
@@ -1418,7 +1476,7 @@ fn client_stream_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, mut server) = make_pair(*kt);
 
-        server.write(b"world").unwrap();
+        server.writer().write(b"world").unwrap();
 
         {
             let mut pipe = OtherSession::new(&mut server);
@@ -1433,7 +1491,7 @@ fn client_streamowned_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (client, mut server) = make_pair(*kt);
 
-        server.write(b"world").unwrap();
+        server.writer().write(b"world").unwrap();
 
         {
             let pipe = OtherSession::new(&mut server);
@@ -1453,7 +1511,7 @@ fn server_stream_write() {
             let mut stream = Stream::new(&mut server, &mut pipe);
             assert_eq!(stream.write(b"hello").unwrap(), 5);
         }
-        check_read(&mut client, b"hello");
+        check_read(&mut client.reader(), b"hello");
     }
 }
 
@@ -1467,7 +1525,7 @@ fn server_streamowned_write() {
             let mut stream = StreamOwned::new(server, pipe);
             assert_eq!(stream.write(b"hello").unwrap(), 5);
         }
-        check_read(&mut client, b"hello");
+        check_read(&mut client.reader(), b"hello");
     }
 }
 
@@ -1476,7 +1534,7 @@ fn server_stream_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, mut server) = make_pair(*kt);
 
-        client.write(b"world").unwrap();
+        client.writer().write(b"world").unwrap();
 
         {
             let mut pipe = OtherSession::new(&mut client);
@@ -1491,7 +1549,7 @@ fn server_streamowned_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, server) = make_pair(*kt);
 
-        client.write(b"world").unwrap();
+        client.writer().write(b"world").unwrap();
 
         {
             let pipe = OtherSession::new(&mut client);
@@ -1536,7 +1594,7 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
         errkind: io::ErrorKind::ConnectionAborted,
         after: 0,
     };
-    client.write(b"hello").unwrap();
+    client.writer().write(b"hello").unwrap();
     let mut client_stream = Stream::new(&mut client, &mut pipe);
     let rc = client_stream.write(b"world");
     assert!(rc.is_err());
@@ -1553,7 +1611,7 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
         errkind: io::ErrorKind::ConnectionAborted,
         after: 1,
     };
-    client.write(b"hello").unwrap();
+    client.writer().write(b"hello").unwrap();
     let mut client_stream = Stream::new(&mut client, &mut pipe);
     let rc = client_stream.write(b"world");
     assert_eq!(format!("{:?}", rc), "Ok(5)");
@@ -1623,7 +1681,7 @@ fn server_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    client.write(b"world").unwrap();
+    client.writer().write(b"world").unwrap();
 
     {
         let mut pipe = OtherSession::new_fails(&mut client);
@@ -1643,7 +1701,7 @@ fn server_streamowned_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
     let (mut client, server) = make_pair_for_configs(client_config, server_config);
 
-    client.write(b"world").unwrap();
+    client.writer().write(b"world").unwrap();
 
     let pipe = OtherSession::new_fails(&mut client);
     let mut server_stream = StreamOwned::new(server, pipe);
@@ -2203,9 +2261,11 @@ fn vectored_write_for_server_appdata() {
     do_handshake(&mut client, &mut server);
 
     server
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
     server
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
     {
@@ -2214,7 +2274,10 @@ fn vectored_write_for_server_appdata() {
         assert_eq!(84, wrlen);
         assert_eq!(pipe.writevs, vec![vec![42, 42]]);
     }
-    check_read(&mut client, b"0123456789012345678901234567890123456789");
+    check_read(
+        &mut client.reader(),
+        b"0123456789012345678901234567890123456789",
+    );
 }
 
 #[test]
@@ -2223,9 +2286,11 @@ fn vectored_write_for_client_appdata() {
     do_handshake(&mut client, &mut server);
 
     client
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
     client
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
     {
@@ -2234,7 +2299,10 @@ fn vectored_write_for_client_appdata() {
         assert_eq!(84, wrlen);
         assert_eq!(pipe.writevs, vec![vec![42, 42]]);
     }
-    check_read(&mut server, b"0123456789012345678901234567890123456789");
+    check_read(
+        &mut server.reader(),
+        b"0123456789012345678901234567890123456789",
+    );
 }
 
 #[test]
@@ -2242,9 +2310,13 @@ fn vectored_write_for_server_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
     server
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
-    server.write(b"0123456789").unwrap();
+    server
+        .writer()
+        .write(b"0123456789")
+        .unwrap();
 
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
@@ -2269,7 +2341,7 @@ fn vectored_write_for_server_handshake() {
 
     assert_eq!(server.is_handshaking(), false);
     assert_eq!(client.is_handshaking(), false);
-    check_read(&mut client, b"012345678901234567890123456789");
+    check_read(&mut client.reader(), b"012345678901234567890123456789");
 }
 
 #[test]
@@ -2277,9 +2349,13 @@ fn vectored_write_for_client_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
     client
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
-    client.write(b"0123456789").unwrap();
+    client
+        .writer()
+        .write(b"0123456789")
+        .unwrap();
     {
         let mut pipe = OtherSession::new(&mut server);
         let wrlen = client.write_tls(&mut pipe).unwrap();
@@ -2302,7 +2378,7 @@ fn vectored_write_for_client_handshake() {
 
     assert_eq!(server.is_handshaking(), false);
     assert_eq!(client.is_handshaking(), false);
-    check_read(&mut server, b"012345678901234567890123456789");
+    check_read(&mut server.reader(), b"012345678901234567890123456789");
 }
 
 #[test]
@@ -2313,6 +2389,7 @@ fn vectored_write_with_slow_client() {
 
     do_handshake(&mut client, &mut server);
     server
+        .writer()
         .write(b"01234567890123456789")
         .unwrap();
 
@@ -2331,7 +2408,7 @@ fn vectored_write_with_slow_client() {
             vec![vec![21], vec![10], vec![5], vec![3], vec![3]]
         );
     }
-    check_read(&mut client, b"01234567890123456789");
+    check_read(&mut client.reader(), b"01234567890123456789");
 }
 
 struct ServerStorage {
@@ -2965,7 +3042,7 @@ fn exercise_key_log_file_for_client() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(5, client.write(b"hello").unwrap());
+        assert_eq!(5, client.writer().write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
         transfer(&mut client, &mut server);
@@ -2986,7 +3063,7 @@ fn exercise_key_log_file_for_server() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(5, client.write(b"hello").unwrap());
+        assert_eq!(5, client.writer().write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
         transfer(&mut client, &mut server);

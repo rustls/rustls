@@ -70,7 +70,10 @@ impl TlsClient {
     fn read_source_to_end(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
-        self.tls_conn.write_all(&buf).unwrap();
+        self.tls_conn
+            .writer()
+            .write_all(&buf)
+            .unwrap();
         Ok(len)
     }
 
@@ -119,6 +122,7 @@ impl TlsClient {
             let mut plaintext = Vec::new();
             plaintext.resize(io_state.plaintext_bytes_to_read(), 0u8);
             self.tls_conn
+                .reader()
                 .read(&mut plaintext)
                 .unwrap();
             io::stdout()
@@ -178,17 +182,17 @@ impl TlsClient {
 }
 impl io::Write for TlsClient {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.tls_conn.write(bytes)
+        self.tls_conn.writer().write(bytes)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.tls_conn.flush()
+        self.tls_conn.writer().flush()
     }
 }
 
 impl io::Read for TlsClient {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.tls_conn.read(bytes)
+        self.tls_conn.reader().read(bytes)
     }
 }
 

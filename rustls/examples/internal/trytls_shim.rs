@@ -54,7 +54,9 @@ fn communicate(
     let mut client = ClientConnection::new(&rc_config, dns_name).unwrap();
     let mut stream = TcpStream::connect((&*host, port))?;
 
-    client.write_all(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")?;
+    client
+        .writer()
+        .write_all(b"GET / HTTP/1.0\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")?;
     loop {
         while client.wants_write() {
             client.write_tls(&mut stream)?;
@@ -72,7 +74,7 @@ fn communicate(
                 };
             }
 
-            if client.read(&mut [0])? > 0 {
+            if client.reader().read(&mut [0])? > 0 {
                 return Ok(Verdict::Accept);
             }
         }

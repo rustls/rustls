@@ -21,7 +21,7 @@ use ring::digest::Digest;
 
 use std::collections::VecDeque;
 use std::io;
-use std::io::{Read, Write};
+//use std::io::{Read, Write};
 
 /// Values of this structure are returned from `Session::process_new_packets`
 /// and tell the caller the current I/O state of the TLS connection.
@@ -58,8 +58,83 @@ impl IoState {
     }
 }
 
+/// A structure that implements `std::io::Read` for reading plaintext.
+pub struct Reader<'a> {
+    common: &'a mut ConnectionCommon,
+}
+
+impl<'a> io::Read for Reader<'a> {
+    /// Obtain plaintext data received from the peer over this TLS connection.
+    ///
+    /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
+    /// the pending data has been read. No further data can be received on that
+    /// connection, so the underlying TCP connection should half-closed too.
+    ///
+    /// Note that support `close_notify` varies in peer TLS libraries: many do not
+    /// support it and uncleanly close the TCP connection (this might be
+    /// vulnerable to truncation attacks depending on the application protocol).
+    /// This means applications using rustls must both handle EOF
+    /// from this function, *and* unexpected EOF of the underlying TCP connection.
+    ///
+    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
+    ///
+    /// You may learn the number of bytes available at any time by inspecting
+    /// the return of `process_new_packets()`.
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.common.read(buf)
+    }
+}
+
+/// Internal trait implemented by the `ServerConnection`/`ClientConnection` allowing
+/// them to be the subject of a `Writer`.
+pub trait PlaintextSink {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
+    fn flush(&mut self) -> io::Result<()>;
+}
+
+/// A structure that implements `std::io::Write` for writing plaintext.
+pub struct Writer<'a> {
+    sink: &'a mut dyn PlaintextSink,
+}
+
+impl<'a> Writer<'a> {
+    /// Create a new Writer.
+    ///
+    /// This is not an external interface.  Get one of these objects
+    /// from `Connection::writer()`.
+    #[doc(hidden)]
+    pub fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
+        Writer { sink }
+    }
+}
+
+impl<'a> io::Write for Writer<'a> {
+    /// Send the plaintext `buf` to the peer, encrypting
+    /// and authenticating it.  Once this function succeeds
+    /// you should call `write_tls` which will output the
+    /// corresponding TLS records.
+    ///
+    /// This function buffers plaintext sent before the
+    /// TLS handshake completes, and sends it as soon
+    /// as it can.  This buffer is of *unlimited size* so
+    /// writing much data before it can be sent will
+    /// cause excess memory usage.
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.sink.write(buf)
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.sink.write_vectored(bufs)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.sink.flush()
+    }
+}
+
 /// Generalises `ClientConnection` and `ServerConnection`
-pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
+pub trait Connection: quic::QuicExt + Send + Sync {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
@@ -73,7 +148,7 @@ pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
     /// This function returns `Ok(0)` when the underlying `rd` does
     /// so.  This typically happens when a socket is cleanly closed,
     /// or a file is at EOF.
-    fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error>;
+    fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error>;
 
     /// Writes TLS messages to `wr`.
     ///
@@ -86,7 +161,13 @@ pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
     /// to check if output buffer is not empty.
     ///
     /// [`wants_write`]: #tymethod.wants_write
-    fn write_tls(&mut self, wr: &mut dyn Write) -> Result<usize, io::Error>;
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error>;
+
+    /// Returns an object that allows reading plaintext.
+    fn reader(&mut self) -> Reader;
+
+    /// Returns an object that allows writing plaintext.
+    fn writer(&mut self) -> Writer;
 
     /// Processes any new packets read by a previous call to `read_tls`.
     ///
@@ -207,7 +288,7 @@ pub trait Connection: quic::QuicExt + Read + Write + Send + Sync {
     fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
     where
         Self: Sized,
-        T: Read + Write,
+        T: io::Read + io::Write,
     {
         let until_handshaked = self.is_handshaking();
         let mut eof = false;
@@ -517,6 +598,10 @@ impl ConnectionCommon {
         }
     }
 
+    pub fn reader(&mut self) -> Reader {
+        Reader { common: self }
+    }
+
     pub(crate) fn current_io_state(&self) -> IoState {
         IoState {
             tls_bytes_to_write: self.sendable_tls.len(),
@@ -728,11 +813,11 @@ impl ConnectionCommon {
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
-    pub fn read_tls(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
+    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         self.message_deframer.read(rd)
     }
 
-    pub fn write_tls(&mut self, wr: &mut dyn Write) -> io::Result<usize> {
+    pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
     }
 
