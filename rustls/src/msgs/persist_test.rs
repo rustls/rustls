@@ -4,11 +4,11 @@ use super::handshake::*;
 use super::persist::*;
 use crate::key::Certificate;
 use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
-use webpki::DNSNameRef;
+use webpki::DnsNameRef;
 
 #[test]
 fn clientsessionkey_is_debug() {
-    let name = DNSNameRef::try_from_ascii_str("hello").unwrap();
+    let name = DnsNameRef::try_from_ascii_str("hello").unwrap();
     let csk = ClientSessionKey::session_for_dns_name(name);
     println!("{:?}", csk);
 }

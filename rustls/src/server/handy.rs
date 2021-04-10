@@ -152,7 +152,7 @@ impl ResolvesServerCertUsingSni {
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
-        let checked_name = webpki::DNSNameRef::try_from_ascii_str(name)
+        let checked_name = webpki::DnsNameRef::try_from_ascii_str(name)
             .map_err(|_| Error::General("Bad DNS name".into()))?;
 
         ck.cross_check_end_entity_cert(Some(checked_name))?;
@@ -273,7 +273,7 @@ mod test {
     #[test]
     fn test_resolvesservercertusingsni_handles_unknown_name() {
         let rscsni = ResolvesServerCertUsingSni::new();
-        let name = webpki::DNSNameRef::try_from_ascii_str("hello.com").unwrap();
+        let name = webpki::DnsNameRef::try_from_ascii_str("hello.com").unwrap();
         assert!(
             rscsni
                 .resolve(ClientHello::new(Some(name), &[], None))

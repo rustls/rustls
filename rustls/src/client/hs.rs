@@ -71,7 +71,7 @@ pub fn check_aligned_handshake(conn: &mut ClientConnection) -> Result<(), Error>
 
 fn find_session(
     conn: &mut ClientConnection,
-    dns_name: webpki::DNSNameRef,
+    dns_name: webpki::DnsNameRef,
 ) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
@@ -108,13 +108,13 @@ fn find_session(
 
 struct InitialState {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     transcript: HandshakeHash,
     extra_exts: Vec<ClientExtension>,
 }
 
 impl InitialState {
-    fn new(dns_name: webpki::DNSName, extra_exts: Vec<ClientExtension>) -> InitialState {
+    fn new(dns_name: webpki::DnsName, extra_exts: Vec<ClientExtension>) -> InitialState {
         InitialState {
             resuming_session: None,
             dns_name,
@@ -186,7 +186,7 @@ impl InitialState {
 
 pub fn start_handshake(
     conn: &mut ClientConnection,
-    host_name: webpki::DNSName,
+    host_name: webpki::DnsName,
     extra_exts: Vec<ClientExtension>,
 ) -> NextStateOrError {
     InitialState::new(host_name, extra_exts).emit_initial_client_hello(conn)
@@ -194,7 +194,7 @@ pub fn start_handshake(
 
 struct ExpectServerHello {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -220,7 +220,7 @@ fn emit_client_hello_for_retry(
     mut hello: ClientHelloDetails,
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<&'static SupportedCipherSuite>,
@@ -891,7 +891,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
 
 pub fn send_cert_error_alert(conn: &mut ClientConnection, err: Error) -> Error {
     match err {
-        Error::WebPkiError(webpki::Error::BadDER, _) => {
+        Error::WebPkiError(webpki::Error::BadDer, _) => {
             conn.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }

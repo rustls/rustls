@@ -32,7 +32,7 @@ impl Codec for ClientSessionKey {
 }
 
 impl ClientSessionKey {
-    pub fn session_for_dns_name(dns_name: webpki::DNSNameRef) -> ClientSessionKey {
+    pub fn session_for_dns_name(dns_name: webpki::DnsNameRef) -> ClientSessionKey {
         let dns_name_str: &str = dns_name.into();
         ClientSessionKey {
             kind: b"session",
@@ -40,7 +40,7 @@ impl ClientSessionKey {
         }
     }
 
-    pub fn hint_for_dns_name(dns_name: webpki::DNSNameRef) -> ClientSessionKey {
+    pub fn hint_for_dns_name(dns_name: webpki::DnsNameRef) -> ClientSessionKey {
         let dns_name_str: &str = dns_name.into();
         ClientSessionKey {
             kind: b"kx-hint",
@@ -209,7 +209,7 @@ pub type ServerSessionKey = SessionID;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
-    pub sni: Option<webpki::DNSName>,
+    pub sni: Option<webpki::DnsName>,
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
@@ -251,7 +251,7 @@ impl Codec for ServerSessionValue {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
-            let dns_name = webpki::DNSNameRef::try_from_ascii(&dns_name.0).ok()?;
+            let dns_name = webpki::DnsNameRef::try_from_ascii(&dns_name.0).ok()?;
             Some(dns_name.into())
         } else {
             None
@@ -289,7 +289,7 @@ impl Codec for ServerSessionValue {
 
 impl ServerSessionValue {
     pub fn new(
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: Vec<u8>,

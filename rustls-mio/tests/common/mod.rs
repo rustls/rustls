@@ -809,7 +809,7 @@ pub struct OpenSSLClient {
 impl OpenSSLClient {
     pub fn new(port: u16) -> OpenSSLClient {
         OpenSSLClient {
-            port: port,
+            port,
             cafile: PathBuf::new(),
             extra_args: Vec::new(),
             expect_fails: false,

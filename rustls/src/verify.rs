@@ -12,6 +12,7 @@ use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::DigitallySignedStruct;
 
 use ring::digest::Digest;
+use std::convert::TryFrom;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
@@ -90,7 +91,7 @@ pub trait ServerCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        dns_name: webpki::DNSNameRef,
+        dns_name: webpki::DnsNameRef,
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
@@ -180,7 +181,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
         Some(self.offer_client_auth())
     }
 
@@ -193,7 +194,7 @@ pub trait ClientCertVerifier: Send + Sync {
     /// been validated as a proper DNS name but is otherwise untrusted.
     fn client_auth_root_subjects(
         &self,
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
     ) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
@@ -209,7 +210,7 @@ pub trait ClientCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error>;
 
@@ -284,7 +285,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        dns_name: webpki::DNSNameRef,
+        dns_name: webpki::DnsNameRef,
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
@@ -295,7 +296,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         let cert = cert
             .verify_is_valid_tls_server_cert(
                 SUPPORTED_SIG_ALGS,
-                &webpki::TLSServerTrustAnchors(&trustroots),
+                &webpki::TlsServerTrustAnchors(&trustroots),
                 &chain,
                 webpki_now,
             )
@@ -361,7 +362,7 @@ fn prepare<'a, 'b>(
     roots: &'b RootCertStore,
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::from(&end_entity.0)
+    let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref())
         .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
     let intermediates: Vec<&'a [u8]> = intermediates
@@ -398,13 +399,13 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
         Some(true)
     }
 
     fn client_auth_root_subjects(
         &self,
-        _sni: Option<&webpki::DNSName>,
+        _sni: Option<&webpki::DnsName>,
     ) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
@@ -413,14 +414,14 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        _sni: Option<&webpki::DNSName>,
+        _sni: Option<&webpki::DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
-            &webpki::TLSClientTrustAnchors(&trustroots),
+            &webpki::TlsClientTrustAnchors(&trustroots),
             &chain,
             now,
         )
@@ -455,13 +456,13 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         self.inner.offer_client_auth()
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
         Some(false)
     }
 
     fn client_auth_root_subjects(
         &self,
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
     ) -> Option<DistinguishedNames> {
         self.inner
             .client_auth_root_subjects(sni)
@@ -471,7 +472,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         self.inner
@@ -496,7 +497,7 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn client_auth_root_subjects(
         &self,
-        _sni: Option<&webpki::DNSName>,
+        _sni: Option<&webpki::DnsName>,
     ) -> Option<DistinguishedNames> {
         unimplemented!();
     }
@@ -505,7 +506,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        _sni: Option<&webpki::DNSName>,
+        _sni: Option<&webpki::DnsName>,
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
@@ -574,7 +575,7 @@ fn verify_signed_struct(
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::from(&cert.0)
+    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
         .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
@@ -630,7 +631,7 @@ fn verify_tls13(
     let alg = convert_alg_tls13(dss.scheme)?;
 
 
-    let cert = webpki::EndEntityCert::from(&cert.0)
+    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
         .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, &msg, &dss.sig.0)

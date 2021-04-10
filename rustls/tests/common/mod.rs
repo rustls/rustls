@@ -340,7 +340,7 @@ pub struct MockClientVerifier {
 
 #[cfg(feature = "dangerous_configuration")]
 impl ClientCertVerifier for MockClientVerifier {
-    fn client_auth_mandatory(&self, sni: Option<&webpki::DNSName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, sni: Option<&webpki::DnsName>) -> Option<bool> {
         // This is just an added 'test' to make sure we plumb through the SNI,
         // although its valid for it to be None, its just our tests should (as of now) always provide it
         assert!(sni.is_some());
@@ -349,7 +349,7 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn client_auth_root_subjects(
         &self,
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
     ) -> Option<DistinguishedNames> {
         assert!(sni.is_some());
         self.subjects.as_ref().cloned()
@@ -359,7 +359,7 @@ impl ClientCertVerifier for MockClientVerifier {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        sni: Option<&webpki::DNSName>,
+        sni: Option<&webpki::DnsName>,
         _now: std::time::SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         assert!(sni.is_some());
@@ -430,8 +430,8 @@ pub fn do_handshake_until_both_error(
     }
 }
 
-pub fn dns_name(name: &'static str) -> webpki::DNSNameRef<'_> {
-    webpki::DNSNameRef::try_from_ascii_str(name).unwrap()
+pub fn dns_name(name: &'static str) -> webpki::DnsNameRef<'_> {
+    webpki::DnsNameRef::try_from_ascii_str(name).unwrap()
 }
 
 pub struct FailsReads {

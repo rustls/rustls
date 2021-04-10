@@ -4,6 +4,7 @@ use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
+use std::convert::TryFrom;
 use std::mem;
 use std::sync::Arc;
 
@@ -82,7 +83,7 @@ impl CertifiedKey {
     /// *server* attempting to detect accidental misconfiguration.
     pub fn cross_check_end_entity_cert(
         &self,
-        name: Option<webpki::DNSNameRef>,
+        name: Option<webpki::DnsNameRef>,
     ) -> Result<(), Error> {
         // Always reject an empty certificate chain.
         let end_entity_cert = self
@@ -93,7 +94,7 @@ impl CertifiedKey {
 
         // Reject syntactically-invalid end-entity certificates.
         let end_entity_cert =
-            webpki::EndEntityCert::from(end_entity_cert.as_ref()).map_err(|_| {
+            webpki::EndEntityCert::try_from(end_entity_cert.as_ref()).map_err(|_| {
                 Error::General(
                     "End-entity certificate in certificate \
                                   chain is syntactically invalid"

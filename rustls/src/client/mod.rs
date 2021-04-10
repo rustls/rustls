@@ -422,7 +422,7 @@ impl ClientConnection {
     /// hostname of who we want to talk to.
     pub fn new(
         config: &Arc<ClientConfig>,
-        hostname: webpki::DNSNameRef,
+        hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
         let mut new = Self::from_config(config);
         new.start_handshake(hostname.into(), vec![])?;
@@ -477,7 +477,7 @@ impl ClientConnection {
 
     fn start_handshake(
         &mut self,
-        dns_name: webpki::DNSName,
+        dns_name: webpki::DnsName,
         extra_exts: Vec<ClientExtension>,
     ) -> Result<(), Error> {
         self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
@@ -777,7 +777,7 @@ pub trait ClientQuicExt {
     fn new_quic(
         config: &Arc<ClientConfig>,
         quic_version: quic::Version,
-        hostname: webpki::DNSNameRef,
+        hostname: webpki::DnsNameRef,
         params: Vec<u8>,
     ) -> Result<ClientConnection, Error> {
         assert!(
