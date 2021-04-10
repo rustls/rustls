@@ -98,7 +98,7 @@ fn drain(d: &mut dyn Connection, expect_len: usize) {
     let mut left = expect_len;
     let mut buf = [0u8; 8192];
     loop {
-        let sz = d.read(&mut buf).unwrap();
+        let sz = d.reader().read(&mut buf).unwrap();
         left -= sz;
         if left == 0 {
             break;
@@ -460,7 +460,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) 
 
     for _ in 0..rounds {
         time_send += time(|| {
-            server.write_all(&buf).unwrap();
+            server.writer().write_all(&buf).unwrap();
             ()
         });
 
@@ -525,7 +525,10 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     }
 
     for client in clients.iter_mut() {
-        client.write_all(&[0u8; 1024]).unwrap();
+        client
+            .writer()
+            .write_all(&[0u8; 1024])
+            .unwrap();
     }
 
     for (client, server) in clients
@@ -534,7 +537,7 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     {
         transfer(client, server);
         let mut buf = [0u8; 1024];
-        server.read(&mut buf).unwrap();
+        server.reader().read(&mut buf).unwrap();
     }
 }
 

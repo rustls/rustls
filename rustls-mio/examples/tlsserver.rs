@@ -248,7 +248,10 @@ impl OpenConnection {
                 let mut buf = Vec::new();
                 buf.resize(io_state.plaintext_bytes_to_read(), 0u8);
 
-                self.tls_conn.read(&mut buf).unwrap();
+                self.tls_conn
+                    .reader()
+                    .read(&mut buf)
+                    .unwrap();
 
                 debug!("plaintext read {:?}", buf.len());
                 self.incoming_plaintext(&buf);
@@ -283,6 +286,7 @@ impl OpenConnection {
             }
             Some(len) => {
                 self.tls_conn
+                    .writer()
                     .write_all(&buf[..len])
                     .unwrap();
             }
@@ -294,7 +298,10 @@ impl OpenConnection {
     fn incoming_plaintext(&mut self, buf: &[u8]) {
         match self.mode {
             ServerMode::Echo => {
-                self.tls_conn.write_all(buf).unwrap();
+                self.tls_conn
+                    .writer()
+                    .write_all(buf)
+                    .unwrap();
             }
             ServerMode::Http => {
                 self.send_http_response_once();
@@ -314,6 +321,7 @@ impl OpenConnection {
             b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
             self.tls_conn
+                .writer()
                 .write_all(response)
                 .unwrap();
             self.sent_http_response = true;

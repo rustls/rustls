@@ -76,13 +76,13 @@
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!     read_tls()      +-----------------------+      io::Read
+//!     read_tls()      +-----------------------+      reader() as io::Read
 //!                     |                       |
 //!           +--------->   ClientConnection    +--------->
 //!                     |          or           |
 //!           <---------+   ServerConnection    <---------+
 //!                     |                       |
-//!     write_tls()     +-----------------------+      io::Write
+//!     write_tls()     +-----------------------+      writer() as io::Write
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -145,11 +145,11 @@
 //! return `Err(WebPkiError(CertExpired, ValidateServerCert))`.  From this point on,
 //! `process_new_packets` will not do any new work and will return that error continually.
 //!
-//! You can extract newly received data by calling `client.read()` (via the `io::Read`
-//! trait).  You can send data to the peer by calling `client.write()` (via the `io::Write`
-//! trait).  Note that `client.write()` buffers data you send if the TLS connection is not
-//! yet established: this is useful for writing (say) a HTTP request, but don't write huge
-//! amounts of data.
+//! You can extract newly received data by calling `client.reader()` (which implements the
+//! `io::Read` trait).  You can send data to the peer by calling `client.writer()` (which
+//! implements `io::Write` trait).  Note that `client.writer().write()` buffers data you
+//! send if the TLS connection is not yet established: this is useful for writing (say) a
+//! HTTP request, but this is buffered so avoid large amounts of data.
 //!
 //! The following code uses a fictional socket IO API for illustration, and does not handle
 //! errors.
@@ -157,7 +157,7 @@
 //! ```text
 //! use std::io;
 //!
-//! client.write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
+//! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
@@ -165,7 +165,7 @@
 //!     client.process_new_packets().unwrap();
 //!
 //!     let mut plaintext = Vec::new();
-//!     client.read_to_end(&mut plaintext).unwrap();
+//!     client.reader().read_to_end(&mut plaintext).unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
 //!   }
 //!
@@ -289,7 +289,7 @@ pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage}
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientConnection, WriteEarlyData};
-pub use crate::conn::Connection;
+pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::error::Error;
 pub use crate::error::WebPkiOp;
 pub use crate::key::{Certificate, PrivateKey};

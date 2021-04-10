@@ -1,4 +1,6 @@
-use crate::conn::{Connection, ConnectionCommon, IoState, MessageType};
+use crate::conn::{
+    Connection, ConnectionCommon, IoState, MessageType, PlaintextSink, Reader, Writer,
+};
 use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -684,41 +686,17 @@ impl Connection for ClientConnection {
             .get_suite()
             .or(self.resumption_ciphersuite)
     }
-}
 
-impl io::Read for ClientConnection {
-    /// Obtain plaintext data received from the peer over this TLS connection.
-    ///
-    /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
-    /// the pending data has been read. No further data can be received on that
-    /// connection, so the underlying TCP connection should half-closed too.
-    ///
-    /// Note that support `close_notify` varies in peer TLS libraries: many do not
-    /// support it and uncleanly close the TCP connection (this might be
-    /// vulnerable to truncation attacks depending on the application protocol).
-    /// This means applications using rustls must both handle EOF
-    /// from this function, *and* unexpected EOF of the underlying TCP connection.
-    ///
-    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
-    ///
-    /// You may learn the number of bytes available at any time by inspecting
-    /// the return of `process_new_packets()`.
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.common.read(buf)
+    fn writer(&mut self) -> Writer {
+        Writer::new(self)
+    }
+
+    fn reader(&mut self) -> Reader {
+        self.common.reader()
     }
 }
 
-impl io::Write for ClientConnection {
-    /// Send the plaintext `buf` to the peer, encrypting
-    /// and authenticating it.  Once this function succeeds
-    /// you should call `write_tls` which will output the
-    /// corresponding TLS records.
-    ///
-    /// This function buffers plaintext sent before the
-    /// TLS handshake completes, and sends it as soon
-    /// as it can.  This buffer is of *unlimited size* so
-    /// writing much data before it can be sent will
-    /// cause excess memory usage.
+impl PlaintextSink for ClientConnection {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         Ok(self.send_some_plaintext(buf))
     }

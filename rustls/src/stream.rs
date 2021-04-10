@@ -66,7 +66,7 @@ where
             }
         }
 
-        self.conn.read(buf)
+        self.conn.reader().read(buf)
     }
 }
 
@@ -78,7 +78,7 @@ where
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self.conn.write(buf)?;
+        let len = self.conn.writer().write(buf)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
@@ -91,7 +91,10 @@ where
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self.conn.write_vectored(bufs)?;
+        let len = self
+            .conn
+            .writer()
+            .write_vectored(bufs)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
@@ -104,7 +107,7 @@ where
     fn flush(&mut self) -> Result<()> {
         self.complete_prior_io()?;
 
-        self.conn.flush()?;
+        self.conn.writer().flush()?;
         if self.conn.wants_write() {
             self.conn.complete_io(self.sock)?;
         }
