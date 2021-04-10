@@ -525,7 +525,7 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        Error::WebPkiError(webpki::Error::BadDER, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
+        Error::WebPkiError(webpki::Error::BadDer, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
         Error::WebPkiError(webpki::Error::InvalidSignatureForPublicKey, ..) => {
             quit(":BAD_SIGNATURE:")
         }
