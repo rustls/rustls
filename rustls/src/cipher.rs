@@ -66,49 +66,35 @@ fn make_tls12_gcm_nonce(write_iv: &[u8], explicit: &[u8]) -> Iv {
     iv
 }
 
-pub type BuildTls12Decrypter = fn(&[u8], &[u8]) -> Box<dyn MessageDecrypter>;
-pub type BuildTls12Encrypter = fn(&[u8], &[u8], &[u8]) -> Box<dyn MessageEncrypter>;
+pub type BuildTls12Decrypter = fn(aead::LessSafeKey, &[u8]) -> Box<dyn MessageDecrypter>;
+pub type BuildTls12Encrypter = fn(aead::LessSafeKey, &[u8], &[u8]) -> Box<dyn MessageEncrypter>;
 
-pub fn build_tls12_gcm_128_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
-    Box::new(GcmMessageDecrypter::new(&aead::AES_128_GCM, key, iv))
+pub fn build_tls12_gcm_decrypter(key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    Box::new(GcmMessageDecrypter::new(key, iv))
 }
 
-pub fn build_tls12_gcm_128_encrypter(
-    key: &[u8],
+pub fn build_tls12_gcm_encrypter(
+    key: aead::LessSafeKey,
     iv: &[u8],
     extra: &[u8],
 ) -> Box<dyn MessageEncrypter> {
     let nonce = make_tls12_gcm_nonce(iv, extra);
-    Box::new(GcmMessageEncrypter::new(&aead::AES_128_GCM, key, nonce))
+    Box::new(GcmMessageEncrypter::new(key, nonce))
 }
 
-pub fn build_tls12_gcm_256_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
-    Box::new(GcmMessageDecrypter::new(&aead::AES_256_GCM, key, iv))
-}
-
-pub fn build_tls12_gcm_256_encrypter(
-    key: &[u8],
+pub fn build_tls12_chacha_decrypter(
+    key: aead::LessSafeKey,
     iv: &[u8],
-    extra: &[u8],
+) -> Box<dyn MessageDecrypter> {
+    Box::new(ChaCha20Poly1305MessageDecrypter::new(key, Iv::copy(iv)))
+}
+
+pub fn build_tls12_chacha_encrypter(
+    key: aead::LessSafeKey,
+    iv: &[u8],
+    _: &[u8],
 ) -> Box<dyn MessageEncrypter> {
-    let nonce = make_tls12_gcm_nonce(iv, extra);
-    Box::new(GcmMessageEncrypter::new(&aead::AES_256_GCM, key, nonce))
-}
-
-pub fn build_tls12_chacha_decrypter(key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
-    Box::new(ChaCha20Poly1305MessageDecrypter::new(
-        &aead::CHACHA20_POLY1305,
-        key,
-        Iv::copy(iv),
-    ))
-}
-
-pub fn build_tls12_chacha_encrypter(key: &[u8], iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
-    Box::new(ChaCha20Poly1305MessageEncrypter::new(
-        &aead::CHACHA20_POLY1305,
-        key,
-        Iv::copy(iv),
-    ))
+    Box::new(ChaCha20Poly1305MessageEncrypter::new(key, Iv::copy(iv)))
 }
 
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
@@ -136,12 +122,16 @@ pub fn new_tls12(
     } else {
         (server_write_key, server_write_iv)
     };
+    let write_key =
+        aead::LessSafeKey::new(aead::UnboundKey::new(scs.aead_algorithm, write_key).unwrap());
 
     let (read_key, read_iv) = if secrets.randoms.we_are_client {
         (server_write_key, server_write_iv)
     } else {
         (client_write_key, client_write_iv)
     };
+    let read_key =
+        aead::LessSafeKey::new(aead::UnboundKey::new(scs.aead_algorithm, read_key).unwrap());
 
     (
         scs.build_tls12_decrypter.unwrap()(read_key, read_iv),
@@ -248,20 +238,15 @@ impl MessageEncrypter for GcmMessageEncrypter {
 }
 
 impl GcmMessageEncrypter {
-    fn new(alg: &'static aead::Algorithm, enc_key: &[u8], iv: Iv) -> GcmMessageEncrypter {
-        let key = aead::UnboundKey::new(alg, enc_key).unwrap();
-        GcmMessageEncrypter {
-            enc_key: aead::LessSafeKey::new(key),
-            iv,
-        }
+    fn new(enc_key: aead::LessSafeKey, iv: Iv) -> GcmMessageEncrypter {
+        GcmMessageEncrypter { enc_key, iv }
     }
 }
 
 impl GcmMessageDecrypter {
-    fn new(alg: &'static aead::Algorithm, dec_key: &[u8], dec_iv: &[u8]) -> GcmMessageDecrypter {
-        let key = aead::UnboundKey::new(alg, dec_key).unwrap();
+    fn new(dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> GcmMessageDecrypter {
         let mut ret = GcmMessageDecrypter {
-            dec_key: aead::LessSafeKey::new(key),
+            dec_key,
             dec_salt: [0u8; 4],
         };
 
@@ -452,28 +437,18 @@ pub struct ChaCha20Poly1305MessageDecrypter {
 }
 
 impl ChaCha20Poly1305MessageEncrypter {
-    fn new(
-        alg: &'static aead::Algorithm,
-        enc_key: &[u8],
-        enc_iv: Iv,
-    ) -> ChaCha20Poly1305MessageEncrypter {
-        let key = aead::UnboundKey::new(alg, enc_key).unwrap();
-        ChaCha20Poly1305MessageEncrypter {
-            enc_key: aead::LessSafeKey::new(key),
+    fn new(enc_key: aead::LessSafeKey, enc_iv: Iv) -> Self {
+        Self {
+            enc_key,
             enc_offset: enc_iv,
         }
     }
 }
 
 impl ChaCha20Poly1305MessageDecrypter {
-    fn new(
-        alg: &'static aead::Algorithm,
-        dec_key: &[u8],
-        dec_iv: Iv,
-    ) -> ChaCha20Poly1305MessageDecrypter {
-        let key = aead::UnboundKey::new(alg, dec_key).unwrap();
+    fn new(dec_key: aead::LessSafeKey, dec_iv: Iv) -> ChaCha20Poly1305MessageDecrypter {
         ChaCha20Poly1305MessageDecrypter {
-            dec_key: aead::LessSafeKey::new(key),
+            dec_key,
             dec_offset: dec_iv,
         }
     }

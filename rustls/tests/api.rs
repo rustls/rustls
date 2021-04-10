@@ -611,7 +611,7 @@ impl ClientCheckCertResolve {
     fn new(expect_queries: usize) -> ClientCheckCertResolve {
         ClientCheckCertResolve {
             query_count: AtomicUsize::new(0),
-            expect_queries: expect_queries,
+            expect_queries,
         }
     }
 }
