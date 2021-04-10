@@ -9,6 +9,7 @@ use std::sync::Mutex;
 
 use rustls;
 
+use rustls::internal::msgs::{codec::Codec, persist::ClientSessionValue};
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::sign;
@@ -2631,6 +2632,7 @@ struct ClientStorage {
     storage: Arc<dyn rustls::StoresClientSessions>,
     put_count: AtomicUsize,
     get_count: AtomicUsize,
+    last_put_key: Mutex<Option<Vec<u8>>>,
 }
 
 impl ClientStorage {
@@ -2639,6 +2641,7 @@ impl ClientStorage {
             storage: rustls::ClientSessionMemoryCache::new(1024),
             put_count: AtomicUsize::new(0),
             get_count: AtomicUsize::new(0),
+            last_put_key: Mutex::new(None),
         }
     }
 
@@ -2664,6 +2667,7 @@ impl rustls::StoresClientSessions for ClientStorage {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         self.put_count
             .fetch_add(1, Ordering::SeqCst);
+        *self.last_put_key.lock().unwrap() = Some(key.clone());
         self.storage.put(key, value)
     }
 
@@ -2785,6 +2789,76 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+}
+
+#[test]
+fn early_data_not_available() {
+    let (mut client, _) = make_pair(KeyType::RSA);
+    assert!(client.early_data().is_none());
+}
+
+#[test]
+fn early_data_is_available_on_resumption() {
+    let kt = KeyType::RSA;
+    let mut client_config = make_client_config(kt);
+    client_config.enable_early_data = true;
+
+    let storage = Arc::new(ClientStorage::new());
+    client_config.session_persistence = storage.clone();
+
+    let client_config = Arc::new(client_config);
+
+    let server_config = Arc::new(make_server_config(kt));
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    /* discover the session data in the storage, and edit it to fool the
+     * client on resumption that the server supports 0rtt. */
+    let session_key = storage
+        .last_put_key
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap();
+
+    let session_value_bytes = storage
+        .storage
+        .get(&session_key)
+        .unwrap();
+    let mut session_value = ClientSessionValue::read_bytes(&session_value_bytes).unwrap();
+    session_value.max_early_data_size = 128;
+
+    storage
+        .storage
+        .put(session_key, session_value.get_encoding());
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    assert!(client.early_data().is_some());
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .bytes_left(),
+        128
+    );
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .flush()
+            .unwrap(),
+        ()
+    );
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(b"hello")
+            .unwrap(),
+        5
+    );
+    let err = do_handshake_until_error(&mut client, &mut server);
+    assert_eq!(err, Err(ErrorFromPeer::Server(Error::DecryptError)));
 }
 
 #[cfg(feature = "quic")]
