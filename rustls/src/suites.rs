@@ -43,9 +43,6 @@ pub struct SupportedCipherSuite {
     /// to the ciphersuite concept there.
     pub sign: Option<&'static [SignatureScheme]>,
 
-    /// Encryption key length, for the bulk algorithm.
-    pub enc_key_len: usize,
-
     /// How long the fixed part of the 'IV' is.
     ///
     /// This isn't usually an IV, but we continue the
@@ -77,7 +74,6 @@ impl fmt::Debug for SupportedCipherSuite {
             .field("bulk", &self.bulk)
             .field("hash", &self.hash)
             .field("sign", &self.sign)
-            .field("enc_key_len", &self.enc_key_len)
             .field("fixed_iv_len", &self.fixed_iv_len)
             .field("explicit_nonce_len", &self.explicit_nonce_len)
             .finish()
@@ -108,12 +104,6 @@ impl SupportedCipherSuite {
         } else {
             vec![]
         }
-    }
-
-    /// Length of key block that needs to be output by the key
-    /// derivation phase for this suite.
-    pub fn key_block_len(&self) -> usize {
-        (self.enc_key_len + self.fixed_iv_len) * 2 + self.explicit_nonce_len
     }
 
     /// Return true if this suite is usable for TLS `version`.
@@ -181,7 +171,6 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         sign: Some(TLS12_ECDSA_SCHEMES),
         bulk: BulkAlgorithm::Chacha20Poly1305,
         hash: HashAlgorithm::SHA256,
-        enc_key_len: 32,
         fixed_iv_len: 12,
         explicit_nonce_len: 0,
         hkdf_algorithm: ring::hkdf::HKDF_SHA256,
@@ -198,7 +187,6 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         sign: Some(TLS12_RSA_SCHEMES),
         bulk: BulkAlgorithm::Chacha20Poly1305,
         hash: HashAlgorithm::SHA256,
-        enc_key_len: 32,
         fixed_iv_len: 12,
         explicit_nonce_len: 0,
         hkdf_algorithm: ring::hkdf::HKDF_SHA256,
@@ -214,7 +202,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     sign: Some(TLS12_RSA_SCHEMES),
     bulk: BulkAlgorithm::Aes128Gcm,
     hash: HashAlgorithm::SHA256,
-    enc_key_len: 16,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
@@ -230,7 +217,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     sign: Some(TLS12_RSA_SCHEMES),
     bulk: BulkAlgorithm::Aes256Gcm,
     hash: HashAlgorithm::SHA384,
-    enc_key_len: 32,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
@@ -246,7 +232,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     sign: Some(TLS12_ECDSA_SCHEMES),
     bulk: BulkAlgorithm::Aes128Gcm,
     hash: HashAlgorithm::SHA256,
-    enc_key_len: 16,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
@@ -262,7 +247,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     sign: Some(TLS12_ECDSA_SCHEMES),
     bulk: BulkAlgorithm::Aes256Gcm,
     hash: HashAlgorithm::SHA384,
-    enc_key_len: 32,
     fixed_iv_len: 4,
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
@@ -278,7 +262,6 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     sign: None,
     bulk: BulkAlgorithm::Chacha20Poly1305,
     hash: HashAlgorithm::SHA256,
-    enc_key_len: 32,
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
@@ -294,7 +277,6 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     sign: None,
     bulk: BulkAlgorithm::Aes256Gcm,
     hash: HashAlgorithm::SHA384,
-    enc_key_len: 32,
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
@@ -310,7 +292,6 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
     sign: None,
     bulk: BulkAlgorithm::Aes128Gcm,
     hash: HashAlgorithm::SHA256,
-    enc_key_len: 16,
     fixed_iv_len: 12,
     explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,

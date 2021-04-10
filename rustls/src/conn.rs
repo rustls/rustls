@@ -343,7 +343,9 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn make_key_block(&self, len: usize) -> Vec<u8> {
+    pub fn make_key_block(&self, scs: &SupportedCipherSuite) -> Vec<u8> {
+        let len = (scs.aead_algorithm.key_len() + scs.fixed_iv_len) * 2 + scs.explicit_nonce_len;
+
         let mut out = Vec::new();
         out.resize(len, 0u8);
 
