@@ -127,7 +127,7 @@
 //! #     trusted_ct_logs,
 //! #     rustls::DEFAULT_CIPHERSUITES);
 //! let rc_config = Arc::new(config);
-//! let example_com = webpki::DNSNameRef::try_from_ascii_str("example.com").unwrap();
+//! let example_com = webpki::DnsNameRef::try_from_ascii_str("example.com").unwrap();
 //! let mut client = rustls::ClientConnection::new(&rc_config, example_com);
 //! ```
 //!

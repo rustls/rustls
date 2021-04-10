@@ -365,7 +365,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
     let mut server_time = 0f64;
 
     for _ in 0..rounds {
-        let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
+        let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
         let mut client = ClientConnection::new(&client_config, dns_name).unwrap();
         let mut server = ServerConnection::new(&server_config);
 
@@ -440,7 +440,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) 
         mtu,
     ));
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
+    let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
     let mut client = ClientConnection::new(&client_config, dns_name).unwrap();
     let mut server = ServerConnection::new(&server_config);
 
@@ -509,7 +509,7 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
 
     for _i in 0..conn_count {
         servers.push(ServerConnection::new(&server_config));
-        let dns_name = webpki::DNSNameRef::try_from_ascii_str("localhost").unwrap();
+        let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
         clients.push(ClientConnection::new(&client_config, dns_name).unwrap());
     }
 

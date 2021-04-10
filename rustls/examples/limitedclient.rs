@@ -21,7 +21,7 @@ fn main() {
         &[&rustls::cipher_suites::TLS13_CHACHA20_POLY1305_SHA256],
     );
 
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str("google.com").unwrap();
+    let dns_name = webpki::DnsNameRef::try_from_ascii_str("google.com").unwrap();
     let mut conn = rustls::ClientConnection::new(&Arc::new(config), dns_name).unwrap();
     let mut sock = TcpStream::connect("google.com:443").unwrap();
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);

@@ -212,7 +212,7 @@ impl Context {
         let (end_entity, intermediates) = self.chain.split_first().unwrap();
         for _ in 0..count {
             let start = Instant::now();
-            let dns_name = webpki::DNSNameRef::try_from_ascii_str(self.domain).unwrap();
+            let dns_name = webpki::DnsNameRef::try_from_ascii_str(self.domain).unwrap();
             verifier
                 .verify_server_cert(
                     end_entity,

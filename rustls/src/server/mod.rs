@@ -102,7 +102,7 @@ pub trait ResolvesServerCert: Send + Sync {
 
 /// A struct representing the received Client Hello
 pub struct ClientHello<'a> {
-    server_name: Option<webpki::DNSNameRef<'a>>,
+    server_name: Option<webpki::DnsNameRef<'a>>,
     signature_schemes: &'a [SignatureScheme],
     alpn: Option<&'a [&'a [u8]]>,
 }
@@ -110,7 +110,7 @@ pub struct ClientHello<'a> {
 impl<'a> ClientHello<'a> {
     /// Creates a new ClientHello
     fn new(
-        server_name: Option<webpki::DNSNameRef<'a>>,
+        server_name: Option<webpki::DnsNameRef<'a>>,
         signature_schemes: &'a [SignatureScheme],
         alpn: Option<&'a [&'a [u8]]>,
     ) -> Self {
@@ -124,7 +124,7 @@ impl<'a> ClientHello<'a> {
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
-    pub fn server_name(&self) -> Option<webpki::DNSNameRef> {
+    pub fn server_name(&self) -> Option<webpki::DnsNameRef> {
         self.server_name
     }
 
@@ -344,7 +344,7 @@ impl ServerConfig {
 pub struct ServerConnection {
     config: Arc<ServerConfig>,
     common: ConnectionCommon,
-    sni: Option<webpki::DNSName>,
+    sni: Option<webpki::DnsName>,
     received_resumption_data: Option<Vec<u8>>,
     resumption_data: Vec<u8>,
     state: Option<Box<dyn hs::State + Send + Sync>>,
@@ -442,11 +442,11 @@ impl ServerConnection {
             .map(|s| s.as_ref().into())
     }
 
-    fn get_sni(&self) -> Option<&webpki::DNSName> {
+    fn get_sni(&self) -> Option<&webpki::DnsName> {
         self.sni.as_ref()
     }
 
-    fn set_sni(&mut self, value: webpki::DNSName) {
+    fn set_sni(&mut self, value: webpki::DnsName) {
         // The SNI hostname is immutable once set.
         assert!(self.sni.is_none());
         self.sni = Some(value)

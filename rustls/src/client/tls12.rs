@@ -31,7 +31,7 @@ use std::mem;
 pub struct ExpectCertificate {
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     pub session_id: SessionID,
-    pub dns_name: webpki::DNSName,
+    pub dns_name: webpki::DnsName,
     pub randoms: ConnectionRandoms,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
@@ -89,7 +89,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateStatus {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -141,7 +141,7 @@ impl hs::State for ExpectCertificateStatus {
 struct ExpectCertificateStatusOrServerKx {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -200,7 +200,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
 struct ExpectServerKx {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -371,7 +371,7 @@ fn emit_finished(
 struct ExpectCertificateRequest {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -446,7 +446,7 @@ impl hs::State for ExpectCertificateRequest {
 struct ExpectServerDoneOrCertReq {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -506,7 +506,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 struct ExpectServerDone {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -669,7 +669,7 @@ pub struct ExpectCcs {
     pub secrets: ConnectionSecrets,
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     pub session_id: SessionID,
-    pub dns_name: webpki::DNSName,
+    pub dns_name: webpki::DnsName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
     pub ticket: ReceivedTicketDetails,
@@ -709,7 +709,7 @@ pub struct ExpectNewTicket {
     pub secrets: ConnectionSecrets,
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     pub session_id: SessionID,
-    pub dns_name: webpki::DNSName,
+    pub dns_name: webpki::DnsName,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
     pub resuming: bool,
@@ -751,7 +751,7 @@ fn save_session(
     secrets: &ConnectionSecrets,
     mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSNameRef,
+    dns_name: webpki::DnsNameRef,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
     conn: &mut ClientConnection,
@@ -802,7 +802,7 @@ fn save_session(
 struct ExpectFinished {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: ReceivedTicketDetails,

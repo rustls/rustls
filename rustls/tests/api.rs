@@ -1685,7 +1685,7 @@ fn server_exposes_offered_sni() {
 
 #[test]
 fn server_exposes_offered_sni_smashed_to_lowercase() {
-    // webpki actually does this for us in its DNSName type
+    // webpki actually does this for us in its DnsName type
     let kt = KeyType::RSA;
     for client_config in AllClientVersions::new(make_client_config(kt)) {
         let mut client =

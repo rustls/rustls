@@ -38,7 +38,7 @@ struct TlsClient {
 impl TlsClient {
     fn new(
         sock: TcpStream,
-        hostname: webpki::DNSNameRef<'_>,
+        hostname: webpki::DnsNameRef<'_>,
         cfg: Arc<rustls::ClientConfig>,
     ) -> TlsClient {
         TlsClient {
@@ -450,7 +450,7 @@ mod danger {
             &self,
             _end_entity: &rustls::Certificate,
             _intermediates: &[rustls::Certificate],
-            _dns_name: webpki::DNSNameRef<'_>,
+            _dns_name: webpki::DnsNameRef<'_>,
             _scts: &mut dyn Iterator<Item = &[u8]>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
@@ -560,7 +560,7 @@ fn main() {
     let config = make_config(&args);
 
     let sock = TcpStream::connect(addr).unwrap();
-    let dns_name = webpki::DNSNameRef::try_from_ascii_str(&args.arg_hostname).unwrap();
+    let dns_name = webpki::DnsNameRef::try_from_ascii_str(&args.arg_hostname).unwrap();
     let mut tlsclient = TlsClient::new(sock, dns_name, config);
 
     if args.flag_http {

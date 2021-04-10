@@ -73,7 +73,7 @@ pub fn validate_server_hello(
     Ok(())
 }
 
-fn find_kx_hint(conn: &ClientConnection, dns_name: webpki::DNSNameRef) -> Option<NamedGroup> {
+fn find_kx_hint(conn: &ClientConnection, dns_name: webpki::DnsNameRef) -> Option<NamedGroup> {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
@@ -84,7 +84,7 @@ fn find_kx_hint(conn: &ClientConnection, dns_name: webpki::DNSNameRef) -> Option
     maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
 }
 
-fn save_kx_hint(conn: &mut ClientConnection, dns_name: webpki::DNSNameRef, group: NamedGroup) {
+fn save_kx_hint(conn: &mut ClientConnection, dns_name: webpki::DnsNameRef, group: NamedGroup) {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
 
     conn.config
@@ -96,7 +96,7 @@ pub fn choose_kx_groups(
     conn: &ClientConnection,
     exts: &mut Vec<ClientExtension>,
     hello: &mut ClientHelloDetails,
-    dns_name: webpki::DNSNameRef,
+    dns_name: webpki::DnsNameRef,
     retryreq: Option<&HelloRetryRequest>,
 ) {
     // Choose our groups:
@@ -173,7 +173,7 @@ pub fn start_handshake_traffic(
     early_key_schedule: Option<KeyScheduleEarly>,
     server_hello: &ServerHelloPayload,
     resuming_session: &mut Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DNSNameRef,
+    dns_name: webpki::DnsNameRef,
     transcript: &mut HandshakeHash,
     hello: &mut ClientHelloDetails,
     randoms: &ConnectionRandoms,
@@ -411,7 +411,7 @@ fn validate_encrypted_extensions(
 
 pub struct ExpectEncryptedExtensions {
     pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub dns_name: webpki::DNSName,
+    pub dns_name: webpki::DnsName,
     pub randoms: ConnectionRandoms,
     pub suite: &'static SupportedCipherSuite,
     pub transcript: HandshakeHash,
@@ -508,7 +508,7 @@ impl hs::State for ExpectEncryptedExtensions {
 }
 
 struct ExpectCertificate {
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -582,7 +582,7 @@ impl hs::State for ExpectCertificate {
 }
 
 struct ExpectCertificateOrCertReq {
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -630,7 +630,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -642,7 +642,7 @@ struct ExpectCertificateVerify {
 
 fn send_cert_error_alert(conn: &mut ClientConnection, err: Error) -> Error {
     match err {
-        Error::WebPkiError(webpki::Error::BadDER, _) => {
+        Error::WebPkiError(webpki::Error::BadDer, _) => {
             conn.common
                 .send_fatal_alert(AlertDescription::DecodeError);
         }
@@ -726,7 +726,7 @@ impl hs::State for ExpectCertificateVerify {
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
 struct ExpectCertificateRequest {
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -925,7 +925,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, conn: &mut Clien
 }
 
 struct ExpectFinished {
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -1056,7 +1056,7 @@ impl hs::State for ExpectFinished {
 // In this state we can be sent tickets, keyupdates,
 // and application data.
 struct ExpectTraffic {
-    dns_name: webpki::DNSName,
+    dns_name: webpki::DnsName,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,

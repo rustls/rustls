@@ -3,7 +3,7 @@ use super::codec::{put_u16, Codec, Reader};
 use super::enums::*;
 use super::handshake::*;
 use crate::key::Certificate;
-use webpki::DNSNameRef;
+use webpki::DnsNameRef;
 
 use std::mem;
 
@@ -368,7 +368,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::ECPointFormats(ECPointFormatList::supported()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            ClientExtension::make_sni(DNSNameRef::try_from_ascii_str("hello").unwrap()),
+            ClientExtension::make_sni(DnsNameRef::try_from_ascii_str("hello").unwrap()),
             ClientExtension::SessionTicketRequest,
             ClientExtension::SessionTicketOffer(Payload(vec![])),
             ClientExtension::Protocols(vec![PayloadU8(vec![0])]),

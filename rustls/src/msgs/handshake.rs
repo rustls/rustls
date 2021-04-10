@@ -237,13 +237,13 @@ impl DecomposedSignatureScheme for SignatureScheme {
 
 #[derive(Clone, Debug)]
 pub enum ServerNamePayload {
-    // Stored twice, bytes so we can round-trip, and DNSName for use
-    HostName((PayloadU16, webpki::DNSName)),
+    // Stored twice, bytes so we can round-trip, and DnsName for use
+    HostName((PayloadU16, webpki::DnsName)),
     Unknown(Payload),
 }
 
 impl ServerNamePayload {
-    pub fn new_hostname(hostname: webpki::DNSName) -> ServerNamePayload {
+    pub fn new_hostname(hostname: webpki::DnsName) -> ServerNamePayload {
         let raw = {
             let s: &str = hostname.as_ref().into();
             PayloadU16::new(s.as_bytes().into())
@@ -255,7 +255,7 @@ impl ServerNamePayload {
         let raw = PayloadU16::read(r)?;
 
         let dns_name = {
-            match webpki::DNSNameRef::try_from_ascii(&raw.0) {
+            match webpki::DnsNameRef::try_from_ascii(&raw.0) {
                 Ok(dns_name) => dns_name.into(),
                 Err(_) => {
                     warn!("Illegal SNI hostname received {:?}", raw.0);
@@ -302,7 +302,7 @@ declare_u16_vec!(ServerNameRequest, ServerName);
 
 pub trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
-    fn get_single_hostname(&self) -> Option<webpki::DNSNameRef>;
+    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef>;
 }
 
 impl ConvertServerNameList for ServerNameRequest {
@@ -319,8 +319,8 @@ impl ConvertServerNameList for ServerNameRequest {
         false
     }
 
-    fn get_single_hostname(&self) -> Option<webpki::DNSNameRef> {
-        fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DNSNameRef> {
+    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef> {
+        fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DnsNameRef> {
             if let ServerNamePayload::HostName((_, ref dns)) = name.payload {
                 Some(dns.as_ref())
             } else {
@@ -686,14 +686,14 @@ impl Codec for ClientExtension {
     }
 }
 
-fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DNSNameRef) -> webpki::DNSName {
+fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DnsNameRef) -> webpki::DnsName {
     let dns_name_str: &str = dns_name.into();
 
     // RFC6066: "The hostname is represented as a byte string using
     // ASCII encoding without a trailing dot"
     if dns_name_str.ends_with('.') {
         let trimmed = &dns_name_str[0..dns_name_str.len() - 1];
-        webpki::DNSNameRef::try_from_ascii_str(trimmed)
+        webpki::DnsNameRef::try_from_ascii_str(trimmed)
             .unwrap()
             .to_owned()
     } else {
@@ -703,7 +703,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DNSNameRef) -> webpki::D
 
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub fn make_sni(dns_name: webpki::DNSNameRef) -> ClientExtension {
+    pub fn make_sni(dns_name: webpki::DnsNameRef) -> ClientExtension {
         let name = ServerName {
             typ: ServerNameType::HostName,
             payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
