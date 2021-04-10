@@ -1006,6 +1006,18 @@ fn server_error_is_sticky() {
 }
 
 #[test]
+fn server_flush_does_nothing() {
+    let (_, mut server) = make_pair(KeyType::RSA);
+    assert!(matches!(server.writer().flush(), Ok(())));
+}
+
+#[test]
+fn client_flush_does_nothing() {
+    let (mut client, _) = make_pair(KeyType::RSA);
+    assert!(matches!(client.writer().flush(), Ok(())));
+}
+
+#[test]
 fn server_is_send_and_sync() {
     let (_, server) = make_pair(KeyType::RSA);
     &server as &dyn Send;
