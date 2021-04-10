@@ -219,8 +219,8 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
-    build_tls12_encrypter: Some(cipher::build_tls12_gcm_128_encrypter),
-    build_tls12_decrypter: Some(cipher::build_tls12_gcm_128_decrypter),
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
@@ -235,8 +235,8 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
     aead_algorithm: &ring::aead::AES_256_GCM,
-    build_tls12_encrypter: Some(cipher::build_tls12_gcm_256_encrypter),
-    build_tls12_decrypter: Some(cipher::build_tls12_gcm_256_decrypter),
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -251,8 +251,8 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
-    build_tls12_encrypter: Some(cipher::build_tls12_gcm_128_encrypter),
-    build_tls12_decrypter: Some(cipher::build_tls12_gcm_128_decrypter),
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_decrypter),
 };
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -267,8 +267,8 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
     aead_algorithm: &ring::aead::AES_256_GCM,
-    build_tls12_encrypter: Some(cipher::build_tls12_gcm_256_encrypter),
-    build_tls12_decrypter: Some(cipher::build_tls12_gcm_256_decrypter),
+    build_tls12_encrypter: Some(cipher::build_tls12_gcm_encrypter),
+    build_tls12_decrypter: Some(cipher::build_tls12_gcm_decrypter),
 };
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
