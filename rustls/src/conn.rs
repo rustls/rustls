@@ -21,7 +21,6 @@ use ring::digest::Digest;
 
 use std::collections::VecDeque;
 use std::io;
-//use std::io::{Read, Write};
 
 /// Values of this structure are returned from `Session::process_new_packets`
 /// and tell the caller the current I/O state of the TLS connection.
@@ -879,7 +878,7 @@ impl ConnectionCommon {
 
     /// Send any buffered plaintext.  Plaintext is buffered if
     /// written during handshake.
-    pub fn flush_plaintext(&mut self) {
+    fn flush_plaintext(&mut self) {
         if !self.traffic {
             return;
         }

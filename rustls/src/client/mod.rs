@@ -710,7 +710,6 @@ impl PlaintextSink for ClientConnection {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.common.flush_plaintext();
         Ok(())
     }
 }

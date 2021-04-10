@@ -624,7 +624,6 @@ impl PlaintextSink for ServerConnection {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.common.flush_plaintext();
         Ok(())
     }
 }
