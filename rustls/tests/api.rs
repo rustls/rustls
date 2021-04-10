@@ -981,6 +981,152 @@ mod test_clientverifier {
     }
 } // mod test_clientverifier
 
+#[cfg(feature = "dangerous_configuration")]
+mod test_serververifier {
+    use super::*;
+    use crate::common::MockServerVerifier;
+    use rustls::internal::msgs::enums::AlertDescription;
+
+    #[test]
+    fn client_can_override_certificate_verification() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(*kt);
+            let verifier = Arc::new(MockServerVerifier::accepts_anything());
+
+            client_config
+                .dangerous()
+                .set_certificate_verifier(verifier);
+
+            let server_config = Arc::new(make_server_config(*kt));
+
+            for client_config in AllClientVersions::new(client_config) {
+                let (mut client, mut server) =
+                    make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+                do_handshake(&mut client, &mut server);
+            }
+        }
+    }
+
+    #[test]
+    fn client_can_override_certificate_verification_and_reject_certificate() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(*kt);
+            let verifier = Arc::new(MockServerVerifier::rejects_certificate(
+                Error::CorruptMessage,
+            ));
+
+            client_config
+                .dangerous()
+                .set_certificate_verifier(verifier);
+
+            let server_config = Arc::new(make_server_config(*kt));
+
+            for client_config in AllClientVersions::new(client_config) {
+                let (mut client, mut server) =
+                    make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+                let errs = do_handshake_until_both_error(&mut client, &mut server);
+                assert_eq!(
+                    errs,
+                    Err(vec![
+                        ErrorFromPeer::Client(Error::CorruptMessage),
+                        ErrorFromPeer::Server(Error::AlertReceived(
+                            AlertDescription::BadCertificate
+                        ))
+                    ])
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(*kt);
+            let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
+                Error::CorruptMessage,
+            ));
+
+            client_config
+                .dangerous()
+                .set_certificate_verifier(verifier);
+            client_config.versions = vec![ProtocolVersion::TLSv1_2];
+
+            let server_config = Arc::new(make_server_config(*kt));
+
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            let errs = do_handshake_until_both_error(&mut client, &mut server);
+            assert_eq!(
+                errs,
+                Err(vec![
+                    ErrorFromPeer::Client(Error::CorruptMessage),
+                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate))
+                ])
+            );
+        }
+    }
+
+    #[test]
+    fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(*kt);
+            let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
+                Error::CorruptMessage,
+            ));
+
+            client_config
+                .dangerous()
+                .set_certificate_verifier(verifier);
+            client_config.versions = vec![ProtocolVersion::TLSv1_3];
+
+            let server_config = Arc::new(make_server_config(*kt));
+
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            let errs = do_handshake_until_both_error(&mut client, &mut server);
+            assert_eq!(
+                errs,
+                Err(vec![
+                    ErrorFromPeer::Client(Error::CorruptMessage),
+                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate))
+                ])
+            );
+        }
+    }
+
+    #[test]
+    fn client_can_override_certificate_verification_and_offer_no_signature_schemes() {
+        for kt in ALL_KEY_TYPES.iter() {
+            let mut client_config = make_client_config(*kt);
+            let verifier = Arc::new(MockServerVerifier::offers_no_signature_schemes());
+
+            client_config
+                .dangerous()
+                .set_certificate_verifier(verifier);
+            client_config.versions = vec![ProtocolVersion::TLSv1_3];
+
+            let server_config = Arc::new(make_server_config(*kt));
+
+            for client_config in AllClientVersions::new(client_config) {
+                let (mut client, mut server) =
+                    make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+                let errs = do_handshake_until_both_error(&mut client, &mut server);
+                assert_eq!(
+                    errs,
+                    Err(vec![
+                        ErrorFromPeer::Server(Error::PeerIncompatibleError(
+                            "no overlapping sigschemes".into()
+                        )),
+                        ErrorFromPeer::Client(Error::AlertReceived(
+                            AlertDescription::HandshakeFailure
+                        )),
+                    ])
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn client_error_is_sticky() {
     let (mut client, _) = make_pair(KeyType::RSA);
