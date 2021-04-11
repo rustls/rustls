@@ -1,6 +1,7 @@
 use crate::check::check_message;
 use crate::conn::ConnectionRandoms;
 use crate::error::Error;
+use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 use crate::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 #[cfg(feature = "logging")]
@@ -20,7 +21,6 @@ use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
-use crate::server::common::HandshakeDetails;
 use crate::server::hs;
 
 use ring::constant_time;
@@ -58,7 +58,7 @@ mod client_hello {
     use super::*;
 
     pub(in crate::server) struct CompleteClientHelloHandling {
-        pub(in crate::server) handshake: HandshakeDetails,
+        pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) suite: &'static SupportedCipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
@@ -81,7 +81,6 @@ mod client_hello {
 
             let suite_hash = suite.get_hash();
             let handshake_hash = self
-                .handshake
                 .transcript
                 .get_hash_given(suite_hash, &binder_plaintext);
 
@@ -170,19 +169,17 @@ mod client_hello {
                         .find(|group| groups_ext.contains(&group.name))
                         .cloned();
 
-                    self.handshake
-                        .transcript
-                        .add_message(chm);
+                    self.transcript.add_message(chm);
 
                     if let Some(group) = retry_group_maybe {
                         if self.done_retry {
                             return Err(hs::illegal_param(conn, "did not follow retry request"));
                         }
 
-                        emit_hello_retry_request(&mut self.handshake, suite, conn, group.name);
+                        emit_hello_retry_request(&mut self.transcript, suite, conn, group.name);
                         emit_fake_ccs(conn);
                         return Ok(Box::new(hs::ExpectClientHello {
-                            handshake: self.handshake,
+                            transcript: self.transcript,
                             session_id: SessionID::empty(),
                             using_ems: false,
                             done_retry: true,
@@ -257,11 +254,9 @@ mod client_hello {
             }
 
             let full_handshake = resumedata.is_none();
-            self.handshake
-                .transcript
-                .add_message(chm);
+            self.transcript.add_message(chm);
             let key_schedule = emit_server_hello(
-                &mut self.handshake,
+                &mut self.transcript,
                 &self.randoms,
                 suite,
                 conn,
@@ -279,7 +274,7 @@ mod client_hello {
             let (mut ocsp_response, mut sct_list) =
                 (server_key.get_ocsp(), server_key.get_sct_list());
             emit_encrypted_extensions(
-                &mut self.handshake,
+                &mut self.transcript,
                 suite,
                 conn,
                 &mut ocsp_response,
@@ -290,16 +285,16 @@ mod client_hello {
             )?;
 
             let doing_client_auth = if full_handshake {
-                let client_auth = emit_certificate_req_tls13(&mut self.handshake, conn)?;
+                let client_auth = emit_certificate_req_tls13(&mut self.transcript, conn)?;
                 emit_certificate_tls13(
-                    &mut self.handshake,
+                    &mut self.transcript,
                     conn,
                     server_key.get_cert(),
                     ocsp_response,
                     sct_list,
                 );
                 emit_certificate_verify_tls13(
-                    &mut self.handshake,
+                    &mut self.transcript,
                     conn,
                     server_key.get_key(),
                     &sigschemes_ext,
@@ -311,7 +306,7 @@ mod client_hello {
 
             hs::check_aligned_handshake(conn)?;
             let (key_schedule_traffic, hash_at_server_fin) = emit_finished_tls13(
-                &mut self.handshake,
+                &mut self.transcript,
                 self.suite,
                 &self.randoms,
                 conn,
@@ -320,7 +315,7 @@ mod client_hello {
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
-                    handshake: self.handshake,
+                    transcript: self.transcript,
                     suite: self.suite,
                     randoms: self.randoms,
                     key_schedule: key_schedule_traffic,
@@ -329,7 +324,7 @@ mod client_hello {
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
-                    handshake: self.handshake,
+                    transcript: self.transcript,
                     suite: self.suite,
                     randoms: self.randoms,
                     key_schedule: key_schedule_traffic,
@@ -341,7 +336,7 @@ mod client_hello {
     }
 
     fn emit_server_hello(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
         suite: &'static SupportedCipherSuite,
         conn: &mut ServerConnection,
@@ -386,12 +381,10 @@ mod client_hello {
         hs::check_aligned_handshake(conn)?;
 
         #[cfg(feature = "quic")]
-        let client_hello_hash = handshake
-            .transcript
-            .get_hash_given(suite.get_hash(), &[]);
+        let client_hello_hash = transcript.get_hash_given(suite.get_hash(), &[]);
 
         trace!("sending server hello {:?}", sh);
-        handshake.transcript.add_message(&sh);
+        transcript.add_message(&sh);
         conn.common.send_msg(sh, false);
 
         // Start key schedule
@@ -418,7 +411,7 @@ mod client_hello {
             KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
         };
 
-        let handshake_hash = handshake.transcript.get_current_hash();
+        let handshake_hash = transcript.get_current_hash();
         let write_key = key_schedule.server_handshake_traffic_secret(
             &handshake_hash,
             &*conn.config.key_log,
@@ -461,7 +454,7 @@ mod client_hello {
     }
 
     fn emit_hello_retry_request(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
         conn: &mut ServerConnection,
         group: NamedGroup,
@@ -490,13 +483,13 @@ mod client_hello {
         };
 
         trace!("Requesting retry {:?}", m);
-        handshake.transcript.rollup_for_hrr();
-        handshake.transcript.add_message(&m);
+        transcript.rollup_for_hrr();
+        transcript.add_message(&m);
         conn.common.send_msg(m, false);
     }
 
     fn emit_encrypted_extensions(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
         conn: &mut ServerConnection,
         ocsp_response: &mut Option<&[u8]>,
@@ -526,13 +519,13 @@ mod client_hello {
         };
 
         trace!("sending encrypted extensions {:?}", ee);
-        handshake.transcript.add_message(&ee);
+        transcript.add_message(&ee);
         conn.common.send_msg(ee, true);
         Ok(())
     }
 
     fn emit_certificate_req_tls13(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
     ) -> Result<bool, Error> {
         if !conn.config.verifier.offer_client_auth() {
@@ -577,13 +570,13 @@ mod client_hello {
         };
 
         trace!("Sending CertificateRequest {:?}", m);
-        handshake.transcript.add_message(&m);
+        transcript.add_message(&m);
         conn.common.send_msg(m, true);
         Ok(true)
     }
 
     fn emit_certificate_tls13(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
         cert_chain: &[Certificate],
         ocsp_response: Option<&[u8]>,
@@ -628,18 +621,17 @@ mod client_hello {
         };
 
         trace!("sending certificate {:?}", c);
-        handshake.transcript.add_message(&c);
+        transcript.add_message(&c);
         conn.common.send_msg(c, true);
     }
 
     fn emit_certificate_verify_tls13(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
-        let message =
-            verify::construct_tls13_server_verify_message(&handshake.transcript.get_current_hash());
+        let message = verify::construct_tls13_server_verify_message(&transcript.get_current_hash());
 
         let signer = signing_key
             .choose_scheme(schemes)
@@ -660,19 +652,19 @@ mod client_hello {
         };
 
         trace!("sending certificate-verify {:?}", m);
-        handshake.transcript.add_message(&m);
+        transcript.add_message(&m);
         conn.common.send_msg(m, true);
         Ok(())
     }
 
     fn emit_finished_tls13(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
         randoms: &ConnectionRandoms,
         conn: &mut ServerConnection,
         key_schedule: KeyScheduleHandshake,
     ) -> (KeyScheduleTrafficWithClientFinishedPending, Digest) {
-        let handshake_hash = handshake.transcript.get_current_hash();
+        let handshake_hash = transcript.get_current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
@@ -686,8 +678,8 @@ mod client_hello {
         };
 
         trace!("sending finished {:?}", m);
-        handshake.transcript.add_message(&m);
-        let hash_at_server_fin = handshake.transcript.get_current_hash();
+        transcript.add_message(&m);
+        let hash_at_server_fin = transcript.get_current_hash();
         conn.common.send_msg(m, true);
 
         // Now move to application data keys.  Read key change is deferred until
@@ -727,7 +719,7 @@ mod client_hello {
 }
 
 struct ExpectCertificate {
-    pub handshake: HandshakeDetails,
+    pub transcript: HandshakeHash,
     pub suite: &'static SupportedCipherSuite,
     pub randoms: ConnectionRandoms,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
@@ -746,9 +738,7 @@ impl hs::State for ExpectCertificate {
             HandshakeType::Certificate,
             HandshakePayload::CertificateTLS13
         )?;
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
@@ -775,14 +765,12 @@ impl hs::State for ExpectCertificate {
             None => {
                 if !mandatory {
                     debug!("client auth requested but no certificate supplied");
-                    self.handshake
-                        .transcript
-                        .abandon_client_auth();
+                    self.transcript.abandon_client_auth();
                     return Ok(Box::new(ExpectFinished {
                         suite: self.suite,
                         key_schedule: self.key_schedule,
                         randoms: self.randoms,
-                        handshake: self.handshake,
+                        transcript: self.transcript,
                         send_ticket: self.send_ticket,
                         hash_at_server_fin: self.hash_at_server_fin,
                     }));
@@ -806,7 +794,7 @@ impl hs::State for ExpectCertificate {
 
         Ok(Box::new(ExpectCertificateVerify {
             suite: self.suite,
-            handshake: self.handshake,
+            transcript: self.transcript,
             randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_cert,
@@ -817,7 +805,7 @@ impl hs::State for ExpectCertificate {
 }
 
 struct ExpectCertificateVerify {
-    handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
@@ -838,13 +826,8 @@ impl hs::State for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_hash = self
-                .handshake
-                .transcript
-                .get_current_hash();
-            self.handshake
-                .transcript
-                .abandon_client_auth();
+            let handshake_hash = self.transcript.get_current_hash();
+            self.transcript.abandon_client_auth();
             let certs = &self.client_cert;
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
@@ -862,13 +845,11 @@ impl hs::State for ExpectCertificateVerify {
         trace!("client CertificateVerify OK");
         conn.client_cert_chain = Some(self.client_cert);
 
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
             suite: self.suite,
             key_schedule: self.key_schedule,
-            handshake: self.handshake,
+            transcript: self.transcript,
             randoms: self.randoms,
             send_ticket: self.send_ticket,
             hash_at_server_fin: self.hash_at_server_fin,
@@ -878,7 +859,7 @@ impl hs::State for ExpectCertificateVerify {
 
 // --- Process client's Finished ---
 fn get_server_session_value(
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     suite: &'static SupportedCipherSuite,
     key_schedule: &KeyScheduleTraffic,
     conn: &ServerConnection,
@@ -886,7 +867,7 @@ fn get_server_session_value(
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
 
-    let handshake_hash = handshake.transcript.get_current_hash();
+    let handshake_hash = transcript.get_current_hash();
     let secret =
         key_schedule.resumption_master_secret_and_derive_ticket_psk(&handshake_hash, nonce);
 
@@ -902,7 +883,7 @@ fn get_server_session_value(
 }
 
 struct ExpectFinished {
-    pub handshake: HandshakeDetails,
+    pub transcript: HandshakeHash,
     pub suite: &'static SupportedCipherSuite,
     pub randoms: ConnectionRandoms,
     pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
@@ -912,14 +893,14 @@ struct ExpectFinished {
 
 impl ExpectFinished {
     fn emit_ticket(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
         conn: &mut ServerConnection,
         key_schedule: &KeyScheduleTraffic,
     ) -> Result<(), rand::GetRandomFailed> {
         let nonce = rand::random_vec(32)?;
         let plain =
-            get_server_session_value(handshake, suite, key_schedule, conn, &nonce).get_encoding();
+            get_server_session_value(transcript, suite, key_schedule, conn, &nonce).get_encoding();
 
         let stateless = conn.config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
@@ -965,7 +946,7 @@ impl ExpectFinished {
         };
 
         trace!("sending new ticket {:?} (stateless: {})", m, stateless);
-        handshake.transcript.add_message(&m);
+        transcript.add_message(&m);
         conn.common.send_msg(m, true);
         Ok(())
     }
@@ -980,10 +961,7 @@ impl hs::State for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        let handshake_hash = self
-            .handshake
-            .transcript
-            .get_current_hash();
+        let handshake_hash = self.transcript.get_current_hash();
         let expect_verify_data = self
             .key_schedule
             .sign_client_finish(&handshake_hash);
@@ -999,9 +977,7 @@ impl hs::State for ExpectFinished {
 
         // nb. future derivations include Client Finished, but not the
         // main application data keying.
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         hs::check_aligned_handshake(conn)?;
 
@@ -1020,7 +996,12 @@ impl hs::State for ExpectFinished {
         let key_schedule_traffic = self.key_schedule.into_traffic();
 
         if self.send_ticket {
-            Self::emit_ticket(&mut self.handshake, self.suite, conn, &key_schedule_traffic)?;
+            Self::emit_ticket(
+                &mut self.transcript,
+                self.suite,
+                conn,
+                &key_schedule_traffic,
+            )?;
         }
 
         conn.common.start_traffic();
