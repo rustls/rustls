@@ -13,11 +13,10 @@ use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig, ServerConnection};
-use crate::sign;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::HandshakeDetails;
+use crate::server::common::{ActiveCertifiedKey, HandshakeDetails};
 use crate::server::{tls12, tls13};
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -465,7 +464,7 @@ impl State for ExpectClientHello {
                 Error::General("no server certificate chain resolved".to_string())
             })?
         };
-        let certkey = sign::ActiveCertifiedKey::from_certified_key(&certkey);
+        let certkey = ActiveCertifiedKey::from_certified_key(&certkey);
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)

@@ -52,6 +52,7 @@ mod client_hello {
     use crate::msgs::handshake::SessionID;
     #[cfg(feature = "quic")]
     use crate::quic;
+    use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
 
     use super::*;
@@ -113,7 +114,7 @@ mod client_hello {
             mut self,
             suite: &'static SupportedCipherSuite,
             conn: &mut ServerConnection,
-            server_key: sign::ActiveCertifiedKey,
+            server_key: ActiveCertifiedKey,
             chm: &Message,
         ) -> hs::NextStateOrError {
             let client_hello = require_handshake_msg!(

@@ -118,46 +118,6 @@ impl CertifiedKey {
     }
 }
 
-/// ActiveCertifiedKey wraps CertifiedKey and prevents `ocsp` and `sct_list` from being
-/// consumed more than once.
-pub(crate) struct ActiveCertifiedKey<'a> {
-    key: &'a CertifiedKey,
-    ocsp: Option<&'a [u8]>,
-    sct_list: Option<&'a [u8]>,
-}
-
-impl<'a> ActiveCertifiedKey<'a> {
-    pub fn from_certified_key(key: &CertifiedKey) -> ActiveCertifiedKey {
-        ActiveCertifiedKey {
-            key,
-            ocsp: key.ocsp.as_deref(),
-            sct_list: key.sct_list.as_deref(),
-        }
-    }
-
-    /// Get the certificate chain
-    #[inline]
-    pub fn get_cert(&self) -> &[key::Certificate] {
-        &self.key.cert
-    }
-
-    /// Get the signing key
-    #[inline]
-    pub fn get_key(&self) -> &dyn SigningKey {
-        &*self.key.key
-    }
-
-    #[inline]
-    pub fn get_ocsp(&self) -> Option<&[u8]> {
-        self.ocsp
-    }
-
-    #[inline]
-    pub fn get_sct_list(&self) -> Option<&[u8]> {
-        self.sct_list
-    }
-}
-
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
 pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {

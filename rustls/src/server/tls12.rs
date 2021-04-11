@@ -16,7 +16,7 @@ use crate::server::ServerConnection;
 use crate::verify;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::HandshakeDetails;
+use crate::server::common::{ActiveCertifiedKey, HandshakeDetails};
 use crate::server::hs;
 
 use ring::constant_time;
@@ -51,7 +51,7 @@ mod client_hello {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             conn: &mut ServerConnection,
-            server_key: sign::ActiveCertifiedKey,
+            server_key: ActiveCertifiedKey,
             chm: &Message,
             client_hello: &ClientHelloPayload,
             sigschemes_ext: Vec<SignatureScheme>,
