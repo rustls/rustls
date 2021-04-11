@@ -6,6 +6,3 @@ members = [
   "rustls-mio",
 ]
 exclude = ["admin/rustfmt"]
-
-[patches.crates-io]
-webpki-roots = { path = "../webpki-roots" }
