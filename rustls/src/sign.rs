@@ -127,7 +127,7 @@ pub(crate) struct ActiveCertifiedKey<'a> {
 }
 
 impl<'a> ActiveCertifiedKey<'a> {
-    pub fn from_certified_key<'k>(key: &'k CertifiedKey) -> ActiveCertifiedKey<'k> {
+    pub fn from_certified_key(key: &CertifiedKey) -> ActiveCertifiedKey {
         ActiveCertifiedKey {
             key,
             ocsp: key.ocsp.as_deref(),
