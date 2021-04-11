@@ -45,6 +45,9 @@ struct Options {
     tickets: bool,
     resume_with_tickets_disabled: bool,
     queue_data: bool,
+    queue_data_on_resume: bool,
+    only_write_one_byte_after_handshake: bool,
+    only_write_one_byte_after_handshake_on_resume: bool,
     shut_down_after_handshake: bool,
     check_close_notify: bool,
     host_name: String,
@@ -73,7 +76,6 @@ struct Options {
     expect_ticket_supports_early_data: bool,
     expect_accept_early_data: bool,
     expect_reject_early_data: bool,
-    queue_data_on_resume: bool,
     expect_version: u16,
 }
 
@@ -91,6 +93,9 @@ impl Options {
             use_sni: false,
             send_sct: false,
             queue_data: false,
+            queue_data_on_resume: false,
+            only_write_one_byte_after_handshake: false,
+            only_write_one_byte_after_handshake_on_resume: false,
             shut_down_after_handshake: false,
             check_close_notify: false,
             require_any_client_cert: false,
@@ -118,7 +123,6 @@ impl Options {
             expect_ticket_supports_early_data: false,
             expect_accept_early_data: false,
             expect_reject_early_data: false,
-            queue_data_on_resume: false,
             expect_version: 0,
         }
     }
@@ -588,6 +592,8 @@ impl ClientOrServer {
 }
 
 fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
+    let mut sent_message = false;
+
     if opts.queue_data || (opts.queue_data_on_resume && count > 0) {
         if count > 0 && opts.enable_early_data {
             let len = sess
@@ -599,8 +605,10 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
             sess.writer()
                 .write_all(&b"hello"[len..])
                 .unwrap();
-        } else {
+            sent_message = true;
+        } else if !opts.only_write_one_byte_after_handshake {
             let _ = sess.writer().write_all(b"hello");
+            sent_message = true;
         }
     }
 
@@ -612,9 +620,12 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
     let mut sent_shutdown = false;
     let mut seen_eof = false;
     let mut sent_exporter = false;
+    let mut quench_writes = false;
 
     loop {
-        flush(&mut sess, &mut conn);
+        if !quench_writes {
+            flush(&mut sess, &mut conn);
+        }
 
         if sess.wants_read() {
             let len = match sess.read_tls(&mut conn) {
@@ -665,6 +676,23 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
             sent_exporter = true;
         }
 
+        if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
+            println!("writing message and then only one byte of its tls frame");
+            flush(&mut sess, &mut conn);
+
+            sess.writer()
+                .write_all(b"hello")
+                .unwrap();
+            sent_message = true;
+
+            let mut one_byte = [ 0u8 ];
+            let mut cursor = io::Cursor::new(&mut one_byte[..]);
+            sess.write_tls(&mut cursor).unwrap();
+            conn.write(&one_byte).expect("IO error");
+
+            quench_writes = true;
+        }
+
         if opts.enable_early_data && !sess.is_handshaking() && count > 0 {
             if opts.expect_accept_early_data && !sess.client().is_early_data_accepted() {
                 quit_err("Early data was not accepted, but we expect the opposite");
@@ -710,6 +738,11 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
         if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
             sess.send_close_notify();
             sent_shutdown = true;
+        }
+
+        if quench_writes && len > 0 {
+            println!("unquenching writes after {:?}", len);
+            quench_writes = false;
         }
 
         for b in buf.iter_mut() {
@@ -879,6 +912,10 @@ fn main() {
             "-shim-writes-first" => {
                 opts.queue_data = true;
             }
+            "-read-with-unfinished-write" => {
+                opts.queue_data = true;
+                opts.only_write_one_byte_after_handshake = true;
+            }
             "-shim-shuts-down" => {
                 opts.shut_down_after_handshake = true;
             }
@@ -904,6 +941,10 @@ fn main() {
             }
             "-on-resume-shim-writes-first" => {
                 opts.queue_data_on_resume = true;
+            }
+            "-on-resume-read-with-unfinished-write" => {
+                opts.queue_data_on_resume = true;
+                opts.only_write_one_byte_after_handshake_on_resume = true;
             }
             "-expect-ticket-supports-early-data" => {
                 opts.expect_ticket_supports_early_data = true;
@@ -1003,8 +1044,6 @@ fn main() {
             "-reverify-on-resume" |
             "-verify-prefs" |
             "-no-op-extra-handshake" |
-            "-read-with-unfinished-write" |
-            "-on-resume-read-with-unfinished-write" |
             "-expect-peer-cert-file" |
             "-no-rsa-pss-rsae-certs" |
             "-ignore-tls13-downgrade" |
