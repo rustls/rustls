@@ -1,6 +1,7 @@
 use crate::check::check_message;
 use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
+use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -17,7 +18,7 @@ use crate::verify;
 use crate::SupportedCipherSuite;
 use crate::{kx, tls12};
 
-use crate::server::common::{ActiveCertifiedKey, HandshakeDetails};
+use crate::server::common::ActiveCertifiedKey;
 use crate::server::hs;
 
 use ring::constant_time;
@@ -40,7 +41,7 @@ mod client_hello {
     use super::*;
 
     pub(in crate::server) struct CompleteClientHelloHandling {
-        pub(in crate::server) handshake: HandshakeDetails,
+        pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) session_id: SessionID,
         pub(in crate::server) suite: &'static SupportedCipherSuite,
         pub(in crate::server) using_ems: bool,
@@ -60,9 +61,7 @@ mod client_hello {
             tls13_enabled: bool,
         ) -> hs::NextStateOrError {
             // -- TLS1.2 only from hereon in --
-            self.handshake
-                .transcript
-                .add_message(&chm);
+            self.transcript.add_message(&chm);
 
             if client_hello.ems_support_offered() {
                 self.using_ems = true;
@@ -175,7 +174,7 @@ mod client_hello {
             }
 
             self.send_ticket = emit_server_hello(
-                &mut self.handshake,
+                &mut self.transcript,
                 conn,
                 self.session_id,
                 self.suite,
@@ -187,24 +186,24 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.handshake, conn, server_key.get_cert());
+            emit_certificate(&mut self.transcript, conn, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut self.handshake, conn, ocsp_response);
+                emit_cert_status(&mut self.transcript, conn, ocsp_response);
             }
             let server_kx = emit_server_kx(
-                &mut self.handshake,
+                &mut self.transcript,
                 conn,
                 sigschemes,
                 group,
                 server_key.get_key(),
                 &self.randoms,
             )?;
-            let doing_client_auth = emit_certificate_req(&mut self.handshake, conn)?;
-            emit_server_hello_done(&mut self.handshake, conn);
+            let doing_client_auth = emit_certificate_req(&mut self.transcript, conn)?;
+            emit_server_hello_done(&mut self.transcript, conn);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
-                    handshake: self.handshake,
+                    transcript: self.transcript,
                     randoms: self.randoms,
                     session_id: self.session_id,
                     suite: self.suite,
@@ -214,7 +213,7 @@ mod client_hello {
                 }))
             } else {
                 Ok(Box::new(ExpectClientKx {
-                    handshake: self.handshake,
+                    transcript: self.transcript,
                     randoms: self.randoms,
                     session_id: self.session_id,
                     suite: self.suite,
@@ -243,7 +242,7 @@ mod client_hello {
 
             self.session_id = *id;
             self.send_ticket = emit_server_hello(
-                &mut self.handshake,
+                &mut self.transcript,
                 conn,
                 self.session_id,
                 self.suite,
@@ -271,17 +270,17 @@ mod client_hello {
             conn.client_cert_chain = resumedata.client_cert_chain;
 
             if self.send_ticket {
-                emit_ticket(&secrets, &mut self.handshake, self.using_ems, conn);
+                emit_ticket(&secrets, &mut self.transcript, self.using_ems, conn);
             }
             emit_ccs(conn);
             conn.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&secrets, &mut self.handshake, conn);
+            emit_finished(&secrets, &mut self.transcript, conn);
 
             Ok(Box::new(ExpectCcs {
                 secrets,
-                handshake: self.handshake,
+                transcript: self.transcript,
                 session_id: self.session_id,
                 using_ems: self.using_ems,
                 resuming: true,
@@ -291,7 +290,7 @@ mod client_hello {
     }
 
     fn emit_server_hello(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
         session_id: SessionID,
         suite: &'static SupportedCipherSuite,
@@ -332,13 +331,13 @@ mod client_hello {
         };
 
         trace!("sending server hello {:?}", sh);
-        handshake.transcript.add_message(&sh);
+        transcript.add_message(&sh);
         conn.common.send_msg(sh, false);
         Ok(ep.send_ticket)
     }
 
     fn emit_certificate(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
         cert_chain: &[Certificate],
     ) {
@@ -351,15 +350,11 @@ mod client_hello {
             }),
         };
 
-        handshake.transcript.add_message(&c);
+        transcript.add_message(&c);
         conn.common.send_msg(c, false);
     }
 
-    fn emit_cert_status(
-        handshake: &mut HandshakeDetails,
-        conn: &mut ServerConnection,
-        ocsp: &[u8],
-    ) {
+    fn emit_cert_status(transcript: &mut HandshakeHash, conn: &mut ServerConnection, ocsp: &[u8]) {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
@@ -371,12 +366,12 @@ mod client_hello {
             }),
         };
 
-        handshake.transcript.add_message(&c);
+        transcript.add_message(&c);
         conn.common.send_msg(c, false);
     }
 
     fn emit_server_kx(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
@@ -411,13 +406,13 @@ mod client_hello {
             }),
         };
 
-        handshake.transcript.add_message(&m);
+        transcript.add_message(&m);
         conn.common.send_msg(m, false);
         Ok(kx)
     }
 
     fn emit_certificate_req(
-        handshake: &mut HandshakeDetails,
+        transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
     ) -> Result<bool, Error> {
         let client_auth = conn.config.get_verifier();
@@ -456,12 +451,12 @@ mod client_hello {
         };
 
         trace!("Sending CertificateRequest {:?}", m);
-        handshake.transcript.add_message(&m);
+        transcript.add_message(&m);
         conn.common.send_msg(m, false);
         Ok(true)
     }
 
-    fn emit_server_hello_done(handshake: &mut HandshakeDetails, conn: &mut ServerConnection) {
+    fn emit_server_hello_done(transcript: &mut HandshakeHash, conn: &mut ServerConnection) {
         let m = Message {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
@@ -471,14 +466,14 @@ mod client_hello {
             }),
         };
 
-        handshake.transcript.add_message(&m);
+        transcript.add_message(&m);
         conn.common.send_msg(m, false);
     }
 }
 
 // --- Process client's Certificate for client auth ---
 struct ExpectCertificate {
-    handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
     suite: &'static SupportedCipherSuite,
@@ -493,9 +488,7 @@ impl hs::State for ExpectCertificate {
         conn: &mut ServerConnection,
         m: Message,
     ) -> hs::NextStateOrError {
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         let cert_chain = require_handshake_msg_move!(
             m,
             HandshakeType::Certificate,
@@ -524,9 +517,7 @@ impl hs::State for ExpectCertificate {
             }
             None => {
                 debug!("client auth requested but no certificate supplied");
-                self.handshake
-                    .transcript
-                    .abandon_client_auth();
+                self.transcript.abandon_client_auth();
                 None
             }
             Some((end_entity, intermediates)) => {
@@ -544,7 +535,7 @@ impl hs::State for ExpectCertificate {
         };
 
         Ok(Box::new(ExpectClientKx {
-            handshake: self.handshake,
+            transcript: self.transcript,
             randoms: self.randoms,
             session_id: self.session_id,
             suite: self.suite,
@@ -558,7 +549,7 @@ impl hs::State for ExpectCertificate {
 
 // --- Process client's KeyExchange ---
 struct ExpectClientKx {
-    handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
     suite: &'static SupportedCipherSuite,
@@ -579,9 +570,7 @@ impl hs::State for ExpectClientKx {
             HandshakeType::ClientKeyExchange,
             HandshakePayload::ClientKeyExchange
         )?;
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
@@ -590,10 +579,7 @@ impl hs::State for ExpectClientKx {
         let kxd = tls12::complete_ecdh(self.server_kx, &peer_kx_params.public.0)?;
 
         let secrets = if self.using_ems {
-            let handshake_hash = self
-                .handshake
-                .transcript
-                .get_current_hash();
+            let handshake_hash = self.transcript.get_current_hash();
             ConnectionSecrets::new_ems(
                 &self.randoms,
                 &handshake_hash,
@@ -614,7 +600,7 @@ impl hs::State for ExpectClientKx {
         if let Some(client_cert) = self.client_cert {
             Ok(Box::new(ExpectCertificateVerify {
                 secrets,
-                handshake: self.handshake,
+                transcript: self.transcript,
                 session_id: self.session_id,
                 using_ems: self.using_ems,
                 client_cert,
@@ -623,7 +609,7 @@ impl hs::State for ExpectClientKx {
         } else {
             Ok(Box::new(ExpectCcs {
                 secrets,
-                handshake: self.handshake,
+                transcript: self.transcript,
                 session_id: self.session_id,
                 using_ems: self.using_ems,
                 resuming: false,
@@ -636,7 +622,7 @@ impl hs::State for ExpectClientKx {
 // --- Process client's certificate proof ---
 struct ExpectCertificateVerify {
     secrets: ConnectionSecrets,
-    handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     session_id: SessionID,
     using_ems: bool,
     client_cert: Vec<Certificate>,
@@ -655,10 +641,7 @@ impl hs::State for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_msgs = self
-                .handshake
-                .transcript
-                .take_handshake_buf();
+            let handshake_msgs = self.transcript.take_handshake_buf();
             let certs = &self.client_cert;
 
             conn.config
@@ -675,12 +658,10 @@ impl hs::State for ExpectCertificateVerify {
         trace!("client CertificateVerify OK");
         conn.client_cert_chain = Some(self.client_cert);
 
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
             secrets: self.secrets,
-            handshake: self.handshake,
+            transcript: self.transcript,
             session_id: self.session_id,
             using_ems: self.using_ems,
             resuming: false,
@@ -692,7 +673,7 @@ impl hs::State for ExpectCertificateVerify {
 // --- Process client's ChangeCipherSpec ---
 struct ExpectCcs {
     secrets: ConnectionSecrets,
-    handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     session_id: SessionID,
     using_ems: bool,
     resuming: bool,
@@ -712,7 +693,7 @@ impl hs::State for ExpectCcs {
             .start_decrypting();
         Ok(Box::new(ExpectFinished {
             secrets: self.secrets,
-            handshake: self.handshake,
+            transcript: self.transcript,
             session_id: self.session_id,
             using_ems: self.using_ems,
             resuming: self.resuming,
@@ -749,7 +730,7 @@ fn get_server_connion_value_tls12(
 
 fn emit_ticket(
     secrets: &ConnectionSecrets,
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     using_ems: bool,
     conn: &mut ServerConnection,
 ) {
@@ -775,7 +756,7 @@ fn emit_ticket(
         }),
     };
 
-    handshake.transcript.add_message(&m);
+    transcript.add_message(&m);
     conn.common.send_msg(m, false);
 }
 
@@ -791,10 +772,10 @@ fn emit_ccs(conn: &mut ServerConnection) {
 
 fn emit_finished(
     secrets: &ConnectionSecrets,
-    handshake: &mut HandshakeDetails,
+    transcript: &mut HandshakeHash,
     conn: &mut ServerConnection,
 ) {
-    let vh = handshake.transcript.get_current_hash();
+    let vh = transcript.get_current_hash();
     let verify_data = secrets.server_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -807,13 +788,13 @@ fn emit_finished(
         }),
     };
 
-    handshake.transcript.add_message(&f);
+    transcript.add_message(&f);
     conn.common.send_msg(f, true);
 }
 
 struct ExpectFinished {
     secrets: ConnectionSecrets,
-    handshake: HandshakeDetails,
+    transcript: HandshakeHash,
     session_id: SessionID,
     using_ems: bool,
     resuming: bool,
@@ -831,10 +812,7 @@ impl hs::State for ExpectFinished {
 
         conn.common.check_aligned_handshake()?;
 
-        let vh = self
-            .handshake
-            .transcript
-            .get_current_hash();
+        let vh = self.transcript.get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
         let _fin_verified =
@@ -862,18 +840,16 @@ impl hs::State for ExpectFinished {
         }
 
         // Send our CCS and Finished.
-        self.handshake
-            .transcript
-            .add_message(&m);
+        self.transcript.add_message(&m);
         if !self.resuming {
             if self.send_ticket {
-                emit_ticket(&self.secrets, &mut self.handshake, self.using_ems, conn);
+                emit_ticket(&self.secrets, &mut self.transcript, self.using_ems, conn);
             }
             emit_ccs(conn);
             conn.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.handshake, conn);
+            emit_finished(&self.secrets, &mut self.transcript, conn);
         }
 
         conn.common.start_traffic();

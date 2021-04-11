@@ -1,17 +1,4 @@
-use crate::hash_hs;
 use crate::{key, sign};
-
-pub struct HandshakeDetails {
-    pub transcript: hash_hs::HandshakeHash,
-}
-
-impl HandshakeDetails {
-    pub fn new() -> HandshakeDetails {
-        HandshakeDetails {
-            transcript: hash_hs::HandshakeHash::new(),
-        }
-    }
-}
 
 /// ActiveCertifiedKey wraps CertifiedKey and tracks OSCP and SCT state
 /// in a single handshake.
