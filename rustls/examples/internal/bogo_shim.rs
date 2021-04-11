@@ -685,7 +685,7 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 .unwrap();
             sent_message = true;
 
-            let mut one_byte = [ 0u8 ];
+            let mut one_byte = [0u8];
             let mut cursor = io::Cursor::new(&mut one_byte[..]);
             sess.write_tls(&mut cursor).unwrap();
             conn.write(&one_byte).expect("IO error");
