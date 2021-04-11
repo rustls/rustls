@@ -189,6 +189,7 @@ mod client_hello {
                         emit_fake_ccs(conn);
                         return Ok(Box::new(hs::ExpectClientHello {
                             handshake: self.handshake,
+                            session_id: SessionID::empty(),
                             using_ems: false,
                             done_retry: true,
                             send_ticket: self.send_ticket,

@@ -8,9 +8,8 @@ use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::{
-    ClientECDHParams, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
-};
+use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, HandshakePayload};
+use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerConnection;
@@ -42,6 +41,7 @@ mod client_hello {
 
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) handshake: HandshakeDetails,
+        pub(in crate::server) session_id: SessionID,
         pub(in crate::server) suite: &'static SupportedCipherSuite,
         pub(in crate::server) using_ems: bool,
         pub(in crate::server) randoms: ConnectionRandoms,
@@ -170,13 +170,14 @@ mod client_hello {
 
             // If we're not offered a ticket or a potential connection ID,
             // allocate a connection ID.
-            if self.handshake.session_id.is_empty() && !ticket_received {
-                self.handshake.session_id = SessionID::random()?;
+            if self.session_id.is_empty() && !ticket_received {
+                self.session_id = SessionID::random()?;
             }
 
             self.send_ticket = emit_server_hello(
                 &mut self.handshake,
                 conn,
+                self.session_id,
                 self.suite,
                 self.using_ems,
                 &mut ocsp_response,
@@ -205,6 +206,7 @@ mod client_hello {
                 Ok(Box::new(ExpectCertificate {
                     handshake: self.handshake,
                     randoms: self.randoms,
+                    session_id: self.session_id,
                     suite: self.suite,
                     using_ems: self.using_ems,
                     server_kx,
@@ -214,6 +216,7 @@ mod client_hello {
                 Ok(Box::new(ExpectClientKx {
                     handshake: self.handshake,
                     randoms: self.randoms,
+                    session_id: self.session_id,
                     suite: self.suite,
                     using_ems: self.using_ems,
                     server_kx,
@@ -238,10 +241,11 @@ mod client_hello {
                     .illegal_param("refusing to resume without ems"));
             }
 
-            self.handshake.session_id = *id;
+            self.session_id = *id;
             self.send_ticket = emit_server_hello(
                 &mut self.handshake,
                 conn,
+                self.session_id,
                 self.suite,
                 self.using_ems,
                 &mut None,
@@ -278,6 +282,7 @@ mod client_hello {
             Ok(Box::new(ExpectCcs {
                 secrets,
                 handshake: self.handshake,
+                session_id: self.session_id,
                 using_ems: self.using_ems,
                 resuming: true,
                 send_ticket: self.send_ticket,
@@ -288,6 +293,7 @@ mod client_hello {
     fn emit_server_hello(
         handshake: &mut HandshakeDetails,
         conn: &mut ServerConnection,
+        session_id: SessionID,
         suite: &'static SupportedCipherSuite,
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
@@ -317,7 +323,7 @@ mod client_hello {
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
-                    session_id: handshake.session_id,
+                    session_id,
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
                     extensions: ep.exts,
@@ -474,6 +480,7 @@ mod client_hello {
 struct ExpectCertificate {
     handshake: HandshakeDetails,
     randoms: ConnectionRandoms,
+    session_id: SessionID,
     suite: &'static SupportedCipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
@@ -539,6 +546,7 @@ impl hs::State for ExpectCertificate {
         Ok(Box::new(ExpectClientKx {
             handshake: self.handshake,
             randoms: self.randoms,
+            session_id: self.session_id,
             suite: self.suite,
             using_ems: self.using_ems,
             server_kx: self.server_kx,
@@ -552,6 +560,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectClientKx {
     handshake: HandshakeDetails,
     randoms: ConnectionRandoms,
+    session_id: SessionID,
     suite: &'static SupportedCipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
@@ -606,6 +615,7 @@ impl hs::State for ExpectClientKx {
             Ok(Box::new(ExpectCertificateVerify {
                 secrets,
                 handshake: self.handshake,
+                session_id: self.session_id,
                 using_ems: self.using_ems,
                 client_cert,
                 send_ticket: self.send_ticket,
@@ -614,6 +624,7 @@ impl hs::State for ExpectClientKx {
             Ok(Box::new(ExpectCcs {
                 secrets,
                 handshake: self.handshake,
+                session_id: self.session_id,
                 using_ems: self.using_ems,
                 resuming: false,
                 send_ticket: self.send_ticket,
@@ -626,6 +637,7 @@ impl hs::State for ExpectClientKx {
 struct ExpectCertificateVerify {
     secrets: ConnectionSecrets,
     handshake: HandshakeDetails,
+    session_id: SessionID,
     using_ems: bool,
     client_cert: Vec<Certificate>,
     send_ticket: bool,
@@ -669,6 +681,7 @@ impl hs::State for ExpectCertificateVerify {
         Ok(Box::new(ExpectCcs {
             secrets: self.secrets,
             handshake: self.handshake,
+            session_id: self.session_id,
             using_ems: self.using_ems,
             resuming: false,
             send_ticket: self.send_ticket,
@@ -680,6 +693,7 @@ impl hs::State for ExpectCertificateVerify {
 struct ExpectCcs {
     secrets: ConnectionSecrets,
     handshake: HandshakeDetails,
+    session_id: SessionID,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -699,6 +713,7 @@ impl hs::State for ExpectCcs {
         Ok(Box::new(ExpectFinished {
             secrets: self.secrets,
             handshake: self.handshake,
+            session_id: self.session_id,
             using_ems: self.using_ems,
             resuming: self.resuming,
             send_ticket: self.send_ticket,
@@ -799,6 +814,7 @@ fn emit_finished(
 struct ExpectFinished {
     secrets: ConnectionSecrets,
     handshake: HandshakeDetails,
+    session_id: SessionID,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -831,13 +847,13 @@ impl hs::State for ExpectFinished {
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         // Save connion, perhaps
-        if !self.resuming && !self.handshake.session_id.is_empty() {
+        if !self.resuming && !self.session_id.is_empty() {
             let value = get_server_connion_value_tls12(&self.secrets, self.using_ems, conn);
 
-            let worked = conn.config.session_storage.put(
-                self.handshake.session_id.get_encoding(),
-                value.get_encoding(),
-            );
+            let worked = conn
+                .config
+                .session_storage
+                .put(self.session_id.get_encoding(), value.get_encoding());
             if worked {
                 debug!("Session saved");
             } else {

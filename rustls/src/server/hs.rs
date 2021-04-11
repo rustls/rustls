@@ -7,6 +7,7 @@ use crate::log::{debug, trace};
 use crate::msgs::enums::{AlertDescription, ExtensionType};
 use crate::msgs::enums::{CipherSuite, Compression};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
@@ -250,6 +251,7 @@ impl ExtensionProcessing {
 pub struct ExpectClientHello {
     pub handshake: HandshakeDetails,
     pub extra_exts: Vec<ServerExtension>,
+    pub session_id: SessionID,
     pub using_ems: bool,
     pub done_retry: bool,
     pub send_ticket: bool,
@@ -263,6 +265,7 @@ impl ExpectClientHello {
         let mut ech = ExpectClientHello {
             handshake: HandshakeDetails::new(),
             extra_exts,
+            session_id: SessionID::empty(),
             using_ems: false,
             done_retry: false,
             send_ticket: false,
@@ -477,6 +480,7 @@ impl State for ExpectClientHello {
         } else {
             tls12::CompleteClientHelloHandling {
                 handshake: self.handshake,
+                session_id: self.session_id,
                 suite,
                 using_ems: self.using_ems,
                 randoms,
