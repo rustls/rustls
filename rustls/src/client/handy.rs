@@ -63,7 +63,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
         &self,
         _acceptable_issuers: &[&[u8]],
         _sigschemes: &[SignatureScheme],
-    ) -> Option<sign::CertifiedKey> {
+    ) -> Option<Arc<sign::CertifiedKey>> {
         None
     }
 
@@ -72,7 +72,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-pub struct AlwaysResolvesClientCert(sign::CertifiedKey);
+pub struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
     pub fn new(
@@ -81,9 +81,9 @@ impl AlwaysResolvesClientCert {
     ) -> Result<AlwaysResolvesClientCert, Error> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
-        Ok(AlwaysResolvesClientCert(sign::CertifiedKey::new(
+        Ok(AlwaysResolvesClientCert(Arc::new(sign::CertifiedKey::new(
             chain, key,
-        )))
+        ))))
     }
 }
 
@@ -92,7 +92,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
         &self,
         _acceptable_issuers: &[&[u8]],
         _sigschemes: &[SignatureScheme],
-    ) -> Option<sign::CertifiedKey> {
+    ) -> Option<Arc<sign::CertifiedKey>> {
         Some(self.0.clone())
     }
 

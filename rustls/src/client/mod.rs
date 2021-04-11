@@ -72,7 +72,7 @@ pub trait ResolvesClientCert: Send + Sync {
         &self,
         acceptable_issuers: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<sign::CertifiedKey>;
+    ) -> Option<Arc<sign::CertifiedKey>>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;

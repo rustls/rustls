@@ -271,14 +271,14 @@ impl rustls::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
         &self,
         acceptable_issuers: &[&[u8]],
         sigschemes: &[rustls::SignatureScheme],
-    ) -> Option<rustls::sign::CertifiedKey> {
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
         if !sigschemes.contains(&self.scheme) {
             quit(":NO_COMMON_SIGNATURE_ALGORITHMS:");
         }
         let mut certkey = self
             .resolver
             .resolve(acceptable_issuers, sigschemes)?;
-        certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
+        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
         });

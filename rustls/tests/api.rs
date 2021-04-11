@@ -661,7 +661,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         &self,
         acceptable_issuers: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<sign::CertifiedKey> {
+    ) -> Option<Arc<sign::CertifiedKey>> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 

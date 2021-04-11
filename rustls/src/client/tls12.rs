@@ -259,17 +259,15 @@ impl hs::State for ExpectServerKx {
 
 fn emit_certificate(
     transcript: &mut HandshakeHash,
-    client_auth: &mut ClientAuthDetails,
+    cert_chain: CertificatePayload,
     conn: &mut ClientConnection,
 ) {
-    let chosen_cert = client_auth.cert.take();
-
     let cert = Message {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(chosen_cert.unwrap_or_else(Vec::new)),
+            payload: HandshakePayload::Certificate(cert_chain),
         }),
     };
 
@@ -413,14 +411,14 @@ impl hs::State for ExpectCertificateRequest {
             .client_auth_cert_resolver
             .resolve(&canames, &certreq.sigschemes);
 
-        if let Some(mut certkey) = maybe_certkey {
+        if let Some(certkey) = maybe_certkey {
             let maybe_signer = certkey
                 .key
                 .choose_scheme(&certreq.sigschemes);
 
             if maybe_signer.is_some() {
                 debug!("Attempting client auth");
-                client_auth.cert = Some(certkey.take_cert());
+                client_auth.certkey = Some(certkey);
             }
             client_auth.signer = maybe_signer;
         } else {
@@ -595,7 +593,11 @@ impl hs::State for ExpectServerDone {
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate(&mut st.transcript, client_auth, conn);
+            if let Some(cert_key) = &client_auth.certkey {
+                emit_certificate(&mut st.transcript, cert_key.cert.clone(), conn);
+            } else {
+                emit_certificate(&mut st.transcript, Vec::new(), conn);
+            }
         }
 
         // 5a.

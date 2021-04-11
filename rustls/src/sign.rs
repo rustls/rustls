@@ -5,7 +5,6 @@ use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
 use std::convert::TryFrom;
-use std::mem;
 use std::sync::Arc;
 
 /// An abstract signing key.
@@ -66,11 +65,6 @@ impl CertifiedKey {
     /// The end-entity certificate.
     pub fn end_entity_cert(&self) -> Result<&key::Certificate, SignError> {
         self.cert.get(0).ok_or(SignError(()))
-    }
-
-    /// Steal ownership of the certificate chain.
-    pub fn take_cert(&mut self) -> Vec<key::Certificate> {
-        mem::take(&mut self.cert)
     }
 
     /// Check the certificate chain for validity:

@@ -44,8 +44,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     - `rustls::ProducesTickets::get_lifetime` to `rustls::ProducesTickets::lifetime`.
     - `rustls::Session`: `get_peer_certificates` to `peer_certificates`, `get_alpn_protocol` to `alpn_protocol`,
       `get_protocol_version` to `protocol_version`, `get_negotiated_ciphersuite` to `negotiated_cipher_suite`.
-  - *Breaking API change*: `ResolvesServerCert::resolve` now returns `Option<Arc<CertifiedKey>>` instead of 
-    `Option<CertifiedKey>`.
+  - *Breaking API change*: `ResolvesServerCert::resolve` and `ResolvesClientCert::resolve` now return
+    `Option<Arc<CertifiedKey>>` instead of `Option<CertifiedKey>`.  `CertifiedKey` is now an immutable
+    type.
 * 0.19.0 (2020-11-22):
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.

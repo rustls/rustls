@@ -791,12 +791,12 @@ impl hs::State for ExpectCertificateRequest {
             .resolve(&canames, &compat_sigschemes);
 
         let mut client_auth = ClientAuthDetails::new();
-        if let Some(mut certkey) = maybe_certkey {
+        if let Some(certkey) = maybe_certkey {
             debug!("Attempting client auth");
             let maybe_signer = certkey
                 .key
                 .choose_scheme(&compat_sigschemes);
-            client_auth.cert = Some(certkey.take_cert());
+            client_auth.certkey = Some(certkey);
             client_auth.signer = maybe_signer;
             client_auth.auth_context = Some(certreq.context.0.clone());
         } else {
@@ -831,11 +831,11 @@ fn emit_certificate_tls13(
         entries: Vec::new(),
     };
 
-    if let Some(cert_chain) = client_auth.cert.take() {
-        for cert in cert_chain {
+    if let Some(cert_key) = &client_auth.certkey {
+        for cert in &cert_key.cert {
             cert_payload
                 .entries
-                .push(CertificateEntry::new(cert));
+                .push(CertificateEntry::new(cert.clone()));
         }
     }
 

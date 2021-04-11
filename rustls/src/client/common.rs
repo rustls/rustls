@@ -9,6 +9,8 @@ use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
 use crate::sign;
 
+use std::sync::Arc;
+
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
     pub ocsp_response: Vec<u8>,
@@ -132,7 +134,7 @@ impl ReceivedTicketDetails {
 }
 
 pub struct ClientAuthDetails {
-    pub cert: Option<CertificatePayload>,
+    pub certkey: Option<Arc<sign::CertifiedKey>>,
     pub signer: Option<Box<dyn sign::Signer>>,
     pub auth_context: Option<Vec<u8>>,
 }
@@ -140,7 +142,7 @@ pub struct ClientAuthDetails {
 impl ClientAuthDetails {
     pub fn new() -> ClientAuthDetails {
         ClientAuthDetails {
-            cert: None,
+            certkey: None,
             signer: None,
             auth_context: None,
         }
