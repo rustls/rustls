@@ -1,34 +1,22 @@
+use crate::conn::ConnectionRandoms;
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
-use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
-use crate::key::Certificate;
-use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ExtensionType};
-use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat};
-use crate::msgs::enums::{ClientCertificateType, SignatureScheme};
+use crate::msgs::enums::{CipherSuite, Compression};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::CertificateRequestPayload;
-use crate::msgs::handshake::CertificateStatus;
-use crate::msgs::handshake::ClientExtension;
-use crate::msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
+use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
-use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
-use crate::msgs::handshake::{ECDHEServerKeyExchange, ServerKeyExchangePayload};
-use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
-use crate::msgs::handshake::{HandshakeMessagePayload, Random, ServerHelloPayload};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig, ServerConnection};
-use crate::sign;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::{HandshakeDetails, ServerKxDetails};
+use crate::server::common::HandshakeDetails;
 use crate::server::{tls12, tls13};
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -99,7 +87,10 @@ pub fn can_resume(
 
 // Require an exact match for the purpose of comparing SNI DNS Names from two
 // client hellos, even though a case-insensitive comparison might also be OK.
-fn same_dns_name_or_both_none(a: Option<&webpki::DnsName>, b: Option<&webpki::DnsName>) -> bool {
+pub(super) fn same_dns_name_or_both_none(
+    a: Option<&webpki::DnsName>,
+    b: Option<&webpki::DnsName>,
+) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => {
             let a: &str = a.as_ref().into();
@@ -156,7 +147,7 @@ impl ExtensionProcessing {
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        handshake: &HandshakeDetails,
+        extra_exts: Vec<ServerExtension>,
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &conn.config.alpn_protocols;
@@ -262,13 +253,12 @@ impl ExtensionProcessing {
             sct_list.take();
         }
 
-        self.exts
-            .extend(handshake.extra_exts.iter().cloned());
+        self.exts.extend(extra_exts);
 
         Ok(())
     }
 
-    fn process_tls12(
+    pub(super) fn process_tls12(
         &mut self,
         conn: &ServerConnection,
         hello: &ClientHelloPayload,
@@ -311,6 +301,7 @@ impl ExtensionProcessing {
 
 pub struct ExpectClientHello {
     pub handshake: HandshakeDetails,
+    pub extra_exts: Vec<ServerExtension>,
     pub using_ems: bool,
     pub done_retry: bool,
     pub send_ticket: bool,
@@ -322,7 +313,8 @@ impl ExpectClientHello {
         extra_exts: Vec<ServerExtension>,
     ) -> ExpectClientHello {
         let mut ech = ExpectClientHello {
-            handshake: HandshakeDetails::new(extra_exts),
+            handshake: HandshakeDetails::new(),
+            extra_exts,
             using_ems: false,
             done_retry: false,
             send_ticket: false,
@@ -338,249 +330,6 @@ impl ExpectClientHello {
         }
 
         ech
-    }
-
-    fn emit_server_hello(
-        &mut self,
-        conn: &mut ServerConnection,
-        suite: &'static SupportedCipherSuite,
-        ocsp_response: &mut Option<&[u8]>,
-        sct_list: &mut Option<&[u8]>,
-        hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
-        randoms: &ConnectionRandoms,
-    ) -> Result<(), Error> {
-        let mut ep = ExtensionProcessing::new();
-        ep.process_common(
-            conn,
-            suite,
-            ocsp_response,
-            sct_list,
-            hello,
-            resumedata,
-            &self.handshake,
-        )?;
-        ep.process_tls12(conn, hello, self.using_ems);
-
-        self.send_ticket = ep.send_ticket;
-
-        let sh = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&randoms.server),
-                    session_id: self.handshake.session_id,
-                    cipher_suite: suite.suite,
-                    compression_method: Compression::Null,
-                    extensions: ep.exts,
-                }),
-            }),
-        };
-
-        trace!("sending server hello {:?}", sh);
-        self.handshake
-            .transcript
-            .add_message(&sh);
-        conn.common.send_msg(sh, false);
-        Ok(())
-    }
-
-    fn emit_certificate(&mut self, conn: &mut ServerConnection, cert_chain: &[Certificate]) {
-        let c = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
-            }),
-        };
-
-        self.handshake
-            .transcript
-            .add_message(&c);
-        conn.common.send_msg(c, false);
-    }
-
-    fn emit_cert_status(&mut self, conn: &mut ServerConnection, ocsp: &[u8]) {
-        let st = CertificateStatus::new(ocsp.to_owned());
-
-        let c = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateStatus,
-                payload: HandshakePayload::CertificateStatus(st),
-            }),
-        };
-
-        self.handshake
-            .transcript
-            .add_message(&c);
-        conn.common.send_msg(c, false);
-    }
-
-    fn emit_server_kx(
-        &mut self,
-        conn: &mut ServerConnection,
-        sigschemes: Vec<SignatureScheme>,
-        skxg: &'static kx::SupportedKxGroup,
-        signing_key: &dyn sign::SigningKey,
-        randoms: &ConnectionRandoms,
-    ) -> Result<kx::KeyExchange, Error> {
-        let kx = kx::KeyExchange::start(skxg)
-            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
-        let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
-
-        let mut msg = Vec::new();
-        msg.extend(&randoms.client);
-        msg.extend(&randoms.server);
-        secdh.encode(&mut msg);
-
-        let signer = signing_key
-            .choose_scheme(&sigschemes)
-            .ok_or_else(|| Error::General("incompatible signing key".to_string()))?;
-        let sigscheme = signer.get_scheme();
-        let sig = signer.sign(&msg)?;
-
-        let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
-            params: secdh,
-            dss: DigitallySignedStruct::new(sigscheme, sig),
-        });
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerKeyExchange,
-                payload: HandshakePayload::ServerKeyExchange(skx),
-            }),
-        };
-
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, false);
-        Ok(kx)
-    }
-
-    fn emit_certificate_req(&mut self, conn: &mut ServerConnection) -> Result<bool, Error> {
-        let client_auth = conn.config.get_verifier();
-
-        if !client_auth.offer_client_auth() {
-            return Ok(false);
-        }
-
-        let verify_schemes = client_auth.supported_verify_schemes();
-
-        let names = client_auth
-            .client_auth_root_subjects(conn.get_sni())
-            .ok_or_else(|| {
-                debug!("could not determine root subjects based on SNI");
-                conn.common
-                    .send_fatal_alert(AlertDescription::AccessDenied);
-                Error::General("client rejected by client_auth_root_subjects".into())
-            })?;
-
-        let cr = CertificateRequestPayload {
-            certtypes: vec![
-                ClientCertificateType::RSASign,
-                ClientCertificateType::ECDSASign,
-            ],
-            sigschemes: verify_schemes,
-            canames: names,
-        };
-
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateRequest,
-                payload: HandshakePayload::CertificateRequest(cr),
-            }),
-        };
-
-        trace!("Sending CertificateRequest {:?}", m);
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, false);
-        Ok(true)
-    }
-
-    fn emit_server_hello_done(&mut self, conn: &mut ServerConnection) {
-        let m = Message {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHelloDone,
-                payload: HandshakePayload::ServerHelloDone,
-            }),
-        };
-
-        self.handshake
-            .transcript
-            .add_message(&m);
-        conn.common.send_msg(m, false);
-    }
-
-    fn start_resumption(
-        mut self,
-        conn: &mut ServerConnection,
-        client_hello: &ClientHelloPayload,
-        suite: &'static SupportedCipherSuite,
-        sni: Option<&webpki::DnsName>,
-        id: &SessionID,
-        resumedata: persist::ServerSessionValue,
-        randoms: &ConnectionRandoms,
-    ) -> NextStateOrError {
-        debug!("Resuming session");
-
-        if resumedata.extended_ms && !self.using_ems {
-            return Err(illegal_param(conn, "refusing to resume without ems"));
-        }
-
-        self.handshake.session_id = *id;
-        self.emit_server_hello(
-            conn,
-            suite,
-            &mut None,
-            &mut None,
-            client_hello,
-            Some(&resumedata),
-            randoms,
-        )?;
-
-        let secrets = ConnectionSecrets::new_resume(&randoms, suite, &resumedata.master_secret.0);
-        conn.config.key_log.log(
-            "CLIENT_RANDOM",
-            &secrets.randoms.client,
-            &secrets.master_secret,
-        );
-        conn.common
-            .start_encryption_tls12(&secrets);
-        conn.client_cert_chain = resumedata.client_cert_chain;
-
-        if self.send_ticket {
-            tls12::emit_ticket(&secrets, &mut self.handshake, self.using_ems, conn);
-        }
-        tls12::emit_ccs(conn);
-        conn.common
-            .record_layer
-            .start_encrypting();
-        tls12::emit_finished(&secrets, &mut self.handshake, conn);
-
-        assert!(same_dns_name_or_both_none(sni, conn.get_sni()));
-
-        Ok(Box::new(tls12::ExpectCcs {
-            secrets,
-            handshake: self.handshake,
-            using_ems: self.using_ems,
-            resuming: true,
-            send_ticket: self.send_ticket,
-        }))
     }
 }
 
@@ -761,179 +510,33 @@ impl State for ExpectClientHello {
             .write_slice(&mut randoms.client);
 
         if conn.common.is_tls13() {
-            return tls13::CompleteClientHelloHandling {
+            tls13::CompleteClientHelloHandling {
                 handshake: self.handshake,
                 suite,
                 randoms,
                 done_retry: self.done_retry,
                 send_ticket: self.send_ticket,
+                extra_exts: self.extra_exts,
             }
-            .handle_client_hello(suite, conn, &certkey, &m);
-        }
-
-        // -- TLS1.2 only from hereon in --
-        self.handshake
-            .transcript
-            .add_message(&m);
-
-        if client_hello.ems_support_offered() {
-            self.using_ems = true;
-        }
-
-        let groups_ext = client_hello
-            .get_namedgroups_extension()
-            .ok_or_else(|| incompatible(conn, "client didn't describe groups"))?;
-        let ecpoints_ext = client_hello
-            .get_ecpoints_extension()
-            .ok_or_else(|| incompatible(conn, "client didn't describe ec points"))?;
-
-        trace!("namedgroups {:?}", groups_ext);
-        trace!("ecpoints {:?}", ecpoints_ext);
-
-        if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
-            conn.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(Error::PeerIncompatibleError(
-                "client didn't support uncompressed ec points".to_string(),
-            ));
-        }
-
-        // -- If TLS1.3 is enabled, signal the downgrade in the server random
-        if tls13_enabled {
-            randoms.set_tls12_downgrade_marker();
-        }
-
-        // -- Check for resumption --
-        // We can do this either by (in order of preference):
-        // 1. receiving a ticket that decrypts
-        // 2. receiving a sessionid that is in our cache
-        //
-        // If we receive a ticket, the sessionid won't be in our
-        // cache, so don't check.
-        //
-        // If either works, we end up with a ServerSessionValue
-        // which is passed to start_resumption and concludes
-        // our handling of the ClientHello.
-        //
-        let mut ticket_received = false;
-
-        if let Some(ClientExtension::SessionTicketOffer(ref ticket)) =
-            client_hello.get_ticket_extension()
-        {
-            ticket_received = true;
-            debug!("Ticket received");
-
-            if let Some(resume) = conn
-                .config
-                .ticketer
-                .decrypt(&ticket.0)
-                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
-                .and_then(|resumedata| can_resume(suite, &sni, self.using_ems, resumedata))
-            {
-                return self.start_resumption(
-                    conn,
-                    client_hello,
-                    suite,
-                    sni.as_ref(),
-                    &client_hello.session_id,
-                    resume,
-                    &randoms,
-                );
-            } else {
-                debug!("Ticket didn't decrypt");
-            }
-        }
-
-        // If we're not offered a ticket or a potential session ID,
-        // allocate a session ID.
-        if self.handshake.session_id.is_empty() && !ticket_received {
-            self.handshake.session_id = SessionID::random()?;
-        }
-
-        // Perhaps resume?  If we received a ticket, the sessionid
-        // does not correspond to a real session.
-        if !client_hello.session_id.is_empty() && !ticket_received {
-            if let Some(resume) = conn
-                .config
-                .session_storage
-                .get(&client_hello.session_id.get_encoding())
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
-                .and_then(|resumedata| can_resume(suite, &conn.sni, self.using_ems, resumedata))
-            {
-                return self.start_resumption(
-                    conn,
-                    client_hello,
-                    suite,
-                    sni.as_ref(),
-                    &client_hello.session_id,
-                    resume,
-                    &randoms,
-                );
-            }
-        }
-
-        // Now we have chosen a ciphersuite, we can make kx decisions.
-        let sigschemes = suite.resolve_sig_schemes(&sigschemes_ext);
-
-        if sigschemes.is_empty() {
-            return Err(incompatible(conn, "no supported sig scheme"));
-        }
-
-        let group = conn
-            .config
-            .kx_groups
-            .iter()
-            .find(|skxg| groups_ext.contains(&skxg.name))
-            .cloned()
-            .ok_or_else(|| incompatible(conn, "no supported group"))?;
-
-        let ecpoint = ECPointFormatList::supported()
-            .iter()
-            .find(|format| ecpoints_ext.contains(format))
-            .cloned()
-            .ok_or_else(|| incompatible(conn, "no supported point format"))?;
-
-        debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
-
-        let (mut ocsp_response, mut sct_list) =
-            (certkey.ocsp.as_deref(), certkey.sct_list.as_deref());
-        self.emit_server_hello(
-            conn,
-            suite,
-            &mut ocsp_response,
-            &mut sct_list,
-            client_hello,
-            None,
-            &randoms,
-        )?;
-        self.emit_certificate(conn, &certkey.cert);
-        if let Some(ocsp_response) = ocsp_response {
-            self.emit_cert_status(conn, ocsp_response);
-        }
-        let kx = self.emit_server_kx(conn, sigschemes, group, &*certkey.key, &randoms)?;
-        let doing_client_auth = self.emit_certificate_req(conn)?;
-        self.emit_server_hello_done(conn);
-
-        let server_kx = ServerKxDetails::new(kx);
-        if doing_client_auth {
-            Ok(Box::new(tls12::ExpectCertificate {
-                handshake: self.handshake,
-                randoms,
-                suite,
-                using_ems: self.using_ems,
-                server_kx,
-                send_ticket: self.send_ticket,
-            }))
+            .handle_client_hello(suite, conn, &certkey, &m)
         } else {
-            Ok(Box::new(tls12::ExpectClientKx {
+            tls12::CompleteClientHelloHandling {
                 handshake: self.handshake,
-                randoms,
                 suite,
                 using_ems: self.using_ems,
-                server_kx,
-                client_cert: None,
+                randoms,
                 send_ticket: self.send_ticket,
-            }))
+                extra_exts: self.extra_exts,
+            }
+            .handle_client_hello(
+                conn,
+                &certkey,
+                &m,
+                client_hello,
+                sigschemes_ext,
+                sni,
+                tls13_enabled,
+            )
         }
     }
 }
