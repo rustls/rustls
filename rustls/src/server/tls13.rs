@@ -724,7 +724,7 @@ mod client_hello {
     }
 }
 
-pub struct ExpectCertificate {
+struct ExpectCertificate {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
     pub randoms: ConnectionRandoms,
@@ -814,7 +814,7 @@ impl hs::State for ExpectCertificate {
     }
 }
 
-pub struct ExpectCertificateVerify {
+struct ExpectCertificateVerify {
     handshake: HandshakeDetails,
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
@@ -899,7 +899,7 @@ fn get_server_session_value(
     )
 }
 
-pub struct ExpectFinished {
+struct ExpectFinished {
     pub handshake: HandshakeDetails,
     pub suite: &'static SupportedCipherSuite,
     pub randoms: ConnectionRandoms,
@@ -1043,7 +1043,7 @@ impl hs::State for ExpectFinished {
 }
 
 // --- Process traffic ---
-pub struct ExpectTraffic {
+struct ExpectTraffic {
     suite: &'static SupportedCipherSuite,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
@@ -1148,7 +1148,7 @@ impl hs::State for ExpectTraffic {
 }
 
 #[cfg(feature = "quic")]
-pub struct ExpectQUICTraffic {
+struct ExpectQUICTraffic {
     key_schedule: KeyScheduleTraffic,
     _fin_verified: verify::FinishedMessageVerified,
 }

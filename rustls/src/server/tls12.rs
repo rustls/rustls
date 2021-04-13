@@ -487,13 +487,13 @@ mod client_hello {
 }
 
 // --- Process client's Certificate for client auth ---
-pub struct ExpectCertificate {
-    pub handshake: HandshakeDetails,
-    pub randoms: ConnectionRandoms,
-    pub suite: &'static SupportedCipherSuite,
-    pub using_ems: bool,
-    pub server_kx: kx::KeyExchange,
-    pub send_ticket: bool,
+struct ExpectCertificate {
+    handshake: HandshakeDetails,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    using_ems: bool,
+    server_kx: kx::KeyExchange,
+    send_ticket: bool,
 }
 
 impl hs::State for ExpectCertificate {
@@ -565,14 +565,14 @@ impl hs::State for ExpectCertificate {
 }
 
 // --- Process client's KeyExchange ---
-pub struct ExpectClientKx {
-    pub handshake: HandshakeDetails,
-    pub randoms: ConnectionRandoms,
-    pub suite: &'static SupportedCipherSuite,
-    pub using_ems: bool,
-    pub server_kx: kx::KeyExchange,
-    pub client_cert: Option<Vec<Certificate>>,
-    pub send_ticket: bool,
+struct ExpectClientKx {
+    handshake: HandshakeDetails,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    using_ems: bool,
+    server_kx: kx::KeyExchange,
+    client_cert: Option<Vec<Certificate>>,
+    send_ticket: bool,
 }
 
 impl hs::State for ExpectClientKx {
@@ -644,7 +644,7 @@ impl hs::State for ExpectClientKx {
 }
 
 // --- Process client's certificate proof ---
-pub struct ExpectCertificateVerify {
+struct ExpectCertificateVerify {
     secrets: ConnectionSecrets,
     handshake: HandshakeDetails,
     using_ems: bool,
@@ -698,12 +698,12 @@ impl hs::State for ExpectCertificateVerify {
 }
 
 // --- Process client's ChangeCipherSpec ---
-pub struct ExpectCcs {
-    pub secrets: ConnectionSecrets,
-    pub handshake: HandshakeDetails,
-    pub using_ems: bool,
-    pub resuming: bool,
-    pub send_ticket: bool,
+struct ExpectCcs {
+    secrets: ConnectionSecrets,
+    handshake: HandshakeDetails,
+    using_ems: bool,
+    resuming: bool,
+    send_ticket: bool,
 }
 
 impl hs::State for ExpectCcs {
@@ -753,7 +753,7 @@ fn get_server_connion_value_tls12(
     v
 }
 
-pub fn emit_ticket(
+fn emit_ticket(
     secrets: &ConnectionSecrets,
     handshake: &mut HandshakeDetails,
     using_ems: bool,
@@ -785,7 +785,7 @@ pub fn emit_ticket(
     conn.common.send_msg(m, false);
 }
 
-pub fn emit_ccs(conn: &mut ServerConnection) {
+fn emit_ccs(conn: &mut ServerConnection) {
     let m = Message {
         typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
@@ -795,7 +795,7 @@ pub fn emit_ccs(conn: &mut ServerConnection) {
     conn.common.send_msg(m, false);
 }
 
-pub fn emit_finished(
+fn emit_finished(
     secrets: &ConnectionSecrets,
     handshake: &mut HandshakeDetails,
     conn: &mut ServerConnection,
@@ -817,7 +817,7 @@ pub fn emit_finished(
     conn.common.send_msg(f, true);
 }
 
-pub struct ExpectFinished {
+struct ExpectFinished {
     secrets: ConnectionSecrets,
     handshake: HandshakeDetails,
     using_ems: bool,
@@ -890,7 +890,7 @@ impl hs::State for ExpectFinished {
 }
 
 // --- Process traffic ---
-pub struct ExpectTraffic {
+struct ExpectTraffic {
     secrets: ConnectionSecrets,
     _fin_verified: verify::FinishedMessageVerified,
 }
