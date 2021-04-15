@@ -259,6 +259,8 @@ mod rand;
 mod record_layer;
 mod stream;
 mod vecbuf;
+#[cfg(test)]
+mod vecbuf_test;
 mod verify;
 #[cfg(test)]
 mod verifybench;
