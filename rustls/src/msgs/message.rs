@@ -142,7 +142,7 @@ impl Message {
         let mut sub = r
             .sub(len as usize)
             .ok_or(MessageError::TooShortForLength)?;
-        let payload = Payload::read(&mut sub).unwrap();
+        let payload = Payload::read(&mut sub);
 
         Ok(Message {
             typ,
