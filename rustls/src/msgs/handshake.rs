@@ -1020,8 +1020,7 @@ impl ClientHelloPayload {
     pub fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
         self.get_psk_modes()
             .map(|modes| modes.contains(&mode))
-            .or(Some(false))
-            .unwrap()
+            .unwrap_or(false)
     }
 
 
