@@ -13,6 +13,8 @@ mod deframer_test;
 #[allow(non_camel_case_types)]
 pub mod enums;
 pub mod fragmenter;
+#[cfg(test)]
+mod fragmenter_test;
 #[allow(non_camel_case_types)]
 pub mod handshake;
 pub mod hsjoiner;
