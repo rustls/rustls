@@ -174,9 +174,9 @@ impl UnknownExtension {
         self.payload.encode(bytes);
     }
 
-    fn read(typ: ExtensionType, r: &mut Reader) -> Option<UnknownExtension> {
-        let payload = Payload::read(r)?;
-        Some(UnknownExtension { typ, payload })
+    fn read(typ: ExtensionType, r: &mut Reader) -> Self {
+        let payload = Payload::read(r);
+        Self { typ, payload }
     }
 }
 
@@ -291,7 +291,7 @@ impl Codec for ServerName {
 
         let payload = match typ {
             ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
-            _ => ServerNamePayload::Unknown(Payload::read(r).unwrap()),
+            _ => ServerNamePayload::Unknown(Payload::read(r)),
         };
 
         Some(ServerName { typ, payload })
@@ -512,7 +512,7 @@ impl Codec for CertificateStatusRequest {
                 Some(CertificateStatusRequest::OCSP(ocsp_req))
             }
             _ => {
-                let data = Payload::read(r)?;
+                let data = Payload::read(r);
                 Some(CertificateStatusRequest::Unknown((typ, data)))
             }
         }
@@ -642,7 +642,7 @@ impl Codec for ClientExtension {
             }
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
-                    let contents = Payload::read(&mut sub).unwrap();
+                    let contents = Payload::read(&mut sub);
                     ClientExtension::SessionTicketOffer(contents)
                 } else {
                     ClientExtension::SessionTicketRequest
@@ -679,7 +679,7 @@ impl Codec for ClientExtension {
                 ClientExtension::TransportParametersDraft(sub.rest().to_vec())
             }
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
-            _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
+            _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
         if sub.any_left() { None } else { Some(ext) }
@@ -816,7 +816,7 @@ impl Codec for ServerExtension {
                 ServerExtension::TransportParametersDraft(sub.rest().to_vec())
             }
             ExtensionType::EarlyData => ServerExtension::EarlyData,
-            _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
+            _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
         if sub.any_left() { None } else { Some(ext) }
@@ -1088,7 +1088,7 @@ impl Codec for HelloRetryExtension {
             ExtensionType::SupportedVersions => {
                 HelloRetryExtension::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
-            _ => HelloRetryExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
+            _ => HelloRetryExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
         if sub.any_left() { None } else { Some(ext) }
@@ -1364,7 +1364,7 @@ impl Codec for CertificateExtension {
                 let scts = SCTList::read(&mut sub)?;
                 CertificateExtension::SignedCertificateTimestamp(scts)
             }
-            _ => CertificateExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
+            _ => CertificateExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
         if sub.any_left() { None } else { Some(ext) }
@@ -1677,7 +1677,7 @@ impl Codec for ServerKeyExchangePayload {
     fn read(r: &mut Reader) -> Option<ServerKeyExchangePayload> {
         // read as Unknown, fully parse when we know the
         // KeyExchangeAlgorithm
-        Payload::read(r).map(ServerKeyExchangePayload::Unknown)
+        Some(Self::Unknown(Payload::read(r)))
     }
 }
 
@@ -1863,7 +1863,7 @@ impl Codec for CertReqExtension {
                 let cas = DistinguishedNames::read(&mut sub)?;
                 CertReqExtension::AuthorityNames(cas)
             }
-            _ => CertReqExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
+            _ => CertReqExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
         if sub.any_left() { None } else { Some(ext) }
@@ -1989,7 +1989,7 @@ impl Codec for NewSessionTicketExtension {
 
         let ext = match typ {
             ExtensionType::EarlyData => NewSessionTicketExtension::EarlyData(u32::read(&mut sub)?),
-            _ => NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)?),
+            _ => NewSessionTicketExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
         if sub.any_left() { None } else { Some(ext) }
@@ -2235,7 +2235,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::ServerHelloDone
             }
             HandshakeType::ClientKeyExchange => {
-                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub).unwrap())
+                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
             }
             HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
                 let p = CertificateRequestPayloadTLS13::read(&mut sub)?;
@@ -2262,7 +2262,7 @@ impl HandshakeMessagePayload {
             HandshakeType::KeyUpdate => {
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
             }
-            HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub).unwrap()),
+            HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
             HandshakeType::CertificateStatus => {
                 HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
             }
@@ -2274,7 +2274,7 @@ impl HandshakeMessagePayload {
                 // not legal on wire
                 return None;
             }
-            _ => HandshakePayload::Unknown(Payload::read(&mut sub).unwrap()),
+            _ => HandshakePayload::Unknown(Payload::read(&mut sub)),
         };
 
         if sub.any_left() {

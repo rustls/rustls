@@ -11,7 +11,7 @@ impl Codec for Payload {
     }
 
     fn read(r: &mut Reader) -> Option<Payload> {
-        Some(Payload(r.rest().to_vec()))
+        Some(Payload::read(r))
     }
 }
 
@@ -22,6 +22,10 @@ impl Payload {
 
     pub fn empty() -> Payload {
         Payload::new(Vec::new())
+    }
+
+    pub fn read(r: &mut Reader) -> Self {
+        Self(r.rest().to_vec())
     }
 }
 
