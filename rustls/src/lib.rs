@@ -272,6 +272,8 @@ mod keylog;
 mod kx;
 mod server;
 mod suites;
+#[cfg(test)]
+mod suites_test;
 mod ticketer;
 
 /// Internal classes which may be useful outside the library.
