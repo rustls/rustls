@@ -207,12 +207,3 @@ impl Ticketer {
         Ok(Arc::new(TicketSwitcher::new(6 * 60 * 60, generate_inner)?))
     }
 }
-
-#[test]
-fn basic_pairwise_test() {
-    let t = Ticketer::new().unwrap();
-    assert_eq!(true, t.enabled());
-    let cipher = t.encrypt(b"hello world").unwrap();
-    let plain = t.decrypt(&cipher).unwrap();
-    assert_eq!(plain, b"hello world");
-}
