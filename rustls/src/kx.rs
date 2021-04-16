@@ -26,9 +26,7 @@ impl KeyExchange {
         kx_params: &[u8],
         supported: &[&'static SupportedKxGroup],
     ) -> Option<KeyExchangeResult> {
-        let mut rd = Reader::init(kx_params);
-        let ecdh_params = ServerECDHParams::read(&mut rd)?;
-
+        let ecdh_params = Self::decode_ecdh_params::<ServerECDHParams>(kx_params)?;
         KeyExchange::choose(ecdh_params.curve_params.named_group, supported)
             .and_then(KeyExchange::start)
             .and_then(|kx| kx.complete(&ecdh_params.public.0))
@@ -67,20 +65,19 @@ impl KeyExchange {
         self.skxg.name
     }
 
-    fn decode_client_params(&self, kx_params: &[u8]) -> Option<ClientECDHParams> {
+    fn decode_ecdh_params<T: Codec>(kx_params: &[u8]) -> Option<T> {
         let mut rd = Reader::init(kx_params);
-        let ecdh_params = ClientECDHParams::read(&mut rd).unwrap();
-        if rd.any_left() {
-            None
-        } else {
-            Some(ecdh_params)
+        let ecdh_params = T::read(&mut rd)?;
+        match rd.any_left() {
+            false => Some(ecdh_params),
+            true => None,
         }
     }
 
     /// Complete the server-side computation, by decoding the client's ClientECDHParams
     /// and then using the contained public key to invoke complete().
     pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        self.decode_client_params(kx_params)
+        Self::decode_ecdh_params::<ClientECDHParams>(kx_params)
             .and_then(|ecdh| self.complete(&ecdh.public.0))
     }
 
@@ -132,3 +129,24 @@ pub static SECP384R1: SupportedKxGroup = SupportedKxGroup {
 
 /// A list of all the key exchange groups supported by rustls.
 pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP384R1];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn server_ecdhe_remaining_bytes() {
+        let key = KeyExchange::start(&X25519).unwrap();
+        let server_params = ServerECDHParams::new(X25519.name, key.pubkey.as_ref());
+        let mut server_buf = Vec::new();
+        server_params.encode(&mut server_buf);
+        server_buf.push(34);
+        assert!(KeyExchange::client_ecdhe(&server_buf, &[&X25519]).is_none());
+    }
+
+    #[test]
+    fn client_ecdhe_invalid() {
+        let key = KeyExchange::start(&X25519).unwrap();
+        assert!(KeyExchange::server_complete(key, &[34]).is_none());
+    }
+}
