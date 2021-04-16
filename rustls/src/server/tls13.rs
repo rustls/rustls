@@ -726,12 +726,12 @@ mod client_hello {
 }
 
 struct ExpectCertificate {
-    pub transcript: HandshakeHash,
-    pub suite: &'static SupportedCipherSuite,
-    pub randoms: ConnectionRandoms,
-    pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    pub send_ticket: bool,
-    pub hash_at_server_fin: Digest,
+    transcript: HandshakeHash,
+    suite: &'static SupportedCipherSuite,
+    randoms: ConnectionRandoms,
+    key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    send_ticket: bool,
+    hash_at_server_fin: Digest,
 }
 
 impl hs::State for ExpectCertificate {
@@ -890,12 +890,12 @@ fn get_server_session_value(
 }
 
 struct ExpectFinished {
-    pub transcript: HandshakeHash,
-    pub suite: &'static SupportedCipherSuite,
-    pub randoms: ConnectionRandoms,
-    pub key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    pub send_ticket: bool,
-    pub hash_at_server_fin: Digest,
+    transcript: HandshakeHash,
+    suite: &'static SupportedCipherSuite,
+    randoms: ConnectionRandoms,
+    key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    send_ticket: bool,
+    hash_at_server_fin: Digest,
 }
 
 impl ExpectFinished {
