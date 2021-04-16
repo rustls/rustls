@@ -63,10 +63,10 @@ pub(super) fn handle_server_hello(
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
-    mut transcript: HandshakeHash,
+    transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    offered_key_share: kx::KeyExchange,
+    our_key_share: kx::KeyExchange,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
     if !suite.usable_for_version(ProtocolVersion::TLSv1_3) {
@@ -77,17 +77,115 @@ pub(super) fn handle_server_hello(
 
     validate_server_hello(cx.common, &server_hello)?;
 
-    let (key_schedule, hash_at_client_recvd_server_hello) = start_handshake_traffic(
-        suite,
-        cx,
-        early_key_schedule,
-        &server_hello,
-        &mut resuming_session,
-        dns_name.as_ref(),
-        &mut transcript,
-        offered_key_share,
-        &randoms,
-    )?;
+    let their_key_share = server_hello
+        .get_key_share()
+        .ok_or_else(|| {
+            cx.common
+                .send_fatal_alert(AlertDescription::MissingExtension);
+            Error::PeerMisbehavedError("missing key share".to_string())
+        })?;
+
+    if our_key_share.group() != their_key_share.group {
+        return Err(cx
+            .common
+            .illegal_param("wrong group for key share"));
+    }
+
+    let shared = our_key_share
+        .complete(&their_key_share.payload.0)
+        .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
+
+    let mut key_schedule = if let (Some(selected_psk), Some(early_key_schedule)) =
+        (server_hello.get_psk_index(), early_key_schedule)
+    {
+        if let Some(ref resuming) = resuming_session {
+            if !resuming
+                .supported_cipher_suite()
+                .can_resume_to(suite)
+            {
+                return Err(cx
+                    .common
+                    .illegal_param("server resuming incompatible suite"));
+            }
+
+            // If the server varies the suite here, we will have encrypted early data with
+            // the wrong suite.
+            if cx.data.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
+                return Err(cx
+                    .common
+                    .illegal_param("server varied suite with early data"));
+            }
+
+            if selected_psk != 0 {
+                return Err(cx
+                    .common
+                    .illegal_param("server selected invalid psk"));
+            }
+
+            debug!("Resuming using PSK");
+            // The key schedule has been initialized and set in fill_in_psk_binder()
+        } else {
+            return Err(Error::PeerMisbehavedError(
+                "server selected unoffered psk".to_string(),
+            ));
+        }
+        early_key_schedule.into_handshake(&shared.shared_secret)
+    } else {
+        debug!("Not resuming");
+        // Discard the early data key schedule.
+        cx.data.early_data.rejected();
+        cx.common.early_traffic = false;
+        resuming_session.take();
+        KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&shared.shared_secret)
+    };
+
+    // Remember what KX group the server liked for next time.
+    save_kx_hint(cx.config, dns_name.as_ref(), their_key_share.group);
+
+    // If we change keying when a subsequent handshake message is being joined,
+    // the two halves will have different record layer protections.  Disallow this.
+    cx.common.check_aligned_handshake()?;
+
+    let hash_at_client_recvd_server_hello = transcript.get_current_hash();
+
+    let _maybe_write_key = if !cx.data.early_data.is_enabled() {
+        // Set the client encryption key for handshakes if early data is not used
+        let write_key = key_schedule.client_handshake_traffic_secret(
+            &hash_at_client_recvd_server_hello,
+            &*cx.config.key_log,
+            &randoms.client,
+        );
+        cx.common
+            .record_layer
+            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
+        Some(write_key)
+    } else {
+        None
+    };
+
+    let read_key = key_schedule.server_handshake_traffic_secret(
+        &hash_at_client_recvd_server_hello,
+        &*cx.config.key_log,
+        &randoms.client,
+    );
+    cx.common
+        .record_layer
+        .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+
+    #[cfg(feature = "quic")]
+    {
+        cx.common.quic.hs_secrets = Some(quic::Secrets {
+            server: read_key,
+            client: _maybe_write_key.unwrap_or_else(|| {
+                key_schedule.client_handshake_traffic_secret(
+                    &hash_at_client_recvd_server_hello,
+                    &*cx.config.key_log,
+                    &randoms.client,
+                )
+            }),
+        });
+    }
+
     emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
 
     Ok(Box::new(ExpectEncryptedExtensions {
@@ -175,129 +273,6 @@ pub fn fill_in_psk_binder(
     };
 
     key_schedule
-}
-
-fn start_handshake_traffic(
-    suite: &'static SupportedCipherSuite,
-    cx: &mut ClientContext<'_>,
-    early_key_schedule: Option<KeyScheduleEarly>,
-    server_hello: &ServerHelloPayload,
-    resuming_session: &mut Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsNameRef,
-    transcript: &mut HandshakeHash,
-    our_key_share: kx::KeyExchange,
-    randoms: &ConnectionRandoms,
-) -> Result<(KeyScheduleHandshake, Digest), Error> {
-    let their_key_share = server_hello
-        .get_key_share()
-        .ok_or_else(|| {
-            cx.common
-                .send_fatal_alert(AlertDescription::MissingExtension);
-            Error::PeerMisbehavedError("missing key share".to_string())
-        })?;
-
-    if our_key_share.group() != their_key_share.group {
-        return Err(cx
-            .common
-            .illegal_param("wrong group for key share"));
-    }
-
-    let shared = our_key_share
-        .complete(&their_key_share.payload.0)
-        .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
-
-    let mut key_schedule = if let (Some(selected_psk), Some(early_key_schedule)) =
-        (server_hello.get_psk_index(), early_key_schedule)
-    {
-        if let Some(ref resuming) = resuming_session {
-            if !resuming
-                .supported_cipher_suite()
-                .can_resume_to(suite)
-            {
-                return Err(cx
-                    .common
-                    .illegal_param("server resuming incompatible suite"));
-            }
-
-            // If the server varies the suite here, we will have encrypted early data with
-            // the wrong suite.
-            if cx.data.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
-                return Err(cx
-                    .common
-                    .illegal_param("server varied suite with early data"));
-            }
-
-            if selected_psk != 0 {
-                return Err(cx
-                    .common
-                    .illegal_param("server selected invalid psk"));
-            }
-
-            debug!("Resuming using PSK");
-            // The key schedule has been initialized and set in fill_in_psk_binder()
-        } else {
-            return Err(Error::PeerMisbehavedError(
-                "server selected unoffered psk".to_string(),
-            ));
-        }
-        early_key_schedule.into_handshake(&shared.shared_secret)
-    } else {
-        debug!("Not resuming");
-        // Discard the early data key schedule.
-        cx.data.early_data.rejected();
-        cx.common.early_traffic = false;
-        resuming_session.take();
-        KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&shared.shared_secret)
-    };
-
-    // Remember what KX group the server liked for next time.
-    save_kx_hint(cx.config, dns_name, their_key_share.group);
-
-    // If we change keying when a subsequent handshake message is being joined,
-    // the two halves will have different record layer protections.  Disallow this.
-    cx.common.check_aligned_handshake()?;
-
-    let hash_at_client_recvd_server_hello = transcript.get_current_hash();
-
-    let _maybe_write_key = if !cx.data.early_data.is_enabled() {
-        // Set the client encryption key for handshakes if early data is not used
-        let write_key = key_schedule.client_handshake_traffic_secret(
-            &hash_at_client_recvd_server_hello,
-            &*cx.config.key_log,
-            &randoms.client,
-        );
-        cx.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-        Some(write_key)
-    } else {
-        None
-    };
-
-    let read_key = key_schedule.server_handshake_traffic_secret(
-        &hash_at_client_recvd_server_hello,
-        &*cx.config.key_log,
-        &randoms.client,
-    );
-    cx.common
-        .record_layer
-        .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
-
-    #[cfg(feature = "quic")]
-    {
-        cx.common.quic.hs_secrets = Some(quic::Secrets {
-            server: read_key,
-            client: _maybe_write_key.unwrap_or_else(|| {
-                key_schedule.client_handshake_traffic_secret(
-                    &hash_at_client_recvd_server_hello,
-                    &*cx.config.key_log,
-                    &randoms.client,
-                )
-            }),
-        });
-    }
-
-    Ok((key_schedule, hash_at_client_recvd_server_hello))
 }
 
 pub(super) fn prepare_resumption(
