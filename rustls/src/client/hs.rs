@@ -6,6 +6,7 @@ use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::KeyScheduleEarly;
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -15,12 +16,12 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::HelloRetryRequest;
 use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
+use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -114,6 +115,10 @@ impl InitialState {
         // Calculate all inputs to the client hellos that might otherwise
         // change between the initial and retry hellos here to enforce this.
 
+        let support_tls13 = conn
+            .config
+            .supports_version(ProtocolVersion::TLSv1_3);
+
         if conn
             .config
             .client_auth_cert_resolver
@@ -150,6 +155,13 @@ impl InitialState {
         let hello_details = ClientHelloDetails::new();
         let sent_tls13_fake_ccs = false;
         let may_send_sct_list = conn.config.verifier.request_scts();
+
+        let key_share = if support_tls13 {
+            Some(tls13::initial_key_share(conn, self.dns_name.as_ref())?)
+        } else {
+            None
+        };
+
         Ok(emit_client_hello_for_retry(
             conn,
             self.resuming_session,
@@ -161,6 +173,7 @@ impl InitialState {
             session_id,
             None,
             self.dns_name,
+            key_share,
             self.extra_exts,
             may_send_sct_list,
             None,
@@ -184,6 +197,7 @@ struct ExpectServerHello {
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
+    offered_key_share: Option<kx::KeyExchange>,
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
     suite: Option<&'static SupportedCipherSuite>,
@@ -205,6 +219,7 @@ fn emit_client_hello_for_retry(
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
     dns_name: webpki::DnsName,
+    key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<&'static SupportedCipherSuite>,
@@ -263,8 +278,10 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
     }
 
-    if support_tls13 {
-        tls13::choose_kx_groups(conn, &mut exts, &mut hello, dns_name.as_ref(), retryreq);
+    if let Some(key_share) = &key_share {
+        debug_assert!(support_tls13);
+        let key_share = KeyShareEntry::new(key_share.group(), key_share.pubkey.as_ref());
+        exts.push(ClientExtension::KeyShare(vec![key_share]));
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
@@ -403,6 +420,7 @@ fn emit_client_hello_for_retry(
         transcript,
         early_key_schedule,
         hello,
+        offered_key_share: key_share,
         session_id,
         sent_tls13_fake_ccs,
         suite,
@@ -577,6 +595,10 @@ impl State for ExpectServerHello {
         // handshake_traffic_secret.
         if conn.common.is_tls13() {
             tls13::validate_server_hello(conn, &server_hello)?;
+
+            // We always send a key share when TLS 1.3 is enabled.
+            let our_key_share = self.offered_key_share.unwrap();
+
             let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
                 suite,
                 conn,
@@ -585,7 +607,7 @@ impl State for ExpectServerHello {
                 &mut self.resuming_session,
                 self.dns_name.as_ref(),
                 &mut self.transcript,
-                &mut self.hello,
+                our_key_share,
                 &self.randoms,
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, conn);
@@ -756,31 +778,28 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let cookie = hrr.get_cookie();
         let req_group = hrr.get_requested_key_share_group();
 
+        // We always send a key share when TLS 1.3 is enabled.
+        let offered_key_share = self.next.offered_key_share.unwrap();
+
         // A retry request is illegal if it contains no cookie and asks for
         // retry of a group we already sent.
-        if cookie.is_none()
-            && req_group
-                .map(|g| self.next.hello.has_key_share(g))
-                .unwrap_or(false)
-        {
+        if cookie.is_none() && req_group == Some(offered_key_share.group()) {
             return Err(conn
                 .common
                 .illegal_param("server requested hrr with our group"));
         }
 
         // Or asks for us to retry on an unsupported group.
-        if let Some(group) = req_group {
-            if !conn
-                .config
-                .kx_groups
-                .iter()
-                .any(|skxg| skxg.name == group)
-            {
-                return Err(conn
-                    .common
-                    .illegal_param("server requested hrr with bad group"));
-            }
-        }
+        let req_group = if let Some(group) = req_group {
+            Some(
+                kx::KeyExchange::choose(group, &conn.config.kx_groups).ok_or_else(|| {
+                    conn.common
+                        .illegal_param("server requested hrr with bad group")
+                })?,
+            )
+        } else {
+            None
+        };
 
         // Or has an empty cookie.
         if let Some(cookie) = cookie {
@@ -858,6 +877,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .next
             .hello
             .server_may_send_sct_list();
+
+        let key_share = match req_group {
+            Some(group) if group.name != offered_key_share.group() => {
+                kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?
+            }
+            _ => offered_key_share,
+        };
+
         Ok(emit_client_hello_for_retry(
             conn,
             self.next.resuming_session,
@@ -869,6 +896,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             Some(self.next.session_id),
             Some(&hrr),
             self.next.dns_name,
+            Some(key_share),
             self.extra_exts,
             may_send_sct_list,
             Some(cs),

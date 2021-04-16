@@ -1,8 +1,6 @@
-use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::SCTList;
@@ -55,46 +53,18 @@ impl ServerKxDetails {
 
 pub struct ClientHelloDetails {
     pub sent_extensions: Vec<ExtensionType>,
-    pub offered_key_shares: Vec<kx::KeyExchange>,
 }
 
 impl ClientHelloDetails {
     pub fn new() -> ClientHelloDetails {
         ClientHelloDetails {
             sent_extensions: Vec::new(),
-            offered_key_shares: Vec::new(),
         }
     }
 
     pub fn server_may_send_sct_list(&self) -> bool {
         self.sent_extensions
             .contains(&ExtensionType::SCT)
-    }
-
-    pub fn has_key_share(&self, group: NamedGroup) -> bool {
-        self.offered_key_shares
-            .iter()
-            .any(|share| share.group() == group)
-    }
-
-    pub fn find_key_share(&mut self, group: NamedGroup) -> Option<kx::KeyExchange> {
-        self.offered_key_shares
-            .iter()
-            .position(|s| s.group() == group)
-            .map(|idx| self.offered_key_shares.remove(idx))
-    }
-
-    pub fn find_key_share_and_discard_others(
-        &mut self,
-        group: NamedGroup,
-    ) -> Option<kx::KeyExchange> {
-        match self.find_key_share(group) {
-            Some(group) => {
-                self.offered_key_shares.clear();
-                Some(group)
-            }
-            None => None,
-        }
     }
 
     pub fn server_sent_unsolicited_extensions(
