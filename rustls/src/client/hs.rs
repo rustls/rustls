@@ -585,40 +585,20 @@ impl State for ExpectServerHello {
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         if cx.common.is_tls13() {
-            if !suite.usable_for_version(TLSv1_3) {
-                return Err(cx
-                    .common
-                    .illegal_param("server chose unusable ciphersuite for version"));
-            }
-
-            tls13::validate_server_hello(cx.common, &server_hello)?;
-
-            // We always send a key share when TLS 1.3 is enabled.
-            let our_key_share = self.offered_key_share.unwrap();
-
-            let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
-                suite,
+            tls13::handle_server_hello(
                 cx,
-                self.early_key_schedule.take(),
-                &server_hello,
-                &mut self.resuming_session,
-                self.dns_name.as_ref(),
-                &mut self.transcript,
-                our_key_share,
-                &self.randoms,
-            )?;
-            tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, cx.common);
-
-            Ok(Box::new(tls13::ExpectEncryptedExtensions {
-                resuming_session: self.resuming_session,
-                dns_name: self.dns_name,
-                randoms: self.randoms,
+                server_hello,
+                self.resuming_session,
+                self.dns_name,
+                self.randoms,
                 suite,
-                transcript: self.transcript,
-                key_schedule,
-                hello: self.hello,
-                hash_at_client_recvd_server_hello,
-            }))
+                self.transcript,
+                self.early_key_schedule,
+                self.hello,
+                // We always send a key share when TLS 1.3 is enabled.
+                self.offered_key_share.unwrap(),
+                self.sent_tls13_fake_ccs,
+            )
         } else {
             tls12::CompleteServerHelloHandling {
                 resuming_session: self.resuming_session,

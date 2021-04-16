@@ -56,7 +56,53 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
-pub fn validate_server_hello(
+pub(super) fn handle_server_hello(
+    cx: &mut ClientContext,
+    server_hello: &ServerHelloPayload,
+    mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    mut transcript: HandshakeHash,
+    early_key_schedule: Option<KeyScheduleEarly>,
+    hello: ClientHelloDetails,
+    offered_key_share: kx::KeyExchange,
+    mut sent_tls13_fake_ccs: bool,
+) -> hs::NextStateOrError {
+    if !suite.usable_for_version(ProtocolVersion::TLSv1_3) {
+        return Err(cx
+            .common
+            .illegal_param("server chose unusable ciphersuite for version"));
+    }
+
+    validate_server_hello(cx.common, &server_hello)?;
+
+    let (key_schedule, hash_at_client_recvd_server_hello) = start_handshake_traffic(
+        suite,
+        cx,
+        early_key_schedule,
+        &server_hello,
+        &mut resuming_session,
+        dns_name.as_ref(),
+        &mut transcript,
+        offered_key_share,
+        &randoms,
+    )?;
+    emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+
+    Ok(Box::new(ExpectEncryptedExtensions {
+        resuming_session,
+        dns_name,
+        randoms,
+        suite,
+        transcript,
+        key_schedule,
+        hello,
+        hash_at_client_recvd_server_hello,
+    }))
+}
+
+fn validate_server_hello(
     common: &mut ConnectionCommon,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
@@ -131,7 +177,7 @@ pub fn fill_in_psk_binder(
     key_schedule
 }
 
-pub(super) fn start_handshake_traffic(
+fn start_handshake_traffic(
     suite: &'static SupportedCipherSuite,
     cx: &mut ClientContext<'_>,
     early_key_schedule: Option<KeyScheduleEarly>,
@@ -374,15 +420,15 @@ fn validate_encrypted_extensions(
     Ok(())
 }
 
-pub struct ExpectEncryptedExtensions {
-    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub dns_name: webpki::DnsName,
-    pub randoms: ConnectionRandoms,
-    pub suite: &'static SupportedCipherSuite,
-    pub transcript: HandshakeHash,
-    pub key_schedule: KeyScheduleHandshake,
-    pub hello: ClientHelloDetails,
-    pub hash_at_client_recvd_server_hello: Digest,
+struct ExpectEncryptedExtensions {
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    transcript: HandshakeHash,
+    key_schedule: KeyScheduleHandshake,
+    hello: ClientHelloDetails,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl hs::State for ExpectEncryptedExtensions {
