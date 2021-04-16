@@ -15,11 +15,11 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureScheme};
+use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
-use crate::msgs::handshake::{ClientExtension, HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
@@ -72,12 +72,26 @@ pub fn validate_server_hello(
     Ok(())
 }
 
-fn find_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef) -> Option<NamedGroup> {
+pub(super) fn initial_key_share(
+    config: &ClientConfig,
+    dns_name: webpki::DnsNameRef,
+) -> Result<kx::KeyExchange, Error> {
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
     let maybe_value = config.session_persistence.get(&key_buf);
-    maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
+
+    let group = maybe_value
+        .and_then(|enc| NamedGroup::read_bytes(&enc))
+        .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
+        .unwrap_or_else(|| {
+            config
+                .kx_groups
+                .first()
+                .expect("No kx groups configured")
+        });
+
+    kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
 }
 
 fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: NamedGroup) {
@@ -86,52 +100,6 @@ fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: Name
     config
         .session_persistence
         .put(key.get_encoding(), group.get_encoding());
-}
-
-pub fn choose_kx_groups(
-    config: &ClientConfig,
-    exts: &mut Vec<ClientExtension>,
-    hello: &mut ClientHelloDetails,
-    dns_name: webpki::DnsNameRef,
-    retryreq: Option<&HelloRetryRequest>,
-) {
-    // Choose our groups:
-    // - if we've been asked via HelloRetryRequest for a specific
-    //   one, do that.
-    // - if not, we might have a hint of what the server supports.
-    // - if not, send just the first configured group.
-    //
-    let group = retryreq
-        .and_then(|req| HelloRetryRequest::get_requested_key_share_group(req))
-        .or_else(|| find_kx_hint(config, dns_name))
-        .unwrap_or_else(|| {
-            config
-                .kx_groups
-                .get(0)
-                .expect("No kx groups configured")
-                .name
-        });
-
-    let mut key_shares = vec![];
-
-    // in reply to HelloRetryRequest, we must not alter any existing key
-    // shares
-    if let Some(already_offered_share) = hello.find_key_share(group) {
-        key_shares.push(KeyShareEntry::new(
-            group,
-            already_offered_share.pubkey.as_ref(),
-        ));
-        hello
-            .offered_key_shares
-            .push(already_offered_share);
-    } else if let Some(key_share) =
-        kx::KeyExchange::choose(group, &config.kx_groups).and_then(kx::KeyExchange::start)
-    {
-        key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
-        hello.offered_key_shares.push(key_share);
-    }
-
-    exts.push(ClientExtension::KeyShare(key_shares));
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
@@ -171,7 +139,7 @@ pub(super) fn start_handshake_traffic(
     resuming_session: &mut Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     dns_name: webpki::DnsNameRef,
     transcript: &mut HandshakeHash,
-    hello: &mut ClientHelloDetails,
+    our_key_share: kx::KeyExchange,
     randoms: &ConnectionRandoms,
 ) -> Result<(KeyScheduleHandshake, Digest), Error> {
     let their_key_share = server_hello
@@ -182,12 +150,12 @@ pub(super) fn start_handshake_traffic(
             Error::PeerMisbehavedError("missing key share".to_string())
         })?;
 
-    let our_key_share = hello
-        .find_key_share_and_discard_others(their_key_share.group)
-        .ok_or_else(|| {
-            cx.common
-                .illegal_param("wrong group for key share")
-        })?;
+    if our_key_share.group() != their_key_share.group {
+        return Err(cx
+            .common
+            .illegal_param("wrong group for key share"));
+    }
+
     let shared = our_key_share
         .complete(&their_key_share.payload.0)
         .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
