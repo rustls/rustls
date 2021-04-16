@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::KeyScheduleEarly;
@@ -24,15 +24,11 @@ use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::verify;
+use crate::ticketer::TimeBase;
 use crate::SupportedCipherSuite;
 
-use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
+use crate::client::common::ClientHelloDetails;
 use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData};
-use crate::suites::Tls12CipherSuite;
-use crate::ticketer::TimeBase;
-
-use std::convert::TryFrom;
 
 pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
@@ -613,7 +609,7 @@ impl State for ExpectServerHello {
             )?;
             tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, cx.common);
 
-            return Ok(Box::new(tls13::ExpectEncryptedExtensions {
+            Ok(Box::new(tls13::ExpectEncryptedExtensions {
                 resuming_session: self.resuming_session,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
@@ -622,143 +618,18 @@ impl State for ExpectServerHello {
                 key_schedule,
                 hello: self.hello,
                 hash_at_client_recvd_server_hello,
-            }));
-        }
-
-        // TLS1.2 only from here-on
-
-        let suite = Tls12CipherSuite::try_from(suite).map_err(|_| {
-            cx.common
-                .illegal_param("server chose unusable ciphersuite for version")
-        })?;
-
-        // Save ServerRandom and SessionID
-        server_hello
-            .random
-            .write_slice(&mut self.randoms.server);
-        self.session_id = server_hello.session_id;
-
-        // Look for TLS1.3 downgrade signal in server random
-        if tls13_supported
-            && self
-                .randoms
-                .has_tls12_downgrade_marker()
-        {
-            return Err(cx
-                .common
-                .illegal_param("downgrade to TLS1.2 when TLS1.3 is supported"));
-        }
-
-        // Doing EMS?
-        self.using_ems = server_hello.ems_support_acked();
-
-        // Might the server send a ticket?
-        let must_issue_new_ticket = if server_hello
-            .find_extension(ExtensionType::SessionTicket)
-            .is_some()
-        {
-            debug!("Server supports tickets");
-            true
+            }))
         } else {
-            false
-        };
-
-        // Might the server send a CertificateStatus between Certificate and
-        // ServerKeyExchange?
-        let may_send_cert_status = server_hello
-            .find_extension(ExtensionType::StatusRequest)
-            .is_some();
-        if may_send_cert_status {
-            debug!("Server may staple OCSP response");
-        }
-
-        // Save any sent SCTs for verification against the certificate.
-        let server_cert_sct_list = if let Some(sct_list) = server_hello.get_sct_list() {
-            debug!("Server sent {:?} SCTs", sct_list.len());
-
-            if sct_list_is_invalid(sct_list) {
-                let error_msg = "server sent invalid SCT list".to_string();
-                return Err(Error::PeerMisbehavedError(error_msg));
+            tls12::CompleteServerHelloHandling {
+                resuming_session: self.resuming_session,
+                dns_name: self.dns_name,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                transcript: self.transcript,
+                session_id: server_hello.session_id,
             }
-            Some(sct_list.clone())
-        } else {
-            None
-        };
-
-        // See if we're successfully resuming.
-        if let Some(ref resuming) = self.resuming_session {
-            if resuming.session_id == self.session_id {
-                debug!("Server agreed to resume");
-
-                // Is the server telling lies about the ciphersuite?
-                if resuming.supported_cipher_suite() != suite.supported_suite() {
-                    let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
-                    return Err(Error::PeerMisbehavedError(error_msg));
-                }
-
-                // And about EMS support?
-                if resuming.extended_ms != self.using_ems {
-                    let error_msg = "server varied ems support over resume".to_string();
-                    return Err(Error::PeerMisbehavedError(error_msg));
-                }
-
-                let secrets =
-                    ConnectionSecrets::new_resume(&self.randoms, suite, &resuming.master_secret.0);
-                cx.config.key_log.log(
-                    "CLIENT_RANDOM",
-                    &secrets.randoms.client,
-                    &secrets.master_secret,
-                );
-                cx.common
-                    .start_encryption_tls12(&secrets);
-
-                // Since we're resuming, we verified the certificate and
-                // proof of possession in the prior session.
-                cx.data.server_cert_chain = resuming.server_cert_chain.clone();
-                let cert_verified = verify::ServerCertVerified::assertion();
-                let sig_verified = verify::HandshakeSignatureValid::assertion();
-
-                return if must_issue_new_ticket {
-                    Ok(Box::new(tls12::ExpectNewTicket {
-                        secrets,
-                        resuming_session: self.resuming_session,
-                        session_id: self.session_id,
-                        dns_name: self.dns_name,
-                        using_ems: self.using_ems,
-                        transcript: self.transcript,
-                        resuming: true,
-                        cert_verified,
-                        sig_verified,
-                    }))
-                } else {
-                    Ok(Box::new(tls12::ExpectCcs {
-                        secrets,
-                        resuming_session: self.resuming_session,
-                        session_id: self.session_id,
-                        dns_name: self.dns_name,
-                        using_ems: self.using_ems,
-                        transcript: self.transcript,
-                        ticket: ReceivedTicketDetails::new(),
-                        resuming: true,
-                        cert_verified,
-                        sig_verified,
-                    }))
-                };
-            }
+            .handle_server_hello(cx, suite, &server_hello, tls13_supported)
         }
-
-        Ok(Box::new(tls12::ExpectCertificate {
-            resuming_session: self.resuming_session,
-            session_id: self.session_id,
-            dns_name: self.dns_name,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            transcript: self.transcript,
-            suite,
-            may_send_cert_status,
-            must_issue_new_ticket,
-            server_cert_sct_list,
-        }))
     }
 }
 

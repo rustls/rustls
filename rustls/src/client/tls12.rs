@@ -15,6 +15,7 @@ use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::{kx, tls12};
 
@@ -26,19 +27,187 @@ use crate::client::hs;
 use crate::suites::Tls12CipherSuite;
 use crate::ticketer::TimeBase;
 use ring::constant_time;
+
+use std::convert::TryFrom;
 use std::mem;
 
-pub struct ExpectCertificate {
-    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub session_id: SessionID,
-    pub dns_name: webpki::DnsName,
-    pub randoms: ConnectionRandoms,
-    pub using_ems: bool,
-    pub transcript: HandshakeHash,
+pub(super) use server_hello::CompleteServerHelloHandling;
+
+mod server_hello {
+    use crate::msgs::enums::ExtensionType;
+    use crate::msgs::handshake::HasServerExtensions;
+    use crate::msgs::handshake::ServerHelloPayload;
+
+    use super::*;
+
+    pub(in crate::client) struct CompleteServerHelloHandling {
+        pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+        pub dns_name: webpki::DnsName,
+        pub randoms: ConnectionRandoms,
+        pub using_ems: bool,
+        pub transcript: HandshakeHash,
+        pub session_id: SessionID,
+    }
+
+    impl CompleteServerHelloHandling {
+        pub(in crate::client) fn handle_server_hello(
+            mut self,
+            cx: &mut ClientContext,
+            suite: &'static SupportedCipherSuite,
+            server_hello: &ServerHelloPayload,
+            tls13_supported: bool,
+        ) -> hs::NextStateOrError {
+            // TLS1.2 only from here-on
+
+            let suite = Tls12CipherSuite::try_from(suite).map_err(|_| {
+                cx.common
+                    .illegal_param("server chose unusable ciphersuite for version")
+            })?;
+
+            server_hello
+                .random
+                .write_slice(&mut self.randoms.server);
+
+            // Look for TLS1.3 downgrade signal in server random
+            if tls13_supported
+                && self
+                    .randoms
+                    .has_tls12_downgrade_marker()
+            {
+                return Err(cx
+                    .common
+                    .illegal_param("downgrade to TLS1.2 when TLS1.3 is supported"));
+            }
+
+            // Doing EMS?
+            self.using_ems = server_hello.ems_support_acked();
+
+            // Might the server send a ticket?
+            let must_issue_new_ticket = if server_hello
+                .find_extension(ExtensionType::SessionTicket)
+                .is_some()
+            {
+                debug!("Server supports tickets");
+                true
+            } else {
+                false
+            };
+
+            // Might the server send a CertificateStatus between Certificate and
+            // ServerKeyExchange?
+            let may_send_cert_status = server_hello
+                .find_extension(ExtensionType::StatusRequest)
+                .is_some();
+            if may_send_cert_status {
+                debug!("Server may staple OCSP response");
+            }
+
+            // Save any sent SCTs for verification against the certificate.
+            let server_cert_sct_list = if let Some(sct_list) = server_hello.get_sct_list() {
+                debug!("Server sent {:?} SCTs", sct_list.len());
+
+                if hs::sct_list_is_invalid(sct_list) {
+                    let error_msg = "server sent invalid SCT list".to_string();
+                    return Err(Error::PeerMisbehavedError(error_msg));
+                }
+                Some(sct_list.clone())
+            } else {
+                None
+            };
+
+            // See if we're successfully resuming.
+            if let Some(ref resuming) = self.resuming_session {
+                if resuming.session_id == self.session_id {
+                    debug!("Server agreed to resume");
+
+                    // Is the server telling lies about the ciphersuite?
+                    if resuming.supported_cipher_suite() != suite.supported_suite() {
+                        let error_msg =
+                            "abbreviated handshake offered, but with varied cs".to_string();
+                        return Err(Error::PeerMisbehavedError(error_msg));
+                    }
+
+                    // And about EMS support?
+                    if resuming.extended_ms != self.using_ems {
+                        let error_msg = "server varied ems support over resume".to_string();
+                        return Err(Error::PeerMisbehavedError(error_msg));
+                    }
+
+                    let secrets = ConnectionSecrets::new_resume(
+                        &self.randoms,
+                        suite,
+                        &resuming.master_secret.0,
+                    );
+                    cx.config.key_log.log(
+                        "CLIENT_RANDOM",
+                        &secrets.randoms.client,
+                        &secrets.master_secret,
+                    );
+                    cx.common
+                        .start_encryption_tls12(&secrets);
+
+                    // Since we're resuming, we verified the certificate and
+                    // proof of possession in the prior session.
+                    cx.data.server_cert_chain = resuming.server_cert_chain.clone();
+                    let cert_verified = verify::ServerCertVerified::assertion();
+                    let sig_verified = verify::HandshakeSignatureValid::assertion();
+
+                    return if must_issue_new_ticket {
+                        Ok(Box::new(ExpectNewTicket {
+                            secrets,
+                            resuming_session: self.resuming_session,
+                            session_id: self.session_id,
+                            dns_name: self.dns_name,
+                            using_ems: self.using_ems,
+                            transcript: self.transcript,
+                            resuming: true,
+                            cert_verified,
+                            sig_verified,
+                        }))
+                    } else {
+                        Ok(Box::new(ExpectCcs {
+                            secrets,
+                            resuming_session: self.resuming_session,
+                            session_id: self.session_id,
+                            dns_name: self.dns_name,
+                            using_ems: self.using_ems,
+                            transcript: self.transcript,
+                            ticket: ReceivedTicketDetails::new(),
+                            resuming: true,
+                            cert_verified,
+                            sig_verified,
+                        }))
+                    };
+                }
+            }
+
+            Ok(Box::new(ExpectCertificate {
+                resuming_session: self.resuming_session,
+                session_id: self.session_id,
+                dns_name: self.dns_name,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                transcript: self.transcript,
+                suite,
+                may_send_cert_status,
+                must_issue_new_ticket,
+                server_cert_sct_list,
+            }))
+        }
+    }
+}
+
+struct ExpectCertificate {
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    session_id: SessionID,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    using_ems: bool,
+    transcript: HandshakeHash,
     pub(super) suite: Tls12CipherSuite,
-    pub may_send_cert_status: bool,
-    pub must_issue_new_ticket: bool,
-    pub server_cert_sct_list: Option<SCTList>,
+    may_send_cert_status: bool,
+    must_issue_new_ticket: bool,
+    server_cert_sct_list: Option<SCTList>,
 }
 
 impl hs::State for ExpectCertificate {
@@ -660,17 +829,17 @@ impl hs::State for ExpectServerDone {
 }
 
 // -- Waiting for their CCS --
-pub struct ExpectCcs {
-    pub secrets: ConnectionSecrets,
-    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub session_id: SessionID,
-    pub dns_name: webpki::DnsName,
-    pub using_ems: bool,
-    pub transcript: HandshakeHash,
-    pub ticket: ReceivedTicketDetails,
-    pub resuming: bool,
-    pub cert_verified: verify::ServerCertVerified,
-    pub sig_verified: verify::HandshakeSignatureValid,
+struct ExpectCcs {
+    secrets: ConnectionSecrets,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    session_id: SessionID,
+    dns_name: webpki::DnsName,
+    using_ems: bool,
+    transcript: HandshakeHash,
+    ticket: ReceivedTicketDetails,
+    resuming: bool,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
 }
 
 impl hs::State for ExpectCcs {
@@ -700,16 +869,16 @@ impl hs::State for ExpectCcs {
     }
 }
 
-pub struct ExpectNewTicket {
-    pub secrets: ConnectionSecrets,
-    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub session_id: SessionID,
-    pub dns_name: webpki::DnsName,
-    pub using_ems: bool,
-    pub transcript: HandshakeHash,
-    pub resuming: bool,
-    pub cert_verified: verify::ServerCertVerified,
-    pub sig_verified: verify::HandshakeSignatureValid,
+struct ExpectNewTicket {
+    secrets: ConnectionSecrets,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    session_id: SessionID,
+    dns_name: webpki::DnsName,
+    using_ems: bool,
+    transcript: HandshakeHash,
+    resuming: bool,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
 }
 
 impl hs::State for ExpectNewTicket {
