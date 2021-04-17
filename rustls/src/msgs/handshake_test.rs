@@ -360,7 +360,7 @@ fn decomposed_signature_scheme_has_correct_mappings() {
 fn get_sample_clienthellopayload() -> ClientHelloPayload {
     ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
-        random: Random::from_slice(&[0; 32]),
+        random: Random::from([0; 32]),
         session_id: SessionID::empty(),
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
@@ -758,7 +758,7 @@ fn certentry_get_scts() {
 fn get_sample_serverhellopayload() -> ServerHelloPayload {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
-        random: Random::from_slice(&[0; 32]),
+        random: Random::from([0; 32]),
         session_id: SessionID::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,

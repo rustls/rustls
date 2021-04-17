@@ -77,14 +77,16 @@ impl Codec for Random {
 }
 
 impl Random {
-    pub fn from_slice(bytes: &[u8]) -> Random {
-        let mut rd = Reader::init(bytes);
-        Random::read(&mut rd).unwrap()
-    }
-
     pub fn write_slice(&self, bytes: &mut [u8]) {
         let buf = self.get_encoding();
         bytes.copy_from_slice(&buf);
+    }
+}
+
+impl From<[u8; 32]> for Random {
+    #[inline]
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
     }
 }
 
