@@ -4,6 +4,7 @@ use super::handshake::*;
 use super::persist::*;
 use crate::key::Certificate;
 use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+use crate::ticketer::TimeBase;
 use webpki::DnsNameRef;
 
 #[test]
@@ -29,6 +30,7 @@ fn clientsessionvalue_is_debug() {
         vec![],
         vec![1, 2, 3],
         &vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],
+        TimeBase::now().unwrap(),
     );
     println!("{:?}", csv);
 }

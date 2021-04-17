@@ -16,7 +16,6 @@ use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::ticketer;
 use crate::verify;
 use crate::SupportedCipherSuite;
 use crate::{kx, tls12};
@@ -25,6 +24,7 @@ use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
 use crate::client::hs;
 
+use crate::ticketer::TimeBase;
 use ring::constant_time;
 use std::mem;
 
@@ -782,6 +782,14 @@ fn save_session(
         return;
     }
 
+    let time_now = match TimeBase::now() {
+        Ok(time_now) => time_now,
+        Err(_) => {
+            debug!("Session not saved: failed to get system time");
+            return;
+        }
+    };
+
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
 
     let master_secret = secrets.get_master_secret();
@@ -792,8 +800,9 @@ fn save_session(
         ticket,
         master_secret,
         &conn.server_cert_chain,
+        time_now,
     );
-    value.set_times(ticketer::timebase(), recvd_ticket.new_ticket_lifetime, 0);
+    value.set_times(recvd_ticket.new_ticket_lifetime, 0);
     if using_ems {
         value.set_extended_ms_used();
     }

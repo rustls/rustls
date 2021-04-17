@@ -1,5 +1,6 @@
 use crate::rand;
 use crate::server::ProducesTickets;
+use crate::Error;
 
 use ring::aead;
 use std::mem;
@@ -8,11 +9,23 @@ use std::time;
 
 /// The timebase for expiring and rolling tickets and ticketing
 /// keys.  This is UNIX wall time in seconds.
-pub fn timebase() -> u64 {
-    time::SystemTime::now()
-        .duration_since(time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+///
+/// This is guaranteed to be on or after the UNIX epoch.
+#[derive(Clone, Copy, Debug)]
+pub struct TimeBase(time::Duration);
+
+impl TimeBase {
+    #[inline]
+    pub fn now() -> Result<Self, time::SystemTimeError> {
+        Ok(Self(
+            time::SystemTime::now().duration_since(time::UNIX_EPOCH)?,
+        ))
+    }
+
+    #[inline]
+    pub fn as_secs(&self) -> u64 {
+        self.0.as_secs()
+    }
 }
 
 /// This is a `ProducesTickets` implementation which uses
@@ -111,7 +124,7 @@ struct TicketSwitcherState {
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
-pub struct TicketSwitcher {
+struct TicketSwitcher {
     generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
     lifetime: u32,
     state: Mutex<TicketSwitcherState>,
@@ -122,17 +135,18 @@ impl TicketSwitcher {
     /// is used to generate new tickets.  Tickets are accepted for no
     /// longer than twice this duration.  `generator` produces a new
     /// `ProducesTickets` implementation.
-    pub fn new(
+    fn new(
         lifetime: u32,
         generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
-    ) -> Result<TicketSwitcher, rand::GetRandomFailed> {
+    ) -> Result<TicketSwitcher, Error> {
+        let now = TimeBase::now()?;
         Ok(TicketSwitcher {
             generator,
             lifetime,
             state: Mutex::new(TicketSwitcherState {
                 current: generator()?,
                 previous: None,
-                next_switch_time: timebase() + u64::from(lifetime),
+                next_switch_time: now.as_secs() + u64::from(lifetime),
             }),
         })
     }
@@ -145,10 +159,10 @@ impl TicketSwitcher {
     /// key erasure will be delayed until the next encrypt/decrypt call.
     fn maybe_roll(
         &self,
+        now: TimeBase,
         state: &mut MutexGuard<TicketSwitcherState>,
     ) -> Result<(), rand::GetRandomFailed> {
-        let now = timebase();
-
+        let now = now.as_secs();
         if now > state.next_switch_time {
             state.previous = Some(mem::replace(&mut state.current, (self.generator)()?));
             state.next_switch_time = now + u64::from(self.lifetime);
@@ -168,8 +182,8 @@ impl ProducesTickets for TicketSwitcher {
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         let mut state = self.state.lock().ok()?;
-
-        self.maybe_roll(&mut state).ok()?;
+        self.maybe_roll(TimeBase::now().ok()?, &mut state)
+            .ok()?;
 
         state.current.encrypt(message)
     }
@@ -177,7 +191,8 @@ impl ProducesTickets for TicketSwitcher {
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
         let mut state = self.state.lock().ok()?;
 
-        self.maybe_roll(&mut state).ok()?;
+        self.maybe_roll(TimeBase::now().ok()?, &mut state)
+            .ok()?;
 
         // Decrypt with the current key; if that fails, try with the previous.
         state
@@ -204,7 +219,7 @@ impl Ticketer {
     /// with a 12 hour life and randomly generated keys.
     ///
     /// The encryption mechanism used in Chacha20Poly1305.
-    pub fn new() -> Result<Arc<dyn ProducesTickets>, rand::GetRandomFailed> {
+    pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(TicketSwitcher::new(6 * 60 * 60, generate_inner)?))
     }
 }
