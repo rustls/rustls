@@ -1,6 +1,6 @@
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
+use crate::msgs::handshake::ClientECDHParams;
 
 /// The result of a key exchange.  This has our public key,
 /// and the agreed shared secret (also known as the "premaster secret"
@@ -19,19 +19,6 @@ pub struct KeyExchange {
 }
 
 impl KeyExchange {
-    /// From a TLS1.2 client's point of view, start a key exchange: `kx_params` is the server's ServerECDHParams
-    /// saying which group to use and the server's public key.  `supported` is the list of
-    /// supported key exchange groups.
-    pub fn client_ecdhe(
-        kx_params: &[u8],
-        supported: &[&'static SupportedKxGroup],
-    ) -> Option<KeyExchangeResult> {
-        let ecdh_params = Self::decode_ecdh_params::<ServerECDHParams>(kx_params)?;
-        KeyExchange::choose(ecdh_params.curve_params.named_group, supported)
-            .and_then(KeyExchange::start)
-            .and_then(|kx| kx.complete(&ecdh_params.public.0))
-    }
-
     /// Choose a SupportedKxGroup by name, from a list of supported groups.
     pub fn choose(
         name: NamedGroup,
@@ -65,7 +52,7 @@ impl KeyExchange {
         self.skxg.name
     }
 
-    fn decode_ecdh_params<T: Codec>(kx_params: &[u8]) -> Option<T> {
+    pub fn decode_ecdh_params<T: Codec>(kx_params: &[u8]) -> Option<T> {
         let mut rd = Reader::init(kx_params);
         let ecdh_params = T::read(&mut rd)?;
         match rd.any_left() {
@@ -133,6 +120,7 @@ pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP38
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::msgs::handshake::ServerECDHParams;
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
@@ -141,7 +129,7 @@ mod tests {
         let mut server_buf = Vec::new();
         server_params.encode(&mut server_buf);
         server_buf.push(34);
-        assert!(KeyExchange::client_ecdhe(&server_buf, &[&X25519]).is_none());
+        assert!(KeyExchange::decode_ecdh_params::<ServerECDHParams>(&server_buf).is_none());
     }
 
     #[test]

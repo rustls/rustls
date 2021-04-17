@@ -11,9 +11,9 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::ServerKeyExchangePayload;
 use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID};
+use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -601,7 +601,21 @@ impl hs::State for ExpectServerDone {
         }
 
         // 5a.
-        let kxd = kx::KeyExchange::client_ecdhe(&st.server_kx.kx_params, &conn.config.kx_groups)
+        let ecdh_params =
+            kx::KeyExchange::decode_ecdh_params::<ServerECDHParams>(&st.server_kx.kx_params)
+                .ok_or_else(|| {
+                    Error::PeerMisbehavedError(
+                        "failed to decode peer's key exchange parameters".to_string(),
+                    )
+                })?;
+        let group =
+            kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &conn.config.kx_groups)
+                .ok_or_else(|| {
+                Error::PeerMisbehavedError("peer chose an unsupported group".to_string())
+            })?;
+        let kxd = kx::KeyExchange::start(group)
+            .ok_or(Error::FailedToGetRandomBytes)?
+            .complete(&ecdh_params.public.0)
             .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // 5b.
