@@ -9,7 +9,9 @@ use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload};
+use crate::msgs::handshake::{
+    ClientECDHParams, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
+};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerConnection;
@@ -392,8 +394,7 @@ mod client_hello {
         signing_key: &dyn sign::SigningKey,
         randoms: &ConnectionRandoms,
     ) -> Result<kx::KeyExchange, Error> {
-        let kx = kx::KeyExchange::start(skxg)
-            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
+        let kx = kx::KeyExchange::start(skxg).ok_or(Error::FailedToGetRandomBytes)?;
         let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();
@@ -592,13 +593,19 @@ impl hs::State for ExpectClientKx {
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
-        let kxd = self
-            .server_kx
-            .server_complete(&client_kx.0)
+        let peer_kx_params = kx::KeyExchange::decode_ecdh_params::<ClientECDHParams>(&client_kx.0)
             .ok_or_else(|| {
                 conn.common
                     .send_fatal_alert(AlertDescription::DecodeError);
                 Error::CorruptMessagePayload(ContentType::Handshake)
+            })?;
+        let kxd = self
+            .server_kx
+            .complete(&peer_kx_params.public.0)
+            .ok_or_else(|| {
+                Error::PeerMisbehavedError(
+                    "unable to decode peer key exchange parameters".to_string(),
+                )
             })?;
 
         let secrets = if self.using_ems {

@@ -1,6 +1,5 @@
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientECDHParams;
 
 /// The result of a key exchange.  This has our public key,
 /// and the agreed shared secret (also known as the "premaster secret"
@@ -61,13 +60,6 @@ impl KeyExchange {
         }
     }
 
-    /// Complete the server-side computation, by decoding the client's ClientECDHParams
-    /// and then using the contained public key to invoke complete().
-    pub fn server_complete(self, kx_params: &[u8]) -> Option<KeyExchangeResult> {
-        Self::decode_ecdh_params::<ClientECDHParams>(kx_params)
-            .and_then(|ecdh| self.complete(&ecdh.public.0))
-    }
-
     /// Completes the key exchange, given the peer's public key.  The shared
     /// secret is returned as a KeyExchangeResult.
     pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
@@ -120,7 +112,7 @@ pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP38
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msgs::handshake::ServerECDHParams;
+    use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
@@ -134,7 +126,6 @@ mod tests {
 
     #[test]
     fn client_ecdhe_invalid() {
-        let key = KeyExchange::start(&X25519).unwrap();
-        assert!(KeyExchange::server_complete(key, &[34]).is_none());
+        assert!(KeyExchange::decode_ecdh_params::<ClientECDHParams>(&[34]).is_none());
     }
 }
