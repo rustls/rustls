@@ -165,7 +165,7 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        self.maybe_roll().unwrap();
+        self.maybe_roll().ok()?;
 
         self.state
             .lock()
@@ -175,7 +175,7 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        self.maybe_roll().unwrap();
+        self.maybe_roll().ok()?;
 
         // Decrypt with the current key; if that fails, try with the previous.
         let state = self.state.lock().unwrap();
