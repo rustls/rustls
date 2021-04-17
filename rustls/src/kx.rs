@@ -49,9 +49,9 @@ impl KeyExchange {
     pub fn start(skxg: &'static SupportedKxGroup) -> Option<KeyExchange> {
         let rng = ring::rand::SystemRandom::new();
         let ours =
-            ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).unwrap();
+            ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).ok()?;
 
-        let pubkey = ours.compute_public_key().unwrap();
+        let pubkey = ours.compute_public_key().ok()?;
 
         Some(KeyExchange {
             skxg,
