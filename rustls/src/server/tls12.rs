@@ -595,14 +595,7 @@ impl hs::State for ExpectClientKx {
         // resulting premaster secret.
         let peer_kx_params =
             tls12::decode_ecdh_params::<ClientECDHParams>(&mut conn.common, &client_kx.0)?;
-        let kxd = self
-            .server_kx
-            .complete(&peer_kx_params.public.0)
-            .ok_or_else(|| {
-                Error::PeerMisbehavedError(
-                    "unable to decode peer key exchange parameters".to_string(),
-                )
-            })?;
+        let kxd = tls12::complete_ecdh(self.server_kx, &peer_kx_params.public.0)?;
 
         let secrets = if self.using_ems {
             let handshake_hash = self
