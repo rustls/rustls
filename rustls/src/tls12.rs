@@ -1,4 +1,5 @@
 use crate::conn::ConnectionCommon;
+use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::Error;
@@ -22,10 +23,17 @@ fn decode_ecdh_params_<T: Codec>(kx_params: &[u8]) -> Option<T> {
     }
 }
 
+pub fn complete_ecdh(
+    mine: kx::KeyExchange,
+    peer_pub_key: &[u8],
+) -> Result<kx::KeyExchangeResult, Error> {
+    mine.complete(peer_pub_key)
+        .ok_or_else(|| Error::PeerMisbehavedError("key agreement failed".to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kx;
     use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
     #[test]

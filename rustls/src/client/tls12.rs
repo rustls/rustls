@@ -610,10 +610,8 @@ impl hs::State for ExpectServerDone {
                 .ok_or_else(|| {
                 Error::PeerMisbehavedError("peer chose an unsupported group".to_string())
             })?;
-        let kxd = kx::KeyExchange::start(group)
-            .ok_or(Error::FailedToGetRandomBytes)?
-            .complete(&ecdh_params.public.0)
-            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
+        let kx = kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?;
+        let kxd = tls12::complete_ecdh(kx, &ecdh_params.public.0)?;
 
         // 5b.
         emit_clientkx(&mut st.transcript, conn, &kxd);
