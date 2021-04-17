@@ -140,7 +140,7 @@
     "NoSharedCipher": ":HANDSHAKE_FAILURE:",
     "NoSharedCipher-TLS13": ":HANDSHAKE_FAILURE:",
     "InvalidECDHPoint-Client": ":PEER_MISBEHAVIOUR:",
-    "InvalidECDHPoint-Server": ":BAD_HANDSHAKE_MSG:",
+    "InvalidECDHPoint-Server": ":PEER_MISBEHAVIOUR:",
     "TrailingMessageData-ClientHello-TLS": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-ServerHello-TLS": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-ServerCertificate-TLS": ":BAD_HANDSHAKE_MSG:",
