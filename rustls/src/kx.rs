@@ -1,4 +1,3 @@
-use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::NamedGroup;
 
 /// The result of a key exchange.  This has our public key,
@@ -51,15 +50,6 @@ impl KeyExchange {
         self.skxg.name
     }
 
-    pub fn decode_ecdh_params<T: Codec>(kx_params: &[u8]) -> Option<T> {
-        let mut rd = Reader::init(kx_params);
-        let ecdh_params = T::read(&mut rd)?;
-        match rd.any_left() {
-            false => Some(ecdh_params),
-            true => None,
-        }
-    }
-
     /// Completes the key exchange, given the peer's public key.  The shared
     /// secret is returned as a KeyExchangeResult.
     pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
@@ -108,24 +98,3 @@ pub static SECP384R1: SupportedKxGroup = SupportedKxGroup {
 
 /// A list of all the key exchange groups supported by rustls.
 pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP384R1];
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
-
-    #[test]
-    fn server_ecdhe_remaining_bytes() {
-        let key = KeyExchange::start(&X25519).unwrap();
-        let server_params = ServerECDHParams::new(X25519.name, key.pubkey.as_ref());
-        let mut server_buf = Vec::new();
-        server_params.encode(&mut server_buf);
-        server_buf.push(34);
-        assert!(KeyExchange::decode_ecdh_params::<ServerECDHParams>(&server_buf).is_none());
-    }
-
-    #[test]
-    fn client_ecdhe_invalid() {
-        assert!(KeyExchange::decode_ecdh_params::<ClientECDHParams>(&[34]).is_none());
-    }
-}

@@ -2,7 +2,6 @@ use crate::check::check_message;
 use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::key::Certificate;
-use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -17,6 +16,7 @@ use crate::msgs::persist;
 use crate::server::ServerConnection;
 use crate::verify;
 use crate::SupportedCipherSuite;
+use crate::{kx, tls12};
 
 use crate::server::common::{ActiveCertifiedKey, HandshakeDetails};
 use crate::server::hs;
@@ -593,12 +593,8 @@ impl hs::State for ExpectClientKx {
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
-        let peer_kx_params = kx::KeyExchange::decode_ecdh_params::<ClientECDHParams>(&client_kx.0)
-            .ok_or_else(|| {
-                conn.common
-                    .send_fatal_alert(AlertDescription::DecodeError);
-                Error::CorruptMessagePayload(ContentType::Handshake)
-            })?;
+        let peer_kx_params =
+            tls12::decode_ecdh_params::<ClientECDHParams>(&mut conn.common, &client_kx.0)?;
         let kxd = self
             .server_kx
             .complete(&peer_kx_params.public.0)
