@@ -91,7 +91,7 @@ impl KeyExchange {
 
     fn decode_client_params(&self, kx_params: &[u8]) -> Option<ClientECDHParams> {
         let mut rd = Reader::init(kx_params);
-        let ecdh_params = ClientECDHParams::read(&mut rd).unwrap();
+        let ecdh_params = ClientECDHParams::read(&mut rd)?;
         if rd.any_left() {
             None
         } else {
