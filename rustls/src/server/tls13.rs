@@ -354,7 +354,8 @@ mod client_hello {
         // Do key exchange
         let kxr = kx::KeyExchange::choose(share.group, &conn.config.kx_groups)
             .and_then(kx::KeyExchange::start)
-            .and_then(|kx| kx.complete(&share.payload.0))
+            .ok_or(Error::FailedToGetRandomBytes)?
+            .complete(&share.payload.0)
             .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
