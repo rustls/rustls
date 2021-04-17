@@ -3,7 +3,7 @@ use crate::server::ProducesTickets;
 
 use ring::aead;
 use std::mem;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time;
 
 /// The timebase for expiring and rolling tickets and ticketing
@@ -143,8 +143,10 @@ impl TicketSwitcher {
     ///
     /// Calling this regularly will ensure timely key erasure.  Otherwise,
     /// key erasure will be delayed until the next encrypt/decrypt call.
-    fn maybe_roll(&self) -> Result<(), rand::GetRandomFailed> {
-        let mut state = self.state.lock().unwrap();
+    fn maybe_roll(
+        &self,
+        state: &mut MutexGuard<TicketSwitcherState>,
+    ) -> Result<(), rand::GetRandomFailed> {
         let now = timebase();
 
         if now > state.next_switch_time {
@@ -165,20 +167,19 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        self.maybe_roll().ok()?;
+        let mut state = self.state.lock().ok()?;
 
-        self.state
-            .lock()
-            .unwrap()
-            .current
-            .encrypt(message)
+        self.maybe_roll(&mut state).ok()?;
+
+        state.current.encrypt(message)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        self.maybe_roll().ok()?;
+        let mut state = self.state.lock().ok()?;
+
+        self.maybe_roll(&mut state).ok()?;
 
         // Decrypt with the current key; if that fails, try with the previous.
-        let state = self.state.lock().unwrap();
         state
             .current
             .decrypt(ciphertext)
