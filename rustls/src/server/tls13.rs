@@ -373,7 +373,7 @@ mod client_hello {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from_slice(&randoms.server),
+                    random: Random::from(randoms.server),
                     session_id: *session_id,
                     cipher_suite: suite.suite,
                     compression_method: Compression::Null,
