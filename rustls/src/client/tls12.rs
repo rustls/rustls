@@ -3,7 +3,6 @@ use crate::client::ClientConnection;
 use crate::conn::{ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
-use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -20,6 +19,7 @@ use crate::msgs::persist;
 use crate::ticketer;
 use crate::verify;
 use crate::SupportedCipherSuite;
+use crate::{kx, tls12};
 
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
@@ -601,13 +601,10 @@ impl hs::State for ExpectServerDone {
         }
 
         // 5a.
-        let ecdh_params =
-            kx::KeyExchange::decode_ecdh_params::<ServerECDHParams>(&st.server_kx.kx_params)
-                .ok_or_else(|| {
-                    Error::PeerMisbehavedError(
-                        "failed to decode peer's key exchange parameters".to_string(),
-                    )
-                })?;
+        let ecdh_params = tls12::decode_ecdh_params::<ServerECDHParams>(
+            &mut conn.common,
+            &st.server_kx.kx_params,
+        )?;
         let group =
             kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &conn.config.kx_groups)
                 .ok_or_else(|| {

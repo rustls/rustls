@@ -258,6 +258,7 @@ mod prf;
 mod rand;
 mod record_layer;
 mod stream;
+mod tls12;
 mod vecbuf;
 mod verify;
 #[cfg(test)]
