@@ -47,6 +47,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - *Breaking API change*: `ResolvesServerCert::resolve` and `ResolvesClientCert::resolve` now return
     `Option<Arc<CertifiedKey>>` instead of `Option<CertifiedKey>`.  `CertifiedKey` is now an immutable
     type.
+* 0.19.1 (2021-04-17):
+  - Backport: fix security issue: there was a reachable panic in servers if a client
+    sent an invalid `ClientECDiffieHellmanPublic` encoding, due to an errant `unwrap()`
+    when parsing the encoding.
 * 0.19.0 (2020-11-22):
   - Ensured that `get_peer_certificates` is both better documented, and works
     uniformly for both full-handshake and resumed sessions.
