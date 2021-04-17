@@ -1051,6 +1051,12 @@ impl ConnectionCommon {
             .prepare_message_decrypter(dec);
     }
 
+    #[cfg(feature = "quic")]
+    pub fn missing_extension(&mut self, why: &str) -> Error {
+        self.send_fatal_alert(AlertDescription::MissingExtension);
+        Error::PeerMisbehavedError(why.to_string())
+    }
+
     pub fn send_warning_alert(&mut self, desc: AlertDescription) {
         warn!("Sending warning alert {:?}", desc);
         self.send_warning_alert_no_log(desc);

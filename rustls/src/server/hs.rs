@@ -162,9 +162,14 @@ impl ExtensionProcessing {
 
         #[cfg(feature = "quic")]
         {
-            if cx.common.protocol == Protocol::Quic {
-                if let Some(params) = hello.get_quic_params_extension() {
-                    cx.common.quic.params = Some(params);
+            if cx.common.is_quic() {
+                match hello.get_quic_params_extension() {
+                    Some(params) => cx.common.quic.params = Some(params),
+                    None => {
+                        return Err(cx
+                            .common
+                            .missing_extension("QUIC transport parameters not found"));
+                    }
                 }
 
                 if let Some(resume) = resumedata {

@@ -434,8 +434,15 @@ impl hs::State for ExpectEncryptedExtensions {
         #[cfg(feature = "quic")]
         {
             // QUIC transport parameters
-            if let Some(params) = exts.get_quic_params_extension() {
-                cx.common.quic.params = Some(params);
+            if cx.common.is_quic() {
+                match exts.get_quic_params_extension() {
+                    Some(params) => cx.common.quic.params = Some(params),
+                    None => {
+                        return Err(cx
+                            .common
+                            .missing_extension("QUIC transport parameters not found"));
+                    }
+                }
             }
         }
 
