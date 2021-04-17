@@ -795,18 +795,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 .illegal_param("server requested hrr with our group"));
         }
 
-        // Or asks for us to retry on an unsupported group.
-        let req_group = if let Some(group) = req_group {
-            Some(
-                kx::KeyExchange::choose(group, &cx.config.kx_groups).ok_or_else(|| {
-                    cx.common
-                        .illegal_param("server requested hrr with bad group")
-                })?,
-            )
-        } else {
-            None
-        };
-
         // Or has an empty cookie.
         if let Some(cookie) = cookie {
             if cookie.0.is_empty() {
@@ -885,7 +873,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .server_may_send_sct_list();
 
         let key_share = match req_group {
-            Some(group) if group.name != offered_key_share.group() => {
+            Some(group) if group != offered_key_share.group() => {
+                let group =
+                    kx::KeyExchange::choose(group, &cx.config.kx_groups).ok_or_else(|| {
+                        cx.common
+                            .illegal_param("server requested hrr with bad group")
+                    })?;
                 kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?
             }
             _ => offered_key_share,
