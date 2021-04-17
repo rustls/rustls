@@ -32,6 +32,12 @@ impl Secrets {
 /// Generic methods for QUIC sessions
 pub trait QuicExt {
     /// Return the TLS-encoded transport parameters for the session's peer.
+    ///
+    /// While the transport parameters are technically available prior to the
+    /// completion of the handshake, they cannot be fully trusted until the
+    /// handshake completes, and reliance on them should be minimized.
+    /// However, any tampering with the parameters will cause the handshake
+    /// to fail.
     fn get_quic_transport_parameters(&self) -> Option<&[u8]>;
 
     /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
