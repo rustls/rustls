@@ -54,7 +54,7 @@ impl ProducesTickets for AeadTicketer {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
-        rand::fill_random(&mut nonce_buf).unwrap();
+        rand::fill_random(&mut nonce_buf).ok()?;
         let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
         let aad = ring::aead::Aad::empty();
 
