@@ -143,7 +143,7 @@ impl TicketSwitcher {
     ///
     /// Calling this regularly will ensure timely key erasure.  Otherwise,
     /// key erasure will be delayed until the next encrypt/decrypt call.
-    pub fn maybe_roll(&self) -> Result<(), rand::GetRandomFailed> {
+    fn maybe_roll(&self) -> Result<(), rand::GetRandomFailed> {
         let mut state = self.state.lock().unwrap();
         let now = timebase();
 
