@@ -27,7 +27,6 @@ use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign;
-use crate::ticketer;
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
@@ -37,6 +36,7 @@ use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::hs;
 
+use crate::ticketer::TimeBase;
 use ring::constant_time;
 use ring::digest::Digest;
 
@@ -311,7 +311,8 @@ pub fn prepare_resumption(
     //
     // Include an empty binder. It gets filled in below because it depends on
     // the message it's contained in (!!!).
-    let obfuscated_ticket_age = resuming_session.get_obfuscated_ticket_age(ticketer::timebase());
+    let obfuscated_ticket_age =
+        resuming_session.get_obfuscated_ticket_age(resuming_session.time_retrieved());
 
     let binder_len = resuming_suite.get_hash().output_len;
     let binder = vec![0u8; binder_len];
@@ -1078,6 +1079,7 @@ impl ExpectTraffic {
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
 
+        let time_now = TimeBase::now()?;
         let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
             ProtocolVersion::TLSv1_3,
             self.suite,
@@ -1085,8 +1087,9 @@ impl ExpectTraffic {
             nst.ticket.0.clone(),
             secret,
             &conn.server_cert_chain,
+            time_now,
         );
-        value.set_times(ticketer::timebase(), nst.lifetime, nst.age_add);
+        value.set_times(nst.lifetime, nst.age_add);
 
         if let Some(sz) = nst.get_max_early_data_size() {
             value.set_max_early_data_size(sz);

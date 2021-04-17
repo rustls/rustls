@@ -24,12 +24,12 @@ use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::ticketer;
 use crate::verify;
 use crate::SupportedCipherSuite;
 
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
+use crate::ticketer::TimeBase;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, Error>;
@@ -86,10 +86,12 @@ fn find_session(
         })?;
 
     let mut reader = Reader::init(&value[..]);
-    let result = persist::ClientSessionValue::read(&mut reader)
-        .and_then(|csv| csv.resolve_cipher_suite(&conn.config.cipher_suites));
+    let result = persist::ClientSessionValue::read(&mut reader).and_then(|csv| {
+        let time = TimeBase::now().ok()?;
+        csv.resolve_cipher_suite(&conn.config.cipher_suites, time)
+    });
     if let Some(result) = result {
-        if result.has_expired(ticketer::timebase()) {
+        if result.has_expired() {
             None
         } else {
             #[cfg(feature = "quic")]

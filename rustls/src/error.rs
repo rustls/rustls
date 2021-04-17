@@ -3,6 +3,7 @@ use crate::rand;
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::time::SystemTimeError;
 
 /// The reason WebPKI operation was performed, used in [`Error`].
 #[derive(Debug, PartialEq, Clone)]
@@ -155,6 +156,13 @@ impl fmt::Display for Error {
             Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
+    }
+}
+
+impl From<SystemTimeError> for Error {
+    #[inline]
+    fn from(_: SystemTimeError) -> Self {
+        Self::FailedToGetCurrentTime
     }
 }
 

@@ -5,6 +5,7 @@ use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
 use crate::SupportedCipherSuite;
 
+use crate::ticketer::TimeBase;
 use std::cmp;
 use std::mem;
 
@@ -68,6 +69,7 @@ impl ClientSessionValue {
     pub fn resolve_cipher_suite(
         self,
         enabled_cipher_suites: &[&'static SupportedCipherSuite],
+        time: TimeBase,
     ) -> Option<ClientSessionValueWithResolvedCipherSuite> {
         let supported_cipher_suite = enabled_cipher_suites
             .iter()
@@ -75,6 +77,7 @@ impl ClientSessionValue {
         Some(ClientSessionValueWithResolvedCipherSuite {
             value: self,
             supported_cipher_suite,
+            time_retrieved: time,
         })
     }
 }
@@ -127,6 +130,7 @@ impl Codec for ClientSessionValue {
 pub struct ClientSessionValueWithResolvedCipherSuite {
     value: ClientSessionValue,
     supported_cipher_suite: &'static SupportedCipherSuite,
+    time_retrieved: TimeBase,
 }
 
 impl std::ops::Deref for ClientSessionValueWithResolvedCipherSuite {
@@ -146,6 +150,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
         ticket: Vec<u8>,
         ms: Vec<u8>,
         server_cert_chain: &CertificatePayload,
+        time_now: TimeBase,
     ) -> Self {
         ClientSessionValueWithResolvedCipherSuite {
             value: ClientSessionValue {
@@ -162,6 +167,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
                 server_cert_chain: server_cert_chain.to_owned(),
             },
             supported_cipher_suite: cipher_suite,
+            time_retrieved: time_now,
         }
     }
 
@@ -177,18 +183,21 @@ impl ClientSessionValueWithResolvedCipherSuite {
         self.value.extended_ms = true;
     }
 
-    pub fn set_times(&mut self, receipt_time_secs: u64, lifetime_secs: u32, age_add: u32) {
-        self.value.epoch = receipt_time_secs;
+    pub fn set_times(&mut self, lifetime_secs: u32, age_add: u32) {
+        self.value.epoch = self.time_retrieved.as_secs();
         self.value.lifetime = cmp::min(lifetime_secs, MAX_TICKET_LIFETIME);
         self.value.age_add = age_add;
     }
 
-    pub fn has_expired(&self, time_now: u64) -> bool {
-        self.value.lifetime != 0 && self.value.epoch + u64::from(self.value.lifetime) < time_now
+    pub fn has_expired(&self) -> bool {
+        self.value.lifetime != 0
+            && self.value.epoch + u64::from(self.value.lifetime) < self.time_retrieved.as_secs()
     }
 
-    pub fn get_obfuscated_ticket_age(&self, time_now: u64) -> u32 {
-        let age_secs = time_now.saturating_sub(self.value.epoch);
+    pub fn get_obfuscated_ticket_age(&self, time_now: TimeBase) -> u32 {
+        let age_secs = time_now
+            .as_secs()
+            .saturating_sub(self.value.epoch);
         let age_millis = age_secs as u32 * 1000;
         age_millis.wrapping_add(self.value.age_add)
     }
@@ -201,6 +210,11 @@ impl ClientSessionValueWithResolvedCipherSuite {
 
     pub fn set_max_early_data_size(&mut self, sz: u32) {
         self.value.max_early_data_size = sz;
+    }
+
+    #[inline]
+    pub fn time_retrieved(&self) -> TimeBase {
+        self.time_retrieved
     }
 }
 
