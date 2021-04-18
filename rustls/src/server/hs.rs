@@ -2,11 +2,13 @@ use crate::conn::ConnectionRandoms;
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
 use crate::error::Error;
+use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::enums::{AlertDescription, ExtensionType};
 use crate::msgs::enums::{CipherSuite, Compression};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
@@ -16,7 +18,7 @@ use crate::server::{ClientHello, ServerConfig, ServerConnection};
 use crate::suites;
 use crate::SupportedCipherSuite;
 
-use crate::server::common::{ActiveCertifiedKey, HandshakeDetails};
+use crate::server::common::ActiveCertifiedKey;
 use crate::server::{tls12, tls13};
 
 pub type NextState = Box<dyn State + Send + Sync>;
@@ -248,8 +250,9 @@ impl ExtensionProcessing {
 }
 
 pub struct ExpectClientHello {
-    pub handshake: HandshakeDetails,
     pub extra_exts: Vec<ServerExtension>,
+    pub transcript: HandshakeHash,
+    pub session_id: SessionID,
     pub using_ems: bool,
     pub done_retry: bool,
     pub send_ticket: bool,
@@ -261,8 +264,9 @@ impl ExpectClientHello {
         extra_exts: Vec<ServerExtension>,
     ) -> ExpectClientHello {
         let mut ech = ExpectClientHello {
-            handshake: HandshakeDetails::new(),
             extra_exts,
+            transcript: HandshakeHash::new(),
+            session_id: SessionID::empty(),
             using_ems: false,
             done_retry: false,
             send_ticket: false,
@@ -272,9 +276,7 @@ impl ExpectClientHello {
             .verifier
             .offer_client_auth()
         {
-            ech.handshake
-                .transcript
-                .set_client_auth_enabled();
+            ech.transcript.set_client_auth_enabled();
         }
 
         ech
@@ -447,7 +449,6 @@ impl State for ExpectClientHello {
         // Start handshake hash.
         let starting_hash = suite.get_hash();
         if !self
-            .handshake
             .transcript
             .start_hash(starting_hash)
         {
@@ -466,7 +467,7 @@ impl State for ExpectClientHello {
 
         if conn.common.is_tls13() {
             tls13::CompleteClientHelloHandling {
-                handshake: self.handshake,
+                transcript: self.transcript,
                 suite,
                 randoms,
                 done_retry: self.done_retry,
@@ -476,7 +477,8 @@ impl State for ExpectClientHello {
             .handle_client_hello(suite, conn, certkey, &m)
         } else {
             tls12::CompleteClientHelloHandling {
-                handshake: self.handshake,
+                transcript: self.transcript,
+                session_id: self.session_id,
                 suite,
                 using_ems: self.using_ems,
                 randoms,
