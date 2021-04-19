@@ -13,12 +13,11 @@ use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, Handshak
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::ServerConnection;
 use crate::verify;
 use crate::{kx, tls12};
 
-use crate::server::common::ActiveCertifiedKey;
-use crate::server::hs;
+use super::common::ActiveCertifiedKey;
+use super::hs::{self, ServerContext};
 
 use ring::constant_time;
 
@@ -54,7 +53,7 @@ mod client_hello {
     impl CompleteClientHelloHandling {
         pub(in crate::server) fn handle_client_hello(
             mut self,
-            conn: &mut ServerConnection,
+            conn: &mut ServerContext<'_>,
             server_key: ActiveCertifiedKey,
             chm: &Message,
             client_hello: &ClientHelloPayload,
@@ -244,7 +243,7 @@ mod client_hello {
 
         fn start_resumption(
             mut self,
-            conn: &mut ServerConnection,
+            conn: &mut ServerContext<'_>,
             client_hello: &ClientHelloPayload,
             id: &SessionID,
             resumedata: persist::ServerSessionValue,
@@ -308,7 +307,7 @@ mod client_hello {
 
     fn emit_server_hello(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         session_id: SessionID,
         suite: Tls12CipherSuite,
         using_ems: bool,
@@ -434,7 +433,7 @@ mod client_hello {
 
     fn emit_certificate_req(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
         let client_auth = conn.config.get_verifier();
 
@@ -506,7 +505,7 @@ struct ExpectCertificate {
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
@@ -583,7 +582,7 @@ struct ExpectClientKx {
 impl hs::State for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
@@ -653,7 +652,7 @@ struct ExpectCertificateVerify {
 impl hs::State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let rc = {
@@ -702,7 +701,7 @@ struct ExpectCcs {
 }
 
 impl hs::State for ExpectCcs {
-    fn handle(self: Box<Self>, conn: &mut ServerConnection, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
         // CCS should not be received interleaved with fragmented handshake-level
@@ -727,7 +726,7 @@ impl hs::State for ExpectCcs {
 fn get_server_connion_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
-    conn: &ServerConnection,
+    conn: &ServerContext<'_>,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
@@ -753,7 +752,7 @@ fn emit_ticket(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     using_ems: bool,
-    conn: &mut ServerConnection,
+    conn: &mut ServerContext<'_>,
 ) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -825,7 +824,7 @@ struct ExpectFinished {
 impl hs::State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let finished =
@@ -892,7 +891,7 @@ impl ExpectTraffic {}
 impl hs::State for ExpectTraffic {
     fn handle(
         self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         mut m: Message,
     ) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;

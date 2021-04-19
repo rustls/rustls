@@ -15,13 +15,13 @@ use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::server::{ServerConfig, ServerConnection};
+use crate::server::ServerConfig;
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
-use crate::server::hs;
+use super::hs::{self, ServerContext};
 
 use ring::constant_time;
 use ring::digest::Digest;
@@ -112,7 +112,7 @@ mod client_hello {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             suite: &'static SupportedCipherSuite,
-            conn: &mut ServerConnection,
+            conn: &mut ServerContext<'_>,
             server_key: ActiveCertifiedKey,
             chm: &Message,
         ) -> hs::NextStateOrError {
@@ -363,7 +363,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
         suite: &'static SupportedCipherSuite,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         session_id: &SessionID,
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
@@ -515,7 +515,7 @@ mod client_hello {
     fn emit_encrypted_extensions(
         transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -550,7 +550,7 @@ mod client_hello {
 
     fn emit_certificate_req_tls13(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
         if !conn.config.verifier.offer_client_auth() {
             return Ok(false);
@@ -685,7 +685,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
         randoms: &ConnectionRandoms,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
     ) -> (KeyScheduleTrafficWithClientFinishedPending, Digest) {
         let handshake_hash = transcript.get_current_hash();
@@ -754,7 +754,7 @@ struct ExpectCertificate {
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let certp = require_handshake_msg!(
@@ -841,7 +841,7 @@ struct ExpectCertificateVerify {
 impl hs::State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let rc = {
@@ -886,7 +886,7 @@ fn get_server_session_value(
     transcript: &mut HandshakeHash,
     suite: &'static SupportedCipherSuite,
     key_schedule: &KeyScheduleTraffic,
-    conn: &ServerConnection,
+    conn: &ServerContext<'_>,
     nonce: &[u8],
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
@@ -919,7 +919,7 @@ impl ExpectFinished {
     fn emit_ticket(
         transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         key_schedule: &KeyScheduleTraffic,
     ) -> Result<(), rand::GetRandomFailed> {
         let nonce = rand::random_vec(32)?;
@@ -979,7 +979,7 @@ impl ExpectFinished {
 impl hs::State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let finished =
@@ -1058,7 +1058,7 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, conn: &mut ServerConnection, mut m: Message) {
+    fn handle_traffic(&self, conn: &mut ServerContext<'_>, mut m: Message) {
         conn.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
     }
@@ -1106,7 +1106,7 @@ impl ExpectTraffic {
 impl hs::State for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
@@ -1159,7 +1159,7 @@ struct ExpectQUICTraffic {
 
 #[cfg(feature = "quic")]
 impl hs::State for ExpectQUICTraffic {
-    fn handle(self: Box<Self>, _: &mut ServerConnection, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, _: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         // reject all messages
         check_message(&m, &[], &[])?;
         unreachable!();

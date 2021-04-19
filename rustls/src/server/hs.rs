@@ -14,19 +14,20 @@ use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::{ClientHello, ServerConfig, ServerConnection};
+use crate::server::{ClientHello, ServerConfig};
 use crate::suites;
 use crate::SupportedCipherSuite;
 
 use crate::server::common::ActiveCertifiedKey;
-use crate::server::{tls12, tls13};
+use crate::server::{tls12, tls13, ServerConnectionData};
+
 use std::convert::TryFrom;
 
-pub type NextState = Box<dyn State + Send + Sync>;
-pub type NextStateOrError = Result<NextState, Error>;
+pub(super) type NextState = Box<dyn State + Send + Sync>;
+pub(super) type NextStateOrError = Result<NextState, Error>;
 
-pub trait State {
-    fn handle(self: Box<Self>, conn: &mut ServerConnection, m: Message) -> NextStateOrError;
+pub(super) trait State {
+    fn handle(self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -38,6 +39,12 @@ pub trait State {
     }
 
     fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
+}
+
+pub(super) struct ServerContext<'a> {
+    pub(super) common: &'a mut ConnectionCommon,
+    pub(super) data: &'a mut ServerConnectionData,
+    pub(super) config: &'a ServerConfig,
 }
 
 pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
@@ -86,9 +93,9 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub(crate) fn process_common(
+    pub(super) fn process_common(
         &mut self,
-        conn: &mut ServerConnection,
+        conn: &mut ServerContext<'_>,
         #[allow(unused_variables)] // #[cfg(feature = "quic")] only
         suite: &'static SupportedCipherSuite,
         ocsp_response: &mut Option<&[u8]>,
@@ -282,7 +289,7 @@ impl ExpectClientHello {
 }
 
 impl State for ExpectClientHello {
-    fn handle(mut self: Box<Self>, conn: &mut ServerConnection, m: Message) -> NextStateOrError {
+    fn handle(mut self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let client_hello =
             require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
         let tls13_enabled = conn
