@@ -99,10 +99,7 @@ pub fn build_tls12_chacha_encrypter(
 
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
 /// and the session's `secrets`.
-pub fn new_tls12(
-    scs: &'static SupportedCipherSuite,
-    secrets: &ConnectionSecrets,
-) -> MessageCipherPair {
+pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     fn split_key<'a>(
         key_block: &'a [u8],
         alg: &'static aead::Algorithm,
@@ -116,7 +113,10 @@ pub fn new_tls12(
 
     // Make a key block, and chop it up.
     // nb. we don't implement any ciphersuites with nonzero mac_key_len.
-    let key_block = secrets.make_key_block(scs);
+    let key_block = secrets.make_key_block();
+
+    let suite = secrets.suite();
+    let scs = suite.scs();
 
     let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
     let (server_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
@@ -140,8 +140,8 @@ pub fn new_tls12(
     };
 
     (
-        scs.build_tls12_decrypter.unwrap()(read_key, read_iv),
-        scs.build_tls12_encrypter.unwrap()(write_key, write_iv, extra),
+        (suite.tls12().build_tls12_decrypter)(read_key, read_iv),
+        (suite.tls12().build_tls12_encrypter)(write_key, write_iv, extra),
     )
 }
 

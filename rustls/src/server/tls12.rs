@@ -15,7 +15,6 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::ServerConnection;
 use crate::verify;
-use crate::SupportedCipherSuite;
 use crate::{kx, tls12};
 
 use crate::server::common::ActiveCertifiedKey;
@@ -23,6 +22,7 @@ use crate::server::hs;
 
 use ring::constant_time;
 
+use crate::suites::Tls12CipherSuite;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
@@ -39,11 +39,12 @@ mod client_hello {
     use crate::sign;
 
     use super::*;
+    use crate::suites::Tls12CipherSuite;
 
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) session_id: SessionID,
-        pub(in crate::server) suite: &'static SupportedCipherSuite,
+        pub(in crate::server) suite: Tls12CipherSuite,
         pub(in crate::server) using_ems: bool,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) send_ticket: bool,
@@ -132,7 +133,7 @@ mod client_hello {
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
                 .filter(|resumedata| {
-                    hs::can_resume(self.suite, &conn.sni, self.using_ems, resumedata)
+                    hs::can_resume(self.suite.scs(), &conn.sni, self.using_ems, resumedata)
                 });
 
             if let Some(data) = resume_data {
@@ -293,7 +294,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         conn: &mut ServerConnection,
         session_id: SessionID,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
@@ -305,7 +306,7 @@ mod client_hello {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
             conn,
-            suite,
+            suite.scs(),
             ocsp_response,
             sct_list,
             hello,
@@ -323,7 +324,7 @@ mod client_hello {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
                     session_id,
-                    cipher_suite: suite.suite,
+                    cipher_suite: suite.scs().suite,
                     compression_method: Compression::Null,
                     extensions: ep.exts,
                 }),
@@ -476,7 +477,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
     send_ticket: bool,
@@ -552,7 +553,7 @@ struct ExpectClientKx {
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
     client_cert: Option<Vec<Certificate>>,
@@ -714,7 +715,7 @@ fn get_server_connion_value_tls12(
     let mut v = persist::ServerSessionValue::new(
         conn.get_sni(),
         version,
-        secrets.suite().suite,
+        secrets.suite().scs().suite,
         secret,
         &conn.client_cert_chain,
         conn.common.alpn_protocol.clone(),

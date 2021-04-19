@@ -29,7 +29,9 @@ use crate::SupportedCipherSuite;
 
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
 use crate::client::{tls12, tls13};
+use crate::suites::Tls12CipherSuite;
 use crate::ticketer::TimeBase;
+use std::convert::TryFrom;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, Error>;
@@ -562,12 +564,6 @@ impl State for ExpectServerHello {
             }
         }
 
-        if !suite.usable_for_version(version) {
-            return Err(conn
-                .common
-                .illegal_param("server chose unusable ciphersuite for version"));
-        }
-
         // Start our handshake hash, and input the server-hello.
         self.transcript
             .start_hash(suite.get_hash());
@@ -576,6 +572,12 @@ impl State for ExpectServerHello {
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         if conn.common.is_tls13() {
+            if !suite.usable_for_version(TLSv1_3) {
+                return Err(conn
+                    .common
+                    .illegal_param("server chose unusable ciphersuite for version"));
+            }
+
             tls13::validate_server_hello(conn, &server_hello)?;
             let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
                 suite,
@@ -603,6 +605,11 @@ impl State for ExpectServerHello {
         }
 
         // TLS1.2 only from here-on
+
+        let suite = Tls12CipherSuite::try_from(suite).map_err(|_| {
+            conn.common
+                .illegal_param("server chose unusable ciphersuite for version")
+        })?;
 
         // Save ServerRandom and SessionID
         server_hello
@@ -663,7 +670,7 @@ impl State for ExpectServerHello {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
-                if resuming.supported_cipher_suite() != suite {
+                if resuming.supported_cipher_suite() != suite.scs() {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
                     return Err(Error::PeerMisbehavedError(error_msg));
                 }

@@ -20,6 +20,7 @@ use crate::SupportedCipherSuite;
 
 use crate::server::common::ActiveCertifiedKey;
 use crate::server::{tls12, tls13};
+use std::convert::TryFrom;
 
 pub type NextState = Box<dyn State + Send + Sync>;
 pub type NextStateOrError = Result<NextState, Error>;
@@ -476,6 +477,7 @@ impl State for ExpectClientHello {
             }
             .handle_client_hello(suite, conn, certkey, &m)
         } else {
+            let suite = suites::Tls12CipherSuite::try_from(suite).unwrap();
             tls12::CompleteClientHelloHandling {
                 transcript: self.transcript,
                 session_id: self.session_id,
