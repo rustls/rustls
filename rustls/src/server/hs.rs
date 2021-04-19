@@ -72,7 +72,22 @@ pub fn can_resume(
     // establish a new session."
     resumedata.cipher_suite == suite.suite
         && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
-        && &resumedata.sni == sni
+        && sni_exact_eq(&resumedata.sni, &sni)
+}
+
+/// Exactly compare `DnsName` values
+///
+/// webpki compares `DnsName`s case-insensitively, but for the purpose of comparing SNI values
+/// from resumption to current handshake or HelloRetryRequest to ServerHello, we need an exact
+/// comparison.
+pub(super) fn sni_exact_eq(a: &Option<webpki::DnsName>, b: &Option<webpki::DnsName>) -> bool {
+    let a = a
+        .as_ref()
+        .map(|sni| <webpki::DnsName as AsRef<str>>::as_ref(sni));
+    let b = b
+        .as_ref()
+        .map(|sni| <webpki::DnsName as AsRef<str>>::as_ref(sni));
+    a == b
 }
 
 #[derive(Default)]
@@ -369,7 +384,7 @@ impl State for ExpectClientHello {
             // The SNI hostname is immutable once set.
             assert!(conn.sni.is_none());
             conn.sni = Some(sni.clone());
-        } else if conn.sni != sni {
+        } else if !sni_exact_eq(&conn.sni, &sni) {
             return Err(Error::PeerIncompatibleError(
                 "SNI differed on retry".to_string(),
             ));
