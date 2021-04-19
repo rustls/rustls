@@ -98,90 +98,68 @@ fn find_session(
     }
 }
 
-struct InitialState {
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsName,
-    transcript: HandshakeHash,
-    extra_exts: Vec<ClientExtension>,
-}
-
-impl InitialState {
-    fn new(dns_name: webpki::DnsName, extra_exts: Vec<ClientExtension>) -> InitialState {
-        InitialState {
-            resuming_session: None,
-            dns_name,
-            transcript: HandshakeHash::new(),
-            extra_exts,
-        }
-    }
-
-    fn emit_initial_client_hello(mut self, cx: &mut ClientContext<'_>) -> NextStateOrError {
-        // During retries "the client MUST send the same ClientHello without
-        // modification" with only a few exceptions as noted in
-        // https://tools.ietf.org/html/rfc8446#section-4.1.2,
-        // Calculate all inputs to the client hellos that might otherwise
-        // change between the initial and retry hellos here to enforce this.
-
-        if cx
-            .config
-            .client_auth_cert_resolver
-            .has_certs()
-        {
-            self.transcript
-                .set_client_auth_enabled();
-        }
-
-        let mut session_id: Option<SessionID> = None;
-        self.resuming_session = find_session(cx, self.dns_name.as_ref());
-
-        if let Some(resuming) = &mut self.resuming_session {
-            if resuming.version == ProtocolVersion::TLSv1_2 {
-                // If we have a ticket, we use the sessionid as a signal that
-                // we're  doing an abbreviated handshake.  See section 3.4 in
-                // RFC5077.
-                if !resuming.ticket.0.is_empty() {
-                    resuming.set_session_id(SessionID::random()?);
-                }
-                session_id = Some(resuming.session_id);
-            }
-            debug!("Resuming session");
-        } else {
-            debug!("Not resuming any session");
-        }
-        // https://tools.ietf.org/html/rfc8446#appendix-D.4
-        // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
-        if session_id.is_none() && !cx.common.is_quic() {
-            session_id = Some(SessionID::random()?);
-        }
-
-        let randoms = ConnectionRandoms::for_client()?;
-        let hello_details = ClientHelloDetails::new();
-        let sent_tls13_fake_ccs = false;
-        let may_send_sct_list = cx.config.verifier.request_scts();
-        Ok(emit_client_hello_for_retry(
-            cx,
-            self.resuming_session,
-            randoms,
-            false,
-            self.transcript,
-            sent_tls13_fake_ccs,
-            hello_details,
-            session_id,
-            None,
-            self.dns_name,
-            self.extra_exts,
-            may_send_sct_list,
-            None,
-        ))
-    }
-}
-
 pub(super) fn start_handshake(
-    cx: &mut ClientContext<'_>,
-    host_name: webpki::DnsName,
+    dns_name: webpki::DnsName,
     extra_exts: Vec<ClientExtension>,
+    cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
-    InitialState::new(host_name, extra_exts).emit_initial_client_hello(cx)
+    // During retries "the client MUST send the same ClientHello without
+    // modification" with only a few exceptions as noted in
+    // https://tools.ietf.org/html/rfc8446#section-4.1.2,
+    // Calculate all inputs to the client hellos that might otherwise
+    // change between the initial and retry hellos here to enforce this.
+
+    let mut transcript = HandshakeHash::new();
+    if cx
+        .config
+        .client_auth_cert_resolver
+        .has_certs()
+    {
+        transcript.set_client_auth_enabled();
+    }
+
+    let mut session_id: Option<SessionID> = None;
+    let mut resuming_session = find_session(cx, dns_name.as_ref());
+
+    if let Some(resuming) = &mut resuming_session {
+        if resuming.version == ProtocolVersion::TLSv1_2 {
+            // If we have a ticket, we use the sessionid as a signal that
+            // we're  doing an abbreviated handshake.  See section 3.4 in
+            // RFC5077.
+            if !resuming.ticket.0.is_empty() {
+                resuming.set_session_id(SessionID::random()?);
+            }
+            session_id = Some(resuming.session_id);
+        }
+        debug!("Resuming session");
+    } else {
+        debug!("Not resuming any session");
+    }
+    // https://tools.ietf.org/html/rfc8446#appendix-D.4
+    // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
+    if session_id.is_none() && !cx.common.is_quic() {
+        session_id = Some(SessionID::random()?);
+    }
+
+    let randoms = ConnectionRandoms::for_client()?;
+    let hello_details = ClientHelloDetails::new();
+    let sent_tls13_fake_ccs = false;
+    let may_send_sct_list = cx.config.verifier.request_scts();
+    Ok(emit_client_hello_for_retry(
+        cx,
+        resuming_session,
+        randoms,
+        false,
+        transcript,
+        sent_tls13_fake_ccs,
+        hello_details,
+        session_id,
+        None,
+        dns_name,
+        extra_exts,
+        may_send_sct_list,
+        None,
+    ))
 }
 
 struct ExpectServerHello {
