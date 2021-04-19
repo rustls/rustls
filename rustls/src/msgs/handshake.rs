@@ -2397,6 +2397,7 @@ impl Codec for ECHConfigContents {
         })
     }
 }
+
 #[derive(Clone, Debug)]
 pub struct ECHConfig {
     pub version: ECHVersion,
