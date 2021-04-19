@@ -803,9 +803,9 @@ impl hs::State for ExpectCertificate {
         cx.config
             .get_verifier()
             .verify_client_cert(end_entity, intermediates, cx.data.get_sni(), now)
-            .or_else(|err| {
+            .map_err(|err| {
                 hs::incompatible(&mut cx.common, "certificate invalid");
-                Err(err)
+                err
             })?;
 
         Ok(Box::new(ExpectCertificateVerify {
