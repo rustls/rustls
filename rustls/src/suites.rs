@@ -41,12 +41,6 @@ pub struct SupportedCipherSuite {
     /// terminology misuse to match the standard.
     pub fixed_iv_len: usize,
 
-    /// This is a non-standard extension which extends the
-    /// key block to provide an initial explicit nonce offset,
-    /// in a deterministic and safe way.  GCM needs this,
-    /// chacha20poly1305 works this way by design.
-    pub explicit_nonce_len: usize,
-
     pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
     pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
 
@@ -56,6 +50,12 @@ pub struct SupportedCipherSuite {
 pub(crate) struct Tls12Parameters {
     /// How to sign messages for authentication.
     pub sign: &'static [SignatureScheme],
+
+    /// This is a non-standard extension which extends the
+    /// key block to provide an initial explicit nonce offset,
+    /// in a deterministic and safe way.  GCM needs this,
+    /// chacha20poly1305 works this way by design.
+    pub explicit_nonce_len: usize,
 
     pub build_tls12_encrypter: cipher::BuildTls12Encrypter,
     pub build_tls12_decrypter: cipher::BuildTls12Decrypter,
@@ -117,7 +117,6 @@ impl fmt::Debug for SupportedCipherSuite {
             .field("suite", &self.suite)
             .field("bulk", &self.bulk)
             .field("fixed_iv_len", &self.fixed_iv_len)
-            .field("explicit_nonce_len", &self.explicit_nonce_len)
             .finish()
     }
 }
@@ -198,11 +197,11 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         bulk: BulkAlgorithm::Chacha20Poly1305,
         fixed_iv_len: 12,
-        explicit_nonce_len: 0,
         hkdf_algorithm: ring::hkdf::HKDF_SHA256,
         aead_algorithm: &ring::aead::CHACHA20_POLY1305,
         tls12: Some(Tls12Parameters {
             sign: TLS12_ECDSA_SCHEMES,
+            explicit_nonce_len: 0,
             build_tls12_encrypter: cipher::build_tls12_chacha_encrypter,
             build_tls12_decrypter: cipher::build_tls12_chacha_decrypter,
         }),
@@ -215,11 +214,11 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         bulk: BulkAlgorithm::Chacha20Poly1305,
         fixed_iv_len: 12,
-        explicit_nonce_len: 0,
         hkdf_algorithm: ring::hkdf::HKDF_SHA256,
         aead_algorithm: &ring::aead::CHACHA20_POLY1305,
         tls12: Some(Tls12Parameters {
             sign: TLS12_RSA_SCHEMES,
+            explicit_nonce_len: 0,
             build_tls12_encrypter: cipher::build_tls12_chacha_encrypter,
             build_tls12_decrypter: cipher::build_tls12_chacha_decrypter,
         }),
@@ -231,11 +230,11 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Support
     kx: KeyExchangeAlgorithm::ECDHE,
     bulk: BulkAlgorithm::Aes128Gcm,
     fixed_iv_len: 4,
-    explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
     tls12: Some(Tls12Parameters {
         sign: TLS12_RSA_SCHEMES,
+        explicit_nonce_len: 8,
         build_tls12_encrypter: cipher::build_tls12_gcm_encrypter,
         build_tls12_decrypter: cipher::build_tls12_gcm_decrypter,
     }),
@@ -247,11 +246,11 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Support
     kx: KeyExchangeAlgorithm::ECDHE,
     bulk: BulkAlgorithm::Aes256Gcm,
     fixed_iv_len: 4,
-    explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
     aead_algorithm: &ring::aead::AES_256_GCM,
     tls12: Some(Tls12Parameters {
         sign: TLS12_RSA_SCHEMES,
+        explicit_nonce_len: 8,
         build_tls12_encrypter: cipher::build_tls12_gcm_encrypter,
         build_tls12_decrypter: cipher::build_tls12_gcm_decrypter,
     }),
@@ -263,11 +262,11 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite = Suppo
     kx: KeyExchangeAlgorithm::ECDHE,
     bulk: BulkAlgorithm::Aes128Gcm,
     fixed_iv_len: 4,
-    explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
     tls12: Some(Tls12Parameters {
         sign: TLS12_ECDSA_SCHEMES,
+        explicit_nonce_len: 8,
         build_tls12_encrypter: cipher::build_tls12_gcm_encrypter,
         build_tls12_decrypter: cipher::build_tls12_gcm_decrypter,
     }),
@@ -279,11 +278,11 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite = Suppo
     kx: KeyExchangeAlgorithm::ECDHE,
     bulk: BulkAlgorithm::Aes256Gcm,
     fixed_iv_len: 4,
-    explicit_nonce_len: 8,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
     aead_algorithm: &ring::aead::AES_256_GCM,
     tls12: Some(Tls12Parameters {
         sign: TLS12_ECDSA_SCHEMES,
+        explicit_nonce_len: 8,
         build_tls12_encrypter: cipher::build_tls12_gcm_encrypter,
         build_tls12_decrypter: cipher::build_tls12_gcm_decrypter,
     }),
@@ -295,7 +294,6 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite = SupportedCiphe
     kx: KeyExchangeAlgorithm::BulkOnly,
     bulk: BulkAlgorithm::Chacha20Poly1305,
     fixed_iv_len: 12,
-    explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::CHACHA20_POLY1305,
     tls12: None,
@@ -307,7 +305,6 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite = SupportedCipherSuite
     kx: KeyExchangeAlgorithm::BulkOnly,
     bulk: BulkAlgorithm::Aes256Gcm,
     fixed_iv_len: 12,
-    explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA384,
     aead_algorithm: &ring::aead::AES_256_GCM,
     tls12: None,
@@ -319,7 +316,6 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite = SupportedCipherSuite
     kx: KeyExchangeAlgorithm::BulkOnly,
     bulk: BulkAlgorithm::Aes128Gcm,
     fixed_iv_len: 12,
-    explicit_nonce_len: 0,
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
     tls12: None,
