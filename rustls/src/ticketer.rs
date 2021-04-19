@@ -86,31 +86,22 @@ impl ProducesTickets for AeadTicketer {
 
     /// Decrypt `ciphertext` and recover the original message.
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        let nonce_len = self.alg.nonce_len();
-        let tag_len = self.alg.tag_len();
+        // Non-panicking `let (nonce, ciphertext) = ciphertext.split_at(...)`.
+        let nonce = ciphertext.get(..self.alg.nonce_len())?;
+        let ciphertext = ciphertext.get(nonce.len()..)?;
 
-        if ciphertext.len() < nonce_len + tag_len {
-            return None;
-        }
+        // This won't fail since `nonce` has the required length.
+        let nonce = ring::aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
 
-        let nonce =
-            ring::aead::Nonce::try_assume_unique_for_key(&ciphertext[0..nonce_len]).unwrap();
-        let aad = ring::aead::Aad::empty();
+        let mut out = Vec::from(ciphertext);
 
-        let mut out = Vec::new();
-        out.extend_from_slice(&ciphertext[nonce_len..]);
-
-        let plain_len = match self
+        let plain_len = self
             .key
-            .open_in_place(nonce, aad, &mut out)
-        {
-            Ok(plaintext) => plaintext.len(),
-            Err(..) => {
-                return None;
-            }
-        };
-
+            .open_in_place(nonce, aead::Aad::empty(), &mut out)
+            .ok()?
+            .len();
         out.truncate(plain_len);
+
         Some(out)
     }
 }
