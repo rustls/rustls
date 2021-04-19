@@ -378,8 +378,14 @@ impl ServerConnection {
             return Ok(());
         }
 
+        let mut cx = hs::ServerContext {
+            common: &mut self.common,
+            data: &mut self.data,
+            config: &self.config,
+        };
+
         let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(self, msg);
+        let maybe_next_state = state.handle(&mut cx, msg);
         let next_state = self
             .common
             .maybe_send_unexpected_alert(maybe_next_state)?;
