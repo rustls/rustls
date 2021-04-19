@@ -486,7 +486,12 @@ impl ClientConnection {
         dns_name: webpki::DnsName,
         extra_exts: Vec<ClientExtension>,
     ) -> Result<(), Error> {
-        self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
+        let mut cx = hs::ClientContext {
+            common: &mut self.common,
+            data: &mut self.data,
+            config: &self.config,
+        };
+        self.state = Some(hs::start_handshake(&mut cx, dns_name, extra_exts)?);
         Ok(())
     }
 
@@ -518,8 +523,14 @@ impl ClientConnection {
             return Ok(());
         }
 
+        let mut cx = hs::ClientContext {
+            common: &mut self.common,
+            data: &mut self.data,
+            config: &self.config,
+        };
+
         let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(self, msg);
+        let maybe_next_state = state.handle(&mut cx, msg);
         let next_state = self
             .common
             .maybe_send_unexpected_alert(maybe_next_state)?;
