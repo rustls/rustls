@@ -1,5 +1,4 @@
 use crate::check::check_message;
-use crate::client::ClientConnection;
 use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -19,6 +18,7 @@ use crate::msgs::persist;
 use crate::verify;
 use crate::{kx, tls12};
 
+use super::hs::ClientContext;
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
 use crate::client::hs;
@@ -44,7 +44,7 @@ pub struct ExpectCertificate {
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        _conn: &mut ClientConnection,
+        _conn: &mut ClientContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
@@ -102,7 +102,7 @@ struct ExpectCertificateStatus {
 impl hs::State for ExpectCertificateStatus {
     fn handle(
         mut self: Box<Self>,
-        _conn: &mut ClientConnection,
+        _conn: &mut ClientContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
@@ -152,7 +152,7 @@ struct ExpectCertificateStatusOrServerKx {
 }
 
 impl hs::State for ExpectCertificateStatusOrServerKx {
-    fn handle(self: Box<Self>, conn: &mut ClientConnection, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],
@@ -212,7 +212,7 @@ struct ExpectServerKx {
 impl hs::State for ExpectServerKx {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ClientConnection,
+        conn: &mut ClientContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
@@ -382,7 +382,7 @@ struct ExpectCertificateRequest {
 impl hs::State for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ClientConnection,
+        conn: &mut ClientContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         let certreq = require_handshake_msg!(
@@ -457,7 +457,7 @@ struct ExpectServerDoneOrCertReq {
 impl hs::State for ExpectServerDoneOrCertReq {
     fn handle(
         mut self: Box<Self>,
-        conn: &mut ClientConnection,
+        conn: &mut ClientContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         if require_handshake_msg!(
@@ -516,7 +516,7 @@ struct ExpectServerDone {
 }
 
 impl hs::State for ExpectServerDone {
-    fn handle(self: Box<Self>, conn: &mut ClientConnection, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         check_message(
             &m,
@@ -562,7 +562,7 @@ impl hs::State for ExpectServerDone {
                 &st.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| hs::send_cert_error_alert(&mut conn.common, err))?;
+            .map_err(|err| hs::send_cert_error_alert(conn.common, err))?;
 
         // 3.
         // Build up the contents of the signed message.
@@ -590,24 +590,22 @@ impl hs::State for ExpectServerDone {
             conn.config
                 .get_verifier()
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
-                .map_err(|err| hs::send_cert_error_alert(&mut conn.common, err))?
+                .map_err(|err| hs::send_cert_error_alert(conn.common, err))?
         };
         conn.data.server_cert_chain = st.server_cert.cert_chain;
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
             if let Some(cert_key) = &client_auth.certkey {
-                emit_certificate(&mut st.transcript, cert_key.cert.clone(), &mut conn.common);
+                emit_certificate(&mut st.transcript, cert_key.cert.clone(), conn.common);
             } else {
-                emit_certificate(&mut st.transcript, Vec::new(), &mut conn.common);
+                emit_certificate(&mut st.transcript, Vec::new(), conn.common);
             }
         }
 
         // 5a.
-        let ecdh_params = tls12::decode_ecdh_params::<ServerECDHParams>(
-            &mut conn.common,
-            &st.server_kx.kx_params,
-        )?;
+        let ecdh_params =
+            tls12::decode_ecdh_params::<ServerECDHParams>(conn.common, &st.server_kx.kx_params)?;
         let group =
             kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &conn.config.kx_groups)
                 .ok_or_else(|| {
@@ -617,17 +615,17 @@ impl hs::State for ExpectServerDone {
         let kxd = tls12::complete_ecdh(kx, &ecdh_params.public.0)?;
 
         // 5b.
-        emit_clientkx(&mut st.transcript, &mut conn.common, &kxd);
+        emit_clientkx(&mut st.transcript, conn.common, &kxd);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
         let handshake_hash = st.transcript.get_current_hash();
 
         // 5c.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut st.transcript, client_auth, &mut conn.common)?;
+            emit_certverify(&mut st.transcript, client_auth, conn.common)?;
         }
 
         // 5d.
-        emit_ccs(&mut conn.common);
+        emit_ccs(conn.common);
 
         // 5e. Now commit secrets.
         let secrets = if st.using_ems {
@@ -647,7 +645,7 @@ impl hs::State for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut st.transcript, &mut conn.common);
+        emit_finished(&secrets, &mut st.transcript, conn.common);
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -693,7 +691,7 @@ pub struct ExpectCcs {
 }
 
 impl hs::State for ExpectCcs {
-    fn handle(self: Box<Self>, conn: &mut ClientConnection, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
@@ -734,7 +732,7 @@ pub struct ExpectNewTicket {
 impl hs::State for ExpectNewTicket {
     fn handle(
         mut self: Box<Self>,
-        _conn: &mut ClientConnection,
+        _conn: &mut ClientContext<'_>,
         m: Message,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
@@ -768,7 +766,7 @@ fn save_session(
     dns_name: webpki::DnsNameRef,
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
-    conn: &mut ClientConnection,
+    conn: &mut ClientContext<'_>,
 ) {
     // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
     // original ticket again.
@@ -836,7 +834,7 @@ struct ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(self: Box<Self>, conn: &mut ClientConnection, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -872,11 +870,11 @@ impl hs::State for ExpectFinished {
         );
 
         if st.resuming {
-            emit_ccs(&mut conn.common);
+            emit_ccs(conn.common);
             conn.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&st.secrets, &mut st.transcript, &mut conn.common);
+            emit_finished(&st.secrets, &mut st.transcript, conn.common);
         }
 
         conn.common.start_traffic();
@@ -900,7 +898,7 @@ struct ExpectTraffic {
 impl hs::State for ExpectTraffic {
     fn handle(
         self: Box<Self>,
-        conn: &mut ClientConnection,
+        conn: &mut ClientContext<'_>,
         mut m: Message,
     ) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;

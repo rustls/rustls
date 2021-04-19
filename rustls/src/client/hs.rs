@@ -1,7 +1,6 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::client::ClientConnection;
 use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -28,18 +27,19 @@ use crate::verify;
 use crate::SupportedCipherSuite;
 
 use crate::client::common::{ClientHelloDetails, ReceivedTicketDetails};
-use crate::client::{tls12, tls13};
+use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData};
 use crate::suites::Tls12CipherSuite;
 use crate::ticketer::TimeBase;
+
 use std::convert::TryFrom;
 
-pub type NextState = Box<dyn State + Send + Sync>;
-pub type NextStateOrError = Result<NextState, Error>;
+pub(super) type NextState = Box<dyn State + Send + Sync>;
+pub(super) type NextStateOrError = Result<NextState, Error>;
 
-pub trait State {
+pub(super) trait State {
     /// Each handle() implementation consumes a whole TLS message, and returns
     /// either an error or the next state.
-    fn handle(self: Box<Self>, conn: &mut ClientConnection, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -53,8 +53,14 @@ pub trait State {
     fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
+pub(super) struct ClientContext<'a> {
+    pub(super) common: &'a mut ConnectionCommon,
+    pub(super) data: &'a mut ClientConnectionData,
+    pub(super) config: &'a ClientConfig,
+}
+
 fn find_session(
-    conn: &mut ClientConnection,
+    conn: &mut ClientContext<'_>,
     dns_name: webpki::DnsNameRef,
 ) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
@@ -109,7 +115,7 @@ impl InitialState {
         }
     }
 
-    fn emit_initial_client_hello(mut self, conn: &mut ClientConnection) -> NextStateOrError {
+    fn emit_initial_client_hello(mut self, conn: &mut ClientContext<'_>) -> NextStateOrError {
         // During retries "the client MUST send the same ClientHello without
         // modification" with only a few exceptions as noted in
         // https://tools.ietf.org/html/rfc8446#section-4.1.2,
@@ -170,8 +176,8 @@ impl InitialState {
     }
 }
 
-pub fn start_handshake(
-    conn: &mut ClientConnection,
+pub(super) fn start_handshake(
+    conn: &mut ClientContext<'_>,
     host_name: webpki::DnsName,
     extra_exts: Vec<ClientExtension>,
 ) -> NextStateOrError {
@@ -197,7 +203,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 }
 
 fn emit_client_hello_for_retry(
-    conn: &mut ClientConnection,
+    conn: &mut ClientContext<'_>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -267,7 +273,7 @@ fn emit_client_hello_for_retry(
 
     if support_tls13 {
         tls13::choose_kx_groups(
-            &conn.config,
+            conn.config,
             &mut exts,
             &mut hello,
             dns_name.as_ref(),
@@ -378,7 +384,7 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, &mut conn.common);
+        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, conn.common);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -423,8 +429,8 @@ fn emit_client_hello_for_retry(
     }
 }
 
-pub fn process_alpn_protocol(
-    conn: &mut ClientConnection,
+pub(super) fn process_alpn_protocol(
+    conn: &mut ClientContext<'_>,
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
     conn.common.alpn_protocol = proto.map(ToOwned::to_owned);
@@ -456,7 +462,7 @@ pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
 }
 
 impl State for ExpectServerHello {
-    fn handle(mut self: Box<Self>, conn: &mut ClientConnection, m: Message) -> NextStateOrError {
+    fn handle(mut self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {:#?}", server_hello);
@@ -584,7 +590,7 @@ impl State for ExpectServerHello {
                     .illegal_param("server chose unusable ciphersuite for version"));
             }
 
-            tls13::validate_server_hello(&mut conn.common, &server_hello)?;
+            tls13::validate_server_hello(conn.common, &server_hello)?;
             let (key_schedule, hash_at_client_recvd_server_hello) = tls13::start_handshake_traffic(
                 suite,
                 conn,
@@ -596,7 +602,7 @@ impl State for ExpectServerHello {
                 &mut self.hello,
                 &self.randoms,
             )?;
-            tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, &mut conn.common);
+            tls13::emit_fake_ccs(&mut self.sent_tls13_fake_ccs, conn.common);
 
             return Ok(Box::new(tls13::ExpectEncryptedExtensions {
                 resuming_session: self.resuming_session,
@@ -754,7 +760,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
     fn handle_hello_retry_request(
         mut self,
-        conn: &mut ClientConnection,
+        conn: &mut ClientContext<'_>,
         m: Message,
     ) -> NextStateOrError {
         let hrr = require_handshake_msg!(
@@ -890,7 +896,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, conn: &mut ClientConnection, m: Message) -> NextStateOrError {
+    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],
