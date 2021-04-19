@@ -630,22 +630,6 @@ struct ExpectCertificateVerify {
     hash_at_client_recvd_server_hello: Digest,
 }
 
-fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
-    match err {
-        Error::WebPkiError(webpki::Error::BadDer, _) => {
-            common.send_fatal_alert(AlertDescription::DecodeError);
-        }
-        Error::PeerMisbehavedError(_) => {
-            common.send_fatal_alert(AlertDescription::IllegalParameter);
-        }
-        _ => {
-            common.send_fatal_alert(AlertDescription::BadCertificate);
-        }
-    };
-
-    err
-}
-
 impl hs::State for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
@@ -674,7 +658,7 @@ impl hs::State for ExpectCertificateVerify {
                 &self.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| send_cert_error_alert(cx.common, err))?;
+            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.transcript.get_current_hash();
@@ -686,7 +670,7 @@ impl hs::State for ExpectCertificateVerify {
                 &self.server_cert.cert_chain[0],
                 &cert_verify,
             )
-            .map_err(|err| send_cert_error_alert(cx.common, err))?;
+            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
         cx.data.server_cert_chain = self.server_cert.cert_chain;
         self.transcript.add_message(&m);

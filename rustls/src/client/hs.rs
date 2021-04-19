@@ -910,7 +910,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
+pub(super) fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
     match err {
         Error::WebPkiError(webpki::Error::BadDer, _) => {
             common.send_fatal_alert(AlertDescription::DecodeError);
