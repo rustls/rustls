@@ -9,11 +9,9 @@ use crate::log::trace;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::{CertificatePayload, ClientExtension};
-use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
@@ -501,39 +499,13 @@ impl ClientConnection {
             .frames
             .pop_front()
         {
-            self.process_main_protocol(msg)?;
+            self.common.process_main_protocol(
+                msg,
+                &mut self.state,
+                &mut self.data,
+                &self.config,
+            )?;
         }
-
-        Ok(())
-    }
-
-    /// Process `msg`.  First, we get the current state.  Then we ask what messages
-    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
-    /// to handle the message.
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if msg.is_handshake_type(HandshakeType::HelloRequest)
-            && !self.common.is_tls13()
-            && !self.is_handshaking()
-        {
-            self.common
-                .reject_renegotiation_attempt();
-            return Ok(());
-        }
-
-        let mut cx = hs::ClientContext {
-            common: &mut self.common,
-            data: &mut self.data,
-            config: &self.config,
-        };
-
-        let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(&mut cx, msg);
-        let next_state = self
-            .common
-            .maybe_send_unexpected_alert(maybe_next_state)?;
-        self.state = Some(next_state);
 
         Ok(())
     }
@@ -589,7 +561,12 @@ impl Connection for ClientConnection {
                 .process_msg(msg)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => self.process_new_handshake_messages(),
-                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
+                    Some(MessageType::Data(msg)) => self.common.process_main_protocol(
+                        msg,
+                        &mut self.state,
+                        &mut self.data,
+                        &self.config,
+                    ),
                     None => Ok(()),
                 });
 

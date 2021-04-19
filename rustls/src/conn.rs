@@ -6,6 +6,7 @@ use crate::log::{debug, error, trace, warn};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::MessageDeframer;
+use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use crate::msgs::hsjoiner::HandshakeJoiner;
@@ -661,6 +662,36 @@ impl ConnectionCommon {
         Ok(Some(MessageType::Data(msg)))
     }
 
+    /// Process `msg`.  First, we get the current state.  Then we ask what messages
+    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
+    /// to handle the message.
+    pub(crate) fn process_main_protocol<S: HandleState>(
+        &mut self,
+        msg: Message,
+        state: &mut Option<S>,
+        data: &mut S::Data,
+        config: &S::Config,
+    ) -> Result<(), Error> {
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.traffic && !self.is_tls13() {
+            let reject_ty = match self.is_client {
+                true => HandshakeType::HelloRequest,
+                false => HandshakeType::ClientHello,
+            };
+            if msg.is_handshake_type(reject_ty) {
+                self.reject_renegotiation_attempt();
+                return Ok(());
+            }
+        }
+
+        let current = state.take().unwrap();
+        let maybe_next_state = current.handle(msg, data, self, config);
+        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
+        *state = Some(next_state);
+        Ok(())
+    }
+
     // Changing the keys must not span any fragmented handshake
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
@@ -1009,6 +1040,19 @@ impl ConnectionCommon {
         #[cfg(not(feature = "quic"))]
         false
     }
+}
+
+pub(crate) trait HandleState: Sized {
+    type Data;
+    type Config;
+
+    fn handle(
+        self,
+        message: Message,
+        data: &mut Self::Data,
+        common: &mut ConnectionCommon,
+        config: &Self::Config,
+    ) -> Result<Self, Error>;
 }
 
 pub enum MessageType {
