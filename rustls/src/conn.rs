@@ -557,8 +557,8 @@ pub struct ConnectionCommon {
     pub early_traffic: bool,
     sent_fatal_alert: bool,
     received_middlebox_ccs: bool,
-    pub error: Option<Error>,
-    pub message_deframer: MessageDeframer,
+    error: Option<Error>,
+    message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
     received_plaintext: ChunkVecBuffer,
@@ -600,7 +600,7 @@ impl ConnectionCommon {
         Reader { common: self }
     }
 
-    pub(crate) fn current_io_state(&self) -> IoState {
+    fn current_io_state(&self) -> IoState {
         IoState {
             tls_bytes_to_write: self.sendable_tls.len(),
             plaintext_bytes_to_read: self.received_plaintext.len(),
@@ -612,7 +612,7 @@ impl ConnectionCommon {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<Option<MessageType>, Error> {
+    fn process_msg(&mut self, mut msg: Message) -> Result<Option<MessageType>, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
@@ -662,6 +662,42 @@ impl ConnectionCommon {
         Ok(Some(MessageType::Data(msg)))
     }
 
+    pub(crate) fn process_new_packets<S: HandleState>(
+        &mut self,
+        state: &mut Option<S>,
+        data: &mut S::Data,
+        config: &S::Config,
+    ) -> Result<IoState, Error> {
+        if let Some(ref err) = self.error {
+            return Err(err.clone());
+        }
+
+        if self.message_deframer.desynced {
+            return Err(Error::CorruptMessage);
+        }
+
+        while let Some(msg) = self.message_deframer.frames.pop_front() {
+            let result = self
+                .process_msg(msg)
+                .and_then(|val| match val {
+                    Some(MessageType::Handshake) => {
+                        self.process_new_handshake_messages(state, data, config)
+                    }
+                    Some(MessageType::Data(msg)) => {
+                        self.process_main_protocol(msg, state, data, config)
+                    }
+                    None => Ok(()),
+                });
+
+            if let Err(err) = result {
+                self.error = Some(err.clone());
+                return Err(err);
+            }
+        }
+
+        Ok(self.current_io_state())
+    }
+
     pub(crate) fn process_new_handshake_messages<S: HandleState>(
         &mut self,
         state: &mut Option<S>,
@@ -678,7 +714,7 @@ impl ConnectionCommon {
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
-    pub(crate) fn process_main_protocol<S: HandleState>(
+    fn process_main_protocol<S: HandleState>(
         &mut self,
         msg: Message,
         state: &mut Option<S>,
@@ -759,7 +795,7 @@ impl ConnectionCommon {
         self.sendable_tls.set_limit(limit);
     }
 
-    pub fn maybe_send_unexpected_alert<T>(&mut self, rc: Result<T, Error>) -> Result<T, Error> {
+    fn maybe_send_unexpected_alert<T>(&mut self, rc: Result<T, Error>) -> Result<T, Error> {
         match rc {
             Err(Error::InappropriateMessage { .. })
             | Err(Error::InappropriateHandshakeMessage { .. }) => {
@@ -770,11 +806,11 @@ impl ConnectionCommon {
         rc
     }
 
-    pub(crate) fn reject_renegotiation_attempt(&mut self) {
+    fn reject_renegotiation_attempt(&mut self) {
         self.send_warning_alert(AlertDescription::NoRenegotiation);
     }
 
-    pub fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
+    fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
         if let MessagePayload::Alert(ref alert) = msg.payload {
             // Reject unknown AlertLevels.
             if let AlertLevel::Unknown(_) = alert.level {

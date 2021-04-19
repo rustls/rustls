@@ -1,6 +1,4 @@
-use crate::conn::{
-    Connection, ConnectionCommon, IoState, MessageType, PlaintextSink, Protocol, Reader, Writer,
-};
+use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer};
 use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -524,47 +522,8 @@ impl Connection for ClientConnection {
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        if let Some(ref err) = self.common.error {
-            return Err(err.clone());
-        }
-
-        if self.common.message_deframer.desynced {
-            return Err(Error::CorruptMessage);
-        }
-
-        while let Some(msg) = self
-            .common
-            .message_deframer
-            .frames
-            .pop_front()
-        {
-            let result = self
-                .common
-                .process_msg(msg)
-                .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self
-                        .common
-                        .process_new_handshake_messages(
-                            &mut self.state,
-                            &mut self.data,
-                            &self.config,
-                        ),
-                    Some(MessageType::Data(msg)) => self.common.process_main_protocol(
-                        msg,
-                        &mut self.state,
-                        &mut self.data,
-                        &self.config,
-                    ),
-                    None => Ok(()),
-                });
-
-            if let Err(err) = result {
-                self.common.error = Some(err.clone());
-                return Err(err);
-            }
-        }
-
-        Ok(self.common.current_io_state())
+        self.common
+            .process_new_packets(&mut self.state, &mut self.data, &self.config)
     }
 
     fn wants_read(&self) -> bool {
