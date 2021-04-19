@@ -17,13 +17,13 @@ use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::verify;
-use crate::SupportedCipherSuite;
 use crate::{kx, tls12};
 
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
 use crate::client::hs;
 
+use crate::suites::Tls12CipherSuite;
 use crate::ticketer::TimeBase;
 use ring::constant_time;
 use std::mem;
@@ -35,7 +35,7 @@ pub struct ExpectCertificate {
     pub randoms: ConnectionRandoms,
     pub using_ems: bool,
     pub transcript: HandshakeHash,
-    pub suite: &'static SupportedCipherSuite,
+    pub(super) suite: Tls12CipherSuite,
     pub may_send_cert_status: bool,
     pub must_issue_new_ticket: bool,
     pub server_cert_sct_list: Option<SCTList>,
@@ -93,7 +93,7 @@ struct ExpectCertificateStatus {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
@@ -145,7 +145,7 @@ struct ExpectCertificateStatusOrServerKx {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
@@ -204,7 +204,7 @@ struct ExpectServerKx {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
 }
@@ -223,7 +223,7 @@ impl hs::State for ExpectServerKx {
         self.transcript.add_message(&m);
 
         let decoded_kx = opaque_kx
-            .unwrap_given_kxa(&self.suite.kx)
+            .unwrap_given_kxa(&self.suite.scs().kx)
             .ok_or_else(|| {
                 conn.common
                     .send_fatal_alert(AlertDescription::DecodeError);
@@ -373,7 +373,7 @@ struct ExpectCertificateRequest {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
@@ -448,7 +448,7 @@ struct ExpectServerDoneOrCertReq {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
@@ -508,7 +508,7 @@ struct ExpectServerDone {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     client_auth: Option<ClientAuthDetails>,
@@ -575,11 +575,14 @@ impl hs::State for ExpectServerDone {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            if !suite.usable_for_sigalg(sig.scheme.sign()) {
+            if !suite
+                .scs()
+                .usable_for_sigalg(sig.scheme.sign())
+            {
                 let error_message = format!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),
-                    suite.sign
+                    suite.tls12().sign
                 );
                 return Err(Error::PeerMisbehavedError(error_message));
             }
@@ -795,7 +798,7 @@ fn save_session(
     let master_secret = secrets.get_master_secret();
     let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
         ProtocolVersion::TLSv1_2,
-        secrets.suite(),
+        secrets.suite().scs(),
         &session_id,
         ticket,
         master_secret,

@@ -14,7 +14,7 @@ use crate::prf;
 use crate::quic;
 use crate::rand;
 use crate::record_layer;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
 use crate::vecbuf::ChunkVecBuffer;
 
 use ring::digest::Digest;
@@ -394,14 +394,14 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 /// TLS1.2 per-connection keying material
 pub struct ConnectionSecrets {
     pub randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     pub master_secret: [u8; 48],
 }
 
 impl ConnectionSecrets {
-    pub fn new(
+    pub(crate) fn new(
         randoms: &ConnectionRandoms,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         pms: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -413,7 +413,7 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
         prf::prf(
             &mut ret.master_secret,
-            suite.hmac_algorithm(),
+            suite.scs().hmac_algorithm(),
             pms,
             b"master secret",
             &randoms,
@@ -421,10 +421,10 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn new_ems(
+    pub(crate) fn new_ems(
         randoms: &ConnectionRandoms,
         hs_hash: &Digest,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         pms: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -435,7 +435,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut ret.master_secret,
-            suite.hmac_algorithm(),
+            suite.scs().hmac_algorithm(),
             pms,
             b"extended master secret",
             hs_hash.as_ref(),
@@ -443,9 +443,9 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn new_resume(
+    pub(crate) fn new_resume(
         randoms: &ConnectionRandoms,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         master_secret: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -458,7 +458,8 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn make_key_block(&self, scs: &SupportedCipherSuite) -> Vec<u8> {
+    pub fn make_key_block(&self) -> Vec<u8> {
+        let scs = self.suite.scs();
         let len = (scs.aead_algorithm.key_len() + scs.fixed_iv_len) * 2 + scs.explicit_nonce_len;
 
         let mut out = Vec::new();
@@ -469,7 +470,7 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.suite.hmac_algorithm(),
+            self.suite.scs().hmac_algorithm(),
             &self.master_secret,
             b"key expansion",
             &randoms,
@@ -478,7 +479,7 @@ impl ConnectionSecrets {
         out
     }
 
-    pub fn suite(&self) -> &'static SupportedCipherSuite {
+    pub(crate) fn suite(&self) -> Tls12CipherSuite {
         self.suite
     }
 
@@ -494,7 +495,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut out,
-            self.suite.hmac_algorithm(),
+            self.suite.scs().hmac_algorithm(),
             &self.master_secret,
             label,
             handshake_hash.as_ref(),
@@ -522,7 +523,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             output,
-            self.suite.hmac_algorithm(),
+            self.suite.scs().hmac_algorithm(),
             &self.master_secret,
             label,
             &randoms,
@@ -963,7 +964,7 @@ impl ConnectionCommon {
     }
 
     pub fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets) {
-        let (dec, enc) = cipher::new_tls12(secrets.suite(), secrets);
+        let (dec, enc) = cipher::new_tls12(secrets);
         self.record_layer
             .prepare_message_encrypter(enc);
         self.record_layer
