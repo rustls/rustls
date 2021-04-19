@@ -53,7 +53,7 @@ mod client_hello {
     impl CompleteClientHelloHandling {
         pub(in crate::server) fn handle_client_hello(
             mut self,
-            conn: &mut ServerContext<'_>,
+            cx: &mut ServerContext<'_>,
             server_key: ActiveCertifiedKey,
             chm: &Message,
             client_hello: &ClientHelloPayload,
@@ -69,20 +69,18 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| {
-                    hs::incompatible(&mut conn.common, "client didn't describe groups")
-                })?;
+                .ok_or_else(|| hs::incompatible(&mut cx.common, "client didn't describe groups"))?;
             let ecpoints_ext = client_hello
                 .get_ecpoints_extension()
                 .ok_or_else(|| {
-                    hs::incompatible(&mut conn.common, "client didn't describe ec points")
+                    hs::incompatible(&mut cx.common, "client didn't describe ec points")
                 })?;
 
             trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
 
             if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
-                conn.common
+                cx.common
                     .send_fatal_alert(AlertDescription::IllegalParameter);
                 return Err(Error::PeerIncompatibleError(
                     "client didn't support uncompressed ec points".to_string(),
@@ -117,7 +115,7 @@ mod client_hello {
                 .and_then(|ticket| {
                     ticket_received = true;
                     debug!("Ticket received");
-                    let data = conn.config.ticketer.decrypt(&ticket.0);
+                    let data = cx.config.ticketer.decrypt(&ticket.0);
                     if data.is_none() {
                         debug!("Ticket didn't decrypt");
                     }
@@ -130,7 +128,7 @@ mod client_hello {
                         return None;
                     }
 
-                    conn.config
+                    cx.config
                         .session_storage
                         .get(&client_hello.session_id.get_encoding())
                 })
@@ -138,14 +136,14 @@ mod client_hello {
                 .filter(|resumedata| {
                     hs::can_resume(
                         self.suite.supported_suite(),
-                        &conn.data.sni,
+                        &cx.data.sni,
                         self.using_ems,
                         resumedata,
                     )
                 });
 
             if let Some(data) = resume_data {
-                return self.start_resumption(conn, client_hello, &client_hello.session_id, data);
+                return self.start_resumption(cx, client_hello, &client_hello.session_id, data);
             }
 
             // Now we have chosen a ciphersuite, we can make kx decisions.
@@ -155,24 +153,24 @@ mod client_hello {
 
             if sigschemes.is_empty() {
                 return Err(hs::incompatible(
-                    &mut conn.common,
+                    &mut cx.common,
                     "no overlapping sigschemes",
                 ));
             }
 
-            let group = conn
+            let group = cx
                 .config
                 .kx_groups
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(&mut conn.common, "no supported group"))?;
+                .ok_or_else(|| hs::incompatible(&mut cx.common, "no supported group"))?;
 
             let ecpoint = ECPointFormatList::supported()
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(&mut conn.common, "no supported point format"))?;
+                .ok_or_else(|| hs::incompatible(&mut cx.common, "no supported point format"))?;
 
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
@@ -187,7 +185,7 @@ mod client_hello {
 
             self.send_ticket = emit_server_hello(
                 &mut self.transcript,
-                conn,
+                cx,
                 self.session_id,
                 self.suite,
                 self.using_ems,
@@ -198,24 +196,20 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(
-                &mut self.transcript,
-                &mut conn.common,
-                server_key.get_cert(),
-            );
+            emit_certificate(&mut self.transcript, &mut cx.common, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut self.transcript, &mut conn.common, ocsp_response);
+                emit_cert_status(&mut self.transcript, &mut cx.common, ocsp_response);
             }
             let server_kx = emit_server_kx(
                 &mut self.transcript,
-                &mut conn.common,
+                &mut cx.common,
                 sigschemes,
                 group,
                 server_key.get_key(),
                 &self.randoms,
             )?;
-            let doing_client_auth = emit_certificate_req(&mut self.transcript, conn)?;
-            emit_server_hello_done(&mut self.transcript, &mut conn.common);
+            let doing_client_auth = emit_certificate_req(&mut self.transcript, cx)?;
+            emit_server_hello_done(&mut self.transcript, &mut cx.common);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -243,7 +237,7 @@ mod client_hello {
 
         fn start_resumption(
             mut self,
-            conn: &mut ServerContext<'_>,
+            cx: &mut ServerContext<'_>,
             client_hello: &ClientHelloPayload,
             id: &SessionID,
             resumedata: persist::ServerSessionValue,
@@ -251,7 +245,7 @@ mod client_hello {
             debug!("Resuming connion");
 
             if resumedata.extended_ms && !self.using_ems {
-                return Err(conn
+                return Err(cx
                     .common
                     .illegal_param("refusing to resume without ems"));
             }
@@ -259,7 +253,7 @@ mod client_hello {
             self.session_id = *id;
             self.send_ticket = emit_server_hello(
                 &mut self.transcript,
-                conn,
+                cx,
                 self.session_id,
                 self.suite,
                 self.using_ems,
@@ -276,23 +270,23 @@ mod client_hello {
                 self.suite,
                 &resumedata.master_secret.0,
             );
-            conn.config.key_log.log(
+            cx.config.key_log.log(
                 "CLIENT_RANDOM",
                 &secrets.randoms.client,
                 &secrets.master_secret,
             );
-            conn.common
+            cx.common
                 .start_encryption_tls12(&secrets);
-            conn.data.client_cert_chain = resumedata.client_cert_chain;
+            cx.data.client_cert_chain = resumedata.client_cert_chain;
 
             if self.send_ticket {
-                emit_ticket(&secrets, &mut self.transcript, self.using_ems, conn);
+                emit_ticket(&secrets, &mut self.transcript, self.using_ems, cx);
             }
-            emit_ccs(&mut conn.common);
-            conn.common
+            emit_ccs(&mut cx.common);
+            cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&secrets, &mut self.transcript, &mut conn.common);
+            emit_finished(&secrets, &mut self.transcript, &mut cx.common);
 
             Ok(Box::new(ExpectCcs {
                 secrets,
@@ -307,7 +301,7 @@ mod client_hello {
 
     fn emit_server_hello(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerContext<'_>,
+        cx: &mut ServerContext<'_>,
         session_id: SessionID,
         suite: Tls12CipherSuite,
         using_ems: bool,
@@ -320,7 +314,7 @@ mod client_hello {
     ) -> Result<bool, Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
-            conn,
+            cx,
             suite.supported_suite(),
             ocsp_response,
             sct_list,
@@ -328,7 +322,7 @@ mod client_hello {
             resumedata,
             extra_exts,
         )?;
-        ep.process_tls12(&conn.config, hello, using_ems);
+        ep.process_tls12(&cx.config, hello, using_ems);
 
         let sh = Message {
             typ: ContentType::Handshake,
@@ -348,7 +342,7 @@ mod client_hello {
 
         trace!("sending server hello {:?}", sh);
         transcript.add_message(&sh);
-        conn.common.send_msg(sh, false);
+        cx.common.send_msg(sh, false);
         Ok(ep.send_ticket)
     }
 
@@ -433,9 +427,9 @@ mod client_hello {
 
     fn emit_certificate_req(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerContext<'_>,
+        cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
-        let client_auth = conn.config.get_verifier();
+        let client_auth = cx.config.get_verifier();
 
         if !client_auth.offer_client_auth() {
             return Ok(false);
@@ -444,10 +438,10 @@ mod client_hello {
         let verify_schemes = client_auth.supported_verify_schemes();
 
         let names = client_auth
-            .client_auth_root_subjects(conn.data.get_sni())
+            .client_auth_root_subjects(cx.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
-                conn.common
+                cx.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("client rejected by client_auth_root_subjects".into())
             })?;
@@ -472,7 +466,7 @@ mod client_hello {
 
         trace!("Sending CertificateRequest {:?}", m);
         transcript.add_message(&m);
-        conn.common.send_msg(m, false);
+        cx.common.send_msg(m, false);
         Ok(true)
     }
 
@@ -503,11 +497,7 @@ struct ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        conn: &mut ServerContext<'_>,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let cert_chain = require_handshake_msg_move!(
             m,
@@ -516,13 +506,13 @@ impl hs::State for ExpectCertificate {
         )?;
 
         // If we can't determine if the auth is mandatory, abort
-        let mandatory = conn
+        let mandatory = cx
             .config
             .verifier
-            .client_auth_mandatory(conn.data.get_sni())
+            .client_auth_mandatory(cx.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
-                conn.common
+                cx.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("client rejected by client_auth_mandatory".into())
             })?;
@@ -531,7 +521,7 @@ impl hs::State for ExpectCertificate {
 
         let client_cert = match cert_chain.split_first() {
             None if mandatory => {
-                conn.common
+                cx.common
                     .send_fatal_alert(AlertDescription::CertificateRequired);
                 return Err(Error::NoCertificatesPresented);
             }
@@ -542,11 +532,11 @@ impl hs::State for ExpectCertificate {
             }
             Some((end_entity, intermediates)) => {
                 let now = std::time::SystemTime::now();
-                conn.config
+                cx.config
                     .verifier
-                    .verify_client_cert(end_entity, intermediates, conn.data.get_sni(), now)
+                    .verify_client_cert(end_entity, intermediates, cx.data.get_sni(), now)
                     .or_else(|err| {
-                        hs::incompatible(&mut conn.common, "certificate invalid");
+                        hs::incompatible(&mut cx.common, "certificate invalid");
                         Err(err)
                     })?;
 
@@ -580,11 +570,7 @@ struct ExpectClientKx {
 }
 
 impl hs::State for ExpectClientKx {
-    fn handle(
-        mut self: Box<Self>,
-        conn: &mut ServerContext<'_>,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
             HandshakeType::ClientKeyExchange,
@@ -595,7 +581,7 @@ impl hs::State for ExpectClientKx {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
-            tls12::decode_ecdh_params::<ClientECDHParams>(&mut conn.common, &client_kx.0)?;
+            tls12::decode_ecdh_params::<ClientECDHParams>(&mut cx.common, &client_kx.0)?;
         let kxd = tls12::complete_ecdh(self.server_kx, &peer_kx_params.public.0)?;
 
         let secrets = if self.using_ems {
@@ -609,12 +595,12 @@ impl hs::State for ExpectClientKx {
         } else {
             ConnectionSecrets::new(&self.randoms, self.suite, &kxd.shared_secret)
         };
-        conn.config.key_log.log(
+        cx.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
             &secrets.master_secret,
         );
-        conn.common
+        cx.common
             .start_encryption_tls12(&secrets);
 
         if let Some(client_cert) = self.client_cert {
@@ -650,11 +636,7 @@ struct ExpectCertificateVerify {
 }
 
 impl hs::State for ExpectCertificateVerify {
-    fn handle(
-        mut self: Box<Self>,
-        conn: &mut ServerContext<'_>,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
                 m,
@@ -664,19 +646,19 @@ impl hs::State for ExpectCertificateVerify {
             let handshake_msgs = self.transcript.take_handshake_buf();
             let certs = &self.client_cert;
 
-            conn.config
+            cx.config
                 .get_verifier()
                 .verify_tls12_signature(&handshake_msgs, &certs[0], sig)
         };
 
         if let Err(e) = rc {
-            conn.common
+            cx.common
                 .send_fatal_alert(AlertDescription::AccessDenied);
             return Err(e);
         }
 
         trace!("client CertificateVerify OK");
-        conn.data.client_cert_chain = Some(self.client_cert);
+        cx.data.client_cert_chain = Some(self.client_cert);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
@@ -701,14 +683,14 @@ struct ExpectCcs {
 }
 
 impl hs::State for ExpectCcs {
-    fn handle(self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        conn.common.check_aligned_handshake()?;
+        cx.common.check_aligned_handshake()?;
 
-        conn.common
+        cx.common
             .record_layer
             .start_decrypting();
         Ok(Box::new(ExpectFinished {
@@ -726,19 +708,19 @@ impl hs::State for ExpectCcs {
 fn get_server_connion_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
-    conn: &ServerContext<'_>,
+    cx: &ServerContext<'_>,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(
-        conn.data.get_sni(),
+        cx.data.get_sni(),
         version,
         secrets.suite().supported_suite().suite,
         secret,
-        &conn.data.client_cert_chain,
-        conn.common.alpn_protocol.clone(),
-        conn.data.resumption_data.clone(),
+        &cx.data.client_cert_chain,
+        cx.common.alpn_protocol.clone(),
+        cx.data.resumption_data.clone(),
     );
 
     if using_ems {
@@ -752,17 +734,17 @@ fn emit_ticket(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     using_ems: bool,
-    conn: &mut ServerContext<'_>,
+    cx: &mut ServerContext<'_>,
 ) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
-    let plain = get_server_connion_value_tls12(secrets, using_ems, conn).get_encoding();
-    let ticket = conn
+    let plain = get_server_connion_value_tls12(secrets, using_ems, cx).get_encoding();
+    let ticket = cx
         .config
         .ticketer
         .encrypt(&plain)
         .unwrap_or_else(Vec::new);
-    let ticket_lifetime = conn.config.ticketer.lifetime();
+    let ticket_lifetime = cx.config.ticketer.lifetime();
 
     let m = Message {
         typ: ContentType::Handshake,
@@ -777,7 +759,7 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    conn.common.send_msg(m, false);
+    cx.common.send_msg(m, false);
 }
 
 fn emit_ccs(common: &mut ConnectionCommon) {
@@ -822,15 +804,11 @@ struct ExpectFinished {
 }
 
 impl hs::State for ExpectFinished {
-    fn handle(
-        mut self: Box<Self>,
-        conn: &mut ServerContext<'_>,
-        m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        conn.common.check_aligned_handshake()?;
+        cx.common.check_aligned_handshake()?;
 
         let vh = self.transcript.get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
@@ -838,7 +816,7 @@ impl hs::State for ExpectFinished {
         let _fin_verified =
             constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
                 .map_err(|_| {
-                    conn.common
+                    cx.common
                         .send_fatal_alert(AlertDescription::DecryptError);
                     Error::DecryptError
                 })
@@ -846,9 +824,9 @@ impl hs::State for ExpectFinished {
 
         // Save connion, perhaps
         if !self.resuming && !self.session_id.is_empty() {
-            let value = get_server_connion_value_tls12(&self.secrets, self.using_ems, conn);
+            let value = get_server_connion_value_tls12(&self.secrets, self.using_ems, cx);
 
-            let worked = conn
+            let worked = cx
                 .config
                 .session_storage
                 .put(self.session_id.get_encoding(), value.get_encoding());
@@ -863,16 +841,16 @@ impl hs::State for ExpectFinished {
         self.transcript.add_message(&m);
         if !self.resuming {
             if self.send_ticket {
-                emit_ticket(&self.secrets, &mut self.transcript, self.using_ems, conn);
+                emit_ticket(&self.secrets, &mut self.transcript, self.using_ems, cx);
             }
-            emit_ccs(&mut conn.common);
-            conn.common
+            emit_ccs(&mut cx.common);
+            cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.transcript, &mut conn.common);
+            emit_finished(&self.secrets, &mut self.transcript, &mut cx.common);
         }
 
-        conn.common.start_traffic();
+        cx.common.start_traffic();
         Ok(Box::new(ExpectTraffic {
             secrets: self.secrets,
             _fin_verified,
@@ -889,13 +867,9 @@ struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl hs::State for ExpectTraffic {
-    fn handle(
-        self: Box<Self>,
-        conn: &mut ServerContext<'_>,
-        mut m: Message,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, mut m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;
-        conn.common
+        cx.common
             .take_received_plaintext(m.take_opaque_payload().unwrap());
         Ok(self)
     }
