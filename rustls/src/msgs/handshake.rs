@@ -9,6 +9,7 @@ use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType}
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
+use crate::msgs::enums::{ECHVersion, KEM, KDF, AEAD};
 use crate::rand;
 
 #[cfg(feature = "logging")]
@@ -2321,3 +2322,105 @@ impl HandshakeMessagePayload {
         }
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct HpkeSymmetricCipherSuite {
+    pub hpke_kdf_id: KDF,
+    pub hpke_aead_id: AEAD,
+}
+
+impl Codec for HpkeSymmetricCipherSuite {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.hpke_kdf_id.encode(bytes);
+        self.hpke_aead_id.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<HpkeSymmetricCipherSuite> {
+        Some(HpkeSymmetricCipherSuite {
+            hpke_kdf_id: KDF::read(r)?,
+            hpke_aead_id: AEAD::read(r)?,
+        })
+    }
+}
+
+declare_u16_vec!(HpkeSymmetricCipherSuites, HpkeSymmetricCipherSuite);
+
+#[derive(Clone, Debug)]
+pub struct HpkeKeyConfig {
+    pub config_id: u8,
+    pub hpke_kem_id: KEM,
+    pub hpke_public_key: PayloadU16,
+    pub hpke_symmetric_cipher_suites: HpkeSymmetricCipherSuites,
+}
+
+impl Codec for HpkeKeyConfig {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.config_id.encode(bytes);
+        self.hpke_kem_id.encode(bytes);
+        self.hpke_public_key.encode(bytes);
+        self.hpke_symmetric_cipher_suites.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<HpkeKeyConfig> {
+        Some(HpkeKeyConfig {
+            config_id: u8::read(r)?,
+            hpke_kem_id: KEM::read(r)?,
+            hpke_public_key: PayloadU16::read(r)?,
+            hpke_symmetric_cipher_suites: HpkeSymmetricCipherSuites::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ECHConfigContents {
+    pub hpke_key_config: HpkeKeyConfig,
+    pub maximum_name_length: u16,
+    pub public_name: PayloadU16,
+    pub extensions: PayloadU16,
+}
+
+impl Codec for ECHConfigContents {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.hpke_key_config.encode(bytes);
+        self.maximum_name_length.encode(bytes);
+        self.public_name.encode(bytes);
+        self.extensions.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ECHConfigContents> {
+        Some(ECHConfigContents {
+            hpke_key_config: HpkeKeyConfig::read(r)?,
+            maximum_name_length: u16::read(r)?,
+            public_name: PayloadU16::read(r)?,
+            extensions: PayloadU16::read(r)?,
+        })
+    }
+}
+#[derive(Clone, Debug)]
+pub struct ECHConfig {
+    pub version: ECHVersion,
+    pub contents: ECHConfigContents,
+}
+
+impl Codec for ECHConfig {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.version.encode(bytes);
+        let mut contents = Vec::with_capacity(128);
+        self.contents.encode(&mut contents);
+        let length: &mut[u8; 2] = &mut[0, 0];
+        codec::put_u16(contents.len() as u16, length);
+        bytes.extend_from_slice(length);
+        bytes.extend(contents);
+    }
+
+    fn read(r: &mut Reader) -> Option<ECHConfig> {
+        let version = ECHVersion::read(r)?;
+        let length = u16::read(r)?;
+        Some(ECHConfig {
+            version,
+            contents: ECHConfigContents::read(&mut r.sub(length as usize)?)?,
+        })
+    }
+}
+
+declare_u16_vec!(ECHConfigList, ECHConfig);

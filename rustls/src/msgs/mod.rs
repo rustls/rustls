@@ -30,6 +30,9 @@ mod enums_test;
 mod message_test;
 
 #[cfg(test)]
+mod ech_test;
+
+#[cfg(test)]
 mod test {
     #[test]
     fn smoketest() {
