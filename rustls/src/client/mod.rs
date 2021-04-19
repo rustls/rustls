@@ -1,5 +1,5 @@
 use crate::conn::{
-    Connection, ConnectionCommon, IoState, MessageType, PlaintextSink, Reader, Writer,
+    Connection, ConnectionCommon, IoState, MessageType, PlaintextSink, Protocol, Reader, Writer,
 };
 use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
@@ -20,7 +20,7 @@ use crate::verify;
 use crate::{key, RootCertStore};
 
 #[cfg(feature = "quic")]
-use crate::{conn::Protocol, quic};
+use crate::quic;
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -432,18 +432,31 @@ impl ClientConnection {
         config: &Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        let mut new = Self::from_config(config);
-        new.start_handshake(hostname.into(), vec![])?;
-        Ok(new)
+        Self::new_inner(config, hostname, Vec::new(), Protocol::Tls13)
     }
 
-    fn from_config(config: &Arc<ClientConfig>) -> Self {
-        ClientConnection {
+    fn new_inner(
+        config: &Arc<ClientConfig>,
+        hostname: webpki::DnsNameRef,
+        extra_exts: Vec<ClientExtension>,
+        proto: Protocol,
+    ) -> Result<Self, Error> {
+        let mut new = ClientConnection {
             config: config.clone(),
             common: ConnectionCommon::new(config.mtu, true),
             state: None,
             data: ClientConnectionData::new(),
-        }
+        };
+        new.common.protocol = proto;
+
+        let mut cx = hs::ClientContext {
+            common: &mut new.common,
+            data: &mut new.data,
+            config: &new.config,
+        };
+
+        new.state = Some(hs::start_handshake(hostname.into(), extra_exts, &mut cx)?);
+        Ok(new)
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
@@ -479,20 +492,6 @@ impl ClientConnection {
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
         self.data.early_data.is_accepted()
-    }
-
-    fn start_handshake(
-        &mut self,
-        dns_name: webpki::DnsName,
-        extra_exts: Vec<ClientExtension>,
-    ) -> Result<(), Error> {
-        let mut cx = hs::ClientContext {
-            common: &mut self.common,
-            data: &mut self.data,
-            config: &self.config,
-        };
-        self.state = Some(hs::start_handshake(&mut cx, dns_name, extra_exts)?);
-        Ok(())
     }
 
     pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
@@ -764,10 +763,8 @@ pub trait ClientQuicExt {
             quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
-        let mut new = ClientConnection::from_config(config);
-        new.common.protocol = Protocol::Quic;
-        new.start_handshake(hostname.into(), vec![ext])?;
-        Ok(new)
+
+        ClientConnection::new_inner(config, hostname, vec![ext], Protocol::Quic)
     }
 }
 
