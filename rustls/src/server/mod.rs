@@ -367,24 +367,6 @@ impl ServerConnection {
         }
     }
 
-    fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
-        while let Some(msg) = self
-            .common
-            .handshake_joiner
-            .frames
-            .pop_front()
-        {
-            self.common.process_main_protocol(
-                msg,
-                &mut self.state,
-                &mut self.data,
-                &self.config,
-            )?;
-        }
-
-        Ok(())
-    }
-
     /// Retrieves the SNI hostname, if any, used to select the certificate and
     /// private key.
     ///
@@ -484,7 +466,13 @@ impl Connection for ServerConnection {
                 .common
                 .process_msg(msg)
                 .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
+                    Some(MessageType::Handshake) => self
+                        .common
+                        .process_new_handshake_messages(
+                            &mut self.state,
+                            &mut self.data,
+                            &self.config,
+                        ),
                     Some(MessageType::Data(msg)) => self.common.process_main_protocol(
                         msg,
                         &mut self.state,
@@ -629,7 +617,8 @@ impl quic::QuicExt for ServerConnection {
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
-        self.process_new_handshake_messages()
+        self.common
+            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
