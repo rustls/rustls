@@ -6,10 +6,10 @@ use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
 use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType};
+use crate::msgs::enums::{ECHVersion, AEAD, KDF, KEM};
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
-use crate::msgs::enums::{ECHVersion, KEM, KDF, AEAD};
 use crate::rand;
 
 #[cfg(feature = "logging")]
@@ -2358,7 +2358,8 @@ impl Codec for HpkeKeyConfig {
         self.config_id.encode(bytes);
         self.hpke_kem_id.encode(bytes);
         self.hpke_public_key.encode(bytes);
-        self.hpke_symmetric_cipher_suites.encode(bytes);
+        self.hpke_symmetric_cipher_suites
+            .encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<HpkeKeyConfig> {
@@ -2407,7 +2408,7 @@ impl Codec for ECHConfig {
         self.version.encode(bytes);
         let mut contents = Vec::with_capacity(128);
         self.contents.encode(&mut contents);
-        let length: &mut[u8; 2] = &mut[0, 0];
+        let length: &mut [u8; 2] = &mut [0, 0];
         codec::put_u16(contents.len() as u16, length);
         bytes.extend_from_slice(length);
         bytes.extend(contents);
