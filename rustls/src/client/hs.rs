@@ -53,6 +53,26 @@ pub(super) trait State {
     fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
+impl crate::conn::HandleState for Box<dyn State + Send + Sync> {
+    type Data = ClientConnectionData;
+    type Config = ClientConfig;
+
+    fn handle(
+        self,
+        message: Message,
+        data: &mut Self::Data,
+        common: &mut ConnectionCommon,
+        config: &Self::Config,
+    ) -> Result<Self, Error> {
+        let mut cx = ClientContext {
+            common,
+            data,
+            config,
+        };
+        self.handle(&mut cx, message)
+    }
+}
+
 pub(super) struct ClientContext<'a> {
     pub(super) common: &'a mut ConnectionCommon,
     pub(super) data: &'a mut ClientConnectionData,

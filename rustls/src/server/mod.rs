@@ -7,10 +7,9 @@ use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
-use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::verify;
@@ -368,32 +367,6 @@ impl ServerConnection {
         }
     }
 
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
-        if self.common.traffic
-            && !self.common.is_tls13()
-            && msg.is_handshake_type(HandshakeType::ClientHello)
-        {
-            self.common
-                .reject_renegotiation_attempt();
-            return Ok(());
-        }
-
-        let mut cx = hs::ServerContext {
-            common: &mut self.common,
-            data: &mut self.data,
-            config: &self.config,
-        };
-
-        let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(&mut cx, msg);
-        let next_state = self
-            .common
-            .maybe_send_unexpected_alert(maybe_next_state)?;
-        self.state = Some(next_state);
-
-        Ok(())
-    }
-
     fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
         while let Some(msg) = self
             .common
@@ -401,7 +374,12 @@ impl ServerConnection {
             .frames
             .pop_front()
         {
-            self.process_main_protocol(msg)?;
+            self.common.process_main_protocol(
+                msg,
+                &mut self.state,
+                &mut self.data,
+                &self.config,
+            )?;
         }
 
         Ok(())
@@ -507,7 +485,12 @@ impl Connection for ServerConnection {
                 .process_msg(msg)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => self.process_new_handshake_messages(),
-                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
+                    Some(MessageType::Data(msg)) => self.common.process_main_protocol(
+                        msg,
+                        &mut self.state,
+                        &mut self.data,
+                        &self.config,
+                    ),
                     None => Ok(()),
                 });
 
