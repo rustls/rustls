@@ -460,7 +460,7 @@ impl ConnectionSecrets {
 
     pub fn make_key_block(&self) -> Vec<u8> {
         let scs = self.suite.scs();
-        let len = (scs.aead_algorithm.key_len() + scs.fixed_iv_len) * 2
+        let len = (scs.aead_algorithm.key_len() + self.suite.tls12().fixed_iv_len) * 2
             + self.suite.tls12().explicit_nonce_len;
 
         let mut out = Vec::new();
