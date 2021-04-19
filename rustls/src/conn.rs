@@ -729,16 +729,24 @@ impl ConnectionCommon {
                 false => HandshakeType::ClientHello,
             };
             if msg.is_handshake_type(reject_ty) {
-                self.reject_renegotiation_attempt();
+                self.send_warning_alert(AlertDescription::NoRenegotiation);
                 return Ok(());
             }
         }
 
         let current = state.take().unwrap();
-        let maybe_next_state = current.handle(msg, data, self, config);
-        let next_state = self.maybe_send_unexpected_alert(maybe_next_state)?;
-        *state = Some(next_state);
-        Ok(())
+        match current.handle(msg, data, self, config) {
+            Ok(next) => {
+                *state = Some(next);
+                Ok(())
+            }
+            Err(e @ Error::InappropriateMessage { .. })
+            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
+                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
+                Err(e)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     // Changing the keys must not span any fragmented handshake
@@ -793,21 +801,6 @@ impl ConnectionCommon {
     pub fn set_buffer_limit(&mut self, limit: usize) {
         self.sendable_plaintext.set_limit(limit);
         self.sendable_tls.set_limit(limit);
-    }
-
-    fn maybe_send_unexpected_alert<T>(&mut self, rc: Result<T, Error>) -> Result<T, Error> {
-        match rc {
-            Err(Error::InappropriateMessage { .. })
-            | Err(Error::InappropriateHandshakeMessage { .. }) => {
-                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
-            }
-            _ => {}
-        };
-        rc
-    }
-
-    fn reject_renegotiation_attempt(&mut self) {
-        self.send_warning_alert(AlertDescription::NoRenegotiation);
     }
 
     fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
