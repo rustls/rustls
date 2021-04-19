@@ -345,7 +345,7 @@ impl ServerConfig {
 pub struct ServerConnection {
     config: Arc<ServerConfig>,
     common: ConnectionCommon,
-    state: Option<Box<dyn hs::State + Send + Sync>>,
+    state: Option<Box<dyn hs::State>>,
     data: ServerConnectionData,
 }
 

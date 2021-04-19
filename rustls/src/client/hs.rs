@@ -33,10 +33,10 @@ use crate::ticketer::TimeBase;
 
 use std::convert::TryFrom;
 
-pub(super) type NextState = Box<dyn State + Send + Sync>;
+pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
-pub(super) trait State {
+pub(super) trait State: Send + Sync {
     /// Each handle() implementation consumes a whole TLS message, and returns
     /// either an error or the next state.
     fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> NextStateOrError;
@@ -53,7 +53,7 @@ pub(super) trait State {
     fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
-impl crate::conn::HandleState for Box<dyn State + Send + Sync> {
+impl crate::conn::HandleState for Box<dyn State> {
     type Data = ClientConnectionData;
     type Config = ClientConfig;
 

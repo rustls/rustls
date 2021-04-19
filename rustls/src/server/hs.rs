@@ -23,10 +23,10 @@ use crate::server::{tls12, tls13, ServerConnectionData};
 
 use std::convert::TryFrom;
 
-pub(super) type NextState = Box<dyn State + Send + Sync>;
+pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
-pub(super) trait State {
+pub(super) trait State: Send + Sync {
     fn handle(self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
@@ -41,7 +41,7 @@ pub(super) trait State {
     fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
-impl<'a> crate::conn::HandleState for Box<dyn State + Send + Sync> {
+impl<'a> crate::conn::HandleState for Box<dyn State> {
     type Config = ServerConfig;
     type Data = ServerConnectionData;
 
