@@ -223,7 +223,7 @@ impl hs::State for ExpectServerKx {
         self.transcript.add_message(&m);
 
         let decoded_kx = opaque_kx
-            .unwrap_given_kxa(&self.suite.scs().kx)
+            .unwrap_given_kxa(&self.suite.tls12().kx)
             .ok_or_else(|| {
                 conn.common
                     .send_fatal_alert(AlertDescription::DecodeError);
