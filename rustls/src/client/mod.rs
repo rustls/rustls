@@ -492,24 +492,6 @@ impl ClientConnection {
         self.data.early_data.is_accepted()
     }
 
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
-        while let Some(msg) = self
-            .common
-            .handshake_joiner
-            .frames
-            .pop_front()
-        {
-            self.common.process_main_protocol(
-                msg,
-                &mut self.state,
-                &mut self.data,
-                &self.config,
-            )?;
-        }
-
-        Ok(())
-    }
-
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.data
             .early_data
@@ -560,7 +542,13 @@ impl Connection for ClientConnection {
                 .common
                 .process_msg(msg)
                 .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
+                    Some(MessageType::Handshake) => self
+                        .common
+                        .process_new_handshake_messages(
+                            &mut self.state,
+                            &mut self.data,
+                            &self.config,
+                        ),
                     Some(MessageType::Data(msg)) => self.common.process_main_protocol(
                         msg,
                         &mut self.state,
@@ -701,7 +689,8 @@ impl quic::QuicExt for ClientConnection {
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
-        self.process_new_handshake_messages()
+        self.common
+            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {

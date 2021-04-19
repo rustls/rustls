@@ -662,6 +662,19 @@ impl ConnectionCommon {
         Ok(Some(MessageType::Data(msg)))
     }
 
+    pub(crate) fn process_new_handshake_messages<S: HandleState>(
+        &mut self,
+        state: &mut Option<S>,
+        data: &mut S::Data,
+        config: &S::Config,
+    ) -> Result<(), Error> {
+        while let Some(msg) = self.handshake_joiner.frames.pop_front() {
+            self.process_main_protocol(msg, state, data, &config)?;
+        }
+
+        Ok(())
+    }
+
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
