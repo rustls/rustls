@@ -268,6 +268,7 @@ mod x509;
 mod check;
 mod bs_debug;
 mod client;
+mod ech_key;
 mod key;
 mod keylog;
 mod kx;

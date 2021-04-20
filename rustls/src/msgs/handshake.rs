@@ -2329,6 +2329,16 @@ pub struct HpkeSymmetricCipherSuite {
     pub hpke_aead_id: AEAD,
 }
 
+impl HpkeSymmetricCipherSuite {
+    // TODO: revisit the default configuration. This is just what Cloudflare ships right now.
+    pub fn default() -> HpkeSymmetricCipherSuite {
+        HpkeSymmetricCipherSuite {
+            hpke_kdf_id: KDF::HKDF_SHA256,
+            hpke_aead_id: AEAD::AES_128_GCM,
+        }
+    }
+}
+
 impl Codec for HpkeSymmetricCipherSuite {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.hpke_kdf_id.encode(bytes);

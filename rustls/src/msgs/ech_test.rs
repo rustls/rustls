@@ -56,3 +56,5 @@ fn test_echconfig_serialization() {
     configs.encode(&mut output);
     assert_eq!(base64_echconfigs, base64::encode(&output));
 }
+
+// TODO: tests for "Section 4.1. Configuration Extensions"
