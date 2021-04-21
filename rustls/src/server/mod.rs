@@ -559,7 +559,7 @@ impl ServerConnectionData {
 
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ServerConnection {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+    fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
             .params
@@ -567,7 +567,7 @@ impl quic::QuicExt for ServerConnection {
             .map(|v| v.as_ref())
     }
 
-    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.common.get_suite()?,
             self.common.quic.early_secret.as_ref()?,
@@ -584,7 +584,7 @@ impl quic::QuicExt for ServerConnection {
         quic::write_hs(&mut self.common, buf)
     }
 
-    fn get_alert(&self) -> Option<AlertDescription> {
+    fn alert(&self) -> Option<AlertDescription> {
         self.common.quic.alert
     }
 

@@ -2883,7 +2883,7 @@ mod test_quic {
         if let Err(e) = recv.read_hs(&buf) {
             return Err(e);
         } else {
-            assert_eq!(recv.get_alert(), None);
+            assert_eq!(recv.alert(), None);
         }
         Ok(secrets)
     }
@@ -2927,12 +2927,12 @@ mod test_quic {
 
         let client_initial = step(&mut client, &mut server).unwrap();
         assert!(client_initial.is_none());
-        assert!(client.get_0rtt_keys().is_none());
-        assert_eq!(server.get_quic_transport_parameters(), Some(client_params));
+        assert!(client.zero_rtt_keys().is_none());
+        assert_eq!(server.quic_transport_parameters(), Some(client_params));
         let server_hs = step(&mut server, &mut client)
             .unwrap()
             .unwrap();
-        assert!(server.get_0rtt_keys().is_none());
+        assert!(server.zero_rtt_keys().is_none());
         let client_hs = step(&mut client, &mut server)
             .unwrap()
             .unwrap();
@@ -2942,7 +2942,7 @@ mod test_quic {
             .unwrap()
             .unwrap();
         assert!(!client.is_handshaking());
-        assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
+        assert_eq!(client.quic_transport_parameters(), Some(server_params));
         assert!(server.is_handshaking());
         let client_1rtt = step(&mut client, &mut server)
             .unwrap()
@@ -2980,10 +2980,10 @@ mod test_quic {
                 .unwrap();
 
         step(&mut client, &mut server).unwrap();
-        assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
+        assert_eq!(client.quic_transport_parameters(), Some(server_params));
         {
-            let client_early = client.get_0rtt_keys().unwrap();
-            let server_early = server.get_0rtt_keys().unwrap();
+            let client_early = client.zero_rtt_keys().unwrap();
+            let server_early = server.zero_rtt_keys().unwrap();
             assert!(equal_dir_keys(&client_early, &server_early));
         }
         step(&mut server, &mut client)
@@ -3014,9 +3014,9 @@ mod test_quic {
                     .unwrap();
 
             step(&mut client, &mut server).unwrap();
-            assert_eq!(client.get_quic_transport_parameters(), Some(server_params));
-            assert!(client.get_0rtt_keys().is_some());
-            assert!(server.get_0rtt_keys().is_none());
+            assert_eq!(client.quic_transport_parameters(), Some(server_params));
+            assert!(client.zero_rtt_keys().is_some());
+            assert!(server.zero_rtt_keys().is_none());
             step(&mut server, &mut client)
                 .unwrap()
                 .unwrap();
@@ -3048,7 +3048,7 @@ mod test_quic {
             .unwrap();
         assert!(step(&mut server, &mut client).is_err());
         assert_eq!(
-            client.get_alert(),
+            client.alert(),
             Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
         );
     }
@@ -3088,7 +3088,7 @@ mod test_quic {
             );
 
             assert_eq!(
-                server.get_alert(),
+                server.alert(),
                 Some(rustls::internal::msgs::enums::AlertDescription::NoApplicationProtocol)
             );
         }
