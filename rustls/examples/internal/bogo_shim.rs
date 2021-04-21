@@ -1091,6 +1091,7 @@ fn main() {
                     quic::Version::V1,
                     opts.quic_transport_params.clone(),
                 )
+                .unwrap()
             };
             ClientOrServer::Server(s)
         } else {

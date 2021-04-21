@@ -603,14 +603,13 @@ pub trait ServerQuicExt {
         config: &Arc<ServerConfig>,
         quic_version: quic::Version,
         params: Vec<u8>,
-    ) -> ServerConnection {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
+    ) -> Result<ServerConnection, Error> {
+        if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            return Err(Error::General(
+                "TLS 1.3 support is required for QUIC".into(),
+            ));
+        }
+
         assert!(
             config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
             "QUIC sessions must set a max early data of 0 or 2^32-1"
@@ -621,7 +620,7 @@ pub trait ServerQuicExt {
         };
         let mut new = ServerConnection::from_config(config, vec![ext]);
         new.common.protocol = Protocol::Quic;
-        new
+        Ok(new)
     }
 }
 
