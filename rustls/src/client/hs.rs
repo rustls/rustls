@@ -218,7 +218,8 @@ fn emit_client_hello_for_retry(
 
     let support_tls12 = conn
         .config
-        .supports_version(ProtocolVersion::TLSv1_2);
+        .supports_version(ProtocolVersion::TLSv1_2)
+        && !conn.common.is_quic();
     let support_tls13 = conn
         .config
         .supports_version(ProtocolVersion::TLSv1_3);
