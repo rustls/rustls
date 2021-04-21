@@ -181,13 +181,6 @@ impl Message {
         }
     }
 
-    pub fn take_payload(self) -> Vec<u8> {
-        self.into_opaque()
-            .take_opaque_payload()
-            .unwrap()
-            .0
-    }
-
     pub fn take_opaque_payload(&mut self) -> Option<Payload> {
         if let MessagePayload::Opaque(ref mut op) = self.payload {
             Some(mem::replace(op, Payload::empty()))
