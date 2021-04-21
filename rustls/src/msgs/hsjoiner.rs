@@ -56,8 +56,15 @@ impl HandshakeJoiner {
         // lost information!
         let payload = msg.take_opaque_payload().unwrap();
 
-        self.buf
-            .extend_from_slice(&payload.0[..]);
+        // The vast majority of the time `self.buf` will be empty since most
+        // handshake messages arrive in a single fragment. Avoid allocating and
+        // copying in that common case.
+        if self.buf.is_empty() {
+            self.buf = payload.0;
+        } else {
+            self.buf
+                .extend_from_slice(&payload.0[..]);
+        }
 
         let mut count = 0;
         while self.buf_contains_message() {
