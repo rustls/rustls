@@ -1014,7 +1014,7 @@ impl hs::State for ExpectFinished {
                     client: write_key,
                     server: read_key,
                 });
-                return Ok(Box::new(ExpectQUICTraffic(st)));
+                return Ok(Box::new(ExpectQuicTraffic(st)));
             }
         }
 
@@ -1064,12 +1064,10 @@ impl ExpectTraffic {
             value.set_max_early_data_size(sz);
             #[cfg(feature = "quic")]
             {
-                if cx.common.protocol == Protocol::Quic {
-                    if sz != 0 && sz != 0xffff_ffff {
-                        return Err(Error::PeerMisbehavedError(
-                            "invalid max_early_data_size".into(),
-                        ));
-                    }
+                if cx.common.protocol == Protocol::Quic && sz != 0 && sz != 0xffff_ffff {
+                    return Err(Error::PeerMisbehavedError(
+                        "invalid max_early_data_size".into(),
+                    ));
                 }
             }
         }
@@ -1195,10 +1193,10 @@ impl hs::State for ExpectTraffic {
 }
 
 #[cfg(feature = "quic")]
-pub struct ExpectQUICTraffic(ExpectTraffic);
+pub struct ExpectQuicTraffic(ExpectTraffic);
 
 #[cfg(feature = "quic")]
-impl hs::State for ExpectQUICTraffic {
+impl hs::State for ExpectQuicTraffic {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let nst = require_handshake_msg!(
             m,
