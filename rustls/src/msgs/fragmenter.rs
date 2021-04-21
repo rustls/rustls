@@ -34,7 +34,11 @@ impl MessageFragmenter {
 
         let typ = msg.typ;
         let version = msg.version;
-        let payload = msg.take_payload();
+        let payload = msg
+            .into_opaque()
+            .take_opaque_payload()
+            .unwrap()
+            .0;
 
         for chunk in payload.chunks(self.max_frag) {
             let m = Message {
