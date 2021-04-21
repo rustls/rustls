@@ -224,7 +224,8 @@ fn emit_client_hello_for_retry(
 
     let support_tls12 = cx
         .config
-        .supports_version(ProtocolVersion::TLSv1_2);
+        .supports_version(ProtocolVersion::TLSv1_2)
+        && !cx.common.is_quic();
     let support_tls13 = cx
         .config
         .supports_version(ProtocolVersion::TLSv1_3);

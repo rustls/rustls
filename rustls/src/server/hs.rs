@@ -353,6 +353,11 @@ impl State for ExpectClientHello {
                 ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
                 return Err(bad_version(&mut cx.common, "TLS1.2 not offered/enabled"));
+            } else if cx.common.is_quic() {
+                return Err(bad_version(
+                    &mut cx.common,
+                    "Expecting QUIC connection, but client does not support TLSv1_3",
+                ));
             } else {
                 ProtocolVersion::TLSv1_2
             }
@@ -365,6 +370,11 @@ impl State for ExpectClientHello {
             return Err(bad_version(
                 &mut cx.common,
                 "Server requires TLS1.3, but client omitted versions ext",
+            ));
+        } else if cx.common.is_quic() {
+            return Err(bad_version(
+                conn,
+                "Expecting QUIC connection, but client does not support TLSv1_3",
             ));
         } else {
             ProtocolVersion::TLSv1_2
