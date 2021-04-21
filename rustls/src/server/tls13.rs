@@ -1114,7 +1114,7 @@ impl hs::State for ExpectTraffic {
     fn perhaps_write_key_update(&mut self, common: &mut ConnectionCommon) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            common.send_msg_encrypt(Message::build_key_update_notify());
+            common.send_msg_encrypt(Message::build_key_update_notify().into_opaque());
 
             let write_key = self
                 .key_schedule

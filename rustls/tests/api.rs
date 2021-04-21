@@ -1,4 +1,5 @@
-// Assorted public API tests.
+//! Assorted public API tests.
+use std::convert::TryFrom;
 use std::env;
 use std::fmt;
 use std::io::{self, IoSlice, Read, Write};
@@ -3212,7 +3213,7 @@ mod test_quic {
         };
 
         let mut buf = Vec::new();
-        client_hello.encode(&mut buf);
+        client_hello.into_opaque().encode(&mut buf);
         server
             .read_tls(&mut buf.as_slice())
             .unwrap();
@@ -3281,7 +3282,7 @@ mod test_quic {
         };
 
         let mut buf = Vec::new();
-        client_hello.encode(&mut buf);
+        client_hello.into_opaque().encode(&mut buf);
         server
             .read_tls(&mut buf.as_slice())
             .unwrap();
@@ -3312,8 +3313,8 @@ mod test_quic {
 #[test]
 fn test_client_does_not_offer_sha1() {
     use rustls::internal::msgs::{
-        codec::Codec, enums::HandshakeType, handshake::HandshakePayload, message::Message,
-        message::MessagePayload,
+        codec::Codec, enums::HandshakeType, handshake::HandshakePayload, message::MessagePayload,
+        message::OpaqueMessage,
     };
 
     for kt in ALL_KEY_TYPES.iter() {
@@ -3325,8 +3326,8 @@ fn test_client_does_not_offer_sha1() {
             let sz = client
                 .write_tls(&mut buf.as_mut())
                 .unwrap();
-            let mut msg = Message::read_bytes(&buf[..sz]).unwrap();
-            assert!(msg.decode_payload());
+            let msg = OpaqueMessage::read_bytes(&buf[..sz]).unwrap();
+            let msg = Message::try_from(msg).unwrap();
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 
             let client_hello = match msg.payload {

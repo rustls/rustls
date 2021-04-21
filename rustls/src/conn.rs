@@ -10,7 +10,7 @@ use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use crate::msgs::hsjoiner::HandshakeJoiner;
-use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
+use crate::msgs::message::{BorrowedOpaqueMessage, Message, MessagePayload, OpaqueMessage};
 use crate::prf;
 use crate::quic;
 use crate::rand;
@@ -21,6 +21,7 @@ use crate::vecbuf::ChunkVecBuffer;
 use ring::digest::Digest;
 
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::io;
 
 /// Values of this structure are returned from `Session::process_new_packets`
@@ -612,7 +613,7 @@ impl ConnectionCommon {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    fn process_msg(&mut self, mut msg: Message) -> Result<Option<MessageType>, Error> {
+    fn process_msg(&mut self, mut msg: OpaqueMessage) -> Result<Option<MessageType>, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
@@ -650,9 +651,11 @@ impl ConnectionCommon {
 
         // Now we can fully parse the message payload. We only return an error
         // on the client, or we fail a bogo test (WrongMessageType-TLS13-ServerHello-TLS).
-        if !msg.decode_payload() && self.is_client {
-            return Err(Error::CorruptMessagePayload(msg.typ));
-        }
+        let msg = match Message::try_from(msg) {
+            Ok(msg) => msg,
+            Err((_, err)) if self.is_client => return Err(err),
+            Err((msg, _)) => msg,
+        };
 
         // For alerts, we have separate logic.
         if msg.is_content_type(ContentType::Alert) {
@@ -779,7 +782,7 @@ impl ConnectionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, Error> {
+    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
         if self
             .record_layer
             .wants_close_before_decrypt()
@@ -837,13 +840,13 @@ impl ConnectionCommon {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub fn send_msg_encrypt(&mut self, m: Message) {
+    pub fn send_msg_encrypt(&mut self, m: OpaqueMessage) {
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter
             .fragment(m, &mut plain_messages);
 
         for m in plain_messages {
-            self.send_single_fragment(m.to_borrowed());
+            self.send_single_fragment(m.borrow());
         }
     }
 
@@ -875,7 +878,7 @@ impl ConnectionCommon {
         len
     }
 
-    fn send_single_fragment(&mut self, m: BorrowMessage) {
+    fn send_single_fragment(&mut self, m: BorrowedOpaqueMessage) {
         // Close connection once we start to run out of
         // sequence space.
         if self
@@ -982,7 +985,7 @@ impl ConnectionCommon {
     }
 
     // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: Message) {
+    fn queue_tls_message(&mut self, m: OpaqueMessage) {
         self.sendable_tls
             .append(m.get_encoding());
     }
@@ -1011,12 +1014,12 @@ impl ConnectionCommon {
         if !must_encrypt {
             let mut to_send = VecDeque::new();
             self.message_fragmenter
-                .fragment(m, &mut to_send);
+                .fragment(m.into_opaque(), &mut to_send);
             for mm in to_send {
                 self.queue_tls_message(mm);
             }
         } else {
-            self.send_msg_encrypt(m);
+            self.send_msg_encrypt(m.into_opaque());
         }
     }
 
