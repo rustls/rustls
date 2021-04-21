@@ -186,13 +186,6 @@ mod test {
         assert_eq!(cipher_suites.len(), 1);
         assert_eq!(cipher_suites[0].hpke_kdf_id, KDF::HKDF_SHA256);
         assert_eq!(cipher_suites[0].hpke_aead_id, AEAD::AES_128_GCM);
-        // TODO: Not sure this is right, but maybe Cloudflare reduced coverage.
-        /*assert_eq!(cipher_suites[1].hpke_kdf_id, KDF::HKDF_SHA256);
-        assert_eq!(cipher_suites[1].hpke_aead_id, AEAD::CHACHA20_POLY_1305);
-        assert_eq!(cipher_suites[2].hpke_kdf_id, KDF::HKDF_SHA384);
-        assert_eq!(cipher_suites[2].hpke_aead_id, AEAD::AES_128_GCM);
-        assert_eq!(cipher_suites[3].hpke_kdf_id, KDF::HKDF_SHA384);
-        assert_eq!(cipher_suites[3].hpke_aead_id, AEAD::CHACHA20_POLY_1305); */
     }
 
     fn decode_ech_keys() -> Vec<EchKey> {
@@ -210,11 +203,9 @@ mod test {
         let bytes = base64::decode(&ECH_CONFIGS).unwrap();
         let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
         assert_eq!(configs.len(), 2);
-        let p256_config = &configs[0];
-        test_decode_for_kem(p256_config, KEM::DHKEM_X25519_HKDF_SHA256);
-        let x25519_config = &configs[1];
-        test_decode_for_kem(x25519_config, KEM::DHKEM_X25519_HKDF_SHA256);
-
+        for config in configs {
+            test_decode_for_kem(&config, KEM::DHKEM_X25519_HKDF_SHA256);
+        }
         let keys = decode_ech_keys();
         assert_eq!(keys.len(), 2);
     }
