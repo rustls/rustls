@@ -915,11 +915,7 @@ impl ConnectionCommon {
                     self.quic.alert = Some(alert.description);
                 } else {
                     debug_assert!(
-                        if let MessagePayload::Handshake(_) = m.payload {
-                            true
-                        } else {
-                            false
-                        },
+                        matches!(m.payload, MessagePayload::Handshake(_)),
                         "QUIC uses TLS for the cryptographic handshake only"
                     );
                     let mut bytes = Vec::new();

@@ -1016,7 +1016,7 @@ impl hs::State for ExpectFinished {
         #[cfg(feature = "quic")]
         {
             if conn.common.protocol == Protocol::Quic {
-                return Ok(Box::new(ExpectQUICTraffic {
+                return Ok(Box::new(ExpectQuicTraffic {
                     key_schedule: key_schedule_traffic,
                     _fin_verified: fin,
                 }));
@@ -1138,13 +1138,13 @@ impl hs::State for ExpectTraffic {
 }
 
 #[cfg(feature = "quic")]
-struct ExpectQUICTraffic {
+struct ExpectQuicTraffic {
     key_schedule: KeyScheduleTraffic,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
 #[cfg(feature = "quic")]
-impl hs::State for ExpectQUICTraffic {
+impl hs::State for ExpectQuicTraffic {
     fn handle(self: Box<Self>, _: &mut ServerConnection, m: Message) -> hs::NextStateOrError {
         // reject all messages
         check_message(&m, &[], &[])?;
