@@ -334,7 +334,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Protocol {
-    Tls13,
+    Tcp,
     #[cfg(feature = "quic")]
     Quic,
 }
@@ -581,7 +581,7 @@ impl ConnectionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            protocol: Protocol::Tls13,
+            protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
         }
