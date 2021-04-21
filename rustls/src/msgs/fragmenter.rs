@@ -1,5 +1,6 @@
+use crate::msgs::base::Payload;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
-use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
+use crate::msgs::message::{BorrowedOpaqueMessage, OpaqueMessage};
 use std::collections::VecDeque;
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
@@ -25,28 +26,19 @@ impl MessageFragmenter {
     /// messages whose fragment is no more than max_frag.
     /// The new messages are appended to the `out` deque.
     /// Payloads are copied.
-    pub fn fragment(&self, msg: Message, out: &mut VecDeque<Message>) {
+    pub fn fragment(&self, msg: OpaqueMessage, out: &mut VecDeque<OpaqueMessage>) {
         // Non-fragment path
-        if msg.payload.length() <= self.max_frag {
-            out.push_back(msg.into_opaque());
+        if msg.payload.0.len() <= self.max_frag {
+            out.push_back(msg);
             return;
         }
 
-        let typ = msg.typ;
-        let version = msg.version;
-        let payload = msg
-            .into_opaque()
-            .take_opaque_payload()
-            .unwrap()
-            .0;
-
-        for chunk in payload.chunks(self.max_frag) {
-            let m = Message {
-                typ,
-                version,
-                payload: MessagePayload::new_opaque(chunk.to_vec()),
-            };
-            out.push_back(m);
+        for chunk in msg.payload.0.chunks(self.max_frag) {
+            out.push_back(OpaqueMessage {
+                typ: msg.typ,
+                version: msg.version,
+                payload: Payload(chunk.to_vec()),
+            });
         }
     }
 
@@ -57,10 +49,10 @@ impl MessageFragmenter {
         typ: ContentType,
         version: ProtocolVersion,
         payload: &'a [u8],
-        out: &mut VecDeque<BorrowMessage<'a>>,
+        out: &mut VecDeque<BorrowedOpaqueMessage<'a>>,
     ) {
         for chunk in payload.chunks(self.max_frag) {
-            let cm = BorrowMessage {
+            let cm = BorrowedOpaqueMessage {
                 typ,
                 version,
                 payload: chunk,
@@ -73,26 +65,27 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
+    use crate::msgs::base::Payload;
     use crate::msgs::codec::Codec;
     use crate::msgs::enums::{ContentType, ProtocolVersion};
-    use crate::msgs::message::{Message, MessagePayload};
+    use crate::msgs::message::OpaqueMessage;
     use std::collections::VecDeque;
 
     fn msg_eq(
-        mm: Option<Message>,
+        mm: Option<OpaqueMessage>,
         total_len: usize,
         typ: &ContentType,
         version: &ProtocolVersion,
         bytes: &[u8],
     ) {
-        let mut m = mm.unwrap();
+        let m = mm.unwrap();
 
         let mut buf = Vec::new();
         m.encode(&mut buf);
 
         assert_eq!(&m.typ, typ);
         assert_eq!(&m.version, version);
-        assert_eq!(m.take_opaque_payload().unwrap().0, bytes.to_vec());
+        assert_eq!(m.payload.0, bytes.to_vec());
 
         assert_eq!(total_len, buf.len());
     }
@@ -101,10 +94,10 @@ mod tests {
     fn smoke() {
         let typ = ContentType::Handshake;
         let version = ProtocolVersion::TLSv1_2;
-        let m = Message {
+        let m = OpaqueMessage {
             typ,
             version,
-            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
         let frag = MessageFragmenter::new(3);
@@ -136,10 +129,10 @@ mod tests {
 
     #[test]
     fn non_fragment() {
-        let m = Message {
+        let m = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::new_opaque(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
         let frag = MessageFragmenter::new(8);

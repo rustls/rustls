@@ -31,22 +31,24 @@ mod message_test;
 
 #[cfg(test)]
 mod test {
+    use std::convert::TryFrom;
+
     #[test]
     fn smoketest() {
         use super::codec::Codec;
         use super::codec::Reader;
-        use super::message::Message;
+        use super::message::{Message, OpaqueMessage};
         let bytes = include_bytes!("handshake-test.1.bin");
         let mut r = Reader::init(bytes);
 
         while r.any_left() {
-            let mut m = Message::read(&mut r).unwrap();
+            let m = OpaqueMessage::read(&mut r).unwrap();
 
             let mut out: Vec<u8> = vec![];
             m.encode(&mut out);
             assert!(out.len() > 0);
 
-            m.decode_payload();
+            Message::try_from(m).unwrap();
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -7,6 +8,7 @@ use crate::msgs::enums::{AlertDescription, AlertLevel};
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
 
+use std::convert::TryFrom;
 use std::mem;
 
 #[derive(Debug)]
@@ -27,68 +29,53 @@ impl MessagePayload {
         }
     }
 
-    pub fn decode_given_type(
-        &self,
+    pub fn new(
         typ: ContentType,
         vers: ProtocolVersion,
-    ) -> Option<MessagePayload> {
-        if let MessagePayload::Opaque(ref payload) = *self {
-            let mut r = Reader::init(&payload.0);
-            let parsed = match typ {
-                ContentType::Alert => {
-                    Some(MessagePayload::Alert(AlertMessagePayload::read(&mut r)?))
-                }
-                ContentType::Handshake => {
-                    let p = HandshakeMessagePayload::read_version(&mut r, vers)?;
-                    Some(MessagePayload::Handshake(p))
-                }
-                ContentType::ChangeCipherSpec => {
-                    let p = ChangeCipherSpecPayload::read(&mut r)?;
-                    Some(MessagePayload::ChangeCipherSpec(p))
-                }
-                _ => None,
-            };
+        payload: Payload,
+    ) -> Result<MessagePayload, (MessagePayload, Error)> {
+        let mut r = Reader::init(&payload.0);
+        let parsed = match typ {
+            ContentType::ApplicationData => return Ok(MessagePayload::Opaque(payload)),
+            ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
+            ContentType::Handshake => {
+                HandshakeMessagePayload::read_version(&mut r, vers).map(MessagePayload::Handshake)
+            }
+            ContentType::ChangeCipherSpec => {
+                ChangeCipherSpecPayload::read(&mut r).map(MessagePayload::ChangeCipherSpec)
+            }
+            _ => None,
+        };
 
-            if r.any_left() { None } else { parsed }
-        } else {
-            None
-        }
-    }
-
-    pub fn length(&self) -> usize {
-        match *self {
-            MessagePayload::Alert(ref x) => x.length(),
-            MessagePayload::Handshake(ref x) => x.length(),
-            MessagePayload::ChangeCipherSpec(ref x) => x.length(),
-            MessagePayload::Opaque(ref x) => x.0.len(),
-        }
-    }
-
-    pub fn new_opaque(data: Vec<u8>) -> MessagePayload {
-        MessagePayload::Opaque(Payload::new(data))
+        parsed.filter(|_| !r.any_left()).ok_or((
+            MessagePayload::Opaque(payload),
+            Error::CorruptMessagePayload(typ),
+        ))
     }
 }
 
 /// A TLS frame, named TLSPlaintext in the standard.
-/// This type owns all memory for its interior parts.
+///
+/// This type owns all memory for its interior parts. It is used to read/write from/to I/O
+/// buffers as well as for fragmenting, joining and encryption/decryption. It can be converted
+/// into a `Message` by decoding the payload.
 #[derive(Debug)]
-pub struct Message {
+pub struct OpaqueMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: MessagePayload,
+    pub payload: Payload,
 }
 
-impl Message {
-    /// Like Message::read(), but allows the important distinction between:
-    /// this message might be valid if we read more data; and this message will
-    /// never be valid.
-    pub fn read_with_detailed_error(r: &mut Reader) -> Result<Message, MessageError> {
+impl OpaqueMessage {
+    /// `MessageError` allows callers to distinguish between valid prefixes (might
+    /// become valid if we read more data) and invalid data.
+    pub fn read(r: &mut Reader) -> Result<OpaqueMessage, MessageError> {
         let typ = ContentType::read(r).ok_or(MessageError::TooShortForHeader)?;
         let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
         let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
 
         // Reject oversize messages
-        if len >= Message::MAX_PAYLOAD {
+        if len >= Self::MAX_PAYLOAD {
             return Err(MessageError::IllegalLength);
         }
 
@@ -110,13 +97,59 @@ impl Message {
             .ok_or(MessageError::TooShortForLength)?;
         let payload = Payload::read(&mut sub);
 
-        Ok(Message {
+        Ok(OpaqueMessage {
             typ,
             version,
-            payload: MessagePayload::Opaque(payload),
+            payload,
         })
     }
 
+    pub fn borrow(&self) -> BorrowedOpaqueMessage<'_> {
+        BorrowedOpaqueMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: &self.payload.0,
+        }
+    }
+
+    pub fn is_content_type(&self, typ: ContentType) -> bool {
+        self.typ == typ
+    }
+
+    /// This is the maximum on-the-wire size of a TLSCiphertext.
+    /// That's 2^14 payload bytes, a header, and a 2KB allowance
+    /// for ciphertext overheads.
+    const MAX_PAYLOAD: u16 = 16384 + 2048;
+
+    /// Content type, version and size.
+    const HEADER_SIZE: u16 = 1 + 2 + 2;
+
+    /// Maximum on-wire message size.
+    pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
+}
+
+impl Codec for OpaqueMessage {
+    fn read(r: &mut Reader) -> Option<OpaqueMessage> {
+        OpaqueMessage::read(r).ok()
+    }
+
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.typ.encode(bytes);
+        self.version.encode(bytes);
+        (self.payload.0.len() as u16).encode(bytes);
+        self.payload.encode(bytes);
+    }
+}
+
+/// A message with decoded payload
+#[derive(Debug)]
+pub struct Message {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: MessagePayload,
+}
+
+impl Message {
     pub fn is_content_type(&self, typ: ContentType) -> bool {
         self.typ == typ
     }
@@ -130,23 +163,6 @@ impl Message {
         }
     }
 
-    pub fn decode_payload(&mut self) -> bool {
-        // Do we need a decode?
-        if self.typ == ContentType::ApplicationData {
-            return true;
-        }
-
-        if let Some(x) = self
-            .payload
-            .decode_given_type(self.typ, self.version)
-        {
-            self.payload = x;
-            true
-        } else {
-            false
-        }
-    }
-
     pub fn take_opaque_payload(&mut self) -> Option<Payload> {
         if let MessagePayload::Opaque(ref mut op) = self.payload {
             Some(mem::replace(op, Payload::empty()))
@@ -155,18 +171,20 @@ impl Message {
         }
     }
 
-    pub fn into_opaque(self) -> Message {
-        if let MessagePayload::Opaque(_) = self.payload {
-            return self;
-        }
+    pub fn into_opaque(self: Message) -> OpaqueMessage {
+        let payload = match self.payload {
+            MessagePayload::Opaque(payload) => payload,
+            _ => {
+                let mut buf = Vec::new();
+                self.payload.encode(&mut buf);
+                Payload(buf)
+            }
+        };
 
-        let mut buf = Vec::new();
-        self.payload.encode(&mut buf);
-
-        Message {
+        OpaqueMessage {
             typ: self.typ,
             version: self.version,
-            payload: MessagePayload::new_opaque(buf),
+            payload,
         }
     }
 
@@ -188,63 +206,49 @@ impl Message {
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
+}
 
-    pub fn to_borrowed(&self) -> BorrowMessage<'_> {
-        if let MessagePayload::Opaque(ref p) = self.payload {
-            BorrowMessage {
-                typ: self.typ,
-                version: self.version,
-                payload: &p.0,
-            }
-        } else {
-            unreachable!("to_borrowed must have opaque message");
+impl TryFrom<OpaqueMessage> for Message {
+    type Error = (Message, Error);
+
+    fn try_from(opaque: OpaqueMessage) -> Result<Self, Self::Error> {
+        let (payload, err) = match MessagePayload::new(opaque.typ, opaque.version, opaque.payload) {
+            Ok(payload) => (payload, None),
+            Err((payload, err)) => (payload, Some(err)),
+        };
+
+        let msg = Message {
+            typ: opaque.typ,
+            version: opaque.version,
+            payload,
+        };
+
+        match err {
+            None => Ok(msg),
+            Some(e) => Err((msg, e)),
         }
     }
-
-    /// This is the maximum on-the-wire size of a TLSCiphertext.
-    /// That's 2^14 payload bytes, a header, and a 2KB allowance
-    /// for ciphertext overheads.
-    const MAX_PAYLOAD: u16 = 16384 + 2048;
-
-    /// Content type, version and size.
-    const HEADER_SIZE: u16 = 1 + 2 + 2;
-
-    /// Maximum on-wire message size.
-    pub const MAX_WIRE_SIZE: usize = (Message::MAX_PAYLOAD + Message::HEADER_SIZE) as usize;
-
 }
 
-impl Codec for Message {
-    fn read(r: &mut Reader) -> Option<Message> {
-        Message::read_with_detailed_error(r).ok()
-    }
-
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.version.encode(bytes);
-        (self.payload.length() as u16).encode(bytes);
-        self.payload.encode(bytes);
-    }
+/// A TLS frame, named TLSPlaintext in the standard.
+///
+/// This type differs from `OpaqueMessage` because it borrows
+/// its payload.  You can make a `OpaqueMessage` from an
+/// `BorrowMessage`, but this involves a copy.
+///
+/// This type also cannot decode its internals and
+/// cannot be read/encoded; only `OpaqueMessage` can do that.
+pub struct BorrowedOpaqueMessage<'a> {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: &'a [u8],
 }
 
+#[derive(Debug)]
 pub enum MessageError {
     TooShortForHeader,
     TooShortForLength,
     IllegalLength,
     IllegalContentType,
     IllegalProtocolVersion,
-}
-
-/// A TLS frame, named TLSPlaintext in the standard.
-///
-/// This type differs from `Message` because it borrows
-/// its payload.  You can make a `Message` from an
-/// `BorrowMessage`, but this involves a copy.
-///
-/// This type also cannot decode its internals and
-/// is not a `Codec` type, only `Message` can do that.
-pub struct BorrowMessage<'a> {
-    pub typ: ContentType,
-    pub version: ProtocolVersion,
-    pub payload: &'a [u8],
 }
