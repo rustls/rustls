@@ -610,10 +610,12 @@ pub trait ServerQuicExt {
             ));
         }
 
-        assert!(
-            config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
-            "QUIC sessions must set a max early data of 0 or 2^32-1"
-        );
+        if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
+            return Err(Error::General(
+                "QUIC sessions must set a max early data of 0 or 2^32-1".into(),
+            ));
+        }
+
         let ext = match quic_version {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
