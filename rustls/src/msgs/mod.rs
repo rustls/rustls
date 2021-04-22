@@ -35,7 +35,6 @@ mod test {
 
     #[test]
     fn smoketest() {
-        use super::codec::Codec;
         use super::codec::Reader;
         use super::message::{Message, OpaqueMessage};
         let bytes = include_bytes!("handshake-test.1.bin");
@@ -44,8 +43,7 @@ mod test {
         while r.any_left() {
             let m = OpaqueMessage::read(&mut r).unwrap();
 
-            let mut out: Vec<u8> = vec![];
-            m.encode(&mut out);
+            let out = m.clone().encode();
             assert!(out.len() > 0);
 
             Message::try_from(m).unwrap();

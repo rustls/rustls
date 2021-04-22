@@ -986,8 +986,7 @@ impl ConnectionCommon {
 
     // Put m into sendable_tls for writing.
     fn queue_tls_message(&mut self, m: OpaqueMessage) {
-        self.sendable_tls
-            .append(m.get_encoding());
+        self.sendable_tls.append(m.encode());
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
