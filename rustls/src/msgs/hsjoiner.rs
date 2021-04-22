@@ -36,7 +36,7 @@ impl HandshakeJoiner {
 
     /// Do we want to process this message?
     pub fn want_message(&self, msg: &OpaqueMessage) -> bool {
-        msg.is_content_type(ContentType::Handshake)
+        msg.typ == ContentType::Handshake
     }
 
     /// Do we have any buffered data?

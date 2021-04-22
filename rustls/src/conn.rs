@@ -620,7 +620,7 @@ impl ConnectionCommon {
         // - prior to determining the version (it's illegal as a first message)
         // - if it's not a CCS at all
         // - if we've finished the handshake
-        if msg.is_content_type(ContentType::ChangeCipherSpec) && !self.traffic && self.is_tls13() {
+        if msg.typ == ContentType::ChangeCipherSpec && !self.traffic && self.is_tls13() {
             if self.received_middlebox_ccs {
                 return Err(Error::PeerMisbehavedError(
                     "illegal middlebox CCS received".into(),
