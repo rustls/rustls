@@ -9,7 +9,6 @@ use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
 
 use std::convert::TryFrom;
-use std::mem;
 
 #[derive(Debug)]
 pub enum MessagePayload {
@@ -187,14 +186,6 @@ impl Message {
             hsp.typ == hstyp
         } else {
             false
-        }
-    }
-
-    pub fn take_app_data_payload(&mut self) -> Option<Payload> {
-        if let MessagePayload::ApplicationData(ref mut op) = self.payload {
-            Some(mem::replace(op, Payload::empty()))
-        } else {
-            None
         }
     }
 
