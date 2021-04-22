@@ -172,10 +172,6 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn content_type(&self) -> ContentType {
-        self.payload.content_type()
-    }
-
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
         // Bit of a layering violation, but OK.
         if let MessagePayload::Handshake(ref hsp) = self.payload {
