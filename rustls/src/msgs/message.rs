@@ -33,7 +33,7 @@ impl MessagePayload {
         typ: ContentType,
         vers: ProtocolVersion,
         payload: Payload,
-    ) -> Result<MessagePayload, (MessagePayload, Error)> {
+    ) -> Result<MessagePayload, Error> {
         let mut r = Reader::init(&payload.0);
         let parsed = match typ {
             ContentType::ApplicationData => return Ok(MessagePayload::Opaque(payload)),
@@ -47,10 +47,9 @@ impl MessagePayload {
             _ => None,
         };
 
-        parsed.filter(|_| !r.any_left()).ok_or((
-            MessagePayload::Opaque(payload),
-            Error::CorruptMessagePayload(typ),
-        ))
+        parsed
+            .filter(|_| !r.any_left())
+            .ok_or(Error::CorruptMessagePayload(typ))
     }
 }
 
@@ -207,24 +206,14 @@ impl Message {
 }
 
 impl TryFrom<OpaqueMessage> for Message {
-    type Error = (Message, Error);
+    type Error = Error;
 
     fn try_from(opaque: OpaqueMessage) -> Result<Self, Self::Error> {
-        let (payload, err) = match MessagePayload::new(opaque.typ, opaque.version, opaque.payload) {
-            Ok(payload) => (payload, None),
-            Err((payload, err)) => (payload, Some(err)),
-        };
-
-        let msg = Message {
+        Ok(Message {
             typ: opaque.typ,
             version: opaque.version,
-            payload,
-        };
-
-        match err {
-            None => Ok(msg),
-            Some(e) => Err((msg, e)),
-        }
+            payload: MessagePayload::new(opaque.typ, opaque.version, opaque.payload)?,
+        })
     }
 }
 

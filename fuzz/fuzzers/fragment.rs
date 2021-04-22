@@ -17,7 +17,7 @@ fuzz_target!(|data: &[u8]| {
 
     let msg = match message::Message::try_from(msg) {
         Ok(msg) => msg,
-        Err((msg, _)) => msg,
+        Err(_) => return,
     };
 
     let frg = fragmenter::MessageFragmenter::new(5);
