@@ -141,6 +141,25 @@ impl Codec for OpaqueMessage {
     }
 }
 
+impl From<Message> for OpaqueMessage {
+    fn from(msg: Message) -> OpaqueMessage {
+        let payload = match msg.payload {
+            MessagePayload::Opaque(payload) => payload,
+            _ => {
+                let mut buf = Vec::new();
+                msg.payload.encode(&mut buf);
+                Payload(buf)
+            }
+        };
+
+        OpaqueMessage {
+            typ: msg.typ,
+            version: msg.version,
+            payload,
+        }
+    }
+}
+
 /// A message with decoded payload
 #[derive(Debug)]
 pub struct Message {
@@ -168,23 +187,6 @@ impl Message {
             Some(mem::replace(op, Payload::empty()))
         } else {
             None
-        }
-    }
-
-    pub fn into_opaque(self: Message) -> OpaqueMessage {
-        let payload = match self.payload {
-            MessagePayload::Opaque(payload) => payload,
-            _ => {
-                let mut buf = Vec::new();
-                self.payload.encode(&mut buf);
-                Payload(buf)
-            }
-        };
-
-        OpaqueMessage {
-            typ: self.typ,
-            version: self.version,
-            payload,
         }
     }
 

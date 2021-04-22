@@ -156,7 +156,7 @@ where
             let message = OpaqueMessage::read(&mut reader).unwrap();
             let mut message = Message::try_from(message).unwrap();
             filter(&mut message);
-            let message_enc = message.into_opaque().get_encoding();
+            let message_enc = OpaqueMessage::from(message).get_encoding();
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
             let len = right
                 .read_tls(message_enc_reader)

@@ -14,7 +14,7 @@ fuzz_target!(|data: &[u8]| {
             Err((msg, _)) => msg,
         };
         //println!("msg = {:#?}", m);
-        let enc = msg.into_opaque().get_encoding();
+        let enc = OpaqueMessage::from(msg).get_encoding();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..rdr.used()]);
     }

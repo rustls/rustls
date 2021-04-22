@@ -181,7 +181,7 @@ mod tests {
                 payload: HandshakePayload::HelloRequest,
             }),
         }
-        .into_opaque();
+        .into();
 
         pop_eq(&expect, &mut hj);
         pop_eq(&expect, &mut hj);
@@ -251,7 +251,7 @@ mod tests {
                 payload: HandshakePayload::Finished(Payload::new(payload)),
             }),
         }
-        .into_opaque();
+        .into();
 
         pop_eq(&expect, &mut hj);
     }

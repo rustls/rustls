@@ -35,7 +35,7 @@ fn test_read_fuzz_corpus() {
             Err((msg, _)) => msg,
         };
 
-        let enc = msg.into_opaque().get_encoding();
+        let enc = OpaqueMessage::from(msg).get_encoding();
         assert_eq!(bytes.to_vec(), enc);
         assert_eq!(bytes[..rd.used()].to_vec(), enc);
     }
