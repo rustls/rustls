@@ -3,6 +3,7 @@ use crate::error::Error;
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
+use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::MessageDeframer;
@@ -653,8 +654,8 @@ impl ConnectionCommon {
         let msg = Message::try_from(msg)?;
 
         // For alerts, we have separate logic.
-        if msg.is_content_type(ContentType::Alert) {
-            return self.process_alert(msg).map(|()| None);
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            return self.process_alert(alert).map(|()| None);
         }
 
         Ok(Some(MessageType::Data(msg)))
@@ -801,36 +802,32 @@ impl ConnectionCommon {
         self.sendable_tls.set_limit(limit);
     }
 
-    fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
-        if let MessagePayload::Alert(ref alert) = msg.payload {
-            // Reject unknown AlertLevels.
-            if let AlertLevel::Unknown(_) = alert.level {
-                self.send_fatal_alert(AlertDescription::IllegalParameter);
-            }
+    pub fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+        // Reject unknown AlertLevels.
+        if let AlertLevel::Unknown(_) = alert.level {
+            self.send_fatal_alert(AlertDescription::IllegalParameter);
+        }
 
-            // If we get a CloseNotify, make a note to declare EOF to our
-            // caller.
-            if alert.description == AlertDescription::CloseNotify {
-                self.peer_eof = true;
+        // If we get a CloseNotify, make a note to declare EOF to our
+        // caller.
+        if alert.description == AlertDescription::CloseNotify {
+            self.peer_eof = true;
+            return Ok(());
+        }
+
+        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
+        // (except, for no good reason, user_cancelled).
+        if alert.level == AlertLevel::Warning {
+            if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
+                self.send_fatal_alert(AlertDescription::DecodeError);
+            } else {
+                warn!("TLS alert warning received: {:#?}", alert);
                 return Ok(());
             }
-
-            // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
-            // (except, for no good reason, user_cancelled).
-            if alert.level == AlertLevel::Warning {
-                if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                    self.send_fatal_alert(AlertDescription::DecodeError);
-                } else {
-                    warn!("TLS alert warning received: {:#?}", msg);
-                    return Ok(());
-                }
-            }
-
-            error!("TLS alert received: {:#?}", msg);
-            Err(Error::AlertReceived(alert.description))
-        } else {
-            Err(Error::CorruptMessagePayload(ContentType::Alert))
         }
+
+        error!("TLS alert received: {:#?}", alert);
+        Err(Error::AlertReceived(alert.description))
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
