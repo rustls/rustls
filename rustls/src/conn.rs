@@ -649,13 +649,8 @@ impl ConnectionCommon {
             return Ok(Some(MessageType::Handshake));
         }
 
-        // Now we can fully parse the message payload. We only return an error
-        // on the client, or we fail a bogo test (WrongMessageType-TLS13-ServerHello-TLS).
-        let msg = match Message::try_from(msg) {
-            Ok(msg) => msg,
-            Err((_, err)) if self.is_client => return Err(err),
-            Err((msg, _)) => msg,
-        };
+        // Now we can fully parse the message payload.
+        let msg = Message::try_from(msg)?;
 
         // For alerts, we have separate logic.
         if msg.is_content_type(ContentType::Alert) {

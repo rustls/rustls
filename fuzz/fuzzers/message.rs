@@ -11,7 +11,7 @@ fuzz_target!(|data: &[u8]| {
     if let Ok(m) = OpaqueMessage::read(&mut rdr) {
         let msg = match Message::try_from(m) {
             Ok(msg) => msg,
-            Err((msg, _)) => msg,
+            Err(_) => return,
         };
         //println!("msg = {:#?}", m);
         let enc = OpaqueMessage::from(msg).encode();

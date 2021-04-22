@@ -31,7 +31,7 @@ fn test_read_fuzz_corpus() {
 
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
-            Err((msg, _)) => msg,
+            Err(_) => continue,
         };
 
         let enc = OpaqueMessage::from(msg).encode();
