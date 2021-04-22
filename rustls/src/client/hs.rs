@@ -670,7 +670,7 @@ impl State for ExpectServerHello {
                 debug!("Server agreed to resume");
 
                 // Is the server telling lies about the ciphersuite?
-                if resuming.supported_cipher_suite() != suite.scs() {
+                if resuming.supported_cipher_suite() != suite.supported_suite() {
                     let error_msg = "abbreviated handshake offered, but with varied cs".to_string();
                     return Err(Error::PeerMisbehavedError(error_msg));
                 }
