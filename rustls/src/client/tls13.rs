@@ -1147,7 +1147,7 @@ impl hs::State for ExpectTraffic {
     ) -> hs::NextStateOrError {
         if m.is_content_type(ContentType::ApplicationData) {
             cx.common
-                .take_received_plaintext(m.take_opaque_payload().unwrap());
+                .take_received_plaintext(m.take_app_data_payload().unwrap());
         } else if let Ok(ref new_ticket) = require_handshake_msg!(
             m,
             HandshakeType::NewSessionTicket,

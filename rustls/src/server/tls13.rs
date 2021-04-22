@@ -1037,9 +1037,9 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, cx: &mut ServerContext<'_>, mut m: Message) {
+    fn handle_traffic(&self, cx: &mut ServerContext, mut m: Message) {
         cx.common
-            .take_received_plaintext(m.take_opaque_payload().unwrap());
+            .take_received_plaintext(m.take_app_data_payload().unwrap());
     }
 
     fn handle_key_update(

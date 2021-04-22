@@ -77,7 +77,7 @@ fn alert_is_not_handshake() {
 #[test]
 fn alert_is_not_opaque() {
     let mut m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
-    assert_eq!(None, m.take_opaque_payload());
+    assert_eq!(None, m.take_app_data_payload());
     assert!(Message::try_from(m).is_ok());
 }
 

@@ -870,7 +870,7 @@ impl hs::State for ExpectTraffic {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, mut m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ApplicationData], &[])?;
         cx.common
-            .take_received_plaintext(m.take_opaque_payload().unwrap());
+            .take_received_plaintext(m.take_app_data_payload().unwrap());
         Ok(self)
     }
 

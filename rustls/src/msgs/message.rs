@@ -16,7 +16,7 @@ pub enum MessagePayload {
     Alert(AlertMessagePayload),
     Handshake(HandshakeMessagePayload),
     ChangeCipherSpec(ChangeCipherSpecPayload),
-    Opaque(Payload),
+    ApplicationData(Payload),
 }
 
 impl MessagePayload {
@@ -25,7 +25,7 @@ impl MessagePayload {
             MessagePayload::Alert(ref x) => x.encode(bytes),
             MessagePayload::Handshake(ref x) => x.encode(bytes),
             MessagePayload::ChangeCipherSpec(ref x) => x.encode(bytes),
-            MessagePayload::Opaque(ref x) => x.encode(bytes),
+            MessagePayload::ApplicationData(ref x) => x.encode(bytes),
         }
     }
 
@@ -36,7 +36,7 @@ impl MessagePayload {
     ) -> Result<MessagePayload, Error> {
         let mut r = Reader::init(&payload.0);
         let parsed = match typ {
-            ContentType::ApplicationData => return Ok(MessagePayload::Opaque(payload)),
+            ContentType::ApplicationData => return Ok(MessagePayload::ApplicationData(payload)),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
             ContentType::Handshake => {
                 HandshakeMessagePayload::read_version(&mut r, vers).map(MessagePayload::Handshake)
@@ -139,7 +139,7 @@ impl OpaqueMessage {
 impl From<Message> for OpaqueMessage {
     fn from(msg: Message) -> OpaqueMessage {
         let payload = match msg.payload {
-            MessagePayload::Opaque(payload) => payload,
+            MessagePayload::ApplicationData(payload) => payload,
             _ => {
                 let mut buf = Vec::new();
                 msg.payload.encode(&mut buf);
@@ -177,8 +177,8 @@ impl Message {
         }
     }
 
-    pub fn take_opaque_payload(&mut self) -> Option<Payload> {
-        if let MessagePayload::Opaque(ref mut op) = self.payload {
+    pub fn take_app_data_payload(&mut self) -> Option<Payload> {
+        if let MessagePayload::ApplicationData(ref mut op) = self.payload {
             Some(mem::replace(op, Payload::empty()))
         } else {
             None
