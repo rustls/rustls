@@ -146,7 +146,7 @@ mod tests {
 
     fn pop_eq(expect: &OpaqueMessage, hj: &mut HandshakeJoiner) {
         let got = hj.frames.pop_front().unwrap();
-        assert_eq!(got.content_type(), expect.typ);
+        assert_eq!(got.payload.content_type(), expect.typ);
         assert_eq!(got.version, expect.version);
 
         let (mut left, mut right) = (Vec::new(), Vec::new());
