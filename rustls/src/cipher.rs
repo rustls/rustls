@@ -183,23 +183,23 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let buf = &mut msg.payload.0;
-        if buf.len() < GCM_OVERHEAD {
+        let payload = &mut msg.payload.0;
+        if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
         }
 
         let nonce = {
             let mut nonce = [0u8; 12];
             nonce[..4].copy_from_slice(&self.dec_salt);
-            nonce[4..].copy_from_slice(&buf[..8]);
+            nonce[4..].copy_from_slice(&payload[..8]);
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let aad = make_tls12_aad(seq, msg.typ, msg.version, buf.len() - GCM_OVERHEAD);
+        let aad = make_tls12_aad(seq, msg.typ, msg.version, payload.len() - GCM_OVERHEAD);
 
         let plain_len = self
             .dec_key
-            .open_within(nonce, aad, buf, GCM_EXPLICIT_NONCE_LEN..)
+            .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
             .map_err(|_| Error::DecryptError)?
             .len();
 
@@ -207,7 +207,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        buf.truncate(plain_len);
+        payload.truncate(plain_len);
         Ok(msg)
     }
 }
@@ -338,53 +338,53 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]> {
 impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt(&self, msg: BorrowedOpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
-        let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(&msg.payload);
-        msg.typ.encode(&mut buf);
+        let mut payload = Vec::with_capacity(total_len);
+        payload.extend_from_slice(&msg.payload);
+        msg.typ.encode(&mut payload);
 
         let nonce = make_tls13_nonce(&self.iv, seq);
         let aad = make_tls13_aad(total_len);
 
         self.enc_key
-            .seal_in_place_append_tag(nonce, aad, &mut buf)
+            .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::General("encrypt failed".to_string()))?;
 
         Ok(OpaqueMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(buf),
+            payload: Payload::new(payload),
         })
     }
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let mut buf = &mut msg.payload.0;
-        if buf.len() < self.dec_key.algorithm().tag_len() {
+        let mut payload = &mut msg.payload.0;
+        if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
 
         let nonce = make_tls13_nonce(&self.iv, seq);
-        let aad = make_tls13_aad(buf.len());
+        let aad = make_tls13_aad(payload.len());
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, &mut buf)
+            .open_in_place(nonce, aad, &mut payload)
             .map_err(|_| Error::DecryptError)?
             .len();
 
-        buf.truncate(plain_len);
+        payload.truncate(plain_len);
 
-        if buf.len() > MAX_FRAGMENT_LEN + 1 {
+        if payload.len() > MAX_FRAGMENT_LEN + 1 {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        msg.typ = unpad_tls13(&mut buf);
+        msg.typ = unpad_tls13(&mut payload);
         if msg.typ == ContentType::Unknown(0) {
             let msg = "peer sent bad TLSInnerPlaintext".to_string();
             return Err(Error::PeerMisbehavedError(msg));
         }
 
-        if buf.len() > MAX_FRAGMENT_LEN {
+        if payload.len() > MAX_FRAGMENT_LEN {
             return Err(Error::PeerSentOversizedRecord);
         }
 
@@ -449,9 +449,9 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let mut buf = &mut msg.payload.0;
+        let mut payload = &mut msg.payload.0;
 
-        if buf.len() < CHACHAPOLY1305_OVERHEAD {
+        if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
         }
 
@@ -460,12 +460,12 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             seq,
             msg.typ,
             msg.version,
-            buf.len() - CHACHAPOLY1305_OVERHEAD,
+            payload.len() - CHACHAPOLY1305_OVERHEAD,
         );
 
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, &mut buf)
+            .open_in_place(nonce, aad, &mut payload)
             .map_err(|_| Error::DecryptError)?
             .len();
 
@@ -473,7 +473,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        buf.truncate(plain_len);
+        payload.truncate(plain_len);
         Ok(msg)
     }
 }
