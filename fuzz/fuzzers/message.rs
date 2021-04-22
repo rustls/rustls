@@ -2,7 +2,7 @@
 #[macro_use] extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::internal::msgs::codec::{Codec, Reader};
+use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage};
 use std::convert::TryFrom;
 
@@ -14,7 +14,7 @@ fuzz_target!(|data: &[u8]| {
             Err((msg, _)) => msg,
         };
         //println!("msg = {:#?}", m);
-        let enc = OpaqueMessage::from(msg).get_encoding();
+        let enc = OpaqueMessage::from(msg).encode();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..rdr.used()]);
     }

@@ -3213,8 +3213,7 @@ mod test_quic {
             }),
         };
 
-        let mut buf = Vec::new();
-        OpaqueMessage::from(client_hello).encode(&mut buf);
+        let buf = OpaqueMessage::from(client_hello).encode();
         server
             .read_tls(&mut buf.as_slice())
             .unwrap();
@@ -3283,8 +3282,7 @@ mod test_quic {
             }),
         };
 
-        let mut buf = Vec::new();
-        OpaqueMessage::from(client_hello).encode(&mut buf);
+        let buf = OpaqueMessage::from(client_hello).encode();
         server
             .read_tls(&mut buf.as_slice())
             .unwrap();
@@ -3315,7 +3313,7 @@ mod test_quic {
 #[test]
 fn test_client_does_not_offer_sha1() {
     use rustls::internal::msgs::{
-        codec::Codec, enums::HandshakeType, handshake::HandshakePayload, message::MessagePayload,
+        codec::Reader, enums::HandshakeType, handshake::HandshakePayload, message::MessagePayload,
         message::OpaqueMessage,
     };
 
@@ -3328,7 +3326,7 @@ fn test_client_does_not_offer_sha1() {
             let sz = client
                 .write_tls(&mut buf.as_mut())
                 .unwrap();
-            let msg = OpaqueMessage::read_bytes(&buf[..sz]).unwrap();
+            let msg = OpaqueMessage::read(&mut Reader::init(&buf[..sz])).unwrap();
             let msg = Message::try_from(msg).unwrap();
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 

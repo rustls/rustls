@@ -59,7 +59,7 @@ impl MessagePayload {
 /// This type owns all memory for its interior parts. It is used to read/write from/to I/O
 /// buffers as well as for fragmenting, joining and encryption/decryption. It can be converted
 /// into a `Message` by decoding the payload.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OpaqueMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
@@ -104,6 +104,15 @@ impl OpaqueMessage {
         })
     }
 
+    pub fn encode(self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        self.typ.encode(&mut buf);
+        self.version.encode(&mut buf);
+        (self.payload.0.len() as u16).encode(&mut buf);
+        self.payload.encode(&mut buf);
+        buf
+    }
+
     pub fn borrow(&self) -> BorrowedOpaqueMessage<'_> {
         BorrowedOpaqueMessage {
             typ: self.typ,
@@ -126,19 +135,6 @@ impl OpaqueMessage {
 
     /// Maximum on-wire message size.
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
-}
-
-impl Codec for OpaqueMessage {
-    fn read(r: &mut Reader) -> Option<OpaqueMessage> {
-        OpaqueMessage::read(r).ok()
-    }
-
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.version.encode(bytes);
-        (self.payload.0.len() as u16).encode(bytes);
-        self.payload.encode(bytes);
-    }
 }
 
 impl From<Message> for OpaqueMessage {

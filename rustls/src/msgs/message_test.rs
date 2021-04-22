@@ -1,4 +1,3 @@
-use super::codec::Codec;
 use super::codec::Reader;
 use super::enums::{AlertDescription, AlertLevel, HandshakeType};
 use super::message::{Message, OpaqueMessage};
@@ -35,7 +34,7 @@ fn test_read_fuzz_corpus() {
             Err((msg, _)) => msg,
         };
 
-        let enc = OpaqueMessage::from(msg).get_encoding();
+        let enc = OpaqueMessage::from(msg).encode();
         assert_eq!(bytes.to_vec(), enc);
         assert_eq!(bytes[..rd.used()].to_vec(), enc);
     }
@@ -91,8 +90,8 @@ fn construct_all_types() {
         &b"\x17\x03\x04\x00\x04\x11\x22\x33\x44"[..],
         &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
     ];
-    for bytes in samples.iter() {
-        let m = OpaqueMessage::read_bytes(bytes).unwrap();
+    for &bytes in samples.iter() {
+        let m = OpaqueMessage::read(&mut Reader::init(bytes)).unwrap();
         println!("m = {:?}", m);
         let m = Message::try_from(m);
         println!("m' = {:?}", m);

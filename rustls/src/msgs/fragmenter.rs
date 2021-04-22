@@ -66,7 +66,6 @@ impl MessageFragmenter {
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
     use crate::msgs::base::Payload;
-    use crate::msgs::codec::Codec;
     use crate::msgs::enums::{ContentType, ProtocolVersion};
     use crate::msgs::message::OpaqueMessage;
     use std::collections::VecDeque;
@@ -79,9 +78,7 @@ mod tests {
         bytes: &[u8],
     ) {
         let m = mm.unwrap();
-
-        let mut buf = Vec::new();
-        m.encode(&mut buf);
+        let buf = m.clone().encode();
 
         assert_eq!(&m.typ, typ);
         assert_eq!(&m.version, version);
