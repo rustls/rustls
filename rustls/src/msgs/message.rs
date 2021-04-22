@@ -128,10 +128,6 @@ impl OpaqueMessage {
         }
     }
 
-    pub fn is_content_type(&self, typ: ContentType) -> bool {
-        self.typ == typ
-    }
-
     /// This is the maximum on-the-wire size of a TLSCiphertext.
     /// That's 2^14 payload bytes, a header, and a 2KB allowance
     /// for ciphertext overheads.
