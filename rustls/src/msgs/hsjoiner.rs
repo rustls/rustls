@@ -102,7 +102,6 @@ impl HandshakeJoiner {
             };
 
             let m = Message {
-                typ: ContentType::Handshake,
                 version,
                 payload: MessagePayload::Handshake(payload),
             };
@@ -147,7 +146,7 @@ mod tests {
 
     fn pop_eq(expect: &OpaqueMessage, hj: &mut HandshakeJoiner) {
         let got = hj.frames.pop_front().unwrap();
-        assert_eq!(got.typ, expect.typ);
+        assert_eq!(got.content_type(), expect.typ);
         assert_eq!(got.version, expect.version);
 
         let (mut left, mut right) = (Vec::new(), Vec::new());
@@ -174,7 +173,6 @@ mod tests {
         assert_eq!(hj.is_empty(), true);
 
         let expect = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::HelloRequest,
@@ -244,7 +242,6 @@ mod tests {
 
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Finished,

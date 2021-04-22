@@ -3172,7 +3172,7 @@ mod test_quic {
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{
-            CipherSuite, Compression, ContentType, HandshakeType, NamedGroup, SignatureScheme,
+            CipherSuite, Compression, HandshakeType, NamedGroup, SignatureScheme,
         };
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
@@ -3190,7 +3190,6 @@ mod test_quic {
             .unwrap();
 
         let client_hello = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ClientHello,
@@ -3235,7 +3234,7 @@ mod test_quic {
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{
-            CipherSuite, Compression, ContentType, HandshakeType, NamedGroup, SignatureScheme,
+            CipherSuite, Compression, HandshakeType, NamedGroup, SignatureScheme,
         };
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
@@ -3260,7 +3259,6 @@ mod test_quic {
         .unwrap();
 
         let client_hello = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ClientHello,

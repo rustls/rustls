@@ -259,7 +259,6 @@ fn emit_certificate(
     common: &mut ConnectionCommon,
 ) {
     let cert = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
@@ -282,7 +281,6 @@ fn emit_clientkx(
     let pubkey = Payload::new(buf);
 
     let ckx = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::ClientKeyExchange,
@@ -314,7 +312,6 @@ fn emit_certverify(
     let body = DigitallySignedStruct::new(scheme, sig);
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
@@ -329,7 +326,6 @@ fn emit_certverify(
 
 fn emit_ccs(common: &mut ConnectionCommon) {
     let ccs = Message {
-        typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
@@ -347,7 +343,6 @@ fn emit_finished(
     let verify_data_payload = Payload::new(verify_data);
 
     let f = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,

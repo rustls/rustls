@@ -19,7 +19,7 @@ macro_rules! require_handshake_msg(
         }
         _ => Err(Error::InappropriateMessage {
                  expect_types: vec![ ContentType::Handshake ],
-                 got_type: $m.typ})
+                 got_type: $m.content_type()})
     }
   )
 );
@@ -36,7 +36,7 @@ macro_rules! require_handshake_msg_move(
         }
         _ => Err(Error::InappropriateMessage {
                  expect_types: vec![ ContentType::Handshake ],
-                 got_type: $m.typ})
+                 got_type: $m.content_type()})
     }
   )
 );
@@ -51,14 +51,14 @@ pub fn check_message(
     content_types: &[ContentType],
     handshake_types: &[HandshakeType],
 ) -> Result<(), Error> {
-    if !content_types.contains(&m.typ) {
+    if !content_types.contains(&m.content_type()) {
         warn!(
             "Received a {:?} message while expecting {:?}",
-            m.typ, content_types
+            m.content_type(), content_types
         );
         return Err(Error::InappropriateMessage {
             expect_types: content_types.to_vec(),
-            got_type: m.typ,
+            got_type: m.content_type(),
         });
     }
 
