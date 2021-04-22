@@ -79,40 +79,6 @@ pub struct Message {
 }
 
 impl Message {
-    /// This is the maximum on-the-wire size of a TLSCiphertext.
-    /// That's 2^14 payload bytes, a header, and a 2KB allowance
-    /// for ciphertext overheads.
-    const MAX_PAYLOAD: u16 = 16384 + 2048;
-
-    /// Content type, version and size.
-    const HEADER_SIZE: u16 = 1 + 2 + 2;
-
-    /// Maximum on-wire message size.
-    pub const MAX_WIRE_SIZE: usize = (Message::MAX_PAYLOAD + Message::HEADER_SIZE) as usize;
-}
-
-impl Codec for Message {
-    fn read(r: &mut Reader) -> Option<Message> {
-        Message::read_with_detailed_error(r).ok()
-    }
-
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.version.encode(bytes);
-        (self.payload.length() as u16).encode(bytes);
-        self.payload.encode(bytes);
-    }
-}
-
-pub enum MessageError {
-    TooShortForHeader,
-    TooShortForLength,
-    IllegalLength,
-    IllegalContentType,
-    IllegalProtocolVersion,
-}
-
-impl Message {
     /// Like Message::read(), but allows the important distinction between:
     /// this message might be valid if we read more data; and this message will
     /// never be valid.
@@ -222,10 +188,8 @@ impl Message {
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
-}
 
-impl<'a> Message {
-    pub fn to_borrowed(&'a self) -> BorrowMessage<'a> {
+    pub fn to_borrowed(&self) -> BorrowMessage<'_> {
         if let MessagePayload::Opaque(ref p) = self.payload {
             BorrowMessage {
                 typ: self.typ,
@@ -236,6 +200,39 @@ impl<'a> Message {
             unreachable!("to_borrowed must have opaque message");
         }
     }
+
+    /// This is the maximum on-the-wire size of a TLSCiphertext.
+    /// That's 2^14 payload bytes, a header, and a 2KB allowance
+    /// for ciphertext overheads.
+    const MAX_PAYLOAD: u16 = 16384 + 2048;
+
+    /// Content type, version and size.
+    const HEADER_SIZE: u16 = 1 + 2 + 2;
+
+    /// Maximum on-wire message size.
+    pub const MAX_WIRE_SIZE: usize = (Message::MAX_PAYLOAD + Message::HEADER_SIZE) as usize;
+
+}
+
+impl Codec for Message {
+    fn read(r: &mut Reader) -> Option<Message> {
+        Message::read_with_detailed_error(r).ok()
+    }
+
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.typ.encode(bytes);
+        self.version.encode(bytes);
+        (self.payload.length() as u16).encode(bytes);
+        self.payload.encode(bytes);
+    }
+}
+
+pub enum MessageError {
+    TooShortForHeader,
+    TooShortForLength,
+    IllegalLength,
+    IllegalContentType,
+    IllegalProtocolVersion,
 }
 
 /// A TLS frame, named TLSPlaintext in the standard.
