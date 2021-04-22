@@ -1,4 +1,4 @@
-use crate::check::check_message;
+use crate::check::{check_message, inappropriate_message};
 use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -858,10 +858,15 @@ struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl hs::State for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, mut m: Message) -> hs::NextStateOrError {
-        check_message(&m, &[ContentType::ApplicationData], &[])?;
-        cx.common
-            .take_received_plaintext(m.take_app_data_payload().unwrap());
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => cx
+                .common
+                .take_received_plaintext(payload),
+            _ => {
+                return Err(inappropriate_message(&m, &[ContentType::ApplicationData]));
+            }
+        }
         Ok(self)
     }
 

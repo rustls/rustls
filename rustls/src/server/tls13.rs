@@ -1,4 +1,6 @@
+#[cfg(feature = "quic")]
 use crate::check::check_message;
+use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -1028,11 +1030,6 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, cx: &mut ServerContext, mut m: Message) {
-        cx.common
-            .take_received_plaintext(m.take_app_data_payload().unwrap());
-    }
-
     fn handle_key_update(
         &mut self,
         common: &mut ConnectionCommon,
@@ -1074,19 +1071,28 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        if m.is_content_type(ContentType::ApplicationData) {
-            self.handle_traffic(cx, m);
-        } else if let Ok(key_update) =
-            require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
-        {
-            self.handle_key_update(&mut cx.common, key_update)?;
-        } else {
-            check_message(
-                &m,
-                &[ContentType::ApplicationData, ContentType::Handshake],
-                &[HandshakeType::KeyUpdate],
-            )?;
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => cx
+                .common
+                .take_received_plaintext(payload),
+            MessagePayload::Handshake(payload) => match payload.payload {
+                HandshakePayload::KeyUpdate(key_update) => {
+                    self.handle_key_update(cx.common, &key_update)?
+                }
+                _ => {
+                    return Err(inappropriate_handshake_message(
+                        &payload,
+                        &[HandshakeType::KeyUpdate],
+                    ));
+                }
+            },
+            _ => {
+                return Err(inappropriate_message(
+                    &m,
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                ));
+            }
         }
 
         Ok(self)

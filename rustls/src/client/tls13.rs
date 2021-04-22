@@ -1,4 +1,4 @@
-use crate::check::check_message;
+use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -1135,30 +1135,31 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(
-        mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        mut m: Message,
-    ) -> hs::NextStateOrError {
-        if m.is_content_type(ContentType::ApplicationData) {
-            cx.common
-                .take_received_plaintext(m.take_app_data_payload().unwrap());
-        } else if let Ok(ref new_ticket) = require_handshake_msg!(
-            m,
-            HandshakeType::NewSessionTicket,
-            HandshakePayload::NewSessionTicketTLS13
-        ) {
-            self.handle_new_ticket_tls13(cx, new_ticket)?;
-        } else if let Ok(ref key_update) =
-            require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
-        {
-            self.handle_key_update(cx.common, key_update)?;
-        } else {
-            check_message(
-                &m,
-                &[ContentType::ApplicationData, ContentType::Handshake],
-                &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-            )?;
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => cx
+                .common
+                .take_received_plaintext(payload),
+            MessagePayload::Handshake(payload) => match payload.payload {
+                HandshakePayload::NewSessionTicketTLS13(new_ticket) => {
+                    self.handle_new_ticket_tls13(cx, &new_ticket)?
+                }
+                HandshakePayload::KeyUpdate(key_update) => {
+                    self.handle_key_update(cx.common, &key_update)?
+                }
+                _ => {
+                    return Err(inappropriate_handshake_message(
+                        &payload,
+                        &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
+                    ));
+                }
+            },
+            _ => {
+                return Err(inappropriate_message(
+                    &m,
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                ));
+            }
         }
 
         Ok(self)
