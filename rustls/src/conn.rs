@@ -1014,12 +1014,12 @@ impl ConnectionCommon {
         if !must_encrypt {
             let mut to_send = VecDeque::new();
             self.message_fragmenter
-                .fragment(m.into_opaque(), &mut to_send);
+                .fragment(m.into(), &mut to_send);
             for mm in to_send {
                 self.queue_tls_message(mm);
             }
         } else {
-            self.send_msg_encrypt(m.into_opaque());
+            self.send_msg_encrypt(m.into());
         }
     }
 

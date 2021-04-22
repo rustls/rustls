@@ -3177,6 +3177,7 @@ mod test_quic {
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
+        use rustls::internal::msgs::message::OpaqueMessage;
 
         let rng = ring::rand::SystemRandom::new();
         let mut random = [0; 32];
@@ -3213,7 +3214,7 @@ mod test_quic {
         };
 
         let mut buf = Vec::new();
-        client_hello.into_opaque().encode(&mut buf);
+        OpaqueMessage::from(client_hello).encode(&mut buf);
         server
             .read_tls(&mut buf.as_slice())
             .unwrap();
@@ -3240,6 +3241,7 @@ mod test_quic {
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
+        use rustls::internal::msgs::message::OpaqueMessage;
 
         let rng = ring::rand::SystemRandom::new();
         let mut random = [0; 32];
@@ -3282,7 +3284,7 @@ mod test_quic {
         };
 
         let mut buf = Vec::new();
-        client_hello.into_opaque().encode(&mut buf);
+        OpaqueMessage::from(client_hello).encode(&mut buf);
         server
             .read_tls(&mut buf.as_slice())
             .unwrap();

@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
 
     let frg = fragmenter::MessageFragmenter::new(5);
     let mut out = VecDeque::new();
-    frg.fragment(msg.into_opaque(), &mut out);
+    frg.fragment(message::OpaqueMessage::from(msg), &mut out);
 
     for msg in out {
         message::Message::try_from(msg).ok();
