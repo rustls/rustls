@@ -383,7 +383,6 @@ mod client_hello {
         }
 
         let sh = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
@@ -466,7 +465,6 @@ mod client_hello {
             return;
         }
         let m = Message {
-            typ: ContentType::ChangeCipherSpec,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
@@ -494,7 +492,6 @@ mod client_hello {
             ));
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::HelloRetryRequest,
@@ -530,7 +527,6 @@ mod client_hello {
         )?;
 
         let ee = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::EncryptedExtensions,
@@ -581,7 +577,6 @@ mod client_hello {
         }
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateRequest,
@@ -632,7 +627,6 @@ mod client_hello {
 
         let cert_body = CertificatePayloadTLS13::new(cert_entries);
         let c = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
@@ -663,7 +657,6 @@ mod client_hello {
         let cv = DigitallySignedStruct::new(scheme, sig);
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateVerify,
@@ -689,7 +682,6 @@ mod client_hello {
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Finished,
@@ -949,7 +941,6 @@ impl ExpectFinished {
             }
         }
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::NewSessionTicket,

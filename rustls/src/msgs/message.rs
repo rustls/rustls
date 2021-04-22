@@ -51,6 +51,15 @@ impl MessagePayload {
             .filter(|_| !r.any_left())
             .ok_or(Error::CorruptMessagePayload(typ))
     }
+
+    pub fn content_type(&self) -> ContentType {
+        match self {
+            MessagePayload::Alert(_) => ContentType::Alert,
+            MessagePayload::Handshake(_) => ContentType::Handshake,
+            MessagePayload::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
+            MessagePayload::ApplicationData(_) => ContentType::ApplicationData,
+        }
+    }
 }
 
 /// A TLS frame, named TLSPlaintext in the standard.
@@ -138,6 +147,7 @@ impl OpaqueMessage {
 
 impl From<Message> for OpaqueMessage {
     fn from(msg: Message) -> OpaqueMessage {
+        let typ = msg.payload.content_type();
         let payload = match msg.payload {
             MessagePayload::ApplicationData(payload) => payload,
             _ => {
@@ -148,7 +158,7 @@ impl From<Message> for OpaqueMessage {
         };
 
         OpaqueMessage {
-            typ: msg.typ,
+            typ,
             version: msg.version,
             payload,
         }
@@ -158,14 +168,17 @@ impl From<Message> for OpaqueMessage {
 /// A message with decoded payload
 #[derive(Debug)]
 pub struct Message {
-    pub typ: ContentType,
     pub version: ProtocolVersion,
     pub payload: MessagePayload,
 }
 
 impl Message {
+    pub fn content_type(&self) -> ContentType {
+        self.payload.content_type()
+    }
+
     pub fn is_content_type(&self, typ: ContentType) -> bool {
-        self.typ == typ
+        self.payload.content_type() == typ
     }
 
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
@@ -187,7 +200,6 @@ impl Message {
 
     pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message {
         Message {
-            typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
                 level,
@@ -198,7 +210,6 @@ impl Message {
 
     pub fn build_key_update_notify() -> Message {
         Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
@@ -210,7 +221,6 @@ impl TryFrom<OpaqueMessage> for Message {
 
     fn try_from(opaque: OpaqueMessage) -> Result<Self, Self::Error> {
         Ok(Message {
-            typ: opaque.typ,
             version: opaque.version,
             payload: MessagePayload::new(opaque.typ, opaque.version, opaque.payload)?,
         })

@@ -369,7 +369,6 @@ pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut ConnectionComm
     }
 
     let m = Message {
-        typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
@@ -810,7 +809,6 @@ fn emit_certificate_tls13(
     }
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
@@ -841,7 +839,6 @@ fn emit_certverify_tls13(
     let dss = DigitallySignedStruct::new(scheme, sig);
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
@@ -864,7 +861,6 @@ fn emit_finished_tls13(
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
@@ -882,7 +878,6 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Con
     }
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::EndOfEarlyData,
