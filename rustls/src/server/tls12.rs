@@ -133,7 +133,12 @@ mod client_hello {
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
                 .filter(|resumedata| {
-                    hs::can_resume(self.suite.scs(), &conn.sni, self.using_ems, resumedata)
+                    hs::can_resume(
+                        self.suite.supported_suite(),
+                        &conn.sni,
+                        self.using_ems,
+                        resumedata,
+                    )
                 });
 
             if let Some(data) = resume_data {
@@ -306,7 +311,7 @@ mod client_hello {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
             conn,
-            suite.scs(),
+            suite.supported_suite(),
             ocsp_response,
             sct_list,
             hello,
@@ -324,7 +329,7 @@ mod client_hello {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
                     session_id,
-                    cipher_suite: suite.scs().suite,
+                    cipher_suite: suite.supported_suite().suite,
                     compression_method: Compression::Null,
                     extensions: ep.exts,
                 }),
@@ -715,7 +720,7 @@ fn get_server_connion_value_tls12(
     let mut v = persist::ServerSessionValue::new(
         conn.get_sni(),
         version,
-        secrets.suite().scs().suite,
+        secrets.suite().supported_suite().suite,
         secret,
         &conn.client_cert_chain,
         conn.common.alpn_protocol.clone(),

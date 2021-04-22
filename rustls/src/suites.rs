@@ -80,7 +80,7 @@ impl TryFrom<&'static SupportedCipherSuite> for Tls12CipherSuite {
 
 impl Tls12CipherSuite {
     #[inline]
-    pub fn scs(&self) -> &'static SupportedCipherSuite {
+    pub fn supported_suite(&self) -> &'static SupportedCipherSuite {
         self.scs
     }
 

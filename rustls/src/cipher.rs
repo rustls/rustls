@@ -116,7 +116,7 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     let key_block = secrets.make_key_block();
 
     let suite = secrets.suite();
-    let scs = suite.scs();
+    let scs = suite.supported_suite();
 
     let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
     let (server_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);

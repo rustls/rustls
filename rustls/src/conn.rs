@@ -413,7 +413,7 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
         prf::prf(
             &mut ret.master_secret,
-            suite.scs().hmac_algorithm(),
+            suite.supported_suite().hmac_algorithm(),
             pms,
             b"master secret",
             &randoms,
@@ -435,7 +435,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut ret.master_secret,
-            suite.scs().hmac_algorithm(),
+            suite.supported_suite().hmac_algorithm(),
             pms,
             b"extended master secret",
             hs_hash.as_ref(),
@@ -459,7 +459,7 @@ impl ConnectionSecrets {
     }
 
     pub fn make_key_block(&self) -> Vec<u8> {
-        let scs = self.suite.scs();
+        let scs = self.suite.supported_suite();
         let len = (scs.aead_algorithm.key_len() + self.suite.tls12().fixed_iv_len) * 2
             + self.suite.tls12().explicit_nonce_len;
 
@@ -471,7 +471,9 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.suite.scs().hmac_algorithm(),
+            self.suite
+                .supported_suite()
+                .hmac_algorithm(),
             &self.master_secret,
             b"key expansion",
             &randoms,
@@ -496,7 +498,9 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut out,
-            self.suite.scs().hmac_algorithm(),
+            self.suite
+                .supported_suite()
+                .hmac_algorithm(),
             &self.master_secret,
             label,
             handshake_hash.as_ref(),
@@ -524,7 +528,9 @@ impl ConnectionSecrets {
 
         prf::prf(
             output,
-            self.suite.scs().hmac_algorithm(),
+            self.suite
+                .supported_suite()
+                .hmac_algorithm(),
             &self.master_secret,
             label,
             &randoms,

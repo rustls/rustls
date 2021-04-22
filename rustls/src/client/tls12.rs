@@ -576,7 +576,7 @@ impl hs::State for ExpectServerDone {
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
             if !suite
-                .scs()
+                .supported_suite()
                 .usable_for_sigalg(sig.scheme.sign())
             {
                 let error_message = format!(
@@ -798,7 +798,7 @@ fn save_session(
     let master_secret = secrets.get_master_secret();
     let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
         ProtocolVersion::TLSv1_2,
-        secrets.suite().scs(),
+        secrets.suite().supported_suite(),
         &session_id,
         ticket,
         master_secret,
