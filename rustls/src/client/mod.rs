@@ -428,7 +428,7 @@ impl ClientConnection {
         config: &Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        Self::new_inner(config, hostname, Vec::new(), Protocol::Tls13)
+        Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
     }
 
     fn new_inner(

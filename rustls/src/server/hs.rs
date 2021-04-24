@@ -27,7 +27,7 @@ pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
 pub(super) trait State: Send + Sync {
-    fn handle(self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -373,7 +373,7 @@ impl State for ExpectClientHello {
             ));
         } else if cx.common.is_quic() {
             return Err(bad_version(
-                conn,
+                &mut cx.common,
                 "Expecting QUIC connection, but client does not support TLSv1_3",
             ));
         } else {
