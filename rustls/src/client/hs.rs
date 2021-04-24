@@ -30,6 +30,8 @@ use crate::SupportedCipherSuite;
 use crate::client::common::ClientHelloDetails;
 use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData};
 
+use std::sync::Arc;
+
 pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
@@ -52,20 +54,14 @@ pub(super) trait State: Send + Sync {
 
 impl crate::conn::HandleState for Box<dyn State> {
     type Data = ClientConnectionData;
-    type Config = ClientConfig;
 
     fn handle(
         self,
         message: Message,
         data: &mut Self::Data,
         common: &mut ConnectionCommon,
-        config: &Self::Config,
     ) -> Result<Self, Error> {
-        let mut cx = ClientContext {
-            common,
-            data,
-            config,
-        };
+        let mut cx = ClientContext { common, data };
         self.handle(&mut cx, message)
     }
 }
@@ -73,18 +69,17 @@ impl crate::conn::HandleState for Box<dyn State> {
 pub(super) struct ClientContext<'a> {
     pub(super) common: &'a mut ConnectionCommon,
     pub(super) data: &'a mut ClientConnectionData,
-    pub(super) config: &'a ClientConfig,
 }
 
 fn find_session(
-    cx: &mut ClientContext<'_>,
     dns_name: webpki::DnsNameRef,
+    config: &ClientConfig,
+    #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
-    let value = cx
-        .config
+    let value = config
         .session_storage
         .get(&key_buf)
         .or_else(|| {
@@ -95,7 +90,7 @@ fn find_session(
     let mut reader = Reader::init(&value[..]);
     let result = persist::ClientSessionValue::read(&mut reader).and_then(|csv| {
         let time = TimeBase::now().ok()?;
-        csv.resolve_cipher_suite(&cx.config.cipher_suites, time)
+        csv.resolve_cipher_suite(&config.cipher_suites, time)
     });
     if let Some(result) = result {
         if result.has_expired() {
@@ -118,27 +113,29 @@ fn find_session(
 pub(super) fn start_handshake(
     dns_name: webpki::DnsName,
     extra_exts: Vec<ClientExtension>,
+    config: &Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
     let mut transcript = HandshakeHash::new();
-
-    if cx
-        .config
+    if config
         .client_auth_cert_resolver
         .has_certs()
     {
         transcript.set_client_auth_enabled();
     }
 
-    let support_tls13 = cx
-        .config
-        .supports_version(ProtocolVersion::TLSv1_3);
+    let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut session_id: Option<SessionID> = None;
-    let mut resuming_session = find_session(cx, dns_name.as_ref());
+    let mut resuming_session = find_session(
+        dns_name.as_ref(),
+        config,
+        #[cfg(feature = "quic")]
+        cx,
+    );
 
     let key_share = if support_tls13 {
-        Some(tls13::initial_key_share(cx.config, dns_name.as_ref())?)
+        Some(tls13::initial_key_share(config, dns_name.as_ref())?)
     } else {
         None
     };
@@ -168,8 +165,9 @@ pub(super) fn start_handshake(
     let randoms = ConnectionRandoms::for_client()?;
     let hello_details = ClientHelloDetails::new();
     let sent_tls13_fake_ccs = false;
-    let may_send_sct_list = cx.config.verifier.request_scts();
+    let may_send_sct_list = config.verifier.request_scts();
     Ok(emit_client_hello_for_retry(
+        config.clone(),
         cx,
         resuming_session,
         randoms,
@@ -188,6 +186,7 @@ pub(super) fn start_handshake(
 }
 
 struct ExpectServerHello {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
@@ -207,6 +206,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 }
 
 fn emit_client_hello_for_retry(
+    config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     randoms: ConnectionRandoms,
@@ -229,13 +229,8 @@ fn emit_client_hello_for_retry(
         (Vec::new(), ProtocolVersion::Unknown(0))
     };
 
-    let support_tls12 = cx
-        .config
-        .supports_version(ProtocolVersion::TLSv1_2)
-        && !cx.common.is_quic();
-    let support_tls13 = cx
-        .config
-        .supports_version(ProtocolVersion::TLSv1_3);
+    let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
+    let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut supported_versions = Vec::new();
     if support_tls13 {
@@ -250,21 +245,21 @@ fn emit_client_hello_for_retry(
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
-    if cx.config.enable_sni {
+    if config.enable_sni {
         exts.push(ClientExtension::make_sni(dns_name.as_ref()));
     }
     exts.push(ClientExtension::ECPointFormats(
         ECPointFormatList::supported(),
     ));
     exts.push(ClientExtension::NamedGroups(
-        cx.config
+        config
             .kx_groups
             .iter()
             .map(|skxg| skxg.name)
             .collect(),
     ));
     exts.push(ClientExtension::SignatureAlgorithms(
-        cx.config
+        config
             .verifier
             .supported_verify_schemes(),
     ));
@@ -287,16 +282,16 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
-    if support_tls13 && cx.config.enable_tickets {
+    if support_tls13 && config.enable_tickets {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PSKKeyExchangeMode::PSK_DHE_KE];
         exts.push(ClientExtension::PresharedKeyModes(psk_modes));
     }
 
-    if !cx.config.alpn_protocols.is_empty() {
+    if !config.alpn_protocols.is_empty() {
         exts.push(ClientExtension::Protocols(ProtocolNameList::from_slices(
-            &cx.config
+            &config
                 .alpn_protocols
                 .iter()
                 .map(|proto| &proto[..])
@@ -308,7 +303,7 @@ fn emit_client_hello_for_retry(
     exts.extend(extra_exts.iter().cloned());
 
     let fill_in_binder = if support_tls13
-        && cx.config.enable_tickets
+        && config.enable_tickets
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
     {
@@ -319,10 +314,17 @@ fn emit_client_hello_for_retry(
                 None => true,
             })
             .map(|resuming| {
-                tls13::prepare_resumption(cx, ticket, resuming, &mut exts, retryreq.is_some());
+                tls13::prepare_resumption(
+                    &config,
+                    cx,
+                    ticket,
+                    resuming,
+                    &mut exts,
+                    retryreq.is_some(),
+                );
                 resuming
             })
-    } else if cx.config.enable_tickets {
+    } else if config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
             exts.push(ClientExtension::SessionTicketRequest);
@@ -341,8 +343,7 @@ fn emit_client_hello_for_retry(
         .collect();
 
     let session_id = session_id.unwrap_or_else(SessionID::empty);
-    let mut cipher_suites: Vec<_> = cx
-        .config
+    let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
         .map(|cs| cs.suite)
@@ -399,6 +400,7 @@ fn emit_client_hello_for_retry(
         }
 
         tls13::derive_early_traffic_secret(
+            &*config.key_log,
             cx,
             resuming,
             &schedule,
@@ -410,6 +412,7 @@ fn emit_client_hello_for_retry(
     });
 
     let next = ExpectServerHello {
+        config,
         resuming_session,
         dns_name,
         randoms,
@@ -432,13 +435,13 @@ fn emit_client_hello_for_retry(
 
 pub(super) fn process_alpn_protocol(
     cx: &mut ClientContext<'_>,
+    config: &ClientConfig,
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
     cx.common.alpn_protocol = proto.map(ToOwned::to_owned);
 
     if let Some(alpn_protocol) = &cx.common.alpn_protocol {
-        if !cx
-            .config
+        if !config
             .alpn_protocols
             .contains(alpn_protocol)
         {
@@ -469,7 +472,7 @@ impl State for ExpectServerHello {
         trace!("We got ServerHello {:#?}", server_hello);
 
         use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
-        let tls13_supported = cx.config.supports_version(TLSv1_3);
+        let tls13_supported = self.config.supports_version(TLSv1_3);
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
@@ -481,7 +484,7 @@ impl State for ExpectServerHello {
 
         let version = match server_version {
             TLSv1_3 if tls13_supported => TLSv1_3,
-            TLSv1_2 if cx.config.supports_version(TLSv1_2) => {
+            TLSv1_2 if self.config.supports_version(TLSv1_2) => {
                 if cx.data.early_data.is_enabled() && cx.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
@@ -540,7 +543,7 @@ impl State for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx, server_hello.get_alpn_protocol())?;
+            process_alpn_protocol(cx, &self.config, server_hello.get_alpn_protocol())?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
@@ -555,7 +558,7 @@ impl State for ExpectServerHello {
             }
         }
 
-        let suite = cx
+        let suite = self
             .config
             .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
@@ -586,6 +589,7 @@ impl State for ExpectServerHello {
         // handshake_traffic_secret.
         if cx.common.is_tls13() {
             tls13::handle_server_hello(
+                self.config,
                 cx,
                 server_hello,
                 self.resuming_session,
@@ -601,6 +605,7 @@ impl State for ExpectServerHello {
             )
         } else {
             tls12::CompleteServerHelloHandling {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
@@ -691,7 +696,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
-        let maybe_cs = cx
+        let maybe_cs = self
+            .next
             .config
             .find_cipher_suite(hrr.cipher_suite);
         let cs = match maybe_cs {
@@ -725,8 +731,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let group =
-                    kx::KeyExchange::choose(group, &cx.config.kx_groups).ok_or_else(|| {
+                let group = kx::KeyExchange::choose(group, &self.next.config.kx_groups)
+                    .ok_or_else(|| {
                         cx.common
                             .illegal_param("server requested hrr with bad group")
                     })?;
@@ -736,6 +742,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
 
         Ok(emit_client_hello_for_retry(
+            self.next.config,
             cx,
             self.next.resuming_session,
             self.next.randoms,

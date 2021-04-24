@@ -316,7 +316,6 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    config: Arc<ClientConfig>,
     common: ConnectionCommon,
     state: Option<hs::NextState>,
     data: ClientConnectionData,
@@ -347,7 +346,6 @@ impl ClientConnection {
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut new = ClientConnection {
-            config: config.clone(),
             common: ConnectionCommon::new(config.mtu, true),
             state: None,
             data: ClientConnectionData::new(),
@@ -357,10 +355,14 @@ impl ClientConnection {
         let mut cx = hs::ClientContext {
             common: &mut new.common,
             data: &mut new.data,
-            config: &new.config,
         };
 
-        new.state = Some(hs::start_handshake(hostname.into(), extra_exts, &mut cx)?);
+        new.state = Some(hs::start_handshake(
+            hostname.into(),
+            extra_exts,
+            config,
+            &mut cx,
+        )?);
         Ok(new)
     }
 
@@ -432,7 +434,7 @@ impl Connection for ClientConnection {
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.common
-            .process_new_packets(&mut self.state, &mut self.data, &self.config)
+            .process_new_packets(&mut self.state, &mut self.data)
     }
 
     fn wants_read(&self) -> bool {
@@ -558,7 +560,7 @@ impl quic::QuicExt for ClientConnection {
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
         self.common
-            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
+            .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {

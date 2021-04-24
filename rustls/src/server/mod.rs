@@ -219,7 +219,6 @@ impl ServerConfig {
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
-    config: Arc<ServerConfig>,
     common: ConnectionCommon,
     state: Option<Box<dyn hs::State>>,
     data: ServerConnectionData,
@@ -234,9 +233,11 @@ impl ServerConnection {
 
     fn from_config(config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
         ServerConnection {
-            config: config.clone(),
             common: ConnectionCommon::new(config.mtu, false),
-            state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
+            state: Some(Box::new(hs::ExpectClientHello::new(
+                config.clone(),
+                extra_exts,
+            ))),
             data: ServerConnectionData::default(),
         }
     }
@@ -323,7 +324,7 @@ impl Connection for ServerConnection {
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.common
-            .process_new_packets(&mut self.state, &mut self.data, &self.config)
+            .process_new_packets(&mut self.state, &mut self.data)
     }
 
     fn wants_read(&self) -> bool {
@@ -453,7 +454,7 @@ impl quic::QuicExt for ServerConnection {
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
         self.common
-            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
+            .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {

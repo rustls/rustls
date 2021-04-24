@@ -16,13 +16,13 @@ use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
-use crate::verify;
 use crate::{kx, tls12};
+use crate::{verify, StoresClientSessions};
 
 use super::hs::ClientContext;
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
-use crate::client::hs;
+use crate::client::{hs, ClientConfig};
 
 use crate::suites::Tls12CipherSuite;
 use crate::ticketer::TimeBase;
@@ -30,6 +30,7 @@ use ring::constant_time;
 
 use std::convert::TryFrom;
 use std::mem;
+use std::sync::Arc;
 
 pub(super) use server_hello::CompleteServerHelloHandling;
 
@@ -41,6 +42,7 @@ mod server_hello {
     use super::*;
 
     pub(in crate::client) struct CompleteServerHelloHandling {
+        pub config: Arc<ClientConfig>,
         pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
         pub dns_name: webpki::DnsName,
         pub randoms: ConnectionRandoms,
@@ -138,7 +140,7 @@ mod server_hello {
                         suite,
                         &resuming.master_secret.0,
                     );
-                    cx.config.key_log.log(
+                    self.config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,
                         &secrets.master_secret,
@@ -154,6 +156,7 @@ mod server_hello {
 
                     return if must_issue_new_ticket {
                         Ok(Box::new(ExpectNewTicket {
+                            config: self.config,
                             secrets,
                             resuming_session: self.resuming_session,
                             session_id: self.session_id,
@@ -166,6 +169,7 @@ mod server_hello {
                         }))
                     } else {
                         Ok(Box::new(ExpectCcs {
+                            config: self.config,
                             secrets,
                             resuming_session: self.resuming_session,
                             session_id: self.session_id,
@@ -182,6 +186,7 @@ mod server_hello {
             }
 
             Ok(Box::new(ExpectCertificate {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -198,6 +203,7 @@ mod server_hello {
 }
 
 struct ExpectCertificate {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -225,6 +231,7 @@ impl hs::State for ExpectCertificate {
 
         if self.may_send_cert_status {
             Ok(Box::new(ExpectCertificateStatusOrServerKx {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -241,6 +248,7 @@ impl hs::State for ExpectCertificate {
                 ServerCertDetails::new(server_cert_chain, vec![], self.server_cert_sct_list);
 
             Ok(Box::new(ExpectServerKx {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -256,6 +264,7 @@ impl hs::State for ExpectCertificate {
 }
 
 struct ExpectCertificateStatus {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -294,6 +303,7 @@ impl hs::State for ExpectCertificateStatus {
         );
 
         Ok(Box::new(ExpectServerKx {
+            config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             dns_name: self.dns_name,
@@ -308,6 +318,7 @@ impl hs::State for ExpectCertificateStatus {
 }
 
 struct ExpectCertificateStatusOrServerKx {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -333,6 +344,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
 
         if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
             Box::new(ExpectServerKx {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -350,6 +362,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
             .handle(cx, m)
         } else {
             Box::new(ExpectCertificateStatus {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -367,6 +380,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
 }
 
 struct ExpectServerKx {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -408,6 +422,7 @@ impl hs::State for ExpectServerKx {
         }
 
         Ok(Box::new(ExpectServerDoneOrCertReq {
+            config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             dns_name: self.dns_name,
@@ -527,6 +542,7 @@ fn emit_finished(
 // Existence of the CertificateRequest tells us the server is asking for
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -540,7 +556,11 @@ struct ExpectCertificateRequest {
 }
 
 impl hs::State for ExpectCertificateRequest {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        m: Message,
+    ) -> hs::NextStateOrError {
         let certreq = require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -562,7 +582,7 @@ impl hs::State for ExpectCertificateRequest {
             .iter()
             .map(|p| p.0.as_slice())
             .collect::<Vec<&[u8]>>();
-        let maybe_certkey = cx
+        let maybe_certkey = self
             .config
             .client_auth_cert_resolver
             .resolve(&canames, &certreq.sigschemes);
@@ -582,6 +602,7 @@ impl hs::State for ExpectCertificateRequest {
         }
 
         Ok(Box::new(ExpectServerDone {
+            config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             dns_name: self.dns_name,
@@ -598,6 +619,7 @@ impl hs::State for ExpectCertificateRequest {
 }
 
 struct ExpectServerDoneOrCertReq {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -620,6 +642,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
         .is_ok()
         {
             Box::new(ExpectCertificateRequest {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -636,6 +659,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
             self.transcript.abandon_client_auth();
 
             Box::new(ExpectServerDone {
+                config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 dns_name: self.dns_name,
@@ -654,6 +678,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
 }
 
 struct ExpectServerDone {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -703,7 +728,7 @@ impl hs::State for ExpectServerDone {
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let cert_verified = cx
+        let cert_verified = st
             .config
             .verifier
             .verify_server_cert(
@@ -739,7 +764,7 @@ impl hs::State for ExpectServerDone {
                 return Err(Error::PeerMisbehavedError(error_message));
             }
 
-            cx.config
+            st.config
                 .verifier
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
                 .map_err(|err| hs::send_cert_error_alert(cx.common, err))?
@@ -759,7 +784,7 @@ impl hs::State for ExpectServerDone {
         let ecdh_params =
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let group =
-            kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &cx.config.kx_groups)
+            kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &st.config.kx_groups)
                 .ok_or_else(|| {
                     Error::PeerMisbehavedError("peer chose an unsupported group".to_string())
                 })?;
@@ -785,7 +810,7 @@ impl hs::State for ExpectServerDone {
         } else {
             ConnectionSecrets::new(&st.randoms, suite, &kxd.shared_secret)
         };
-        cx.config.key_log.log(
+        st.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
             &secrets.master_secret,
@@ -801,6 +826,7 @@ impl hs::State for ExpectServerDone {
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
+                config: st.config,
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
@@ -813,6 +839,7 @@ impl hs::State for ExpectServerDone {
             }))
         } else {
             Ok(Box::new(ExpectCcs {
+                config: st.config,
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
@@ -830,6 +857,7 @@ impl hs::State for ExpectServerDone {
 
 // -- Waiting for their CCS --
 struct ExpectCcs {
+    config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
@@ -855,6 +883,7 @@ impl hs::State for ExpectCcs {
             .start_decrypting();
 
         Ok(Box::new(ExpectFinished {
+            config: self.config,
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
@@ -870,6 +899,7 @@ impl hs::State for ExpectCcs {
 }
 
 struct ExpectNewTicket {
+    config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
@@ -896,6 +926,7 @@ impl hs::State for ExpectNewTicket {
         )?;
 
         Ok(Box::new(ExpectCcs {
+            config: self.config,
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
@@ -919,6 +950,7 @@ fn save_session(
     using_ems: bool,
     recvd_ticket: &mut ReceivedTicketDetails,
     cx: &mut ClientContext<'_>,
+    session_storage: &dyn StoresClientSessions,
 ) {
     // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
     // original ticket again.
@@ -960,10 +992,7 @@ fn save_session(
         value.set_extended_ms_used();
     }
 
-    let worked = cx
-        .config
-        .session_storage
-        .put(key.get_encoding(), value.get_encoding());
+    let worked = session_storage.put(key.get_encoding(), value.get_encoding());
 
     if worked {
         debug!("Session saved");
@@ -973,6 +1002,7 @@ fn save_session(
 }
 
 struct ExpectFinished {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
     dns_name: webpki::DnsName,
@@ -1019,6 +1049,7 @@ impl hs::State for ExpectFinished {
             st.using_ems,
             &mut st.ticket,
             cx,
+            &*st.config.session_storage,
         );
 
         if st.resuming {
