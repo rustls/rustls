@@ -2297,15 +2297,16 @@ impl HandshakeMessagePayload {
         let mut ret = self.get_encoding();
 
         let binder_len = match self.payload {
-            HandshakePayload::ClientHello(ref ch) => {
-                let offer = ch.get_psk().unwrap();
-
-                let mut binders_encoding = Vec::new();
-                offer
-                    .binders
-                    .encode(&mut binders_encoding);
-                binders_encoding.len()
-            }
+            HandshakePayload::ClientHello(ref ch) => match ch.extensions.last() {
+                Some(ClientExtension::PresharedKey(ref offer)) => {
+                    let mut binders_encoding = Vec::new();
+                    offer
+                        .binders
+                        .encode(&mut binders_encoding);
+                    binders_encoding.len()
+                }
+                _ => 0,
+            },
             _ => 0,
         };
 
