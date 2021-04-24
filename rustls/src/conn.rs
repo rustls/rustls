@@ -335,13 +335,6 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum Protocol {
-    Tcp,
-    #[cfg(feature = "quic")]
-    Quic,
-}
-
 #[derive(Clone, Debug)]
 pub struct ConnectionRandoms {
     pub we_are_client: bool,
@@ -566,10 +559,8 @@ pub struct ConnectionCommon {
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub sendable_tls: ChunkVecBuffer,
-    /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    pub protocol: Protocol,
     #[cfg(feature = "quic")]
-    pub(crate) quic: Quic,
+    pub(crate) quic: Option<Box<Quic>>,
 }
 
 impl ConnectionCommon {
@@ -592,9 +583,8 @@ impl ConnectionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
-            quic: Quic::new(),
+            quic: None,
         }
     }
 
@@ -979,23 +969,20 @@ impl ConnectionCommon {
     /// Send a raw TLS message, fragmenting it if needed.
     pub fn send_msg(&mut self, m: Message, must_encrypt: bool) {
         #[cfg(feature = "quic")]
-        {
-            if self.is_quic() {
-                if let MessagePayload::Alert(alert) = m.payload {
-                    self.quic.alert = Some(alert.description);
-                } else {
-                    debug_assert!(
-                        matches!(m.payload, MessagePayload::Handshake(_)),
-                        "QUIC uses TLS for the cryptographic handshake only"
-                    );
-                    let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes);
-                    self.quic
-                        .hs_queue
-                        .push_back((must_encrypt, bytes));
-                }
-                return;
+        if let Some(quic) = &mut self.quic {
+            if let MessagePayload::Alert(alert) = m.payload {
+                quic.alert = Some(alert.description);
+            } else {
+                debug_assert!(
+                    matches!(m.payload, MessagePayload::Handshake(_)),
+                    "QUIC uses TLS for the cryptographic handshake only"
+                );
+                let mut bytes = Vec::new();
+                m.payload.encode(&mut bytes);
+                quic.hs_queue
+                    .push_back((must_encrypt, bytes));
             }
+            return;
         }
         if !must_encrypt {
             let mut to_send = VecDeque::new();
@@ -1068,7 +1055,7 @@ impl ConnectionCommon {
     pub fn is_quic(&self) -> bool {
         #[cfg(feature = "quic")]
         {
-            self.protocol == Protocol::Quic
+            self.quic.is_some()
         }
         #[cfg(not(feature = "quic"))]
         false

@@ -97,11 +97,9 @@ fn find_session(
             None
         } else {
             #[cfg(feature = "quic")]
-            {
-                if cx.common.is_quic() {
-                    let params = PayloadU16::read(&mut reader)?;
-                    cx.common.quic.params = Some(params.0);
-                }
+            if let Some(quic) = &mut cx.common.quic {
+                let params = PayloadU16::read(&mut reader)?;
+                quic.params = Some(params.0);
             }
             Some(result)
         }

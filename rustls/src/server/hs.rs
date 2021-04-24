@@ -143,42 +143,38 @@ impl ExtensionProcessing {
             } else {
                 // For compatibility, strict ALPN validation is not employed unless targeting QUIC
                 #[cfg(feature = "quic")]
-                {
-                    if cx.common.is_quic() && !our_protocols.is_empty() {
-                        cx.common
-                            .send_fatal_alert(AlertDescription::NoApplicationProtocol);
-                        return Err(Error::NoApplicationProtocol);
-                    }
+                if cx.common.is_quic() && !our_protocols.is_empty() {
+                    cx.common
+                        .send_fatal_alert(AlertDescription::NoApplicationProtocol);
+                    return Err(Error::NoApplicationProtocol);
                 }
             }
         }
 
         #[cfg(feature = "quic")]
-        {
-            if cx.common.is_quic() {
-                match hello.get_quic_params_extension() {
-                    Some(params) => cx.common.quic.params = Some(params),
-                    None => {
-                        return Err(cx
-                            .common
-                            .missing_extension("QUIC transport parameters not found"));
-                    }
+        if let Some(quic) = &mut cx.common.quic {
+            match hello.get_quic_params_extension() {
+                Some(params) => quic.params = Some(params),
+                None => {
+                    return Err(cx
+                        .common
+                        .missing_extension("QUIC transport parameters not found"));
                 }
+            }
 
-                if let Some(resume) = resumedata {
-                    if config.max_early_data_size > 0
-                        && hello.early_data_extension_offered()
-                        && resume.version == cx.common.negotiated_version.unwrap()
-                        && resume.cipher_suite == suite.suite
-                        && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref()
-                        && !cx.data.reject_early_data
-                    {
-                        self.exts
-                            .push(ServerExtension::EarlyData);
-                    } else {
-                        // Clobber value set in tls13::emit_server_hello
-                        cx.common.quic.early_secret = None;
-                    }
+            if let Some(resume) = resumedata {
+                if config.max_early_data_size > 0
+                    && hello.early_data_extension_offered()
+                    && resume.version == cx.common.negotiated_version.unwrap()
+                    && resume.cipher_suite == suite.suite
+                    && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref()
+                    && !cx.data.reject_early_data
+                {
+                    self.exts
+                        .push(ServerExtension::EarlyData);
+                } else {
+                    // Clobber value set in tls13::emit_server_hello
+                    quic.early_secret = None;
                 }
             }
         }

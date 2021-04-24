@@ -1,3 +1,5 @@
+#[cfg(feature = "quic")]
+use crate::conn::Quic;
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
 use crate::key;
@@ -8,11 +10,11 @@ use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::ServerExtension;
+#[cfg(feature = "quic")]
+use crate::quic;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
-#[cfg(feature = "quic")]
-use crate::{conn::Protocol, quic};
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -436,34 +438,52 @@ impl quic::QuicExt for ServerConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
+            .as_ref()?
             .params
-            .as_ref()
-            .map(|v| v.as_ref())
+            .as_deref()
     }
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.common.get_suite()?,
-            self.common.quic.early_secret.as_ref()?,
+            self.common.suite?,
+            self.common
+                .quic
+                .as_ref()?
+                .early_secret
+                .as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        quic::read_hs(&mut self.common, plaintext)?;
+        let quic = match &mut self.common.quic {
+            Some(quic) => quic,
+            None => return Ok(()),
+        };
+
+        quic::read_hs(plaintext, &mut self.common.handshake_joiner, quic)?;
         self.common
             .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
-        quic::write_hs(&mut self.common, buf)
+        quic::write_hs(
+            buf,
+            self.common.quic.as_mut()?,
+            self.common.is_client,
+            &self.common.suite,
+        )
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
+        self.common.quic.as_ref()?.alert
     }
 
     fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
-        quic::next_1rtt_keys(&mut self.common)
+        quic::next_1rtt_keys(
+            self.common.quic.as_mut()?,
+            self.common.is_client,
+            self.common.suite?,
+        )
     }
 }
 
@@ -494,8 +514,9 @@ pub trait ServerQuicExt {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
         };
+
         let mut new = ServerConnection::from_config(config, vec![ext]);
-        new.common.protocol = Protocol::Quic;
+        new.common.quic = Some(Box::new(Quic::new()));
         Ok(new)
     }
 }

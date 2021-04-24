@@ -423,18 +423,15 @@ mod client_hello {
             let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
 
             #[cfg(feature = "quic")]
-            {
-                if cx.common.is_quic() {
-                    let client_early_traffic_secret = early_key_schedule
-                        .client_early_traffic_secret(
-                            &client_hello_hash,
-                            &*config.key_log,
-                            &randoms.client,
-                        );
-                    // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
-                    // before the application can see.
-                    cx.common.quic.early_secret = Some(client_early_traffic_secret);
-                }
+            if let Some(quic) = &mut cx.common.quic {
+                let client_early_traffic_secret = early_key_schedule.client_early_traffic_secret(
+                    &client_hello_hash,
+                    &*config.key_log,
+                    &randoms.client,
+                );
+                // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
+                // before the application can see.
+                quic.early_secret = Some(client_early_traffic_secret);
             }
 
             early_key_schedule.into_handshake(&kxr.shared_secret)
@@ -462,8 +459,8 @@ mod client_hello {
             .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
 
         #[cfg(feature = "quic")]
-        {
-            cx.common.quic.hs_secrets = Some(quic::Secrets {
+        if let Some(quic) = &mut cx.common.quic {
+            quic.hs_secrets = Some(quic::Secrets {
                 client: read_key,
                 server: write_key,
             });
@@ -733,8 +730,8 @@ mod client_hello {
         );
 
         #[cfg(feature = "quic")]
-        {
-            cx.common.quic.traffic_secrets = Some(quic::Secrets {
+        if let Some(quic) = &mut cx.common.quic {
+            quic.traffic_secrets = Some(quic::Secrets {
                 client: _read_key,
                 server: write_key,
             });

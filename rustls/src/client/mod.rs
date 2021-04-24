@@ -1,4 +1,6 @@
-use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer};
+#[cfg(feature = "quic")]
+use crate::conn::Quic;
+use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::KeyLog;
@@ -10,14 +12,15 @@ use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::{CertificatePayload, ClientExtension};
+use crate::msgs::handshake::CertificatePayload;
+#[cfg(feature = "quic")]
+use crate::msgs::handshake::ClientExtension;
+#[cfg(feature = "quic")]
+use crate::quic;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
-
-#[cfg(feature = "quic")]
-use crate::quic;
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -336,22 +339,7 @@ impl ClientConnection {
         config: Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
-    }
-
-    fn new_inner(
-        config: Arc<ClientConfig>,
-        hostname: webpki::DnsNameRef,
-        extra_exts: Vec<ClientExtension>,
-        proto: Protocol,
-    ) -> Result<Self, Error> {
-        let mut new = ClientConnection {
-            common: ConnectionCommon::new(config.mtu, true),
-            state: None,
-            data: ClientConnectionData::new(),
-        };
-        new.common.protocol = proto;
-
+        let mut new = Self::new_inner(config.mtu);
         let mut cx = hs::ClientContext {
             common: &mut new.common,
             data: &mut new.data,
@@ -359,11 +347,19 @@ impl ClientConnection {
 
         new.state = Some(hs::start_handshake(
             hostname.into(),
-            extra_exts,
+            vec![],
             config,
             &mut cx,
         )?);
         Ok(new)
+    }
+
+    fn new_inner(mtu: Option<usize>) -> Self {
+        ClientConnection {
+            common: ConnectionCommon::new(mtu, true),
+            state: None,
+            data: ClientConnectionData::new(),
+        }
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
@@ -545,34 +541,52 @@ impl quic::QuicExt for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
+            .as_ref()?
             .params
-            .as_ref()
-            .map(|v| v.as_ref())
+            .as_deref()
     }
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.data.resumption_ciphersuite?,
-            self.common.quic.early_secret.as_ref()?,
+            self.common
+                .quic
+                .as_ref()?
+                .early_secret
+                .as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        quic::read_hs(&mut self.common, plaintext)?;
+        let quic = match &mut self.common.quic {
+            Some(quic) => quic,
+            None => return Ok(()),
+        };
+
+        quic::read_hs(plaintext, &mut self.common.handshake_joiner, quic)?;
         self.common
             .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
-        quic::write_hs(&mut self.common, buf)
+        quic::write_hs(
+            buf,
+            self.common.quic.as_mut()?,
+            self.common.is_client,
+            &self.common.suite,
+        )
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
+        self.common.quic.as_ref()?.alert
     }
 
     fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
-        quic::next_1rtt_keys(&mut self.common)
+        quic::next_1rtt_keys(
+            self.common.quic.as_mut()?,
+            self.common.is_client,
+            self.common.suite?,
+        )
     }
 }
 
@@ -599,7 +613,21 @@ pub trait ClientQuicExt {
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
 
-        ClientConnection::new_inner(config, hostname, vec![ext], Protocol::Quic)
+        let mut new = ClientConnection::new_inner(config.mtu);
+        new.common.quic = Some(Box::new(Quic::new()));
+
+        let mut cx = hs::ClientContext {
+            common: &mut new.common,
+            data: &mut new.data,
+        };
+
+        new.state = Some(hs::start_handshake(
+            hostname.into(),
+            vec![ext],
+            config,
+            &mut cx,
+        )?);
+        Ok(new)
     }
 }
 

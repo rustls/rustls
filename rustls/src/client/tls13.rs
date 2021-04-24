@@ -176,8 +176,8 @@ pub(super) fn handle_server_hello(
         .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
 
     #[cfg(feature = "quic")]
-    {
-        cx.common.quic.hs_secrets = Some(quic::Secrets {
+    if let Some(quic) = &mut cx.common.quic {
+        quic.hs_secrets = Some(quic::Secrets {
             server: read_key,
             client: _maybe_write_key.unwrap_or_else(|| {
                 key_schedule.client_handshake_traffic_secret(
@@ -342,8 +342,8 @@ pub(super) fn derive_early_traffic_secret(
         ));
 
     #[cfg(feature = "quic")]
-    {
-        cx.common.quic.early_secret = Some(client_early_traffic_secret);
+    if let Some(quic) = &mut cx.common.quic {
+        quic.early_secret = Some(client_early_traffic_secret);
     }
 
     // Now the client can send encrypted early data
@@ -424,16 +424,14 @@ impl hs::State for ExpectEncryptedExtensions {
         hs::process_alpn_protocol(cx, &self.config, exts.get_alpn_protocol())?;
 
         #[cfg(feature = "quic")]
-        {
-            // QUIC transport parameters
-            if cx.common.is_quic() {
-                match exts.get_quic_params_extension() {
-                    Some(params) => cx.common.quic.params = Some(params),
-                    None => {
-                        return Err(cx
-                            .common
-                            .missing_extension("QUIC transport parameters not found"));
-                    }
+        // QUIC transport parameters
+        if let Some(quic) = &mut cx.common.quic {
+            match exts.get_quic_params_extension() {
+                Some(params) => quic.params = Some(params),
+                None => {
+                    return Err(cx
+                        .common
+                        .missing_extension("QUIC transport parameters not found"));
                 }
             }
         }
@@ -1009,14 +1007,12 @@ impl hs::State for ExpectFinished {
         };
 
         #[cfg(feature = "quic")]
-        {
-            if cx.common.is_quic() {
-                cx.common.quic.traffic_secrets = Some(quic::Secrets {
-                    client: write_key,
-                    server: read_key,
-                });
-                return Ok(Box::new(ExpectQuicTraffic(st)));
-            }
+        if let Some(quic) = &mut cx.common.quic {
+            quic.traffic_secrets = Some(quic::Secrets {
+                client: write_key,
+                server: read_key,
+            });
+            return Ok(Box::new(ExpectQuicTraffic(st)));
         }
 
         Ok(Box::new(st))
@@ -1079,10 +1075,13 @@ impl ExpectTraffic {
         let mut ticket = value.get_encoding();
 
         #[cfg(feature = "quic")]
+        if let Some(quic_params) = &cx
+            .common
+            .quic
+            .as_ref()
+            .and_then(|quic| quic.params.as_ref())
         {
-            if let (true, Some(ref quic_params)) = (cx.common.is_quic(), &cx.common.quic.params) {
-                PayloadU16::encode_slice(quic_params, &mut ticket);
-            }
+            PayloadU16::encode_slice(quic_params, &mut ticket);
         }
 
         let worked = self
