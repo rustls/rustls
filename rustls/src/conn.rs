@@ -980,7 +980,7 @@ impl ConnectionCommon {
     pub fn send_msg(&mut self, m: Message, must_encrypt: bool) {
         #[cfg(feature = "quic")]
         {
-            if let Protocol::Quic = self.protocol {
+            if self.is_quic() {
                 if let MessagePayload::Alert(alert) = m.payload {
                     self.quic.alert = Some(alert.description);
                 } else {

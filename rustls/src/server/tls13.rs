@@ -13,6 +13,8 @@ use crate::msgs::enums::{AlertDescription, KeyUpdateRequest};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::handshake::HandshakePayload;
+#[cfg(feature = "quic")]
+use crate::msgs::handshake::NewSessionTicketExtension;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -20,8 +22,6 @@ use crate::rand;
 use crate::server::ServerConfig;
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
-#[cfg(feature = "quic")]
-use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
 use super::hs::{self, ServerContext};
 
@@ -424,7 +424,7 @@ mod client_hello {
 
             #[cfg(feature = "quic")]
             {
-                if cx.common.protocol == Protocol::Quic {
+                if cx.common.is_quic() {
                     let client_early_traffic_secret = early_key_schedule
                         .client_early_traffic_secret(
                             &client_hello_hash,
@@ -952,7 +952,7 @@ impl ExpectFinished {
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
         #[cfg(feature = "quic")]
         {
-            if config.max_early_data_size > 0 && cx.common.protocol == Protocol::Quic {
+            if config.max_early_data_size > 0 && cx.common.is_quic() {
                 payload
                     .exts
                     .push(NewSessionTicketExtension::EarlyData(
@@ -1028,7 +1028,7 @@ impl hs::State for ExpectFinished {
 
         #[cfg(feature = "quic")]
         {
-            if cx.common.protocol == Protocol::Quic {
+            if cx.common.is_quic() {
                 return Ok(Box::new(ExpectQuicTraffic {
                     key_schedule: key_schedule_traffic,
                     _fin_verified: fin,
@@ -1061,7 +1061,7 @@ impl ExpectTraffic {
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
         {
-            if let Protocol::Quic = common.protocol {
+            if common.is_quic() {
                 common.send_fatal_alert(AlertDescription::UnexpectedMessage);
                 let msg = "KeyUpdate received in QUIC connection".to_string();
                 warn!("{}", msg);
