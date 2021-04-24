@@ -192,7 +192,9 @@ pub(super) fn start_handshake_traffic(
         .complete(&their_key_share.payload.0)
         .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
-    let mut key_schedule = if let Some(selected_psk) = server_hello.get_psk_index() {
+    let mut key_schedule = if let (Some(selected_psk), Some(early_key_schedule)) =
+        (server_hello.get_psk_index(), early_key_schedule)
+    {
         if let Some(ref resuming) = resuming_session {
             if !resuming
                 .supported_cipher_suite()
@@ -224,9 +226,7 @@ pub(super) fn start_handshake_traffic(
                 "server selected unoffered psk".to_string(),
             ));
         }
-        early_key_schedule
-            .unwrap()
-            .into_handshake(&shared.shared_secret)
+        early_key_schedule.into_handshake(&shared.shared_secret)
     } else {
         debug!("Not resuming");
         // Discard the early data key schedule.
