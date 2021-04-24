@@ -25,11 +25,11 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID}
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::sign;
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
+use crate::{sign, KeyLog};
 
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;
@@ -39,6 +39,8 @@ use crate::client::{hs, ClientConfig};
 use crate::ticketer::TimeBase;
 use ring::constant_time;
 use ring::digest::Digest;
+
+use std::sync::Arc;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -57,6 +59,7 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 ];
 
 pub(super) fn handle_server_hello(
+    config: Arc<ClientConfig>,
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
@@ -140,7 +143,7 @@ pub(super) fn handle_server_hello(
     };
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(cx.config, dns_name.as_ref(), their_key_share.group);
+    save_kx_hint(&config, dns_name.as_ref(), their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -152,7 +155,7 @@ pub(super) fn handle_server_hello(
         // Set the client encryption key for handshakes if early data is not used
         let write_key = key_schedule.client_handshake_traffic_secret(
             &hash_at_client_recvd_server_hello,
-            &*cx.config.key_log,
+            &*config.key_log,
             &randoms.client,
         );
         cx.common
@@ -165,7 +168,7 @@ pub(super) fn handle_server_hello(
 
     let read_key = key_schedule.server_handshake_traffic_secret(
         &hash_at_client_recvd_server_hello,
-        &*cx.config.key_log,
+        &*config.key_log,
         &randoms.client,
     );
     cx.common
@@ -179,7 +182,7 @@ pub(super) fn handle_server_hello(
             client: _maybe_write_key.unwrap_or_else(|| {
                 key_schedule.client_handshake_traffic_secret(
                     &hash_at_client_recvd_server_hello,
-                    &*cx.config.key_log,
+                    &*config.key_log,
                     &randoms.client,
                 )
             }),
@@ -189,6 +192,7 @@ pub(super) fn handle_server_hello(
     emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
 
     Ok(Box::new(ExpectEncryptedExtensions {
+        config,
         resuming_session,
         dns_name,
         randoms,
@@ -276,6 +280,7 @@ pub fn fill_in_psk_binder(
 }
 
 pub(super) fn prepare_resumption(
+    config: &ClientConfig,
     cx: &mut ClientContext<'_>,
     ticket: Vec<u8>,
     resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
@@ -288,7 +293,7 @@ pub(super) fn prepare_resumption(
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size;
-    if cx.config.enable_early_data && max_early_data_size > 0 && !doing_retry {
+    if config.enable_early_data && max_early_data_size > 0 && !doing_retry {
         cx.data
             .early_data
             .enable(max_early_data_size as usize);
@@ -312,6 +317,7 @@ pub(super) fn prepare_resumption(
 }
 
 pub(super) fn derive_early_traffic_secret(
+    key_log: &dyn KeyLog,
     cx: &mut ClientContext<'_>,
     resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
     early_key_schedule: &KeyScheduleEarly,
@@ -325,11 +331,8 @@ pub(super) fn derive_early_traffic_secret(
     let resuming_suite = resuming_session.supported_cipher_suite();
 
     let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
-    let client_early_traffic_secret = early_key_schedule.client_early_traffic_secret(
-        &client_hello_hash,
-        &*cx.config.key_log,
-        client_random,
-    );
+    let client_early_traffic_secret =
+        early_key_schedule.client_early_traffic_secret(&client_hello_hash, key_log, client_random);
     // Set early data encryption key
     cx.common
         .record_layer
@@ -396,6 +399,7 @@ fn validate_encrypted_extensions(
 }
 
 struct ExpectEncryptedExtensions {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
@@ -417,7 +421,7 @@ impl hs::State for ExpectEncryptedExtensions {
         self.transcript.add_message(&m);
 
         validate_encrypted_extensions(cx.common, &self.hello, &exts)?;
-        hs::process_alpn_protocol(cx, exts.get_alpn_protocol())?;
+        hs::process_alpn_protocol(cx, &self.config, exts.get_alpn_protocol())?;
 
         #[cfg(feature = "quic")]
         {
@@ -451,7 +455,7 @@ impl hs::State for ExpectEncryptedExtensions {
                     .key_schedule
                     .client_handshake_traffic_secret(
                         &self.hash_at_client_recvd_server_hello,
-                        &*cx.config.key_log,
+                        &*self.config.key_log,
                         &self.randoms.client,
                     );
                 cx.common
@@ -468,6 +472,7 @@ impl hs::State for ExpectEncryptedExtensions {
             let cert_verified = verify::ServerCertVerified::assertion();
             let sig_verified = verify::HandshakeSignatureValid::assertion();
             Ok(Box::new(ExpectFinished {
+                config: self.config,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
                 suite: self.suite,
@@ -484,6 +489,7 @@ impl hs::State for ExpectEncryptedExtensions {
                 return Err(Error::PeerMisbehavedError(msg));
             }
             Ok(Box::new(ExpectCertificateOrCertReq {
+                config: self.config,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
                 suite: self.suite,
@@ -497,6 +503,7 @@ impl hs::State for ExpectEncryptedExtensions {
 }
 
 struct ExpectCertificate {
+    config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
@@ -554,6 +561,7 @@ impl hs::State for ExpectCertificate {
         }
 
         Ok(Box::new(ExpectCertificateVerify {
+            config: self.config,
             dns_name: self.dns_name,
             randoms: self.randoms,
             suite: self.suite,
@@ -567,6 +575,7 @@ impl hs::State for ExpectCertificate {
 }
 
 struct ExpectCertificateOrCertReq {
+    config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
@@ -588,6 +597,7 @@ impl hs::State for ExpectCertificateOrCertReq {
         )?;
         if m.is_handshake_type(HandshakeType::Certificate) {
             Box::new(ExpectCertificate {
+                config: self.config,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
                 suite: self.suite,
@@ -600,6 +610,7 @@ impl hs::State for ExpectCertificateOrCertReq {
             .handle(cx, m)
         } else {
             Box::new(ExpectCertificateRequest {
+                config: self.config,
                 dns_name: self.dns_name,
                 randoms: self.randoms,
                 suite: self.suite,
@@ -615,6 +626,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
+    config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
@@ -642,7 +654,7 @@ impl hs::State for ExpectCertificateVerify {
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let cert_verified = cx
+        let cert_verified = self
             .config
             .verifier
             .verify_server_cert(
@@ -657,7 +669,7 @@ impl hs::State for ExpectCertificateVerify {
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.transcript.get_current_hash();
-        let sig_verified = cx
+        let sig_verified = self
             .config
             .verifier
             .verify_tls13_signature(
@@ -671,6 +683,7 @@ impl hs::State for ExpectCertificateVerify {
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
+            config: self.config,
             dns_name: self.dns_name,
             randoms: self.randoms,
             suite: self.suite,
@@ -688,6 +701,7 @@ impl hs::State for ExpectCertificateVerify {
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
 struct ExpectCertificateRequest {
+    config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
@@ -743,7 +757,7 @@ impl hs::State for ExpectCertificateRequest {
             .iter()
             .map(|p| p.0.as_slice())
             .collect::<Vec<&[u8]>>();
-        let maybe_certkey = cx
+        let maybe_certkey = self
             .config
             .client_auth_cert_resolver
             .resolve(&canames, &compat_sigschemes);
@@ -762,6 +776,7 @@ impl hs::State for ExpectCertificateRequest {
         }
 
         Ok(Box::new(ExpectCertificate {
+            config: self.config,
             dns_name: self.dns_name,
             randoms: self.randoms,
             suite: self.suite,
@@ -879,6 +894,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Con
 }
 
 struct ExpectFinished {
+    config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
@@ -915,7 +931,7 @@ impl hs::State for ExpectFinished {
                 .key_schedule
                 .client_handshake_traffic_secret(
                     &st.hash_at_client_recvd_server_hello,
-                    &*cx.config.key_log,
+                    &*st.config.key_log,
                     &st.randoms.client,
                 );
             Some(key)
@@ -955,7 +971,7 @@ impl hs::State for ExpectFinished {
         /* Traffic from server is now decrypted with application data keys. */
         let read_key = key_schedule_finished.server_application_traffic_secret(
             &hash_after_handshake,
-            &*cx.config.key_log,
+            &*st.config.key_log,
             &st.randoms.client,
         );
         cx.common
@@ -964,13 +980,13 @@ impl hs::State for ExpectFinished {
 
         key_schedule_finished.exporter_master_secret(
             &hash_after_handshake,
-            &*cx.config.key_log,
+            &*st.config.key_log,
             &st.randoms.client,
         );
 
         let write_key = key_schedule_finished.client_application_traffic_secret(
             &hash_after_handshake,
-            &*cx.config.key_log,
+            &*st.config.key_log,
             &st.randoms.client,
         );
         cx.common
@@ -981,6 +997,7 @@ impl hs::State for ExpectFinished {
         cx.common.start_traffic();
 
         let st = ExpectTraffic {
+            config: st.config,
             dns_name: st.dns_name,
             suite: st.suite,
             transcript: st.transcript,
@@ -1010,6 +1027,7 @@ impl hs::State for ExpectFinished {
 // In this state we can be sent tickets, keyupdates,
 // and application data.
 struct ExpectTraffic {
+    config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -1069,7 +1087,7 @@ impl ExpectTraffic {
             }
         }
 
-        let worked = cx
+        let worked = self
             .config
             .session_storage
             .put(key.get_encoding(), ticket);

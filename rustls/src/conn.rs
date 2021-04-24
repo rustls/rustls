@@ -665,7 +665,6 @@ impl ConnectionCommon {
         &mut self,
         state: &mut Option<S>,
         data: &mut S::Data,
-        config: &S::Config,
     ) -> Result<IoState, Error> {
         if let Some(ref err) = self.error {
             return Err(err.clone());
@@ -680,11 +679,9 @@ impl ConnectionCommon {
                 .process_msg(msg)
                 .and_then(|val| match val {
                     Some(MessageType::Handshake) => {
-                        self.process_new_handshake_messages(state, data, config)
+                        self.process_new_handshake_messages(state, data)
                     }
-                    Some(MessageType::Data(msg)) => {
-                        self.process_main_protocol(msg, state, data, config)
-                    }
+                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg, state, data),
                     None => Ok(()),
                 });
 
@@ -701,10 +698,9 @@ impl ConnectionCommon {
         &mut self,
         state: &mut Option<S>,
         data: &mut S::Data,
-        config: &S::Config,
     ) -> Result<(), Error> {
         while let Some(msg) = self.handshake_joiner.frames.pop_front() {
-            self.process_main_protocol(msg, state, data, &config)?;
+            self.process_main_protocol(msg, state, data)?;
         }
 
         Ok(())
@@ -718,7 +714,6 @@ impl ConnectionCommon {
         msg: Message,
         state: &mut Option<S>,
         data: &mut S::Data,
-        config: &S::Config,
     ) -> Result<(), Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
@@ -734,7 +729,7 @@ impl ConnectionCommon {
         }
 
         let current = state.take().unwrap();
-        match current.handle(msg, data, self, config) {
+        match current.handle(msg, data, self) {
             Ok(next) => {
                 *state = Some(next);
                 Ok(())
@@ -1082,14 +1077,12 @@ impl ConnectionCommon {
 
 pub(crate) trait HandleState: Sized {
     type Data;
-    type Config;
 
     fn handle(
         self,
         message: Message,
         data: &mut Self::Data,
         common: &mut ConnectionCommon,
-        config: &Self::Config,
     ) -> Result<Self, Error>;
 }
 

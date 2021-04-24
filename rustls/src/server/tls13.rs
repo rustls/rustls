@@ -25,6 +25,8 @@ use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
 use super::hs::{self, ServerContext};
 
+use std::sync::Arc;
+
 use ring::constant_time;
 use ring::digest::Digest;
 
@@ -60,6 +62,7 @@ mod client_hello {
     use super::*;
 
     pub(in crate::server) struct CompleteClientHelloHandling {
+        pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) suite: &'static SupportedCipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
@@ -95,16 +98,15 @@ mod client_hello {
 
         fn attempt_tls13_ticket_decryption(
             &mut self,
-            config: &ServerConfig,
             ticket: &[u8],
         ) -> Option<persist::ServerSessionValue> {
-            if config.ticketer.enabled() {
-                config
+            if self.config.ticketer.enabled() {
+                self.config
                     .ticketer
                     .decrypt(ticket)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
             } else {
-                config
+                self.config
                     .session_storage
                     .take(ticket)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
@@ -155,7 +157,7 @@ mod client_hello {
             }
 
             // choose a share that we support
-            let chosen_share = cx
+            let chosen_share = self
                 .config
                 .kx_groups
                 .iter()
@@ -170,7 +172,7 @@ mod client_hello {
                 None => {
                     // We don't have a suitable key share.  Choose a suitable group and
                     // send a HelloRetryRequest.
-                    let retry_group_maybe = cx
+                    let retry_group_maybe = self
                         .config
                         .kx_groups
                         .iter()
@@ -194,6 +196,7 @@ mod client_hello {
                         );
                         emit_fake_ccs(&mut cx.common);
                         return Ok(Box::new(hs::ExpectClientHello {
+                            config: self.config,
                             transcript: self.transcript,
                             session_id: SessionID::empty(),
                             using_ems: false,
@@ -234,7 +237,7 @@ mod client_hello {
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                     let resume = match self
-                        .attempt_tls13_ticket_decryption(&cx.config, &psk_id.identity.0)
+                        .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .filter(|resumedata| {
                             hs::can_resume(self.suite, &cx.data.sni, false, resumedata)
                         }) {
@@ -288,6 +291,7 @@ mod client_hello {
                 resumedata
                     .as_ref()
                     .map(|x| &x.master_secret.0[..]),
+                &self.config,
             )?;
             if !self.done_retry {
                 emit_fake_ccs(&mut cx.common);
@@ -304,10 +308,12 @@ mod client_hello {
                 client_hello,
                 resumedata.as_ref(),
                 self.extra_exts,
+                &self.config,
             )?;
 
             let doing_client_auth = if full_handshake {
-                let client_auth = emit_certificate_req_tls13(&mut self.transcript, cx)?;
+                let client_auth =
+                    emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
                 emit_certificate_tls13(
                     &mut self.transcript,
                     &mut cx.common,
@@ -333,10 +339,12 @@ mod client_hello {
                 &self.randoms,
                 cx,
                 key_schedule,
+                &self.config,
             );
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
+                    config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
                     randoms: self.randoms,
@@ -346,6 +354,7 @@ mod client_hello {
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
+                    config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
                     randoms: self.randoms,
@@ -366,11 +375,12 @@ mod client_hello {
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
+        config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
         let mut extensions = Vec::new();
 
         // Do key exchange
-        let kxr = kx::KeyExchange::choose(share.group, &cx.config.kx_groups)
+        let kxr = kx::KeyExchange::choose(share.group, &config.kx_groups)
             .and_then(kx::KeyExchange::start)
             .ok_or(Error::FailedToGetRandomBytes)?
             .complete(&share.payload.0)
@@ -418,7 +428,7 @@ mod client_hello {
                     let client_early_traffic_secret = early_key_schedule
                         .client_early_traffic_secret(
                             &client_hello_hash,
-                            &*cx.config.key_log,
+                            &*config.key_log,
                             &randoms.client,
                         );
                     // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
@@ -435,7 +445,7 @@ mod client_hello {
         let handshake_hash = transcript.get_current_hash();
         let write_key = key_schedule.server_handshake_traffic_secret(
             &handshake_hash,
-            &*cx.config.key_log,
+            &*config.key_log,
             &randoms.client,
         );
         cx.common
@@ -444,7 +454,7 @@ mod client_hello {
 
         let read_key = key_schedule.client_handshake_traffic_secret(
             &handshake_hash,
-            &*cx.config.key_log,
+            &*config.key_log,
             &randoms.client,
         );
         cx.common
@@ -516,9 +526,11 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: Vec<ServerExtension>,
+        config: &ServerConfig,
     ) -> Result<(), Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
+            config,
             cx,
             suite,
             ocsp_response,
@@ -545,8 +557,9 @@ mod client_hello {
     fn emit_certificate_req_tls13(
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
+        config: &ServerConfig,
     ) -> Result<bool, Error> {
-        if !cx.config.verifier.offer_client_auth() {
+        if !config.verifier.offer_client_auth() {
             return Ok(false);
         }
 
@@ -555,15 +568,13 @@ mod client_hello {
             extensions: Vec::new(),
         };
 
-        let schemes = cx
-            .config
+        let schemes = config
             .verifier
             .supported_verify_schemes();
         cr.extensions
             .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = cx
-            .config
+        let names = config
             .verifier
             .client_auth_root_subjects(cx.data.get_sni())
             .ok_or_else(|| {
@@ -678,6 +689,7 @@ mod client_hello {
         randoms: &ConnectionRandoms,
         cx: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
+        config: &ServerConfig,
     ) -> (KeyScheduleTrafficWithClientFinishedPending, Digest) {
         let handshake_hash = transcript.get_current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
@@ -701,7 +713,7 @@ mod client_hello {
         let mut key_schedule_traffic = key_schedule.into_traffic_with_client_finished_pending();
         let write_key = key_schedule_traffic.server_application_traffic_secret(
             &hash_at_server_fin,
-            &*cx.config.key_log,
+            &*config.key_log,
             &randoms.client,
         );
         cx.common
@@ -710,13 +722,13 @@ mod client_hello {
 
         key_schedule_traffic.exporter_master_secret(
             &hash_at_server_fin,
-            &*cx.config.key_log,
+            &*config.key_log,
             &randoms.client,
         );
 
         let _read_key = key_schedule_traffic.client_application_traffic_secret(
             &hash_at_server_fin,
-            &*cx.config.key_log,
+            &*config.key_log,
             &randoms.client,
         );
 
@@ -733,6 +745,7 @@ mod client_hello {
 }
 
 struct ExpectCertificate {
+    config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
@@ -760,7 +773,7 @@ impl hs::State for ExpectCertificate {
 
         let client_cert = certp.convert();
 
-        let mandatory = cx
+        let mandatory = self
             .config
             .verifier
             .client_auth_mandatory(cx.data.get_sni())
@@ -777,6 +790,7 @@ impl hs::State for ExpectCertificate {
                     debug!("client auth requested but no certificate supplied");
                     self.transcript.abandon_client_auth();
                     return Ok(Box::new(ExpectFinished {
+                        config: self.config,
                         suite: self.suite,
                         key_schedule: self.key_schedule,
                         randoms: self.randoms,
@@ -794,7 +808,7 @@ impl hs::State for ExpectCertificate {
         };
 
         let now = std::time::SystemTime::now();
-        cx.config
+        self.config
             .verifier
             .verify_client_cert(end_entity, intermediates, cx.data.get_sni(), now)
             .map_err(|err| {
@@ -803,6 +817,7 @@ impl hs::State for ExpectCertificate {
             })?;
 
         Ok(Box::new(ExpectCertificateVerify {
+            config: self.config,
             suite: self.suite,
             transcript: self.transcript,
             randoms: self.randoms,
@@ -815,6 +830,7 @@ impl hs::State for ExpectCertificate {
 }
 
 struct ExpectCertificateVerify {
+    config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
@@ -837,7 +853,7 @@ impl hs::State for ExpectCertificateVerify {
             let certs = &self.client_cert;
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
-            cx.config
+            self.config
                 .verifier
                 .verify_tls13_signature(&msg, &certs[0], sig)
         };
@@ -853,6 +869,7 @@ impl hs::State for ExpectCertificateVerify {
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
+            config: self.config,
             suite: self.suite,
             key_schedule: self.key_schedule,
             transcript: self.transcript,
@@ -889,6 +906,7 @@ fn get_server_session_value(
 }
 
 struct ExpectFinished {
+    config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
@@ -903,22 +921,22 @@ impl ExpectFinished {
         suite: &'static SupportedCipherSuite,
         cx: &mut ServerContext<'_>,
         key_schedule: &KeyScheduleTraffic,
+        config: &ServerConfig,
     ) -> Result<(), rand::GetRandomFailed> {
         let nonce = rand::random_vec(32)?;
         let plain =
             get_server_session_value(transcript, suite, key_schedule, cx, &nonce).get_encoding();
 
-        let stateless = cx.config.ticketer.enabled();
+        let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
-            let ticket = match cx.config.ticketer.encrypt(&plain) {
+            let ticket = match config.ticketer.encrypt(&plain) {
                 Some(t) => t,
                 None => return Ok(()),
             };
-            (ticket, cx.config.ticketer.lifetime())
+            (ticket, config.ticketer.lifetime())
         } else {
             let id = rand::random_vec(32)?;
-            let stored = cx
-                .config
+            let stored = config
                 .session_storage
                 .put(id.clone(), plain);
             if !stored {
@@ -934,11 +952,11 @@ impl ExpectFinished {
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
         #[cfg(feature = "quic")]
         {
-            if cx.config.max_early_data_size > 0 && cx.common.protocol == Protocol::Quic {
+            if config.max_early_data_size > 0 && cx.common.protocol == Protocol::Quic {
                 payload
                     .exts
                     .push(NewSessionTicketExtension::EarlyData(
-                        cx.config.max_early_data_size,
+                        config.max_early_data_size,
                     ));
             }
         }
@@ -987,7 +1005,7 @@ impl hs::State for ExpectFinished {
             .key_schedule
             .client_application_traffic_secret(
                 &self.hash_at_server_fin,
-                &*cx.config.key_log,
+                &*self.config.key_log,
                 &self.randoms.client,
             );
         cx.common
@@ -997,7 +1015,13 @@ impl hs::State for ExpectFinished {
         let key_schedule_traffic = self.key_schedule.into_traffic();
 
         if self.send_ticket {
-            Self::emit_ticket(&mut self.transcript, self.suite, cx, &key_schedule_traffic)?;
+            Self::emit_ticket(
+                &mut self.transcript,
+                self.suite,
+                cx,
+                &key_schedule_traffic,
+                &self.config,
+            )?;
         }
 
         cx.common.start_traffic();
