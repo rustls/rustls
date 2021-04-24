@@ -39,7 +39,7 @@ pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) trait State: Send + Sync {
     /// Each handle() implementation consumes a whole TLS message, and returns
     /// either an error or the next state.
-    fn handle(self: Box<Self>, conn: &mut ClientContext<'_>, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -80,13 +80,13 @@ pub(super) struct ClientContext<'a> {
 }
 
 fn find_session(
-    conn: &mut ClientContext<'_>,
+    cx: &mut ClientContext<'_>,
     dns_name: webpki::DnsNameRef,
 ) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
     let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
-    let value = conn
+    let value = cx
         .config
         .session_persistence
         .get(&key_buf)
@@ -98,7 +98,7 @@ fn find_session(
     let mut reader = Reader::init(&value[..]);
     let result = persist::ClientSessionValue::read(&mut reader).and_then(|csv| {
         let time = TimeBase::now().ok()?;
-        csv.resolve_cipher_suite(&conn.config.cipher_suites, time)
+        csv.resolve_cipher_suite(&cx.config.cipher_suites, time)
     });
     if let Some(result) = result {
         if result.has_expired() {
@@ -106,9 +106,9 @@ fn find_session(
         } else {
             #[cfg(feature = "quic")]
             {
-                if conn.common.is_quic() {
+                if cx.common.is_quic() {
                     let params = PayloadU16::read(&mut reader)?;
-                    conn.common.quic.params = Some(params.0);
+                    cx.common.quic.params = Some(params.0);
                 }
             }
             Some(result)
@@ -224,7 +224,8 @@ fn emit_client_hello_for_retry(
 
     let support_tls12 = cx
         .config
-        .supports_version(ProtocolVersion::TLSv1_2);
+        .supports_version(ProtocolVersion::TLSv1_2)
+        && !cx.common.is_quic();
     let support_tls13 = cx
         .config
         .supports_version(ProtocolVersion::TLSv1_3);

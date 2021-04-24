@@ -210,7 +210,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -p rustls -- -D warnings
+          args: -p rustls --all-features -- -D warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -228,4 +228,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -p rustls
+          args: -p rustls --all-features

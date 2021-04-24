@@ -27,7 +27,7 @@ pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
 pub(super) trait State: Send + Sync {
-    fn handle(self: Box<Self>, conn: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -162,9 +162,14 @@ impl ExtensionProcessing {
 
         #[cfg(feature = "quic")]
         {
-            if cx.common.protocol == Protocol::Quic {
-                if let Some(params) = hello.get_quic_params_extension() {
-                    cx.common.quic.params = Some(params);
+            if cx.common.is_quic() {
+                match hello.get_quic_params_extension() {
+                    Some(params) => cx.common.quic.params = Some(params),
+                    None => {
+                        return Err(cx
+                            .common
+                            .missing_extension("QUIC transport parameters not found"));
+                    }
                 }
 
                 if let Some(resume) = resumedata {
@@ -348,6 +353,11 @@ impl State for ExpectClientHello {
                 ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
                 return Err(bad_version(&mut cx.common, "TLS1.2 not offered/enabled"));
+            } else if cx.common.is_quic() {
+                return Err(bad_version(
+                    &mut cx.common,
+                    "Expecting QUIC connection, but client does not support TLSv1_3",
+                ));
             } else {
                 ProtocolVersion::TLSv1_2
             }
@@ -360,6 +370,11 @@ impl State for ExpectClientHello {
             return Err(bad_version(
                 &mut cx.common,
                 "Server requires TLS1.3, but client omitted versions ext",
+            ));
+        } else if cx.common.is_quic() {
+            return Err(bad_version(
+                &mut cx.common,
+                "Expecting QUIC connection, but client does not support TLSv1_3",
             ));
         } else {
             ProtocolVersion::TLSv1_2

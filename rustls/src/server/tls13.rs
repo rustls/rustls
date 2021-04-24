@@ -511,7 +511,7 @@ mod client_hello {
     fn emit_encrypted_extensions(
         transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
-        conn: &mut ServerContext<'_>,
+        cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -520,7 +520,7 @@ mod client_hello {
     ) -> Result<(), Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
-            conn,
+            cx,
             suite,
             ocsp_response,
             sct_list,
@@ -540,15 +540,15 @@ mod client_hello {
 
         trace!("sending encrypted extensions {:?}", ee);
         transcript.add_message(&ee);
-        conn.common.send_msg(ee, true);
+        cx.common.send_msg(ee, true);
         Ok(())
     }
 
     fn emit_certificate_req_tls13(
         transcript: &mut HandshakeHash,
-        conn: &mut ServerContext<'_>,
+        cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
-        if !conn.config.verifier.offer_client_auth() {
+        if !cx.config.verifier.offer_client_auth() {
             return Ok(false);
         }
 
@@ -557,20 +557,20 @@ mod client_hello {
             extensions: Vec::new(),
         };
 
-        let schemes = conn
+        let schemes = cx
             .config
             .get_verifier()
             .supported_verify_schemes();
         cr.extensions
             .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = conn
+        let names = cx
             .config
             .verifier
-            .client_auth_root_subjects(conn.data.get_sni())
+            .client_auth_root_subjects(cx.data.get_sni())
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
-                conn.common
+                cx.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("client rejected by client_auth_root_subjects".into())
             })?;
@@ -591,7 +591,7 @@ mod client_hello {
 
         trace!("Sending CertificateRequest {:?}", m);
         transcript.add_message(&m);
-        conn.common.send_msg(m, true);
+        cx.common.send_msg(m, true);
         Ok(true)
     }
 
@@ -1012,7 +1012,7 @@ impl hs::State for ExpectFinished {
         #[cfg(feature = "quic")]
         {
             if cx.common.protocol == Protocol::Quic {
-                return Ok(Box::new(ExpectQUICTraffic {
+                return Ok(Box::new(ExpectQuicTraffic {
                     key_schedule: key_schedule_traffic,
                     _fin_verified: fin,
                 }));
@@ -1127,13 +1127,13 @@ impl hs::State for ExpectTraffic {
 }
 
 #[cfg(feature = "quic")]
-struct ExpectQUICTraffic {
+struct ExpectQuicTraffic {
     key_schedule: KeyScheduleTraffic,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
 #[cfg(feature = "quic")]
-impl hs::State for ExpectQUICTraffic {
+impl hs::State for ExpectQuicTraffic {
     fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         // reject all messages
         check_message(&m, &[], &[])?;

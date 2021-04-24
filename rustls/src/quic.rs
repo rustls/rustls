@@ -32,10 +32,16 @@ impl Secrets {
 /// Generic methods for QUIC sessions
 pub trait QuicExt {
     /// Return the TLS-encoded transport parameters for the session's peer.
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]>;
+    ///
+    /// While the transport parameters are technically available prior to the
+    /// completion of the handshake, they cannot be fully trusted until the
+    /// handshake completes, and reliance on them should be minimized.
+    /// However, any tampering with the parameters will cause the handshake
+    /// to fail.
+    fn quic_transport_parameters(&self) -> Option<&[u8]>;
 
     /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
-    fn get_0rtt_keys(&self) -> Option<DirectionalKeys>;
+    fn zero_rtt_keys(&self) -> Option<DirectionalKeys>;
 
     /// Consume unencrypted TLS handshake data.
     ///
@@ -50,7 +56,7 @@ pub trait QuicExt {
     /// Emit the TLS description code of a fatal alert, if one has arisen.
     ///
     /// Check after `read_hs` returns `Err(_)`.
-    fn get_alert(&self) -> Option<AlertDescription>;
+    fn alert(&self) -> Option<AlertDescription>;
 
     /// Compute the keys to use following a 1-RTT key update
     ///

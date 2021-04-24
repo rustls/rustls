@@ -428,7 +428,7 @@ impl ClientConnection {
         config: &Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        Self::new_inner(config, hostname, Vec::new(), Protocol::Tls13)
+        Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
     }
 
     fn new_inner(
@@ -631,7 +631,7 @@ impl ClientConnectionData {
 
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ClientConnection {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+    fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
             .params
@@ -639,7 +639,7 @@ impl quic::QuicExt for ClientConnection {
             .map(|v| v.as_ref())
     }
 
-    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.data.resumption_ciphersuite?,
             self.common.quic.early_secret.as_ref()?,
@@ -656,7 +656,7 @@ impl quic::QuicExt for ClientConnection {
         quic::write_hs(&mut self.common, buf)
     }
 
-    fn get_alert(&self) -> Option<AlertDescription> {
+    fn alert(&self) -> Option<AlertDescription> {
         self.common.quic.alert
     }
 
@@ -677,13 +677,12 @@ pub trait ClientQuicExt {
         hostname: webpki::DnsNameRef,
         params: Vec<u8>,
     ) -> Result<ClientConnection, Error> {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
+        if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            return Err(Error::General(
+                "TLS 1.3 support is required for QUIC".into(),
+            ));
+        }
+
         let ext = match quic_version {
             quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             quic::Version::V1 => ClientExtension::TransportParameters(params),

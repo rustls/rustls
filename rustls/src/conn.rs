@@ -335,7 +335,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Protocol {
-    Tls13,
+    Tcp,
     #[cfg(feature = "quic")]
     Quic,
 }
@@ -590,7 +590,7 @@ impl ConnectionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            protocol: Protocol::Tls13,
+            protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
         }
@@ -996,11 +996,7 @@ impl ConnectionCommon {
                     self.quic.alert = Some(alert.description);
                 } else {
                     debug_assert!(
-                        if let MessagePayload::Handshake(_) = m.payload {
-                            true
-                        } else {
-                            false
-                        },
+                        matches!(m.payload, MessagePayload::Handshake(_)),
                         "QUIC uses TLS for the cryptographic handshake only"
                     );
                     let mut bytes = Vec::new();
@@ -1049,6 +1045,12 @@ impl ConnectionCommon {
             .prepare_message_encrypter(enc);
         self.record_layer
             .prepare_message_decrypter(dec);
+    }
+
+    #[cfg(feature = "quic")]
+    pub fn missing_extension(&mut self, why: &str) -> Error {
+        self.send_fatal_alert(AlertDescription::MissingExtension);
+        Error::PeerMisbehavedError(why.to_string())
     }
 
     pub fn send_warning_alert(&mut self, desc: AlertDescription) {

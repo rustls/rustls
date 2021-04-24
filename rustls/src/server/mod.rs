@@ -559,7 +559,7 @@ impl ServerConnectionData {
 
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ServerConnection {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+    fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
             .params
@@ -567,7 +567,7 @@ impl quic::QuicExt for ServerConnection {
             .map(|v| v.as_ref())
     }
 
-    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.common.get_suite()?,
             self.common.quic.early_secret.as_ref()?,
@@ -584,7 +584,7 @@ impl quic::QuicExt for ServerConnection {
         quic::write_hs(&mut self.common, buf)
     }
 
-    fn get_alert(&self) -> Option<AlertDescription> {
+    fn alert(&self) -> Option<AlertDescription> {
         self.common.quic.alert
     }
 
@@ -603,25 +603,26 @@ pub trait ServerQuicExt {
         config: &Arc<ServerConfig>,
         quic_version: quic::Version,
         params: Vec<u8>,
-    ) -> ServerConnection {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
-        assert!(
-            config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
-            "QUIC sessions must set a max early data of 0 or 2^32-1"
-        );
+    ) -> Result<ServerConnection, Error> {
+        if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            return Err(Error::General(
+                "TLS 1.3 support is required for QUIC".into(),
+            ));
+        }
+
+        if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
+            return Err(Error::General(
+                "QUIC sessions must set a max early data of 0 or 2^32-1".into(),
+            ));
+        }
+
         let ext = match quic_version {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
         };
         let mut new = ServerConnection::from_config(config, vec![ext]);
         new.common.protocol = Protocol::Quic;
-        new
+        Ok(new)
     }
 }
 
