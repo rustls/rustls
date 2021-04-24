@@ -1078,8 +1078,10 @@ impl ExpectTraffic {
 
         #[cfg(feature = "quic")]
         {
-            if cx.common.protocol == Protocol::Quic {
-                PayloadU16::encode_slice(cx.common.quic.params.as_ref().unwrap(), &mut ticket);
+            if let (Protocol::Quic, Some(ref quic_params)) =
+                (cx.common.protocol, &cx.common.quic.params)
+            {
+                PayloadU16::encode_slice(quic_params, &mut ticket);
             }
         }
 
