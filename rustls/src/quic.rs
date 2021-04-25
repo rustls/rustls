@@ -212,74 +212,74 @@ impl Quic {
             returned_traffic_keys: false,
         }
     }
-}
 
-pub(crate) fn read_hs(
-    plaintext: &[u8],
-    joiner: &mut HandshakeJoiner,
-    quic: &mut Quic,
-) -> Result<(), Error> {
-    if joiner
-        .take_message(OpaqueMessage {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: Payload::new(plaintext.to_vec()),
-        })
-        .is_none()
-    {
-        quic.alert = Some(AlertDescription::DecodeError);
-        return Err(Error::CorruptMessage);
+    pub(crate) fn read_hs(
+        &mut self,
+        plaintext: &[u8],
+        joiner: &mut HandshakeJoiner,
+    ) -> Result<(), Error> {
+        if joiner
+            .take_message(OpaqueMessage {
+                typ: ContentType::Handshake,
+                version: ProtocolVersion::TLSv1_3,
+                payload: Payload::new(plaintext.to_vec()),
+            })
+            .is_none()
+        {
+            self.alert = Some(AlertDescription::DecodeError);
+            return Err(Error::CorruptMessage);
+        }
+        Ok(())
     }
-    Ok(())
-}
 
-pub(crate) fn write_hs(
-    buf: &mut Vec<u8>,
-    quic: &mut Quic,
-    is_client: bool,
-    suite: &Option<&'static SupportedCipherSuite>,
-) -> Option<Keys> {
-    while let Some((_, msg)) = quic.hs_queue.pop_front() {
-        buf.extend_from_slice(&msg);
-        if let Some(&(true, _)) = quic.hs_queue.front() {
-            if quic.hs_secrets.is_some() {
-                // Allow the caller to switch keys before proceeding.
-                break;
+    pub(crate) fn write_hs(
+        &mut self,
+        buf: &mut Vec<u8>,
+        is_client: bool,
+        suite: &Option<&'static SupportedCipherSuite>,
+    ) -> Option<Keys> {
+        while let Some((_, msg)) = self.hs_queue.pop_front() {
+            buf.extend_from_slice(&msg);
+            if let Some(&(true, _)) = self.hs_queue.front() {
+                if self.hs_secrets.is_some() {
+                    // Allow the caller to switch keys before proceeding.
+                    break;
+                }
             }
         }
-    }
 
-    let suite = (*suite)?;
-    if let Some(secrets) = quic.hs_secrets.take() {
-        return Some(Keys::new(suite, is_client, &secrets));
-    }
-
-    if let Some(secrets) = quic.traffic_secrets.as_ref() {
-        if !quic.returned_traffic_keys {
-            quic.returned_traffic_keys = true;
+        let suite = (*suite)?;
+        if let Some(secrets) = self.hs_secrets.take() {
             return Some(Keys::new(suite, is_client, &secrets));
         }
+
+        if let Some(secrets) = self.traffic_secrets.as_ref() {
+            if !self.returned_traffic_keys {
+                self.returned_traffic_keys = true;
+                return Some(Keys::new(suite, is_client, &secrets));
+            }
+        }
+
+        None
     }
 
-    None
-}
+    pub(crate) fn next_1rtt_keys(
+        &mut self,
+        is_client: bool,
+        suite: &'static SupportedCipherSuite,
+    ) -> Option<PacketKeySet> {
+        let secrets = self.traffic_secrets.as_ref()?;
+        let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);
 
-pub(crate) fn next_1rtt_keys(
-    quic: &mut Quic,
-    is_client: bool,
-    suite: &'static SupportedCipherSuite,
-) -> Option<PacketKeySet> {
-    let secrets = quic.traffic_secrets.as_ref()?;
-    let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);
+        let (local, remote) = next.local_remote(is_client);
+        let keys = PacketKeySet {
+            local: PacketKey::new(suite, local),
+            remote: PacketKey::new(suite, remote),
+        };
 
-    let (local, remote) = next.local_remote(is_client);
-    let keys = PacketKeySet {
-        local: PacketKey::new(suite, local),
-        remote: PacketKey::new(suite, remote),
-    };
-
-    quic.traffic_secrets = Some(next);
-    Some(keys)
+        self.traffic_secrets = Some(next);
+        Some(keys)
+    }
 }
 
 fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {

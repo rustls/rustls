@@ -458,18 +458,16 @@ impl quic::QuicExt for ServerConnection {
             None => return Ok(()),
         };
 
-        quic::read_hs(plaintext, &mut self.common.handshake_joiner, quic)?;
+        quic.read_hs(plaintext, &mut self.common.handshake_joiner)?;
         self.common
             .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
-        quic::write_hs(
-            buf,
-            self.common.quic.as_mut()?,
-            self.common.is_client,
-            &self.common.suite,
-        )
+        self.common
+            .quic
+            .as_mut()?
+            .write_hs(buf, self.common.is_client, &self.common.suite)
     }
 
     fn alert(&self) -> Option<AlertDescription> {
@@ -477,11 +475,10 @@ impl quic::QuicExt for ServerConnection {
     }
 
     fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
-        quic::next_1rtt_keys(
-            self.common.quic.as_mut()?,
-            self.common.is_client,
-            self.common.suite?,
-        )
+        self.common
+            .quic
+            .as_mut()?
+            .next_1rtt_keys(self.common.is_client, self.common.suite?)
     }
 }
 
