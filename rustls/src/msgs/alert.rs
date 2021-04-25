@@ -20,9 +20,3 @@ impl Codec for AlertMessagePayload {
         Some(AlertMessagePayload { level, description })
     }
 }
-
-impl AlertMessagePayload {
-    pub fn length(&self) -> usize {
-        1 + 1
-    }
-}

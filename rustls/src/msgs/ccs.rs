@@ -18,9 +18,3 @@ impl Codec for ChangeCipherSpecPayload {
         }
     }
 }
-
-impl ChangeCipherSpecPayload {
-    pub fn length(&self) -> usize {
-        1
-    }
-}
