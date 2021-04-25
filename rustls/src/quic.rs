@@ -1,6 +1,5 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 pub use crate::client::ClientQuicExt;
-use crate::conn::Quic;
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
 use crate::msgs::base::Payload;
@@ -11,6 +10,8 @@ pub use crate::server::ServerQuicExt;
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
 
 use ring::{aead, hkdf};
+
+use std::collections::VecDeque;
 
 /// Secrets used to encrypt/decrypt traffic
 #[derive(Clone, Debug)]
@@ -181,6 +182,34 @@ impl Keys {
         Keys {
             local: DirectionalKeys::new(suite, local),
             remote: DirectionalKeys::new(suite, remote),
+        }
+    }
+}
+
+#[cfg(feature = "quic")]
+pub(crate) struct Quic {
+    /// QUIC transport parameters received from the peer during the handshake
+    pub params: Option<Vec<u8>>,
+    pub alert: Option<AlertDescription>,
+    pub hs_queue: VecDeque<(bool, Vec<u8>)>,
+    pub early_secret: Option<ring::hkdf::Prk>,
+    pub hs_secrets: Option<Secrets>,
+    pub traffic_secrets: Option<Secrets>,
+    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
+    pub returned_traffic_keys: bool,
+}
+
+#[cfg(feature = "quic")]
+impl Quic {
+    pub(crate) fn new() -> Self {
+        Self {
+            params: None,
+            alert: None,
+            hs_queue: VecDeque::new(),
+            early_secret: None,
+            hs_secrets: None,
+            traffic_secrets: None,
+            returned_traffic_keys: false,
         }
     }
 }

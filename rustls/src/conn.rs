@@ -14,6 +14,8 @@ use crate::msgs::hsjoiner::HandshakeJoiner;
 use crate::msgs::message::{BorrowedOpaqueMessage, Message, MessagePayload, OpaqueMessage};
 use crate::prf;
 use crate::quic;
+#[cfg(feature = "quic")]
+use crate::quic::Quic;
 use crate::rand;
 use crate::record_layer;
 use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
@@ -1076,32 +1078,4 @@ pub(crate) trait HandleState: Sized {
 pub enum MessageType {
     Handshake,
     Data(Message),
-}
-
-#[cfg(feature = "quic")]
-pub(crate) struct Quic {
-    /// QUIC transport parameters received from the peer during the handshake
-    pub params: Option<Vec<u8>>,
-    pub alert: Option<AlertDescription>,
-    pub hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub early_secret: Option<ring::hkdf::Prk>,
-    pub hs_secrets: Option<quic::Secrets>,
-    pub traffic_secrets: Option<quic::Secrets>,
-    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    pub returned_traffic_keys: bool,
-}
-
-#[cfg(feature = "quic")]
-impl Quic {
-    pub fn new() -> Self {
-        Self {
-            params: None,
-            alert: None,
-            hs_queue: VecDeque::new(),
-            early_secret: None,
-            hs_secrets: None,
-            traffic_secrets: None,
-            returned_traffic_keys: false,
-        }
-    }
 }

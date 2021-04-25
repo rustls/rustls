@@ -1,5 +1,3 @@
-#[cfg(feature = "quic")]
-use crate::conn::Quic;
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
 use crate::key;
@@ -16,7 +14,7 @@ use crate::msgs::handshake::CertificatePayload;
 #[cfg(feature = "quic")]
 use crate::msgs::handshake::ClientExtension;
 #[cfg(feature = "quic")]
-use crate::quic;
+use crate::quic::{self, Quic};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
