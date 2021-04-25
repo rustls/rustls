@@ -1,4 +1,4 @@
-use crate::check::check_message;
+use crate::check::{check_message, inappropriate_message};
 use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -325,7 +325,6 @@ mod client_hello {
         ep.process_tls12(&cx.config, hello, using_ems);
 
         let sh = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
@@ -352,7 +351,6 @@ mod client_hello {
         cert_chain: &[Certificate],
     ) {
         let c = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
@@ -372,7 +370,6 @@ mod client_hello {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateStatus,
@@ -412,7 +409,6 @@ mod client_hello {
         });
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerKeyExchange,
@@ -456,7 +452,6 @@ mod client_hello {
         };
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateRequest,
@@ -472,7 +467,6 @@ mod client_hello {
 
     fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut ConnectionCommon) {
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHelloDone,
@@ -747,7 +741,6 @@ fn emit_ticket(
     let ticket_lifetime = cx.config.ticketer.lifetime();
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::NewSessionTicket,
@@ -764,7 +757,6 @@ fn emit_ticket(
 
 fn emit_ccs(common: &mut ConnectionCommon) {
     let m = Message {
-        typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
@@ -782,7 +774,6 @@ fn emit_finished(
     let verify_data_payload = Payload::new(verify_data);
 
     let f = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
@@ -867,10 +858,15 @@ struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl hs::State for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, mut m: Message) -> hs::NextStateOrError {
-        check_message(&m, &[ContentType::ApplicationData], &[])?;
-        cx.common
-            .take_received_plaintext(m.take_opaque_payload().unwrap());
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => cx
+                .common
+                .take_received_plaintext(payload),
+            _ => {
+                return Err(inappropriate_message(&m, &[ContentType::ApplicationData]));
+            }
+        }
         Ok(self)
     }
 

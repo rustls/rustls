@@ -2187,12 +2187,6 @@ impl Codec for HandshakeMessagePayload {
 }
 
 impl HandshakeMessagePayload {
-    pub fn length(&self) -> usize {
-        let mut buf = Vec::new();
-        self.encode(&mut buf);
-        buf.len()
-    }
-
     pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<HandshakeMessagePayload> {
         let mut typ = HandshakeType::read(r)?;
         let len = codec::u24::read(r)?.0 as usize;

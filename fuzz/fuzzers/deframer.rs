@@ -3,6 +3,8 @@
 extern crate rustls;
 
 use rustls::internal::msgs::deframer;
+use rustls::internal::msgs::message::Message;
+use std::convert::TryFrom;
 use std::io;
 
 fuzz_target!(|data: &[u8]| {
@@ -13,7 +15,7 @@ fuzz_target!(|data: &[u8]| {
     dfm.has_pending();
 
     while !dfm.frames.is_empty() {
-        let mut msg = dfm.frames.pop_front().unwrap();
-        msg.decode_payload();
+        let msg = dfm.frames.pop_front().unwrap();
+        Message::try_from(msg).ok();
     }
 });

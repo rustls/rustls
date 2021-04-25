@@ -3,8 +3,9 @@ pub use crate::client::ClientQuicExt;
 use crate::conn::ConnectionCommon;
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
+use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::message::OpaqueMessage;
 pub use crate::server::ServerQuicExt;
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
 
@@ -186,10 +187,10 @@ impl Keys {
 pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(), Error> {
     if this
         .handshake_joiner
-        .take_message(Message {
+        .take_message(OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::new_opaque(plaintext.into()),
+            payload: Payload::new(plaintext.to_vec()),
         })
         .is_none()
     {

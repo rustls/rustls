@@ -2,6 +2,7 @@ use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::enums::{ContentType, HandshakeType};
+use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
 
 /// For a Message $m, and a HandshakePayload enum member $payload_type,
@@ -19,7 +20,7 @@ macro_rules! require_handshake_msg(
         }
         _ => Err(Error::InappropriateMessage {
                  expect_types: vec![ ContentType::Handshake ],
-                 got_type: $m.typ})
+                 got_type: $m.payload.content_type()})
     }
   )
 );
@@ -36,7 +37,7 @@ macro_rules! require_handshake_msg_move(
         }
         _ => Err(Error::InappropriateMessage {
                  expect_types: vec![ ContentType::Handshake ],
-                 got_type: $m.typ})
+                 got_type: $m.payload.content_type()})
     }
   )
 );
@@ -51,29 +52,41 @@ pub fn check_message(
     content_types: &[ContentType],
     handshake_types: &[HandshakeType],
 ) -> Result<(), Error> {
-    if !content_types.contains(&m.typ) {
-        warn!(
-            "Received a {:?} message while expecting {:?}",
-            m.typ, content_types
-        );
-        return Err(Error::InappropriateMessage {
-            expect_types: content_types.to_vec(),
-            got_type: m.typ,
-        });
+    if !content_types.contains(&m.payload.content_type()) {
+        return Err(inappropriate_message(m, content_types));
     }
 
     if let MessagePayload::Handshake(ref hsp) = m.payload {
         if !handshake_types.is_empty() && !handshake_types.contains(&hsp.typ) {
-            warn!(
-                "Received a {:?} handshake message while expecting {:?}",
-                hsp.typ, handshake_types
-            );
-            return Err(Error::InappropriateHandshakeMessage {
-                expect_types: handshake_types.to_vec(),
-                got_type: hsp.typ,
-            });
+            return Err(inappropriate_handshake_message(hsp, handshake_types));
         }
     }
 
     Ok(())
+}
+
+pub fn inappropriate_message(m: &Message, content_types: &[ContentType]) -> Error {
+    warn!(
+        "Received a {:?} message while expecting {:?}",
+        m.payload.content_type(),
+        content_types
+    );
+    Error::InappropriateMessage {
+        expect_types: content_types.to_vec(),
+        got_type: m.payload.content_type(),
+    }
+}
+
+pub fn inappropriate_handshake_message(
+    hsp: &HandshakeMessagePayload,
+    handshake_types: &[HandshakeType],
+) -> Error {
+    warn!(
+        "Received a {:?} handshake message while expecting {:?}",
+        hsp.typ, handshake_types
+    );
+    Error::InappropriateHandshakeMessage {
+        expect_types: handshake_types.to_vec(),
+        got_type: hsp.typ,
+    }
 }

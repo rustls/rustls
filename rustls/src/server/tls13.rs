@@ -1,4 +1,6 @@
+#[cfg(feature = "quic")]
 use crate::check::check_message;
+use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -383,7 +385,6 @@ mod client_hello {
         }
 
         let sh = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
@@ -466,7 +467,6 @@ mod client_hello {
             return;
         }
         let m = Message {
-            typ: ContentType::ChangeCipherSpec,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
@@ -494,7 +494,6 @@ mod client_hello {
             ));
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::HelloRetryRequest,
@@ -530,7 +529,6 @@ mod client_hello {
         )?;
 
         let ee = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::EncryptedExtensions,
@@ -581,7 +579,6 @@ mod client_hello {
         }
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateRequest,
@@ -632,7 +629,6 @@ mod client_hello {
 
         let cert_body = CertificatePayloadTLS13::new(cert_entries);
         let c = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
@@ -663,7 +659,6 @@ mod client_hello {
         let cv = DigitallySignedStruct::new(scheme, sig);
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateVerify,
@@ -689,7 +684,6 @@ mod client_hello {
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Finished,
@@ -949,7 +943,6 @@ impl ExpectFinished {
             }
         }
         let m = Message {
-            typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::NewSessionTicket,
@@ -1037,11 +1030,6 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_traffic(&self, cx: &mut ServerContext<'_>, mut m: Message) {
-        cx.common
-            .take_received_plaintext(m.take_opaque_payload().unwrap());
-    }
-
     fn handle_key_update(
         &mut self,
         common: &mut ConnectionCommon,
@@ -1083,19 +1071,28 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        if m.is_content_type(ContentType::ApplicationData) {
-            self.handle_traffic(cx, m);
-        } else if let Ok(key_update) =
-            require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
-        {
-            self.handle_key_update(&mut cx.common, key_update)?;
-        } else {
-            check_message(
-                &m,
-                &[ContentType::ApplicationData, ContentType::Handshake],
-                &[HandshakeType::KeyUpdate],
-            )?;
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => cx
+                .common
+                .take_received_plaintext(payload),
+            MessagePayload::Handshake(payload) => match payload.payload {
+                HandshakePayload::KeyUpdate(key_update) => {
+                    self.handle_key_update(cx.common, &key_update)?
+                }
+                _ => {
+                    return Err(inappropriate_handshake_message(
+                        &payload,
+                        &[HandshakeType::KeyUpdate],
+                    ));
+                }
+            },
+            _ => {
+                return Err(inappropriate_message(
+                    &m,
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                ));
+            }
         }
 
         Ok(self)
@@ -1114,7 +1111,7 @@ impl hs::State for ExpectTraffic {
     fn perhaps_write_key_update(&mut self, common: &mut ConnectionCommon) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            common.send_msg_encrypt(Message::build_key_update_notify());
+            common.send_msg_encrypt(Message::build_key_update_notify().into());
 
             let write_key = self
                 .key_schedule

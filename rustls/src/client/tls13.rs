@@ -1,4 +1,4 @@
-use crate::check::check_message;
+use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -369,7 +369,6 @@ pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut ConnectionComm
     }
 
     let m = Message {
-        typ: ContentType::ChangeCipherSpec,
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
@@ -810,7 +809,6 @@ fn emit_certificate_tls13(
     }
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
@@ -841,7 +839,6 @@ fn emit_certverify_tls13(
     let dss = DigitallySignedStruct::new(scheme, sig);
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
@@ -864,7 +861,6 @@ fn emit_finished_tls13(
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
@@ -882,7 +878,6 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Con
     }
 
     let m = Message {
-        typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::EndOfEarlyData,
@@ -1140,30 +1135,31 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(
-        mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        mut m: Message,
-    ) -> hs::NextStateOrError {
-        if m.is_content_type(ContentType::ApplicationData) {
-            cx.common
-                .take_received_plaintext(m.take_opaque_payload().unwrap());
-        } else if let Ok(ref new_ticket) = require_handshake_msg!(
-            m,
-            HandshakeType::NewSessionTicket,
-            HandshakePayload::NewSessionTicketTLS13
-        ) {
-            self.handle_new_ticket_tls13(cx, new_ticket)?;
-        } else if let Ok(ref key_update) =
-            require_handshake_msg!(m, HandshakeType::KeyUpdate, HandshakePayload::KeyUpdate)
-        {
-            self.handle_key_update(cx.common, key_update)?;
-        } else {
-            check_message(
-                &m,
-                &[ContentType::ApplicationData, ContentType::Handshake],
-                &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-            )?;
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => cx
+                .common
+                .take_received_plaintext(payload),
+            MessagePayload::Handshake(payload) => match payload.payload {
+                HandshakePayload::NewSessionTicketTLS13(new_ticket) => {
+                    self.handle_new_ticket_tls13(cx, &new_ticket)?
+                }
+                HandshakePayload::KeyUpdate(key_update) => {
+                    self.handle_key_update(cx.common, &key_update)?
+                }
+                _ => {
+                    return Err(inappropriate_handshake_message(
+                        &payload,
+                        &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
+                    ));
+                }
+            },
+            _ => {
+                return Err(inappropriate_message(
+                    &m,
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                ));
+            }
         }
 
         Ok(self)
@@ -1182,7 +1178,7 @@ impl hs::State for ExpectTraffic {
     fn perhaps_write_key_update(&mut self, common: &mut ConnectionCommon) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            common.send_msg_encrypt(Message::build_key_update_notify());
+            common.send_msg_encrypt(Message::build_key_update_notify().into());
 
             let write_key = self
                 .key_schedule
