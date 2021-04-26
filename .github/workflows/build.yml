@@ -1,5 +1,9 @@
-on: [push, pull_request]
 name: rustls
+
+permissions:
+  contents: read
+
+on: [push, pull_request]
 
 jobs:
   build:
