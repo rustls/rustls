@@ -502,78 +502,6 @@ impl hs::State for ExpectEncryptedExtensions {
     }
 }
 
-struct ExpectCertificate {
-    config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
-    randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
-    transcript: HandshakeHash,
-    key_schedule: KeyScheduleHandshake,
-    may_send_sct_list: bool,
-    client_auth: Option<ClientAuthDetails>,
-    hash_at_client_recvd_server_hello: Digest,
-}
-
-impl hs::State for ExpectCertificate {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        let cert_chain = require_handshake_msg!(
-            m,
-            HandshakeType::Certificate,
-            HandshakePayload::CertificateTLS13
-        )?;
-        self.transcript.add_message(&m);
-
-        // This is only non-empty for client auth.
-        if !cert_chain.context.0.is_empty() {
-            warn!("certificate with non-empty context during handshake");
-            cx.common
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
-        }
-
-        if cert_chain.any_entry_has_duplicate_extension()
-            || cert_chain.any_entry_has_unknown_extension()
-        {
-            warn!("certificate chain contains unsolicited/unknown extension");
-            cx.common
-                .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(Error::PeerMisbehavedError(
-                "bad cert chain extensions".to_string(),
-            ));
-        }
-
-        let server_cert = ServerCertDetails::new(
-            cert_chain.convert(),
-            cert_chain.get_end_entity_ocsp(),
-            cert_chain.get_end_entity_scts(),
-        );
-
-        if let Some(sct_list) = server_cert.scts.as_ref() {
-            if hs::sct_list_is_invalid(sct_list) {
-                let error_msg = "server sent invalid SCT list".to_string();
-                return Err(Error::PeerMisbehavedError(error_msg));
-            }
-
-            if !self.may_send_sct_list {
-                let error_msg = "server sent unsolicited SCT list".to_string();
-                return Err(Error::PeerMisbehavedError(error_msg));
-            }
-        }
-
-        Ok(Box::new(ExpectCertificateVerify {
-            config: self.config,
-            dns_name: self.dns_name,
-            randoms: self.randoms,
-            suite: self.suite,
-            transcript: self.transcript,
-            key_schedule: self.key_schedule,
-            server_cert,
-            client_auth: self.client_auth,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        }))
-    }
-}
-
 struct ExpectCertificateOrCertReq {
     config: Arc<ClientConfig>,
     dns_name: webpki::DnsName,
@@ -621,79 +549,6 @@ impl hs::State for ExpectCertificateOrCertReq {
             })
             .handle(cx, m)
         }
-    }
-}
-
-// --- TLS1.3 CertificateVerify ---
-struct ExpectCertificateVerify {
-    config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
-    randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
-    transcript: HandshakeHash,
-    key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails,
-    client_auth: Option<ClientAuthDetails>,
-    hash_at_client_recvd_server_hello: Digest,
-}
-
-impl hs::State for ExpectCertificateVerify {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        let cert_verify = require_handshake_msg!(
-            m,
-            HandshakeType::CertificateVerify,
-            HandshakePayload::CertificateVerify
-        )?;
-
-        trace!("Server cert is {:?}", self.server_cert.cert_chain);
-
-        // 1. Verify the certificate chain.
-        let (end_entity, intermediates) = self
-            .server_cert
-            .cert_chain
-            .split_first()
-            .ok_or(Error::NoCertificatesPresented)?;
-        let now = std::time::SystemTime::now();
-        let cert_verified = self
-            .config
-            .verifier
-            .verify_server_cert(
-                end_entity,
-                intermediates,
-                self.dns_name.as_ref(),
-                &mut self.server_cert.scts(),
-                &self.server_cert.ocsp_response,
-                now,
-            )
-            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
-
-        // 2. Verify their signature on the handshake.
-        let handshake_hash = self.transcript.get_current_hash();
-        let sig_verified = self
-            .config
-            .verifier
-            .verify_tls13_signature(
-                &verify::construct_tls13_server_verify_message(&handshake_hash),
-                &self.server_cert.cert_chain[0],
-                &cert_verify,
-            )
-            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
-
-        cx.data.server_cert_chain = self.server_cert.cert_chain;
-        self.transcript.add_message(&m);
-
-        Ok(Box::new(ExpectFinished {
-            config: self.config,
-            dns_name: self.dns_name,
-            randoms: self.randoms,
-            suite: self.suite,
-            transcript: self.transcript,
-            key_schedule: self.key_schedule,
-            client_auth: self.client_auth,
-            cert_verified,
-            sig_verified,
-            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
-        }))
     }
 }
 
@@ -784,6 +639,151 @@ impl hs::State for ExpectCertificateRequest {
             key_schedule: self.key_schedule,
             may_send_sct_list: self.may_send_sct_list,
             client_auth: Some(client_auth),
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
+    }
+}
+
+struct ExpectCertificate {
+    config: Arc<ClientConfig>,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    transcript: HandshakeHash,
+    key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
+    client_auth: Option<ClientAuthDetails>,
+    hash_at_client_recvd_server_hello: Digest,
+}
+
+impl hs::State for ExpectCertificate {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        let cert_chain = require_handshake_msg!(
+            m,
+            HandshakeType::Certificate,
+            HandshakePayload::CertificateTLS13
+        )?;
+        self.transcript.add_message(&m);
+
+        // This is only non-empty for client auth.
+        if !cert_chain.context.0.is_empty() {
+            warn!("certificate with non-empty context during handshake");
+            cx.common
+                .send_fatal_alert(AlertDescription::DecodeError);
+            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+        }
+
+        if cert_chain.any_entry_has_duplicate_extension()
+            || cert_chain.any_entry_has_unknown_extension()
+        {
+            warn!("certificate chain contains unsolicited/unknown extension");
+            cx.common
+                .send_fatal_alert(AlertDescription::UnsupportedExtension);
+            return Err(Error::PeerMisbehavedError(
+                "bad cert chain extensions".to_string(),
+            ));
+        }
+
+        let server_cert = ServerCertDetails::new(
+            cert_chain.convert(),
+            cert_chain.get_end_entity_ocsp(),
+            cert_chain.get_end_entity_scts(),
+        );
+
+        if let Some(sct_list) = server_cert.scts.as_ref() {
+            if hs::sct_list_is_invalid(sct_list) {
+                let error_msg = "server sent invalid SCT list".to_string();
+                return Err(Error::PeerMisbehavedError(error_msg));
+            }
+
+            if !self.may_send_sct_list {
+                let error_msg = "server sent unsolicited SCT list".to_string();
+                return Err(Error::PeerMisbehavedError(error_msg));
+            }
+        }
+
+        Ok(Box::new(ExpectCertificateVerify {
+            config: self.config,
+            dns_name: self.dns_name,
+            randoms: self.randoms,
+            suite: self.suite,
+            transcript: self.transcript,
+            key_schedule: self.key_schedule,
+            server_cert,
+            client_auth: self.client_auth,
+            hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
+        }))
+    }
+}
+
+// --- TLS1.3 CertificateVerify ---
+struct ExpectCertificateVerify {
+    config: Arc<ClientConfig>,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    transcript: HandshakeHash,
+    key_schedule: KeyScheduleHandshake,
+    server_cert: ServerCertDetails,
+    client_auth: Option<ClientAuthDetails>,
+    hash_at_client_recvd_server_hello: Digest,
+}
+
+impl hs::State for ExpectCertificateVerify {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        let cert_verify = require_handshake_msg!(
+            m,
+            HandshakeType::CertificateVerify,
+            HandshakePayload::CertificateVerify
+        )?;
+
+        trace!("Server cert is {:?}", self.server_cert.cert_chain);
+
+        // 1. Verify the certificate chain.
+        let (end_entity, intermediates) = self
+            .server_cert
+            .cert_chain
+            .split_first()
+            .ok_or(Error::NoCertificatesPresented)?;
+        let now = std::time::SystemTime::now();
+        let cert_verified = self
+            .config
+            .verifier
+            .verify_server_cert(
+                end_entity,
+                intermediates,
+                self.dns_name.as_ref(),
+                &mut self.server_cert.scts(),
+                &self.server_cert.ocsp_response,
+                now,
+            )
+            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
+
+        // 2. Verify their signature on the handshake.
+        let handshake_hash = self.transcript.get_current_hash();
+        let sig_verified = self
+            .config
+            .verifier
+            .verify_tls13_signature(
+                &verify::construct_tls13_server_verify_message(&handshake_hash),
+                &self.server_cert.cert_chain[0],
+                &cert_verify,
+            )
+            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
+
+        cx.data.server_cert_chain = self.server_cert.cert_chain;
+        self.transcript.add_message(&m);
+
+        Ok(Box::new(ExpectFinished {
+            config: self.config,
+            dns_name: self.dns_name,
+            randoms: self.randoms,
+            suite: self.suite,
+            transcript: self.transcript,
+            key_schedule: self.key_schedule,
+            client_auth: self.client_auth,
+            cert_verified,
+            sig_verified,
             hash_at_client_recvd_server_hello: self.hash_at_client_recvd_server_hello,
         }))
     }
