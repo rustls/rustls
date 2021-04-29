@@ -263,60 +263,6 @@ impl hs::State for ExpectCertificate {
     }
 }
 
-struct ExpectCertificateStatus {
-    config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: SessionID,
-    dns_name: webpki::DnsName,
-    randoms: ConnectionRandoms,
-    using_ems: bool,
-    transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
-    server_cert_chain: CertificatePayload,
-    must_issue_new_ticket: bool,
-}
-
-impl hs::State for ExpectCertificateStatus {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        m: Message,
-    ) -> hs::NextStateOrError {
-        self.transcript.add_message(&m);
-        let server_cert_ocsp_response = require_handshake_msg_move!(
-            m,
-            HandshakeType::CertificateStatus,
-            HandshakePayload::CertificateStatus
-        )?
-        .into_inner();
-
-        trace!(
-            "Server stapled OCSP response is {:?}",
-            &server_cert_ocsp_response
-        );
-
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain,
-            server_cert_ocsp_response,
-            self.server_cert_sct_list,
-        );
-
-        Ok(Box::new(ExpectServerKx {
-            config: self.config,
-            resuming_session: self.resuming_session,
-            session_id: self.session_id,
-            dns_name: self.dns_name,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            transcript: self.transcript,
-            suite: self.suite,
-            server_cert,
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        }))
-    }
-}
-
 struct ExpectCertificateStatusOrServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
@@ -376,6 +322,60 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
             })
             .handle(cx, m)
         }
+    }
+}
+
+struct ExpectCertificateStatus {
+    config: Arc<ClientConfig>,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    session_id: SessionID,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    using_ems: bool,
+    transcript: HandshakeHash,
+    suite: Tls12CipherSuite,
+    server_cert_sct_list: Option<SCTList>,
+    server_cert_chain: CertificatePayload,
+    must_issue_new_ticket: bool,
+}
+
+impl hs::State for ExpectCertificateStatus {
+    fn handle(
+        mut self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        m: Message,
+    ) -> hs::NextStateOrError {
+        self.transcript.add_message(&m);
+        let server_cert_ocsp_response = require_handshake_msg_move!(
+            m,
+            HandshakeType::CertificateStatus,
+            HandshakePayload::CertificateStatus
+        )?
+        .into_inner();
+
+        trace!(
+            "Server stapled OCSP response is {:?}",
+            &server_cert_ocsp_response
+        );
+
+        let server_cert = ServerCertDetails::new(
+            self.server_cert_chain,
+            server_cert_ocsp_response,
+            self.server_cert_sct_list,
+        );
+
+        Ok(Box::new(ExpectServerKx {
+            config: self.config,
+            resuming_session: self.resuming_session,
+            session_id: self.session_id,
+            dns_name: self.dns_name,
+            randoms: self.randoms,
+            using_ems: self.using_ems,
+            transcript: self.transcript,
+            suite: self.suite,
+            server_cert,
+            must_issue_new_ticket: self.must_issue_new_ticket,
+        }))
     }
 }
 
@@ -538,6 +538,65 @@ fn emit_finished(
     common.send_msg(f, true);
 }
 
+struct ExpectServerDoneOrCertReq {
+    config: Arc<ClientConfig>,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    session_id: SessionID,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    using_ems: bool,
+    transcript: HandshakeHash,
+    suite: Tls12CipherSuite,
+    server_cert: ServerCertDetails,
+    server_kx: ServerKxDetails,
+    must_issue_new_ticket: bool,
+}
+
+impl hs::State for ExpectServerDoneOrCertReq {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        if require_handshake_msg!(
+            m,
+            HandshakeType::CertificateRequest,
+            HandshakePayload::CertificateRequest
+        )
+        .is_ok()
+        {
+            Box::new(ExpectCertificateRequest {
+                config: self.config,
+                resuming_session: self.resuming_session,
+                session_id: self.session_id,
+                dns_name: self.dns_name,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                transcript: self.transcript,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            })
+            .handle(cx, m)
+        } else {
+            self.transcript.abandon_client_auth();
+
+            Box::new(ExpectServerDone {
+                config: self.config,
+                resuming_session: self.resuming_session,
+                session_id: self.session_id,
+                dns_name: self.dns_name,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                transcript: self.transcript,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                client_auth: None,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            })
+            .handle(cx, m)
+        }
+    }
+}
+
 // --- Either a CertificateRequest, or a ServerHelloDone. ---
 // Existence of the CertificateRequest tells us the server is asking for
 // client auth.  Otherwise we go straight to ServerHelloDone.
@@ -615,65 +674,6 @@ impl hs::State for ExpectCertificateRequest {
             client_auth: Some(client_auth),
             must_issue_new_ticket: self.must_issue_new_ticket,
         }))
-    }
-}
-
-struct ExpectServerDoneOrCertReq {
-    config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: SessionID,
-    dns_name: webpki::DnsName,
-    randoms: ConnectionRandoms,
-    using_ems: bool,
-    transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
-    server_cert: ServerCertDetails,
-    server_kx: ServerKxDetails,
-    must_issue_new_ticket: bool,
-}
-
-impl hs::State for ExpectServerDoneOrCertReq {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        if require_handshake_msg!(
-            m,
-            HandshakeType::CertificateRequest,
-            HandshakePayload::CertificateRequest
-        )
-        .is_ok()
-        {
-            Box::new(ExpectCertificateRequest {
-                config: self.config,
-                resuming_session: self.resuming_session,
-                session_id: self.session_id,
-                dns_name: self.dns_name,
-                randoms: self.randoms,
-                using_ems: self.using_ems,
-                transcript: self.transcript,
-                suite: self.suite,
-                server_cert: self.server_cert,
-                server_kx: self.server_kx,
-                must_issue_new_ticket: self.must_issue_new_ticket,
-            })
-            .handle(cx, m)
-        } else {
-            self.transcript.abandon_client_auth();
-
-            Box::new(ExpectServerDone {
-                config: self.config,
-                resuming_session: self.resuming_session,
-                session_id: self.session_id,
-                dns_name: self.dns_name,
-                randoms: self.randoms,
-                using_ems: self.using_ems,
-                transcript: self.transcript,
-                suite: self.suite,
-                server_cert: self.server_cert,
-                server_kx: self.server_kx,
-                client_auth: None,
-                must_issue_new_ticket: self.must_issue_new_ticket,
-            })
-            .handle(cx, m)
-        }
     }
 }
 
@@ -855,50 +855,7 @@ impl hs::State for ExpectServerDone {
     }
 }
 
-// -- Waiting for their CCS --
-struct ExpectCcs {
-    config: Arc<ClientConfig>,
-    secrets: ConnectionSecrets,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: SessionID,
-    dns_name: webpki::DnsName,
-    using_ems: bool,
-    transcript: HandshakeHash,
-    ticket: ReceivedTicketDetails,
-    resuming: bool,
-    cert_verified: verify::ServerCertVerified,
-    sig_verified: verify::HandshakeSignatureValid,
-}
-
-impl hs::State for ExpectCcs {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
-        // CCS should not be received interleaved with fragmented handshake-level
-        // message.
-        cx.common.check_aligned_handshake()?;
-
-        // nb. msgs layer validates trivial contents of CCS
-        cx.common
-            .record_layer
-            .start_decrypting();
-
-        Ok(Box::new(ExpectFinished {
-            config: self.config,
-            secrets: self.secrets,
-            resuming_session: self.resuming_session,
-            session_id: self.session_id,
-            dns_name: self.dns_name,
-            using_ems: self.using_ems,
-            transcript: self.transcript,
-            ticket: self.ticket,
-            resuming: self.resuming,
-            cert_verified: self.cert_verified,
-            sig_verified: self.sig_verified,
-        }))
-    }
-}
-
-struct ExpectNewTicket {
+pub struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
@@ -934,6 +891,49 @@ impl hs::State for ExpectNewTicket {
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
+            resuming: self.resuming,
+            cert_verified: self.cert_verified,
+            sig_verified: self.sig_verified,
+        }))
+    }
+}
+
+// -- Waiting for their CCS --
+pub struct ExpectCcs {
+    config: Arc<ClientConfig>,
+    secrets: ConnectionSecrets,
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    session_id: SessionID,
+    dns_name: webpki::DnsName,
+    using_ems: bool,
+    transcript: HandshakeHash,
+    ticket: ReceivedTicketDetails,
+    resuming: bool,
+    cert_verified: verify::ServerCertVerified,
+    sig_verified: verify::HandshakeSignatureValid,
+}
+
+impl hs::State for ExpectCcs {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
+        // CCS should not be received interleaved with fragmented handshake-level
+        // message.
+        cx.common.check_aligned_handshake()?;
+
+        // nb. msgs layer validates trivial contents of CCS
+        cx.common
+            .record_layer
+            .start_decrypting();
+
+        Ok(Box::new(ExpectFinished {
+            config: self.config,
+            secrets: self.secrets,
+            resuming_session: self.resuming_session,
+            session_id: self.session_id,
+            dns_name: self.dns_name,
+            using_ems: self.using_ems,
+            transcript: self.transcript,
+            ticket: self.ticket,
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
