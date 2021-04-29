@@ -16,8 +16,8 @@ use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
+use crate::verify;
 use crate::{kx, tls12};
-use crate::{verify, StoresClientSessions};
 
 use super::hs::ClientContext;
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
@@ -941,66 +941,6 @@ impl hs::State for ExpectNewTicket {
     }
 }
 
-// -- Waiting for their finished --
-fn save_session(
-    secrets: &ConnectionSecrets,
-    mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    session_id: SessionID,
-    dns_name: webpki::DnsNameRef,
-    using_ems: bool,
-    recvd_ticket: &mut ReceivedTicketDetails,
-    cx: &mut ClientContext<'_>,
-    session_storage: &dyn StoresClientSessions,
-) {
-    // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
-    // original ticket again.
-    let mut ticket = mem::take(&mut recvd_ticket.new_ticket);
-
-    if ticket.is_empty() {
-        if let Some(resuming_session) = &mut resuming_session {
-            ticket = resuming_session.take_ticket();
-        }
-    }
-
-    if session_id.is_empty() && ticket.is_empty() {
-        debug!("Session not saved: server didn't allocate id or ticket");
-        return;
-    }
-
-    let time_now = match TimeBase::now() {
-        Ok(time_now) => time_now,
-        Err(_) => {
-            debug!("Session not saved: failed to get system time");
-            return;
-        }
-    };
-
-    let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
-
-    let master_secret = secrets.get_master_secret();
-    let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
-        ProtocolVersion::TLSv1_2,
-        secrets.suite().supported_suite(),
-        &session_id,
-        ticket,
-        master_secret,
-        &cx.data.server_cert_chain,
-        time_now,
-    );
-    value.set_times(recvd_ticket.new_ticket_lifetime, 0);
-    if using_ems {
-        value.set_extended_ms_used();
-    }
-
-    let worked = session_storage.put(key.get_encoding(), value.get_encoding());
-
-    if worked {
-        debug!("Session saved");
-    } else {
-        debug!("Session not saved");
-    }
-}
-
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
@@ -1013,6 +953,62 @@ struct ExpectFinished {
     resuming: bool,
     cert_verified: verify::ServerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
+}
+
+impl ExpectFinished {
+    // -- Waiting for their finished --
+    fn save_session(&mut self, cx: &mut ClientContext<'_>) {
+        // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
+        // original ticket again.
+        let mut ticket = mem::take(&mut self.ticket.new_ticket);
+
+        if ticket.is_empty() {
+            if let Some(resuming_session) = &mut self.resuming_session {
+                ticket = resuming_session.take_ticket();
+            }
+        }
+
+        if self.session_id.is_empty() && ticket.is_empty() {
+            debug!("Session not saved: server didn't allocate id or ticket");
+            return;
+        }
+
+        let time_now = match TimeBase::now() {
+            Ok(time_now) => time_now,
+            Err(_) => {
+                debug!("Session not saved: failed to get system time");
+                return;
+            }
+        };
+
+        let key = persist::ClientSessionKey::session_for_dns_name(self.dns_name.as_ref());
+
+        let master_secret = self.secrets.get_master_secret();
+        let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
+            ProtocolVersion::TLSv1_2,
+            self.secrets.suite().supported_suite(),
+            &self.session_id,
+            ticket,
+            master_secret,
+            &cx.data.server_cert_chain,
+            time_now,
+        );
+        value.set_times(self.ticket.new_ticket_lifetime, 0);
+        if self.using_ems {
+            value.set_extended_ms_used();
+        }
+
+        let worked = self
+            .config
+            .session_storage
+            .put(key.get_encoding(), value.get_encoding());
+
+        if worked {
+            debug!("Session saved");
+        } else {
+            debug!("Session not saved");
+        }
+    }
 }
 
 impl hs::State for ExpectFinished {
@@ -1041,16 +1037,7 @@ impl hs::State for ExpectFinished {
         // Hash this message too.
         st.transcript.add_message(&m);
 
-        save_session(
-            &st.secrets,
-            st.resuming_session,
-            st.session_id,
-            st.dns_name.as_ref(),
-            st.using_ems,
-            &mut st.ticket,
-            cx,
-            &*st.config.session_storage,
-        );
+        st.save_session(cx);
 
         if st.resuming {
             emit_ccs(cx.common);
