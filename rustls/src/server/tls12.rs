@@ -100,9 +100,9 @@ mod client_hello {
             // -- Check for resumption --
             // We can do this either by (in order of preference):
             // 1. receiving a ticket that decrypts
-            // 2. receiving a connionid that is in our cache
+            // 2. receiving a sessionid that is in our cache
             //
-            // If we receive a ticket, the connionid won't be in our
+            // If we receive a ticket, the sessionid won't be in our
             // cache, so don't check.
             //
             // If either works, we end up with a ServerConnectionValue
@@ -249,7 +249,7 @@ mod client_hello {
             id: &SessionID,
             resumedata: persist::ServerSessionValue,
         ) -> hs::NextStateOrError {
-            debug!("Resuming connion");
+            debug!("Resuming connection");
 
             if resumedata.extended_ms && !self.using_ems {
                 return Err(cx
@@ -726,7 +726,7 @@ impl hs::State for ExpectCcs {
 }
 
 // --- Process client's Finished ---
-fn get_server_connion_value_tls12(
+fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
     cx: &ServerContext<'_>,
@@ -760,7 +760,7 @@ fn emit_ticket(
 ) {
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
-    let plain = get_server_connion_value_tls12(secrets, using_ems, cx).get_encoding();
+    let plain = get_server_connection_value_tls12(secrets, using_ems, cx).get_encoding();
     let ticket = ticketer
         .encrypt(&plain)
         .unwrap_or_else(Vec::new);
@@ -840,9 +840,9 @@ impl hs::State for ExpectFinished {
                 })
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
-        // Save connion, perhaps
+        // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
-            let value = get_server_connion_value_tls12(&self.secrets, self.using_ems, cx);
+            let value = get_server_connection_value_tls12(&self.secrets, self.using_ems, cx);
 
             let worked = self
                 .config
