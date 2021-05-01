@@ -1,6 +1,4 @@
-use crate::conn::{
-    Connection, ConnectionCommon, IoState, MessageType, PlaintextSink, Reader, Writer,
-};
+use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer};
 use crate::error::Error;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
@@ -9,18 +7,16 @@ use crate::log::trace;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::{CertificatePayload, ClientExtension};
-use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::{key, RootCertStore};
 
 #[cfg(feature = "quic")]
-use crate::{conn::Protocol, quic};
+use crate::quic;
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -395,7 +391,7 @@ impl<'a> WriteEarlyData<'a> {
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.sess.early_data.bytes_left()
+        self.sess.data.early_data.bytes_left()
     }
 }
 
@@ -414,9 +410,7 @@ pub struct ClientConnection {
     config: Arc<ClientConfig>,
     common: ConnectionCommon,
     state: Option<hs::NextState>,
-    server_cert_chain: CertificatePayload,
-    early_data: EarlyData,
-    resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+    data: ClientConnectionData,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -434,20 +428,31 @@ impl ClientConnection {
         config: &Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        let mut new = Self::from_config(config);
-        new.start_handshake(hostname.into(), vec![])?;
-        Ok(new)
+        Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
     }
 
-    fn from_config(config: &Arc<ClientConfig>) -> Self {
-        ClientConnection {
+    fn new_inner(
+        config: &Arc<ClientConfig>,
+        hostname: webpki::DnsNameRef,
+        extra_exts: Vec<ClientExtension>,
+        proto: Protocol,
+    ) -> Result<Self, Error> {
+        let mut new = ClientConnection {
             config: config.clone(),
             common: ConnectionCommon::new(config.mtu, true),
             state: None,
-            server_cert_chain: Vec::new(),
-            early_data: EarlyData::new(),
-            resumption_ciphersuite: None,
-        }
+            data: ClientConnectionData::new(),
+        };
+        new.common.protocol = proto;
+
+        let mut cx = hs::ClientContext {
+            common: &mut new.common,
+            data: &mut new.data,
+            config: &new.config,
+        };
+
+        new.state = Some(hs::start_handshake(hostname.into(), extra_exts, &mut cx)?);
+        Ok(new)
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
@@ -469,7 +474,7 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-        if self.early_data.is_enabled() {
+        if self.data.early_data.is_enabled() {
             Some(WriteEarlyData::new(self))
         } else {
             None
@@ -482,58 +487,12 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.early_data.is_accepted()
-    }
-
-    fn start_handshake(
-        &mut self,
-        dns_name: webpki::DnsName,
-        extra_exts: Vec<ClientExtension>,
-    ) -> Result<(), Error> {
-        self.state = Some(hs::start_handshake(self, dns_name, extra_exts)?);
-        Ok(())
-    }
-
-    pub(crate) fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
-        while let Some(msg) = self
-            .common
-            .handshake_joiner
-            .frames
-            .pop_front()
-        {
-            self.process_main_protocol(msg)?;
-        }
-
-        Ok(())
-    }
-
-    /// Process `msg`.  First, we get the current state.  Then we ask what messages
-    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
-    /// to handle the message.
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if msg.is_handshake_type(HandshakeType::HelloRequest)
-            && !self.common.is_tls13()
-            && !self.is_handshaking()
-        {
-            self.common
-                .reject_renegotiation_attempt();
-            return Ok(());
-        }
-
-        let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(self, msg);
-        let next_state = self
-            .common
-            .maybe_send_unexpected_alert(maybe_next_state)?;
-        self.state = Some(next_state);
-
-        Ok(())
+        self.data.early_data.is_accepted()
     }
 
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.early_data
+        self.data
+            .early_data
             .check_write(data.len())
             .map(|sz| {
                 self.common
@@ -544,7 +503,7 @@ impl ClientConnection {
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
         if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(self);
+            st.perhaps_write_key_update(&mut self.common);
         }
         self.state = st;
 
@@ -563,36 +522,8 @@ impl Connection for ClientConnection {
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        if let Some(ref err) = self.common.error {
-            return Err(err.clone());
-        }
-
-        if self.common.message_deframer.desynced {
-            return Err(Error::CorruptMessage);
-        }
-
-        while let Some(msg) = self
-            .common
-            .message_deframer
-            .frames
-            .pop_front()
-        {
-            let result = self
-                .common
-                .process_msg(msg)
-                .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
-                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
-                    None => Ok(()),
-                });
-
-            if let Err(err) = result {
-                self.common.error = Some(err.clone());
-                return Err(err);
-            }
-        }
-
-        Ok(self.common.current_io_state())
+        self.common
+            .process_new_packets(&mut self.state, &mut self.data, &self.config)
     }
 
     fn wants_read(&self) -> bool {
@@ -622,11 +553,11 @@ impl Connection for ClientConnection {
     }
 
     fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        if self.server_cert_chain.is_empty() {
+        if self.data.server_cert_chain.is_empty() {
             return None;
         }
 
-        Some(self.server_cert_chain.to_vec())
+        Some(self.data.server_cert_chain.to_vec())
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -652,7 +583,7 @@ impl Connection for ClientConnection {
     fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common
             .get_suite()
-            .or(self.resumption_ciphersuite)
+            .or(self.data.resumption_ciphersuite)
     }
 
     fn writer(&mut self) -> Writer {
@@ -682,9 +613,25 @@ impl PlaintextSink for ClientConnection {
     }
 }
 
+struct ClientConnectionData {
+    server_cert_chain: CertificatePayload,
+    early_data: EarlyData,
+    resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+}
+
+impl ClientConnectionData {
+    fn new() -> Self {
+        Self {
+            server_cert_chain: Vec::new(),
+            early_data: EarlyData::new(),
+            resumption_ciphersuite: None,
+        }
+    }
+}
+
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ClientConnection {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+    fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
             .params
@@ -692,23 +639,24 @@ impl quic::QuicExt for ClientConnection {
             .map(|v| v.as_ref())
     }
 
-    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.resumption_ciphersuite?,
+            self.data.resumption_ciphersuite?,
             self.common.quic.early_secret.as_ref()?,
         ))
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
-        self.process_new_handshake_messages()
+        self.common
+            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
         quic::write_hs(&mut self.common, buf)
     }
 
-    fn get_alert(&self) -> Option<AlertDescription> {
+    fn alert(&self) -> Option<AlertDescription> {
         self.common.quic.alert
     }
 
@@ -729,21 +677,18 @@ pub trait ClientQuicExt {
         hostname: webpki::DnsNameRef,
         params: Vec<u8>,
     ) -> Result<ClientConnection, Error> {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
+        if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            return Err(Error::General(
+                "TLS 1.3 support is required for QUIC".into(),
+            ));
+        }
+
         let ext = match quic_version {
             quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
-        let mut new = ClientConnection::from_config(config);
-        new.common.protocol = Protocol::Quic;
-        new.start_handshake(hostname.into(), vec![ext])?;
-        Ok(new)
+
+        ClientConnection::new_inner(config, hostname, vec![ext], Protocol::Quic)
     }
 }
 

@@ -3,23 +3,26 @@ use crate::error::Error;
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
+use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::MessageDeframer;
+use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
 use crate::msgs::hsjoiner::HandshakeJoiner;
-use crate::msgs::message::{BorrowMessage, Message, MessagePayload};
+use crate::msgs::message::{BorrowedOpaqueMessage, Message, MessagePayload, OpaqueMessage};
 use crate::prf;
 use crate::quic;
 use crate::rand;
 use crate::record_layer;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
 use crate::vecbuf::ChunkVecBuffer;
 
 use ring::digest::Digest;
 
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 use std::io;
 
 /// Values of this structure are returned from `Session::process_new_packets`
@@ -334,7 +337,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Protocol {
-    Tls13,
+    Tcp,
     #[cfg(feature = "quic")]
     Quic,
 }
@@ -394,14 +397,14 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 /// TLS1.2 per-connection keying material
 pub struct ConnectionSecrets {
     pub randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: Tls12CipherSuite,
     pub master_secret: [u8; 48],
 }
 
 impl ConnectionSecrets {
-    pub fn new(
+    pub(crate) fn new(
         randoms: &ConnectionRandoms,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         pms: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -413,7 +416,7 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
         prf::prf(
             &mut ret.master_secret,
-            suite.hmac_algorithm(),
+            suite.supported_suite().hmac_algorithm(),
             pms,
             b"master secret",
             &randoms,
@@ -421,10 +424,10 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn new_ems(
+    pub(crate) fn new_ems(
         randoms: &ConnectionRandoms,
         hs_hash: &Digest,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         pms: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -435,7 +438,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut ret.master_secret,
-            suite.hmac_algorithm(),
+            suite.supported_suite().hmac_algorithm(),
             pms,
             b"extended master secret",
             hs_hash.as_ref(),
@@ -443,9 +446,9 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn new_resume(
+    pub(crate) fn new_resume(
         randoms: &ConnectionRandoms,
-        suite: &'static SupportedCipherSuite,
+        suite: Tls12CipherSuite,
         master_secret: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -458,8 +461,10 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub fn make_key_block(&self, scs: &SupportedCipherSuite) -> Vec<u8> {
-        let len = (scs.aead_algorithm.key_len() + scs.fixed_iv_len) * 2 + scs.explicit_nonce_len;
+    pub fn make_key_block(&self) -> Vec<u8> {
+        let scs = self.suite.supported_suite();
+        let len = (scs.aead_algorithm.key_len() + self.suite.tls12().fixed_iv_len) * 2
+            + self.suite.tls12().explicit_nonce_len;
 
         let mut out = Vec::new();
         out.resize(len, 0u8);
@@ -469,7 +474,9 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.suite.hmac_algorithm(),
+            self.suite
+                .supported_suite()
+                .hmac_algorithm(),
             &self.master_secret,
             b"key expansion",
             &randoms,
@@ -478,7 +485,7 @@ impl ConnectionSecrets {
         out
     }
 
-    pub fn suite(&self) -> &'static SupportedCipherSuite {
+    pub(crate) fn suite(&self) -> Tls12CipherSuite {
         self.suite
     }
 
@@ -494,7 +501,9 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut out,
-            self.suite.hmac_algorithm(),
+            self.suite
+                .supported_suite()
+                .hmac_algorithm(),
             &self.master_secret,
             label,
             handshake_hash.as_ref(),
@@ -522,7 +531,9 @@ impl ConnectionSecrets {
 
         prf::prf(
             output,
-            self.suite.hmac_algorithm(),
+            self.suite
+                .supported_suite()
+                .hmac_algorithm(),
             &self.master_secret,
             label,
             &randoms,
@@ -548,8 +559,8 @@ pub struct ConnectionCommon {
     pub early_traffic: bool,
     sent_fatal_alert: bool,
     received_middlebox_ccs: bool,
-    pub error: Option<Error>,
-    pub message_deframer: MessageDeframer,
+    error: Option<Error>,
+    message_deframer: MessageDeframer,
     pub handshake_joiner: HandshakeJoiner,
     pub message_fragmenter: MessageFragmenter,
     received_plaintext: ChunkVecBuffer,
@@ -581,7 +592,7 @@ impl ConnectionCommon {
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
-            protocol: Protocol::Tls13,
+            protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
         }
@@ -591,7 +602,7 @@ impl ConnectionCommon {
         Reader { common: self }
     }
 
-    pub(crate) fn current_io_state(&self) -> IoState {
+    fn current_io_state(&self) -> IoState {
         IoState {
             tls_bytes_to_write: self.sendable_tls.len(),
             plaintext_bytes_to_read: self.received_plaintext.len(),
@@ -603,13 +614,13 @@ impl ConnectionCommon {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    pub fn process_msg(&mut self, mut msg: Message) -> Result<Option<MessageType>, Error> {
+    fn process_msg(&mut self, mut msg: OpaqueMessage) -> Result<Option<MessageType>, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
         // - if it's not a CCS at all
         // - if we've finished the handshake
-        if msg.is_content_type(ContentType::ChangeCipherSpec) && !self.traffic && self.is_tls13() {
+        if msg.typ == ContentType::ChangeCipherSpec && !self.traffic && self.is_tls13() {
             if self.received_middlebox_ccs {
                 return Err(Error::PeerMisbehavedError(
                     "illegal middlebox CCS received".into(),
@@ -639,18 +650,102 @@ impl ConnectionCommon {
             return Ok(Some(MessageType::Handshake));
         }
 
-        // Now we can fully parse the message payload. We only return an error
-        // on the client, or we fail a bogo test (WrongMessageType-TLS13-ServerHello-TLS).
-        if !msg.decode_payload() && self.is_client {
-            return Err(Error::CorruptMessagePayload(msg.typ));
-        }
+        // Now we can fully parse the message payload.
+        let msg = Message::try_from(msg)?;
 
         // For alerts, we have separate logic.
-        if msg.is_content_type(ContentType::Alert) {
-            return self.process_alert(msg).map(|()| None);
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            return self.process_alert(alert).map(|()| None);
         }
 
         Ok(Some(MessageType::Data(msg)))
+    }
+
+    pub(crate) fn process_new_packets<S: HandleState>(
+        &mut self,
+        state: &mut Option<S>,
+        data: &mut S::Data,
+        config: &S::Config,
+    ) -> Result<IoState, Error> {
+        if let Some(ref err) = self.error {
+            return Err(err.clone());
+        }
+
+        if self.message_deframer.desynced {
+            return Err(Error::CorruptMessage);
+        }
+
+        while let Some(msg) = self.message_deframer.frames.pop_front() {
+            let result = self
+                .process_msg(msg)
+                .and_then(|val| match val {
+                    Some(MessageType::Handshake) => {
+                        self.process_new_handshake_messages(state, data, config)
+                    }
+                    Some(MessageType::Data(msg)) => {
+                        self.process_main_protocol(msg, state, data, config)
+                    }
+                    None => Ok(()),
+                });
+
+            if let Err(err) = result {
+                self.error = Some(err.clone());
+                return Err(err);
+            }
+        }
+
+        Ok(self.current_io_state())
+    }
+
+    pub(crate) fn process_new_handshake_messages<S: HandleState>(
+        &mut self,
+        state: &mut Option<S>,
+        data: &mut S::Data,
+        config: &S::Config,
+    ) -> Result<(), Error> {
+        while let Some(msg) = self.handshake_joiner.frames.pop_front() {
+            self.process_main_protocol(msg, state, data, &config)?;
+        }
+
+        Ok(())
+    }
+
+    /// Process `msg`.  First, we get the current state.  Then we ask what messages
+    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
+    /// to handle the message.
+    fn process_main_protocol<S: HandleState>(
+        &mut self,
+        msg: Message,
+        state: &mut Option<S>,
+        data: &mut S::Data,
+        config: &S::Config,
+    ) -> Result<(), Error> {
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.traffic && !self.is_tls13() {
+            let reject_ty = match self.is_client {
+                true => HandshakeType::HelloRequest,
+                false => HandshakeType::ClientHello,
+            };
+            if msg.is_handshake_type(reject_ty) {
+                self.send_warning_alert(AlertDescription::NoRenegotiation);
+                return Ok(());
+            }
+        }
+
+        let current = state.take().unwrap();
+        match current.handle(msg, data, self, config) {
+            Ok(next) => {
+                *state = Some(next);
+                Ok(())
+            }
+            Err(e @ Error::InappropriateMessage { .. })
+            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
+                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
+                Err(e)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     // Changing the keys must not span any fragmented handshake
@@ -683,7 +778,7 @@ impl ConnectionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn decrypt_incoming(&mut self, encr: Message) -> Result<Message, Error> {
+    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
         if self
             .record_layer
             .wants_close_before_decrypt()
@@ -707,62 +802,43 @@ impl ConnectionCommon {
         self.sendable_tls.set_limit(limit);
     }
 
-    pub fn maybe_send_unexpected_alert<T>(&mut self, rc: Result<T, Error>) -> Result<T, Error> {
-        match rc {
-            Err(Error::InappropriateMessage { .. })
-            | Err(Error::InappropriateHandshakeMessage { .. }) => {
-                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
-            }
-            _ => {}
-        };
-        rc
-    }
+    pub fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+        // Reject unknown AlertLevels.
+        if let AlertLevel::Unknown(_) = alert.level {
+            self.send_fatal_alert(AlertDescription::IllegalParameter);
+        }
 
-    pub(crate) fn reject_renegotiation_attempt(&mut self) {
-        self.send_warning_alert(AlertDescription::NoRenegotiation);
-    }
+        // If we get a CloseNotify, make a note to declare EOF to our
+        // caller.
+        if alert.description == AlertDescription::CloseNotify {
+            self.peer_eof = true;
+            return Ok(());
+        }
 
-    pub fn process_alert(&mut self, msg: Message) -> Result<(), Error> {
-        if let MessagePayload::Alert(ref alert) = msg.payload {
-            // Reject unknown AlertLevels.
-            if let AlertLevel::Unknown(_) = alert.level {
-                self.send_fatal_alert(AlertDescription::IllegalParameter);
-            }
-
-            // If we get a CloseNotify, make a note to declare EOF to our
-            // caller.
-            if alert.description == AlertDescription::CloseNotify {
-                self.peer_eof = true;
+        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
+        // (except, for no good reason, user_cancelled).
+        if alert.level == AlertLevel::Warning {
+            if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
+                self.send_fatal_alert(AlertDescription::DecodeError);
+            } else {
+                warn!("TLS alert warning received: {:#?}", alert);
                 return Ok(());
             }
-
-            // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
-            // (except, for no good reason, user_cancelled).
-            if alert.level == AlertLevel::Warning {
-                if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                    self.send_fatal_alert(AlertDescription::DecodeError);
-                } else {
-                    warn!("TLS alert warning received: {:#?}", msg);
-                    return Ok(());
-                }
-            }
-
-            error!("TLS alert received: {:#?}", msg);
-            Err(Error::AlertReceived(alert.description))
-        } else {
-            Err(Error::CorruptMessagePayload(ContentType::Alert))
         }
+
+        error!("TLS alert received: {:#?}", alert);
+        Err(Error::AlertReceived(alert.description))
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub fn send_msg_encrypt(&mut self, m: Message) {
+    pub fn send_msg_encrypt(&mut self, m: OpaqueMessage) {
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter
             .fragment(m, &mut plain_messages);
 
         for m in plain_messages {
-            self.send_single_fragment(m.to_borrowed());
+            self.send_single_fragment(m.borrow());
         }
     }
 
@@ -794,7 +870,7 @@ impl ConnectionCommon {
         len
     }
 
-    fn send_single_fragment(&mut self, m: BorrowMessage) {
+    fn send_single_fragment(&mut self, m: BorrowedOpaqueMessage) {
         // Close connection once we start to run out of
         // sequence space.
         if self
@@ -901,9 +977,8 @@ impl ConnectionCommon {
     }
 
     // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: Message) {
-        self.sendable_tls
-            .append(m.get_encoding());
+    fn queue_tls_message(&mut self, m: OpaqueMessage) {
+        self.sendable_tls.append(m.encode());
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
@@ -915,11 +990,7 @@ impl ConnectionCommon {
                     self.quic.alert = Some(alert.description);
                 } else {
                     debug_assert!(
-                        if let MessagePayload::Handshake(_) = m.payload {
-                            true
-                        } else {
-                            false
-                        },
+                        matches!(m.payload, MessagePayload::Handshake(_)),
                         "QUIC uses TLS for the cryptographic handshake only"
                     );
                     let mut bytes = Vec::new();
@@ -934,12 +1005,12 @@ impl ConnectionCommon {
         if !must_encrypt {
             let mut to_send = VecDeque::new();
             self.message_fragmenter
-                .fragment(m, &mut to_send);
+                .fragment(m.into(), &mut to_send);
             for mm in to_send {
                 self.queue_tls_message(mm);
             }
         } else {
-            self.send_msg_encrypt(m);
+            self.send_msg_encrypt(m.into());
         }
     }
 
@@ -963,11 +1034,17 @@ impl ConnectionCommon {
     }
 
     pub fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets) {
-        let (dec, enc) = cipher::new_tls12(secrets.suite(), secrets);
+        let (dec, enc) = cipher::new_tls12(secrets);
         self.record_layer
             .prepare_message_encrypter(enc);
         self.record_layer
             .prepare_message_decrypter(dec);
+    }
+
+    #[cfg(feature = "quic")]
+    pub fn missing_extension(&mut self, why: &str) -> Error {
+        self.send_fatal_alert(AlertDescription::MissingExtension);
+        Error::PeerMisbehavedError(why.to_string())
     }
 
     pub fn send_warning_alert(&mut self, desc: AlertDescription) {
@@ -1001,6 +1078,19 @@ impl ConnectionCommon {
         #[cfg(not(feature = "quic"))]
         false
     }
+}
+
+pub(crate) trait HandleState: Sized {
+    type Data;
+    type Config;
+
+    fn handle(
+        self,
+        message: Message,
+        data: &mut Self::Data,
+        common: &mut ConnectionCommon,
+        config: &Self::Config,
+    ) -> Result<Self, Error>;
 }
 
 pub enum MessageType {

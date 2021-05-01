@@ -3,8 +3,9 @@ pub use crate::client::ClientQuicExt;
 use crate::conn::ConnectionCommon;
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
+use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::message::OpaqueMessage;
 pub use crate::server::ServerQuicExt;
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
 
@@ -32,10 +33,16 @@ impl Secrets {
 /// Generic methods for QUIC sessions
 pub trait QuicExt {
     /// Return the TLS-encoded transport parameters for the session's peer.
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]>;
+    ///
+    /// While the transport parameters are technically available prior to the
+    /// completion of the handshake, they cannot be fully trusted until the
+    /// handshake completes, and reliance on them should be minimized.
+    /// However, any tampering with the parameters will cause the handshake
+    /// to fail.
+    fn quic_transport_parameters(&self) -> Option<&[u8]>;
 
     /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
-    fn get_0rtt_keys(&self) -> Option<DirectionalKeys>;
+    fn zero_rtt_keys(&self) -> Option<DirectionalKeys>;
 
     /// Consume unencrypted TLS handshake data.
     ///
@@ -50,7 +57,7 @@ pub trait QuicExt {
     /// Emit the TLS description code of a fatal alert, if one has arisen.
     ///
     /// Check after `read_hs` returns `Err(_)`.
-    fn get_alert(&self) -> Option<AlertDescription>;
+    fn alert(&self) -> Option<AlertDescription>;
 
     /// Compute the keys to use following a 1-RTT key update
     ///
@@ -180,10 +187,10 @@ impl Keys {
 pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(), Error> {
     if this
         .handshake_joiner
-        .take_message(Message {
+        .take_message(OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::new_opaque(plaintext.into()),
+            payload: Payload::new(plaintext.to_vec()),
         })
         .is_none()
     {

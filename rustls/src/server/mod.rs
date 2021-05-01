@@ -1,16 +1,13 @@
-use crate::conn::{
-    Connection, ConnectionCommon, IoState, MessageType, PlaintextSink, Reader, Writer,
-};
+use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::{KeyLog, NoKeyLog};
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::ServerExtension;
-use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::verify;
@@ -348,14 +345,8 @@ impl ServerConfig {
 pub struct ServerConnection {
     config: Arc<ServerConfig>,
     common: ConnectionCommon,
-    sni: Option<webpki::DnsName>,
-    received_resumption_data: Option<Vec<u8>>,
-    resumption_data: Vec<u8>,
-    state: Option<Box<dyn hs::State + Send + Sync>>,
-    client_cert_chain: Option<Vec<key::Certificate>>,
-    #[allow(dead_code)] // #[cfg(feature = "quic")] only
-    /// Whether to reject early data even if it would otherwise be accepted
-    reject_early_data: bool,
+    state: Option<Box<dyn hs::State>>,
+    data: ServerConnectionData,
 }
 
 impl ServerConnection {
@@ -369,46 +360,9 @@ impl ServerConnection {
         ServerConnection {
             config: config.clone(),
             common: ConnectionCommon::new(config.mtu, false),
-            sni: None,
-            received_resumption_data: None,
-            resumption_data: Vec::new(),
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
-            client_cert_chain: None,
-            reject_early_data: false,
+            data: ServerConnectionData::default(),
         }
-    }
-
-    fn process_main_protocol(&mut self, msg: Message) -> Result<(), Error> {
-        if self.common.traffic
-            && !self.common.is_tls13()
-            && msg.is_handshake_type(HandshakeType::ClientHello)
-        {
-            self.common
-                .reject_renegotiation_attempt();
-            return Ok(());
-        }
-
-        let state = self.state.take().unwrap();
-        let maybe_next_state = state.handle(self, msg);
-        let next_state = self
-            .common
-            .maybe_send_unexpected_alert(maybe_next_state)?;
-        self.state = Some(next_state);
-
-        Ok(())
-    }
-
-    fn process_new_handshake_messages(&mut self) -> Result<(), Error> {
-        while let Some(msg) = self
-            .common
-            .handshake_joiner
-            .frames
-            .pop_front()
-        {
-            self.process_main_protocol(msg)?;
-        }
-
-        Ok(())
     }
 
     /// Retrieves the SNI hostname, if any, used to select the certificate and
@@ -428,12 +382,9 @@ impl ServerConnection {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn sni_hostname(&self) -> Option<&str> {
-        self.get_sni()
+        self.data
+            .get_sni()
             .map(|s| s.as_ref().into())
-    }
-
-    fn get_sni(&self) -> Option<&webpki::DnsName> {
-        self.sni.as_ref()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -442,7 +393,8 @@ impl ServerConnection {
     ///
     /// Returns `Some` iff a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.received_resumption_data
+        self.data
+            .received_resumption_data
             .as_ref()
             .map(|x| &x[..])
     }
@@ -457,7 +409,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) {
         assert!(data.len() < 2usize.pow(15));
-        self.resumption_data = data.into();
+        self.data.resumption_data = data.into();
     }
 
     /// Explicitly discard early data, notifying the client
@@ -470,13 +422,13 @@ impl ServerConnection {
             self.is_handshaking(),
             "cannot retroactively reject early data"
         );
-        self.reject_early_data = true;
+        self.data.reject_early_data = true;
     }
 
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
         if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(self);
+            st.perhaps_write_key_update(&mut self.common);
         }
         self.state = st;
         self.common.send_some_plaintext(buf)
@@ -494,36 +446,8 @@ impl Connection for ServerConnection {
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        if let Some(ref err) = self.common.error {
-            return Err(err.clone());
-        }
-
-        if self.common.message_deframer.desynced {
-            return Err(Error::CorruptMessage);
-        }
-
-        while let Some(msg) = self
-            .common
-            .message_deframer
-            .frames
-            .pop_front()
-        {
-            let result = self
-                .common
-                .process_msg(msg)
-                .and_then(|val| match val {
-                    Some(MessageType::Handshake) => self.process_new_handshake_messages(),
-                    Some(MessageType::Data(msg)) => self.process_main_protocol(msg),
-                    None => Ok(()),
-                });
-
-            if let Err(err) = result {
-                self.common.error = Some(err.clone());
-                return Err(err);
-            }
-        }
-
-        Ok(self.common.current_io_state())
+        self.common
+            .process_new_packets(&mut self.state, &mut self.data, &self.config)
     }
 
     fn wants_read(&self) -> bool {
@@ -553,7 +477,8 @@ impl Connection for ServerConnection {
     }
 
     fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.client_cert_chain
+        self.data
+            .client_cert_chain
             .as_ref()
             .map(|chain| chain.to_vec())
     }
@@ -616,9 +541,25 @@ impl fmt::Debug for ServerConnection {
     }
 }
 
+#[derive(Default)]
+struct ServerConnectionData {
+    sni: Option<webpki::DnsName>,
+    received_resumption_data: Option<Vec<u8>>,
+    resumption_data: Vec<u8>,
+    client_cert_chain: Option<Vec<key::Certificate>>,
+    /// Whether to reject early data even if it would otherwise be accepted
+    reject_early_data: bool,
+}
+
+impl ServerConnectionData {
+    fn get_sni(&self) -> Option<&webpki::DnsName> {
+        self.sni.as_ref()
+    }
+}
+
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ServerConnection {
-    fn get_quic_transport_parameters(&self) -> Option<&[u8]> {
+    fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
             .quic
             .params
@@ -626,7 +567,7 @@ impl quic::QuicExt for ServerConnection {
             .map(|v| v.as_ref())
     }
 
-    fn get_0rtt_keys(&self) -> Option<quic::DirectionalKeys> {
+    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.common.get_suite()?,
             self.common.quic.early_secret.as_ref()?,
@@ -635,14 +576,15 @@ impl quic::QuicExt for ServerConnection {
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
-        self.process_new_handshake_messages()
+        self.common
+            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
         quic::write_hs(&mut self.common, buf)
     }
 
-    fn get_alert(&self) -> Option<AlertDescription> {
+    fn alert(&self) -> Option<AlertDescription> {
         self.common.quic.alert
     }
 
@@ -661,25 +603,26 @@ pub trait ServerQuicExt {
         config: &Arc<ServerConfig>,
         quic_version: quic::Version,
         params: Vec<u8>,
-    ) -> ServerConnection {
-        assert!(
-            config
-                .versions
-                .iter()
-                .all(|x| x.get_u16() >= ProtocolVersion::TLSv1_3.get_u16()),
-            "QUIC requires TLS version >= 1.3"
-        );
-        assert!(
-            config.max_early_data_size == 0 || config.max_early_data_size == 0xffff_ffff,
-            "QUIC sessions must set a max early data of 0 or 2^32-1"
-        );
+    ) -> Result<ServerConnection, Error> {
+        if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            return Err(Error::General(
+                "TLS 1.3 support is required for QUIC".into(),
+            ));
+        }
+
+        if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
+            return Err(Error::General(
+                "QUIC sessions must set a max early data of 0 or 2^32-1".into(),
+            ));
+        }
+
         let ext = match quic_version {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
         };
         let mut new = ServerConnection::from_config(config, vec![ext]);
         new.common.protocol = Protocol::Quic;
-        new
+        Ok(new)
     }
 }
 

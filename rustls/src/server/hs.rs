@@ -1,6 +1,6 @@
-use crate::conn::ConnectionRandoms;
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -14,18 +14,20 @@ use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::{ClientHello, ServerConfig, ServerConnection};
+use crate::server::{ClientHello, ServerConfig};
 use crate::suites;
 use crate::SupportedCipherSuite;
 
 use crate::server::common::ActiveCertifiedKey;
-use crate::server::{tls12, tls13};
+use crate::server::{tls12, tls13, ServerConnectionData};
 
-pub type NextState = Box<dyn State + Send + Sync>;
-pub type NextStateOrError = Result<NextState, Error>;
+use std::convert::TryFrom;
 
-pub trait State {
-    fn handle(self: Box<Self>, conn: &mut ServerConnection, m: Message) -> NextStateOrError;
+pub(super) type NextState = Box<dyn State>;
+pub(super) type NextStateOrError = Result<NextState, Error>;
+
+pub(super) trait State: Send + Sync {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -36,24 +38,47 @@ pub trait State {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _conn: &mut ServerConnection) {}
+    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
 }
 
-pub fn incompatible(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::HandshakeFailure);
+impl<'a> crate::conn::HandleState for Box<dyn State> {
+    type Config = ServerConfig;
+    type Data = ServerConnectionData;
+
+    fn handle(
+        self,
+        message: Message,
+        data: &mut Self::Data,
+        common: &mut ConnectionCommon,
+        config: &Self::Config,
+    ) -> Result<Self, Error> {
+        let mut cx = ServerContext {
+            common,
+            data,
+            config,
+        };
+        self.handle(&mut cx, message)
+    }
+}
+
+pub(super) struct ServerContext<'a> {
+    pub(super) common: &'a mut ConnectionCommon,
+    pub(super) data: &'a mut ServerConnectionData,
+    pub(super) config: &'a ServerConfig,
+}
+
+pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
+    common.send_fatal_alert(AlertDescription::HandshakeFailure);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-fn bad_version(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::ProtocolVersion);
+fn bad_version(common: &mut ConnectionCommon, why: &str) -> Error {
+    common.send_fatal_alert(AlertDescription::ProtocolVersion);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub fn decode_error(conn: &mut ServerConnection, why: &str) -> Error {
-    conn.common
-        .send_fatal_alert(AlertDescription::DecodeError);
+pub fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
+    common.send_fatal_alert(AlertDescription::DecodeError);
     Error::PeerMisbehavedError(why.to_string())
 }
 
@@ -88,9 +113,9 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub(crate) fn process_common(
+    pub(super) fn process_common(
         &mut self,
-        conn: &mut ServerConnection,
+        cx: &mut ServerContext<'_>,
         #[allow(unused_variables)] // #[cfg(feature = "quic")] only
         suite: &'static SupportedCipherSuite,
         ocsp_response: &mut Option<&[u8]>,
@@ -100,7 +125,7 @@ impl ExtensionProcessing {
         extra_exts: Vec<ServerExtension>,
     ) -> Result<(), Error> {
         // ALPN
-        let our_protocols = &conn.config.alpn_protocols;
+        let our_protocols = &cx.config.alpn_protocols;
         let maybe_their_protocols = hello.get_alpn_extension();
         if let Some(their_protocols) = maybe_their_protocols {
             let their_protocols = their_protocols.to_slices();
@@ -114,11 +139,11 @@ impl ExtensionProcessing {
                 ));
             }
 
-            conn.common.alpn_protocol = our_protocols
+            cx.common.alpn_protocol = our_protocols
                 .iter()
                 .find(|protocol| their_protocols.contains(&protocol.as_slice()))
                 .cloned();
-            if let Some(ref selected_protocol) = conn.common.alpn_protocol {
+            if let Some(ref selected_protocol) = cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts
                     .push(ServerExtension::make_alpn(&[selected_protocol]));
@@ -126,8 +151,8 @@ impl ExtensionProcessing {
                 // For compatibility, strict ALPN validation is not employed unless targeting QUIC
                 #[cfg(feature = "quic")]
                 {
-                    if conn.common.protocol == Protocol::Quic && !our_protocols.is_empty() {
-                        conn.common
+                    if cx.common.protocol == Protocol::Quic && !our_protocols.is_empty() {
+                        cx.common
                             .send_fatal_alert(AlertDescription::NoApplicationProtocol);
                         return Err(Error::NoApplicationProtocol);
                     }
@@ -137,24 +162,29 @@ impl ExtensionProcessing {
 
         #[cfg(feature = "quic")]
         {
-            if conn.common.protocol == Protocol::Quic {
-                if let Some(params) = hello.get_quic_params_extension() {
-                    conn.common.quic.params = Some(params);
+            if cx.common.is_quic() {
+                match hello.get_quic_params_extension() {
+                    Some(params) => cx.common.quic.params = Some(params),
+                    None => {
+                        return Err(cx
+                            .common
+                            .missing_extension("QUIC transport parameters not found"));
+                    }
                 }
 
                 if let Some(resume) = resumedata {
-                    if conn.config.max_early_data_size > 0
+                    if cx.config.max_early_data_size > 0
                         && hello.early_data_extension_offered()
-                        && resume.version == conn.common.negotiated_version.unwrap()
+                        && resume.version == cx.common.negotiated_version.unwrap()
                         && resume.cipher_suite == suite.suite
-                        && resume.alpn.as_ref().map(|x| &x.0) == conn.common.alpn_protocol.as_ref()
-                        && !conn.reject_early_data
+                        && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref()
+                        && !cx.data.reject_early_data
                     {
                         self.exts
                             .push(ServerExtension::EarlyData);
                     } else {
                         // Clobber value set in tls13::emit_server_hello
-                        conn.common.quic.early_secret = None;
+                        cx.common.quic.early_secret = None;
                     }
                 }
             }
@@ -175,7 +205,7 @@ impl ExtensionProcessing {
                 .find_extension(ExtensionType::StatusRequest)
                 .is_some()
         {
-            if ocsp_response.is_some() && !conn.common.is_tls13() {
+            if ocsp_response.is_some() && !cx.common.is_tls13() {
                 // Only TLS1.2 sends confirmation in ServerHello
                 self.exts
                     .push(ServerExtension::CertificateStatusAck);
@@ -190,7 +220,7 @@ impl ExtensionProcessing {
                 .find_extension(ExtensionType::SCT)
                 .is_some()
         {
-            if !conn.common.is_tls13() {
+            if !cx.common.is_tls13() {
                 // Take the SCT list, if any, so we don't send it later,
                 // and put it in the legacy extension.
                 if let Some(sct_list) = sct_list.take() {
@@ -210,7 +240,7 @@ impl ExtensionProcessing {
 
     pub(super) fn process_tls12(
         &mut self,
-        conn: &ServerConnection,
+        config: &ServerConfig,
         hello: &ClientHelloPayload,
         using_ems: bool,
     ) {
@@ -234,7 +264,7 @@ impl ExtensionProcessing {
         if hello
             .find_extension(ExtensionType::SessionTicket)
             .is_some()
-            && conn.config.ticketer.enabled()
+            && config.ticketer.enabled()
         {
             self.send_ticket = true;
             self.exts
@@ -284,13 +314,13 @@ impl ExpectClientHello {
 }
 
 impl State for ExpectClientHello {
-    fn handle(mut self: Box<Self>, conn: &mut ServerConnection, m: Message) -> NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let client_hello =
             require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
-        let tls13_enabled = conn
+        let tls13_enabled = cx
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
-        let tls12_enabled = conn
+        let tls12_enabled = cx
             .config
             .supports_version(ProtocolVersion::TLSv1_2);
         trace!("we got a clienthello {:?}", client_hello);
@@ -299,7 +329,7 @@ impl State for ExpectClientHello {
             .compression_methods
             .contains(&Compression::Null)
         {
-            conn.common
+            cx.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
             return Err(Error::PeerIncompatibleError(
                 "client did not offer Null compression".to_string(),
@@ -307,11 +337,14 @@ impl State for ExpectClientHello {
         }
 
         if client_hello.has_duplicate_extension() {
-            return Err(decode_error(conn, "client sent duplicate extensions"));
+            return Err(decode_error(
+                &mut cx.common,
+                "client sent duplicate extensions",
+            ));
         }
 
         // No handshake messages should follow this one in this flight.
-        conn.common.check_aligned_handshake()?;
+        cx.common.check_aligned_handshake()?;
 
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.get_versions_extension();
@@ -319,22 +352,35 @@ impl State for ExpectClientHello {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
-                return Err(bad_version(conn, "TLS1.2 not offered/enabled"));
+                return Err(bad_version(&mut cx.common, "TLS1.2 not offered/enabled"));
+            } else if cx.common.is_quic() {
+                return Err(bad_version(
+                    &mut cx.common,
+                    "Expecting QUIC connection, but client does not support TLSv1_3",
+                ));
             } else {
                 ProtocolVersion::TLSv1_2
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
-            return Err(bad_version(conn, "Client does not support TLSv1_2"));
+            return Err(bad_version(
+                &mut cx.common,
+                "Client does not support TLSv1_2",
+            ));
         } else if !tls12_enabled && tls13_enabled {
             return Err(bad_version(
-                conn,
+                &mut cx.common,
                 "Server requires TLS1.3, but client omitted versions ext",
+            ));
+        } else if cx.common.is_quic() {
+            return Err(bad_version(
+                &mut cx.common,
+                "Expecting QUIC connection, but client does not support TLSv1_3",
             ));
         } else {
             ProtocolVersion::TLSv1_2
         };
 
-        conn.common.negotiated_version = Some(version);
+        cx.common.negotiated_version = Some(version);
 
         // --- Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
 
@@ -347,7 +393,7 @@ impl State for ExpectClientHello {
             Some(sni) => {
                 if sni.has_duplicate_names_for_type() {
                     return Err(decode_error(
-                        conn,
+                        &mut cx.common,
                         "ClientHello SNI contains duplicate name types",
                     ));
                 }
@@ -355,7 +401,7 @@ impl State for ExpectClientHello {
                 if let Some(hostname) = sni.get_single_hostname() {
                     Some(hostname.into())
                 } else {
-                    return Err(conn
+                    return Err(cx
                         .common
                         .illegal_param("ClientHello SNI did not contain a hostname"));
                 }
@@ -367,9 +413,9 @@ impl State for ExpectClientHello {
         if let (Some(sni), false) = (&sni, self.done_retry) {
             // Save the SNI into the session.
             // The SNI hostname is immutable once set.
-            assert!(conn.sni.is_none());
-            conn.sni = Some(sni.clone());
-        } else if conn.sni != sni {
+            assert!(cx.data.sni.is_none());
+            cx.data.sni = Some(sni.clone());
+        } else if cx.data.sni != sni {
             return Err(Error::PeerIncompatibleError(
                 "SNI differed on retry".to_string(),
             ));
@@ -380,7 +426,7 @@ impl State for ExpectClientHello {
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
         // So: reduce the offered sigschemes to those compatible with the
         // intersection of ciphersuites.
-        let mut common_suites = conn.config.cipher_suites.clone();
+        let mut common_suites = cx.config.cipher_suites.clone();
         common_suites.retain(|scs| {
             client_hello
                 .cipher_suites
@@ -410,12 +456,12 @@ impl State for ExpectClientHello {
             let alpn_slices = alpn_protocols.as_deref();
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
-            let certkey = conn
+            let certkey = cx
                 .config
                 .cert_resolver
                 .resolve(client_hello);
             certkey.ok_or_else(|| {
-                conn.common
+                cx.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
                 Error::General("no server certificate chain resolved".to_string())
             })?
@@ -425,12 +471,12 @@ impl State for ExpectClientHello {
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
         let suitable_suites =
-            suites::reduce_given_sigalg(&conn.config.cipher_suites, certkey.get_key().algorithm());
+            suites::reduce_given_sigalg(&cx.config.cipher_suites, certkey.get_key().algorithm());
 
         // And version
         let suitable_suites = suites::reduce_given_version(&suitable_suites, version);
 
-        let suite = if conn.config.ignore_client_order {
+        let suite = if cx.config.ignore_client_order {
             suites::choose_ciphersuite_preferring_server(
                 &client_hello.cipher_suites,
                 &suitable_suites,
@@ -441,10 +487,10 @@ impl State for ExpectClientHello {
                 &suitable_suites,
             )
         }
-        .ok_or_else(|| incompatible(conn, "no ciphersuites in common"))?;
+        .ok_or_else(|| incompatible(&mut cx.common, "no ciphersuites in common"))?;
 
         debug!("decided upon suite {:?}", suite);
-        conn.common.suite = Some(suite);
+        cx.common.suite = Some(suite);
 
         // Start handshake hash.
         let starting_hash = suite.get_hash();
@@ -452,7 +498,7 @@ impl State for ExpectClientHello {
             .transcript
             .start_hash(starting_hash)
         {
-            conn.common
+            cx.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
             return Err(Error::PeerIncompatibleError(
                 "hash differed on retry".to_string(),
@@ -465,7 +511,7 @@ impl State for ExpectClientHello {
             .random
             .write_slice(&mut randoms.client);
 
-        if conn.common.is_tls13() {
+        if cx.common.is_tls13() {
             tls13::CompleteClientHelloHandling {
                 transcript: self.transcript,
                 suite,
@@ -474,8 +520,9 @@ impl State for ExpectClientHello {
                 send_ticket: self.send_ticket,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(suite, conn, certkey, &m)
+            .handle_client_hello(suite, cx, certkey, &m)
         } else {
+            let suite = suites::Tls12CipherSuite::try_from(suite).unwrap();
             tls12::CompleteClientHelloHandling {
                 transcript: self.transcript,
                 session_id: self.session_id,
@@ -486,7 +533,7 @@ impl State for ExpectClientHello {
                 extra_exts: self.extra_exts,
             }
             .handle_client_hello(
-                conn,
+                cx,
                 certkey,
                 &m,
                 client_hello,

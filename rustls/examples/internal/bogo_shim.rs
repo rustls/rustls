@@ -713,7 +713,7 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 .is_empty()
         {
             let their_transport_params = sess
-                .get_quic_transport_parameters()
+                .quic_transport_parameters()
                 .expect("missing peer quic transport params");
             assert_eq!(opts.expect_quic_transport_params, their_transport_params);
         }
@@ -1091,6 +1091,7 @@ fn main() {
                     quic::Version::V1,
                     opts.quic_transport_params.clone(),
                 )
+                .unwrap()
             };
             ClientOrServer::Server(s)
         } else {

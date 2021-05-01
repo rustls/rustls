@@ -1053,8 +1053,8 @@ impl ClientHelloPayload {
 
 
     pub fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
-        let last_extension = self.extensions.last_mut().unwrap();
-        if let ClientExtension::PresharedKey(ref mut offer) = *last_extension {
+        let last_extension = self.extensions.last_mut();
+        if let Some(ClientExtension::PresharedKey(ref mut offer)) = last_extension {
             offer.binders[0] = PresharedKeyBinder::new(binder.into());
         }
     }
@@ -2213,12 +2213,6 @@ impl Codec for HandshakeMessagePayload {
 }
 
 impl HandshakeMessagePayload {
-    pub fn length(&self) -> usize {
-        let mut buf = Vec::new();
-        self.encode(&mut buf);
-        buf.len()
-    }
-
     pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<HandshakeMessagePayload> {
         let mut typ = HandshakeType::read(r)?;
         let len = codec::u24::read(r)?.0 as usize;
@@ -2323,15 +2317,16 @@ impl HandshakeMessagePayload {
         let mut ret = self.get_encoding();
 
         let binder_len = match self.payload {
-            HandshakePayload::ClientHello(ref ch) => {
-                let offer = ch.get_psk().unwrap();
-
-                let mut binders_encoding = Vec::new();
-                offer
-                    .binders
-                    .encode(&mut binders_encoding);
-                binders_encoding.len()
-            }
+            HandshakePayload::ClientHello(ref ch) => match ch.extensions.last() {
+                Some(ClientExtension::PresharedKey(ref offer)) => {
+                    let mut binders_encoding = Vec::new();
+                    offer
+                        .binders
+                        .encode(&mut binders_encoding);
+                    binders_encoding.len()
+                }
+                _ => 0,
+            },
             _ => 0,
         };
 
