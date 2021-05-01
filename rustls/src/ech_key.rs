@@ -203,7 +203,7 @@ mod test {
         let bytes = base64::decode(&ECH_CONFIGS).unwrap();
         let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
         assert_eq!(configs.len(), 2);
-        for config in configs {
+        for config in &configs {
             test_decode_for_kem(&config, KEM::DHKEM_X25519_HKDF_SHA256);
         }
         let keys = decode_ech_keys();

@@ -542,6 +542,7 @@ pub type SCTList = VecU16OfPayloadU16;
 declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 declare_u16_vec!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
+declare_u8_vec!(OuterExtensions, ExtensionType);
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
@@ -562,6 +563,9 @@ pub enum ClientExtension {
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
+    EncryptedClientHello(ClientEch),
+    EchOuterExtensions(OuterExtensions),
+    ClientHelloInnerIndication,
     EarlyData,
     Unknown(UnknownExtension),
 }
@@ -587,6 +591,9 @@ impl ClientExtension {
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
+            ClientExtension::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
+            ClientExtension::EchOuterExtensions(_) => ExtensionType::EchOuterExtensions,
+            ClientExtension::ClientHelloInnerIndication => ExtensionType::EchIsInner,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
             ClientExtension::Unknown(ref r) => r.typ,
         }
@@ -606,6 +613,7 @@ impl Codec for ClientExtension {
             ClientExtension::SessionTicketRequest
             | ClientExtension::ExtendedMasterSecretRequest
             | ClientExtension::SignedCertificateTimestampRequest
+            | ClientExtension::ClientHelloInnerIndication
             | ClientExtension::EarlyData => {}
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
@@ -617,6 +625,8 @@ impl Codec for ClientExtension {
             ClientExtension::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             ClientExtension::TransportParameters(ref r)
             | ClientExtension::TransportParametersDraft(ref r) => sub.extend_from_slice(r),
+            ClientExtension::EncryptedClientHello(ref r) => r.encode(&mut sub),
+            ClientExtension::EchOuterExtensions(ref r) => r.encode(&mut sub),
             ClientExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -681,6 +691,15 @@ impl Codec for ClientExtension {
             ExtensionType::TransportParametersDraft => {
                 ClientExtension::TransportParametersDraft(sub.rest().to_vec())
             }
+            ExtensionType::EncryptedClientHello => {
+                ClientExtension::EncryptedClientHello(ClientEch::read(&mut sub)?)
+            }
+            ExtensionType::EchOuterExtensions => {
+                ClientExtension::EchOuterExtensions(OuterExtensions::read(&mut sub)?)
+            }
+            ExtensionType::EchIsInner if !sub.any_left() => {
+                ClientExtension::ClientHelloInnerIndication
+            }
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
@@ -731,6 +750,7 @@ pub enum ServerExtension {
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
+    EncryptedClientHello(ServerEch),
     EarlyData,
     Unknown(UnknownExtension),
 }
@@ -751,6 +771,7 @@ impl ServerExtension {
             ServerExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             ServerExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ServerExtension::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
+            ServerExtension::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
             ServerExtension::EarlyData => ExtensionType::EarlyData,
             ServerExtension::Unknown(ref r) => r.typ,
         }
@@ -777,6 +798,7 @@ impl Codec for ServerExtension {
             ServerExtension::SupportedVersions(ref r) => r.encode(&mut sub),
             ServerExtension::TransportParameters(ref r)
             | ServerExtension::TransportParametersDraft(ref r) => sub.extend_from_slice(r),
+            ServerExtension::EncryptedClientHello(ref r) => r.encode(&mut sub),
             ServerExtension::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -817,6 +839,9 @@ impl Codec for ServerExtension {
             }
             ExtensionType::TransportParametersDraft => {
                 ServerExtension::TransportParametersDraft(sub.rest().to_vec())
+            }
+            ExtensionType::EncryptedClientHello => {
+                ServerExtension::EncryptedClientHello(ServerEch::read(&mut sub)?)
             }
             ExtensionType::EarlyData => ServerExtension::EarlyData,
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
@@ -2436,3 +2461,72 @@ impl Codec for ECHConfig {
 }
 
 declare_u16_vec!(ECHConfigList, ECHConfig);
+
+#[derive(Clone, Debug)]
+pub struct ClientEch {
+    pub cipher_suite: HpkeSymmetricCipherSuite,
+    pub config_id: u8,
+    pub enc: PayloadU16,
+    pub payload: PayloadU16,
+}
+
+impl Codec for ClientEch {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cipher_suite.encode(bytes);
+        self.config_id.encode(bytes);
+        self.enc.encode(bytes);
+        self.payload.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ClientEch> {
+        Some(ClientEch {
+            cipher_suite: HpkeSymmetricCipherSuite::read(r)?,
+            config_id: u8::read(r)?,
+            enc: PayloadU16::read(r)?,
+            payload: PayloadU16::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ServerEch {
+    retry_configs: ECHConfigList,
+}
+
+impl Codec for ServerEch {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.retry_configs.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ServerEch> {
+        Some(ServerEch {
+            retry_configs: ECHConfigList::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ClientHelloOuterAAD {
+    pub cipher_suite: HpkeSymmetricCipherSuite,
+    pub config_id: u8,
+    pub enc: PayloadU16,
+    pub outer_hello: PayloadU24,
+}
+
+impl Codec for ClientHelloOuterAAD {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cipher_suite.encode(bytes);
+        self.config_id.encode(bytes);
+        self.enc.encode(bytes);
+        self.outer_hello.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<ClientHelloOuterAAD> {
+        Some(ClientHelloOuterAAD {
+            cipher_suite: HpkeSymmetricCipherSuite::read(r)?,
+            config_id: u8::read(r)?,
+            enc: PayloadU16::read(r)?,
+            outer_hello: PayloadU24::read(r)?,
+        })
+    }
+}
