@@ -16,7 +16,7 @@ jobs:
           - stable
           - beta
           - nightly
-          - 1.47.0 # our MSRV
+          - 1.51.0 # our MSRV
         os: [ubuntu-18.04]
         # but only stable on macos/windows (slower platforms)
         include:
