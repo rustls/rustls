@@ -212,11 +212,6 @@ impl ServerConfig {
                 .iter()
                 .any(|cs| cs.usable_for_version(v))
     }
-
-    #[doc(hidden)]
-    pub fn get_verifier(&self) -> &dyn verify::ClientCertVerifier {
-        self.verifier.as_ref()
-    }
 }
 
 /// This represents a single TLS server connection.

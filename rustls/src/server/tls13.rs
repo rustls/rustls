@@ -557,7 +557,7 @@ mod client_hello {
 
         let schemes = cx
             .config
-            .get_verifier()
+            .verifier
             .supported_verify_schemes();
         cr.extensions
             .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
@@ -795,7 +795,7 @@ impl hs::State for ExpectCertificate {
 
         let now = std::time::SystemTime::now();
         cx.config
-            .get_verifier()
+            .verifier
             .verify_client_cert(end_entity, intermediates, cx.data.get_sni(), now)
             .map_err(|err| {
                 hs::incompatible(&mut cx.common, "certificate invalid");
@@ -838,7 +838,7 @@ impl hs::State for ExpectCertificateVerify {
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
             cx.config
-                .get_verifier()
+                .verifier
                 .verify_tls13_signature(&msg, &certs[0], sig)
         };
 
