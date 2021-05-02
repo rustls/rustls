@@ -3428,6 +3428,34 @@ fn test_client_sends_helloretryrequest() {
 }
 
 #[test]
+fn test_client_attempts_to_use_unsupported_kx_group() {
+    // common to both client configs
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    // first, client sends a x25519 and server agrees. x25519 is inserted
+    //   into kx group cache.
+    let mut client_config_1 = make_client_config(KeyType::RSA);
+    client_config_1.kx_groups = vec![&rustls::kx_group::X25519];
+    client_config_1.session_persistence = shared_storage.clone();
+
+    // second, client only supports secp-384 and so kx group cache
+    //   contains an unusable value.
+    let mut client_config_2 = make_client_config(KeyType::RSA);
+    client_config_2.kx_groups = vec![&rustls::kx_group::SECP384R1];
+    client_config_2.session_persistence = shared_storage.clone();
+
+    let server_config = make_server_config(KeyType::RSA);
+
+    // first handshake
+    let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
+    do_handshake_until_error(&mut client_1, &mut server).unwrap();
+
+    // second handshake
+    let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
+    do_handshake_until_error(&mut client_2, &mut server).unwrap();
+}
+
+#[test]
 fn test_client_mtu_reduction() {
     struct CollectWrites {
         writevs: Vec<Vec<usize>>,
