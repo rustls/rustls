@@ -3,55 +3,35 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::*;
 use crate::msgs::handshake::*;
 
-use hpke::kex::Serializable;
-use hpke::{kem, Kem};
-use rand::{rngs::StdRng, SeedableRng};
+use hpke_rs::prelude::*;
+use hpke_rs::{HpkeKeyPair, HpkePrivateKey, Mode};
+
 use webpki::DnsNameRef;
 
-pub type HpkePrivateKey = Vec<u8>;
-pub type HpkePublicKey = Vec<u8>;
-
-#[derive(Clone, Debug)]
-pub struct HpkeKeyPair {
+#[derive(Debug)]
+pub struct EchKeyPair {
     pub kem_id: KEM,
-    pub private_key: HpkePrivateKey,
-    pub public_key: HpkePublicKey,
+    pub key_pair: HpkeKeyPair,
 }
 
-impl HpkeKeyPair {
+impl EchKeyPair {
     #[allow(dead_code)]
-    pub fn new(kem_id: KEM) -> HpkeKeyPair {
-        let mut csprng = StdRng::from_entropy();
-        let (private_key, public_key) = match kem_id {
-            KEM::DHKEM_P256_HKDF_SHA256 => {
-                let (private, public) = kem::DhP256HkdfSha256::gen_keypair(&mut csprng);
-                (
-                    private.to_bytes().as_slice().to_vec(),
-                    public.to_bytes().as_slice().to_vec(),
-                )
-            }
-            KEM::DHKEM_P384_HKDF_SHA384 => unimplemented!(),
-            KEM::DHKEM_P521_HKDF_SHA512 => unimplemented!(),
-            KEM::DHKEM_X25519_HKDF_SHA256 => {
-                let (private, public) = kem::X25519HkdfSha256::gen_keypair(&mut csprng);
-                (
-                    private.to_bytes().as_slice().to_vec(),
-                    public.to_bytes().as_slice().to_vec(),
-                )
-            }
-            KEM::DHKEM_X448_HKDF_SHA512 => unimplemented!(),
-            _ => unreachable!(),
-        };
-        HpkeKeyPair {
+    pub fn new(kem_id: KEM, cipher_suite: &HpkeSymmetricCipherSuite) -> EchKeyPair {
+        let hpke = hpke_rs::Hpke::new(
+            Mode::Base,
+            HpkeKemMode::try_from(kem_id.get_u16()).unwrap(),
+            HpkeKdfMode::try_from(cipher_suite.hpke_kdf_id.get_u16()).unwrap(),
+            HpkeAeadMode::try_from(cipher_suite.hpke_aead_id.get_u16()).unwrap(),
+        );
+        EchKeyPair {
             kem_id,
-            private_key,
-            public_key,
+            key_pair: hpke.generate_key_pair(),
         }
     }
 }
 
 /// A private key paired with an ECHConfig, which contains the corresponding public key.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct EchKey {
     pub private_key: HpkePrivateKey,
     pub config: ECHConfig,
@@ -60,16 +40,17 @@ pub struct EchKey {
 impl EchKey {
     // TODO: Reconsider this API. This is just enough to get this feature working.
     #[allow(dead_code)]
-    pub fn new(config_id: u8, key_pair: HpkeKeyPair, domain: DnsNameRef) -> EchKey {
+    pub fn new(config_id: u8, ekp: EchKeyPair, domain: DnsNameRef) -> EchKey {
+        let (private_key, public_key) = ekp.key_pair.into_keys();
         EchKey {
-            private_key: key_pair.private_key,
+            private_key: private_key,
             config: ECHConfig {
                 version: ECHVersion::V10,
                 contents: ECHConfigContents {
                     hpke_key_config: HpkeKeyConfig {
                         config_id,
-                        hpke_kem_id: key_pair.kem_id,
-                        hpke_public_key: PayloadU16(key_pair.public_key),
+                        hpke_kem_id: ekp.kem_id,
+                        hpke_public_key: PayloadU16(public_key.as_slice().to_vec()),
                         hpke_symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite::default()],
                     },
                     maximum_name_length: 255,
@@ -83,7 +64,7 @@ impl EchKey {
 
 impl Codec for EchKey {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        PayloadU16(self.private_key.clone()).encode(bytes);
+        PayloadU16(self.private_key.as_slice().to_vec()).encode(bytes);
         self.config.encode(bytes);
     }
 
@@ -92,7 +73,7 @@ impl Codec for EchKey {
         let config_payload = PayloadU16::read(r)?;
         let config = ECHConfig::read(&mut Reader::init(&config_payload.into_inner()))?;
         Some(EchKey {
-            private_key: private_key.into_inner(),
+            private_key: HpkePrivateKey::from(private_key.into_inner()),
             config,
         })
     }
@@ -104,42 +85,69 @@ mod test {
 
     #[test]
     fn test_gen_p256() {
-        let p256 = HpkeKeyPair::new(KEM::DHKEM_P256_HKDF_SHA256);
-        assert_eq!(p256.private_key.len(), 32);
-        assert_eq!(p256.public_key.len(), 65);
+        let p256 = EchKeyPair::new(
+            KEM::DHKEM_P256_HKDF_SHA256,
+            &HpkeSymmetricCipherSuite::default(),
+        );
+        let (private_key, public_key) = p256.key_pair.into_keys();
+        assert_eq!(private_key.as_slice().len(), 32);
+        assert_eq!(public_key.as_slice().len(), 65);
     }
 
     #[test]
     #[should_panic]
     fn test_gen_p384() {
-        let _p384 = HpkeKeyPair::new(KEM::DHKEM_P384_HKDF_SHA384);
+        let _p384 = EchKeyPair::new(
+            KEM::DHKEM_P384_HKDF_SHA384,
+            &HpkeSymmetricCipherSuite::default(),
+        );
     }
 
     #[test]
     #[should_panic]
     fn test_gen_p521() {
-        let _p521 = HpkeKeyPair::new(KEM::DHKEM_P521_HKDF_SHA512);
+        let _p521 = EchKeyPair::new(
+            KEM::DHKEM_P521_HKDF_SHA512,
+            &HpkeSymmetricCipherSuite::default(),
+        );
     }
 
     #[test]
     fn test_gen_x25519() {
-        let x25519 = HpkeKeyPair::new(KEM::DHKEM_X25519_HKDF_SHA256);
-        assert_eq!(x25519.private_key.len(), 32);
-        assert_eq!(x25519.public_key.len(), 32);
+        let x25519 = EchKeyPair::new(
+            KEM::DHKEM_X25519_HKDF_SHA256,
+            &HpkeSymmetricCipherSuite::default(),
+        );
+        let (private_key, public_key) = x25519.key_pair.into_keys();
+
+        assert_eq!(private_key.as_slice().len(), 32);
+        assert_eq!(public_key.as_slice().len(), 32);
     }
 
     #[test]
     #[should_panic]
     fn test_gen_x448() {
-        let _x448 = HpkeKeyPair::new(KEM::DHKEM_X448_HKDF_SHA512);
+        let _x448 = EchKeyPair::new(
+            KEM::DHKEM_X448_HKDF_SHA512,
+            &HpkeSymmetricCipherSuite::default(),
+        );
     }
 
     #[test]
     fn test_create_default_ech_config() {
-        let x25519 = HpkeKeyPair::new(KEM::DHKEM_X25519_HKDF_SHA256);
+        let x25519 = EchKeyPair::new(
+            KEM::DHKEM_X25519_HKDF_SHA256,
+            &HpkeSymmetricCipherSuite::default(),
+        );
         let domain = webpki::DnsNameRef::try_from_ascii_str("example.com").unwrap();
-        let key = EchKey::new(0, x25519.clone(), domain);
-        assert_eq!(key.private_key, x25519.private_key);
+        let private_key = x25519
+            .key_pair
+            .private_key()
+            .as_slice()
+            .to_vec();
+        let key = EchKey::new(0, x25519, domain);
+
+        assert_eq!(key.private_key.as_slice().to_vec(), private_key);
         assert_eq!(key.config.version, ECHVersion::V10);
         assert_eq!(
             key.config
