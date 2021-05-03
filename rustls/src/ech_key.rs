@@ -43,7 +43,7 @@ impl EchKey {
     pub fn new(config_id: u8, ekp: EchKeyPair, domain: DnsNameRef) -> EchKey {
         let (private_key, public_key) = ekp.key_pair.into_keys();
         EchKey {
-            private_key: private_key,
+            private_key,
             config: ECHConfig {
                 version: ECHVersion::V10,
                 contents: ECHConfigContents {
