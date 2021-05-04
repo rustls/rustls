@@ -497,13 +497,13 @@ fn lookup_suites(suites: &[String]) -> Vec<&'static rustls::SupportedCipherSuite
 }
 
 /// Make a vector of protocol versions named in `versions`
-fn lookup_versions(versions: &[String]) -> Vec<rustls::ProtocolVersion> {
+fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtocolVersion> {
     let mut out = Vec::new();
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => rustls::ProtocolVersion::TLSv1_2,
-            "1.3" => rustls::ProtocolVersion::TLSv1_3,
+            "1.2" => &rustls::version::TLS12,
+            "1.3" => &rustls::version::TLS13,
             _ => panic!(
                 "cannot look up version '{}', valid are '1.2' and '1.3'",
                 vname
@@ -601,7 +601,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if !args.flag_protover.is_empty() {
-        config.versions = lookup_versions(&args.flag_protover);
+        config.versions.replace(&lookup_versions(&args.flag_protover));
     }
 
     if args.flag_resumption {

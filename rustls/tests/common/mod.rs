@@ -12,7 +12,7 @@ use rustls::Error;
 use rustls::{AllowAnyAuthenticatedClient, RootCertStore};
 use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientConnection};
-use rustls::{ProtocolVersion, DEFAULT_CIPHERSUITES};
+use rustls::DEFAULT_CIPHERSUITES;
 use rustls::{ServerConfig, ServerConfigBuilder, ServerConnection};
 
 #[cfg(feature = "dangerous_configuration")]
@@ -320,11 +320,11 @@ impl Iterator for AllClientVersions {
 
         match self.index {
             1 => {
-                config.versions = vec![ProtocolVersion::TLSv1_2];
+                config.versions.replace(&[&rustls::version::TLS12]);
                 Some(config)
             }
             2 => {
-                config.versions = vec![ProtocolVersion::TLSv1_3];
+                config.versions.replace(&[&rustls::version::TLS13]);
                 Some(config)
             }
             _ => None,

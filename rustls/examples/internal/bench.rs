@@ -14,7 +14,6 @@ use rustls::ClientSessionMemoryCache;
 use rustls::Connection;
 use rustls::NoClientSessionStorage;
 use rustls::NoServerSessionStorage;
-use rustls::ProtocolVersion;
 use rustls::ServerSessionMemoryCache;
 use rustls::Ticketer;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
@@ -140,14 +139,14 @@ enum KeyType {
 struct BenchmarkParam {
     key_type: KeyType,
     ciphersuite: &'static rustls::SupportedCipherSuite,
-    version: ProtocolVersion,
+    version: &'static rustls::SupportedProtocolVersion,
 }
 
 impl BenchmarkParam {
     const fn new(
         key_type: KeyType,
         ciphersuite: &'static rustls::SupportedCipherSuite,
-        version: ProtocolVersion,
+        version: &'static rustls::SupportedProtocolVersion,
     ) -> BenchmarkParam {
         BenchmarkParam {
             key_type,
@@ -160,63 +159,63 @@ impl BenchmarkParam {
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suites::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suites::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        ProtocolVersion::TLSv1_2,
+        &rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS13_CHACHA20_POLY1305_SHA256,
-        ProtocolVersion::TLSv1_3,
+        &rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS13_AES_256_GCM_SHA384,
-        ProtocolVersion::TLSv1_3,
+        &rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suites::TLS13_AES_128_GCM_SHA256,
-        ProtocolVersion::TLSv1_3,
+        &rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suites::TLS13_AES_128_GCM_SHA256,
-        ProtocolVersion::TLSv1_3,
+        &rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::ED25519,
-        &rustls::cipher_suites::TLS13_AES_128_GCM_SHA256,
-        ProtocolVersion::TLSv1_3,
+        &rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        &rustls::version::TLS13,
     ),
 ];
 
@@ -301,7 +300,7 @@ fn make_server_config(
         cfg.session_storage = Arc::new(NoServerSessionStorage {});
     }
 
-    cfg.versions = vec![params.version];
+    cfg.versions.replace(&[params.version]);
     cfg.mtu = mtu;
     cfg
 }
@@ -317,8 +316,7 @@ fn make_client_config(
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
     let mut cfg = ClientConfig::new(root_store, &[], &[params.ciphersuite]);
-    cfg.versions.clear();
-    cfg.versions.push(params.version);
+    cfg.versions.replace(&[params.version]);
 
     if clientauth == ClientAuth::Yes {
         cfg.set_single_client_cert(
@@ -355,7 +353,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
     assert!(
         params
             .ciphersuite
-            .usable_for_version(params.version)
+            .usable_for_version(params.version.version)
     );
 
     let rounds = apply_work_multiplier(if resume == Resumption::No { 512 } else { 4096 });

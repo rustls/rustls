@@ -185,7 +185,7 @@ pub struct ServerConfig {
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
-    pub versions: Vec<ProtocolVersion>,
+    pub versions: crate::versions::EnabledVersions,
 
     /// How to verify client certificates.
     verifier: Arc<dyn verify::ClientCertVerifier>,
@@ -206,7 +206,7 @@ impl ServerConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(&v)
+        self.versions.contains(v)
             && self
                 .cipher_suites
                 .iter()

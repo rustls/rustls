@@ -385,16 +385,16 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
             .collect::<Vec<_>>();
     }
 
-    cfg.versions.clear();
+    cfg.versions.replace(&[]);
 
     if opts.tls12_supported() {
         cfg.versions
-            .push(ProtocolVersion::TLSv1_2);
+            .enable(&rustls::version::TLS12);
     }
 
     if opts.tls13_supported() {
         cfg.versions
-            .push(ProtocolVersion::TLSv1_3);
+            .enable(&rustls::version::TLS13);
     }
 
 
@@ -462,16 +462,16 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         );
     }
 
-    cfg.versions.clear();
+    cfg.versions.replace(&[]);
 
     if opts.tls12_supported() {
         cfg.versions
-            .push(ProtocolVersion::TLSv1_2);
+            .enable(&rustls::version::TLS12);
     }
 
     if opts.tls13_supported() {
         cfg.versions
-            .push(ProtocolVersion::TLSv1_3);
+            .enable(&rustls::version::TLS13);
     }
 
     if opts.enable_early_data {

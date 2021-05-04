@@ -273,6 +273,7 @@ mod keylog;
 mod kx;
 mod server;
 mod suites;
+mod versions;
 mod ticketer;
 
 /// Internal classes which may be useful outside the library.
@@ -312,6 +313,9 @@ pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES, DEFAULT_CIPHERSUITES,
 };
+pub use crate::versions::{
+    SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS,
+};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
@@ -320,7 +324,7 @@ pub use crate::verify::{
 /// All defined ciphersuites appear in this module.
 ///
 /// ALL_CIPHERSUITES is provided as an array of all of these values.
-pub mod cipher_suites {
+pub mod cipher_suite {
     pub use crate::suites::TLS13_AES_128_GCM_SHA256;
     pub use crate::suites::TLS13_AES_256_GCM_SHA384;
     pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
@@ -330,6 +334,14 @@ pub mod cipher_suites {
     pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
     pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
     pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+}
+
+/// All defined protocol versions appear in this module.
+///
+/// ALL_VERSIONS is a provided as an arry of all of these values.
+pub mod version {
+    pub use crate::versions::TLS12;
+    pub use crate::versions::TLS13;
 }
 
 /// All defined key exchange groups appear in this module.

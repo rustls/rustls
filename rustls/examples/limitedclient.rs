@@ -18,7 +18,7 @@ fn main() {
     let config = rustls::ClientConfig::new(
         root_store,
         &[],
-        &[&rustls::cipher_suites::TLS13_CHACHA20_POLY1305_SHA256],
+        &[&rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
     );
 
     let dns_name = webpki::DnsNameRef::try_from_ascii_str("google.com").unwrap();
