@@ -2,11 +2,11 @@ use crate::error::Error;
 use crate::key;
 use crate::keylog::NoKeyLog;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-use crate::msgs::enums::ProtocolVersion;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::verify;
+use crate::versions;
 
 use std::sync::Arc;
 
@@ -228,7 +228,7 @@ impl ServerConfigBuilderWithClientAuth {
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
-            versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
+            versions: versions::EnabledVersions::new(&[&versions::TLS12, &versions::TLS13]),
             key_log: Arc::new(NoKeyLog {}),
             #[cfg(feature = "quic")]
             max_early_data_size: 0,

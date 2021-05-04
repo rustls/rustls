@@ -13,6 +13,7 @@ use crate::msgs::handshake::{CertificatePayload, ClientExtension};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
+use crate::versions;
 use crate::{key, RootCertStore};
 
 #[cfg(feature = "quic")]
@@ -114,7 +115,7 @@ pub struct ClientConfig {
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
-    pub versions: Vec<ProtocolVersion>,
+    pub versions: versions::EnabledVersions,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
@@ -187,7 +188,7 @@ impl ClientConfig {
             mtu: None,
             client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
             enable_tickets: true,
-            versions: vec![ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2],
+            versions: versions::EnabledVersions::new(&[&versions::TLS12, &versions::TLS13]),
             enable_sni: true,
             verifier,
             key_log: Arc::new(NoKeyLog {}),
@@ -200,7 +201,7 @@ impl ClientConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(&v)
+        self.versions.contains(v)
             && self
                 .cipher_suites
                 .iter()
