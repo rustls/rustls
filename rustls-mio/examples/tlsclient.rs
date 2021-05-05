@@ -262,7 +262,7 @@ impl PersistCache {
         while rd.any_left() {
             let key_pl = PayloadU16::read(&mut rd).unwrap();
             let val_pl = PayloadU16::read(&mut rd).unwrap();
-            cache.insert(key_pl.0, val_pl.0);
+            cache.insert(key_pl.0.to_vec(), val_pl.0.to_vec());
         }
     }
 }

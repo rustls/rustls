@@ -656,7 +656,7 @@ impl ConnectionCommon {
         }
 
         // Now we can fully parse the message payload.
-        let msg = Message::try_from(msg)?;
+        let msg = Message::try_from(&msg)?;
 
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &msg.payload {
@@ -706,7 +706,7 @@ impl ConnectionCommon {
     /// to handle the message.
     fn process_main_protocol<S: HandleState>(
         &mut self,
-        msg: Message,
+        msg: Message<'_>,
         state: &mut Option<S>,
         data: &mut S::Data,
     ) -> Result<(), Error> {
@@ -972,7 +972,7 @@ impl ConnectionCommon {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    pub fn send_msg(&mut self, m: Message, must_encrypt: bool) {
+    pub fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = self.protocol {
@@ -1004,7 +1004,7 @@ impl ConnectionCommon {
         }
     }
 
-    pub fn take_received_plaintext(&mut self, bytes: Payload) {
+    pub fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
         self.received_plaintext
             .append(bytes.0.into_owned());
     }
@@ -1076,7 +1076,7 @@ pub(crate) trait HandleState: Sized {
 
     fn handle(
         self,
-        message: Message,
+        message: Message<'_>,
         data: &mut Self::Data,
         common: &mut ConnectionCommon,
     ) -> Result<Self, Error>;

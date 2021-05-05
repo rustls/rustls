@@ -29,7 +29,7 @@ fn test_read_fuzz_corpus() {
         let msg = OpaqueMessage::read(&mut rd).unwrap();
         println!("{:?}", msg);
 
-        let msg = match Message::try_from(msg) {
+        let msg = match Message::try_from(&msg) {
             Ok(msg) => msg,
             Err(_) => continue,
         };
@@ -65,7 +65,7 @@ fn can_read_safari_client_hello() {
     let mut rd = Reader::init(bytes);
     let m = OpaqueMessage::read(&mut rd).unwrap();
     println!("m = {:?}", m);
-    assert!(Message::try_from(m).is_err());
+    assert!(Message::try_from(&m).is_err());
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn construct_all_types() {
     for &bytes in samples.iter() {
         let m = OpaqueMessage::read(&mut Reader::init(bytes)).unwrap();
         println!("m = {:?}", m);
-        let m = Message::try_from(m);
+        let m = Message::try_from(&m);
         println!("m' = {:?}", m);
     }
 }

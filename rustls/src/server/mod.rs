@@ -231,7 +231,7 @@ impl ServerConnection {
         Self::from_config(config, vec![])
     }
 
-    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension<'static>>) -> Self {
         ServerConnection {
             common: ConnectionCommon::new(config.mtu, false),
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),

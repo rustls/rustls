@@ -610,7 +610,7 @@ impl hs::State for ExpectCertificateRequest {
             .get_authorities_extension()
             .unwrap_or(&no_canames)
             .iter()
-            .map(|p| p.0.as_slice())
+            .map(|p| p.0.as_ref())
             .collect::<Vec<&[u8]>>();
         let maybe_certkey = self
             .config
@@ -657,7 +657,11 @@ struct ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        m: Message<'_>,
+    ) -> hs::NextStateOrError {
         let cert_chain = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
@@ -862,7 +866,7 @@ fn emit_finished_tls13(
 ) {
     let handshake_hash = transcript.get_current_hash();
     let verify_data = key_schedule.sign_client_finish(&handshake_hash);
-    let verify_data_payload = Payload::new(verify_data.as_ref());
+    let verify_data_payload = Payload::new(verify_data.as_ref().to_vec());
 
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
@@ -917,13 +921,16 @@ impl hs::State for ExpectFinished {
             .key_schedule
             .sign_server_finish(&handshake_hash);
 
-        let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
-            .map_err(|_| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
-                Error::DecryptError
-            })
-            .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let fin = constant_time::verify_slices_are_equal(
+            expect_verify_data.as_ref(),
+            finished.0.as_ref(),
+        )
+        .map_err(|_| {
+            cx.common
+                .send_fatal_alert(AlertDescription::DecryptError);
+            Error::DecryptError
+        })
+        .map(|_| verify::FinishedMessageVerified::assertion())?;
 
         let maybe_write_key = if cx.common.early_traffic {
             /* Derive the client-to-server encryption key before key schedule update */
@@ -1055,7 +1062,7 @@ impl ExpectTraffic {
             ProtocolVersion::TLSv1_3,
             self.suite,
             &SessionID::empty(),
-            nst.ticket.0.clone(),
+            nst.ticket.0.to_vec(),
             secret,
             &cx.data.server_cert_chain,
             time_now,
@@ -1142,7 +1149,11 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        m: Message<'_>,
+    ) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common

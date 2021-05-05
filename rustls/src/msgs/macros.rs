@@ -21,12 +21,12 @@ macro_rules! enum_builder {
                 }
             }
         }
-        impl Codec for $enum_name {
+        impl<'a> Codec<'a> for $enum_name {
             fn encode(&self, bytes: &mut Vec<u8>) {
                 self.get_u8().encode(bytes);
             }
 
-            fn read(r: &mut Reader) -> Option<Self> {
+            fn read(r: &mut Reader<'a>) -> Option<Self> {
                 u8::read(r).map($enum_name::from)
             }
         }
@@ -60,12 +60,12 @@ macro_rules! enum_builder {
                 }
             }
         }
-        impl Codec for $enum_name {
+        impl<'a> Codec<'a> for $enum_name {
             fn encode(&self, bytes: &mut Vec<u8>) {
                 self.get_u16().encode(bytes);
             }
 
-            fn read(r: &mut Reader) -> Option<Self> {
+            fn read(r: &mut Reader<'a>) -> Option<Self> {
                 u16::read(r).map($enum_name::from)
             }
         }

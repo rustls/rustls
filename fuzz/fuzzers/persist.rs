@@ -5,7 +5,7 @@ extern crate rustls;
 use rustls::internal::msgs::persist;
 use rustls::internal::msgs::codec::{Reader, Codec};
 
-fn try_type<T>(data: &[u8]) where T: Codec {
+fn try_type<'a, T>(data: &'a [u8]) where T: Codec<'a> {
     let mut rdr = Reader::init(data);
     T::read(&mut rdr);
 }

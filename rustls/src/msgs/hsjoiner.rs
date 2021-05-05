@@ -13,7 +13,7 @@ const HEADER_SIZE: usize = 1 + 3;
 /// one handshake payload.
 pub struct HandshakeJoiner {
     /// Completed handshake frames for output.
-    pub frames: VecDeque<Message>,
+    pub frames: VecDeque<Message<'static>>,
 
     /// The message payload we're currently accumulating.
     buf: Vec<u8>,
@@ -103,7 +103,7 @@ impl HandshakeJoiner {
 
             let m = Message {
                 version,
-                payload: MessagePayload::Handshake(payload),
+                payload: MessagePayload::Handshake(payload.to_owned()),
             };
 
             self.frames.push_back(m);

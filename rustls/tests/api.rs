@@ -806,7 +806,13 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).subjects()),
+                subjects: Some(
+                    get_client_root_store(*kt)
+                        .subjects()
+                        .into_iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                ),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -830,7 +836,13 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).subjects()),
+                subjects: Some(
+                    get_client_root_store(*kt)
+                        .subjects()
+                        .into_iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                ),
                 mandatory: Some(true),
                 offered_schemes: Some(vec![]),
             };
@@ -927,7 +939,13 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_unreachable,
-                subjects: Some(get_client_root_store(*kt).subjects()),
+                subjects: Some(
+                    get_client_root_store(*kt)
+                        .subjects()
+                        .into_iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                ),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -961,7 +979,13 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_err,
-                subjects: Some(get_client_root_store(*kt).subjects()),
+                subjects: Some(
+                    get_client_root_store(*kt)
+                        .subjects()
+                        .into_iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                ),
                 mandatory: Some(true),
                 offered_schemes: None,
             };
@@ -989,7 +1013,13 @@ mod test_clientverifier {
         for kt in ALL_KEY_TYPES.iter() {
             let client_verifier = MockClientVerifier {
                 verified: ver_ok,
-                subjects: Some(get_client_root_store(*kt).subjects()),
+                subjects: Some(
+                    get_client_root_store(*kt)
+                        .subjects()
+                        .into_iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                ),
                 mandatory: None,
                 offered_schemes: None,
             };
@@ -3410,7 +3440,7 @@ fn test_client_does_not_offer_sha1() {
                 .write_tls(&mut buf.as_mut())
                 .unwrap();
             let msg = OpaqueMessage::read(&mut Reader::init(&buf[..sz])).unwrap();
-            let msg = Message::try_from(msg).unwrap();
+            let msg = Message::try_from(&msg).unwrap();
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 
             let client_hello = match msg.payload {
@@ -3678,7 +3708,7 @@ fn test_server_rejects_duplicate_sni_names() {
             if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::ServerName(snr) = &mut ext {
-                        snr.push(snr[0].clone());
+                        snr.push(snr[0].to_owned());
                     }
                 }
             }

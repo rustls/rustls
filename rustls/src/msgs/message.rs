@@ -11,14 +11,14 @@ use crate::msgs::handshake::HandshakeMessagePayload;
 use std::convert::TryFrom;
 
 #[derive(Debug)]
-pub enum MessagePayload {
+pub enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
-    Handshake(HandshakeMessagePayload),
+    Handshake(HandshakeMessagePayload<'a>),
     ChangeCipherSpec(ChangeCipherSpecPayload),
-    ApplicationData(Payload),
+    ApplicationData(Payload<'a>),
 }
 
-impl MessagePayload {
+impl<'a> MessagePayload<'a> {
     pub fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             MessagePayload::Alert(ref x) => x.encode(bytes),
@@ -31,9 +31,9 @@ impl MessagePayload {
     pub fn new(
         typ: ContentType,
         vers: ProtocolVersion,
-        payload: Vec<u8>,
-    ) -> Result<MessagePayload, Error> {
-        let mut r = Reader::init(&payload);
+        payload: &'a [u8],
+    ) -> Result<MessagePayload<'a>, Error> {
+        let mut r = Reader::init(payload);
         let parsed = match typ {
             ContentType::ApplicationData => {
                 return Ok(MessagePayload::ApplicationData(Payload::new(payload)));
@@ -142,8 +142,8 @@ impl OpaqueMessage {
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
 }
 
-impl From<Message> for OpaqueMessage {
-    fn from(msg: Message) -> OpaqueMessage {
+impl From<Message<'_>> for OpaqueMessage {
+    fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
             MessagePayload::ApplicationData(payload) => payload.0.into_owned(),
@@ -164,12 +164,12 @@ impl From<Message> for OpaqueMessage {
 
 /// A message with decoded payload
 #[derive(Debug)]
-pub struct Message {
+pub struct Message<'a> {
     pub version: ProtocolVersion,
-    pub payload: MessagePayload,
+    pub payload: MessagePayload<'a>,
 }
 
-impl Message {
+impl<'a> Message<'a> {
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
         // Bit of a layering violation, but OK.
         if let MessagePayload::Handshake(ref hsp) = self.payload {
@@ -179,7 +179,7 @@ impl Message {
         }
     }
 
-    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message {
+    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message<'static> {
         Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
@@ -189,7 +189,7 @@ impl Message {
         }
     }
 
-    pub fn build_key_update_notify() -> Message {
+    pub fn build_key_update_notify() -> Message<'static> {
         Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
@@ -197,13 +197,13 @@ impl Message {
     }
 }
 
-impl TryFrom<OpaqueMessage> for Message {
+impl<'a> TryFrom<&'a OpaqueMessage> for Message<'a> {
     type Error = Error;
 
-    fn try_from(opaque: OpaqueMessage) -> Result<Self, Self::Error> {
+    fn try_from(opaque: &'a OpaqueMessage) -> Result<Self, Self::Error> {
         Ok(Message {
             version: opaque.version,
-            payload: MessagePayload::new(opaque.typ, opaque.version, opaque.payload)?,
+            payload: MessagePayload::new(opaque.typ, opaque.version, &opaque.payload)?,
         })
     }
 }

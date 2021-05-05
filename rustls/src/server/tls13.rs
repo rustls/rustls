@@ -68,7 +68,7 @@ mod client_hello {
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
         pub(in crate::server) send_ticket: bool,
-        pub(in crate::server) extra_exts: Vec<ServerExtension>,
+        pub(in crate::server) extra_exts: Vec<ServerExtension<'static>>,
     }
 
     impl CompleteClientHelloHandling {
@@ -274,7 +274,7 @@ mod client_hello {
             }
 
             if let Some(ref resume) = resumedata {
-                cx.data.received_resumption_data = Some(resume.application_data.0.clone());
+                cx.data.received_resumption_data = Some(resume.application_data.0.to_vec());
                 cx.data.client_cert_chain = resume.client_cert_chain.clone();
             }
 
@@ -525,7 +525,7 @@ mod client_hello {
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: Vec<ServerExtension<'static>>,
         config: &ServerConfig,
     ) -> Result<(), Error> {
         let mut ep = hs::ExtensionProcessing::new();
@@ -634,7 +634,7 @@ mod client_hello {
             if let Some(sct_list) = sct_list {
                 end_entity_cert
                     .exts
-                    .push(CertificateExtension::make_sct(sct_list.to_owned()));
+                    .push(CertificateExtension::make_sct(sct_list));
             }
         }
 
@@ -693,7 +693,7 @@ mod client_hello {
     ) -> (KeyScheduleTrafficWithClientFinishedPending, Digest) {
         let handshake_hash = transcript.get_current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
-        let verify_data_payload = Payload::new(verify_data.as_ref());
+        let verify_data_payload = Payload::new(verify_data.as_ref().to_vec());
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
@@ -1095,7 +1095,7 @@ impl ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message<'_>) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common

@@ -15,7 +15,7 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
 
-    let msg = match message::Message::try_from(msg) {
+    let msg = match message::Message::try_from(&msg) {
         Ok(msg) => msg,
         Err(_) => return,
     };
@@ -25,6 +25,6 @@ fuzz_target!(|data: &[u8]| {
     frg.fragment(message::OpaqueMessage::from(msg), &mut out);
 
     for msg in out {
-        message::Message::try_from(msg).ok();
+        message::Message::try_from(&msg).ok();
     }
 });

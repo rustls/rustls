@@ -9,7 +9,7 @@ use std::convert::TryFrom;
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);
     if let Ok(m) = OpaqueMessage::read(&mut rdr) {
-        let msg = match Message::try_from(m) {
+        let msg = match Message::try_from(&m) {
             Ok(msg) => msg,
             Err(_) => return,
         };

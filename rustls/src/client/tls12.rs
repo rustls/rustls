@@ -112,7 +112,12 @@ mod server_hello {
                     let error_msg = "server sent invalid SCT list".to_string();
                     return Err(Error::PeerMisbehavedError(error_msg));
                 }
-                Some(sct_list.clone())
+                Some(
+                    sct_list
+                        .iter()
+                        .map(|sct| sct.to_owned())
+                        .collect(),
+                )
             } else {
                 None
             };
@@ -213,14 +218,14 @@ struct ExpectCertificate {
     pub(super) suite: Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<SCTList<'static>>,
 }
 
 impl hs::State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        m: Message,
+        m: Message<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let server_cert_chain = require_handshake_msg_move!(
@@ -272,13 +277,13 @@ struct ExpectCertificateStatusOrServerKx {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<SCTList<'static>>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
 
 impl hs::State for ExpectCertificateStatusOrServerKx {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],
@@ -334,7 +339,7 @@ struct ExpectCertificateStatus {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<SCTList<'static>>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
@@ -412,7 +417,7 @@ impl hs::State for ExpectServerKx {
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
         decoded_kx.encode_params(&mut kx_params);
-        let server_kx = ServerKxDetails::new(kx_params, decoded_kx.get_sig().unwrap());
+        let server_kx = ServerKxDetails::new(kx_params, decoded_kx.get_sig().unwrap().to_owned());
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
@@ -639,7 +644,7 @@ impl hs::State for ExpectCertificateRequest {
         let canames = certreq
             .canames
             .iter()
-            .map(|p| p.0.as_slice())
+            .map(|p| p.0.as_ref())
             .collect::<Vec<&[u8]>>();
         let maybe_certkey = self
             .config
@@ -890,7 +895,7 @@ impl hs::State for ExpectNewTicket {
             dns_name: self.dns_name,
             using_ems: self.using_ems,
             transcript: self.transcript,
-            ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
+            ticket: ReceivedTicketDetails::from(nst.ticket.0.to_vec(), nst.lifetime_hint),
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
@@ -1026,7 +1031,7 @@ impl hs::State for ExpectFinished {
         // Constant-time verification of this is relatively unimportant: they only
         // get one chance.  But it can't hurt.
         let _fin_verified =
-            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+            constant_time::verify_slices_are_equal(&expect_verify_data, finished.0.as_ref())
                 .map_err(|_| {
                     cx.common
                         .send_fatal_alert(AlertDescription::DecryptError);
@@ -1066,7 +1071,7 @@ struct ExpectTraffic {
 }
 
 impl hs::State for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common
