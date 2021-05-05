@@ -28,7 +28,7 @@ pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
 pub(super) trait State: Send + Sync {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -47,7 +47,7 @@ impl<'a> crate::conn::HandleState for Box<dyn State> {
 
     fn handle(
         self,
-        message: Message,
+        message: Message<'_>,
         data: &mut Self::Data,
         common: &mut ConnectionCommon,
     ) -> Result<Self, Error> {
@@ -97,7 +97,7 @@ pub fn can_resume(
 #[derive(Default)]
 pub struct ExtensionProcessing {
     // extensions to reply with
-    pub exts: Vec<ServerExtension>,
+    pub exts: Vec<ServerExtension<'static>>,
 
     pub send_ticket: bool,
 }
@@ -117,7 +117,7 @@ impl ExtensionProcessing {
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: Vec<ServerExtension<'static>>,
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
@@ -224,7 +224,7 @@ impl ExtensionProcessing {
                 // and put it in the legacy extension.
                 if let Some(sct_list) = sct_list.take() {
                     self.exts
-                        .push(ServerExtension::make_sct(sct_list.to_vec()));
+                        .push(ServerExtension::make_sct(sct_list).to_owned());
                 }
             }
         } else {
@@ -280,7 +280,7 @@ impl ExtensionProcessing {
 
 pub struct ExpectClientHello {
     pub config: Arc<ServerConfig>,
-    pub extra_exts: Vec<ServerExtension>,
+    pub extra_exts: Vec<ServerExtension<'static>>,
     pub transcript: HandshakeHash,
     pub session_id: SessionID,
     pub using_ems: bool,
@@ -289,7 +289,10 @@ pub struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> ExpectClientHello {
+    pub fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension<'static>>,
+    ) -> ExpectClientHello {
         let mut ech = ExpectClientHello {
             config,
             extra_exts,

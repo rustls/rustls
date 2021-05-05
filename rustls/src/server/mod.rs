@@ -239,7 +239,7 @@ impl ServerConnection {
 
     fn from_config(
         config: Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: Vec<ServerExtension<'static>>,
     ) -> Result<Self, Error> {
         Ok(ServerConnection {
             common: ConnectionCommon::new(config.max_fragment_size, false)?,

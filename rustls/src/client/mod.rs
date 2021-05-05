@@ -331,7 +331,7 @@ impl ClientConnection {
     fn new_inner(
         config: Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
-        extra_exts: Vec<ClientExtension>,
+        extra_exts: Vec<ClientExtension<'static>>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut new = ClientConnection {

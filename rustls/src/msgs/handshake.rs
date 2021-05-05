@@ -21,12 +21,12 @@ macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
     pub type $name = Vec<$itemtype>;
 
-    impl Codec for $name {
+    impl<'a> Codec<'a> for $name {
       fn encode(&self, bytes: &mut Vec<u8>) {
         codec::encode_vec_u8(bytes, self);
       }
 
-      fn read(r: &mut Reader) -> Option<$name> {
+      fn read(r: &mut Reader<'a>) -> Option<$name> {
         codec::read_vec_u8::<$itemtype>(r)
       }
     }
@@ -37,20 +37,36 @@ macro_rules! declare_u16_vec(
   ($name:ident, $itemtype:ty) => {
     pub type $name = Vec<$itemtype>;
 
-    impl Codec for $name {
+    impl<'a> Codec<'a> for $name {
       fn encode(&self, bytes: &mut Vec<u8>) {
         codec::encode_vec_u16(bytes, self);
       }
 
-      fn read(r: &mut Reader) -> Option<$name> {
+      fn read(r: &mut Reader<'a>) -> Option<$name> {
         codec::read_vec_u16::<$itemtype>(r)
       }
     }
   }
 );
 
-declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
-declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
+macro_rules! declare_u16_vec_lifetime(
+    ($name:ident, $item:ident) => {
+      pub type $name<'a> = Vec<$item<'a>>;
+
+      impl<'a> Codec<'a> for $name<'a> {
+        fn encode(&self, bytes: &mut Vec<u8>) {
+          codec::encode_vec_u16(bytes, self);
+        }
+
+        fn read(r: &mut Reader<'a>) -> Option<$name<'a>> {
+          codec::read_vec_u16::<$item<'a>>(r)
+        }
+      }
+    }
+);
+
+declare_u16_vec_lifetime!(VecU16OfPayloadU8, PayloadU8);
+declare_u16_vec_lifetime!(VecU16OfPayloadU16, PayloadU16);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Random([u8; 32]);
@@ -62,12 +78,12 @@ static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
 
 static ZERO_RANDOM: Random = Random([0u8; 32]);
 
-impl Codec for Random {
+impl<'a> Codec<'a> for Random {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Random> {
+    fn read(r: &mut Reader<'a>) -> Option<Random> {
         let bytes = r.take(32)?;
         let mut opaque = [0; 32];
         opaque.clone_from_slice(bytes);
@@ -121,14 +137,14 @@ impl PartialEq for SessionID {
     }
 }
 
-impl Codec for SessionID {
+impl<'a> Codec<'a> for SessionID {
     fn encode(&self, bytes: &mut Vec<u8>) {
         debug_assert!(self.len <= 32);
         bytes.push(self.len as u8);
         bytes.extend_from_slice(&self.data[..self.len]);
     }
 
-    fn read(r: &mut Reader) -> Option<SessionID> {
+    fn read(r: &mut Reader<'a>) -> Option<SessionID> {
         let len = u8::read(r)? as usize;
         if len > 32 {
             return None;
@@ -165,18 +181,27 @@ impl SessionID {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct UnknownExtension {
+#[derive(Debug)]
+pub struct UnknownExtension<'a> {
     pub typ: ExtensionType,
-    pub payload: Payload,
+    pub payload: Payload<'a>,
 }
 
-impl UnknownExtension {
+impl<'a> UnknownExtension<'a> {
+    fn to_owned(&self) -> UnknownExtension<'static> {
+        UnknownExtension {
+            typ: self.typ,
+            payload: self.payload.to_owned(),
+        }
+    }
+}
+
+impl<'a> UnknownExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.payload.encode(bytes);
     }
 
-    fn read(typ: ExtensionType, r: &mut Reader) -> Self {
+    fn read(typ: ExtensionType, r: &mut Reader<'a>) -> Self {
         let payload = Payload::read(r);
         Self { typ, payload }
     }
@@ -237,23 +262,23 @@ impl DecomposedSignatureScheme for SignatureScheme {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum ServerNamePayload {
+#[derive(Debug)]
+pub enum ServerNamePayload<'a> {
     // Stored twice, bytes so we can round-trip, and DnsName for use
-    HostName((PayloadU16, webpki::DnsName)),
-    Unknown(Payload),
+    HostName((PayloadU16<'a>, webpki::DnsName)),
+    Unknown(Payload<'a>),
 }
 
-impl ServerNamePayload {
-    pub fn new_hostname(hostname: webpki::DnsName) -> ServerNamePayload {
+impl<'a> ServerNamePayload<'a> {
+    pub fn new_hostname(hostname: webpki::DnsName) -> ServerNamePayload<'static> {
         let raw = {
             let s: &str = hostname.as_ref().into();
-            PayloadU16::new(s.as_bytes().into())
+            PayloadU16::new(s.as_bytes().to_vec())
         };
         ServerNamePayload::HostName((raw, hostname))
     }
 
-    fn read_hostname(r: &mut Reader) -> Option<ServerNamePayload> {
+    fn read_hostname(r: &mut Reader<'a>) -> Option<ServerNamePayload<'a>> {
         let raw = PayloadU16::read(r)?;
 
         let dns_name = {
@@ -274,21 +299,38 @@ impl ServerNamePayload {
             ServerNamePayload::Unknown(ref r) => r.encode(bytes),
         }
     }
+
+    fn to_owned(&self) -> ServerNamePayload<'static> {
+        use ServerNamePayload::*;
+        match self {
+            HostName((payload, dns)) => HostName((payload.to_owned(), dns.clone())),
+            Unknown(payload) => Unknown(payload.to_owned()),
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
-pub struct ServerName {
+#[derive(Debug)]
+pub struct ServerName<'a> {
     pub typ: ServerNameType,
-    pub payload: ServerNamePayload,
+    pub payload: ServerNamePayload<'a>,
 }
 
-impl Codec for ServerName {
+impl<'a> ServerName<'a> {
+    pub fn to_owned(&self) -> ServerName<'static> {
+        ServerName {
+            typ: self.typ,
+            payload: self.payload.to_owned(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for ServerName<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.typ.encode(bytes);
         self.payload.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ServerName> {
+    fn read(r: &mut Reader<'a>) -> Option<ServerName<'a>> {
         let typ = ServerNameType::read(r)?;
 
         let payload = match typ {
@@ -300,14 +342,14 @@ impl Codec for ServerName {
     }
 }
 
-declare_u16_vec!(ServerNameRequest, ServerName);
+declare_u16_vec_lifetime!(ServerNameRequest, ServerName);
 
 pub trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
     fn get_single_hostname(&self) -> Option<webpki::DnsNameRef>;
 }
 
-impl ConvertServerNameList for ServerNameRequest {
+impl<'a> ConvertServerNameList for ServerNameRequest<'a> {
     /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
     fn has_duplicate_names_for_type(&self) -> bool {
         let mut seen = collections::HashSet::new();
@@ -321,8 +363,8 @@ impl ConvertServerNameList for ServerNameRequest {
         false
     }
 
-    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef> {
-        fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DnsNameRef> {
+    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef<'_>> {
+        fn only_dns_hostnames<'a>(name: &'a ServerName) -> Option<webpki::DnsNameRef<'a>> {
             if let ServerNamePayload::HostName((_, ref dns)) = name.payload {
                 Some(dns.as_ref())
             } else {
@@ -336,7 +378,7 @@ impl ConvertServerNameList for ServerNameRequest {
     }
 }
 
-pub type ProtocolNameList = VecU16OfPayloadU8;
+pub type ProtocolNameList<'a> = VecU16OfPayloadU8<'a>;
 
 pub trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
@@ -344,8 +386,8 @@ pub trait ConvertProtocolNameList {
     fn as_single_slice(&self) -> Option<&[u8]>;
 }
 
-impl ConvertProtocolNameList for ProtocolNameList {
-    fn from_slices(names: &[&[u8]]) -> ProtocolNameList {
+impl<'a> ConvertProtocolNameList for ProtocolNameList<'a> {
+    fn from_slices(names: &[&[u8]]) -> ProtocolNameList<'static> {
         let mut ret = Vec::new();
 
         for name in names {
@@ -371,13 +413,13 @@ impl ConvertProtocolNameList for ProtocolNameList {
 }
 
 // --- TLS 1.3 Key shares ---
-#[derive(Clone, Debug)]
-pub struct KeyShareEntry {
+#[derive(Debug)]
+pub struct KeyShareEntry<'a> {
     pub group: NamedGroup,
-    pub payload: PayloadU16,
+    pub payload: PayloadU16<'a>,
 }
 
-impl KeyShareEntry {
+impl KeyShareEntry<'static> {
     pub fn new(group: NamedGroup, payload: &[u8]) -> KeyShareEntry {
         KeyShareEntry {
             group,
@@ -386,13 +428,22 @@ impl KeyShareEntry {
     }
 }
 
-impl Codec for KeyShareEntry {
+impl<'a> KeyShareEntry<'a> {
+    fn to_owned(&self) -> KeyShareEntry<'static> {
+        KeyShareEntry {
+            group: self.group,
+            payload: self.payload.to_owned(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for KeyShareEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.group.encode(bytes);
         self.payload.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<KeyShareEntry> {
+    fn read(r: &mut Reader<'a>) -> Option<KeyShareEntry<'a>> {
         let group = NamedGroup::read(r)?;
         let payload = PayloadU16::read(r)?;
 
@@ -401,14 +452,14 @@ impl Codec for KeyShareEntry {
 }
 
 // --- TLS 1.3 PresharedKey offers ---
-#[derive(Clone, Debug)]
-pub struct PresharedKeyIdentity {
-    pub identity: PayloadU16,
+#[derive(Debug)]
+pub struct PresharedKeyIdentity<'a> {
+    pub identity: PayloadU16<'a>,
     pub obfuscated_ticket_age: u32,
 }
 
-impl PresharedKeyIdentity {
-    pub fn new(id: Vec<u8>, age: u32) -> PresharedKeyIdentity {
+impl PresharedKeyIdentity<'static> {
+    pub fn new(id: Vec<u8>, age: u32) -> Self {
         PresharedKeyIdentity {
             identity: PayloadU16::new(id),
             obfuscated_ticket_age: age,
@@ -416,13 +467,22 @@ impl PresharedKeyIdentity {
     }
 }
 
-impl Codec for PresharedKeyIdentity {
+impl<'a> PresharedKeyIdentity<'a> {
+    fn to_owned(&self) -> PresharedKeyIdentity<'static> {
+        PresharedKeyIdentity {
+            identity: self.identity.to_owned(),
+            obfuscated_ticket_age: self.obfuscated_ticket_age,
+        }
+    }
+}
+
+impl<'a> Codec<'a> for PresharedKeyIdentity<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.identity.encode(bytes);
         self.obfuscated_ticket_age.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<PresharedKeyIdentity> {
+    fn read(r: &mut Reader<'a>) -> Option<PresharedKeyIdentity<'a>> {
         Some(PresharedKeyIdentity {
             identity: PayloadU16::read(r)?,
             obfuscated_ticket_age: u32::read(r)?,
@@ -430,19 +490,20 @@ impl Codec for PresharedKeyIdentity {
     }
 }
 
-declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
-pub type PresharedKeyBinder = PayloadU8;
-pub type PresharedKeyBinders = VecU16OfPayloadU8;
+declare_u16_vec_lifetime!(PresharedKeyIdentities, PresharedKeyIdentity);
 
-#[derive(Clone, Debug)]
-pub struct PresharedKeyOffer {
-    pub identities: PresharedKeyIdentities,
-    pub binders: PresharedKeyBinders,
+pub type PresharedKeyBinder<'a> = PayloadU8<'a>;
+pub type PresharedKeyBinders<'a> = VecU16OfPayloadU8<'a>;
+
+#[derive(Debug)]
+pub struct PresharedKeyOffer<'a> {
+    pub identities: PresharedKeyIdentities<'a>,
+    pub binders: PresharedKeyBinders<'a>,
 }
 
-impl PresharedKeyOffer {
+impl PresharedKeyOffer<'static> {
     /// Make a new one with one entry.
-    pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> PresharedKeyOffer {
+    pub fn new(id: PresharedKeyIdentity<'static>, binder: Vec<u8>) -> Self {
         PresharedKeyOffer {
             identities: vec![id],
             binders: vec![PresharedKeyBinder::new(binder)],
@@ -450,13 +511,30 @@ impl PresharedKeyOffer {
     }
 }
 
-impl Codec for PresharedKeyOffer {
+impl<'a> PresharedKeyOffer<'a> {
+    fn to_owned(&self) -> PresharedKeyOffer<'static> {
+        PresharedKeyOffer {
+            identities: self
+                .identities
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+            binders: self
+                .binders
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for PresharedKeyOffer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.identities.encode(bytes);
         self.binders.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<PresharedKeyOffer> {
+    fn read(r: &mut Reader<'a>) -> Option<PresharedKeyOffer<'a>> {
         Some(PresharedKeyOffer {
             identities: PresharedKeyIdentities::read(r)?,
             binders: PresharedKeyBinders::read(r)?,
@@ -465,22 +543,35 @@ impl Codec for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-type ResponderIDs = VecU16OfPayloadU16;
+type ResponderIDs<'a> = VecU16OfPayloadU16<'a>;
 
-#[derive(Clone, Debug)]
-pub struct OCSPCertificateStatusRequest {
-    pub responder_ids: ResponderIDs,
-    pub extensions: PayloadU16,
+#[derive(Debug)]
+pub struct OCSPCertificateStatusRequest<'a> {
+    pub responder_ids: ResponderIDs<'a>,
+    pub extensions: PayloadU16<'a>,
 }
 
-impl Codec for OCSPCertificateStatusRequest {
+impl<'a> OCSPCertificateStatusRequest<'a> {
+    fn to_owned(&self) -> OCSPCertificateStatusRequest<'static> {
+        OCSPCertificateStatusRequest {
+            responder_ids: self
+                .responder_ids
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+            extensions: self.extensions.to_owned(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for OCSPCertificateStatusRequest<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         CertificateStatusType::OCSP.encode(bytes);
         self.responder_ids.encode(bytes);
         self.extensions.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<OCSPCertificateStatusRequest> {
+    fn read(r: &mut Reader<'a>) -> Option<OCSPCertificateStatusRequest<'a>> {
         Some(OCSPCertificateStatusRequest {
             responder_ids: ResponderIDs::read(r)?,
             extensions: PayloadU16::read(r)?,
@@ -488,13 +579,23 @@ impl Codec for OCSPCertificateStatusRequest {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum CertificateStatusRequest {
-    OCSP(OCSPCertificateStatusRequest),
-    Unknown((CertificateStatusType, Payload)),
+#[derive(Debug)]
+pub enum CertificateStatusRequest<'a> {
+    OCSP(OCSPCertificateStatusRequest<'a>),
+    Unknown((CertificateStatusType, Payload<'a>)),
 }
 
-impl Codec for CertificateStatusRequest {
+impl<'a> CertificateStatusRequest<'a> {
+    fn to_owned(&self) -> CertificateStatusRequest<'static> {
+        use CertificateStatusRequest::*;
+        match self {
+            OCSP(x) => OCSP(x.to_owned()),
+            Unknown((ty, payload)) => Unknown((*ty, payload.to_owned())),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for CertificateStatusRequest<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             CertificateStatusRequest::OCSP(ref r) => r.encode(bytes),
@@ -505,7 +606,7 @@ impl Codec for CertificateStatusRequest {
         }
     }
 
-    fn read(r: &mut Reader) -> Option<CertificateStatusRequest> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificateStatusRequest<'a>> {
         let typ = CertificateStatusType::read(r)?;
 
         match typ {
@@ -521,8 +622,8 @@ impl Codec for CertificateStatusRequest {
     }
 }
 
-impl CertificateStatusRequest {
-    pub fn build_ocsp() -> CertificateStatusRequest {
+impl CertificateStatusRequest<'static> {
+    pub fn build_ocsp() -> Self {
         let ocsp = OCSPCertificateStatusRequest {
             responder_ids: ResponderIDs::new(),
             extensions: PayloadU16::empty(),
@@ -534,38 +635,38 @@ impl CertificateStatusRequest {
 // ---
 // SCTs
 
-pub type SCTList = VecU16OfPayloadU16;
+pub type SCTList<'a> = VecU16OfPayloadU16<'a>;
 
 // ---
 
 declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
-declare_u16_vec!(KeyShareEntries, KeyShareEntry);
+declare_u16_vec_lifetime!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
-#[derive(Clone, Debug)]
-pub enum ClientExtension {
+#[derive(Debug)]
+pub enum ClientExtension<'a> {
     ECPointFormats(ECPointFormatList),
     NamedGroups(NamedGroups),
     SignatureAlgorithms(SupportedSignatureSchemes),
-    ServerName(ServerNameRequest),
+    ServerName(ServerNameRequest<'a>),
     SessionTicketRequest,
-    SessionTicketOffer(Payload),
-    Protocols(ProtocolNameList),
+    SessionTicketOffer(Payload<'a>),
+    Protocols(ProtocolNameList<'a>),
     SupportedVersions(ProtocolVersions),
-    KeyShare(KeyShareEntries),
+    KeyShare(KeyShareEntries<'a>),
     PresharedKeyModes(PSKKeyExchangeModes),
-    PresharedKey(PresharedKeyOffer),
-    Cookie(PayloadU16),
+    PresharedKey(PresharedKeyOffer<'a>),
+    Cookie(PayloadU16<'a>),
     ExtendedMasterSecretRequest,
-    CertificateStatusRequest(CertificateStatusRequest),
+    CertificateStatusRequest(CertificateStatusRequest<'a>),
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
-    Unknown(UnknownExtension),
+    Unknown(UnknownExtension<'a>),
 }
 
-impl ClientExtension {
+impl<'a> ClientExtension<'a> {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             ClientExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
@@ -590,9 +691,34 @@ impl ClientExtension {
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
+
+    pub fn to_owned(&self) -> ClientExtension<'static> {
+        use ClientExtension::*;
+        match self {
+            ECPointFormats(x) => ECPointFormats(x.clone()),
+            NamedGroups(x) => NamedGroups(x.clone()),
+            SignatureAlgorithms(x) => SignatureAlgorithms(x.clone()),
+            ServerName(x) => ServerName(x.iter().map(|y| y.to_owned()).collect()),
+            SessionTicketRequest => SessionTicketRequest,
+            SessionTicketOffer(x) => SessionTicketOffer(x.to_owned()),
+            Protocols(x) => Protocols(x.iter().map(|y| y.to_owned()).collect()),
+            SupportedVersions(x) => SupportedVersions(x.clone()),
+            KeyShare(x) => KeyShare(x.iter().map(|y| y.to_owned()).collect()),
+            PresharedKeyModes(x) => PresharedKeyModes(x.clone()),
+            PresharedKey(x) => PresharedKey(x.to_owned()),
+            Cookie(x) => Cookie(x.to_owned()),
+            ExtendedMasterSecretRequest => ExtendedMasterSecretRequest,
+            CertificateStatusRequest(x) => CertificateStatusRequest(x.to_owned()),
+            SignedCertificateTimestampRequest => SignedCertificateTimestampRequest,
+            TransportParameters(x) => TransportParameters(x.clone()),
+            TransportParametersDraft(x) => TransportParametersDraft(x.clone()),
+            EarlyData => EarlyData,
+            Unknown(r) => Unknown(r.to_owned()),
+        }
+    }
 }
 
-impl Codec for ClientExtension {
+impl<'a> Codec<'a> for ClientExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
@@ -623,7 +749,7 @@ impl Codec for ClientExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<ClientExtension> {
+    fn read(r: &mut Reader<'a>) -> Option<ClientExtension<'a>> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -703,9 +829,9 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DnsNameRef) -> webpki::D
     }
 }
 
-impl ClientExtension {
+impl ClientExtension<'static> {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub fn make_sni(dns_name: webpki::DnsNameRef) -> ClientExtension {
+    pub fn make_sni(dns_name: webpki::DnsNameRef) -> Self {
         let name = ServerName {
             typ: ServerNameType::HostName,
             payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
@@ -715,26 +841,26 @@ impl ClientExtension {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum ServerExtension {
+#[derive(Debug)]
+pub enum ServerExtension<'a> {
     ECPointFormats(ECPointFormatList),
     ServerNameAck,
     SessionTicketAck,
-    RenegotiationInfo(PayloadU8),
-    Protocols(ProtocolNameList),
-    KeyShare(KeyShareEntry),
+    RenegotiationInfo(PayloadU8<'a>),
+    Protocols(ProtocolNameList<'a>),
+    KeyShare(KeyShareEntry<'a>),
     PresharedKey(u16),
     ExtendedMasterSecretAck,
     CertificateStatusAck,
-    SignedCertificateTimestamp(SCTList),
+    SignedCertificateTimestamp(SCTList<'a>),
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
-    Unknown(UnknownExtension),
+    Unknown(UnknownExtension<'a>),
 }
 
-impl ServerExtension {
+impl<'a> ServerExtension<'a> {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             ServerExtension::ECPointFormats(_) => ExtensionType::ECPointFormats,
@@ -754,9 +880,32 @@ impl ServerExtension {
             ServerExtension::Unknown(ref r) => r.typ,
         }
     }
+
+    pub fn to_owned(&self) -> ServerExtension<'static> {
+        use ServerExtension::*;
+        match self {
+            ECPointFormats(x) => ECPointFormats(x.clone()),
+            ServerNameAck => ServerNameAck,
+            SessionTicketAck => SessionTicketAck,
+            RenegotiationInfo(x) => RenegotiationInfo(x.to_owned()),
+            Protocols(x) => Protocols(x.iter().map(|x| x.to_owned()).collect()),
+            KeyShare(x) => KeyShare(x.to_owned()),
+            PresharedKey(x) => PresharedKey(*x),
+            ExtendedMasterSecretAck => ExtendedMasterSecretAck,
+            CertificateStatusAck => CertificateStatusAck,
+            SignedCertificateTimestamp(x) => {
+                SignedCertificateTimestamp(x.iter().map(|x| x.to_owned()).collect())
+            }
+            SupportedVersions(x) => SupportedVersions(*x),
+            TransportParameters(x) => TransportParameters(x.clone()),
+            TransportParametersDraft(x) => TransportParametersDraft(x.clone()),
+            EarlyData => EarlyData,
+            Unknown(r) => Unknown(r.to_owned()),
+        }
+    }
 }
 
-impl Codec for ServerExtension {
+impl<'a> Codec<'a> for ServerExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
@@ -783,7 +932,7 @@ impl Codec for ServerExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<ServerExtension> {
+    fn read(r: &mut Reader<'a>) -> Option<ServerExtension<'a>> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -825,33 +974,33 @@ impl Codec for ServerExtension {
     }
 }
 
-impl ServerExtension {
-    pub fn make_alpn(proto: &[&[u8]]) -> ServerExtension {
+impl<'a> ServerExtension<'a> {
+    pub fn make_alpn(proto: &[&[u8]]) -> ServerExtension<'static> {
         ServerExtension::Protocols(ProtocolNameList::from_slices(proto))
     }
 
-    pub fn make_empty_renegotiation_info() -> ServerExtension {
+    pub fn make_empty_renegotiation_info() -> ServerExtension<'static> {
         let empty = Vec::new();
         ServerExtension::RenegotiationInfo(PayloadU8::new(empty))
     }
 
-    pub fn make_sct(sctl: Vec<u8>) -> ServerExtension {
+    pub fn make_sct(sctl: &'a [u8]) -> ServerExtension<'a> {
         let scts = SCTList::read_bytes(&sctl).expect("invalid SCT list");
         ServerExtension::SignedCertificateTimestamp(scts)
     }
 }
 
 #[derive(Debug)]
-pub struct ClientHelloPayload {
+pub struct ClientHelloPayload<'a> {
     pub client_version: ProtocolVersion,
     pub random: Random,
     pub session_id: SessionID,
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
-    pub extensions: Vec<ClientExtension>,
+    pub extensions: Vec<ClientExtension<'a>>,
 }
 
-impl Codec for ClientHelloPayload {
+impl<'a> Codec<'a> for ClientHelloPayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
@@ -864,7 +1013,7 @@ impl Codec for ClientHelloPayload {
         }
     }
 
-    fn read(r: &mut Reader) -> Option<ClientHelloPayload> {
+    fn read(r: &mut Reader<'a>) -> Option<ClientHelloPayload<'a>> {
         let mut ret = ClientHelloPayload {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
@@ -886,7 +1035,7 @@ impl Codec for ClientHelloPayload {
     }
 }
 
-impl ClientHelloPayload {
+impl<'a> ClientHelloPayload<'a> {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub fn has_duplicate_extension(&self) -> bool {
@@ -1042,17 +1191,32 @@ impl ClientHelloPayload {
         self.find_extension(ExtensionType::EarlyData)
             .is_some()
     }
+
+    fn to_owned(&self) -> ClientHelloPayload<'static> {
+        ClientHelloPayload {
+            client_version: self.client_version,
+            random: self.random.clone(),
+            session_id: self.session_id,
+            cipher_suites: self.cipher_suites.clone(),
+            compression_methods: self.compression_methods.clone(),
+            extensions: self
+                .extensions
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub enum HelloRetryExtension {
+pub enum HelloRetryExtension<'a> {
     KeyShare(NamedGroup),
-    Cookie(PayloadU16),
+    Cookie(PayloadU16<'a>),
     SupportedVersions(ProtocolVersion),
-    Unknown(UnknownExtension),
+    Unknown(UnknownExtension<'a>),
 }
 
-impl HelloRetryExtension {
+impl<'a> HelloRetryExtension<'a> {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             HelloRetryExtension::KeyShare(_) => ExtensionType::KeyShare,
@@ -1061,9 +1225,19 @@ impl HelloRetryExtension {
             HelloRetryExtension::Unknown(ref r) => r.typ,
         }
     }
+
+    fn to_owned(&self) -> HelloRetryExtension<'static> {
+        use HelloRetryExtension::*;
+        match self {
+            KeyShare(x) => KeyShare(x.to_owned()),
+            Cookie(x) => Cookie(x.to_owned()),
+            SupportedVersions(x) => SupportedVersions(x.to_owned()),
+            Unknown(x) => Unknown(x.to_owned()),
+        }
+    }
 }
 
-impl Codec for HelloRetryExtension {
+impl<'a> Codec<'a> for HelloRetryExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
@@ -1079,7 +1253,7 @@ impl Codec for HelloRetryExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<HelloRetryExtension> {
+    fn read(r: &mut Reader<'a>) -> Option<HelloRetryExtension<'a>> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1098,14 +1272,14 @@ impl Codec for HelloRetryExtension {
 }
 
 #[derive(Debug)]
-pub struct HelloRetryRequest {
+pub struct HelloRetryRequest<'a> {
     pub legacy_version: ProtocolVersion,
     pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
-    pub extensions: Vec<HelloRetryExtension>,
+    pub extensions: Vec<HelloRetryExtension<'a>>,
 }
 
-impl Codec for HelloRetryRequest {
+impl<'a> Codec<'a> for HelloRetryRequest<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.legacy_version.encode(bytes);
         HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
@@ -1115,7 +1289,7 @@ impl Codec for HelloRetryRequest {
         codec::encode_vec_u16(bytes, &self.extensions);
     }
 
-    fn read(r: &mut Reader) -> Option<HelloRetryRequest> {
+    fn read(r: &mut Reader<'a>) -> Option<HelloRetryRequest<'a>> {
         let session_id = SessionID::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
@@ -1133,7 +1307,7 @@ impl Codec for HelloRetryRequest {
     }
 }
 
-impl HelloRetryRequest {
+impl<'a> HelloRetryRequest<'a> {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub fn has_duplicate_extension(&self) -> bool {
@@ -1188,19 +1362,32 @@ impl HelloRetryRequest {
             _ => None,
         }
     }
+
+    fn to_owned(&self) -> HelloRetryRequest<'static> {
+        HelloRetryRequest {
+            legacy_version: self.legacy_version,
+            session_id: self.session_id,
+            cipher_suite: self.cipher_suite,
+            extensions: self
+                .extensions
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct ServerHelloPayload {
+pub struct ServerHelloPayload<'a> {
     pub legacy_version: ProtocolVersion,
     pub random: Random,
     pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
     pub compression_method: Compression,
-    pub extensions: Vec<ServerExtension>,
+    pub extensions: Vec<ServerExtension<'a>>,
 }
 
-impl Codec for ServerHelloPayload {
+impl<'a> Codec<'a> for ServerHelloPayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.legacy_version.encode(bytes);
         self.random.encode(bytes);
@@ -1212,7 +1399,7 @@ impl Codec for ServerHelloPayload {
     }
 
     // minus version and random, which have already been read.
-    fn read(r: &mut Reader) -> Option<ServerHelloPayload> {
+    fn read(r: &mut Reader<'a>) -> Option<ServerHelloPayload<'a>> {
         let session_id = SessionID::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
@@ -1231,13 +1418,13 @@ impl Codec for ServerHelloPayload {
     }
 }
 
-impl HasServerExtensions for ServerHelloPayload {
+impl<'a> HasServerExtensions for ServerHelloPayload<'a> {
     fn get_extensions(&self) -> &[ServerExtension] {
         &self.extensions
     }
 }
 
-impl ServerHelloPayload {
+impl<'a> ServerHelloPayload<'a> {
     pub fn get_key_share(&self) -> Option<&KeyShareEntry> {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
@@ -1282,16 +1469,31 @@ impl ServerHelloPayload {
             _ => None,
         }
     }
+
+    fn to_owned(&self) -> ServerHelloPayload<'static> {
+        ServerHelloPayload {
+            legacy_version: self.legacy_version,
+            random: self.random.clone(),
+            session_id: self.session_id,
+            cipher_suite: self.cipher_suite,
+            compression_method: self.compression_method,
+            extensions: self
+                .extensions
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
 }
 
 pub type CertificatePayload = Vec<key::Certificate>;
 
-impl Codec for CertificatePayload {
+impl<'a> Codec<'a> for CertificatePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::encode_vec_u24(bytes, self);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificatePayload> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificatePayload> {
         // 64KB of certificates is plenty, 16MB is obviously silly
         codec::read_vec_u24_limited(r, 0x10000)
     }
@@ -1302,13 +1504,13 @@ impl Codec for CertificatePayload {
 // context-free any more.
 
 #[derive(Debug)]
-pub enum CertificateExtension {
-    CertificateStatus(CertificateStatus),
-    SignedCertificateTimestamp(SCTList),
-    Unknown(UnknownExtension),
+pub enum CertificateExtension<'a> {
+    CertificateStatus(CertificateStatus<'a>),
+    SignedCertificateTimestamp(SCTList<'a>),
+    Unknown(UnknownExtension<'a>),
 }
 
-impl CertificateExtension {
+impl<'a> CertificateExtension<'a> {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             CertificateExtension::CertificateStatus(_) => ExtensionType::StatusRequest,
@@ -1317,8 +1519,8 @@ impl CertificateExtension {
         }
     }
 
-    pub fn make_sct(sct_list: Vec<u8>) -> CertificateExtension {
-        let sctl = SCTList::read_bytes(&sct_list).expect("invalid SCT list");
+    pub fn make_sct(sct_list: &'a [u8]) -> CertificateExtension<'a> {
+        let sctl = SCTList::read_bytes(sct_list).expect("invalid SCT list");
         CertificateExtension::SignedCertificateTimestamp(sctl)
     }
 
@@ -1335,9 +1537,20 @@ impl CertificateExtension {
             _ => None,
         }
     }
+
+    fn to_owned(&self) -> CertificateExtension<'static> {
+        use CertificateExtension::*;
+        match self {
+            CertificateStatus(x) => CertificateStatus(x.to_owned()),
+            SignedCertificateTimestamp(x) => {
+                SignedCertificateTimestamp(x.iter().map(|y| y.to_owned()).collect())
+            }
+            Unknown(x) => Unknown(x.to_owned()),
+        }
+    }
 }
 
-impl Codec for CertificateExtension {
+impl<'a> Codec<'a> for CertificateExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
@@ -1352,7 +1565,7 @@ impl Codec for CertificateExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificateExtension> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificateExtension<'a>> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1373,21 +1586,21 @@ impl Codec for CertificateExtension {
     }
 }
 
-declare_u16_vec!(CertificateExtensions, CertificateExtension);
+declare_u16_vec_lifetime!(CertificateExtensions, CertificateExtension);
 
 #[derive(Debug)]
-pub struct CertificateEntry {
+pub struct CertificateEntry<'a> {
     pub cert: key::Certificate,
-    pub exts: CertificateExtensions,
+    pub exts: CertificateExtensions<'a>,
 }
 
-impl Codec for CertificateEntry {
+impl<'a> Codec<'a> for CertificateEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.cert.encode(bytes);
         self.exts.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificateEntry> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificateEntry<'a>> {
         Some(CertificateEntry {
             cert: key::Certificate::read(r)?,
             exts: CertificateExtensions::read(r)?,
@@ -1395,8 +1608,8 @@ impl Codec for CertificateEntry {
     }
 }
 
-impl CertificateEntry {
-    pub fn new(cert: key::Certificate) -> CertificateEntry {
+impl<'a> CertificateEntry<'a> {
+    pub fn new(cert: key::Certificate) -> CertificateEntry<'static> {
         CertificateEntry {
             cert,
             exts: Vec::new(),
@@ -1437,21 +1650,32 @@ impl CertificateEntry {
             .find(|ext| ext.get_type() == ExtensionType::SCT)
             .and_then(CertificateExtension::get_sct_list)
     }
+
+    fn to_owned(&self) -> CertificateEntry<'static> {
+        CertificateEntry {
+            cert: self.cert.clone(),
+            exts: self
+                .exts
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct CertificatePayloadTLS13 {
-    pub context: PayloadU8,
-    pub entries: Vec<CertificateEntry>,
+pub struct CertificatePayloadTLS13<'a> {
+    pub context: PayloadU8<'a>,
+    pub entries: Vec<CertificateEntry<'a>>,
 }
 
-impl Codec for CertificatePayloadTLS13 {
+impl<'a> Codec<'a> for CertificatePayloadTLS13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         codec::encode_vec_u24(bytes, &self.entries);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificatePayloadTLS13> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificatePayloadTLS13<'a>> {
         Some(CertificatePayloadTLS13 {
             context: PayloadU8::read(r)?,
             entries: codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)?,
@@ -1459,7 +1683,7 @@ impl Codec for CertificatePayloadTLS13 {
     }
 }
 
-impl CertificatePayloadTLS13 {
+impl<'a> CertificatePayloadTLS13<'a> {
     pub fn new(entries: Vec<CertificateEntry>) -> CertificatePayloadTLS13 {
         CertificatePayloadTLS13 {
             context: PayloadU8::empty(),
@@ -1505,11 +1729,15 @@ impl CertificatePayloadTLS13 {
             .unwrap_or_else(Vec::new)
     }
 
-    pub fn get_end_entity_scts(&self) -> Option<SCTList> {
-        self.entries
-            .first()
-            .and_then(CertificateEntry::get_scts)
-            .cloned()
+    pub fn get_end_entity_scts(&self) -> Option<SCTList<'static>> {
+        self.entries.first().and_then(|entry| {
+            CertificateEntry::get_scts(entry).map(|sct_list| {
+                sct_list
+                    .iter()
+                    .map(|x| x.to_owned())
+                    .collect()
+            })
+        })
     }
 
     pub fn convert(&self) -> CertificatePayload {
@@ -1518,6 +1746,17 @@ impl CertificatePayloadTLS13 {
             ret.push(entry.cert.clone());
         }
         ret
+    }
+
+    fn to_owned(&self) -> CertificatePayloadTLS13<'static> {
+        CertificatePayloadTLS13 {
+            context: self.context.to_owned(),
+            entries: self
+                .entries
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
     }
 }
 
@@ -1534,19 +1773,19 @@ pub enum KeyExchangeAlgorithm {
 // We don't support arbitrary curves.  It's a terrible
 // idea and unnecessary attack surface.  Please,
 // get a grip.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct ECParameters {
     pub curve_type: ECCurveType,
     pub named_group: NamedGroup,
 }
 
-impl Codec for ECParameters {
+impl<'a> Codec<'a> for ECParameters {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.curve_type.encode(bytes);
         self.named_group.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ECParameters> {
+    fn read(r: &mut Reader<'a>) -> Option<ECParameters> {
         let ct = ECCurveType::read(r)?;
 
         if ct != ECCurveType::NamedCurve {
@@ -1562,28 +1801,35 @@ impl Codec for ECParameters {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct DigitallySignedStruct {
+#[derive(Debug)]
+pub struct DigitallySignedStruct<'a> {
     pub scheme: SignatureScheme,
-    pub sig: PayloadU16,
+    pub sig: PayloadU16<'a>,
 }
 
-impl DigitallySignedStruct {
-    pub fn new(scheme: SignatureScheme, sig: Vec<u8>) -> DigitallySignedStruct {
+impl<'a> DigitallySignedStruct<'a> {
+    pub fn new(scheme: SignatureScheme, sig: Vec<u8>) -> DigitallySignedStruct<'static> {
         DigitallySignedStruct {
             scheme,
             sig: PayloadU16::new(sig),
         }
     }
+
+    pub fn to_owned(&self) -> DigitallySignedStruct<'static> {
+        DigitallySignedStruct {
+            scheme: self.scheme,
+            sig: self.sig.to_owned(),
+        }
+    }
 }
 
-impl Codec for DigitallySignedStruct {
+impl<'a> Codec<'a> for DigitallySignedStruct<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.scheme.encode(bytes);
         self.sig.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<DigitallySignedStruct> {
+    fn read(r: &mut Reader<'a>) -> Option<DigitallySignedStruct<'a>> {
         let scheme = SignatureScheme::read(r)?;
         let sig = PayloadU16::read(r)?;
 
@@ -1592,29 +1838,29 @@ impl Codec for DigitallySignedStruct {
 }
 
 #[derive(Debug)]
-pub struct ClientECDHParams {
-    pub public: PayloadU8,
+pub struct ClientECDHParams<'a> {
+    pub public: PayloadU8<'a>,
 }
 
-impl Codec for ClientECDHParams {
+impl<'a> Codec<'a> for ClientECDHParams<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.public.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ClientECDHParams> {
+    fn read(r: &mut Reader<'a>) -> Option<ClientECDHParams<'a>> {
         let pb = PayloadU8::read(r)?;
         Some(ClientECDHParams { public: pb })
     }
 }
 
 #[derive(Debug)]
-pub struct ServerECDHParams {
+pub struct ServerECDHParams<'a> {
     pub curve_params: ECParameters,
-    pub public: PayloadU8,
+    pub public: PayloadU8<'a>,
 }
 
-impl ServerECDHParams {
-    pub fn new(named_group: NamedGroup, pubkey: &[u8]) -> ServerECDHParams {
+impl<'a> ServerECDHParams<'a> {
+    pub fn new(named_group: NamedGroup, pubkey: &[u8]) -> ServerECDHParams<'static> {
         ServerECDHParams {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,
@@ -1623,15 +1869,22 @@ impl ServerECDHParams {
             public: PayloadU8::new(pubkey.to_vec()),
         }
     }
+
+    fn to_owned(&self) -> ServerECDHParams<'static> {
+        ServerECDHParams {
+            curve_params: self.curve_params,
+            public: self.public.to_owned(),
+        }
+    }
 }
 
-impl Codec for ServerECDHParams {
+impl<'a> Codec<'a> for ServerECDHParams<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.curve_params.encode(bytes);
         self.public.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ServerECDHParams> {
+    fn read(r: &mut Reader<'a>) -> Option<ServerECDHParams<'a>> {
         let cp = ECParameters::read(r)?;
         let pb = PayloadU8::read(r)?;
 
@@ -1643,18 +1896,27 @@ impl Codec for ServerECDHParams {
 }
 
 #[derive(Debug)]
-pub struct ECDHEServerKeyExchange {
-    pub params: ServerECDHParams,
-    pub dss: DigitallySignedStruct,
+pub struct ECDHEServerKeyExchange<'a> {
+    pub params: ServerECDHParams<'a>,
+    pub dss: DigitallySignedStruct<'a>,
 }
 
-impl Codec for ECDHEServerKeyExchange {
+impl<'a> ECDHEServerKeyExchange<'a> {
+    fn to_owned(&self) -> ECDHEServerKeyExchange<'static> {
+        ECDHEServerKeyExchange {
+            params: self.params.to_owned(),
+            dss: self.dss.to_owned(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for ECDHEServerKeyExchange<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.params.encode(bytes);
         self.dss.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ECDHEServerKeyExchange> {
+    fn read(r: &mut Reader<'a>) -> Option<ECDHEServerKeyExchange<'a>> {
         let params = ServerECDHParams::read(r)?;
         let dss = DigitallySignedStruct::read(r)?;
 
@@ -1663,12 +1925,12 @@ impl Codec for ECDHEServerKeyExchange {
 }
 
 #[derive(Debug)]
-pub enum ServerKeyExchangePayload {
-    ECDHE(ECDHEServerKeyExchange),
-    Unknown(Payload),
+pub enum ServerKeyExchangePayload<'a> {
+    ECDHE(ECDHEServerKeyExchange<'a>),
+    Unknown(Payload<'a>),
 }
 
-impl Codec for ServerKeyExchangePayload {
+impl<'a> Codec<'a> for ServerKeyExchangePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             ServerKeyExchangePayload::ECDHE(ref x) => x.encode(bytes),
@@ -1676,14 +1938,14 @@ impl Codec for ServerKeyExchangePayload {
         }
     }
 
-    fn read(r: &mut Reader) -> Option<ServerKeyExchangePayload> {
+    fn read(r: &mut Reader<'a>) -> Option<ServerKeyExchangePayload<'a>> {
         // read as Unknown, fully parse when we know the
         // KeyExchangeAlgorithm
-        Some(Self::Unknown(Payload::read(r)))
+        Some(ServerKeyExchangePayload::Unknown(Payload::read(r)))
     }
 }
 
-impl ServerKeyExchangePayload {
+impl<'a> ServerKeyExchangePayload<'a> {
     pub fn unwrap_given_kxa(&self, kxa: &KeyExchangeAlgorithm) -> Option<ServerKeyExchangePayload> {
         if let ServerKeyExchangePayload::Unknown(ref unk) = *self {
             let mut rd = Reader::init(&unk.0);
@@ -1711,16 +1973,24 @@ impl ServerKeyExchangePayload {
         }
     }
 
-    pub fn get_sig(&self) -> Option<DigitallySignedStruct> {
+    pub fn get_sig(&self) -> Option<&DigitallySignedStruct<'a>> {
         match *self {
-            ServerKeyExchangePayload::ECDHE(ref x) => Some(x.dss.clone()),
+            ServerKeyExchangePayload::ECDHE(ref x) => Some(&x.dss),
             _ => None,
+        }
+    }
+
+    fn to_owned(&self) -> ServerKeyExchangePayload<'static> {
+        use ServerKeyExchangePayload::*;
+        match self {
+            ECDHE(x) => ECDHE(x.to_owned()),
+            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
 
 // -- EncryptedExtensions (TLS1.3 only) --
-declare_u16_vec!(EncryptedExtensions, ServerExtension);
+declare_u16_vec_lifetime!(EncryptedExtensions, ServerExtension);
 
 pub trait HasServerExtensions {
     fn get_extensions(&self) -> &[ServerExtension];
@@ -1773,7 +2043,7 @@ pub trait HasServerExtensions {
     }
 }
 
-impl HasServerExtensions for EncryptedExtensions {
+impl<'a> HasServerExtensions for EncryptedExtensions<'a> {
     fn get_extensions(&self) -> &[ServerExtension] {
         self
     }
@@ -1781,24 +2051,38 @@ impl HasServerExtensions for EncryptedExtensions {
 
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
-pub type DistinguishedName = PayloadU16;
-pub type DistinguishedNames = VecU16OfPayloadU16;
+pub type DistinguishedName<'a> = PayloadU16<'a>;
+pub type DistinguishedNames<'a> = VecU16OfPayloadU16<'a>;
 
 #[derive(Debug)]
-pub struct CertificateRequestPayload {
+pub struct CertificateRequestPayload<'a> {
     pub certtypes: ClientCertificateTypes,
     pub sigschemes: SupportedSignatureSchemes,
-    pub canames: DistinguishedNames,
+    pub canames: DistinguishedNames<'a>,
 }
 
-impl Codec for CertificateRequestPayload {
+impl<'a> CertificateRequestPayload<'a> {
+    fn to_owned(&self) -> CertificateRequestPayload<'static> {
+        CertificateRequestPayload {
+            certtypes: self.certtypes.clone(),
+            sigschemes: self.sigschemes.clone(),
+            canames: self
+                .canames
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for CertificateRequestPayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.certtypes.encode(bytes);
         self.sigschemes.encode(bytes);
         self.canames.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificateRequestPayload> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificateRequestPayload<'a>> {
         let certtypes = ClientCertificateTypes::read(r)?;
         let sigschemes = SupportedSignatureSchemes::read(r)?;
         let canames = DistinguishedNames::read(r)?;
@@ -1817,13 +2101,13 @@ impl Codec for CertificateRequestPayload {
 }
 
 #[derive(Debug)]
-pub enum CertReqExtension {
+pub enum CertReqExtension<'a> {
     SignatureAlgorithms(SupportedSignatureSchemes),
-    AuthorityNames(DistinguishedNames),
-    Unknown(UnknownExtension),
+    AuthorityNames(DistinguishedNames<'a>),
+    Unknown(UnknownExtension<'a>),
 }
 
-impl CertReqExtension {
+impl<'a> CertReqExtension<'a> {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             CertReqExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
@@ -1831,9 +2115,18 @@ impl CertReqExtension {
             CertReqExtension::Unknown(ref r) => r.typ,
         }
     }
+
+    fn to_owned(&self) -> CertReqExtension<'static> {
+        use CertReqExtension::*;
+        match self {
+            SignatureAlgorithms(x) => SignatureAlgorithms(x.clone()),
+            AuthorityNames(x) => AuthorityNames(x.iter().map(|y| y.to_owned()).collect()),
+            Unknown(x) => Unknown(x.to_owned()),
+        }
+    }
 }
 
-impl Codec for CertReqExtension {
+impl<'a> Codec<'a> for CertReqExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
@@ -1848,7 +2141,7 @@ impl Codec for CertReqExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<CertReqExtension> {
+    fn read(r: &mut Reader<'a>) -> Option<CertReqExtension<'a>> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1872,21 +2165,21 @@ impl Codec for CertReqExtension {
     }
 }
 
-declare_u16_vec!(CertReqExtensions, CertReqExtension);
+declare_u16_vec_lifetime!(CertReqExtensions, CertReqExtension);
 
 #[derive(Debug)]
-pub struct CertificateRequestPayloadTLS13 {
-    pub context: PayloadU8,
-    pub extensions: CertReqExtensions,
+pub struct CertificateRequestPayloadTLS13<'a> {
+    pub context: PayloadU8<'a>,
+    pub extensions: CertReqExtensions<'a>,
 }
 
-impl Codec for CertificateRequestPayloadTLS13 {
+impl<'a> Codec<'a> for CertificateRequestPayloadTLS13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.extensions.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificateRequestPayloadTLS13> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificateRequestPayloadTLS13<'a>> {
         let context = PayloadU8::read(r)?;
         let extensions = CertReqExtensions::read(r)?;
 
@@ -1897,7 +2190,7 @@ impl Codec for CertificateRequestPayloadTLS13 {
     }
 }
 
-impl CertificateRequestPayloadTLS13 {
+impl<'a> CertificateRequestPayloadTLS13<'a> {
     pub fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
         self.extensions
             .iter()
@@ -1919,31 +2212,49 @@ impl CertificateRequestPayloadTLS13 {
             _ => None,
         }
     }
+
+    fn to_owned(&self) -> CertificateRequestPayloadTLS13<'static> {
+        CertificateRequestPayloadTLS13 {
+            context: self.context.to_owned(),
+            extensions: self
+                .extensions
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
 }
 
 // -- NewSessionTicket --
 #[derive(Debug)]
-pub struct NewSessionTicketPayload {
+pub struct NewSessionTicketPayload<'a> {
     pub lifetime_hint: u32,
-    pub ticket: PayloadU16,
+    pub ticket: PayloadU16<'a>,
 }
 
-impl NewSessionTicketPayload {
-    pub fn new(lifetime_hint: u32, ticket: Vec<u8>) -> NewSessionTicketPayload {
+impl<'a> NewSessionTicketPayload<'a> {
+    pub fn new(lifetime_hint: u32, ticket: Vec<u8>) -> NewSessionTicketPayload<'static> {
         NewSessionTicketPayload {
             lifetime_hint,
             ticket: PayloadU16::new(ticket),
         }
     }
+
+    fn to_owned(&self) -> NewSessionTicketPayload<'static> {
+        NewSessionTicketPayload {
+            lifetime_hint: self.lifetime_hint,
+            ticket: self.ticket.to_owned(),
+        }
+    }
 }
 
-impl Codec for NewSessionTicketPayload {
+impl<'a> Codec<'a> for NewSessionTicketPayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.lifetime_hint.encode(bytes);
         self.ticket.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<NewSessionTicketPayload> {
+    fn read(r: &mut Reader<'a>) -> Option<NewSessionTicketPayload<'a>> {
         let lifetime = u32::read(r)?;
         let ticket = PayloadU16::read(r)?;
 
@@ -1956,21 +2267,29 @@ impl Codec for NewSessionTicketPayload {
 
 // -- NewSessionTicket electric boogaloo --
 #[derive(Debug)]
-pub enum NewSessionTicketExtension {
+pub enum NewSessionTicketExtension<'a> {
     EarlyData(u32),
-    Unknown(UnknownExtension),
+    Unknown(UnknownExtension<'a>),
 }
 
-impl NewSessionTicketExtension {
+impl<'a> NewSessionTicketExtension<'a> {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
             NewSessionTicketExtension::EarlyData(_) => ExtensionType::EarlyData,
             NewSessionTicketExtension::Unknown(ref r) => r.typ,
         }
     }
+
+    fn to_owned(&self) -> NewSessionTicketExtension<'static> {
+        use NewSessionTicketExtension::*;
+        match self {
+            EarlyData(x) => EarlyData(*x),
+            Unknown(x) => Unknown(x.to_owned()),
+        }
+    }
 }
 
-impl Codec for NewSessionTicketExtension {
+impl<'a> Codec<'a> for NewSessionTicketExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
@@ -1984,7 +2303,7 @@ impl Codec for NewSessionTicketExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<NewSessionTicketExtension> {
+    fn read(r: &mut Reader<'a>) -> Option<NewSessionTicketExtension<'a>> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1998,24 +2317,24 @@ impl Codec for NewSessionTicketExtension {
     }
 }
 
-declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
+declare_u16_vec_lifetime!(NewSessionTicketExtensions, NewSessionTicketExtension);
 
 #[derive(Debug)]
-pub struct NewSessionTicketPayloadTLS13 {
+pub struct NewSessionTicketPayloadTLS13<'a> {
     pub lifetime: u32,
     pub age_add: u32,
-    pub nonce: PayloadU8,
-    pub ticket: PayloadU16,
-    pub exts: NewSessionTicketExtensions,
+    pub nonce: PayloadU8<'a>,
+    pub ticket: PayloadU16<'a>,
+    pub exts: NewSessionTicketExtensions<'a>,
 }
 
-impl NewSessionTicketPayloadTLS13 {
+impl<'a> NewSessionTicketPayloadTLS13<'a> {
     pub fn new(
         lifetime: u32,
         age_add: u32,
         nonce: Vec<u8>,
         ticket: Vec<u8>,
-    ) -> NewSessionTicketPayloadTLS13 {
+    ) -> NewSessionTicketPayloadTLS13<'static> {
         NewSessionTicketPayloadTLS13 {
             lifetime,
             age_add,
@@ -2038,9 +2357,23 @@ impl NewSessionTicketPayloadTLS13 {
             _ => None,
         }
     }
+
+    fn to_owned(&self) -> NewSessionTicketPayloadTLS13<'static> {
+        NewSessionTicketPayloadTLS13 {
+            lifetime: self.lifetime,
+            age_add: self.age_add,
+            nonce: self.nonce.to_owned(),
+            ticket: self.ticket.to_owned(),
+            exts: self
+                .exts
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        }
+    }
 }
 
-impl Codec for NewSessionTicketPayloadTLS13 {
+impl<'a> Codec<'a> for NewSessionTicketPayloadTLS13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.lifetime.encode(bytes);
         self.age_add.encode(bytes);
@@ -2049,7 +2382,7 @@ impl Codec for NewSessionTicketPayloadTLS13 {
         self.exts.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<NewSessionTicketPayloadTLS13> {
+    fn read(r: &mut Reader<'a>) -> Option<NewSessionTicketPayloadTLS13<'a>> {
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
@@ -2070,17 +2403,17 @@ impl Codec for NewSessionTicketPayloadTLS13 {
 
 /// Only supports OCSP
 #[derive(Debug)]
-pub struct CertificateStatus {
-    pub ocsp_response: PayloadU24,
+pub struct CertificateStatus<'a> {
+    pub ocsp_response: PayloadU24<'a>,
 }
 
-impl Codec for CertificateStatus {
+impl<'a> Codec<'a> for CertificateStatus<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         CertificateStatusType::OCSP.encode(bytes);
         self.ocsp_response.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<CertificateStatus> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificateStatus<'a>> {
         let typ = CertificateStatusType::read(r)?;
 
         match typ {
@@ -2092,8 +2425,8 @@ impl Codec for CertificateStatus {
     }
 }
 
-impl CertificateStatus {
-    pub fn new(ocsp: Vec<u8>) -> CertificateStatus {
+impl<'a> CertificateStatus<'a> {
+    pub fn new(ocsp: Vec<u8>) -> CertificateStatus<'static> {
         CertificateStatus {
             ocsp_response: PayloadU24::new(ocsp),
         }
@@ -2102,35 +2435,41 @@ impl CertificateStatus {
     pub fn into_inner(self) -> Vec<u8> {
         self.ocsp_response.0.into_owned()
     }
+
+    fn to_owned(&self) -> CertificateStatus<'static> {
+        CertificateStatus {
+            ocsp_response: self.ocsp_response.to_owned(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub enum HandshakePayload {
+pub enum HandshakePayload<'a> {
     HelloRequest,
-    ClientHello(ClientHelloPayload),
-    ServerHello(ServerHelloPayload),
-    HelloRetryRequest(HelloRetryRequest),
+    ClientHello(ClientHelloPayload<'a>),
+    ServerHello(ServerHelloPayload<'a>),
+    HelloRetryRequest(HelloRetryRequest<'a>),
     Certificate(CertificatePayload),
-    CertificateTLS13(CertificatePayloadTLS13),
-    ServerKeyExchange(ServerKeyExchangePayload),
-    CertificateRequest(CertificateRequestPayload),
-    CertificateRequestTLS13(CertificateRequestPayloadTLS13),
-    CertificateVerify(DigitallySignedStruct),
+    CertificateTLS13(CertificatePayloadTLS13<'a>),
+    ServerKeyExchange(ServerKeyExchangePayload<'a>),
+    CertificateRequest(CertificateRequestPayload<'a>),
+    CertificateRequestTLS13(CertificateRequestPayloadTLS13<'a>),
+    CertificateVerify(DigitallySignedStruct<'a>),
     ServerHelloDone,
     EarlyData,
     EndOfEarlyData,
-    ClientKeyExchange(Payload),
-    NewSessionTicket(NewSessionTicketPayload),
-    NewSessionTicketTLS13(NewSessionTicketPayloadTLS13),
-    EncryptedExtensions(EncryptedExtensions),
+    ClientKeyExchange(Payload<'a>),
+    NewSessionTicket(NewSessionTicketPayload<'a>),
+    NewSessionTicketTLS13(NewSessionTicketPayloadTLS13<'a>),
+    EncryptedExtensions(EncryptedExtensions<'a>),
     KeyUpdate(KeyUpdateRequest),
-    Finished(Payload),
-    CertificateStatus(CertificateStatus),
-    MessageHash(Payload),
-    Unknown(Payload),
+    Finished(Payload<'a>),
+    CertificateStatus(CertificateStatus<'a>),
+    MessageHash(Payload<'a>),
+    Unknown(Payload<'a>),
 }
 
-impl HandshakePayload {
+impl<'a> HandshakePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
             HandshakePayload::HelloRequest
@@ -2157,15 +2496,43 @@ impl HandshakePayload {
             HandshakePayload::Unknown(ref x) => x.encode(bytes),
         }
     }
+
+    fn to_owned(&self) -> HandshakePayload<'static> {
+        use HandshakePayload::*;
+        match self {
+            HelloRequest => HelloRequest,
+            ServerHelloDone => ServerHelloDone,
+            EarlyData => EarlyData,
+            EndOfEarlyData => EndOfEarlyData,
+            ClientHello(x) => ClientHello(x.to_owned()),
+            ServerHello(x) => ServerHello(x.to_owned()),
+            HelloRetryRequest(x) => HelloRetryRequest(x.to_owned()),
+            Certificate(x) => Certificate(x.clone()),
+            CertificateTLS13(x) => CertificateTLS13(x.to_owned()),
+            ServerKeyExchange(x) => ServerKeyExchange(x.to_owned()),
+            ClientKeyExchange(x) => ClientKeyExchange(x.to_owned()),
+            CertificateRequest(x) => CertificateRequest(x.to_owned()),
+            CertificateRequestTLS13(x) => CertificateRequestTLS13(x.to_owned()),
+            CertificateVerify(x) => CertificateVerify(x.to_owned()),
+            NewSessionTicket(x) => NewSessionTicket(x.to_owned()),
+            NewSessionTicketTLS13(x) => NewSessionTicketTLS13(x.to_owned()),
+            EncryptedExtensions(x) => EncryptedExtensions(x.iter().map(|y| y.to_owned()).collect()),
+            KeyUpdate(x) => KeyUpdate(x.to_owned()),
+            Finished(x) => Finished(x.to_owned()),
+            CertificateStatus(x) => CertificateStatus(x.to_owned()),
+            MessageHash(x) => MessageHash(x.to_owned()),
+            Unknown(x) => Unknown(x.to_owned()),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub struct HandshakeMessagePayload {
+pub struct HandshakeMessagePayload<'a> {
     pub typ: HandshakeType,
-    pub payload: HandshakePayload,
+    pub payload: HandshakePayload<'a>,
 }
 
-impl Codec for HandshakeMessagePayload {
+impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         // encode payload to learn length
         let mut sub: Vec<u8> = Vec::new();
@@ -2181,13 +2548,16 @@ impl Codec for HandshakeMessagePayload {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<HandshakeMessagePayload> {
+    fn read(r: &mut Reader<'a>) -> Option<HandshakeMessagePayload<'a>> {
         HandshakeMessagePayload::read_version(r, ProtocolVersion::TLSv1_2)
     }
 }
 
-impl HandshakeMessagePayload {
-    pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<HandshakeMessagePayload> {
+impl<'a> HandshakeMessagePayload<'a> {
+    pub fn read_version(
+        r: &mut Reader<'a>,
+        vers: ProtocolVersion,
+    ) -> Option<HandshakeMessagePayload<'a>> {
         let mut typ = HandshakeType::read(r)?;
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
@@ -2280,7 +2650,7 @@ impl HandshakeMessagePayload {
         }
     }
 
-    pub fn build_key_update_notify() -> HandshakeMessagePayload {
+    pub fn build_key_update_notify() -> HandshakeMessagePayload<'static> {
         HandshakeMessagePayload {
             typ: HandshakeType::KeyUpdate,
             payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
@@ -2313,6 +2683,13 @@ impl HandshakeMessagePayload {
         HandshakeMessagePayload {
             typ: HandshakeType::MessageHash,
             payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec())),
+        }
+    }
+
+    pub fn to_owned(&self) -> HandshakeMessagePayload<'static> {
+        HandshakeMessagePayload {
+            typ: self.typ,
+            payload: self.payload.to_owned(),
         }
     }
 }

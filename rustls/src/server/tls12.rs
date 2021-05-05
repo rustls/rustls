@@ -51,7 +51,7 @@ mod client_hello {
         pub(in crate::server) using_ems: bool,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) send_ticket: bool,
-        pub(in crate::server) extra_exts: Vec<ServerExtension>,
+        pub(in crate::server) extra_exts: Vec<ServerExtension<'static>>,
     }
 
     impl CompleteClientHelloHandling {
@@ -326,7 +326,7 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         randoms: &ConnectionRandoms,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: Vec<ServerExtension<'static>>,
     ) -> Result<bool, Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
@@ -510,7 +510,11 @@ struct ExpectCertificate {
 }
 
 impl hs::State for ExpectCertificate {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(
+        mut self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'_>,
+    ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let cert_chain = require_handshake_msg_move!(
             m,
@@ -891,7 +895,7 @@ struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl hs::State for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common

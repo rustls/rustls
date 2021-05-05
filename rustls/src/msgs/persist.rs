@@ -17,10 +17,10 @@ use std::mem;
 #[derive(Debug)]
 pub struct ClientSessionKey {
     kind: &'static [u8],
-    dns_name: PayloadU8,
+    dns_name: PayloadU8<'static>,
 }
 
-impl Codec for ClientSessionKey {
+impl<'a> Codec<'a> for ClientSessionKey {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(self.kind);
         self.dns_name.encode(bytes);
@@ -55,8 +55,8 @@ pub struct ClientSessionValue {
     pub version: ProtocolVersion,
     pub session_id: SessionID,
     cipher_suite: CipherSuite,
-    pub ticket: PayloadU16,
-    pub master_secret: PayloadU8,
+    pub ticket: PayloadU16<'static>,
+    pub master_secret: PayloadU8<'static>,
     pub epoch: u64,
     pub lifetime: u32,
     pub age_add: u32,
@@ -82,7 +82,7 @@ impl ClientSessionValue {
     }
 }
 
-impl Codec for ClientSessionValue {
+impl<'a> Codec<'a> for ClientSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
@@ -97,12 +97,12 @@ impl Codec for ClientSessionValue {
         self.server_cert_chain.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ClientSessionValue> {
+    fn read(r: &mut Reader<'a>) -> Option<ClientSessionValue> {
         let v = ProtocolVersion::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let sid = SessionID::read(r)?;
-        let ticket = PayloadU16::read(r)?;
-        let ms = PayloadU8::read(r)?;
+        let ticket = PayloadU16::read(r)?.to_owned();
+        let ms = PayloadU8::read(r)?.to_owned();
         let epoch = u64::read(r)?;
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
@@ -205,7 +205,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
     pub fn take_ticket(&mut self) -> Vec<u8> {
         let new_ticket = PayloadU16::new(Vec::new());
         let old_ticket = mem::replace(&mut self.value.ticket, new_ticket);
-        old_ticket.0
+        old_ticket.0.into_owned()
     }
 
     pub fn set_max_early_data_size(&mut self, sz: u32) {
@@ -226,14 +226,14 @@ pub struct ServerSessionValue {
     pub sni: Option<webpki::DnsName>,
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
-    pub master_secret: PayloadU8,
+    pub master_secret: PayloadU8<'static>,
     pub extended_ms: bool,
     pub client_cert_chain: Option<CertificatePayload>,
-    pub alpn: Option<PayloadU8>,
-    pub application_data: PayloadU16,
+    pub alpn: Option<PayloadU8<'static>>,
+    pub application_data: PayloadU16<'static>,
 }
 
-impl Codec for ServerSessionValue {
+impl<'a> Codec<'a> for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let Some(ref sni) = self.sni {
             1u8.encode(bytes);
@@ -272,7 +272,7 @@ impl Codec for ServerSessionValue {
         };
         let v = ProtocolVersion::read(r)?;
         let cs = CipherSuite::read(r)?;
-        let ms = PayloadU8::read(r)?;
+        let ms = PayloadU8::read(r)?.to_owned();
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
         let ccert = if has_ccert {
@@ -282,11 +282,11 @@ impl Codec for ServerSessionValue {
         };
         let has_alpn = u8::read(r)? == 1;
         let alpn = if has_alpn {
-            Some(PayloadU8::read(r)?)
+            Some(PayloadU8::read(r)?.to_owned())
         } else {
             None
         };
-        let application_data = PayloadU16::read(r)?;
+        let application_data = PayloadU16::read(r)?.to_owned();
 
         Some(ServerSessionValue {
             sni,

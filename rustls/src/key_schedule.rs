@@ -517,7 +517,7 @@ impl hkdf::KeyType for PayloadU8Len {
     }
 }
 
-impl From<hkdf::Okm<'_, PayloadU8Len>> for PayloadU8 {
+impl From<hkdf::Okm<'_, PayloadU8Len>> for PayloadU8<'static> {
     fn from(okm: hkdf::Okm<PayloadU8Len>) -> Self {
         let mut r = vec![0u8; okm.len().0];
         okm.fill(&mut r[..]).unwrap();

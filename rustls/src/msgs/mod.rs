@@ -43,10 +43,10 @@ mod test {
         while r.any_left() {
             let m = OpaqueMessage::read(&mut r).unwrap();
 
-            let out = m.clone().encode();
+            let out = m.to_owned().encode();
             assert!(out.len() > 0);
 
-            Message::try_from(m).unwrap();
+            Message::try_from(&m).unwrap();
         }
     }
 }

@@ -154,7 +154,7 @@ where
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
             let message = OpaqueMessage::read(&mut reader).unwrap();
-            let mut message = Message::try_from(message).unwrap();
+            let mut message = Message::try_from(&message).unwrap();
             filter(&mut message);
             let message_enc = OpaqueMessage::from(message).encode();
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
@@ -488,13 +488,13 @@ impl Default for MockServerVerifier {
 #[cfg(feature = "dangerous_configuration")]
 pub struct MockClientVerifier {
     pub verified: fn() -> Result<ClientCertVerified, Error>,
-    pub subjects: Option<DistinguishedNames>,
+    pub subjects: Option<DistinguishedNames<'static>>,
     pub mandatory: Option<bool>,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
 }
 
 #[cfg(feature = "dangerous_configuration")]
-impl ClientCertVerifier for MockClientVerifier {
+impl<'a> ClientCertVerifier for MockClientVerifier {
     fn client_auth_mandatory(&self, sni: Option<&webpki::DnsName>) -> Option<bool> {
         // This is just an added 'test' to make sure we plumb through the SNI,
         // although its valid for it to be None, its just our tests should (as of now) always provide it
@@ -505,9 +505,13 @@ impl ClientCertVerifier for MockClientVerifier {
     fn client_auth_root_subjects(
         &self,
         sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    ) -> Option<DistinguishedNames<'static>> {
         assert!(sni.is_some());
-        self.subjects.as_ref().cloned()
+        self.subjects.as_ref().map(|x| {
+            x.into_iter()
+                .map(|y| y.to_owned())
+                .collect()
+        })
     }
 
     fn verify_client_cert(

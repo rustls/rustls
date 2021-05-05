@@ -84,7 +84,7 @@ mod tests {
         bytes: &[u8],
     ) {
         let m = mm.unwrap();
-        let buf = m.clone().encode();
+        let buf = m.to_owned().encode();
 
         assert_eq!(&m.typ, typ);
         assert_eq!(&m.version, version);

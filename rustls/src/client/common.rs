@@ -12,14 +12,14 @@ use std::sync::Arc;
 pub struct ServerCertDetails {
     pub cert_chain: CertificatePayload,
     pub ocsp_response: Vec<u8>,
-    pub scts: Option<SCTList>,
+    pub scts: Option<SCTList<'static>>,
 }
 
 impl ServerCertDetails {
     pub fn new(
         cert_chain: CertificatePayload,
         ocsp_response: Vec<u8>,
-        scts: Option<SCTList>,
+        scts: Option<SCTList<'static>>,
     ) -> ServerCertDetails {
         ServerCertDetails {
             cert_chain,
@@ -33,17 +33,17 @@ impl ServerCertDetails {
             .as_deref()
             .unwrap_or(&[])
             .iter()
-            .map(|payload| payload.0.as_slice())
+            .map(|payload| payload.0.as_ref())
     }
 }
 
 pub struct ServerKxDetails {
     pub kx_params: Vec<u8>,
-    pub kx_sig: DigitallySignedStruct,
+    pub kx_sig: DigitallySignedStruct<'static>,
 }
 
 impl ServerKxDetails {
-    pub fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKxDetails {
+    pub fn new(params: Vec<u8>, sig: DigitallySignedStruct<'static>) -> ServerKxDetails {
         ServerKxDetails {
             kx_params: params,
             kx_sig: sig,

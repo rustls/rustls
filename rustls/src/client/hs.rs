@@ -38,7 +38,7 @@ pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) trait State: Send + Sync {
     /// Each handle() implementation consumes a whole TLS message, and returns
     /// either an error or the next state.
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError;
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError;
 
     fn export_keying_material(
         &self,
@@ -57,7 +57,7 @@ impl crate::conn::HandleState for Box<dyn State> {
 
     fn handle(
         self,
-        message: Message,
+        message: Message<'_>,
         data: &mut Self::Data,
         common: &mut ConnectionCommon,
     ) -> Result<Self, Error> {
@@ -100,7 +100,7 @@ fn find_session(
             {
                 if cx.common.is_quic() {
                     let params = PayloadU16::read(&mut reader)?;
-                    cx.common.quic.params = Some(params.0);
+                    cx.common.quic.params = Some(params.0.into_owned());
                 }
             }
             Some(result)
@@ -112,7 +112,7 @@ fn find_session(
 
 pub(super) fn start_handshake(
     dns_name: webpki::DnsName,
-    extra_exts: Vec<ClientExtension>,
+    extra_exts: Vec<ClientExtension<'static>>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
@@ -202,7 +202,7 @@ struct ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest {
     next: ExpectServerHello,
-    extra_exts: Vec<ClientExtension>,
+    extra_exts: Vec<ClientExtension<'static>>,
 }
 
 fn emit_client_hello_for_retry(
@@ -218,13 +218,13 @@ fn emit_client_hello_for_retry(
     retryreq: Option<&HelloRetryRequest>,
     dns_name: webpki::DnsName,
     key_share: Option<kx::KeyExchange>,
-    extra_exts: Vec<ClientExtension>,
+    extra_exts: Vec<ClientExtension<'static>>,
     may_send_sct_list: bool,
     suite: Option<&'static SupportedCipherSuite>,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
-        (resuming.ticket.0.clone(), resuming.version)
+        (resuming.ticket.0.to_vec(), resuming.version)
     } else {
         (Vec::new(), ProtocolVersion::Unknown(0))
     };
@@ -279,7 +279,7 @@ fn emit_client_hello_for_retry(
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
-        exts.push(ClientExtension::Cookie(cookie.clone()));
+        exts.push(ClientExtension::Cookie(cookie.to_owned()));
     }
 
     if support_tls13 && config.enable_tickets {
@@ -300,7 +300,11 @@ fn emit_client_hello_for_retry(
     }
 
     // Extra extensions must be placed before the PSK extension
-    exts.extend(extra_exts.iter().cloned());
+    exts.extend(
+        extra_exts
+            .iter()
+            .map(|ext| ext.to_owned()),
+    );
 
     let fill_in_binder = if support_tls13
         && config.enable_tickets
@@ -762,7 +766,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
         check_message(
             &m,
             &[ContentType::Handshake],

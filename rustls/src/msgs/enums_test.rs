@@ -3,19 +3,28 @@
 use super::codec::Codec;
 use super::enums::*;
 
-fn get8<T: Codec>(enum_value: &T) -> u8 {
+fn get8<T>(enum_value: &T) -> u8
+where
+    for<'a> T: Codec<'a>,
+{
     let enc = enum_value.get_encoding();
     assert_eq!(enc.len(), 1);
     enc[0]
 }
 
-fn get16<T: Codec>(enum_value: &T) -> u16 {
+fn get16<T>(enum_value: &T) -> u16
+where
+    for<'a> T: Codec<'a>,
+{
     let enc = enum_value.get_encoding();
     assert_eq!(enc.len(), 2);
     (enc[0] as u16 >> 8) | (enc[1] as u16)
 }
 
-fn test_enum16<T: Codec>(first: T, last: T) {
+fn test_enum16<T>(first: T, last: T)
+where
+    for<'a> T: Codec<'a>,
+{
     let first_v = get16(&first);
     let last_v = get16(&last);
 
@@ -29,7 +38,10 @@ fn test_enum16<T: Codec>(first: T, last: T) {
     }
 }
 
-fn test_enum8<T: Codec>(first: T, last: T) {
+fn test_enum8<T>(first: T, last: T)
+where
+    for<'a> T: Codec<'a>,
+{
     let first_v = get8(&first);
     let last_v = get8(&last);
 

@@ -236,7 +236,7 @@ fn can_roundtrip_psk_identity() {
     let bytes = [0, 5, 0x1, 0x2, 0x3, 0x4, 0x5, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
     println!("{:?}", psk_id);
-    assert_eq!(psk_id.identity.0, vec![0x1, 0x2, 0x3, 0x4, 0x5]);
+    assert_eq!(psk_id.identity.0.as_ref(), &[0x1, 0x2, 0x3, 0x4, 0x5]);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
     assert_eq!(psk_id.get_encoding(), bytes.to_vec());
 }
@@ -250,10 +250,10 @@ fn can_roundtrip_psk_offer() {
     println!("{:?}", psko);
 
     assert_eq!(psko.identities.len(), 1);
-    assert_eq!(psko.identities[0].identity.0, vec![0x99]);
+    assert_eq!(psko.identities[0].identity.0.as_ref(), &[0x99]);
     assert_eq!(psko.identities[0].obfuscated_ticket_age, 0x11223344);
     assert_eq!(psko.binders.len(), 1);
-    assert_eq!(psko.binders[0].0, vec![1, 2, 3]);
+    assert_eq!(psko.binders[0].0.as_ref(), &[1, 2, 3]);
     assert_eq!(psko.get_encoding(), bytes.to_vec());
 }
 
@@ -357,7 +357,7 @@ fn decomposed_signature_scheme_has_correct_mappings() {
     );
 }
 
-fn get_sample_clienthellopayload() -> ClientHelloPayload {
+fn get_sample_clienthellopayload() -> ClientHelloPayload<'static> {
     ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: Random::from([0; 32]),
@@ -385,7 +385,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
                     PresharedKeyBinder::new(vec![3, 4, 5]),
                 ],
             }),
-            ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
+            ClientExtension::Cookie(PayloadU16(vec![1, 2, 3].into())),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::SignedCertificateTimestampRequest,
@@ -401,13 +401,6 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
 #[test]
 fn can_print_all_clientextensions() {
     println!("client hello {:?}", get_sample_clienthellopayload());
-}
-
-#[test]
-fn can_clone_all_clientextensions() {
-    let _ = get_sample_serverhellopayload()
-        .extensions
-        .clone();
 }
 
 #[test]
@@ -490,7 +483,10 @@ fn test_truncated_client_extension_is_detected() {
 
 fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
     let mut chp = get_sample_clienthellopayload();
-    let ext = chp.find_extension(typ).unwrap().clone();
+    let ext = chp
+        .find_extension(typ)
+        .unwrap()
+        .to_owned();
 
     chp.extensions = vec![];
     assert!(!getter(&chp));
@@ -678,7 +674,10 @@ fn test_truncated_server_extension_is_detected() {
 
 fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPayload) -> bool) {
     let mut shp = get_sample_serverhellopayload();
-    let ext = shp.find_extension(typ).unwrap().clone();
+    let ext = shp
+        .find_extension(typ)
+        .unwrap()
+        .to_owned();
 
     shp.extensions = vec![];
     assert!(!getter(&shp));
@@ -755,7 +754,7 @@ fn certentry_get_scts() {
     test_cert_extension_getter(ExtensionType::SCT, |ce| ce.get_scts().is_some());
 }
 
-fn get_sample_serverhellopayload() -> ServerHelloPayload {
+fn get_sample_serverhellopayload() -> ServerHelloPayload<'static> {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
         random: Random::from([0; 32]),
@@ -772,7 +771,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,
             ServerExtension::CertificateStatusAck,
-            ServerExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0])]),
+            ServerExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0].into())]),
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             ServerExtension::TransportParameters(vec![1, 2, 3]),
             ServerExtension::Unknown(UnknownExtension {
@@ -788,21 +787,14 @@ fn can_print_all_serverextensions() {
     println!("server hello {:?}", get_sample_serverhellopayload());
 }
 
-#[test]
-fn can_clone_all_serverextensions() {
-    let _ = get_sample_serverhellopayload()
-        .extensions
-        .clone();
-}
-
-fn get_sample_helloretryrequest() -> HelloRetryRequest {
+fn get_sample_helloretryrequest() -> HelloRetryRequest<'static> {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
         session_id: SessionID::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),
-            HelloRetryExtension::Cookie(PayloadU16(vec![0])),
+            HelloRetryExtension::Cookie(PayloadU16(vec![0].into())),
             HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             HelloRetryExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
@@ -812,7 +804,7 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
     }
 }
 
-fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
+fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13<'static> {
     CertificatePayloadTLS13 {
         context: PayloadU8(vec![1, 2, 3].into()),
         entries: vec![CertificateEntry {
@@ -821,7 +813,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
                 CertificateExtension::CertificateStatus(CertificateStatus {
                     ocsp_response: PayloadU24(vec![1, 2, 3].into()),
                 }),
-                CertificateExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0])]),
+                CertificateExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0].into())]),
                 CertificateExtension::Unknown(UnknownExtension {
                     typ: ExtensionType::Unknown(12345),
                     payload: Payload(vec![1, 2, 3].into()),
@@ -831,7 +823,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
     }
 }
 
-fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
+fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload<'static> {
     ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
         params: ServerECDHParams {
             curve_params: ECParameters {
@@ -842,29 +834,29 @@ fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
         },
         dss: DigitallySignedStruct {
             scheme: SignatureScheme::RSA_PSS_SHA256,
-            sig: PayloadU16(vec![1, 2, 3]),
+            sig: PayloadU16(vec![1, 2, 3].into()),
         },
     })
 }
 
-fn get_sample_serverkeyexchangepayload_unknown() -> ServerKeyExchangePayload {
+fn get_sample_serverkeyexchangepayload_unknown() -> ServerKeyExchangePayload<'static> {
     ServerKeyExchangePayload::Unknown(Payload(vec![1, 2, 3].into()))
 }
 
-fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
+fn get_sample_certificaterequestpayload() -> CertificateRequestPayload<'static> {
     CertificateRequestPayload {
         certtypes: vec![ClientCertificateType::RSASign],
         sigschemes: vec![SignatureScheme::ECDSA_NISTP256_SHA256],
-        canames: vec![PayloadU16(vec![1, 2, 3])],
+        canames: vec![PayloadU16(vec![1, 2, 3].into())],
     }
 }
 
-fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13 {
+fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13<'static> {
     CertificateRequestPayloadTLS13 {
         context: PayloadU8(vec![1, 2, 3].into()),
         extensions: vec![
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            CertReqExtension::AuthorityNames(vec![PayloadU16(vec![1, 2, 3])]),
+            CertReqExtension::AuthorityNames(vec![PayloadU16(vec![1, 2, 3].into())]),
             CertReqExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload(vec![1, 2, 3].into()),
@@ -873,19 +865,19 @@ fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13
     }
 }
 
-fn get_sample_newsessionticketpayload() -> NewSessionTicketPayload {
+fn get_sample_newsessionticketpayload() -> NewSessionTicketPayload<'static> {
     NewSessionTicketPayload {
         lifetime_hint: 1234,
-        ticket: PayloadU16(vec![1, 2, 3]),
+        ticket: PayloadU16(vec![1, 2, 3].into()),
     }
 }
 
-fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTLS13 {
+fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTLS13<'static> {
     NewSessionTicketPayloadTLS13 {
         lifetime: 123,
         age_add: 1234,
         nonce: PayloadU8(vec![1, 2, 3].into()),
-        ticket: PayloadU16(vec![4, 5, 6]),
+        ticket: PayloadU16(vec![4, 5, 6].into()),
         exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
             typ: ExtensionType::Unknown(12345),
             payload: Payload(vec![1, 2, 3].into()),
@@ -893,17 +885,17 @@ fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTLS13 {
     }
 }
 
-fn get_sample_encryptedextensions() -> EncryptedExtensions {
+fn get_sample_encryptedextensions() -> EncryptedExtensions<'static> {
     get_sample_serverhellopayload().extensions
 }
 
-fn get_sample_certificatestatus() -> CertificateStatus {
+fn get_sample_certificatestatus() -> CertificateStatus<'static> {
     CertificateStatus {
         ocsp_response: PayloadU24(vec![1, 2, 3].into()),
     }
 }
 
-fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
+fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     vec![
         HandshakeMessagePayload {
             typ: HandshakeType::HelloRequest,
@@ -923,7 +915,7 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
         },
         HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(vec![Certificate(vec![1, 2, 3])]),
+            payload: HandshakePayload::Certificate(vec![Certificate(vec![1, 2, 3].into())]),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
@@ -1033,7 +1025,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
     }
 }
 
-fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload> {
+fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     vec![
         HandshakeMessagePayload {
             typ: HandshakeType::HelloRequest,
