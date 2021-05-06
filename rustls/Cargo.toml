@@ -20,7 +20,7 @@ webpki = { version = "0.22.0", features = ["alloc", "std"] }
 # Temporary until ring has HPKE.
 # Version 0.0.8 supports draft-cfrg-hpke-08, which corresponds to
 # ECH draft-10, the version currently running on crypto.cloudflare.com.
-hpke-rs = { git = "https://github.com/franziskuskiefer/hpke-rs", commit="1603cf1d6c455329ca073111080362054cb47265" , branch="main", features=["hazmat"]}
+hpke-rs = { git = "https://github.com/franziskuskiefer/hpke-rs", branch="main", features=["hazmat"]}
 
 [features]
 default = ["logging"]
