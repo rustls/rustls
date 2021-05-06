@@ -82,6 +82,7 @@ impl Codec for EchKey {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::msgs::ech::EchHrrContext;
 
     #[test]
     fn test_gen_p256() {
@@ -216,5 +217,19 @@ mod test {
         }
         let keys = decode_ech_keys();
         assert_eq!(keys.len(), 2);
+
+        for key in keys {
+            let name = webpki::DnsNameRef::try_from_ascii(
+                key
+                    .config
+                    .contents
+                    .public_name
+                    .clone()
+                    .into_inner().as_slice()).unwrap().to_owned();
+            let config_id = key.config.contents.hpke_key_config.config_id;
+            let ech_context = EchHrrContext::new(name.clone(), key.config.contents.hpke_key_config).unwrap();
+            assert_eq!(ech_context.config_id, config_id);
+            assert_eq!(ech_context.name, name);
+        }
     }
 }
