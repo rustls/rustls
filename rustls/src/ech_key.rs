@@ -235,9 +235,39 @@ mod test {
                 .hpke_key_config
                 .config_id;
             let ech_context =
-                EchHrrContext::new(name.clone(), key.config.contents.hpke_key_config).unwrap();
+                EchHrrContext::new(name.clone(), &key.config.contents.hpke_key_config).unwrap();
             assert_eq!(ech_context.config_id, config_id);
             assert_eq!(ech_context.name, name);
+
+            let info = b"HPKE self test info";
+            let aad = b"HPKE self test aad";
+            let plain_txt = b"HPKE self test plain text";
+            let public_key = HpkePublicKey::from(
+                key.config
+                    .contents
+                    .hpke_key_config
+                    .hpke_public_key
+                    .into_inner(),
+            );
+            let (encapped_secret, cipher_text) = ech_context
+                .hpke
+                .seal(&public_key, info, aad, plain_txt, None, None, None)
+                .unwrap();
+            let decrypted_text = ech_context
+                .hpke
+                .open(
+                    &encapped_secret,
+                    &key.private_key,
+                    info,
+                    aad,
+                    &cipher_text,
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            assert_eq!(plain_txt, decrypted_text.as_slice());
         }
     }
 }

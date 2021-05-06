@@ -18,7 +18,7 @@ impl EchHrrContext {
     #[allow(dead_code)]
     pub(crate) fn new(
         name: DnsName,
-        hpke_key_config: HpkeKeyConfig,
+        hpke_key_config: &HpkeKeyConfig,
     ) -> Result<EchHrrContext, Error> {
         let hpke = hpke_key_config
             .hpke_symmetric_cipher_suites
