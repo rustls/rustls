@@ -20,8 +20,6 @@ jobs:
         os: [ubuntu-18.04]
         # but only stable on macos/windows (slower platforms)
         include:
-          - os: macos-11.0
-            rust: stable
           - os: windows-latest
             rust: stable
     steps:
