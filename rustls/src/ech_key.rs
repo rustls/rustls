@@ -208,7 +208,7 @@ mod test {
     }
 
     #[test]
-    fn test_sign_and_decode() {
+    fn test_seal_and_open() {
         let bytes = base64::decode(&ECH_CONFIGS).unwrap();
         let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
         assert_eq!(configs.len(), 2);
