@@ -1,7 +1,8 @@
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer};
 use crate::error::Error;
-use crate::keylog::{KeyLog, NoKeyLog};
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
+use crate::key;
+use crate::keylog::KeyLog;
+use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 #[cfg(feature = "quic")]
@@ -14,7 +15,6 @@ use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
-use crate::{key, RootCertStore};
 
 #[cfg(feature = "quic")]
 use crate::quic;
@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 #[macro_use]
 mod hs;
+pub mod builder;
 mod common;
 pub mod handy;
 mod tls12;
@@ -87,7 +88,7 @@ pub struct ClientConfig {
     pub cipher_suites: Vec<&'static SupportedCipherSuite>,
 
     /// List of supported key exchange algorithms, in preference order -- the
-    /// first elemnt is the highest priority.
+    /// first element is the highest priority.
     ///
     /// The first element in this list is the _default key share algorithm_,
     /// and in TLS1.3 a key share for it is sent in the client hello.
@@ -98,7 +99,7 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
-    pub session_persistence: Arc<dyn StoresClientSessions>,
+    pub session_storage: Arc<dyn StoresClientSessions>,
 
     /// Our MTU.  If None, we don't limit TLS message sizes.
     pub mtu: Option<usize>,
@@ -107,7 +108,7 @@ pub struct ClientConfig {
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
 
     /// Whether to support RFC5077 tickets.  You must provide a working
-    /// `session_persistence` member for this to have any meaningful
+    /// `session_storage` member for this to have any meaningful
     /// effect.
     ///
     /// The default is true.
@@ -138,64 +139,6 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    /// Make a `ClientConfig`.
-    ///
-    /// The verifier will use the roots in `root_store` and CT logs (if any) in
-    /// `ct_logs`.
-    ///
-    /// `ciphersuites` contains the list of cipher suites to enable. It should
-    /// generally be `DEFAULT_CIPHERSUITES`.
-    ///
-    /// No ALPN protocols will be enabled, and client auth will be supported
-    /// by default. The default session persistence provider stores up to 32
-    /// items in memory.
-    pub fn new(
-        root_store: RootCertStore,
-        ct_logs: &'static [&'static sct::Log],
-        cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> Self {
-        let verifier = verify::WebPkiVerifier::new(root_store, ct_logs);
-        Self::new_(Arc::new(verifier), cipher_suites)
-    }
-
-    /// Make a `ClientConfig` with a custom certificate verifier.
-    ///
-    /// `verifier` is the certificate verifier to use.
-    ///
-    /// `ciphersuites` contains the list of cipher suites to enable. It should
-    /// generally be `DEFAULT_CIPHERSUITES`.
-    ///
-    /// No ALPN protocols will be enabled, and client auth will be supported
-    /// by default. The default session persistence provider stores up to 32
-    /// items in memory.
-    #[cfg(feature = "dangerous_configuration")]
-    pub fn new_dangerous(
-        verifier: Arc<dyn verify::ServerCertVerifier>,
-        cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> Self {
-        Self::new_(verifier, cipher_suites)
-    }
-
-    fn new_(
-        verifier: Arc<dyn verify::ServerCertVerifier>,
-        cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> Self {
-        Self {
-            cipher_suites: cipher_suites.to_vec(),
-            kx_groups: ALL_KX_GROUPS.to_vec(),
-            alpn_protocols: Vec::new(),
-            session_persistence: handy::ClientSessionMemoryCache::new(32),
-            mtu: None,
-            client_auth_cert_resolver: Arc::new(handy::FailResolveClientCert {}),
-            enable_tickets: true,
-            versions: versions::EnabledVersions::new(&[&versions::TLS12, &versions::TLS13]),
-            enable_sni: true,
-            verifier,
-            key_log: Arc::new(NoKeyLog {}),
-            enable_early_data: false,
-        }
-    }
-
     #[doc(hidden)]
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
@@ -206,26 +149,6 @@ impl ClientConfig {
                 .cipher_suites
                 .iter()
                 .any(|cs| cs.usable_for_version(v))
-    }
-
-    #[doc(hidden)]
-    pub fn get_verifier(&self) -> &dyn verify::ServerCertVerifier {
-        self.verifier.as_ref()
-    }
-
-    /// Set the ALPN protocol list to the given protocol names.
-    /// Overwrites any existing configured protocols.
-    /// The first element in the `protocols` list is the most
-    /// preferred, the last is the least preferred.
-    pub fn set_protocols(&mut self, protocols: &[Vec<u8>]) {
-        self.alpn_protocols.clear();
-        self.alpn_protocols
-            .extend_from_slice(protocols);
-    }
-
-    /// Sets persistence layer to `persist`.
-    pub fn set_persistence(&mut self, persist: Arc<dyn StoresClientSessions>) {
-        self.session_persistence = persist;
     }
 
     /// Sets MTU to `mtu`.  If None, the default is used.
@@ -243,21 +166,6 @@ impl ClientConfig {
         } else {
             self.mtu = None;
         }
-    }
-
-    /// Sets a single client authentication certificate and private key.
-    /// This is blindly used for all servers that ask for client auth.
-    ///
-    /// `cert_chain` is a vector of DER-encoded certificates,
-    /// `key_der` is a DER-encoded RSA or ECDSA private key.
-    pub fn set_single_client_cert(
-        &mut self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
-    ) -> Result<(), Error> {
-        let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
-        self.client_auth_cert_resolver = Arc::new(resolver);
-        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires

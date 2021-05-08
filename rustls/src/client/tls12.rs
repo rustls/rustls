@@ -705,7 +705,7 @@ impl hs::State for ExpectServerDone {
         let now = std::time::SystemTime::now();
         let cert_verified = cx
             .config
-            .get_verifier()
+            .verifier
             .verify_server_cert(
                 end_entity,
                 intermediates,
@@ -740,7 +740,7 @@ impl hs::State for ExpectServerDone {
             }
 
             cx.config
-                .get_verifier()
+                .verifier
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
                 .map_err(|err| hs::send_cert_error_alert(cx.common, err))?
         };
@@ -962,7 +962,7 @@ fn save_session(
 
     let worked = cx
         .config
-        .session_persistence
+        .session_storage
         .put(key.get_encoding(), value.get_encoding());
 
     if worked {

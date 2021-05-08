@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use rustls;
 use rustls::ClientSessionMemoryCache;
+use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::NoClientSessionStorage;
 use rustls::NoServerSessionStorage;
@@ -18,7 +19,7 @@ use rustls::ServerSessionMemoryCache;
 use rustls::Ticketer;
 use rustls::{AllowAnyAuthenticatedClient, NoClientAuth, RootCertStore};
 use rustls::{ClientConfig, ClientConnection};
-use rustls::{ServerConfig, ServerConfigBuilder, ServerConnection};
+use rustls::{ServerConfig, ServerConnection};
 
 use rustls_pemfile;
 use webpki;
@@ -287,7 +288,9 @@ fn make_server_config(
         ClientAuth::No => NoClientAuth::new(),
     };
 
-    let mut cfg = ServerConfigBuilder::with_safe_default_crypto()
+    let mut cfg = ConfigBuilder::with_safe_defaults()
+        .for_server()
+        .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
         .expect("bad certs/private key?");
@@ -315,21 +318,27 @@ fn make_client_config(
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
-    let mut cfg = ClientConfig::new(root_store, &[], &[params.ciphersuite]);
-    cfg.versions.replace(&[params.version]);
+    let cfg = ConfigBuilder::with_cipher_suites(&[params.ciphersuite])
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[params.version])
+        .for_client()
+        .unwrap()
+        .with_root_certificates(root_store, &[]);
 
-    if clientauth == ClientAuth::Yes {
-        cfg.set_single_client_cert(
+    let mut cfg = if clientauth == ClientAuth::Yes {
+        cfg.with_single_cert(
             params.key_type.get_client_chain(),
             params.key_type.get_client_key(),
         )
-        .unwrap();
-    }
+        .unwrap()
+    } else {
+        cfg.with_no_client_auth()
+    };
 
     if resume != Resumption::No {
-        cfg.set_persistence(ClientSessionMemoryCache::new(128));
+        cfg.session_storage = ClientSessionMemoryCache::new(128);
     } else {
-        cfg.set_persistence(Arc::new(NoClientSessionStorage {}));
+        cfg.session_storage = Arc::new(NoClientSessionStorage {});
     }
 
     cfg

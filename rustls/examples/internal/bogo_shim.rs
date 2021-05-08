@@ -348,9 +348,11 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         rustls::ALL_KX_GROUPS.to_vec()
     };
 
-    let mut cfg = rustls::ServerConfigBuilder::new()
-        .with_safe_default_cipher_suites()
+    let mut cfg = rustls::ConfigBuilder::with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
+        .with_safe_default_protocol_versions()
+        .for_server()
+        .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(
             cert.clone(),
@@ -426,23 +428,20 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
-    let mut cfg = rustls::ClientConfig::new_dangerous(
-        Arc::new(DummyServerAuth {
+    let cfg = rustls::ConfigBuilder::with_safe_defaults()
+        .for_client()
+        .unwrap()
+        .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
             send_sct: opts.send_sct,
-        }),
-        &rustls::DEFAULT_CIPHERSUITES,
-    );
-    let persist = ClientCacheWithoutKxHints::new();
-    cfg.set_persistence(persist);
-    cfg.enable_sni = opts.use_sni;
-    cfg.mtu = opts.mtu;
+        }));
 
-    if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
+    let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
         let key = load_key(&opts.key_file);
-        cfg.set_single_client_cert(cert, key)
-            .unwrap();
-    }
+        cfg.with_single_cert(cert, key).unwrap()
+    } else {
+        cfg.with_no_client_auth()
+    };
 
     if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
@@ -452,14 +451,17 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         });
     }
 
+    let persist = ClientCacheWithoutKxHints::new();
+    cfg.session_storage = persist;
+    cfg.enable_sni = opts.use_sni;
+    cfg.mtu = opts.mtu;
+
     if !opts.protocols.is_empty() {
-        cfg.set_protocols(
-            &opts
-                .protocols
-                .iter()
-                .map(|proto| proto.as_bytes().to_vec())
-                .collect::<Vec<_>>()[..],
-        );
+        cfg.alpn_protocols = opts
+            .protocols
+            .iter()
+            .map(|proto| proto.as_bytes().to_vec())
+            .collect();
     }
 
     cfg.versions.replace(&[]);
