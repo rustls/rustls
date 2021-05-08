@@ -8,20 +8,20 @@ pub struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
-    pub fn init(bytes: &[u8]) -> Reader {
+    pub fn init(bytes: &'a [u8]) -> Reader<'a> {
         Reader {
             buf: bytes,
             offs: 0,
         }
     }
 
-    pub fn rest(&mut self) -> &[u8] {
+    pub fn rest(&mut self) -> &'a [u8] {
         let ret = &self.buf[self.offs..];
         self.offs = self.buf.len();
         ret
     }
 
-    pub fn take(&mut self, len: usize) -> Option<&[u8]> {
+    pub fn take(&mut self, len: usize) -> Option<&'a [u8]> {
         if self.left() < len {
             return None;
         }
@@ -43,7 +43,7 @@ impl<'a> Reader<'a> {
         self.offs
     }
 
-    pub fn sub(&mut self, len: usize) -> Option<Reader> {
+    pub fn sub(&mut self, len: usize) -> Option<Reader<'a>> {
         self.take(len).map(Reader::init)
     }
 }
