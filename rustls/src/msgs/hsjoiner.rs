@@ -56,10 +56,10 @@ impl HandshakeJoiner {
         // handshake messages arrive in a single fragment. Avoid allocating and
         // copying in that common case.
         if self.buf.is_empty() {
-            self.buf = msg.payload.0;
+            self.buf = msg.payload;
         } else {
             self.buf
-                .extend_from_slice(&msg.payload.0[..]);
+                .extend_from_slice(&msg.payload[..]);
         }
 
         let mut count = 0;
@@ -118,7 +118,6 @@ impl HandshakeJoiner {
 mod tests {
     use super::HandshakeJoiner;
     use crate::msgs::base::Payload;
-    use crate::msgs::codec::Codec;
     use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
     use crate::msgs::message::{Message, MessagePayload, OpaqueMessage};
@@ -131,13 +130,13 @@ mod tests {
         let wanted = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"hello world".to_vec()),
+            payload: b"hello world".to_vec(),
         };
 
         let unwanted = OpaqueMessage {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"ponytown".to_vec()),
+            payload: b"ponytown".to_vec(),
         };
 
         assert_eq!(hj.want_message(&wanted), true);
@@ -151,7 +150,7 @@ mod tests {
 
         let (mut left, mut right) = (Vec::new(), Vec::new());
         got.payload.encode(&mut left);
-        expect.payload.encode(&mut right);
+        right.extend(&expect.payload);
 
         assert_eq!(left, right);
     }
@@ -165,7 +164,7 @@ mod tests {
         let msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec()),
+            payload: b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -194,7 +193,7 @@ mod tests {
         let msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x01\x00\x00\x02\xff\xff".to_vec()),
+            payload: b"\x01\x00\x00\x02\xff\xff".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -211,7 +210,7 @@ mod tests {
         let mut msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec()),
+            payload: b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -222,7 +221,7 @@ mod tests {
         msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec()),
+            payload: b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -233,7 +232,7 @@ mod tests {
         msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x0f".to_vec()),
+            payload: b"\x0f".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -259,7 +258,7 @@ mod tests {
         let msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec()),
+            payload: b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);
@@ -270,7 +269,7 @@ mod tests {
             let msg = OpaqueMessage {
                 typ: ContentType::Handshake,
                 version: ProtocolVersion::TLSv1_2,
-                payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+                payload: b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec(),
             };
 
             assert_eq!(hj.want_message(&msg), true);
@@ -282,7 +281,7 @@ mod tests {
         let msg = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06".to_vec()),
+            payload: b"\x01\x02\x03\x04\x05\x06".to_vec(),
         };
 
         assert_eq!(hj.want_message(&msg), true);

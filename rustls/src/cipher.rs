@@ -1,7 +1,6 @@
 use crate::conn::ConnectionSecrets;
 use crate::error::Error;
 use crate::key_schedule::{derive_traffic_iv, derive_traffic_key};
-use crate::msgs::base::Payload;
 use crate::msgs::codec;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
@@ -183,7 +182,7 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let payload = &mut msg.payload.0;
+        let payload = &mut msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
         }
@@ -230,7 +229,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         Ok(OpaqueMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: Payload::new(payload),
+            payload,
         })
     }
 }
@@ -352,14 +351,14 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         Ok(OpaqueMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(payload),
+            payload,
         })
     }
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let mut payload = &mut msg.payload.0;
+        let mut payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
@@ -449,7 +448,7 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let mut payload = &mut msg.payload.0;
+        let mut payload = &mut msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
@@ -484,17 +483,17 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
-        let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(&msg.payload);
+        let mut payload = Vec::with_capacity(total_len);
+        payload.extend_from_slice(&msg.payload);
 
         self.enc_key
-            .seal_in_place_append_tag(nonce, aad, &mut buf)
+            .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::General("encrypt failed".to_string()))?;
 
         Ok(OpaqueMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: Payload::new(buf),
+            payload,
         })
     }
 }
