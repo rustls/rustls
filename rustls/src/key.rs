@@ -1,3 +1,5 @@
+use crate::msgs::codec::{self, Codec, Reader};
+
 use std::fmt;
 
 /// This type contains a private key by value.
@@ -17,6 +19,20 @@ pub struct PrivateKey(pub Vec<u8>);
 /// The `rustls-pemfile` crate can be used to parse a PEM file.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Certificate(pub Vec<u8>);
+
+impl Codec for Certificate {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        codec::u24(self.0.len() as u32).encode(bytes);
+        bytes.extend_from_slice(&self.0);
+    }
+
+    fn read(r: &mut Reader) -> Option<Certificate> {
+        let len = codec::u24::read(r)?.0 as usize;
+        let mut sub = r.sub(len)?;
+        let body = sub.rest().to_vec();
+        Some(Certificate(body))
+    }
+}
 
 impl AsRef<[u8]> for Certificate {
     fn as_ref(&self) -> &[u8] {

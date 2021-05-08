@@ -1,6 +1,6 @@
-use crate::key;
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
+
 /// An externally length'd payload
 #[derive(Debug, Clone, PartialEq)]
 pub struct Payload(pub Vec<u8>);
@@ -26,20 +26,6 @@ impl Payload {
 
     pub fn read(r: &mut Reader) -> Self {
         Self(r.rest().to_vec())
-    }
-}
-
-impl Codec for key::Certificate {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.0.len() as u32).encode(bytes);
-        bytes.extend_from_slice(&self.0);
-    }
-
-    fn read(r: &mut Reader) -> Option<key::Certificate> {
-        let len = codec::u24::read(r)?.0 as usize;
-        let mut sub = r.sub(len)?;
-        let body = sub.rest().to_vec();
-        Some(key::Certificate(body))
     }
 }
 
