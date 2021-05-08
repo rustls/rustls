@@ -85,7 +85,7 @@ fn find_session(
 
     let value = cx
         .config
-        .session_persistence
+        .session_storage
         .get(&key_buf)
         .or_else(|| {
             debug!("No cached session for {:?}", dns_name);
@@ -265,7 +265,7 @@ fn emit_client_hello_for_retry(
     ));
     exts.push(ClientExtension::SignatureAlgorithms(
         cx.config
-            .get_verifier()
+            .verifier
             .supported_verify_schemes(),
     ));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);

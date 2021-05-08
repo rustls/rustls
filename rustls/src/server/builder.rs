@@ -1,10 +1,10 @@
 use crate::error::Error;
 use crate::key;
 use crate::keylog::NoKeyLog;
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
+use crate::kx::SupportedKxGroup;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
-use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
+use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
 
@@ -18,128 +18,46 @@ use std::sync::Arc;
 ///
 /// Example:
 ///
-/// ```ignore
-/// ServerConfigBuilder::new()
-///     .with_safe_default_cipher_suites()
+/// ```no_run
+/// # use rustls::ConfigBuilder;
+/// # let certs = vec![];
+/// # let private_key = rustls::PrivateKey(vec![]);
+/// ConfigBuilder::with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
+///     .with_safe_default_protocol_versions()
+///     .for_server()
+///     .unwrap()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
-///     .build();
+///     .expect("bad certificate/key");
 /// ```
 ///
 /// This may be shortened to:
 ///
-/// ```ignore
-/// ServerConfigBuilder::with_safe_default_crypto()
+/// ```no_run
+/// # use rustls::ConfigBuilder;
+/// # let certs = vec![];
+/// # let private_key = rustls::PrivateKey(vec![]);
+/// ConfigBuilder::with_safe_defaults()
+///     .for_server()
+///     .unwrap()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
-///     .build();
+///     .expect("bad certificate/key");
 /// ```
 ///
-/// The types used here fit together like this:
-///
-/// 1. Get a [`ServerConfigBuilder`] with [`ServerConfigBuilder::new()`].
-///    You must make a decision on which cipher suites to use, typically
-///    by calling [`ServerConfigBuilder::with_safe_default_cipher_suites()`].
-/// 2. You now have a [`ServerConfigBuilderWithSuites`].  You must make a decision
-///    on key exchange groups: typically by calling [`ServerConfigBuilderWithSuites::with_safe_default_kx_groups()`].
-/// 3. You now have a [`ServerConfigBuilderWithKxGroups`].  You must make
-///    a decision on how and whether to use client authentication.  Perhaps
-///    you call [`ServerConfigBuilderWithKxGroups::with_no_client_auth()`].
-/// 4. You now have a [`ServerConfigBuilderWithClientAuth`].  You must
-///    now provide server authentication credentials.  If you have just a single
-///    key and certificate chain, you might call [`ServerConfigBuilderWithClientAuth::with_single_cert()`].
-/// 5. You now have a [`ServerConfig`].  This object has a number
-///    of defaults you can change.
-///
-/// # [`ServerConfig`] defaults
+/// # Resulting [`ServerConfig`] defaults
 /// * [`ServerConfig::mtu`]: the default is `None`: TLS packets are not fragmented to fit in single IP packet.
 /// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
-/// * [`ServerConfig::versions`]: both TLS1.2 and TLS1.3 are supported.
 /// * [`ServerConfig::key_log`]: key material is not logged.
-pub struct ServerConfigBuilder {}
+pub struct ServerConfigBuilder {
+    pub(crate) cipher_suites: Vec<&'static SupportedCipherSuite>,
+    pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
+    pub(crate) versions: versions::EnabledVersions,
+}
 
 impl ServerConfigBuilder {
-    /// Start building a [`ServerConfig`].
-    pub fn new() -> ServerConfigBuilder {
-        ServerConfigBuilder {}
-    }
-
-    /// Start building a [`ServerConfig`], and accept defaults for underlying
-    /// cryptography.
-    ///
-    /// These are safe defaults, useful for 99% of applications.
-    ///
-    /// With the returned object, you must still make decisions on
-    /// client authentication and provide server credentials -- rustls
-    /// can't provide useful defaults for these.
-    pub fn with_safe_default_crypto() -> ServerConfigBuilderWithKxGroups {
-        ServerConfigBuilder::new()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-    }
-
-    /// Choose a specific set of cipher suites.
-    pub fn with_cipher_suites(
-        self,
-        cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> ServerConfigBuilderWithSuites {
-        ServerConfigBuilderWithSuites {
-            cipher_suites: cipher_suites.to_vec(),
-        }
-    }
-
-    /// Choose the default set of cipher suites.
-    ///
-    /// Note that this default provides only high-quality suites: there is no need
-    /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
-    /// implement these.
-    pub fn with_safe_default_cipher_suites(self) -> ServerConfigBuilderWithSuites {
-        self.with_cipher_suites(DEFAULT_CIPHERSUITES)
-    }
-}
-
-/// A [`ServerConfigBuilder`] where we know the cipher suites.
-pub struct ServerConfigBuilderWithSuites {
-    cipher_suites: Vec<&'static SupportedCipherSuite>,
-}
-
-impl ServerConfigBuilderWithSuites {
-    /// Choose a specific set of key exchange groups.
-    pub fn with_kx_groups(
-        self,
-        kx_groups: &[&'static SupportedKxGroup],
-    ) -> ServerConfigBuilderWithKxGroups {
-        ServerConfigBuilderWithKxGroups {
-            cipher_suites: self.cipher_suites,
-            kx_groups: kx_groups.to_vec(),
-        }
-    }
-
-    /// Choose the default set of key exchange groups.
-    ///
-    /// This is a safe default: rustls doesn't implement any poor-quality groups.
-    pub fn with_safe_default_kx_groups(self) -> ServerConfigBuilderWithKxGroups {
-        self.with_kx_groups(&ALL_KX_GROUPS)
-    }
-}
-
-/// A [`ServerConfigBuilder`] where we know the cipher suites and key exchange
-/// groups.
-pub struct ServerConfigBuilderWithKxGroups {
-    cipher_suites: Vec<&'static SupportedCipherSuite>,
-    kx_groups: Vec<&'static SupportedKxGroup>,
-}
-
-/// Reduce typing for the most common case.
-impl Default for ServerConfigBuilderWithKxGroups {
-    fn default() -> Self {
-        ServerConfigBuilder::with_safe_default_crypto()
-    }
-}
-
-impl ServerConfigBuilderWithKxGroups {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
@@ -148,25 +66,23 @@ impl ServerConfigBuilderWithKxGroups {
         ServerConfigBuilderWithClientAuth {
             cipher_suites: self.cipher_suites,
             kx_groups: self.kx_groups,
+            versions: self.versions,
             verifier: client_cert_verifier,
         }
     }
 
     /// Disable client authentication.
     pub fn with_no_client_auth(self) -> ServerConfigBuilderWithClientAuth {
-        ServerConfigBuilderWithClientAuth {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            verifier: verify::NoClientAuth::new(),
-        }
+        self.with_client_cert_verifier(verify::NoClientAuth::new())
     }
 }
 
 /// A [`ServerConfigBuilder`] where we know the cipher suites, key exchange
-/// groups, and client auth policy.
+/// groups, enabled versions, and client auth policy.
 pub struct ServerConfigBuilderWithClientAuth {
     cipher_suites: Vec<&'static SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
+    versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ClientCertVerifier>,
 }
 
@@ -228,7 +144,7 @@ impl ServerConfigBuilderWithClientAuth {
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
-            versions: versions::EnabledVersions::new(&[&versions::TLS12, &versions::TLS13]),
+            versions: self.versions,
             key_log: Arc::new(NoKeyLog {}),
             #[cfg(feature = "quic")]
             max_early_data_size: 0,

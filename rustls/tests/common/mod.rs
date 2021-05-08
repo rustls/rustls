@@ -7,13 +7,13 @@ use rustls_pemfile;
 
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage};
+use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::Error;
 use rustls::{AllowAnyAuthenticatedClient, RootCertStore};
 use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientConnection};
-use rustls::DEFAULT_CIPHERSUITES;
-use rustls::{ServerConfig, ServerConfigBuilder, ServerConnection};
+use rustls::{ServerConfig, ServerConnection};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::{
@@ -202,7 +202,7 @@ impl KeyType {
         )
     }
 
-    fn get_client_chain(&self) -> Vec<Certificate> {
+    pub fn get_client_chain(&self) -> Vec<Certificate> {
         rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
             .unwrap()
             .iter()
@@ -222,7 +222,9 @@ impl KeyType {
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    ServerConfigBuilder::with_safe_default_crypto()
+    ConfigBuilder::with_safe_defaults()
+        .for_server()
+        .unwrap()
         .with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -242,7 +244,9 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
 
-    ServerConfigBuilder::with_safe_default_crypto()
+    ConfigBuilder::with_safe_defaults()
+        .for_server()
+        .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -252,14 +256,25 @@ pub fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
-    ClientConfig::new(root_store, &[], DEFAULT_CIPHERSUITES)
+
+    ConfigBuilder::with_safe_defaults()
+        .for_client()
+        .unwrap()
+        .with_root_certificates(root_store, &[])
+        .with_no_client_auth()
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    let mut cfg = make_client_config(kt);
-    cfg.set_single_client_cert(kt.get_client_chain(), kt.get_client_key())
-        .unwrap();
-    cfg
+    let mut root_store = RootCertStore::empty();
+    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+
+    ConfigBuilder::with_safe_defaults()
+        .for_client()
+        .unwrap()
+        .with_root_certificates(root_store, &[])
+        .with_single_cert(kt.get_client_chain(), kt.get_client_key())
+        .unwrap()
 }
 
 pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
@@ -320,11 +335,15 @@ impl Iterator for AllClientVersions {
 
         match self.index {
             1 => {
-                config.versions.replace(&[&rustls::version::TLS12]);
+                config
+                    .versions
+                    .replace(&[&rustls::version::TLS12]);
                 Some(config)
             }
             2 => {
-                config.versions.replace(&[&rustls::version::TLS13]);
+                config
+                    .versions
+                    .replace(&[&rustls::version::TLS13]);
                 Some(config)
             }
             _ => None,

@@ -436,15 +436,6 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
     );
 }
 
-fn load_key_and_cert(config: &mut rustls::ClientConfig, keyfile: &str, certsfile: &str) {
-    let certs = load_certs(certsfile);
-    let privkey = load_private_key(keyfile);
-
-    config
-        .set_single_client_cert(certs, privkey)
-        .expect("invalid certificate or private key");
-}
-
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
     use super::rustls;
@@ -496,16 +487,40 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     }
 
-    let mut config = rustls::ClientConfig::new(root_store, &[], rustls::DEFAULT_CIPHERSUITES);
+    let suites = if !args.flag_suite.is_empty() {
+        lookup_suites(&args.flag_suite)
+    } else {
+        rustls::DEFAULT_CIPHERSUITES.to_vec()
+    };
+
+    let versions = if !args.flag_protover.is_empty() {
+        lookup_versions(&args.flag_protover)
+    } else {
+        rustls::DEFAULT_VERSIONS.to_vec()
+    };
+
+    let config = rustls::ConfigBuilder::with_cipher_suites(&suites)
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&versions)
+        .for_client()
+        .expect("inconsistent cipher-suite/versions selected")
+        .with_root_certificates(root_store, &[]);
+
+    let mut config = match (&args.flag_auth_key, &args.flag_auth_certs) {
+        (Some(key_file), Some(certs_file)) => {
+            let certs = load_certs(certs_file);
+            let key = load_private_key(key_file);
+            config
+                .with_single_cert(certs, key)
+                .expect("invalid client auth certs/key")
+        }
+        (None, None) => config.with_no_client_auth(),
+        (_, _) => {
+            panic!("must provide --auth-certs and --auth-key together");
+        }
+    };
+
     config.key_log = Arc::new(rustls::KeyLogFile::new());
-
-    if !args.flag_suite.is_empty() {
-        config.cipher_suites = lookup_suites(&args.flag_suite);
-    }
-
-    if !args.flag_protover.is_empty() {
-        config.versions.replace(&lookup_versions(&args.flag_protover));
-    }
 
     if args.flag_no_tickets {
         config.enable_tickets = false;
@@ -515,31 +530,16 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config.enable_sni = false;
     }
 
-    let persist = Arc::new(PersistCache::new(&args.flag_cache));
+    config.session_storage = Arc::new(PersistCache::new(&args.flag_cache));
 
-    config.set_protocols(
-        &args
-            .flag_proto
-            .iter()
-            .map(|proto| proto.as_bytes().to_vec())
-            .collect::<Vec<_>>()[..],
-    );
-    config.set_persistence(persist);
-    config.set_mtu(&args.flag_mtu);
+    config.alpn_protocols = args
+        .flag_proto
+        .iter()
+        .map(|proto| proto.as_bytes().to_vec())
+        .collect();
+    config.mtu = args.flag_mtu;
 
     apply_dangerous_options(args, &mut config);
-
-    if args.flag_auth_key.is_some() || args.flag_auth_certs.is_some() {
-        load_key_and_cert(
-            &mut config,
-            args.flag_auth_key
-                .as_ref()
-                .expect("must provide --auth-key with --auth-certs"),
-            args.flag_auth_certs
-                .as_ref()
-                .expect("must provide --auth-certs with --auth-key"),
-        );
-    }
 
     Arc::new(config)
 }

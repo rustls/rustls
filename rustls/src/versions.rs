@@ -13,26 +13,19 @@ pub struct SupportedProtocolVersion {
 }
 
 /// TLS1.2
-pub static TLS12: SupportedProtocolVersion =
-    SupportedProtocolVersion {
-        version: ProtocolVersion::TLSv1_2,
-        is_private: ()
-    };
-
-
+pub static TLS12: SupportedProtocolVersion = SupportedProtocolVersion {
+    version: ProtocolVersion::TLSv1_2,
+    is_private: (),
+};
 
 /// TLS1.3
-pub static TLS13: SupportedProtocolVersion =
-    SupportedProtocolVersion {
-        version: ProtocolVersion::TLSv1_3,
-        is_private: (),
-    };
+pub static TLS13: SupportedProtocolVersion = SupportedProtocolVersion {
+    version: ProtocolVersion::TLSv1_3,
+    is_private: (),
+};
 
 /// A list of all the protocol versions supported by rustls.
-pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
-    &TLS13,
-    &TLS12,
-];
+pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[&TLS13, &TLS12];
 
 /// The version configuration that an application should use by default.
 ///
@@ -61,7 +54,7 @@ impl EnabledVersions {
         match version {
             ProtocolVersion::TLSv1_2 => self.tls12.is_some(),
             ProtocolVersion::TLSv1_3 => self.tls13.is_some(),
-            _ => false
+            _ => false,
         }
     }
 
@@ -70,7 +63,7 @@ impl EnabledVersions {
         match v.version {
             ProtocolVersion::TLSv1_2 => self.tls12 = Some(v),
             ProtocolVersion::TLSv1_3 => self.tls13 = Some(v),
-            _ => {},
+            _ => {}
         }
     }
 

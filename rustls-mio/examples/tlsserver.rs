@@ -579,6 +579,12 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         rustls::ALL_CIPHERSUITES.to_vec()
     };
 
+    let versions = if !args.flag_protover.is_empty() {
+        lookup_versions(&args.flag_protover)
+    } else {
+        rustls::ALL_VERSIONS.to_vec()
+    };
+
     let certs = load_certs(
         args.flag_certs
             .as_ref()
@@ -591,18 +597,16 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     );
     let ocsp = load_ocsp(&args.flag_ocsp);
 
-    let mut config = rustls::ServerConfigBuilder::new()
-        .with_cipher_suites(&suites)
+    let mut config = rustls::ConfigBuilder::with_cipher_suites(&suites)
         .with_safe_default_kx_groups()
+        .with_protocol_versions(&versions)
+        .for_server()
+        .expect("inconsistent cipher-suites/versions specified")
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
         .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
-
-    if !args.flag_protover.is_empty() {
-        config.versions.replace(&lookup_versions(&args.flag_protover));
-    }
 
     if args.flag_resumption {
         config.session_storage = rustls::ServerSessionMemoryCache::new(256);

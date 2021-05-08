@@ -223,7 +223,7 @@ pub(super) fn initial_key_share(
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
     let key_buf = key.get_encoding();
 
-    let maybe_value = config.session_persistence.get(&key_buf);
+    let maybe_value = config.session_storage.get(&key_buf);
 
     let group = maybe_value
         .and_then(|enc| NamedGroup::read_bytes(&enc))
@@ -242,7 +242,7 @@ fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: Name
     let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
 
     config
-        .session_persistence
+        .session_storage
         .put(key.get_encoding(), group.get_encoding());
 }
 
@@ -644,7 +644,7 @@ impl hs::State for ExpectCertificateVerify {
         let now = std::time::SystemTime::now();
         let cert_verified = cx
             .config
-            .get_verifier()
+            .verifier
             .verify_server_cert(
                 end_entity,
                 intermediates,
@@ -659,7 +659,7 @@ impl hs::State for ExpectCertificateVerify {
         let handshake_hash = self.transcript.get_current_hash();
         let sig_verified = cx
             .config
-            .get_verifier()
+            .verifier
             .verify_tls13_signature(
                 &verify::construct_tls13_server_verify_message(&handshake_hash),
                 &self.server_cert.cert_chain[0],
@@ -1071,7 +1071,7 @@ impl ExpectTraffic {
 
         let worked = cx
             .config
-            .session_persistence
+            .session_storage
             .put(key.get_encoding(), ticket);
 
         if worked {

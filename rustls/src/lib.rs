@@ -106,26 +106,28 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,ignore
-//! let config = rustls::ClientConfig::new(
-//!     root_store,
-//!     trusted_ct_logs,
-//!     rustls::DEFAULT_CIPHERSUITES);
+//! let config = rustls::ConfigBuilder::with_safe_defaults()
+//!     .for_client()
+//!     .unwrap()
+//!     .with_root_certificates(root_store, trusted_ct_logs)
+//!     .with_no_client_auth();
 //! ```
 //!
 //! Now we can make a connection.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
-//! ```no_run
+//! ```
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
 //! # let mut root_store = rustls::RootCertStore::empty();
 //! # root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 //! # let trusted_ct_logs = &[];
-//! # let config = rustls::ClientConfig::new(
-//! #     root_store,
-//! #     trusted_ct_logs,
-//! #     rustls::DEFAULT_CIPHERSUITES);
+//! # let config = rustls::ConfigBuilder::with_safe_defaults()
+//! #     .for_client()
+//! #     .unwrap()
+//! #     .with_root_certificates(root_store, trusted_ct_logs)
+//! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
 //! let example_com = webpki::DnsNameRef::try_from_ascii_str("example.com").unwrap();
 //! let mut client = rustls::ClientConnection::new(&rc_config, example_com);
@@ -267,14 +269,15 @@ mod x509;
 #[macro_use]
 mod check;
 mod bs_debug;
+mod builder;
 mod client;
 mod key;
 mod keylog;
 mod kx;
 mod server;
 mod suites;
-mod versions;
 mod ticketer;
+mod versions;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
@@ -287,6 +290,9 @@ pub mod internal {
 
 // The public interface is:
 pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
+pub use crate::builder::{
+    ConfigBuilder, ConfigBuilderWithKxGroups, ConfigBuilderWithSuites, ConfigBuilderWithVersions,
+};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
@@ -300,10 +306,7 @@ pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
-pub use crate::server::builder::{
-    ServerConfigBuilder, ServerConfigBuilderWithClientAuth, ServerConfigBuilderWithKxGroups,
-    ServerConfigBuilderWithSuites,
-};
+pub use crate::server::builder::{ServerConfigBuilder, ServerConfigBuilderWithClientAuth};
 pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::StoresServerSessions;
@@ -313,13 +316,11 @@ pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHERSUITES, DEFAULT_CIPHERSUITES,
 };
-pub use crate::versions::{
-    SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS,
-};
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
 };
+pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
 
 /// All defined ciphersuites appear in this module.
 ///
