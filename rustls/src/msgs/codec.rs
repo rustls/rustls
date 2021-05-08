@@ -16,8 +16,8 @@ pub struct Reader<'a> {
 impl<'a> Reader<'a> {
     /// Creates a new Reader of the provided `bytes` slice with
     /// the initial cursor position of zero.
-    pub fn init(bytes: &[u8]) -> Reader {
-        Reader {
+    pub fn init(bytes: &'a [u8]) -> Self {
+        Self {
             buffer: bytes,
             cursor: 0,
         }
@@ -26,7 +26,7 @@ impl<'a> Reader<'a> {
     /// Attempts to create a new Reader on a sub section of this
     /// readers bytes by taking a slice of the provided `length`
     /// will return None if there is not enough bytes
-    pub fn sub(&mut self, length: usize) -> Option<Reader> {
+    pub fn sub(&mut self, length: usize) -> Option<Self> {
         self.take(length).map(Reader::init)
     }
 
@@ -34,7 +34,7 @@ impl<'a> Reader<'a> {
     /// that appear after the cursor position.
     ///
     /// Moves the cursor to the end of the buffer length.
-    pub fn rest(&mut self) -> &[u8] {
+    pub fn rest(&mut self) -> &'a [u8] {
         let rest = &self.buffer[self.cursor..];
         self.cursor = self.buffer.len();
         rest
@@ -44,7 +44,7 @@ impl<'a> Reader<'a> {
     /// cursor position of `length` if there is not enough
     /// bytes remaining after the cursor to take the length
     /// then None is returned instead.
-    pub fn take(&mut self, length: usize) -> Option<&[u8]> {
+    pub fn take(&mut self, length: usize) -> Option<&'a [u8]> {
         if self.left() < length {
             return None;
         }
