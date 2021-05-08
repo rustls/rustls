@@ -1,4 +1,3 @@
-use crate::msgs::base::Payload;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::{BorrowedOpaqueMessage, OpaqueMessage};
 use std::collections::VecDeque;
@@ -28,16 +27,16 @@ impl MessageFragmenter {
     /// Payloads are copied.
     pub fn fragment(&self, msg: OpaqueMessage, out: &mut VecDeque<OpaqueMessage>) {
         // Non-fragment path
-        if msg.payload.0.len() <= self.max_frag {
+        if msg.payload.len() <= self.max_frag {
             out.push_back(msg);
             return;
         }
 
-        for chunk in msg.payload.0.chunks(self.max_frag) {
+        for chunk in msg.payload.chunks(self.max_frag) {
             out.push_back(OpaqueMessage {
                 typ: msg.typ,
                 version: msg.version,
-                payload: Payload(chunk.to_vec()),
+                payload: chunk.to_vec(),
             });
         }
     }
@@ -65,7 +64,6 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::msgs::base::Payload;
     use crate::msgs::enums::{ContentType, ProtocolVersion};
     use crate::msgs::message::OpaqueMessage;
     use std::collections::VecDeque;
@@ -82,7 +80,7 @@ mod tests {
 
         assert_eq!(&m.typ, typ);
         assert_eq!(&m.version, version);
-        assert_eq!(m.payload.0, bytes.to_vec());
+        assert_eq!(m.payload, bytes.to_vec());
 
         assert_eq!(total_len, buf.len());
     }
@@ -94,7 +92,7 @@ mod tests {
         let m = OpaqueMessage {
             typ,
             version,
-            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec(),
         };
 
         let frag = MessageFragmenter::new(3);
@@ -129,7 +127,7 @@ mod tests {
         let m = OpaqueMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec(),
         };
 
         let frag = MessageFragmenter::new(8);

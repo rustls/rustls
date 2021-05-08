@@ -31,11 +31,13 @@ impl MessagePayload {
     pub fn new(
         typ: ContentType,
         vers: ProtocolVersion,
-        payload: Payload,
+        payload: Vec<u8>,
     ) -> Result<MessagePayload, Error> {
-        let mut r = Reader::init(&payload.0);
+        let mut r = Reader::init(&payload);
         let parsed = match typ {
-            ContentType::ApplicationData => return Ok(MessagePayload::ApplicationData(payload)),
+            ContentType::ApplicationData => {
+                return Ok(MessagePayload::ApplicationData(Payload::new(payload)));
+            }
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
             ContentType::Handshake => {
                 HandshakeMessagePayload::read_version(&mut r, vers).map(MessagePayload::Handshake)
@@ -70,7 +72,7 @@ impl MessagePayload {
 pub struct OpaqueMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: Payload,
+    pub payload: Vec<u8>,
 }
 
 impl OpaqueMessage {
@@ -107,16 +109,16 @@ impl OpaqueMessage {
         Ok(OpaqueMessage {
             typ,
             version,
-            payload,
+            payload: payload.0,
         })
     }
 
-    pub fn encode(self) -> Vec<u8> {
+    pub fn encode(mut self) -> Vec<u8> {
         let mut buf = Vec::new();
         self.typ.encode(&mut buf);
         self.version.encode(&mut buf);
-        (self.payload.0.len() as u16).encode(&mut buf);
-        self.payload.encode(&mut buf);
+        (self.payload.len() as u16).encode(&mut buf);
+        buf.append(&mut self.payload);
         buf
     }
 
@@ -124,7 +126,7 @@ impl OpaqueMessage {
         BorrowedOpaqueMessage {
             typ: self.typ,
             version: self.version,
-            payload: &self.payload.0,
+            payload: &self.payload,
         }
     }
 
@@ -144,11 +146,11 @@ impl From<Message> for OpaqueMessage {
     fn from(msg: Message) -> OpaqueMessage {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
-            MessagePayload::ApplicationData(payload) => payload,
+            MessagePayload::ApplicationData(payload) => payload.0,
             _ => {
                 let mut buf = Vec::new();
                 msg.payload.encode(&mut buf);
-                Payload(buf)
+                buf
             }
         };
 
