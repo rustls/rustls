@@ -109,7 +109,7 @@ impl OpaqueMessage {
         Ok(OpaqueMessage {
             typ,
             version,
-            payload: payload.0,
+            payload: payload.0.into_owned(),
         })
     }
 
@@ -146,7 +146,7 @@ impl From<Message> for OpaqueMessage {
     fn from(msg: Message) -> OpaqueMessage {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
-            MessagePayload::ApplicationData(payload) => payload.0,
+            MessagePayload::ApplicationData(payload) => payload.0.into_owned(),
             _ => {
                 let mut buf = Vec::new();
                 msg.payload.encode(&mut buf);

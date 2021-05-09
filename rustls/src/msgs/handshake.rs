@@ -1322,7 +1322,7 @@ impl CertificateExtension {
         CertificateExtension::SignedCertificateTimestamp(sctl)
     }
 
-    pub fn get_cert_status(&self) -> Option<&Vec<u8>> {
+    pub fn get_cert_status(&self) -> Option<&[u8]> {
         match *self {
             CertificateExtension::CertificateStatus(ref cs) => Some(&cs.ocsp_response.0),
             _ => None,
@@ -1424,7 +1424,7 @@ impl CertificateEntry {
         })
     }
 
-    pub fn get_ocsp_response(&self) -> Option<&Vec<u8>> {
+    pub fn get_ocsp_response(&self) -> Option<&[u8]> {
         self.exts
             .iter()
             .find(|ext| ext.get_type() == ExtensionType::StatusRequest)
@@ -1501,7 +1501,7 @@ impl CertificatePayloadTLS13 {
         self.entries
             .first()
             .and_then(CertificateEntry::get_ocsp_response)
-            .cloned()
+            .map(|bytes| bytes.to_vec())
             .unwrap_or_else(Vec::new)
     }
 
@@ -2100,7 +2100,7 @@ impl CertificateStatus {
     }
 
     pub fn into_inner(self) -> Vec<u8> {
-        self.ocsp_response.0
+        self.ocsp_response.0.into_owned()
     }
 }
 
