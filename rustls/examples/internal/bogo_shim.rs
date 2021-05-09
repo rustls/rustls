@@ -143,13 +143,13 @@ impl Options {
     }
 }
 
-fn load_cert(filename: &str) -> Vec<rustls::Certificate> {
+fn load_cert(filename: &str) -> Vec<rustls::Certificate<'static>> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls_pemfile::certs(&mut reader)
         .unwrap()
         .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|v| rustls::Certificate(v.clone().into()))
         .collect()
 }
 
@@ -355,7 +355,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(
-            cert.clone(),
+            cert,
             key,
             opts.server_ocsp_response.clone(),
             opts.server_sct_list.clone(),

@@ -452,7 +452,7 @@ impl Connection for ClientConnection {
         self.common.send_close_notify()
     }
 
-    fn peer_certificates(&self) -> Option<&[key::Certificate]> {
+    fn peer_certificates(&self) -> Option<&[key::Certificate<'static>]> {
         if self.data.server_cert_chain.is_empty() {
             return None;
         }
@@ -514,7 +514,7 @@ impl PlaintextSink for ClientConnection {
 }
 
 struct ClientConnectionData {
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: CertificatePayload<'static>,
     early_data: EarlyData,
     resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
 }

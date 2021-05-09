@@ -102,7 +102,7 @@ impl ServerConfigBuilderWithClientAuth {
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert(
         self,
-        cert_chain: Vec<key::Certificate>,
+        cert_chain: Vec<key::Certificate<'static>>,
         key_der: key::PrivateKey,
     ) -> Result<ServerConfig, Error> {
         let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
@@ -122,7 +122,7 @@ impl ServerConfigBuilderWithClientAuth {
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert_with_ocsp_and_sct(
         self,
-        cert_chain: Vec<key::Certificate>,
+        cert_chain: Vec<key::Certificate<'static>>,
         key_der: key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,

@@ -359,7 +359,7 @@ impl Connection for ServerConnection {
         self.common.send_close_notify()
     }
 
-    fn peer_certificates(&self) -> Option<&[key::Certificate]> {
+    fn peer_certificates(&self) -> Option<&[key::Certificate<'static>]> {
         self.data.client_cert_chain.as_deref()
     }
 
@@ -426,7 +426,7 @@ struct ServerConnectionData {
     sni: Option<webpki::DnsName>,
     received_resumption_data: Option<Vec<u8>>,
     resumption_data: Vec<u8>,
-    client_cert_chain: Option<Vec<key::Certificate>>,
+    client_cert_chain: Option<Vec<key::Certificate<'static>>>,
     /// Whether to reject early data even if it would otherwise be accepted
     reject_early_data: bool,
 }

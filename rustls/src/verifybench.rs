@@ -182,7 +182,7 @@ struct Context {
     name: &'static str,
     domain: &'static str,
     roots: anchors::RootCertStore,
-    chain: Vec<key::Certificate>,
+    chain: Vec<key::Certificate<'static>>,
     now: SystemTime,
 }
 
@@ -197,7 +197,7 @@ impl Context {
             chain: certs
                 .iter()
                 .copied()
-                .map(|bytes| key::Certificate(bytes.to_vec()))
+                .map(|bytes| key::Certificate(bytes.to_vec().into()))
                 .collect(),
             now: SystemTime::UNIX_EPOCH + Duration::from_secs(1617300000),
         }

@@ -118,7 +118,7 @@ impl RootCertStore {
 
         for der_cert in der_certs {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match self.add(&key::Certificate(der_cert.clone())) {
+            match self.add(&key::Certificate(der_cert.clone().into())) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
                     trace!("invalid cert der {:?}", der_cert);

@@ -62,7 +62,7 @@ pub struct ClientSessionValue {
     pub age_add: u32,
     pub extended_ms: bool,
     pub max_early_data_size: u32,
-    pub server_cert_chain: CertificatePayload,
+    pub server_cert_chain: CertificatePayload<'static>,
 }
 
 impl ClientSessionValue {
@@ -108,7 +108,10 @@ impl<'a> Codec<'a> for ClientSessionValue {
         let age_add = u32::read(r)?;
         let extended_ms = u8::read(r)?;
         let max_early_data_size = u32::read(r)?;
-        let server_cert_chain = CertificatePayload::read(r)?;
+        let server_cert_chain = CertificatePayload::read(r)?
+            .iter()
+            .map(|x| x.to_owned())
+            .collect();
 
         Some(ClientSessionValue {
             version: v,
@@ -164,7 +167,10 @@ impl ClientSessionValueWithResolvedCipherSuite {
                 age_add: 0,
                 extended_ms: false,
                 max_early_data_size: 0,
-                server_cert_chain: server_cert_chain.to_owned(),
+                server_cert_chain: server_cert_chain
+                    .iter()
+                    .map(|x| x.to_owned())
+                    .collect(),
             },
             supported_cipher_suite: cipher_suite,
             time_retrieved: time_now,
@@ -228,7 +234,7 @@ pub struct ServerSessionValue {
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8<'static>,
     pub extended_ms: bool,
-    pub client_cert_chain: Option<CertificatePayload>,
+    pub client_cert_chain: Option<CertificatePayload<'static>>,
     pub alpn: Option<PayloadU8<'static>>,
     pub application_data: PayloadU16<'static>,
 }
@@ -276,7 +282,12 @@ impl<'a> Codec<'a> for ServerSessionValue {
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
         let ccert = if has_ccert {
-            Some(CertificatePayload::read(r)?)
+            Some(
+                CertificatePayload::read(r)?
+                    .iter()
+                    .map(|x| x.to_owned())
+                    .collect(),
+            )
         } else {
             None
         };
@@ -317,7 +328,9 @@ impl ServerSessionValue {
             cipher_suite: cs,
             master_secret: PayloadU8::new(ms),
             extended_ms: false,
-            client_cert_chain: cert_chain.clone(),
+            client_cert_chain: cert_chain
+                .as_ref()
+                .map(|x| x.iter().map(|y| y.to_owned()).collect()),
             alpn: alpn.map(PayloadU8::new),
             application_data: PayloadU16::new(application_data),
         }

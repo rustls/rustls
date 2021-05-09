@@ -808,7 +808,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13<'static> {
     CertificatePayloadTLS13 {
         context: PayloadU8(vec![1, 2, 3].into()),
         entries: vec![CertificateEntry {
-            cert: Certificate(vec![3, 4, 5]),
+            cert: Certificate(vec![3, 4, 5].into()),
             exts: vec![
                 CertificateExtension::CertificateStatus(CertificateStatus {
                     ocsp_response: PayloadU24(vec![1, 2, 3].into()),

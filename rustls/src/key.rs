@@ -1,5 +1,6 @@
 use crate::msgs::codec::{self, Codec, Reader};
 
+use std::borrow::Cow;
 use std::fmt;
 
 /// This type contains a private key by value.
@@ -17,30 +18,35 @@ pub struct PrivateKey(pub Vec<u8>);
 /// The certificate must be DER-encoded X.509.
 ///
 /// The `rustls-pemfile` crate can be used to parse a PEM file.
-#[derive(Clone, Eq, PartialEq)]
-pub struct Certificate(pub Vec<u8>);
+#[derive(Eq, PartialEq)]
+pub struct Certificate<'a>(pub Cow<'a, [u8]>);
 
-impl<'a> Codec<'a> for Certificate {
+impl<'a> Certificate<'a> {
+    pub(crate) fn to_owned(&self) -> Certificate<'static> {
+        Certificate(self.0.to_vec().into())
+    }
+}
+
+impl<'a> Codec<'a> for Certificate<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::u24(self.0.len() as u32).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader<'a>) -> Option<Certificate> {
+    fn read(r: &mut Reader<'a>) -> Option<Certificate<'a>> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
-        let body = sub.rest().to_vec();
-        Some(Certificate(body))
+        Some(Certificate(sub.rest().into()))
     }
 }
 
-impl AsRef<[u8]> for Certificate {
+impl<'a> AsRef<[u8]> for Certificate<'a> {
     fn as_ref(&self) -> &[u8] {
-        &self.0
+        self.0.as_ref()
     }
 }
 
-impl fmt::Debug for Certificate {
+impl<'a> fmt::Debug for Certificate<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use super::bs_debug::BsDebug;
         f.debug_tuple("Certificate")
@@ -57,7 +63,7 @@ mod test {
     fn certificate_debug() {
         assert_eq!(
             "Certificate(b\"ab\")",
-            format!("{:?}", Certificate(b"ab".to_vec()))
+            format!("{:?}", Certificate(b"ab".to_vec().into()))
         );
     }
 }

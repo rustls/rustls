@@ -229,13 +229,13 @@ impl KeyType {
         }
     }
 
-    fn get_chain(&self) -> Vec<rustls::Certificate> {
+    fn get_chain(&self) -> Vec<rustls::Certificate<'static>> {
         rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("end.fullchain")).unwrap(),
         ))
         .unwrap()
         .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|v| rustls::Certificate(v.clone().into()))
         .collect()
     }
 
@@ -249,13 +249,13 @@ impl KeyType {
         )
     }
 
-    fn get_client_chain(&self) -> Vec<rustls::Certificate> {
+    fn get_client_chain(&self) -> Vec<rustls::Certificate<'static>> {
         rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("client.fullchain")).unwrap(),
         ))
         .unwrap()
         .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|v| rustls::Certificate(v.clone().into()))
         .collect()
     }
 
