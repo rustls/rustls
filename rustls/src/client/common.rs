@@ -10,14 +10,14 @@ use crate::sign;
 use std::sync::Arc;
 
 pub struct ServerCertDetails {
-    pub cert_chain: CertificatePayload,
+    pub cert_chain: CertificatePayload<'static>,
     pub ocsp_response: Vec<u8>,
     pub scts: Option<SCTList<'static>>,
 }
 
 impl ServerCertDetails {
     pub fn new(
-        cert_chain: CertificatePayload,
+        cert_chain: CertificatePayload<'static>,
         ocsp_response: Vec<u8>,
         scts: Option<SCTList<'static>>,
     ) -> ServerCertDetails {

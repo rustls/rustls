@@ -515,13 +515,13 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
     out
 }
 
-fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
+fn load_certs(filename: &str) -> Vec<rustls::Certificate<'static>> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls_pemfile::certs(&mut reader)
         .unwrap()
         .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|v| rustls::Certificate(v.clone().into()))
         .collect()
 }
 

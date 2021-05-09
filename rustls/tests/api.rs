@@ -2126,7 +2126,7 @@ fn sni_resolver_rejects_bad_certs() {
         )
     );
 
-    let bad_chain = vec![rustls::Certificate(vec![0xa0])];
+    let bad_chain = vec![rustls::Certificate(vec![0xa0].into())];
     assert_eq!(
         Err(Error::General(
             "End-entity certificate in certificate chain is syntactically invalid".into()

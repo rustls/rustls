@@ -76,7 +76,7 @@ pub struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
     pub fn new(
-        chain: Vec<key::Certificate>,
+        chain: Vec<key::Certificate<'static>>,
         priv_key: &key::PrivateKey,
     ) -> Result<AlwaysResolvesClientCert, Error> {
         let key = sign::any_supported_type(priv_key)

@@ -1486,14 +1486,14 @@ impl<'a> ServerHelloPayload<'a> {
     }
 }
 
-pub type CertificatePayload = Vec<key::Certificate>;
+pub type CertificatePayload<'a> = Vec<key::Certificate<'a>>;
 
-impl<'a> Codec<'a> for CertificatePayload {
+impl<'a> Codec<'a> for CertificatePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::encode_vec_u24(bytes, self);
     }
 
-    fn read(r: &mut Reader<'a>) -> Option<CertificatePayload> {
+    fn read(r: &mut Reader<'a>) -> Option<CertificatePayload<'a>> {
         // 64KB of certificates is plenty, 16MB is obviously silly
         codec::read_vec_u24_limited(r, 0x10000)
     }
@@ -1590,7 +1590,7 @@ declare_u16_vec_lifetime!(CertificateExtensions, CertificateExtension);
 
 #[derive(Debug)]
 pub struct CertificateEntry<'a> {
-    pub cert: key::Certificate,
+    pub cert: key::Certificate<'a>,
     pub exts: CertificateExtensions<'a>,
 }
 
@@ -1609,7 +1609,7 @@ impl<'a> Codec<'a> for CertificateEntry<'a> {
 }
 
 impl<'a> CertificateEntry<'a> {
-    pub fn new(cert: key::Certificate) -> CertificateEntry<'static> {
+    pub fn new(cert: key::Certificate<'a>) -> CertificateEntry<'a> {
         CertificateEntry {
             cert,
             exts: Vec::new(),
@@ -1653,7 +1653,7 @@ impl<'a> CertificateEntry<'a> {
 
     fn to_owned(&self) -> CertificateEntry<'static> {
         CertificateEntry {
-            cert: self.cert.clone(),
+            cert: self.cert.to_owned(),
             exts: self
                 .exts
                 .iter()
@@ -1740,10 +1740,10 @@ impl<'a> CertificatePayloadTLS13<'a> {
         })
     }
 
-    pub fn convert(&self) -> CertificatePayload {
+    pub fn convert(&self) -> CertificatePayload<'static> {
         let mut ret = Vec::new();
         for entry in &self.entries {
-            ret.push(entry.cert.clone());
+            ret.push(entry.cert.to_owned());
         }
         ret
     }
@@ -2449,7 +2449,7 @@ pub enum HandshakePayload<'a> {
     ClientHello(ClientHelloPayload<'a>),
     ServerHello(ServerHelloPayload<'a>),
     HelloRetryRequest(HelloRetryRequest<'a>),
-    Certificate(CertificatePayload),
+    Certificate(CertificatePayload<'a>),
     CertificateTLS13(CertificatePayloadTLS13<'a>),
     ServerKeyExchange(ServerKeyExchangePayload<'a>),
     CertificateRequest(CertificateRequestPayload<'a>),
@@ -2507,7 +2507,7 @@ impl<'a> HandshakePayload<'a> {
             ClientHello(x) => ClientHello(x.to_owned()),
             ServerHello(x) => ServerHello(x.to_owned()),
             HelloRetryRequest(x) => HelloRetryRequest(x.to_owned()),
-            Certificate(x) => Certificate(x.clone()),
+            Certificate(x) => Certificate(x.iter().map(|y| y.to_owned()).collect()),
             CertificateTLS13(x) => CertificateTLS13(x.to_owned()),
             ServerKeyExchange(x) => ServerKeyExchange(x.to_owned()),
             ClientKeyExchange(x) => ClientKeyExchange(x.to_owned()),

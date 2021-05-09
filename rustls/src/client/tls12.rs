@@ -155,7 +155,11 @@ mod server_hello {
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    cx.data.server_cert_chain = resuming.server_cert_chain.clone();
+                    cx.data.server_cert_chain = resuming
+                        .server_cert_chain
+                        .iter()
+                        .map(|x| x.to_owned())
+                        .collect();
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -245,12 +249,21 @@ impl hs::State for ExpectCertificate {
                 transcript: self.transcript,
                 suite: self.suite,
                 server_cert_sct_list: self.server_cert_sct_list,
-                server_cert_chain,
+                server_cert_chain: server_cert_chain
+                    .iter()
+                    .map(|x| x.to_owned())
+                    .collect(),
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }))
         } else {
-            let server_cert =
-                ServerCertDetails::new(server_cert_chain, vec![], self.server_cert_sct_list);
+            let server_cert = ServerCertDetails::new(
+                server_cert_chain
+                    .iter()
+                    .map(|y| y.to_owned())
+                    .collect(),
+                vec![],
+                self.server_cert_sct_list,
+            );
 
             Ok(Box::new(ExpectServerKx {
                 config: self.config,
@@ -278,7 +291,7 @@ struct ExpectCertificateStatusOrServerKx {
     transcript: HandshakeHash,
     suite: Tls12CipherSuite,
     server_cert_sct_list: Option<SCTList<'static>>,
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: CertificatePayload<'static>,
     must_issue_new_ticket: bool,
 }
 
@@ -340,7 +353,7 @@ struct ExpectCertificateStatus {
     transcript: HandshakeHash,
     suite: Tls12CipherSuite,
     server_cert_sct_list: Option<SCTList<'static>>,
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: CertificatePayload<'static>,
     must_issue_new_ticket: bool,
 }
 
@@ -779,7 +792,15 @@ impl hs::State for ExpectServerDone {
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
             if let Some(cert_key) = &client_auth.certkey {
-                emit_certificate(&mut st.transcript, cert_key.cert.clone(), cx.common);
+                emit_certificate(
+                    &mut st.transcript,
+                    cert_key
+                        .cert
+                        .iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                    cx.common,
+                );
             } else {
                 emit_certificate(&mut st.transcript, Vec::new(), cx.common);
             }

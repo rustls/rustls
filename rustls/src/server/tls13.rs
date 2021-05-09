@@ -275,7 +275,10 @@ mod client_hello {
 
             if let Some(ref resume) = resumedata {
                 cx.data.received_resumption_data = Some(resume.application_data.0.to_vec());
-                cx.data.client_cert_chain = resume.client_cert_chain.clone();
+                cx.data.client_cert_chain = resume
+                    .client_cert_chain
+                    .as_ref()
+                    .map(|x| x.iter().map(|y| y.to_owned()).collect());
             }
 
             let full_handshake = resumedata.is_none();
@@ -835,7 +838,7 @@ struct ExpectCertificateVerify {
     suite: &'static SupportedCipherSuite,
     randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: Vec<Certificate>,
+    client_cert: Vec<Certificate<'static>>,
     send_ticket: bool,
     hash_at_server_fin: Digest,
 }

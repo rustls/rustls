@@ -88,7 +88,7 @@ impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
     pub fn new(
-        chain: Vec<key::Certificate>,
+        chain: Vec<key::Certificate<'static>>,
         priv_key: &key::PrivateKey,
     ) -> Result<AlwaysResolvesChain, Error> {
         let key = sign::any_supported_type(priv_key)
@@ -103,7 +103,7 @@ impl AlwaysResolvesChain {
     ///
     /// If non-empty, the given OCSP response and SCTs are attached.
     pub fn new_with_extras(
-        chain: Vec<key::Certificate>,
+        chain: Vec<key::Certificate<'static>>,
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,

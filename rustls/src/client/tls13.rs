@@ -465,7 +465,9 @@ impl hs::State for ExpectEncryptedExtensions {
 
             cx.data.server_cert_chain = resuming_session
                 .server_cert_chain
-                .clone();
+                .iter()
+                .map(|x| x.to_owned())
+                .collect();
 
             // We *don't* reverify the certificate chain here: resumption is a
             // continuation of the previous session in terms of security policy.
@@ -812,7 +814,7 @@ fn emit_certificate_tls13(
         for cert in &cert_key.cert {
             cert_payload
                 .entries
-                .push(CertificateEntry::new(cert.clone()));
+                .push(CertificateEntry::new(cert.to_owned()));
         }
     }
 

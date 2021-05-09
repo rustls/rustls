@@ -371,7 +371,12 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
+                payload: HandshakePayload::Certificate(
+                    cert_chain
+                        .iter()
+                        .map(|x| x.to_owned())
+                        .collect(),
+                ),
             }),
         };
 
@@ -569,7 +574,7 @@ impl hs::State for ExpectCertificate {
             suite: self.suite,
             using_ems: self.using_ems,
             server_kx: self.server_kx,
-            client_cert,
+            client_cert: client_cert.map(|x| x.iter().map(|y| y.to_owned()).collect()),
             send_ticket: self.send_ticket,
         }))
     }
@@ -584,7 +589,7 @@ struct ExpectClientKx {
     suite: Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
-    client_cert: Option<Vec<Certificate>>,
+    client_cert: Option<Vec<Certificate<'static>>>,
     send_ticket: bool,
 }
 
@@ -653,7 +658,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionID,
     using_ems: bool,
-    client_cert: Vec<Certificate>,
+    client_cert: Vec<Certificate<'static>>,
     send_ticket: bool,
 }
 

@@ -29,7 +29,10 @@ fn clientsessionvalue_is_debug() {
         &SessionID::random().unwrap(),
         vec![],
         vec![1, 2, 3],
-        &vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],
+        &vec![
+            Certificate(b"abc".to_vec().into()),
+            Certificate(b"def".to_vec().into()),
+        ],
         TimeBase::now().unwrap(),
     );
     println!("{:?}", csv);

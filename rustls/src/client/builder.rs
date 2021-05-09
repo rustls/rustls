@@ -109,7 +109,7 @@ impl ClientConfigBuilderWithCertVerifier {
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert(
         self,
-        cert_chain: Vec<key::Certificate>,
+        cert_chain: Vec<key::Certificate<'static>>,
         key_der: key::PrivateKey,
     ) -> Result<ClientConfig, Error> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;

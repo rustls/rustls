@@ -30,10 +30,9 @@ pub trait Signer: Send + Sync {
 
 /// A packaged-together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response and/or SCT list.
-#[derive(Clone)]
 pub struct CertifiedKey {
     /// The certificate chain.
-    pub cert: Vec<key::Certificate>,
+    pub cert: Vec<key::Certificate<'static>>,
 
     /// The certified key.
     pub key: Arc<dyn SigningKey>,
@@ -53,7 +52,7 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<dyn SigningKey>) -> CertifiedKey {
+    pub fn new(cert: Vec<key::Certificate<'static>>, key: Arc<dyn SigningKey>) -> CertifiedKey {
         CertifiedKey {
             cert,
             key,
@@ -115,6 +114,21 @@ impl CertifiedKey {
         }
 
         Ok(())
+    }
+}
+
+impl Clone for CertifiedKey {
+    fn clone(&self) -> Self {
+        CertifiedKey {
+            cert: self
+                .cert
+                .iter()
+                .map(|x| x.to_owned())
+                .collect(),
+            key: Arc::clone(&self.key),
+            ocsp: self.ocsp.clone(),
+            sct_list: self.sct_list.clone(),
+        }
     }
 }
 
