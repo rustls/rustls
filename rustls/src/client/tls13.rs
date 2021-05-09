@@ -625,7 +625,7 @@ impl hs::State for ExpectCertificateRequest {
                 .choose_scheme(&compat_sigschemes);
             client_auth.certkey = Some(certkey);
             client_auth.signer = maybe_signer;
-            client_auth.auth_context = Some(certreq.context.0.clone());
+            client_auth.auth_context = Some(certreq.context.0.to_vec());
         } else {
             debug!("Client auth requested but no cert selected");
         }

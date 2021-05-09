@@ -1025,7 +1025,8 @@ impl ConnectionCommon {
     }
 
     pub fn take_received_plaintext(&mut self, bytes: Payload) {
-        self.received_plaintext.append(bytes.0);
+        self.received_plaintext
+            .append(bytes.0.into_owned());
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {

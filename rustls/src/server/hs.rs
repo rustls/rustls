@@ -172,7 +172,11 @@ impl ExtensionProcessing {
                         && hello.early_data_extension_offered()
                         && resume.version == cx.common.negotiated_version.unwrap()
                         && resume.cipher_suite == suite.suite
-                        && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref()
+                        && resume
+                            .alpn
+                            .as_ref()
+                            .map(|x| x.0.as_ref())
+                            == cx.common.alpn_protocol.as_deref()
                         && !cx.data.reject_early_data
                     {
                         self.exts
