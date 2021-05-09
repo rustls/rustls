@@ -497,8 +497,8 @@ pub trait ServerQuicExt {
         }
 
         let ext = match quic_version {
-            quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
-            quic::Version::V1 => ServerExtension::TransportParameters(params),
+            quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params.into()),
+            quic::Version::V1 => ServerExtension::TransportParameters(params.into()),
         };
         let mut new = ServerConnection::from_config(config, vec![ext])?;
         new.common.protocol = Protocol::Quic;

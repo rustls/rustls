@@ -584,8 +584,8 @@ pub trait ClientQuicExt {
         }
 
         let ext = match quic_version {
-            quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
-            quic::Version::V1 => ClientExtension::TransportParameters(params),
+            quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params.into()),
+            quic::Version::V1 => ClientExtension::TransportParameters(params.into()),
         };
 
         ClientConnection::new_inner(config, hostname, vec![ext], Protocol::Quic)

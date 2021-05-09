@@ -14,6 +14,7 @@ use crate::rand;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 
+use std::borrow::Cow;
 use std::collections;
 use std::fmt;
 
@@ -660,8 +661,8 @@ pub enum ClientExtension<'a> {
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest<'a>),
     SignedCertificateTimestampRequest,
-    TransportParameters(Vec<u8>),
-    TransportParametersDraft(Vec<u8>),
+    TransportParameters(Cow<'a, [u8]>),
+    TransportParametersDraft(Cow<'a, [u8]>),
     EarlyData,
     Unknown(UnknownExtension<'a>),
 }
@@ -710,8 +711,8 @@ impl<'a> ClientExtension<'a> {
             ExtendedMasterSecretRequest => ExtendedMasterSecretRequest,
             CertificateStatusRequest(x) => CertificateStatusRequest(x.to_owned()),
             SignedCertificateTimestampRequest => SignedCertificateTimestampRequest,
-            TransportParameters(x) => TransportParameters(x.clone()),
-            TransportParametersDraft(x) => TransportParametersDraft(x.clone()),
+            TransportParameters(x) => TransportParameters(x.to_vec().into()),
+            TransportParametersDraft(x) => TransportParametersDraft(x.to_vec().into()),
             EarlyData => EarlyData,
             Unknown(r) => Unknown(r.to_owned()),
         }
@@ -801,10 +802,10 @@ impl<'a> Codec<'a> for ClientExtension<'a> {
                 ClientExtension::SignedCertificateTimestampRequest
             }
             ExtensionType::TransportParameters => {
-                ClientExtension::TransportParameters(sub.rest().to_vec())
+                ClientExtension::TransportParameters(sub.rest().into())
             }
             ExtensionType::TransportParametersDraft => {
-                ClientExtension::TransportParametersDraft(sub.rest().to_vec())
+                ClientExtension::TransportParametersDraft(sub.rest().into())
             }
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
@@ -854,8 +855,8 @@ pub enum ServerExtension<'a> {
     CertificateStatusAck,
     SignedCertificateTimestamp(SCTList<'a>),
     SupportedVersions(ProtocolVersion),
-    TransportParameters(Vec<u8>),
-    TransportParametersDraft(Vec<u8>),
+    TransportParameters(Cow<'a, [u8]>),
+    TransportParametersDraft(Cow<'a, [u8]>),
     EarlyData,
     Unknown(UnknownExtension<'a>),
 }
@@ -897,8 +898,8 @@ impl<'a> ServerExtension<'a> {
                 SignedCertificateTimestamp(x.iter().map(|x| x.to_owned()).collect())
             }
             SupportedVersions(x) => SupportedVersions(*x),
-            TransportParameters(x) => TransportParameters(x.clone()),
-            TransportParametersDraft(x) => TransportParametersDraft(x.clone()),
+            TransportParameters(x) => TransportParameters(x.to_vec().into()),
+            TransportParametersDraft(x) => TransportParametersDraft(x.to_vec().into()),
             EarlyData => EarlyData,
             Unknown(r) => Unknown(r.to_owned()),
         }
@@ -961,10 +962,10 @@ impl<'a> Codec<'a> for ServerExtension<'a> {
                 ServerExtension::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
             ExtensionType::TransportParameters => {
-                ServerExtension::TransportParameters(sub.rest().to_vec())
+                ServerExtension::TransportParameters(sub.rest().into())
             }
             ExtensionType::TransportParametersDraft => {
-                ServerExtension::TransportParametersDraft(sub.rest().to_vec())
+                ServerExtension::TransportParametersDraft(sub.rest().into())
             }
             ExtensionType::EarlyData => ServerExtension::EarlyData,
             _ => ServerExtension::Unknown(UnknownExtension::read(typ, &mut sub)),

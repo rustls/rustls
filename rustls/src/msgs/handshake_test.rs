@@ -389,7 +389,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload<'static> {
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::SignedCertificateTimestampRequest,
-            ClientExtension::TransportParameters(vec![1, 2, 3]),
+            ClientExtension::TransportParameters(vec![1, 2, 3].into()),
             ClientExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload(vec![1, 2, 3].into()),
@@ -773,7 +773,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload<'static> {
             ServerExtension::CertificateStatusAck,
             ServerExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0].into())]),
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
-            ServerExtension::TransportParameters(vec![1, 2, 3]),
+            ServerExtension::TransportParameters(vec![1, 2, 3].into()),
             ServerExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload(vec![1, 2, 3].into()),
