@@ -695,11 +695,7 @@ impl ConnectionCommon {
             return Err(err.clone());
         }
 
-        if self.message_deframer.desynced {
-            return Err(Error::CorruptMessage);
-        }
-
-        while let Some(msg) = self.message_deframer.frames.pop_front() {
+        while let Some(msg) = self.message_deframer.pop()? {
             if let Err(err) = self.process_msg(msg, state, data) {
                 self.error = Some(err.clone());
                 return Err(err);

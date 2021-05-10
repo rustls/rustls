@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::io;
 
+use crate::error::Error;
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
 
@@ -14,7 +15,7 @@ pub struct MessageDeframer {
     /// Set to true if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
     /// the deframer cannot recover.
-    pub desynced: bool,
+    desynced: bool,
 
     /// A fixed-size buffer containing the currently-accumulating
     /// TLS message.
@@ -49,6 +50,13 @@ impl MessageDeframer {
             desynced: false,
             buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
             used: 0,
+        }
+    }
+
+    pub fn pop(&mut self) -> Result<Option<OpaqueMessage>, Error> {
+        match self.desynced {
+            false => Ok(self.frames.pop_front()),
+            true => Err(Error::CorruptMessage),
         }
     }
 
