@@ -25,18 +25,6 @@ pub struct MessageDeframer {
     used: usize,
 }
 
-enum BufferContents {
-    /// Contains an invalid message as a header.
-    Invalid,
-
-    /// Might contain a valid message if we receive more.
-    /// Perhaps totally empty!
-    Partial,
-
-    /// Contains a valid frame as a prefix.
-    Valid,
-}
-
 impl Default for MessageDeframer {
     fn default() -> Self {
         Self::new()
@@ -63,6 +51,7 @@ impl MessageDeframer {
     /// Read some bytes from `rd`, and add them to our internal
     /// buffer.  If this means our internal buffer contains
     /// full messages, decode them all.
+    #[allow(clippy::comparison_chain)]
     pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         // Try to do the largest reads possible.  Note that if
         // we get a message with a length field out of range here,
@@ -74,13 +63,42 @@ impl MessageDeframer {
         self.used += new_bytes;
 
         loop {
-            match self.try_deframe_one() {
-                BufferContents::Invalid => {
-                    self.desynced = true;
+            // Does our `buf` contain a full message?  It does if it is big enough to
+            // contain a header, and that header has a length which falls within `buf`.
+            // If so, deframe it and place the message onto the frames output queue.
+            let mut rd = codec::Reader::init(&self.buf[..self.used]);
+
+            let m = match OpaqueMessage::read(&mut rd) {
+                Ok(m) => m,
+                Err(e) => {
+                    use MessageError::*;
+                    if !matches!(e, TooShortForHeader | TooShortForLength) {
+                        self.desynced = true;
+                    }
                     break;
                 }
-                BufferContents::Valid => continue,
-                BufferContents::Partial => break,
+            };
+
+            let used = rd.used();
+            self.frames.push_back(m);
+            if used < self.used {
+                /* Before:
+                 * +----------+----------+----------+
+                 * | taken    | pending  |xxxxxxxxxx|
+                 * +----------+----------+----------+
+                 * 0          ^ taken    ^ self.used
+                 *
+                 * After:
+                 * +----------+----------+----------+
+                 * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+                 * +----------+----------+----------+
+                 * 0          ^ self.used
+                 */
+
+                self.buf.copy_within(used..self.used, 0);
+                self.used -= used;
+            } else if used == self.used {
+                self.used = 0;
             }
         }
 
@@ -92,47 +110,6 @@ impl MessageDeframer {
     /// queue or partial messages in our buffer.
     pub fn has_pending(&self) -> bool {
         !self.frames.is_empty() || self.used > 0
-    }
-
-    /// Does our `buf` contain a full message?  It does if it is big enough to
-    /// contain a header, and that header has a length which falls within `buf`.
-    /// If so, deframe it and place the message onto the frames output queue.
-    #[allow(clippy::comparison_chain)]
-    fn try_deframe_one(&mut self) -> BufferContents {
-        // Try to decode a message off the front of buf.
-        let mut rd = codec::Reader::init(&self.buf[..self.used]);
-
-        let m = match OpaqueMessage::read(&mut rd) {
-            Ok(m) => m,
-            Err(MessageError::TooShortForHeader) | Err(MessageError::TooShortForLength) => {
-                return BufferContents::Partial;
-            }
-            Err(_) => return BufferContents::Invalid,
-        };
-
-        let used = rd.used();
-        self.frames.push_back(m);
-        if used < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf.copy_within(used..self.used, 0);
-            self.used -= used;
-        } else if used == self.used {
-            self.used = 0;
-        }
-
-        BufferContents::Valid
     }
 }
 
