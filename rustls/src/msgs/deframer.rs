@@ -97,27 +97,22 @@ impl MessageDeframer {
     /// Does our `buf` contain a full message?  It does if it is big enough to
     /// contain a header, and that header has a length which falls within `buf`.
     /// If so, deframe it and place the message onto the frames output queue.
+    #[allow(clippy::comparison_chain)]
     fn try_deframe_one(&mut self) -> BufferContents {
         // Try to decode a message off the front of buf.
         let mut rd = codec::Reader::init(&self.buf[..self.used]);
 
-        match OpaqueMessage::read(&mut rd) {
-            Ok(m) => {
-                let used = rd.used();
-                self.frames.push_back(m);
-                self.buf_consume(used);
-                BufferContents::Valid
-            }
+        let m = match OpaqueMessage::read(&mut rd) {
+            Ok(m) => m,
             Err(MessageError::TooShortForHeader) | Err(MessageError::TooShortForLength) => {
-                BufferContents::Partial
+                return BufferContents::Partial;
             }
-            Err(_) => BufferContents::Invalid,
-        }
-    }
+            Err(_) => return BufferContents::Invalid,
+        };
 
-    #[allow(clippy::comparison_chain)]
-    fn buf_consume(&mut self, taken: usize) {
-        if taken < self.used {
+        let used = rd.used();
+        self.frames.push_back(m);
+        if used < self.used {
             /* Before:
              * +----------+----------+----------+
              * | taken    | pending  |xxxxxxxxxx|
@@ -131,12 +126,13 @@ impl MessageDeframer {
              * 0          ^ self.used
              */
 
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken == self.used {
+            self.buf.copy_within(used..self.used, 0);
+            self.used -= used;
+        } else if used == self.used {
             self.used = 0;
         }
+
+        BufferContents::Valid
     }
 }
 
