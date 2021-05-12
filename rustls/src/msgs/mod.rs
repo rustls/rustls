@@ -31,9 +31,6 @@ mod enums_test;
 mod message_test;
 
 #[cfg(test)]
-mod ech_test;
-
-#[cfg(test)]
 mod test {
     use std::convert::TryFrom;
 
