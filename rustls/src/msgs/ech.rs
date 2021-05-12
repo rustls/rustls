@@ -94,23 +94,25 @@ fn encode_inner_hello(
         .push(ClientExtension::ClientHelloInnerIndication);
     hello.extensions.push(outer_extensions);
 
+    println!("extensions: {:#?}", hello.extensions);
+
     let mut encoded_hello = Vec::new();
     hello.encode(&mut encoded_hello);
 
     hello.extensions.pop();
     hello.extensions.pop();
+
+    hello.extensions.append(&mut outer);
+    hello.session_id = legacy_session_id;
+    hello.random = original_random;
     let index = hello
         .extensions
         .iter()
         .position(|ext| ext.get_type() == ExtensionType::PreSharedKey);
     if let Some(i) = index {
+        println!("will remove");
         hello.extensions.remove(i);
     }
-
-    hello.extensions.append(&mut outer);
-    hello.session_id = legacy_session_id;
-    hello.random = original_random;
-
     (hello, encoded_hello)
 }
 
@@ -246,6 +248,12 @@ mod test {
         let (hello, encoded_inner) = encode_inner_hello(original_hello, &ech_context, &outer_exts);
         assert_eq!(hello.session_id, original_session_id);
         assert_eq!(hello.random, original_random);
+        // Return hello should not have a PSK
+        assert!(
+            hello
+                .find_extension(ExtensionType::PreSharedKey)
+                .is_none()
+        );
 
         let mut reader = Reader::init(&encoded_inner);
         let decoded = ClientHelloPayload::read(&mut reader).unwrap();
@@ -272,6 +280,12 @@ mod test {
         // All of the old extensions except for PSK
         let old_len = original_ext_length - 1;
         assert_eq!(hello.extensions.len(), old_len);
+        println!("decoded: {:#?}", decoded);
+        assert!(
+            decoded
+                .find_extension(ExtensionType::PreSharedKey)
+                .is_some()
+        );
         assert!(
             decoded
                 .find_extension(ExtensionType::EchIsInner)
