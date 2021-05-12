@@ -1,7 +1,9 @@
 use crate::msgs::codec::*;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
-use crate::msgs::handshake::{ClientExtension, ClientHelloPayload, HpkeKeyConfig, SessionID};
+use crate::msgs::handshake::{
+    ClientExtension, ClientHelloPayload, HpkeKeyConfig, Random, SessionID,
+};
 use crate::rand;
 use crate::Error;
 use hpke_rs::prelude::*;
@@ -52,6 +54,7 @@ impl EchHrrContext {
 #[allow(dead_code)]
 fn encode_inner_hello(
     mut hello: ClientHelloPayload,
+    context: &EchHrrContext,
     outer_exts: &Vec<ExtensionType>,
 ) -> (ClientHelloPayload, Vec<u8>) {
     hello.extensions.sort_by(|a, b| {
@@ -83,6 +86,9 @@ fn encode_inner_hello(
 
     let legacy_session_id = hello.session_id;
     hello.session_id = SessionID::empty();
+    let original_random = hello.random;
+    hello.random = Random::from(context.inner_random);
+
     hello
         .extensions
         .push(ClientExtension::ClientHelloInnerIndication);
@@ -95,6 +101,7 @@ fn encode_inner_hello(
     hello.extensions.pop();
     hello.extensions.append(&mut outer);
     hello.session_id = legacy_session_id;
+    hello.random = original_random;
 
     (hello, encoded_hello)
 }
@@ -112,14 +119,20 @@ mod test {
     use base64;
     use webpki::DnsNameRef;
 
-    #[test]
-    fn test_echconfig_serialization() {
+    const BASE64_ECHCONFIGS: &str = "AEj+CgBEuwAgACCYKvleXJQ16RUURAsG1qTRN70ob5ewCDH6NuzE97K8MAAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAA=";
+
+    fn get_ech_config() -> ECHConfigList {
         // An ECHConfigList record from Cloudflare for "crypto.cloudflare.com", draft-10
-        let base64_echconfigs = "AEj+CgBEuwAgACCYKvleXJQ16RUURAsG1qTRN70ob5ewCDH6NuzE97K8MAAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAA=";
-        let bytes = base64::decode(&base64_echconfigs).unwrap();
+        let bytes = base64::decode(&BASE64_ECHCONFIGS).unwrap();
         let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
         assert_eq!(configs.len(), 1);
-        let config: &ECHConfig = &configs[0];
+        configs
+    }
+
+    #[test]
+    fn test_echconfig_serialization() {
+        let configs = get_ech_config();
+        let config = &configs[0];
         assert_eq!(config.version, ECHVersion::V10);
         let name = String::from_utf8(
             config
@@ -163,7 +176,7 @@ mod test {
         );
         let mut output = Vec::new();
         configs.encode(&mut output);
-        assert_eq!(base64_echconfigs, base64::encode(&output));
+        assert_eq!(BASE64_ECHCONFIGS, base64::encode(&output));
     }
 
     fn get_sample_clienthellopayload() -> ClientHelloPayload {
@@ -216,14 +229,21 @@ mod test {
         let original_hello = get_sample_clienthellopayload();
         let original_ext_length = original_hello.extensions.len();
         let original_session_id = original_hello.session_id;
+        let original_random = original_hello.random.clone();
         let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
-        let (hello, encoded_inner) = encode_inner_hello(original_hello, &outer_exts);
+        let config = &get_ech_config()[0];
+        let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
+        let ech_context =
+            EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config).unwrap();
+        let (hello, encoded_inner) = encode_inner_hello(original_hello, &ech_context, &outer_exts);
         assert_eq!(hello.session_id, original_session_id);
+        assert_eq!(hello.random, original_random);
 
         let mut reader = Reader::init(&encoded_inner);
         let decoded = ClientHelloPayload::read(&mut reader).unwrap();
         assert_eq!(decoded.session_id, SessionID::empty());
         assert_ne!(decoded.session_id, original_session_id);
+        assert_ne!(decoded.random, original_random);
 
         // The compressed extensions, plus two for the outer_extensions and ech_is_inner.
         let expected_length = original_ext_length - outer_exts.len() + 2;
@@ -242,5 +262,10 @@ mod test {
         }
 
         assert_eq!(hello.extensions.len(), original_ext_length);
+        assert!(
+            decoded
+                .find_extension(ExtensionType::EchIsInner)
+                .is_some()
+        );
     }
 }
