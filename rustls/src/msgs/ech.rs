@@ -69,8 +69,7 @@ fn encode_inner_hello(
         .iter()
         .rev()
         .take_while(|el| outer_exts.contains(&el.get_type()))
-        .collect::<Vec<&ClientExtension>>()
-        .len();
+        .count();
     let outer: Vec<ClientExtension> = hello
         .extensions
         .drain(hello.extensions.len() - range..)
