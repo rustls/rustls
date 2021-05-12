@@ -70,7 +70,7 @@ fn encode_inner_hello(
         .rev()
         .take_while(|el| outer_exts.contains(&el.get_type()))
         .count();
-    let outer: Vec<ClientExtension> = hello
+    let mut outer: Vec<ClientExtension> = hello
         .extensions
         .drain(hello.extensions.len() - range..)
         .collect();
@@ -89,6 +89,7 @@ fn encode_inner_hello(
     hello.encode(&mut encoded_hello);
 
     hello.extensions.pop();
+    hello.extensions.append(&mut outer);
     hello.session_id = legacy_session_id;
 
     (hello, encoded_hello)
@@ -235,5 +236,7 @@ mod test {
         for ext_type in outers.iter() {
             assert!(outer_exts.contains(ext_type));
         }
+
+        assert_eq!(hello.extensions.len(), original_ext_length);
     }
 }
