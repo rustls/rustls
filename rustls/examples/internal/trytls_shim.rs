@@ -7,9 +7,7 @@
 use webpki;
 use webpki_roots;
 
-use rustls::{
-    ClientConfig, ClientConnection, Connection, Error, RootCertStore, DEFAULT_CIPHERSUITES,
-};
+use rustls::{ClientConfig, ClientConnection, ConfigBuilder, Connection, Error, RootCertStore};
 use std::env;
 use std::error::Error as StdError;
 use std::fs::File;
@@ -38,7 +36,11 @@ fn parse_args(args: &[String]) -> Result<(String, u16, ClientConfig), Box<dyn St
             return Err(From::from("Incorrect number of arguments"));
         }
     };
-    let config = ClientConfig::new(root_store, &[], DEFAULT_CIPHERSUITES);
+    let config = ConfigBuilder::with_safe_defaults()
+        .for_client()
+        .unwrap()
+        .with_root_certificates(root_store, &[])
+        .with_no_client_auth();
 
     let port = args[2].parse()?;
     Ok((args[1].clone(), port, config))

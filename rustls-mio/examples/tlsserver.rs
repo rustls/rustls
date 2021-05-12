@@ -497,13 +497,13 @@ fn lookup_suites(suites: &[String]) -> Vec<&'static rustls::SupportedCipherSuite
 }
 
 /// Make a vector of protocol versions named in `versions`
-fn lookup_versions(versions: &[String]) -> Vec<rustls::ProtocolVersion> {
+fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtocolVersion> {
     let mut out = Vec::new();
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => rustls::ProtocolVersion::TLSv1_2,
-            "1.3" => rustls::ProtocolVersion::TLSv1_3,
+            "1.2" => &rustls::version::TLS12,
+            "1.3" => &rustls::version::TLS13,
             _ => panic!(
                 "cannot look up version '{}', valid are '1.2' and '1.3'",
                 vname
@@ -573,8 +573,17 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         NoClientAuth::new()
     };
 
-    let mut config = rustls::ServerConfig::new(client_auth);
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    let suites = if !args.flag_suite.is_empty() {
+        lookup_suites(&args.flag_suite)
+    } else {
+        rustls::ALL_CIPHERSUITES.to_vec()
+    };
+
+    let versions = if !args.flag_protover.is_empty() {
+        lookup_versions(&args.flag_protover)
+    } else {
+        rustls::ALL_VERSIONS.to_vec()
+    };
 
     let certs = load_certs(
         args.flag_certs
@@ -587,33 +596,31 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
             .expect("--key option missing"),
     );
     let ocsp = load_ocsp(&args.flag_ocsp);
-    config
-        .set_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
+
+    let mut config = rustls::ConfigBuilder::with_cipher_suites(&suites)
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&versions)
+        .for_server()
+        .expect("inconsistent cipher-suites/versions specified")
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
         .expect("bad certificates/private key");
 
-    if !args.flag_suite.is_empty() {
-        config.cipher_suites = lookup_suites(&args.flag_suite);
-    }
-
-    if !args.flag_protover.is_empty() {
-        config.versions = lookup_versions(&args.flag_protover);
-    }
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if args.flag_resumption {
-        config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
+        config.session_storage = rustls::ServerSessionMemoryCache::new(256);
     }
 
     if args.flag_tickets {
         config.ticketer = rustls::Ticketer::new().unwrap();
     }
 
-    config.set_protocols(
-        &args
-            .flag_proto
-            .iter()
-            .map(|proto| proto.as_bytes().to_vec())
-            .collect::<Vec<_>>()[..],
-    );
+    config.alpn_protocols = args
+        .flag_proto
+        .iter()
+        .map(|proto| proto.as_bytes().to_vec())
+        .collect::<Vec<_>>();
 
     Arc::new(config)
 }

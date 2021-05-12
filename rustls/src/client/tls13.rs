@@ -15,11 +15,11 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureScheme};
+use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
-use crate::msgs::handshake::{ClientExtension, HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
@@ -56,124 +56,27 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
-pub fn validate_server_hello(
-    common: &mut ConnectionCommon,
+pub(super) fn handle_server_hello(
+    cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
-) -> Result<(), Error> {
-    for ext in &server_hello.extensions {
-        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
-            common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(Error::PeerMisbehavedError(
-                "server sent unexpected cleartext ext".to_string(),
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-fn find_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef) -> Option<NamedGroup> {
-    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
-    let key_buf = key.get_encoding();
-
-    let maybe_value = config.session_persistence.get(&key_buf);
-    maybe_value.and_then(|enc| NamedGroup::read_bytes(&enc))
-}
-
-fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: NamedGroup) {
-    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
-
-    config
-        .session_persistence
-        .put(key.get_encoding(), group.get_encoding());
-}
-
-pub fn choose_kx_groups(
-    config: &ClientConfig,
-    exts: &mut Vec<ClientExtension>,
-    hello: &mut ClientHelloDetails,
-    dns_name: webpki::DnsNameRef,
-    retryreq: Option<&HelloRetryRequest>,
-) {
-    // Choose our groups:
-    // - if we've been asked via HelloRetryRequest for a specific
-    //   one, do that.
-    // - if not, we might have a hint of what the server supports.
-    // - if not, send just the first configured group.
-    //
-    let group = retryreq
-        .and_then(|req| HelloRetryRequest::get_requested_key_share_group(req))
-        .or_else(|| find_kx_hint(config, dns_name))
-        .unwrap_or_else(|| {
-            config
-                .kx_groups
-                .get(0)
-                .expect("No kx groups configured")
-                .name
-        });
-
-    let mut key_shares = vec![];
-
-    // in reply to HelloRetryRequest, we must not alter any existing key
-    // shares
-    if let Some(already_offered_share) = hello.find_key_share(group) {
-        key_shares.push(KeyShareEntry::new(
-            group,
-            already_offered_share.pubkey.as_ref(),
-        ));
-        hello
-            .offered_key_shares
-            .push(already_offered_share);
-    } else if let Some(key_share) =
-        kx::KeyExchange::choose(group, &config.kx_groups).and_then(kx::KeyExchange::start)
-    {
-        key_shares.push(KeyShareEntry::new(group, key_share.pubkey.as_ref()));
-        hello.offered_key_shares.push(key_share);
-    }
-
-    exts.push(ClientExtension::KeyShare(key_shares));
-}
-
-/// This implements the horrifying TLS1.3 hack where PSK binders have a
-/// data dependency on the message they are contained within.
-pub fn fill_in_psk_binder(
-    resuming: &persist::ClientSessionValueWithResolvedCipherSuite,
-    transcript: &HandshakeHash,
-    hmp: &mut HandshakeMessagePayload,
-) -> KeyScheduleEarly {
-    // We need to know the hash function of the suite we're trying to resume into.
-    let suite = resuming.supported_cipher_suite();
-    let hkdf_alg = suite.hkdf_algorithm;
-    let suite_hash = suite.get_hash();
-
-    // The binder is calculated over the clienthello, but doesn't include itself or its
-    // length, or the length of its container.
-    let binder_plaintext = hmp.get_encoding_for_binder_signing();
-    let handshake_hash = transcript.get_hash_given(suite_hash, &binder_plaintext);
-
-    // Run a fake key_schedule to simulate what the server will do if it chooses
-    // to resume.
-    let key_schedule = KeyScheduleEarly::new(hkdf_alg, &resuming.master_secret.0);
-    let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
-
-    if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
-        ch.set_psk_binder(real_binder.as_ref());
-    };
-
-    key_schedule
-}
-
-pub(super) fn start_handshake_traffic(
+    mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
-    cx: &mut ClientContext<'_>,
+    transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
-    server_hello: &ServerHelloPayload,
-    resuming_session: &mut Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsNameRef,
-    transcript: &mut HandshakeHash,
-    hello: &mut ClientHelloDetails,
-    randoms: &ConnectionRandoms,
-) -> Result<(KeyScheduleHandshake, Digest), Error> {
+    hello: ClientHelloDetails,
+    our_key_share: kx::KeyExchange,
+    mut sent_tls13_fake_ccs: bool,
+) -> hs::NextStateOrError {
+    if !suite.usable_for_version(ProtocolVersion::TLSv1_3) {
+        return Err(cx
+            .common
+            .illegal_param("server chose unusable ciphersuite for version"));
+    }
+
+    validate_server_hello(cx.common, &server_hello)?;
+
     let their_key_share = server_hello
         .get_key_share()
         .ok_or_else(|| {
@@ -182,12 +85,12 @@ pub(super) fn start_handshake_traffic(
             Error::PeerMisbehavedError("missing key share".to_string())
         })?;
 
-    let our_key_share = hello
-        .find_key_share_and_discard_others(their_key_share.group)
-        .ok_or_else(|| {
-            cx.common
-                .illegal_param("wrong group for key share")
-        })?;
+    if our_key_share.group() != their_key_share.group {
+        return Err(cx
+            .common
+            .illegal_param("wrong group for key share"));
+    }
+
     let shared = our_key_share
         .complete(&their_key_share.payload.0)
         .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
@@ -237,7 +140,7 @@ pub(super) fn start_handshake_traffic(
     };
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(cx.config, dns_name, their_key_share.group);
+    save_kx_hint(cx.config, dns_name.as_ref(), their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -283,7 +186,93 @@ pub(super) fn start_handshake_traffic(
         });
     }
 
-    Ok((key_schedule, hash_at_client_recvd_server_hello))
+    emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+
+    Ok(Box::new(ExpectEncryptedExtensions {
+        resuming_session,
+        dns_name,
+        randoms,
+        suite,
+        transcript,
+        key_schedule,
+        hello,
+        hash_at_client_recvd_server_hello,
+    }))
+}
+
+fn validate_server_hello(
+    common: &mut ConnectionCommon,
+    server_hello: &ServerHelloPayload,
+) -> Result<(), Error> {
+    for ext in &server_hello.extensions {
+        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
+            common.send_fatal_alert(AlertDescription::UnsupportedExtension);
+            return Err(Error::PeerMisbehavedError(
+                "server sent unexpected cleartext ext".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+pub(super) fn initial_key_share(
+    config: &ClientConfig,
+    dns_name: webpki::DnsNameRef,
+) -> Result<kx::KeyExchange, Error> {
+    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
+    let key_buf = key.get_encoding();
+
+    let maybe_value = config.session_storage.get(&key_buf);
+
+    let group = maybe_value
+        .and_then(|enc| NamedGroup::read_bytes(&enc))
+        .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
+        .unwrap_or_else(|| {
+            config
+                .kx_groups
+                .first()
+                .expect("No kx groups configured")
+        });
+
+    kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
+}
+
+fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: NamedGroup) {
+    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
+
+    config
+        .session_storage
+        .put(key.get_encoding(), group.get_encoding());
+}
+
+/// This implements the horrifying TLS1.3 hack where PSK binders have a
+/// data dependency on the message they are contained within.
+pub fn fill_in_psk_binder(
+    resuming: &persist::ClientSessionValueWithResolvedCipherSuite,
+    transcript: &HandshakeHash,
+    hmp: &mut HandshakeMessagePayload,
+) -> KeyScheduleEarly {
+    // We need to know the hash function of the suite we're trying to resume into.
+    let suite = resuming.supported_cipher_suite();
+    let hkdf_alg = suite.hkdf_algorithm;
+    let suite_hash = suite.get_hash();
+
+    // The binder is calculated over the clienthello, but doesn't include itself or its
+    // length, or the length of its container.
+    let binder_plaintext = hmp.get_encoding_for_binder_signing();
+    let handshake_hash = transcript.get_hash_given(suite_hash, &binder_plaintext);
+
+    // Run a fake key_schedule to simulate what the server will do if it chooses
+    // to resume.
+    let key_schedule = KeyScheduleEarly::new(hkdf_alg, &resuming.master_secret.0);
+    let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
+
+    if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
+        ch.set_psk_binder(real_binder.as_ref());
+    };
+
+    key_schedule
 }
 
 pub(super) fn prepare_resumption(
@@ -406,15 +395,15 @@ fn validate_encrypted_extensions(
     Ok(())
 }
 
-pub struct ExpectEncryptedExtensions {
-    pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    pub dns_name: webpki::DnsName,
-    pub randoms: ConnectionRandoms,
-    pub suite: &'static SupportedCipherSuite,
-    pub transcript: HandshakeHash,
-    pub key_schedule: KeyScheduleHandshake,
-    pub hello: ClientHelloDetails,
-    pub hash_at_client_recvd_server_hello: Digest,
+struct ExpectEncryptedExtensions {
+    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    dns_name: webpki::DnsName,
+    randoms: ConnectionRandoms,
+    suite: &'static SupportedCipherSuite,
+    transcript: HandshakeHash,
+    key_schedule: KeyScheduleHandshake,
+    hello: ClientHelloDetails,
+    hash_at_client_recvd_server_hello: Digest,
 }
 
 impl hs::State for ExpectEncryptedExtensions {
@@ -655,7 +644,7 @@ impl hs::State for ExpectCertificateVerify {
         let now = std::time::SystemTime::now();
         let cert_verified = cx
             .config
-            .get_verifier()
+            .verifier
             .verify_server_cert(
                 end_entity,
                 intermediates,
@@ -670,7 +659,7 @@ impl hs::State for ExpectCertificateVerify {
         let handshake_hash = self.transcript.get_current_hash();
         let sig_verified = cx
             .config
-            .get_verifier()
+            .verifier
             .verify_tls13_signature(
                 &verify::construct_tls13_server_verify_message(&handshake_hash),
                 &self.server_cert.cert_chain[0],
@@ -1082,7 +1071,7 @@ impl ExpectTraffic {
 
         let worked = cx
             .config
-            .session_persistence
+            .session_storage
             .put(key.get_encoding(), ticket);
 
         if worked {

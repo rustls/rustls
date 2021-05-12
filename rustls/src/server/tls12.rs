@@ -425,7 +425,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
-        let client_auth = cx.config.get_verifier();
+        let client_auth = &cx.config.verifier;
 
         if !client_auth.offer_client_auth() {
             return Ok(false);
@@ -641,7 +641,7 @@ impl hs::State for ExpectCertificateVerify {
             let certs = &self.client_cert;
 
             cx.config
-                .get_verifier()
+                .verifier
                 .verify_tls12_signature(&handshake_msgs, &certs[0], sig)
         };
 
