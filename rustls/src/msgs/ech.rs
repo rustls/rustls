@@ -99,6 +99,14 @@ fn encode_inner_hello(
 
     hello.extensions.pop();
     hello.extensions.pop();
+    let index = hello
+        .extensions
+        .iter()
+        .position(|ext| ext.get_type() == ExtensionType::PreSharedKey);
+    if let Some(i) = index {
+        hello.extensions.remove(i);
+    }
+
     hello.extensions.append(&mut outer);
     hello.session_id = legacy_session_id;
     hello.random = original_random;
@@ -112,7 +120,7 @@ mod test {
     use crate::internal::msgs::enums::ExtensionType::ECPointFormats;
     use crate::msgs::base::{Payload, PayloadU8, PayloadU16};
     use crate::msgs::codec::{Codec, Reader};
-    use crate::msgs::enums::ExtensionType::{EllipticCurves, KeyShare};
+    use crate::msgs::enums::ExtensionType::{Cookie, EllipticCurves, KeyShare};
     use crate::msgs::enums::*;
     use crate::msgs::handshake::*;
     use crate::ProtocolVersion;
@@ -230,7 +238,7 @@ mod test {
         let original_ext_length = original_hello.extensions.len();
         let original_session_id = original_hello.session_id;
         let original_random = original_hello.random.clone();
-        let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
+        let outer_exts = vec![Cookie, KeyShare, ECPointFormats, EllipticCurves];
         let config = &get_ech_config()[0];
         let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
         let ech_context =
@@ -256,12 +264,14 @@ mod test {
             _ => None,
         }
         .unwrap();
-        assert_eq!(outers.len(), 3);
+        assert_eq!(outers.len(), outer_exts.len());
         for ext_type in outers.iter() {
             assert!(outer_exts.contains(ext_type));
         }
 
-        assert_eq!(hello.extensions.len(), original_ext_length);
+        // All of the old extensions except for PSK
+        let old_len = original_ext_length - 1;
+        assert_eq!(hello.extensions.len(), old_len);
         assert!(
             decoded
                 .find_extension(ExtensionType::EchIsInner)
