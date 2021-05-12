@@ -83,11 +83,15 @@ fn encode_inner_hello(
 
     let legacy_session_id = hello.session_id;
     hello.session_id = SessionID::empty();
+    hello
+        .extensions
+        .push(ClientExtension::ClientHelloInnerIndication);
     hello.extensions.push(outer_extensions);
 
     let mut encoded_hello = Vec::new();
     hello.encode(&mut encoded_hello);
 
+    hello.extensions.pop();
     hello.extensions.pop();
     hello.extensions.append(&mut outer);
     hello.session_id = legacy_session_id;
@@ -221,8 +225,8 @@ mod test {
         assert_eq!(decoded.session_id, SessionID::empty());
         assert_ne!(decoded.session_id, original_session_id);
 
-        // The compressed extensions, plus one for the outer_extensions field.
-        let expected_length = original_ext_length - outer_exts.len() + 1;
+        // The compressed extensions, plus two for the outer_extensions and ech_is_inner.
+        let expected_length = original_ext_length - outer_exts.len() + 2;
         assert_eq!(decoded.extensions.len(), expected_length);
         let decoded_outer = decoded
             .find_extension(ExtensionType::EchOuterExtensions)
