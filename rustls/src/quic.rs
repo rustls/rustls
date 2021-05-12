@@ -1,10 +1,8 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 pub use crate::client::ClientQuicExt;
-use crate::conn::ConnectionCommon;
 use crate::error::Error;
 use crate::key_schedule::hkdf_expand;
-use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::msgs::message::OpaqueMessage;
+use crate::msgs::enums::AlertDescription;
 pub use crate::server::ServerQuicExt;
 use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
 
@@ -20,7 +18,7 @@ pub(crate) struct Secrets {
 }
 
 impl Secrets {
-    fn local_remote(&self, is_client: bool) -> (&hkdf::Prk, &hkdf::Prk) {
+    pub(crate) fn local_remote(&self, is_client: bool) -> (&hkdf::Prk, &hkdf::Prk) {
         if is_client {
             (&self.client, &self.server)
         } else {
@@ -96,7 +94,7 @@ pub struct PacketKey {
 }
 
 impl PacketKey {
-    fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
+    pub(crate) fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
         Self {
             key: aead::LessSafeKey::new(hkdf_expand(
                 secret,
@@ -174,7 +172,11 @@ impl Keys {
         Self::new(&TLS13_AES_128_GCM_SHA256, is_client, &secrets)
     }
 
-    fn new(suite: &'static SupportedCipherSuite, is_client: bool, secrets: &Secrets) -> Self {
+    pub(crate) fn new(
+        suite: &'static SupportedCipherSuite,
+        is_client: bool,
+        secrets: &Secrets,
+    ) -> Self {
         let (local, remote) = secrets.local_remote(is_client);
         Keys {
             local: DirectionalKeys::new(suite, local),
@@ -183,64 +185,7 @@ impl Keys {
     }
 }
 
-pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(), Error> {
-    if this
-        .handshake_joiner
-        .take_message(OpaqueMessage {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: plaintext.to_vec(),
-        })
-        .is_none()
-    {
-        this.quic.alert = Some(AlertDescription::DecodeError);
-        return Err(Error::CorruptMessage);
-    }
-    Ok(())
-}
-
-pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
-    while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
-        buf.extend_from_slice(&msg);
-        if let Some(&(true, _)) = this.quic.hs_queue.front() {
-            if this.quic.hs_secrets.is_some() {
-                // Allow the caller to switch keys before proceeding.
-                break;
-            }
-        }
-    }
-
-    let suite = this.get_suite()?;
-    if let Some(secrets) = this.quic.hs_secrets.take() {
-        return Some(Keys::new(suite, this.is_client, &secrets));
-    }
-
-    if let Some(secrets) = this.quic.traffic_secrets.as_ref() {
-        if !this.quic.returned_traffic_keys {
-            this.quic.returned_traffic_keys = true;
-            return Some(Keys::new(suite, this.is_client, &secrets));
-        }
-    }
-
-    None
-}
-
-pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet> {
-    let suite = this.get_suite()?;
-    let secrets = this.quic.traffic_secrets.as_ref()?;
-    let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);
-
-    let (local, remote) = next.local_remote(this.is_client);
-    let keys = PacketKeySet {
-        local: PacketKey::new(suite, local),
-        remote: PacketKey::new(suite, remote),
-    };
-
-    this.quic.traffic_secrets = Some(next);
-    Some(keys)
-}
-
-fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {
+pub(crate) fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {
     Secrets {
         client: hkdf_expand(&prev.client, hkdf_alg, b"quic ku", &[]),
         server: hkdf_expand(&prev.server, hkdf_alg, b"quic ku", &[]),

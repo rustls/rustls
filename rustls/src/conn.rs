@@ -580,15 +580,15 @@ pub struct ConnectionCommon {
     received_middlebox_ccs: bool,
     error: Option<Error>,
     message_deframer: MessageDeframer,
-    pub handshake_joiner: HandshakeJoiner,
-    pub message_fragmenter: MessageFragmenter,
+    handshake_joiner: HandshakeJoiner,
+    message_fragmenter: MessageFragmenter,
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub sendable_tls: ChunkVecBuffer,
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub protocol: Protocol,
     #[cfg(feature = "quic")]
-    pub(crate) quic: Quic,
+    pub(crate) quic: conn_quic::Quic,
 }
 
 impl ConnectionCommon {
@@ -614,7 +614,7 @@ impl ConnectionCommon {
             sendable_tls: ChunkVecBuffer::new(),
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
-            quic: Quic::new(),
+            quic: conn_quic::Quic::new(),
         })
     }
 
@@ -1099,29 +1099,94 @@ pub(crate) trait HandleState: Sized {
 }
 
 #[cfg(feature = "quic")]
-pub(crate) struct Quic {
-    /// QUIC transport parameters received from the peer during the handshake
-    pub params: Option<Vec<u8>>,
-    pub alert: Option<AlertDescription>,
-    pub hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub early_secret: Option<ring::hkdf::Prk>,
-    pub hs_secrets: Option<quic::Secrets>,
-    pub traffic_secrets: Option<quic::Secrets>,
-    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    pub returned_traffic_keys: bool,
-}
+mod conn_quic {
+    use super::*;
+    use crate::quic::{Keys, PacketKeySet};
 
-#[cfg(feature = "quic")]
-impl Quic {
-    pub fn new() -> Self {
-        Self {
-            params: None,
-            alert: None,
-            hs_queue: VecDeque::new(),
-            early_secret: None,
-            hs_secrets: None,
-            traffic_secrets: None,
-            returned_traffic_keys: false,
+    impl ConnectionCommon {
+        pub(crate) fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+            if self
+                .handshake_joiner
+                .take_message(OpaqueMessage {
+                    typ: ContentType::Handshake,
+                    version: ProtocolVersion::TLSv1_3,
+                    payload: plaintext.to_vec(),
+                })
+                .is_none()
+            {
+                self.quic.alert = Some(AlertDescription::DecodeError);
+                return Err(Error::CorruptMessage);
+            }
+            Ok(())
+        }
+
+        pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
+            while let Some((_, msg)) = self.quic.hs_queue.pop_front() {
+                buf.extend_from_slice(&msg);
+                if let Some(&(true, _)) = self.quic.hs_queue.front() {
+                    if self.quic.hs_secrets.is_some() {
+                        // Allow the caller to switch keys before proceeding.
+                        break;
+                    }
+                }
+            }
+
+            let suite = self.get_suite()?;
+            if let Some(secrets) = self.quic.hs_secrets.take() {
+                return Some(quic::Keys::new(suite, self.is_client, &secrets));
+            }
+
+            if let Some(secrets) = self.quic.traffic_secrets.as_ref() {
+                if !self.quic.returned_traffic_keys {
+                    self.quic.returned_traffic_keys = true;
+                    return Some(quic::Keys::new(suite, self.is_client, &secrets));
+                }
+            }
+
+            None
+        }
+
+        pub(crate) fn next_1rtt_keys(&mut self) -> Option<PacketKeySet> {
+            let suite = self.get_suite()?;
+            let secrets = self.quic.traffic_secrets.as_ref()?;
+            let next = quic::next_1rtt_secrets(suite.hkdf_algorithm, secrets);
+
+            let (local, remote) = next.local_remote(self.is_client);
+            let keys = PacketKeySet {
+                local: quic::PacketKey::new(suite, local),
+                remote: quic::PacketKey::new(suite, remote),
+            };
+
+            self.quic.traffic_secrets = Some(next);
+            Some(keys)
+        }
+    }
+
+    #[cfg(feature = "quic")]
+    pub(crate) struct Quic {
+        /// QUIC transport parameters received from the peer during the handshake
+        pub params: Option<Vec<u8>>,
+        pub alert: Option<AlertDescription>,
+        pub hs_queue: VecDeque<(bool, Vec<u8>)>,
+        pub early_secret: Option<ring::hkdf::Prk>,
+        pub hs_secrets: Option<quic::Secrets>,
+        pub traffic_secrets: Option<quic::Secrets>,
+        /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
+        pub returned_traffic_keys: bool,
+    }
+
+    #[cfg(feature = "quic")]
+    impl Quic {
+        pub fn new() -> Self {
+            Self {
+                params: None,
+                alert: None,
+                hs_queue: VecDeque::new(),
+                early_secret: None,
+                hs_secrets: None,
+                traffic_secrets: None,
+                returned_traffic_keys: false,
+            }
         }
     }
 }
