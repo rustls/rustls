@@ -227,17 +227,14 @@ pub struct ServerConnection {
 impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new(config: &Arc<ServerConfig>) -> ServerConnection {
+    pub fn new(config: Arc<ServerConfig>) -> ServerConnection {
         Self::from_config(config, vec![])
     }
 
-    fn from_config(config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
         ServerConnection {
             common: ConnectionCommon::new(config.mtu, false),
-            state: Some(Box::new(hs::ExpectClientHello::new(
-                config.clone(),
-                extra_exts,
-            ))),
+            state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
             data: ServerConnectionData::default(),
         }
     }
@@ -477,7 +474,7 @@ pub trait ServerQuicExt {
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
     fn new_quic(
-        config: &Arc<ServerConfig>,
+        config: Arc<ServerConfig>,
         quic_version: quic::Version,
         params: Vec<u8>,
     ) -> Result<ServerConnection, Error> {

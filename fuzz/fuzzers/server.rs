@@ -20,6 +20,6 @@ fuzz_target!(|data: &[u8]| {
                           .unwrap()
                           .with_no_client_auth()
                           .with_cert_resolver(Arc::new(Fail)));
-    let mut server= ServerConnection::new(&config);
+    let mut server = ServerConnection::new(config);
     let _ = server.read_tls(&mut io::Cursor::new(data));
 });

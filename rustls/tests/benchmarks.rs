@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 fn bench_ewouldblock(c: &mut Criterion) {
     let server_config = make_server_config(KeyType::RSA);
-    let mut server = ServerConnection::new(&Arc::new(server_config));
+    let mut server = ServerConnection::new(Arc::new(server_config));
     let mut read_ewouldblock = FailsReads::new(io::ErrorKind::WouldBlock);
     c.bench_function("read_tls with EWOULDBLOCK", move |b| {
         b.iter(|| server.read_tls(&mut read_ewouldblock))
