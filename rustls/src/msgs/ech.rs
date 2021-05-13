@@ -8,7 +8,6 @@ use crate::rand;
 use crate::Error;
 use hpke_rs::prelude::*;
 use hpke_rs::{Hpke, Mode};
-use std::cmp::Ordering;
 use webpki::DnsName;
 
 #[allow(dead_code)]
@@ -57,7 +56,8 @@ fn encode_inner_hello(
     context: &EchHrrContext,
     outer_exts: &Vec<ExtensionType>,
 ) -> (ClientHelloPayload, Vec<u8>) {
-    // nightly's drain_filter would be nice here.
+    // Remove the ClientExtensions that match outer_exts.
+    // Nightly's drain_filter would be nice here.
     let mut indices = Vec::with_capacity(outer_exts.len());
     for (i, ext) in hello.extensions.iter().enumerate() {
         if outer_exts.contains(&ext.get_type()) {
@@ -68,30 +68,43 @@ fn encode_inner_hello(
     for index in indices.iter().rev() {
         outers.push(hello.extensions.swap_remove(*index));
     }
+
+    // Add these two extensions which can only appear in ClientHelloInner.
     let outer_extensions = EchOuterExtensions(
         outers
             .iter()
             .map(|ext| ext.get_type())
             .collect(),
     );
+    hello.extensions.push(outer_extensions);
     hello
         .extensions
         .push(ClientExtension::ClientHelloInnerIndication);
-    hello.extensions.push(outer_extensions);
 
+    // Preserve these for reuse
     let original_session_id = hello.session_id;
     let original_random = hello.random;
 
+    // SessionID is required to be empty in the ClientHelloInner.
     hello.session_id = SessionID::empty();
+
+    // The random value must be preserved across HRR for the ClientHelloInner
     hello.random = Random::from(context.inner_random);
+
+    // Create the buffer to be encrypted.
     let mut encoded_hello = Vec::new();
     hello.encode(&mut encoded_hello);
 
-    hello.extensions.pop();
-    hello.extensions.pop();
+    // Remove the two ClientHelloInner-only extensions.
+    hello
+        .extensions
+        .truncate(hello.extensions.len() - 2);
 
+    // Restore
     hello.session_id = original_session_id;
     hello.random = original_random;
+
+    // PSK extensions are prohibited in the ClientHelloOuter.
     let index = hello
         .extensions
         .iter()
@@ -99,6 +112,8 @@ fn encode_inner_hello(
     if let Some(i) = index {
         hello.extensions.remove(i);
     }
+
+    // Add the extensions that appear compressed in ClientHelloInner.
     hello.extensions.append(&mut outers);
 
     (hello, encoded_hello)
