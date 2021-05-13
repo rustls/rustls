@@ -57,51 +57,40 @@ fn encode_inner_hello(
     context: &EchHrrContext,
     outer_exts: &Vec<ExtensionType>,
 ) -> (ClientHelloPayload, Vec<u8>) {
-    hello.extensions.sort_by(|a, b| {
-        if outer_exts.contains(&a.get_type()) {
-            Ordering::Greater
-        } else if outer_exts.contains(&b.get_type()) {
-            Ordering::Less
-        } else {
-            Ordering::Equal
+    // nightly's drain_filter would be nice here.
+    let mut indices = Vec::with_capacity(outer_exts.len());
+    for (i, ext) in hello.extensions.iter().enumerate() {
+        if outer_exts.contains(&ext.get_type()) {
+            indices.push(i);
         }
-    });
-
-    let range = hello
-        .extensions
-        .iter()
-        .rev()
-        .take_while(|el| outer_exts.contains(&el.get_type()))
-        .count();
-    let mut outer: Vec<ClientExtension> = hello
-        .extensions
-        .drain(hello.extensions.len() - range..)
-        .collect();
+    }
+    let mut outers = Vec::with_capacity(indices.len());
+    for index in indices.iter().rev() {
+        outers.push(hello.extensions.swap_remove(*index));
+    }
     let outer_extensions = EchOuterExtensions(
-        outer
+        outers
             .iter()
             .map(|ext| ext.get_type())
             .collect(),
     );
-
-    let legacy_session_id = hello.session_id;
-    hello.session_id = SessionID::empty();
-    let original_random = hello.random;
-    hello.random = Random::from(context.inner_random);
-
     hello
         .extensions
         .push(ClientExtension::ClientHelloInnerIndication);
     hello.extensions.push(outer_extensions);
 
+    let original_session_id = hello.session_id;
+    let original_random = hello.random;
+
+    hello.session_id = SessionID::empty();
+    hello.random = Random::from(context.inner_random);
     let mut encoded_hello = Vec::new();
     hello.encode(&mut encoded_hello);
 
     hello.extensions.pop();
     hello.extensions.pop();
 
-    hello.extensions.append(&mut outer);
-    hello.session_id = legacy_session_id;
+    hello.session_id = original_session_id;
     hello.random = original_random;
     let index = hello
         .extensions
@@ -110,6 +99,8 @@ fn encode_inner_hello(
     if let Some(i) = index {
         hello.extensions.remove(i);
     }
+    hello.extensions.append(&mut outers);
+
     (hello, encoded_hello)
 }
 
