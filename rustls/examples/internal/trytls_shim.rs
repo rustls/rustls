@@ -53,7 +53,7 @@ fn communicate(
 ) -> Result<Verdict, Box<dyn StdError>> {
     let dns_name = webpki::DnsNameRef::try_from_ascii_str(&host).unwrap();
     let rc_config = Arc::new(config);
-    let mut client = ClientConnection::new(&rc_config, dns_name).unwrap();
+    let mut client = ClientConnection::new(rc_config, dns_name).unwrap();
     let mut stream = TcpStream::connect((&*host, port))?;
 
     client

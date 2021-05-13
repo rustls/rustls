@@ -130,7 +130,7 @@
 //! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
 //! let example_com = webpki::DnsNameRef::try_from_ascii_str("example.com").unwrap();
-//! let mut client = rustls::ClientConnection::new(&rc_config, example_com);
+//! let mut client = rustls::ClientConnection::new(rc_config, example_com);
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields

@@ -11,7 +11,7 @@ use webpki_roots;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     let dns_name = webpki::DnsNameRef::try_from_ascii_str(domain_name).unwrap();
-    let mut conn = rustls::ClientConnection::new(config, dns_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(Arc::clone(&config), dns_name).unwrap();
     let mut sock = TcpStream::connect(format!("{}:443", domain_name)).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(
