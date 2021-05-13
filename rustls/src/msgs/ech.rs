@@ -94,8 +94,6 @@ fn encode_inner_hello(
         .push(ClientExtension::ClientHelloInnerIndication);
     hello.extensions.push(outer_extensions);
 
-    println!("extensions: {:#?}", hello.extensions);
-
     let mut encoded_hello = Vec::new();
     hello.encode(&mut encoded_hello);
 
@@ -110,7 +108,6 @@ fn encode_inner_hello(
         .iter()
         .position(|ext| ext.get_type() == ExtensionType::PreSharedKey);
     if let Some(i) = index {
-        println!("will remove");
         hello.extensions.remove(i);
     }
     (hello, encoded_hello)
@@ -280,7 +277,6 @@ mod test {
         // All of the old extensions except for PSK
         let old_len = original_ext_length - 1;
         assert_eq!(hello.extensions.len(), old_len);
-        println!("decoded: {:#?}", decoded);
         assert!(
             decoded
                 .find_extension(ExtensionType::PreSharedKey)
