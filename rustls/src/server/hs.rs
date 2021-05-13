@@ -1,6 +1,6 @@
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
-use crate::conn::{ConnectionCommon, ConnectionRandoms};
+use crate::conn::{ConnectionCommon, ConnectionRandoms, Context, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -24,42 +24,9 @@ use crate::server::{tls12, tls13, ServerConnectionData};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-pub(super) type NextState = Box<dyn State>;
+pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
-
-pub(super) trait State: Send + Sync {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> NextStateOrError;
-
-    fn export_keying_material(
-        &self,
-        _output: &mut [u8],
-        _label: &[u8],
-        _context: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-
-    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
-}
-
-impl<'a> crate::conn::HandleState for Box<dyn State> {
-    type Data = ServerConnectionData;
-
-    fn handle(
-        self,
-        message: Message<'_>,
-        data: &mut Self::Data,
-        common: &mut ConnectionCommon,
-    ) -> Result<Self, Error> {
-        let mut cx = ServerContext { common, data };
-        self.handle(&mut cx, message)
-    }
-}
-
-pub(super) struct ServerContext<'a> {
-    pub(super) common: &'a mut ConnectionCommon,
-    pub(super) data: &'a mut ServerConnectionData,
-}
+pub(super) type ServerContext<'a> = Context<'a, ServerConnectionData>;
 
 pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::HandshakeFailure);
@@ -311,7 +278,7 @@ impl ExpectClientHello {
     }
 }
 
-impl State for ExpectClientHello {
+impl State<ServerConnectionData> for ExpectClientHello {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let client_hello =
             require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;

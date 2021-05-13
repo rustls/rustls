@@ -1,7 +1,7 @@
 #[cfg(feature = "quic")]
 use crate::check::check_message;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms};
+use crate::conn::{ConnectionCommon, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -17,13 +17,13 @@ use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
-use crate::server::ServerConfig;
 use crate::verify;
 use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
 use super::hs::{self, ServerContext};
+use super::{ServerConfig, ServerConnectionData};
 
 use std::sync::Arc;
 
@@ -757,7 +757,7 @@ struct ExpectCertificate {
     hash_at_server_fin: Digest,
 }
 
-impl hs::State for ExpectCertificate {
+impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let certp = require_handshake_msg!(
             m,
@@ -843,7 +843,7 @@ struct ExpectCertificateVerify {
     hash_at_server_fin: Digest,
 }
 
-impl hs::State for ExpectCertificateVerify {
+impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
@@ -978,7 +978,7 @@ impl ExpectFinished {
     }
 }
 
-impl hs::State for ExpectFinished {
+impl State<ServerConnectionData> for ExpectFinished {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -1097,7 +1097,7 @@ impl ExpectTraffic {
     }
 }
 
-impl hs::State for ExpectTraffic {
+impl State<ServerConnectionData> for ExpectTraffic {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message<'_>) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
@@ -1157,7 +1157,7 @@ struct ExpectQuicTraffic {
 }
 
 #[cfg(feature = "quic")]
-impl hs::State for ExpectQuicTraffic {
+impl State<ServerConnectionData> for ExpectQuicTraffic {
     fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         // reject all messages
         check_message(&m, &[], &[])?;

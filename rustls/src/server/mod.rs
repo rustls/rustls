@@ -226,7 +226,7 @@ impl ServerConfig {
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
     common: ConnectionCommon,
-    state: Option<Box<dyn hs::State>>,
+    state: Option<hs::NextState>,
     data: ServerConnectionData,
 }
 
