@@ -1217,3 +1217,24 @@ fn cannot_decode_huge_certificate() {
     buf[6] = 0x01;
     assert!(HandshakeMessagePayload::read_bytes(&buf).is_none());
 }
+
+#[test]
+fn hpke_config_roundtrip() {
+    let hkc = HpkeKeyConfig {
+        config_id: 0,
+        hpke_kem_id: KEM::DHKEM_P256_HKDF_SHA256,
+        hpke_public_key: PayloadU16(b"12341234".to_vec()),
+        hpke_symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite::default()],
+    };
+    let mut bytes = Vec::new();
+    hkc.encode(&mut bytes);
+    let mut rd = Reader::init(&bytes);
+    let hkc_2 = HpkeKeyConfig::read(&mut rd).unwrap();
+    assert_eq!(hkc.config_id, hkc_2.config_id);
+    assert_eq!(hkc.hpke_kem_id, hkc_2.hpke_kem_id);
+    assert_eq!(hkc.hpke_public_key, hkc_2.hpke_public_key);
+    assert_eq!(
+        hkc.hpke_symmetric_cipher_suites.len(),
+        hkc_2.hpke_symmetric_cipher_suites.len()
+    );
+}
