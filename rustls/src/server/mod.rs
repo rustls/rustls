@@ -298,15 +298,6 @@ impl ServerConnection {
         );
         self.data.reject_early_data = true;
     }
-
-    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        let mut st = self.state.take();
-        if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(&mut self.common);
-        }
-        self.state = st;
-        self.common.send_some_plaintext(buf)
-    }
 }
 
 impl Connection for ServerConnection {
@@ -387,13 +378,17 @@ impl Connection for ServerConnection {
 
 impl PlaintextSink for ServerConnection {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.send_some_plaintext(buf))
+        Ok(self
+            .common
+            .send_some_plaintext(buf, &mut self.state))
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         let mut sz = 0;
         for buf in bufs {
-            sz += self.send_some_plaintext(buf);
+            sz += self
+                .common
+                .send_some_plaintext(buf, &mut self.state);
         }
         Ok(sz)
     }

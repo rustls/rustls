@@ -745,6 +745,22 @@ impl ConnectionCommon {
         }
     }
 
+    /// Send plaintext application data, fragmenting and
+    /// encrypting it as it goes out.
+    ///
+    /// If internal buffers are too small, this function will not accept
+    /// all the data.
+    pub(crate) fn send_some_plaintext<Data>(
+        &mut self,
+        buf: &[u8],
+        state: &mut Option<Box<dyn State<Data>>>,
+    ) -> usize {
+        if let Some(st) = state {
+            st.perhaps_write_key_update(self);
+        }
+        self.send_plain(buf, Limit::Yes)
+    }
+
     pub(crate) fn export_keying_material<Data>(
         &self,
         output: &mut [u8],
@@ -916,15 +932,6 @@ impl ConnectionCommon {
 
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
-    }
-
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub fn send_some_plaintext(&mut self, data: &[u8]) -> usize {
-        self.send_plain(data, Limit::Yes)
     }
 
     pub fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
