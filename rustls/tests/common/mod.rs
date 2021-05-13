@@ -293,8 +293,8 @@ pub fn make_pair_for_arc_configs(
     server_config: &Arc<ServerConfig>,
 ) -> (ClientConnection, ServerConnection) {
     (
-        ClientConnection::new(client_config, dns_name("localhost")).unwrap(),
-        ServerConnection::new(server_config),
+        ClientConnection::new(&client_config, dns_name("localhost")).unwrap(),
+        ServerConnection::new(Arc::clone(server_config)),
     )
 }
 

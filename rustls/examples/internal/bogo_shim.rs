@@ -1089,11 +1089,12 @@ fn main() {
         ccfg: &Option<Arc<rustls::ClientConfig>>,
     ) -> ClientOrServer {
         if opts.server {
+            let scfg = Arc::clone(scfg.as_ref().unwrap());
             let s = if opts.quic_transport_params.is_empty() {
-                rustls::ServerConnection::new(scfg.as_ref().unwrap())
+                rustls::ServerConnection::new(scfg)
             } else {
                 rustls::ServerConnection::new_quic(
-                    scfg.as_ref().unwrap(),
+                    scfg,
                     quic::Version::V1,
                     opts.quic_transport_params.clone(),
                 )
