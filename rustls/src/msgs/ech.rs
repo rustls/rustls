@@ -2,13 +2,24 @@ use crate::msgs::codec::*;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
 use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, HpkeKeyConfig, Random, SessionID,
+    ClientExtension, ClientHelloPayload, ECHConfig, HpkeKeyConfig, Random, SessionID,
 };
 use crate::rand;
 use crate::Error;
 use hpke_rs::prelude::*;
 use hpke_rs::{Hpke, Mode};
 use webpki::DnsName;
+
+#[allow(dead_code)]
+const HPKE_INFO: &[u8; 8] = b"tls ech\0";
+
+#[allow(dead_code)]
+fn hpke_info(config: &ECHConfig) -> Vec<u8> {
+    let mut info = Vec::with_capacity(128);
+    info.extend_from_slice(HPKE_INFO);
+    config.encode(&mut info);
+    info
+}
 
 #[allow(dead_code)]
 /// ECH data that's reused across HRR.
@@ -123,7 +134,7 @@ fn encode_inner_hello(
 mod test {
     use super::*;
     use crate::internal::msgs::enums::ExtensionType::ECPointFormats;
-    use crate::msgs::base::{Payload, PayloadU8, PayloadU16};
+    use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
     use crate::msgs::codec::{Codec, Reader};
     use crate::msgs::enums::ExtensionType::{Cookie, EllipticCurves, KeyShare};
     use crate::msgs::enums::*;
@@ -293,5 +304,60 @@ mod test {
                 .find_extension(ExtensionType::EchIsInner)
                 .is_some()
         );
+    }
+
+    #[test]
+    fn test_seal() {
+        let ech_list = get_ech_config();
+
+        for config in ech_list {
+            let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
+            let ech_context =
+                EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config).unwrap();
+            let outer_exts = vec![Cookie, KeyShare, ECPointFormats, EllipticCurves];
+            let original_hello = get_sample_clienthellopayload();
+            let (hello, encoded_inner) =
+                encode_inner_hello(original_hello, &ech_context, &outer_exts);
+            let pk_r = HpkePublicKey::from(
+                config
+                    .contents
+                    .hpke_key_config
+                    .hpke_public_key
+                    .clone()
+                    .into_inner(),
+            );
+            for suite in &config
+                .contents
+                .hpke_key_config
+                .hpke_symmetric_cipher_suites
+            {
+                let ech_context =
+                    EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config)
+                        .unwrap();
+                let (enc, mut context) = ech_context
+                    .hpke
+                    .setup_sender(&pk_r, hpke_info(&config).as_slice(), None, None, None)
+                    .unwrap();
+                let mut encoded_hello = Vec::new();
+                hello.encode(&mut encoded_hello);
+                let outer_aad = ClientHelloOuterAAD {
+                    cipher_suite: suite.clone(),
+                    config_id: config
+                        .contents
+                        .hpke_key_config
+                        .config_id,
+                    enc: PayloadU16::new(enc),
+                    outer_hello: PayloadU24::new(encoded_hello),
+                };
+
+                let mut aad = Vec::new();
+                outer_aad.encode(&mut aad);
+
+                let payload = context
+                    .seal(aad.as_slice(), encoded_inner.as_slice())
+                    .unwrap();
+                assert!(payload.len() > 0);
+            }
+        }
     }
 }
