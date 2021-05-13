@@ -28,7 +28,7 @@ fn main() {
         .with_no_client_auth();
 
     let dns_name = webpki::DnsNameRef::try_from_ascii_str("google.com").unwrap();
-    let mut conn = rustls::ClientConnection::new(&Arc::new(config), dns_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(Arc::new(config), dns_name).unwrap();
     let mut sock = TcpStream::connect("google.com:443").unwrap();
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     tls.write(

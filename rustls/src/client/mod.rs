@@ -333,14 +333,14 @@ impl ClientConnection {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(
-        config: &Arc<ClientConfig>,
+        config: Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
         Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
     }
 
     fn new_inner(
-        config: &Arc<ClientConfig>,
+        config: Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
@@ -583,7 +583,7 @@ pub trait ClientQuicExt {
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
     fn new_quic(
-        config: &Arc<ClientConfig>,
+        config: Arc<ClientConfig>,
         quic_version: quic::Version,
         hostname: webpki::DnsNameRef,
         params: Vec<u8>,

@@ -113,7 +113,7 @@ fn find_session(
 pub(super) fn start_handshake(
     dns_name: webpki::DnsName,
     extra_exts: Vec<ClientExtension>,
-    config: &Arc<ClientConfig>,
+    config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
     let mut transcript = HandshakeHash::new();
@@ -129,13 +129,13 @@ pub(super) fn start_handshake(
     let mut session_id: Option<SessionID> = None;
     let mut resuming_session = find_session(
         dns_name.as_ref(),
-        config,
+        &config,
         #[cfg(feature = "quic")]
         cx,
     );
 
     let key_share = if support_tls13 {
-        Some(tls13::initial_key_share(config, dns_name.as_ref())?)
+        Some(tls13::initial_key_share(&config, dns_name.as_ref())?)
     } else {
         None
     };
@@ -167,7 +167,7 @@ pub(super) fn start_handshake(
     let sent_tls13_fake_ccs = false;
     let may_send_sct_list = config.verifier.request_scts();
     Ok(emit_client_hello_for_retry(
-        config.clone(),
+        config,
         cx,
         resuming_session,
         randoms,

@@ -15,6 +15,6 @@ fuzz_target!(|data: &[u8]| {
         .with_root_certificates(root_store, &[])
         .with_no_client_auth());
     let example_com = webpki::DnsNameRef::try_from_ascii_str("example.com").unwrap();
-    let mut client = ClientConnection::new(&config, example_com).unwrap();
+    let mut client = ClientConnection::new(config, example_com).unwrap();
     let _ = client.read_tls(&mut io::Cursor::new(data));
 });

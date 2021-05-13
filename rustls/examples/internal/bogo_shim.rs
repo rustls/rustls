@@ -1103,11 +1103,12 @@ fn main() {
             ClientOrServer::Server(s)
         } else {
             let dns_name = webpki::DnsNameRef::try_from_ascii_str(&opts.host_name).unwrap();
+            let ccfg = Arc::clone(ccfg.as_ref().unwrap());
             let c = if opts.quic_transport_params.is_empty() {
-                rustls::ClientConnection::new(ccfg.as_ref().unwrap(), dns_name)
+                rustls::ClientConnection::new(ccfg, dns_name)
             } else {
                 rustls::ClientConnection::new_quic(
-                    ccfg.as_ref().unwrap(),
+                    ccfg,
                     quic::Version::V1,
                     dns_name,
                     opts.quic_transport_params.clone(),
