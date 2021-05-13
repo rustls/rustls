@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -19,7 +19,7 @@ use crate::{kx, tls12};
 
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
-use super::{ProducesTickets, ServerConfig};
+use super::{ProducesTickets, ServerConfig, ServerConnectionData};
 
 use ring::constant_time;
 
@@ -509,7 +509,7 @@ struct ExpectCertificate {
     send_ticket: bool,
 }
 
-impl hs::State for ExpectCertificate {
+impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let cert_chain = require_handshake_msg_move!(
@@ -584,7 +584,7 @@ struct ExpectClientKx {
     send_ticket: bool,
 }
 
-impl hs::State for ExpectClientKx {
+impl State<ServerConnectionData> for ExpectClientKx {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
@@ -653,7 +653,7 @@ struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl hs::State for ExpectCertificateVerify {
+impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
@@ -702,7 +702,7 @@ struct ExpectCcs {
     send_ticket: bool,
 }
 
-impl hs::State for ExpectCcs {
+impl State<ServerConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
 
@@ -821,7 +821,7 @@ struct ExpectFinished {
     send_ticket: bool,
 }
 
-impl hs::State for ExpectFinished {
+impl State<ServerConnectionData> for ExpectFinished {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -890,7 +890,7 @@ struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl hs::State for ExpectTraffic {
+impl State<ServerConnectionData> for ExpectTraffic {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
