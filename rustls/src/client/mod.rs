@@ -474,10 +474,8 @@ impl Connection for ClientConnection {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
-        self.state
-            .as_ref()
-            .ok_or(Error::HandshakeNotComplete)
-            .and_then(|st| st.export_keying_material(output, label, context))
+        self.common
+            .export_keying_material(output, label, context, &self.state)
     }
 
     fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
