@@ -745,6 +745,19 @@ impl ConnectionCommon {
         }
     }
 
+    pub(crate) fn export_keying_material<Data>(
+        &self,
+        output: &mut [u8],
+        label: &[u8],
+        context: Option<&[u8]>,
+        state: &Option<Box<dyn State<Data>>>,
+    ) -> Result<(), Error> {
+        state
+            .as_ref()
+            .ok_or(Error::HandshakeNotComplete)
+            .and_then(|st| st.export_keying_material(output, label, context))
+    }
+
     // Changing the keys must not span any fragmented handshake
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
