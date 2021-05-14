@@ -4,7 +4,7 @@ use crate::key;
 use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
-use crate::log::trace;
+use crate::log::{trace, warn};
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::CipherSuite;
@@ -161,8 +161,16 @@ impl ClientConfig {
         // is PACKET_OVERHEAD.
         if let Some(x) = *mtu {
             use crate::msgs::fragmenter;
-            debug_assert!(x > fragmenter::PACKET_OVERHEAD);
-            self.mtu = Some(x - fragmenter::PACKET_OVERHEAD);
+            if !cfg!(test) {
+                debug_assert!(x > fragmenter::PACKET_OVERHEAD);
+            }
+            self.mtu = x.checked_sub(fragmenter::PACKET_OVERHEAD);
+            if self.mtu.is_none() {
+                warn!(
+                    "MTU must be greater than {} bytes. Setting to default.",
+                    fragmenter::PACKET_OVERHEAD
+                );
+            }
         } else {
             self.mtu = None;
         }
@@ -605,3 +613,15 @@ pub trait ClientQuicExt {
 
 #[cfg(feature = "quic")]
 impl ClientQuicExt for ClientConnection {}
+
+#[test]
+fn too_small_mtu() {
+    use crate::{ConfigBuilder, RootCertStore};
+    let mut client_config = ConfigBuilder::with_safe_defaults()
+        .for_client()
+        .unwrap()
+        .with_root_certificates(RootCertStore::empty(), &[])
+        .with_no_client_auth();
+    client_config.set_mtu(&Some(1));
+    assert!(client_config.mtu.is_none());
+}
