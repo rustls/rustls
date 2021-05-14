@@ -1233,7 +1233,10 @@ fn hpke_config_roundtrip() {
     assert_eq!(hkc.config_id, hkc_2.config_id);
     assert_eq!(hkc.hpke_kem_id, hkc_2.hpke_kem_id);
     assert_eq!(hkc.hpke_public_key, hkc_2.hpke_public_key);
-    assert_eq!(hkc.hpke_symmetric_cipher_suites, hkc_2.hpke_symmetric_cipher_suites);
+    assert_eq!(
+        hkc.hpke_symmetric_cipher_suites,
+        hkc_2.hpke_symmetric_cipher_suites
+    );
 }
 
 #[test]
@@ -1242,7 +1245,7 @@ fn client_outer_aad_roundtrip() {
         cipher_suite: HpkeSymmetricCipherSuite::default(),
         config_id: 0,
         enc: PayloadU16(b"12341234".to_vec()),
-        outer_hello: PayloadU24(b"123412341".to_vec())
+        outer_hello: PayloadU24(b"123412341".to_vec()),
     };
     let mut bytes = Vec::new();
     aad.encode(&mut bytes);
