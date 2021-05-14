@@ -159,18 +159,20 @@ impl ClientConfig {
         //
         // Externally the MTU is the whole packet size.  The difference
         // is PACKET_OVERHEAD.
-        if let Some(x) = *mtu {
-            use crate::msgs::fragmenter;
-            if let Some(m) = x.checked_sub(fragmenter::PACKET_OVERHEAD + 1) {
-                self.mtu = Some(m + 1);
-                return Ok(());
+        match *mtu {
+            Some(x) => {
+                use crate::msgs::fragmenter;
+                if let Some(m) = x.checked_sub(fragmenter::PACKET_OVERHEAD + 1) {
+                    self.mtu = Some(m + 1);
+                    return Ok(());
+                }
+                Err(Error::MtuError)
             }
-
-            return Err(Error::MtuError);
+            None => {
+                self.mtu = None;
+                Ok(())
+            }
         }
-
-        self.mtu = None;
-        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires
