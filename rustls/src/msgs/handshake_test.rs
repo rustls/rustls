@@ -1229,7 +1229,9 @@ fn hpke_config_roundtrip() {
     let mut bytes = Vec::new();
     hkc.encode(&mut bytes);
     let mut rd = Reader::init(&bytes);
-    let hkc_2 = HpkeKeyConfig::read(&mut rd).unwrap();
+    let hkc_2 = HpkeKeyConfig::read(&mut rd)
+        .unwrap()
+        .clone();
     assert_eq!(hkc.config_id, hkc_2.config_id);
     assert_eq!(hkc.hpke_kem_id, hkc_2.hpke_kem_id);
     assert_eq!(hkc.hpke_public_key, hkc_2.hpke_public_key);
@@ -1250,7 +1252,9 @@ fn client_outer_aad_roundtrip() {
     let mut bytes = Vec::new();
     aad.encode(&mut bytes);
     let mut rd = Reader::init(&bytes);
-    let aad_2 = ClientHelloOuterAAD::read(&mut rd).unwrap();
+    let aad_2 = ClientHelloOuterAAD::read(&mut rd)
+        .unwrap()
+        .clone();
     assert_eq!(aad.cipher_suite, aad_2.cipher_suite);
     assert_eq!(aad.config_id, aad_2.config_id);
     assert_eq!(aad.enc, aad_2.enc);
