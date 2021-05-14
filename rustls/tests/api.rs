@@ -3579,7 +3579,7 @@ fn test_client_mtu_reduction() {
         client_config
             .set_mtu(&Some(64))
             .unwrap();
-
+        println!("client mtu {:?}", client_config.mtu);
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
         let writes = collect_write_lengths(&mut client);

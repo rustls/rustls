@@ -162,10 +162,8 @@ impl ClientConfig {
         if let Some(x) = *mtu {
             use crate::msgs::fragmenter;
             if let Some(m) = x.checked_sub(fragmenter::PACKET_OVERHEAD + 1) {
-                if m > 0 {
-                    self.mtu = Some(m);
-                    return Ok(());
-                }
+                self.mtu = Some(m + 1);
+                return Ok(());
             }
 
             return Err(Error::MtuError);
@@ -627,8 +625,14 @@ fn too_small_mtu() {
         assert!(result.is_err());
         assert!(client_config.mtu.is_none());
     }
+
     client_config
-        .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 2))
+        .set_mtu(&Some(64))
+        .unwrap();
+    assert_eq!(client_config.mtu.unwrap(), 59);
+
+    client_config
+        .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 1))
         .unwrap();
     assert_eq!(client_config.mtu.unwrap(), 1);
 }
