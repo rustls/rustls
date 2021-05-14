@@ -626,6 +626,7 @@ fn too_small_mtu() {
         assert!(client_config.mtu.is_none());
     }
 
+    // Some variations that should succeed.
     client_config
         .set_mtu(&Some(64))
         .unwrap();
@@ -635,4 +636,7 @@ fn too_small_mtu() {
         .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 1))
         .unwrap();
     assert_eq!(client_config.mtu.unwrap(), 1);
+
+    client_config.set_mtu(&None).unwrap();
+    assert!(client_config.mtu.is_none());
 }
