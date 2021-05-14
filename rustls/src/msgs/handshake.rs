@@ -2343,7 +2343,7 @@ impl HandshakeMessagePayload {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HpkeSymmetricCipherSuite {
     pub hpke_kdf_id: KDF,
     pub hpke_aead_id: AEAD,
