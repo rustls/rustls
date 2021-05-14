@@ -206,6 +206,7 @@
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use, unstable_features)]
 #![deny(
+    clippy::clone_on_ref_ptr,
     trivial_casts,
     trivial_numeric_casts,
     missing_docs,
