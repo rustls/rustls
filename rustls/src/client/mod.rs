@@ -161,11 +161,11 @@ impl ClientConfig {
         // is PACKET_OVERHEAD.
         if let Some(x) = *mtu {
             use crate::msgs::fragmenter;
-            if !cfg!(test) {
-                debug_assert!(x > fragmenter::PACKET_OVERHEAD);
-            }
             self.mtu = x.checked_sub(fragmenter::PACKET_OVERHEAD);
             if self.mtu.is_none() {
+                if !cfg!(test) {
+                    debug_assert!(x > fragmenter::PACKET_OVERHEAD);
+                }
                 warn!(
                     "MTU must be greater than {} bytes. Setting to default.",
                     fragmenter::PACKET_OVERHEAD
