@@ -3576,7 +3576,9 @@ fn test_client_mtu_reduction() {
 
     for kt in ALL_KEY_TYPES.iter() {
         let mut client_config = make_client_config(*kt);
-        client_config.set_mtu(&Some(64));
+        client_config
+            .set_mtu(&Some(64))
+            .unwrap();
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();

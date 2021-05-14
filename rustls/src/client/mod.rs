@@ -4,7 +4,7 @@ use crate::key;
 use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
-use crate::log::{trace, warn};
+use crate::log::trace;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::CipherSuite;
@@ -153,7 +153,7 @@ impl ClientConfig {
 
     /// Sets MTU to `mtu`.  If None, the default is used.
     /// If Some(x) then x must be greater than 5 bytes.
-    pub fn set_mtu(&mut self, mtu: &Option<usize>) {
+    pub fn set_mtu(&mut self, mtu: &Option<usize>) -> Result<(), Error> {
         // Internally our MTU relates to fragment size, and does
         // not include the TLS header overhead.
         //
@@ -161,19 +161,18 @@ impl ClientConfig {
         // is PACKET_OVERHEAD.
         if let Some(x) = *mtu {
             use crate::msgs::fragmenter;
-            self.mtu = x.checked_sub(fragmenter::PACKET_OVERHEAD);
-            if self.mtu.is_none() {
-                if !cfg!(test) {
-                    debug_assert!(x > fragmenter::PACKET_OVERHEAD);
+            if let Some(m) = x.checked_sub(fragmenter::PACKET_OVERHEAD + 1) {
+                if m > 0 {
+                    self.mtu = Some(m);
+                    return Ok(());
                 }
-                warn!(
-                    "MTU must be greater than {} bytes. Setting to default.",
-                    fragmenter::PACKET_OVERHEAD
-                );
             }
-        } else {
-            self.mtu = None;
+
+            return Err(Error::MtuError);
         }
+
+        self.mtu = None;
+        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -616,12 +615,20 @@ impl ClientQuicExt for ClientConnection {}
 
 #[test]
 fn too_small_mtu() {
+    use crate::msgs::fragmenter;
     use crate::{ConfigBuilder, RootCertStore};
     let mut client_config = ConfigBuilder::with_safe_defaults()
         .for_client()
         .unwrap()
         .with_root_certificates(RootCertStore::empty(), &[])
         .with_no_client_auth();
-    client_config.set_mtu(&Some(1));
-    assert!(client_config.mtu.is_none());
+    for m in 0..fragmenter::PACKET_OVERHEAD + 1 {
+        let result = client_config.set_mtu(&Some(m));
+        assert!(result.is_err());
+        assert!(client_config.mtu.is_none());
+    }
+    client_config
+        .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 2))
+        .unwrap();
+    assert_eq!(client_config.mtu.unwrap(), 1);
 }
