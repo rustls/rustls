@@ -215,6 +215,7 @@ mod tests {
             Error::HandshakeNotComplete,
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
+            Error::MtuError,
         ];
 
         for err in all {
