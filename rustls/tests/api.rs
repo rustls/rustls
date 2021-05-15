@@ -3589,6 +3589,31 @@ fn test_client_mtu_reduction() {
 }
 
 #[test]
+fn too_small_mtu() {
+    use rustls::internal::msgs::fragmenter;
+    let mut client_config = make_client_config(KeyType::ED25519);
+    for m in 0..fragmenter::PACKET_OVERHEAD + 1 {
+        let result = client_config.set_mtu(&Some(m));
+        assert!(result.is_err());
+        assert!(client_config.mtu.is_none());
+    }
+
+    // Some variations that should succeed.
+    client_config
+        .set_mtu(&Some(64))
+        .unwrap();
+    assert_eq!(client_config.mtu.unwrap(), 59);
+
+    client_config
+        .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 1))
+        .unwrap();
+    assert_eq!(client_config.mtu.unwrap(), 1);
+
+    client_config.set_mtu(&None).unwrap();
+    assert!(client_config.mtu.is_none());
+}
+
+#[test]
 fn exercise_key_log_file_for_client() {
     let server_config = Arc::new(make_server_config(KeyType::RSA));
     let mut client_config = make_client_config(KeyType::RSA);
