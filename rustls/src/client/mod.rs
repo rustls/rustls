@@ -159,20 +159,20 @@ impl ClientConfig {
         //
         // Externally the MTU is the whole packet size.  The difference
         // is PACKET_OVERHEAD.
-        match *mtu {
-            Some(x) => {
-                use crate::msgs::fragmenter;
-                if let Some(m) = x.checked_sub(fragmenter::PACKET_OVERHEAD + 1) {
-                    self.mtu = Some(m + 1);
-                    return Ok(());
-                }
-                Err(Error::MtuError)
-            }
+        let mtu = match mtu {
+            Some(mtu) => *mtu,
             None => {
                 self.mtu = None;
-                Ok(())
+                return Ok(());
             }
-        }
+        };
+
+        use crate::msgs::fragmenter;
+        let mtu = mtu
+            .checked_sub(fragmenter::PACKET_OVERHEAD + 1)
+            .ok_or(Error::MtuTooSmall)?;
+        self.mtu = Some(mtu + 1);
+        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -612,33 +612,3 @@ pub trait ClientQuicExt {
 
 #[cfg(feature = "quic")]
 impl ClientQuicExt for ClientConnection {}
-
-#[test]
-fn too_small_mtu() {
-    use crate::msgs::fragmenter;
-    use crate::{ConfigBuilder, RootCertStore};
-    let mut client_config = ConfigBuilder::with_safe_defaults()
-        .for_client()
-        .unwrap()
-        .with_root_certificates(RootCertStore::empty(), &[])
-        .with_no_client_auth();
-    for m in 0..fragmenter::PACKET_OVERHEAD + 1 {
-        let result = client_config.set_mtu(&Some(m));
-        assert!(result.is_err());
-        assert!(client_config.mtu.is_none());
-    }
-
-    // Some variations that should succeed.
-    client_config
-        .set_mtu(&Some(64))
-        .unwrap();
-    assert_eq!(client_config.mtu.unwrap(), 59);
-
-    client_config
-        .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 1))
-        .unwrap();
-    assert_eq!(client_config.mtu.unwrap(), 1);
-
-    client_config.set_mtu(&None).unwrap();
-    assert!(client_config.mtu.is_none());
-}
