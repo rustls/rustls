@@ -697,9 +697,7 @@ impl Codec for ClientExtension {
             ExtensionType::EchOuterExtensions => {
                 ClientExtension::EchOuterExtensions(OuterExtensions::read(&mut sub)?)
             }
-            ExtensionType::EchIsInner if !sub.any_left() => {
-                ClientExtension::ClientHelloInnerIndication
-            }
+            ExtensionType::EchIsInner => ClientExtension::ClientHelloInnerIndication,
             ExtensionType::EarlyData if !sub.any_left() => ClientExtension::EarlyData,
             _ => ClientExtension::Unknown(UnknownExtension::read(typ, &mut sub)),
         };

@@ -136,7 +136,7 @@ mod test {
     use crate::internal::msgs::enums::ExtensionType::ECPointFormats;
     use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
     use crate::msgs::codec::{Codec, Reader};
-    use crate::msgs::enums::ExtensionType::{Cookie, EllipticCurves, KeyShare};
+    use crate::msgs::enums::ExtensionType::{EllipticCurves, KeyShare};
     use crate::msgs::enums::*;
     use crate::msgs::handshake::*;
     use crate::ProtocolVersion;
@@ -250,60 +250,63 @@ mod test {
 
     #[test]
     fn test_encode_client_hello_inner() {
-        let original_hello = get_sample_clienthellopayload();
-        let original_ext_length = original_hello.extensions.len();
-        let original_session_id = original_hello.session_id;
-        let original_random = original_hello.random.clone();
-        let outer_exts = vec![Cookie, KeyShare, ECPointFormats, EllipticCurves];
-        let config = &get_ech_config()[0];
-        let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
-        let ech_context =
-            EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config).unwrap();
-        let (hello, encoded_inner) = encode_inner_hello(original_hello, &ech_context, &outer_exts);
-        assert_eq!(hello.session_id, original_session_id);
-        assert_eq!(hello.random, original_random);
-        // Return hello should not have a PSK
-        assert!(
-            hello
-                .find_extension(ExtensionType::PreSharedKey)
-                .is_none()
-        );
+        let ext_vecs = vec![vec![KeyShare, ECPointFormats, EllipticCurves], vec![]];
+        for outer_exts in ext_vecs {
+            let original_hello = get_sample_clienthellopayload();
+            let original_ext_length = original_hello.extensions.len();
+            let original_session_id = original_hello.session_id;
+            let original_random = original_hello.random.clone();
+            let config = &get_ech_config()[0];
+            let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
+            let ech_context =
+                EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config).unwrap();
+            let (hello, encoded_inner) =
+                encode_inner_hello(original_hello, &ech_context, &outer_exts);
+            assert_eq!(hello.session_id, original_session_id);
+            assert_eq!(hello.random, original_random);
+            // Return hello should not have a PSK
+            assert!(
+                hello
+                    .find_extension(ExtensionType::PreSharedKey)
+                    .is_none()
+            );
 
-        let mut reader = Reader::init(&encoded_inner);
-        let decoded = ClientHelloPayload::read(&mut reader).unwrap();
-        assert_eq!(decoded.session_id, SessionID::empty());
-        assert_ne!(decoded.session_id, original_session_id);
-        assert_ne!(decoded.random, original_random);
+            let mut reader = Reader::init(&encoded_inner);
+            let decoded = ClientHelloPayload::read(&mut reader).unwrap();
+            assert_eq!(decoded.session_id, SessionID::empty());
+            assert_ne!(decoded.session_id, original_session_id);
+            assert_ne!(decoded.random, original_random);
 
-        // The compressed extensions, plus two for the outer_extensions and ech_is_inner.
-        let expected_length = original_ext_length - outer_exts.len() + 2;
-        assert_eq!(decoded.extensions.len(), expected_length);
-        let decoded_outer = decoded
-            .find_extension(ExtensionType::EchOuterExtensions)
+            // The compressed extensions, plus two for the outer_extensions and ech_is_inner.
+            let expected_length = original_ext_length - outer_exts.len() + 2;
+            assert_eq!(decoded.extensions.len(), expected_length);
+            let decoded_outer = decoded
+                .find_extension(ExtensionType::EchOuterExtensions)
+                .unwrap();
+            let outers = match decoded_outer {
+                EchOuterExtensions(outer_exts) => Some(outer_exts),
+                _ => None,
+            }
             .unwrap();
-        let outers = match decoded_outer {
-            EchOuterExtensions(outer_exts) => Some(outer_exts),
-            _ => None,
-        }
-        .unwrap();
-        assert_eq!(outers.len(), outer_exts.len());
-        for ext_type in outers.iter() {
-            assert!(outer_exts.contains(ext_type));
-        }
+            assert_eq!(outers.len(), outer_exts.len());
+            for ext_type in outers.iter() {
+                assert!(outer_exts.contains(ext_type));
+            }
 
-        // All of the old extensions except for PSK
-        let old_len = original_ext_length - 1;
-        assert_eq!(hello.extensions.len(), old_len);
-        assert!(
-            decoded
-                .find_extension(ExtensionType::PreSharedKey)
-                .is_some()
-        );
-        assert!(
-            decoded
-                .find_extension(ExtensionType::EchIsInner)
-                .is_some()
-        );
+            // All of the old extensions except for PSK
+            let old_len = original_ext_length - 1;
+            assert_eq!(hello.extensions.len(), old_len);
+            assert!(
+                decoded
+                    .find_extension(ExtensionType::PreSharedKey)
+                    .is_some()
+            );
+            assert!(
+                decoded
+                    .find_extension(ExtensionType::EchIsInner)
+                    .is_some()
+            );
+        }
     }
 
     #[test]
@@ -314,7 +317,7 @@ mod test {
             let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
             let ech_context =
                 EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config).unwrap();
-            let outer_exts = vec![Cookie, KeyShare, ECPointFormats, EllipticCurves];
+            let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
             let original_hello = get_sample_clienthellopayload();
             let (hello, encoded_inner) =
                 encode_inner_hello(original_hello, &ech_context, &outer_exts);
