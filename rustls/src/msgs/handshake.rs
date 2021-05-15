@@ -2485,7 +2485,7 @@ impl Codec for ClientEch {
 
 #[derive(Clone, Debug)]
 pub struct ServerEch {
-    retry_configs: ECHConfigList,
+    pub(crate) retry_configs: ECHConfigList,
 }
 
 impl Codec for ServerEch {

@@ -1260,3 +1260,43 @@ fn client_outer_aad_roundtrip() {
     assert_eq!(aad.enc, aad_2.enc);
     assert_eq!(aad.outer_hello, aad_2.outer_hello);
 }
+
+#[test]
+fn client_ech_roundtrip() {
+    let client_ech = ClientEch {
+        cipher_suite: HpkeSymmetricCipherSuite::default(),
+        config_id: 0,
+        enc: PayloadU16(b"enc".to_vec()),
+        payload: PayloadU16(b"payload".to_vec()),
+    };
+    let mut bytes = Vec::new();
+    client_ech.encode(&mut bytes);
+    let mut rd = Reader::init(&bytes);
+    let client_ech2 = ClientEch::read(&mut rd)
+        .unwrap()
+        .clone();
+    assert_eq!(client_ech.cipher_suite, client_ech2.cipher_suite);
+    assert_eq!(client_ech.config_id, client_ech2.config_id);
+    assert_eq!(client_ech.enc, client_ech2.enc);
+    assert_eq!(client_ech.payload, client_ech2.payload);
+}
+
+#[test]
+fn server_ech_roundtrip() {
+    const BASE64_ECHCONFIGS: &str = "AEj+CgBEuwAgACCYKvleXJQ16RUURAsG1qTRN70ob5ewCDH6NuzE97K8MAAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAA=";
+    let bytes = base64::decode(&BASE64_ECHCONFIGS).unwrap();
+    let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
+    let server_ech = ServerEch {
+        retry_configs: configs,
+    };
+    let mut bytes = Vec::new();
+    server_ech.encode(&mut bytes);
+    let mut rd = Reader::init(&bytes);
+    let server_ech2 = ServerEch::read(&mut rd)
+        .unwrap()
+        .clone();
+    assert_eq!(
+        server_ech.retry_configs.len(),
+        server_ech2.retry_configs.len()
+    );
+}

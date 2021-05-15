@@ -109,7 +109,7 @@ pub enum Error {
     /// Couldn't find a suitable HPKE cipher suite for ECH
     NoHpkeConfig,
 
-   /// The MTU value supplied to the client was too small.
+    /// The MTU value supplied to the client was too small.
     MtuTooSmall,
 }
 
