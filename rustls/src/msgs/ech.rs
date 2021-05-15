@@ -371,7 +371,9 @@ mod test {
                     payload: PayloadU16::new(payload),
                 };
 
-                hello.extensions.push(ClientExtension::EncryptedClientHello(client_ech));
+                hello
+                    .extensions
+                    .push(ClientExtension::EncryptedClientHello(client_ech));
             }
         }
     }
