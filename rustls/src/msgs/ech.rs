@@ -319,7 +319,7 @@ mod test {
                 EchHrrContext::new(dns_name.to_owned(), &config.contents.hpke_key_config).unwrap();
             let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
             let original_hello = get_sample_clienthellopayload();
-            let (hello, encoded_inner) =
+            let (mut hello, encoded_inner) =
                 encode_inner_hello(original_hello, &ech_context, &outer_exts);
             let pk_r = HpkePublicKey::from(
                 config
@@ -349,7 +349,7 @@ mod test {
                         .contents
                         .hpke_key_config
                         .config_id,
-                    enc: PayloadU16::new(enc),
+                    enc: PayloadU16::new(enc.clone()),
                     outer_hello: PayloadU24::new(encoded_hello),
                 };
 
@@ -360,6 +360,18 @@ mod test {
                     .seal(aad.as_slice(), encoded_inner.as_slice())
                     .unwrap();
                 assert!(payload.len() > 0);
+
+                let client_ech = ClientEch {
+                    cipher_suite: suite.clone(),
+                    config_id: config
+                        .contents
+                        .hpke_key_config
+                        .config_id,
+                    enc: PayloadU16::new(enc),
+                    payload: PayloadU16::new(payload),
+                };
+
+                hello.extensions.push(ClientExtension::EncryptedClientHello(client_ech));
             }
         }
     }
