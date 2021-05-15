@@ -1300,3 +1300,16 @@ fn server_ech_roundtrip() {
         server_ech2.retry_configs.len()
     );
 }
+
+#[test]
+fn bogus_ech_value_reads() {
+    let bogus = b"asdklfjas;dklfjasd;lkfjas;lkfjas".to_vec();
+    let mut rd = Reader::init(&bogus);
+    assert!(HpkeKeyConfig::read(&mut rd).is_none());
+    let mut rd = Reader::init(&bogus);
+    assert!(ECHConfigContents::read(&mut rd).is_none());
+    let mut rd = Reader::init(&bogus);
+    assert!(ClientEch::read(&mut rd).is_none());
+    let mut rd = Reader::init(&bogus);
+    assert!(ClientHelloOuterAAD::read(&mut rd).is_none());
+}
