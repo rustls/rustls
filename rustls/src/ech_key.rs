@@ -63,9 +63,13 @@ impl EchKey {
 }
 
 impl Codec for EchKey {
+    // TODO: This serialization is odd, but it's the way Cloudflare did it in their test values,
+    // which I borrowed. This should be fixed if something like this struct is kept in the end.
     fn encode(&self, bytes: &mut Vec<u8>) {
         PayloadU16(self.private_key.as_slice().to_vec()).encode(bytes);
-        self.config.encode(bytes);
+        let mut config_bytes = Vec::new();
+        self.config.encode(&mut config_bytes);
+        PayloadU16(config_bytes).encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<EchKey> {
@@ -90,6 +94,7 @@ mod test {
             KEM::DHKEM_P256_HKDF_SHA256,
             &HpkeSymmetricCipherSuite::default(),
         );
+        assert!(format!("{:?}", p256).starts_with("EchKeyPair {"));
         let (private_key, public_key) = p256.key_pair.into_keys();
         assert_eq!(private_key.as_slice().len(), 32);
         assert_eq!(public_key.as_slice().len(), 65);
@@ -147,6 +152,7 @@ mod test {
             .as_slice()
             .to_vec();
         let key = EchKey::new(0, x25519, domain);
+        assert!(format!("{:?}", key).starts_with("EchKey {"));
 
         assert_eq!(key.private_key.as_slice().to_vec(), private_key);
         assert_eq!(key.config.version, ECHVersion::V10);
@@ -205,6 +211,20 @@ mod test {
             keys.push(EchKey::read(reader).unwrap());
         }
         keys
+    }
+
+    #[test]
+    fn round_trip() {
+        let keys = decode_ech_keys();
+        let mut bytes = Vec::new();
+        keys[0].encode(&mut bytes);
+        let mut rd = Reader::init(&bytes);
+        assert_eq!(
+            keys[0].private_key,
+            EchKey::read(&mut rd)
+                .unwrap()
+                .private_key
+        );
     }
 
     #[test]
