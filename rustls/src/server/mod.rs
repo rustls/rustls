@@ -350,11 +350,8 @@ impl Connection for ServerConnection {
         self.common.send_close_notify()
     }
 
-    fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.data
-            .client_cert_chain
-            .as_ref()
-            .map(|chain| chain.to_vec())
+    fn peer_certificates(&self) -> Option<&[key::Certificate]> {
+        self.data.client_cert_chain.as_deref()
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {

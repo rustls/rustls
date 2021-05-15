@@ -463,12 +463,12 @@ impl Connection for ClientConnection {
         self.common.send_close_notify()
     }
 
-    fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn peer_certificates(&self) -> Option<&[key::Certificate]> {
         if self.data.server_cert_chain.is_empty() {
             return None;
         }
 
-        Some(self.data.server_cert_chain.to_vec())
+        Some(&self.data.server_cert_chain)
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {

@@ -322,7 +322,7 @@ fn client_can_get_server_cert() {
             do_handshake(&mut client, &mut server);
 
             let certs = client.peer_certificates();
-            assert_eq!(certs, Some(kt.get_chain()));
+            assert_eq!(certs, Some(kt.get_chain().as_slice()));
         }
     }
 }
@@ -361,7 +361,7 @@ fn server_can_get_client_cert() {
             do_handshake(&mut client, &mut server);
 
             let certs = server.peer_certificates();
-            assert_eq!(certs, Some(kt.get_client_chain()));
+            assert_eq!(certs, Some(kt.get_client_chain().as_slice()));
         }
     }
 }

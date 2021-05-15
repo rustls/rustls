@@ -226,7 +226,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    fn peer_certificates(&self) -> Option<Vec<key::Certificate>>;
+    fn peer_certificates(&self) -> Option<&[key::Certificate]>;
 
     /// Retrieves the protocol agreed with the peer via ALPN.
     ///
