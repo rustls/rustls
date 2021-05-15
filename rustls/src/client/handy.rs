@@ -93,7 +93,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
         _acceptable_issuers: &[&[u8]],
         _sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
-        Some(self.0.clone())
+        Some(Arc::clone(&self.0))
     }
 
     fn has_certs(&self) -> bool {

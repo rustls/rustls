@@ -153,19 +153,26 @@ impl ClientConfig {
 
     /// Sets MTU to `mtu`.  If None, the default is used.
     /// If Some(x) then x must be greater than 5 bytes.
-    pub fn set_mtu(&mut self, mtu: &Option<usize>) {
+    pub fn set_mtu(&mut self, mtu: &Option<usize>) -> Result<(), Error> {
         // Internally our MTU relates to fragment size, and does
         // not include the TLS header overhead.
         //
         // Externally the MTU is the whole packet size.  The difference
         // is PACKET_OVERHEAD.
-        if let Some(x) = *mtu {
-            use crate::msgs::fragmenter;
-            debug_assert!(x > fragmenter::PACKET_OVERHEAD);
-            self.mtu = Some(x - fragmenter::PACKET_OVERHEAD);
-        } else {
-            self.mtu = None;
-        }
+        let mtu = match mtu {
+            Some(mtu) => *mtu,
+            None => {
+                self.mtu = None;
+                return Ok(());
+            }
+        };
+
+        use crate::msgs::fragmenter;
+        let mtu = mtu
+            .checked_sub(fragmenter::PACKET_OVERHEAD + 1)
+            .ok_or(Error::MtuTooSmall)?;
+        self.mtu = Some(mtu + 1);
+        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -316,7 +323,6 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    config: Arc<ClientConfig>,
     common: ConnectionCommon,
     state: Option<hs::NextState>,
     data: ClientConnectionData,
@@ -334,20 +340,19 @@ impl ClientConnection {
     /// we behave in the TLS protocol, `hostname` is the
     /// hostname of who we want to talk to.
     pub fn new(
-        config: &Arc<ClientConfig>,
+        config: Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
         Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
     }
 
     fn new_inner(
-        config: &Arc<ClientConfig>,
+        config: Arc<ClientConfig>,
         hostname: webpki::DnsNameRef,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut new = ClientConnection {
-            config: config.clone(),
             common: ConnectionCommon::new(config.mtu, true),
             state: None,
             data: ClientConnectionData::new(),
@@ -357,10 +362,14 @@ impl ClientConnection {
         let mut cx = hs::ClientContext {
             common: &mut new.common,
             data: &mut new.data,
-            config: &new.config,
         };
 
-        new.state = Some(hs::start_handshake(hostname.into(), extra_exts, &mut cx)?);
+        new.state = Some(hs::start_handshake(
+            hostname.into(),
+            extra_exts,
+            config,
+            &mut cx,
+        )?);
         Ok(new)
     }
 
@@ -432,7 +441,7 @@ impl Connection for ClientConnection {
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.common
-            .process_new_packets(&mut self.state, &mut self.data, &self.config)
+            .process_new_packets(&mut self.state, &mut self.data)
     }
 
     fn wants_read(&self) -> bool {
@@ -461,12 +470,12 @@ impl Connection for ClientConnection {
         self.common.send_close_notify()
     }
 
-    fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
+    fn peer_certificates(&self) -> Option<&[key::Certificate]> {
         if self.data.server_cert_chain.is_empty() {
             return None;
         }
 
-        Some(self.data.server_cert_chain.to_vec())
+        Some(&self.data.server_cert_chain)
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -558,7 +567,7 @@ impl quic::QuicExt for ClientConnection {
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
         self.common
-            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
+            .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
@@ -581,7 +590,7 @@ pub trait ClientQuicExt {
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
     fn new_quic(
-        config: &Arc<ClientConfig>,
+        config: Arc<ClientConfig>,
         quic_version: quic::Version,
         hostname: webpki::DnsNameRef,
         params: Vec<u8>,

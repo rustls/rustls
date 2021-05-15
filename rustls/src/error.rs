@@ -108,6 +108,9 @@ pub enum Error {
 
     /// Couldn't find a suitable HPKE cipher suite for ECH
     NoHpkeConfig,
+
+   /// The MTU value supplied to the client was too small.
+    MtuTooSmall,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -158,6 +161,7 @@ impl fmt::Display for Error {
             Error::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
+            Error::MtuTooSmall => write!(f, "the supplied MTU was too small"),
             Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
@@ -216,6 +220,7 @@ mod tests {
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
             Error::NoHpkeConfig,
+            Error::MtuTooSmall,
         ];
 
         for err in all {

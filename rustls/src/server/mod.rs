@@ -219,7 +219,6 @@ impl ServerConfig {
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
-    config: Arc<ServerConfig>,
     common: ConnectionCommon,
     state: Option<Box<dyn hs::State>>,
     data: ServerConnectionData,
@@ -228,13 +227,12 @@ pub struct ServerConnection {
 impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new(config: &Arc<ServerConfig>) -> ServerConnection {
+    pub fn new(config: Arc<ServerConfig>) -> ServerConnection {
         Self::from_config(config, vec![])
     }
 
-    fn from_config(config: &Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
         ServerConnection {
-            config: config.clone(),
             common: ConnectionCommon::new(config.mtu, false),
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
             data: ServerConnectionData::default(),
@@ -323,7 +321,7 @@ impl Connection for ServerConnection {
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.common
-            .process_new_packets(&mut self.state, &mut self.data, &self.config)
+            .process_new_packets(&mut self.state, &mut self.data)
     }
 
     fn wants_read(&self) -> bool {
@@ -352,11 +350,8 @@ impl Connection for ServerConnection {
         self.common.send_close_notify()
     }
 
-    fn peer_certificates(&self) -> Option<Vec<key::Certificate>> {
-        self.data
-            .client_cert_chain
-            .as_ref()
-            .map(|chain| chain.to_vec())
+    fn peer_certificates(&self) -> Option<&[key::Certificate]> {
+        self.data.client_cert_chain.as_deref()
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
@@ -453,7 +448,7 @@ impl quic::QuicExt for ServerConnection {
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         quic::read_hs(&mut self.common, plaintext)?;
         self.common
-            .process_new_handshake_messages(&mut self.state, &mut self.data, &self.config)
+            .process_new_handshake_messages(&mut self.state, &mut self.data)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
@@ -476,7 +471,7 @@ pub trait ServerQuicExt {
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
     fn new_quic(
-        config: &Arc<ServerConfig>,
+        config: Arc<ServerConfig>,
         quic_version: quic::Version,
         params: Vec<u8>,
     ) -> Result<ServerConnection, Error> {

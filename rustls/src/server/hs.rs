@@ -22,6 +22,7 @@ use crate::server::common::ActiveCertifiedKey;
 use crate::server::{tls12, tls13, ServerConnectionData};
 
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
@@ -42,7 +43,6 @@ pub(super) trait State: Send + Sync {
 }
 
 impl<'a> crate::conn::HandleState for Box<dyn State> {
-    type Config = ServerConfig;
     type Data = ServerConnectionData;
 
     fn handle(
@@ -50,13 +50,8 @@ impl<'a> crate::conn::HandleState for Box<dyn State> {
         message: Message,
         data: &mut Self::Data,
         common: &mut ConnectionCommon,
-        config: &Self::Config,
     ) -> Result<Self, Error> {
-        let mut cx = ServerContext {
-            common,
-            data,
-            config,
-        };
+        let mut cx = ServerContext { common, data };
         self.handle(&mut cx, message)
     }
 }
@@ -64,7 +59,6 @@ impl<'a> crate::conn::HandleState for Box<dyn State> {
 pub(super) struct ServerContext<'a> {
     pub(super) common: &'a mut ConnectionCommon,
     pub(super) data: &'a mut ServerConnectionData,
-    pub(super) config: &'a ServerConfig,
 }
 
 pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
@@ -115,6 +109,7 @@ impl ExtensionProcessing {
 
     pub(super) fn process_common(
         &mut self,
+        config: &ServerConfig,
         cx: &mut ServerContext<'_>,
         #[allow(unused_variables)] // #[cfg(feature = "quic")] only
         suite: &'static SupportedCipherSuite,
@@ -125,7 +120,7 @@ impl ExtensionProcessing {
         extra_exts: Vec<ServerExtension>,
     ) -> Result<(), Error> {
         // ALPN
-        let our_protocols = &cx.config.alpn_protocols;
+        let our_protocols = &config.alpn_protocols;
         let maybe_their_protocols = hello.get_alpn_extension();
         if let Some(their_protocols) = maybe_their_protocols {
             let their_protocols = their_protocols.to_slices();
@@ -173,7 +168,7 @@ impl ExtensionProcessing {
                 }
 
                 if let Some(resume) = resumedata {
-                    if cx.config.max_early_data_size > 0
+                    if config.max_early_data_size > 0
                         && hello.early_data_extension_offered()
                         && resume.version == cx.common.negotiated_version.unwrap()
                         && resume.cipher_suite == suite.suite
@@ -280,6 +275,7 @@ impl ExtensionProcessing {
 }
 
 pub struct ExpectClientHello {
+    pub config: Arc<ServerConfig>,
     pub extra_exts: Vec<ServerExtension>,
     pub transcript: HandshakeHash,
     pub session_id: SessionID,
@@ -289,11 +285,9 @@ pub struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub fn new(
-        server_config: &ServerConfig,
-        extra_exts: Vec<ServerExtension>,
-    ) -> ExpectClientHello {
+    pub fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> ExpectClientHello {
         let mut ech = ExpectClientHello {
+            config,
             extra_exts,
             transcript: HandshakeHash::new(),
             session_id: SessionID::empty(),
@@ -302,10 +296,7 @@ impl ExpectClientHello {
             send_ticket: false,
         };
 
-        if server_config
-            .verifier
-            .offer_client_auth()
-        {
+        if ech.config.verifier.offer_client_auth() {
             ech.transcript.set_client_auth_enabled();
         }
 
@@ -317,10 +308,10 @@ impl State for ExpectClientHello {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let client_hello =
             require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
-        let tls13_enabled = cx
+        let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
-        let tls12_enabled = cx
+        let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2);
         trace!("we got a clienthello {:?}", client_hello);
@@ -426,7 +417,7 @@ impl State for ExpectClientHello {
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
         // So: reduce the offered sigschemes to those compatible with the
         // intersection of ciphersuites.
-        let mut common_suites = cx.config.cipher_suites.clone();
+        let mut common_suites = self.config.cipher_suites.clone();
         common_suites.retain(|scs| {
             client_hello
                 .cipher_suites
@@ -456,7 +447,7 @@ impl State for ExpectClientHello {
             let alpn_slices = alpn_protocols.as_deref();
             let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
 
-            let certkey = cx
+            let certkey = self
                 .config
                 .cert_resolver
                 .resolve(client_hello);
@@ -471,12 +462,12 @@ impl State for ExpectClientHello {
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
         let suitable_suites =
-            suites::reduce_given_sigalg(&cx.config.cipher_suites, certkey.get_key().algorithm());
+            suites::reduce_given_sigalg(&self.config.cipher_suites, certkey.get_key().algorithm());
 
         // And version
         let suitable_suites = suites::reduce_given_version(&suitable_suites, version);
 
-        let suite = if cx.config.ignore_client_order {
+        let suite = if self.config.ignore_client_order {
             suites::choose_ciphersuite_preferring_server(
                 &client_hello.cipher_suites,
                 &suitable_suites,
@@ -513,6 +504,7 @@ impl State for ExpectClientHello {
 
         if cx.common.is_tls13() {
             tls13::CompleteClientHelloHandling {
+                config: self.config,
                 transcript: self.transcript,
                 suite,
                 randoms,
@@ -524,6 +516,7 @@ impl State for ExpectClientHello {
         } else {
             let suite = suites::Tls12CipherSuite::try_from(suite).unwrap();
             tls12::CompleteClientHelloHandling {
+                config: self.config,
                 transcript: self.transcript,
                 session_id: self.session_id,
                 suite,
