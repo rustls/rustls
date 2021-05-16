@@ -303,7 +303,7 @@ impl<'a> io::Write for WriteEarlyData<'a> {
     }
 }
 
-/*
+#[allow(dead_code)]
 pub struct EncryptedHello<'a> {
     pub hostname: webpki::DnsNameRef<'a>,
 
@@ -314,11 +314,11 @@ pub struct EncryptedHello<'a> {
     // outer_only_exts?
 }
 
+#[allow(dead_code)]
 pub enum Hello<'a> {
     Hostname(webpki::DnsNameRef<'a>),
     EncryptedHello(EncryptedHello<'a>),
 }
-*/
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
