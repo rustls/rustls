@@ -3594,14 +3594,23 @@ fn check_client_max_fragment_size(size: usize) -> Option<Error> {
 
 #[test]
 fn bad_client_max_fragment_sizes() {
-    assert_eq!(check_client_max_fragment_size(31), Some(Error::BadMaxFragmentSize));
+    assert_eq!(
+        check_client_max_fragment_size(31),
+        Some(Error::BadMaxFragmentSize)
+    );
     assert_eq!(check_client_max_fragment_size(32), None);
     assert_eq!(check_client_max_fragment_size(64), None);
     assert_eq!(check_client_max_fragment_size(1460), None);
     assert_eq!(check_client_max_fragment_size(0x4000), None);
     assert_eq!(check_client_max_fragment_size(0x4005), None);
-    assert_eq!(check_client_max_fragment_size(0x4006), Some(Error::BadMaxFragmentSize));
-    assert_eq!(check_client_max_fragment_size(0xffff), Some(Error::BadMaxFragmentSize));
+    assert_eq!(
+        check_client_max_fragment_size(0x4006),
+        Some(Error::BadMaxFragmentSize)
+    );
+    assert_eq!(
+        check_client_max_fragment_size(0xffff),
+        Some(Error::BadMaxFragmentSize)
+    );
 }
 
 #[test]

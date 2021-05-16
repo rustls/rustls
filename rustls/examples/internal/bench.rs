@@ -479,7 +479,8 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
 
     let mfs_str = format!(
         "max_fragment_size:{}",
-        max_fragment_size.map(|v| v.to_string())
+        max_fragment_size
+            .map(|v| v.to_string())
             .unwrap_or("default".to_string())
     );
     let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
