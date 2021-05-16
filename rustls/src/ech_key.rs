@@ -34,7 +34,7 @@ impl EchKeyPair {
 #[derive(Debug)]
 pub struct EchKey {
     pub private_key: HpkePrivateKey,
-    pub config: ECHConfig,
+    pub config: EchConfig,
 }
 
 impl EchKey {
@@ -44,9 +44,9 @@ impl EchKey {
         let (private_key, public_key) = ekp.key_pair.into_keys();
         EchKey {
             private_key,
-            config: ECHConfig {
-                version: ECHVersion::V10,
-                contents: ECHConfigContents {
+            config: EchConfig {
+                version: EchVersion::V10,
+                contents: EchConfigContents {
                     hpke_key_config: HpkeKeyConfig {
                         config_id,
                         hpke_kem_id: ekp.kem_id,
@@ -75,7 +75,7 @@ impl Codec for EchKey {
     fn read(r: &mut Reader) -> Option<EchKey> {
         let private_key = PayloadU16::read(r)?;
         let config_payload = PayloadU16::read(r)?;
-        let config = ECHConfig::read(&mut Reader::init(&config_payload.into_inner()))?;
+        let config = EchConfig::read(&mut Reader::init(&config_payload.into_inner()))?;
         Some(EchKey {
             private_key: HpkePrivateKey::from(private_key.into_inner()),
             config,
@@ -155,7 +155,7 @@ mod test {
         assert!(format!("{:?}", key).starts_with("EchKey {"));
 
         assert_eq!(key.private_key.as_slice().to_vec(), private_key);
-        assert_eq!(key.config.version, ECHVersion::V10);
+        assert_eq!(key.config.version, EchVersion::V10);
         assert_eq!(
             key.config
                 .contents
@@ -176,8 +176,8 @@ mod test {
     const ECH_CONFIGS: &str = "AJD+CgBEAAAgACCLVO6NYnbfqTVUAx5GfKwpsOKDEukOz8AZ0SjArwqIGQAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAD+CgBEAQAgACBnVG7W7IZfo30dizn+kATcrBRdEMEcPQF2dryg/i5UTAAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAA=";
     const ECH_KEYS: &str = "ACDhS0q2cTU1Qzi6hPM4BQ/HLnbEUZyWdY2GbmS0DVkumgBIAfUARAAAIAAgi1TujWJ236k1VAMeRnysKbDigxLpDs/AGdEowK8KiBkABAABAAEAAAATY2xvdWRmbGFyZS1lc25pLmNvbQAAACBmNj/zQe6OT/MR/MM39G6kwMJCJEXpdvTAkbdHErlgXwBIAfUARAEAIAAgZ1Ru1uyGX6N9HYs5/pAE3KwUXRDBHD0Bdna8oP4uVEwABAABAAEAAAATY2xvdWRmbGFyZS1lc25pLmNvbQAA";
 
-    fn test_decode_for_kem(config: &ECHConfig, kem: KEM) {
-        assert_eq!(config.version, ECHVersion::V10);
+    fn test_decode_for_kem(config: &EchConfig, kem: KEM) {
+        assert_eq!(config.version, EchVersion::V10);
         let name = String::from_utf8(
             config
                 .contents
@@ -230,7 +230,7 @@ mod test {
     #[test]
     fn test_seal_and_open() {
         let bytes = base64::decode(&ECH_CONFIGS).unwrap();
-        let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
+        let configs = EchConfigList::read(&mut Reader::init(&bytes)).unwrap();
         assert_eq!(configs.len(), 2);
         for config in &configs {
             test_decode_for_kem(&config, KEM::DHKEM_X25519_HKDF_SHA256);

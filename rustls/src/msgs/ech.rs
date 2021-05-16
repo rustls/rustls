@@ -2,7 +2,7 @@ use crate::msgs::codec::*;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
 use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, ECHConfig, HpkeKeyConfig, Random, SessionID,
+    ClientExtension, ClientHelloPayload, EchConfig, HpkeKeyConfig, Random, SessionID,
 };
 use crate::rand;
 use crate::Error;
@@ -14,7 +14,7 @@ use webpki::DnsName;
 const HPKE_INFO: &[u8; 8] = b"tls ech\0";
 
 #[allow(dead_code)]
-fn hpke_info(config: &ECHConfig) -> Vec<u8> {
+fn hpke_info(config: &EchConfig) -> Vec<u8> {
     let mut info = Vec::with_capacity(128);
     info.extend_from_slice(HPKE_INFO);
     config.encode(&mut info);
@@ -145,10 +145,10 @@ mod test {
 
     const BASE64_ECHCONFIGS: &str = "AEj+CgBEuwAgACCYKvleXJQ16RUURAsG1qTRN70ob5ewCDH6NuzE97K8MAAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAA=";
 
-    fn get_ech_config() -> ECHConfigList {
-        // An ECHConfigList record from Cloudflare for "crypto.cloudflare.com", draft-10
+    fn get_ech_config() -> EchConfigList {
+        // An EchConfigList record from Cloudflare for "crypto.cloudflare.com", draft-10
         let bytes = base64::decode(&BASE64_ECHCONFIGS).unwrap();
-        let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
+        let configs = EchConfigList::read(&mut Reader::init(&bytes)).unwrap();
         assert_eq!(configs.len(), 1);
         configs
     }
@@ -157,7 +157,7 @@ mod test {
     fn test_echconfig_serialization() {
         let configs = get_ech_config();
         let config = &configs[0];
-        assert_eq!(config.version, ECHVersion::V10);
+        assert_eq!(config.version, EchVersion::V10);
         let name = String::from_utf8(
             config
                 .contents

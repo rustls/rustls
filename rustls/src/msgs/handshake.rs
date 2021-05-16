@@ -6,7 +6,7 @@ use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
 use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType};
-use crate::msgs::enums::{ECHVersion, AEAD, KDF, KEM};
+use crate::msgs::enums::{EchVersion, AEAD, KDF, KEM};
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
@@ -2401,14 +2401,14 @@ impl Codec for HpkeKeyConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct ECHConfigContents {
+pub struct EchConfigContents {
     pub hpke_key_config: HpkeKeyConfig,
     pub maximum_name_length: u16,
     pub public_name: PayloadU16,
     pub extensions: PayloadU16,
 }
 
-impl Codec for ECHConfigContents {
+impl Codec for EchConfigContents {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.hpke_key_config.encode(bytes);
         self.maximum_name_length.encode(bytes);
@@ -2416,8 +2416,8 @@ impl Codec for ECHConfigContents {
         self.extensions.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ECHConfigContents> {
-        Some(ECHConfigContents {
+    fn read(r: &mut Reader) -> Option<EchConfigContents> {
+        Some(EchConfigContents {
             hpke_key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u16::read(r)?,
             public_name: PayloadU16::read(r)?,
@@ -2427,12 +2427,12 @@ impl Codec for ECHConfigContents {
 }
 
 #[derive(Clone, Debug)]
-pub struct ECHConfig {
-    pub version: ECHVersion,
-    pub contents: ECHConfigContents,
+pub struct EchConfig {
+    pub version: EchVersion,
+    pub contents: EchConfigContents,
 }
 
-impl Codec for ECHConfig {
+impl Codec for EchConfig {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
         let mut contents = Vec::with_capacity(128);
@@ -2443,17 +2443,17 @@ impl Codec for ECHConfig {
         bytes.extend(contents);
     }
 
-    fn read(r: &mut Reader) -> Option<ECHConfig> {
-        let version = ECHVersion::read(r)?;
+    fn read(r: &mut Reader) -> Option<EchConfig> {
+        let version = EchVersion::read(r)?;
         let length = u16::read(r)?;
-        Some(ECHConfig {
+        Some(EchConfig {
             version,
-            contents: ECHConfigContents::read(&mut r.sub(length as usize)?)?,
+            contents: EchConfigContents::read(&mut r.sub(length as usize)?)?,
         })
     }
 }
 
-declare_u16_vec!(ECHConfigList, ECHConfig);
+declare_u16_vec!(EchConfigList, EchConfig);
 
 #[derive(Clone, Debug)]
 pub struct ClientEch {
@@ -2483,7 +2483,7 @@ impl Codec for ClientEch {
 
 #[derive(Clone, Debug)]
 pub struct ServerEch {
-    pub(crate) retry_configs: ECHConfigList,
+    pub(crate) retry_configs: EchConfigList,
 }
 
 impl Codec for ServerEch {
@@ -2493,7 +2493,7 @@ impl Codec for ServerEch {
 
     fn read(r: &mut Reader) -> Option<ServerEch> {
         Some(ServerEch {
-            retry_configs: ECHConfigList::read(r)?,
+            retry_configs: EchConfigList::read(r)?,
         })
     }
 }

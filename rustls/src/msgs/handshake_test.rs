@@ -1285,7 +1285,7 @@ fn client_ech_roundtrip() {
 fn server_ech_roundtrip() {
     const BASE64_ECHCONFIGS: &str = "AEj+CgBEuwAgACCYKvleXJQ16RUURAsG1qTRN70ob5ewCDH6NuzE97K8MAAEAAEAAQAAABNjbG91ZGZsYXJlLWVzbmkuY29tAAA=";
     let bytes = base64::decode(&BASE64_ECHCONFIGS).unwrap();
-    let configs = ECHConfigList::read(&mut Reader::init(&bytes)).unwrap();
+    let configs = EchConfigList::read(&mut Reader::init(&bytes)).unwrap();
     let server_ech = ServerEch {
         retry_configs: configs,
     };
@@ -1307,7 +1307,7 @@ fn bogus_ech_value_reads() {
     let mut rd = Reader::init(&bogus);
     assert!(HpkeKeyConfig::read(&mut rd).is_none());
     let mut rd = Reader::init(&bogus);
-    assert!(ECHConfigContents::read(&mut rd).is_none());
+    assert!(EchConfigContents::read(&mut rd).is_none());
     let mut rd = Reader::init(&bogus);
     assert!(ClientEch::read(&mut rd).is_none());
     let mut rd = Reader::init(&bogus);

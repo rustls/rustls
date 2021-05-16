@@ -798,7 +798,7 @@ enum_builder! {
 enum_builder! {
     /// The `ECH` protocol version.
     @U16
-    EnumName: ECHVersion;
+    EnumName: EchVersion;
     EnumVal{
         V10 => 0xfe0a
     }
