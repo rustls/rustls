@@ -2,6 +2,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::{BorrowedOpaqueMessage, OpaqueMessage};
 use std::collections::VecDeque;
+use crate::Error;
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -17,11 +18,11 @@ impl MessageFragmenter {
     /// `max_fragment_size` is the maximum fragment size that will be produced --
     /// this includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
     /// up to 10 bytes.
-    pub fn new(max_fragment_size: Option<usize>) -> Result<MessageFragmenter, ()> {
+    pub fn new(max_fragment_size: Option<usize>) -> Result<MessageFragmenter, Error> {
         let max_fragment_len = match max_fragment_size {
             Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
             None => MAX_FRAGMENT_LEN,
-            _ => return Err(()),
+            _ => return Err(Error::BadMaxFragmentSize),
         };
 
         Ok(MessageFragmenter {
