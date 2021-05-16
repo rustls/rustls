@@ -97,7 +97,7 @@ obsolete cryptography.
 * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
 * ALPN support.
 * SNI support.
-* Tunable MTU to make TLS messages match size of underlying transport.
+* Tunable fragment size to make TLS messages match size of underlying transport.
 * Optional use of vectored IO to minimise system calls.
 * TLS1.2 session resumption.
 * TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).

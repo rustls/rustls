@@ -267,7 +267,7 @@ pub struct TlsClient {
     pub no_sni: bool,
     pub insecure: bool,
     pub verbose: bool,
-    pub mtu: Option<usize>,
+    pub max_fragment_size: Option<usize>,
     pub expect_fails: bool,
     pub expect_output: Vec<String>,
     pub expect_log: Vec<String>,
@@ -287,7 +287,7 @@ impl TlsClient {
             no_sni: false,
             insecure: false,
             verbose: false,
-            mtu: None,
+            max_fragment_size: None,
             suites: Vec::new(),
             protos: Vec::new(),
             expect_fails: false,
@@ -332,8 +332,8 @@ impl TlsClient {
         self
     }
 
-    pub fn mtu(&mut self, mtu: usize) -> &mut TlsClient {
-        self.mtu = Some(mtu);
+    pub fn max_fragment_size(&mut self, max_fragment_size: usize) -> &mut TlsClient {
+        self.max_fragment_size = Some(max_fragment_size);
         self
     }
 
@@ -370,7 +370,7 @@ impl TlsClient {
     }
 
     pub fn go(&mut self) -> Option<()> {
-        let mtustring;
+        let fragstring;
         let portstring = self.port.to_string();
         let mut args = Vec::<&str>::new();
         args.push(&self.hostname);
@@ -446,10 +446,10 @@ impl TlsClient {
             args.push("--verbose");
         }
 
-        if self.mtu.is_some() {
-            args.push("--mtu");
-            mtustring = self.mtu.unwrap().to_string();
-            args.push(&mtustring);
+        if self.max_fragment_size.is_some() {
+            args.push("--max-frag-size");
+            fragstring = self.max_fragment_size.unwrap().to_string();
+            args.push(&fragstring);
         }
 
         let output = process::Command::new(tlsclient_find())

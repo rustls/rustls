@@ -274,7 +274,7 @@ fn make_server_config(
     params: &BenchmarkParam,
     client_auth: ClientAuth,
     resume: Resumption,
-    mtu: Option<usize>,
+    max_fragment_size: Option<usize>,
 ) -> ServerConfig {
     let client_auth = match client_auth {
         ClientAuth::Yes => {
@@ -304,7 +304,7 @@ fn make_server_config(
     }
 
     cfg.versions.replace(&[params.version]);
-    cfg.mtu = mtu;
+    cfg.max_fragment_size = max_fragment_size;
     cfg
 }
 
@@ -372,7 +372,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
     for _ in 0..rounds {
         let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
         let mut client = ClientConnection::new(Arc::clone(&client_config), dns_name).unwrap();
-        let mut server = ServerConnection::new(Arc::clone(&server_config));
+        let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
         server_time += time(|| {
             transfer(&mut client, &mut server);
@@ -436,18 +436,18 @@ fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
     while do_handshake_step(client, server) {}
 }
 
-fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) {
+fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: Option<usize>) {
     let client_config = Arc::new(make_client_config(params, ClientAuth::No, Resumption::No));
     let server_config = Arc::new(make_server_config(
         params,
         ClientAuth::No,
         Resumption::No,
-        mtu,
+        max_fragment_size,
     ));
 
     let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
     let mut client = ClientConnection::new(client_config, dns_name).unwrap();
-    let mut server = ServerConnection::new(Arc::clone(&server_config));
+    let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
     do_handshake(&mut client, &mut server);
 
@@ -477,9 +477,9 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) 
         drain(&mut client, buf.len());
     }
 
-    let mtu_str = format!(
-        "mtu:{}",
-        mtu.map(|v| v.to_string())
+    let mfs_str = format!(
+        "max_fragment_size:{}",
+        max_fragment_size.map(|v| v.to_string())
             .unwrap_or("default".to_string())
     );
     let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
@@ -487,14 +487,14 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, mtu: Option<usize>) 
         "bulk\t{:?}\t{:?}\t{}\tsend\t{:.2}\tMB/s",
         params.version,
         params.ciphersuite.suite,
-        mtu_str,
+        mfs_str,
         total_mbs / time_send
     );
     println!(
         "bulk\t{:?}\t{:?}\t{}\trecv\t{:.2}\tMB/s",
         params.version,
         params.ciphersuite.suite,
-        mtu_str,
+        mfs_str,
         total_mbs / time_recv
     );
 }
@@ -515,7 +515,7 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     let mut clients = Vec::with_capacity(conn_count);
 
     for _i in 0..conn_count {
-        servers.push(ServerConnection::new(Arc::clone(&server_config)));
+        servers.push(ServerConnection::new(Arc::clone(&server_config)).unwrap());
         let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
         clients.push(ClientConnection::new(Arc::clone(&client_config), dns_name).unwrap());
     }
@@ -576,12 +576,12 @@ fn selected_tests(mut args: env::Args) {
                             .expect("3rd arg must be plaintext size integer")
                     })
                     .unwrap_or(1048576);
-                let mtu = args.next().map(|arg| {
+                let mfs = args.next().map(|arg| {
                     arg.parse::<usize>()
-                        .expect("4th arg must be mtu integer")
+                        .expect("4th arg must be max_fragment_size integer")
                 });
                 for param in lookup_matching_benches(&suite).iter() {
-                    bench_bulk(param, len, mtu);
+                    bench_bulk(param, len, mfs);
                 }
             }
             None => {

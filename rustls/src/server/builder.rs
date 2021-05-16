@@ -47,7 +47,7 @@ use std::sync::Arc;
 /// ```
 ///
 /// # Resulting [`ServerConfig`] defaults
-/// * [`ServerConfig::mtu`]: the default is `None`: TLS packets are not fragmented to fit in single IP packet.
+/// * [`ServerConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
 /// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
@@ -140,7 +140,7 @@ impl ServerConfigBuilderWithClientAuth {
             verifier: self.verifier,
             cert_resolver,
             ignore_client_order: false,
-            mtu: None,
+            max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),

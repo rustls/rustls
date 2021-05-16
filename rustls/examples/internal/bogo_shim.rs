@@ -37,7 +37,7 @@ macro_rules! println_err(
 struct Options {
     port: u16,
     server: bool,
-    mtu: Option<usize>,
+    max_fragment: Option<usize>,
     resumes: usize,
     verify_peer: bool,
     require_any_client_cert: bool,
@@ -84,7 +84,7 @@ impl Options {
         Options {
             port: 0,
             server: false,
-            mtu: None,
+            max_fragment: None,
             resumes: 0,
             verify_peer: false,
             tickets: true,
@@ -363,7 +363,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         .unwrap();
 
     cfg.session_storage = rustls::ServerSessionMemoryCache::new(32);
-    cfg.mtu = opts.mtu;
+    cfg.max_fragment_size = opts.max_fragment;
 
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
@@ -454,7 +454,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
     let persist = ClientCacheWithoutKxHints::new();
     cfg.session_storage = persist;
     cfg.enable_sni = opts.use_sni;
-    cfg.mtu = opts.mtu;
+    cfg.max_fragment_size = opts.max_fragment;
 
     if !opts.protocols.is_empty() {
         cfg.alpn_protocols = opts
@@ -808,8 +808,8 @@ fn main() {
                 opts.max_version = Some(ProtocolVersion::Unknown(max));
             }
             "-max-send-fragment" => {
-                let mtu = args.remove(0).parse::<usize>().unwrap();
-                opts.mtu = Some(mtu);
+                let max_fragment = args.remove(0).parse::<usize>().unwrap();
+                opts.max_fragment = Some(max_fragment + 5); // ours includes header
             }
             "-read-size" => {
                 let rdsz = args.remove(0).parse::<usize>().unwrap();
@@ -1091,7 +1091,7 @@ fn main() {
         if opts.server {
             let scfg = Arc::clone(scfg.as_ref().unwrap());
             let s = if opts.quic_transport_params.is_empty() {
-                rustls::ServerConnection::new(scfg)
+                rustls::ServerConnection::new(scfg).unwrap()
             } else {
                 rustls::ServerConnection::new_quic(
                     scfg,

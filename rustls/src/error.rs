@@ -106,8 +106,9 @@ pub enum Error {
     /// An incoming connection did not support any known application protocol.
     NoApplicationProtocol,
 
-    /// The MTU value supplied to the client was too small.
-    MtuTooSmall,
+    /// The `max_fragment_size` value supplied in configuration was too small,
+    /// or too large.
+    BadMaxFragmentSize,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -157,7 +158,7 @@ impl fmt::Display for Error {
             Error::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
-            Error::MtuTooSmall => write!(f, "the supplied MTU was too small"),
+            Error::BadMaxFragmentSize => write!(f, "the supplied max_fragment_size was too small or large"),
             Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
@@ -215,7 +216,7 @@ mod tests {
             Error::HandshakeNotComplete,
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
-            Error::MtuTooSmall,
+            Error::BadMaxFragmentSize,
         ];
 
         for err in all {

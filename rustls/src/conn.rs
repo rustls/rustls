@@ -9,7 +9,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::MessageDeframer;
 use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
-use crate::msgs::fragmenter::{MessageFragmenter, MAX_FRAGMENT_LEN};
+use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::hsjoiner::HandshakeJoiner;
 use crate::msgs::message::{BorrowedOpaqueMessage, Message, MessagePayload, OpaqueMessage};
 use crate::prf;
@@ -575,8 +575,8 @@ pub struct ConnectionCommon {
 }
 
 impl ConnectionCommon {
-    pub fn new(mtu: Option<usize>, client: bool) -> ConnectionCommon {
-        ConnectionCommon {
+    pub fn new(max_fragment_size: Option<usize>, client: bool) -> Result<ConnectionCommon, Error> {
+        Ok(ConnectionCommon {
             negotiated_version: None,
             is_client: client,
             record_layer: record_layer::RecordLayer::new(),
@@ -590,14 +590,15 @@ impl ConnectionCommon {
             error: None,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
-            message_fragmenter: MessageFragmenter::new(mtu.unwrap_or(MAX_FRAGMENT_LEN)),
+            message_fragmenter: MessageFragmenter::new(max_fragment_size)
+                .map_err(|_| Error::BadMaxFragmentSize)?,
             received_plaintext: ChunkVecBuffer::new(),
             sendable_plaintext: ChunkVecBuffer::new(),
             sendable_tls: ChunkVecBuffer::new(),
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
-        }
+        })
     }
 
     pub fn reader(&mut self) -> Reader {
