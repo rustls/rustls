@@ -237,7 +237,10 @@ impl ServerConnection {
         Self::from_config(config, vec![])
     }
 
-    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Result<Self, Error> {
+    fn from_config(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+    ) -> Result<Self, Error> {
         Ok(ServerConnection {
             common: ConnectionCommon::new(config.max_fragment_size, false)?,
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),

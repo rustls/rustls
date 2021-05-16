@@ -7,10 +7,10 @@ use crate::kx::SupportedKxGroup;
 use crate::log::trace;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
-use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::{CertificatePayload, ClientExtension};
+use crate::msgs::enums::{CipherSuite, ExtensionType};
+use crate::msgs::handshake::{CertificatePayload, ClientExtension, EchConfig};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
@@ -301,6 +301,21 @@ impl<'a> io::Write for WriteEarlyData<'a> {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+pub struct EncryptedHello<'a> {
+    pub hostname: webpki::DnsNameRef<'a>,
+
+    pub ech_config: EchConfig,
+
+    /// Extensions that will be referenced in the ClientHelloOuter by the EncryptedClientHelloInner.
+    pub compressed_extensions: Vec<ExtensionType>,
+    // outer_only_exts?
+}
+
+pub enum Hello<'a> {
+    Hostname(webpki::DnsNameRef<'a>),
+    EncryptedHello(EncryptedHello<'a>),
 }
 
 /// This represents a single TLS client connection.
