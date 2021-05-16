@@ -220,6 +220,8 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// second certifies the first, the third certifies the second, and
     /// so on.
     ///
+    /// This is made available for both full and resumed handshakes.
+    ///
     /// For clients, this is the certificate chain of the server.
     ///
     /// For servers, this is the certificate chain of the client,

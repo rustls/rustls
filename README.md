@@ -27,7 +27,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     pass the end-entity and intermediate certificates separately.  This means rustls deals with the case
     where the certificate chain is empty, rather than leaving that to ServerCertVerifier/ClientCertVerifier
     implementation.
-  - There are now 30% fewer unreachable unwraps in the core crate thanks to large refactoring efforts.
+  - There are now 40% fewer unreachable unwraps in the core crate thanks to large refactoring efforts.
   - *Breaking API change*: the `WebPkiError` variant of `rustls::Error` now includes which operation failed.
   - *Breaking API changes*: These public API items have been renamed to meet naming guidelines:
     - `rustls::TLSError` to `rustls::Error`.
@@ -47,6 +47,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - *Breaking API change*: `ResolvesServerCert::resolve` and `ResolvesClientCert::resolve` now return
     `Option<Arc<CertifiedKey>>` instead of `Option<CertifiedKey>`.  `CertifiedKey` is now an immutable
     type.
+  - *Breaking API change*: `peer_certificates` returns a borrow rather than a copy on the
+    internally stored certificate chain.
 * 0.19.1 (2021-04-17):
   - Backport: fix security issue: there was a reachable panic in servers if a client
     sent an invalid `ClientECDiffieHellmanPublic` encoding, due to an errant `unwrap()`
