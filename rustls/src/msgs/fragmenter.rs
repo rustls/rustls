@@ -1,8 +1,8 @@
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::{BorrowedOpaqueMessage, OpaqueMessage};
-use std::collections::VecDeque;
 use crate::Error;
+use std::collections::VecDeque;
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
