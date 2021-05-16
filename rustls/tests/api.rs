@@ -528,7 +528,7 @@ fn server_cert_resolve_with_sni() {
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("the-value-from-sni")).unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config));
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(err.is_err(), true);
@@ -549,7 +549,7 @@ fn server_cert_resolve_with_alpn() {
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("sni-value")).unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config));
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(err.is_err(), true);
@@ -569,7 +569,7 @@ fn client_trims_terminating_dot() {
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("some-host.com.")).unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config));
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(err.is_err(), true);
@@ -592,7 +592,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
     });
 
     let mut client = ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
-    let mut server = ServerConnection::new(Arc::new(server_config));
+    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
     let err = do_handshake_until_error(&mut client, &mut server);
     assert_eq!(err.is_err(), true);
@@ -650,7 +650,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
         for client_config in AllClientVersions::new(client_config) {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), dns_name("value-not-sent")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config));
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(err.is_err(), true);
@@ -670,7 +670,7 @@ fn client_checks_server_certificate_with_given_name() {
                 dns_name("not-the-right-hostname.com"),
             )
             .unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config));
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
@@ -869,7 +869,7 @@ mod test_clientverifier {
             let client_config = make_client_config_with_auth(*kt);
 
             for client_config in AllClientVersions::new(client_config) {
-                let mut server = ServerConnection::new(Arc::clone(&server_config));
+                let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
                 let mut client =
                     ClientConnection::new(Arc::new(client_config), dns_name("notlocalhost"))
                         .unwrap();
@@ -903,7 +903,7 @@ mod test_clientverifier {
             let client_config = make_client_config(*kt);
 
             for client_config in AllClientVersions::new(client_config) {
-                let mut server = ServerConnection::new(Arc::clone(&server_config));
+                let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
                 let mut client =
                     ClientConnection::new(Arc::new(client_config), dns_name("notlocalhost"))
                         .unwrap();
@@ -938,7 +938,7 @@ mod test_clientverifier {
 
             for client_config in AllClientVersions::new(client_config) {
                 println!("Failing: {:?}", client_config.versions);
-                let mut server = ServerConnection::new(Arc::clone(&server_config));
+                let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
                 let mut client =
                     ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
                 let errs = do_handshake_until_both_error(&mut client, &mut server);
@@ -971,7 +971,7 @@ mod test_clientverifier {
             let client_config = make_client_config_with_auth(*kt);
 
             for client_config in AllClientVersions::new(client_config) {
-                let mut server = ServerConnection::new(Arc::clone(&server_config));
+                let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
                 let mut client =
                     ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
                 let err = do_handshake_until_error(&mut client, &mut server);
@@ -999,7 +999,7 @@ mod test_clientverifier {
             let client_config = make_client_config_with_auth(*kt);
 
             for client_config in AllClientVersions::new(client_config) {
-                let mut server = ServerConnection::new(Arc::clone(&server_config));
+                let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
                 let mut client =
                     ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
                 let errs = do_handshake_until_both_error(&mut client, &mut server);
@@ -1961,7 +1961,7 @@ fn server_exposes_offered_sni() {
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("second.testserver.com"))
                 .unwrap();
-        let mut server = ServerConnection::new(Arc::new(make_server_config(kt)));
+        let mut server = ServerConnection::new(Arc::new(make_server_config(kt))).unwrap();
 
         assert_eq!(None, server.sni_hostname());
         do_handshake(&mut client, &mut server);
@@ -1977,7 +1977,7 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("SECOND.TESTServer.com"))
                 .unwrap();
-        let mut server = ServerConnection::new(Arc::new(make_server_config(kt)));
+        let mut server = ServerConnection::new(Arc::new(make_server_config(kt))).unwrap();
 
         assert_eq!(None, server.sni_hostname());
         do_handshake(&mut client, &mut server);
@@ -1995,7 +1995,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
     let server_config = Arc::new(server_config);
 
     for client_config in AllClientVersions::new(make_client_config(kt)) {
-        let mut server = ServerConnection::new(Arc::clone(&server_config));
+        let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("thisdoesNOTexist.com"))
                 .unwrap();
@@ -2029,13 +2029,13 @@ fn sni_resolver_works() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(Arc::clone(&server_config));
+    let mut server1 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
     let mut client1 =
         ClientConnection::new(Arc::new(make_client_config(kt)), dns_name("localhost")).unwrap();
     let err = do_handshake_until_error(&mut client1, &mut server1);
     assert_eq!(err, Ok(()));
 
-    let mut server2 = ServerConnection::new(Arc::clone(&server_config));
+    let mut server2 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
     let mut client2 =
         ClientConnection::new(Arc::new(make_client_config(kt)), dns_name("notlocalhost")).unwrap();
     let err = do_handshake_until_error(&mut client2, &mut server2);
@@ -3576,9 +3576,7 @@ fn test_client_mtu_reduction() {
 
     for kt in ALL_KEY_TYPES.iter() {
         let mut client_config = make_client_config(*kt);
-        client_config
-            .set_mtu(&Some(64))
-            .unwrap();
+        client_config.max_fragment_size = Some(64);
         let mut client =
             ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
         let writes = collect_write_lengths(&mut client);
@@ -3588,29 +3586,22 @@ fn test_client_mtu_reduction() {
     }
 }
 
-#[test]
-fn too_small_mtu() {
-    use rustls::internal::msgs::fragmenter;
+fn check_client_max_fragment_size(size: usize) -> Option<Error> {
     let mut client_config = make_client_config(KeyType::ED25519);
-    for m in 0..fragmenter::PACKET_OVERHEAD + 1 {
-        let result = client_config.set_mtu(&Some(m));
-        assert!(result.is_err());
-        assert!(client_config.mtu.is_none());
-    }
+    client_config.max_fragment_size = Some(size);
+    ClientConnection::new(Arc::new(client_config), dns_name("localhost")).err()
+}
 
-    // Some variations that should succeed.
-    client_config
-        .set_mtu(&Some(64))
-        .unwrap();
-    assert_eq!(client_config.mtu.unwrap(), 59);
-
-    client_config
-        .set_mtu(&Some(fragmenter::PACKET_OVERHEAD + 1))
-        .unwrap();
-    assert_eq!(client_config.mtu.unwrap(), 1);
-
-    client_config.set_mtu(&None).unwrap();
-    assert!(client_config.mtu.is_none());
+#[test]
+fn bad_client_max_fragment_sizes() {
+    assert_eq!(check_client_max_fragment_size(31), Some(Error::BadMaxFragmentSize));
+    assert_eq!(check_client_max_fragment_size(32), None);
+    assert_eq!(check_client_max_fragment_size(64), None);
+    assert_eq!(check_client_max_fragment_size(1460), None);
+    assert_eq!(check_client_max_fragment_size(0x4000), None);
+    assert_eq!(check_client_max_fragment_size(0x4005), None);
+    assert_eq!(check_client_max_fragment_size(0x4006), Some(Error::BadMaxFragmentSize));
+    assert_eq!(check_client_max_fragment_size(0xffff), Some(Error::BadMaxFragmentSize));
 }
 
 #[test]

@@ -20,7 +20,7 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
 
-    let frg = fragmenter::MessageFragmenter::new(5);
+    let frg = fragmenter::MessageFragmenter::new(Some(32)).unwrap();
     let mut out = VecDeque::new();
     frg.fragment(message::OpaqueMessage::from(msg), &mut out);
 

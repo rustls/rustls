@@ -167,8 +167,14 @@ pub struct ServerConfig {
     /// which is supported by the client.
     pub ignore_client_order: bool,
 
-    /// Our MTU.  If None, we don't limit TLS message sizes.
-    pub mtu: Option<usize>,
+    /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
+    /// message lengths except to the 2**16 limit specified in the standard.
+    ///
+    /// rustls enforces an arbitrary minimum of 32 bytes for this field.
+    /// Out of range values are reported as errors from ServerConnection::new.
+    ///
+    /// Setting this value to the TCP MSS may improve latency for stream-y workloads.
+    pub max_fragment_size: Option<usize>,
 
     /// How to store client sessions.
     pub session_storage: Arc<dyn StoresServerSessions + Send + Sync>,
@@ -227,16 +233,16 @@ pub struct ServerConnection {
 impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new(config: Arc<ServerConfig>) -> ServerConnection {
+    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         Self::from_config(config, vec![])
     }
 
-    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
-        ServerConnection {
-            common: ConnectionCommon::new(config.mtu, false),
+    fn from_config(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Result<Self, Error> {
+        Ok(ServerConnection {
+            common: ConnectionCommon::new(config.max_fragment_size, false)?,
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
             data: ServerConnectionData::default(),
-        }
+        })
     }
 
     /// Retrieves the SNI hostname, if any, used to select the certificate and
@@ -491,7 +497,7 @@ pub trait ServerQuicExt {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
         };
-        let mut new = ServerConnection::from_config(config, vec![ext]);
+        let mut new = ServerConnection::from_config(config, vec![ext])?;
         new.common.protocol = Protocol::Quic;
         Ok(new)
     }

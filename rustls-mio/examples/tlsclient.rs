@@ -320,7 +320,7 @@ Options:
     --no-sni            Disable server name indication support.
     --insecure          Disable certificate verification.
     --verbose           Emit log output.
-    --mtu MTU           Limit outgoing messages to MTU bytes.
+    --max-frag-size M   Limit outgoing messages to M bytes.
     --version, -v       Show tool version.
     --help, -h          Show this screen.
 ";
@@ -333,7 +333,7 @@ struct Args {
     flag_protover: Vec<String>,
     flag_suite: Vec<String>,
     flag_proto: Vec<String>,
-    flag_mtu: Option<usize>,
+    flag_max_frag_size: Option<usize>,
     flag_cafile: Option<String>,
     flag_cache: Option<String>,
     flag_no_tickets: bool,
@@ -537,7 +537,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         .iter()
         .map(|proto| proto.as_bytes().to_vec())
         .collect();
-    config.mtu = args.flag_mtu;
+    config.max_fragment_size = args.flag_max_frag_size;
 
     apply_dangerous_options(args, &mut config);
 

@@ -101,8 +101,14 @@ pub struct ClientConfig {
     /// How we store session data or tickets.
     pub session_storage: Arc<dyn StoresClientSessions>,
 
-    /// Our MTU.  If None, we don't limit TLS message sizes.
-    pub mtu: Option<usize>,
+    /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
+    /// message lengths except to the 2**16 limit specified in the standard.
+    ///
+    /// rustls enforces an arbitrary minimum of 32 bytes for this field.
+    /// Out of range values are reported as errors from ClientConnection::new.
+    ///
+    /// Setting this value to the TCP MSS may improve latency for stream-y workloads.
+    pub max_fragment_size: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
@@ -149,30 +155,6 @@ impl ClientConfig {
                 .cipher_suites
                 .iter()
                 .any(|cs| cs.usable_for_version(v))
-    }
-
-    /// Sets MTU to `mtu`.  If None, the default is used.
-    /// If Some(x) then x must be greater than 5 bytes.
-    pub fn set_mtu(&mut self, mtu: &Option<usize>) -> Result<(), Error> {
-        // Internally our MTU relates to fragment size, and does
-        // not include the TLS header overhead.
-        //
-        // Externally the MTU is the whole packet size.  The difference
-        // is PACKET_OVERHEAD.
-        let mtu = match mtu {
-            Some(mtu) => *mtu,
-            None => {
-                self.mtu = None;
-                return Ok(());
-            }
-        };
-
-        use crate::msgs::fragmenter;
-        let mtu = mtu
-            .checked_sub(fragmenter::PACKET_OVERHEAD + 1)
-            .ok_or(Error::MtuTooSmall)?;
-        self.mtu = Some(mtu + 1);
-        Ok(())
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -353,7 +335,7 @@ impl ClientConnection {
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut new = ClientConnection {
-            common: ConnectionCommon::new(config.mtu, true),
+            common: ConnectionCommon::new(config.max_fragment_size, true)?,
             state: None,
             data: ClientConnectionData::new(),
         };

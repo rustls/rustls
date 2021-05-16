@@ -5,21 +5,28 @@ use std::collections::VecDeque;
 
 pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
+pub const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
 pub struct MessageFragmenter {
     max_frag: usize,
 }
 
 impl MessageFragmenter {
-    /// Make a new fragmenter.  `max_fragment_len` is the maximum
-    /// fragment size that will be produced -- this does not
-    /// include overhead (so a `max_fragment_len` of 5 will produce
-    /// 10 byte packets).
-    pub fn new(max_fragment_len: usize) -> MessageFragmenter {
-        debug_assert!(max_fragment_len <= MAX_FRAGMENT_LEN);
-        MessageFragmenter {
+    /// Make a new fragmenter.
+    ///
+    /// `max_fragment_size` is the maximum fragment size that will be produced --
+    /// this includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
+    /// up to 10 bytes.
+    pub fn new(max_fragment_size: Option<usize>) -> Result<MessageFragmenter, ()> {
+        let max_fragment_len = match max_fragment_size {
+            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
+            None => MAX_FRAGMENT_LEN,
+            _ => return Err(()),
+        };
+
+        Ok(MessageFragmenter {
             max_frag: max_fragment_len,
-        }
+        })
     }
 
     /// Take the Message `msg` and re-fragment it into new
@@ -91,35 +98,36 @@ mod tests {
     fn smoke() {
         let typ = ContentType::Handshake;
         let version = ProtocolVersion::TLSv1_2;
+        let data: Vec<u8> = (1..70u8).collect();
         let m = OpaqueMessage {
             typ,
             version,
-            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
+            payload: Payload::new(data),
         };
 
-        let frag = MessageFragmenter::new(3);
+        let frag = MessageFragmenter::new(Some(32)).unwrap();
         let mut q = VecDeque::new();
         frag.fragment(m, &mut q);
         msg_eq(
             q.pop_front(),
-            PACKET_OVERHEAD + 3,
+            32,
             &typ,
             &version,
-            b"\x01\x02\x03",
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
         );
         msg_eq(
             q.pop_front(),
-            PACKET_OVERHEAD + 3,
+            32,
             &typ,
             &version,
-            b"\x04\x05\x06",
+            &[28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54],
         );
         msg_eq(
             q.pop_front(),
-            PACKET_OVERHEAD + 2,
+            20,
             &typ,
             &version,
-            b"\x07\x08",
+            &[55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
         );
         assert_eq!(q.len(), 0);
     }
@@ -132,7 +140,7 @@ mod tests {
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
-        let frag = MessageFragmenter::new(8);
+        let frag = MessageFragmenter::new(Some(32)).unwrap();
         let mut q = VecDeque::new();
         frag.fragment(m, &mut q);
         msg_eq(

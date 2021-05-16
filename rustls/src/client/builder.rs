@@ -49,7 +49,7 @@ use std::sync::Arc;
 /// ```
 ///
 /// # Resulting [`ConfigConfig`] defaults
-/// * [`ClientConfig::mtu`]: the default is `None`: TLS packets are not fragmented to fit in single IP packet.
+/// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
 /// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
@@ -131,7 +131,7 @@ impl ClientConfigBuilderWithCertVerifier {
             kx_groups: self.kx_groups,
             alpn_protocols: Vec::new(),
             session_storage: handy::ClientSessionMemoryCache::new(256),
-            mtu: None,
+            max_fragment_size: None,
             client_auth_cert_resolver,
             enable_tickets: true,
             versions: self.versions,
