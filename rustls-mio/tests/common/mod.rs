@@ -448,7 +448,10 @@ impl TlsClient {
 
         if self.max_fragment_size.is_some() {
             args.push("--max-frag-size");
-            fragstring = self.max_fragment_size.unwrap().to_string();
+            fragstring = self
+                .max_fragment_size
+                .unwrap()
+                .to_string();
             args.push(&fragstring);
         }
 

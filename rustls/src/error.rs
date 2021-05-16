@@ -158,7 +158,9 @@ impl fmt::Display for Error {
             Error::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
-            Error::BadMaxFragmentSize => write!(f, "the supplied max_fragment_size was too small or large"),
+            Error::BadMaxFragmentSize => {
+                write!(f, "the supplied max_fragment_size was too small or large")
+            }
             Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
