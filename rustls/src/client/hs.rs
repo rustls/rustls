@@ -420,7 +420,7 @@ fn emit_client_hello_for_retry(
         using_ems,
         transcript,
         early_key_schedule,
-        hello_details: hello_details,
+        hello_details,
         offered_key_share: key_share,
         session_id,
         sent_tls13_fake_ccs,
