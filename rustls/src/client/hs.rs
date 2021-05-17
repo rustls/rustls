@@ -28,7 +28,7 @@ use crate::ticketer::TimeBase;
 use crate::SupportedCipherSuite;
 
 use crate::client::common::ClientHelloDetails;
-use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData, Hello};
+use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData, ServerIdentity};
 
 use std::sync::Arc;
 
@@ -111,7 +111,7 @@ fn find_session(
 }
 
 pub(super) fn start_handshake(
-    hello: Hello,
+    server_id: ServerIdentity,
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -127,7 +127,7 @@ pub(super) fn start_handshake(
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut session_id: Option<SessionID> = None;
-    let hostname = hello.get_outer_hostname();
+    let hostname = server_id.get_outer_hostname();
     let mut resuming_session = find_session(
         hostname,
         &config,
@@ -178,7 +178,7 @@ pub(super) fn start_handshake(
         hello_details,
         session_id,
         None,
-        hello,
+        server_id,
         key_share,
         extra_exts,
         may_send_sct_list,
@@ -189,7 +189,7 @@ pub(super) fn start_handshake(
 struct ExpectServerHello {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    hello: Hello,
+    server_id: ServerIdentity,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -217,7 +217,7 @@ fn emit_client_hello_for_retry(
     mut hello_details: ClientHelloDetails,
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
-    hello: Hello,
+    server_id: ServerIdentity,
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
@@ -247,7 +247,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
     if config.enable_sni {
-        exts.push(ClientExtension::make_sni(hello.get_outer_hostname()));
+        exts.push(ClientExtension::make_sni(server_id.get_outer_hostname()));
     }
     exts.push(ClientExtension::ECPointFormats(
         ECPointFormatList::supported(),
@@ -415,7 +415,7 @@ fn emit_client_hello_for_retry(
     let next = ExpectServerHello {
         config,
         resuming_session,
-        hello,
+        server_id,
         randoms,
         using_ems,
         transcript,
@@ -594,7 +594,7 @@ impl State for ExpectServerHello {
                 cx,
                 server_hello,
                 self.resuming_session,
-                self.hello
+                self.server_id
                     .get_outer_hostname()
                     .to_owned(),
                 self.randoms,
@@ -611,7 +611,7 @@ impl State for ExpectServerHello {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 dns_name: self
-                    .hello
+                    .server_id
                     .get_outer_hostname()
                     .to_owned(),
                 randoms: self.randoms,
@@ -758,7 +758,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.hello_details,
             Some(self.next.session_id),
             Some(&hrr),
-            self.next.hello,
+            self.next.server_id,
             Some(key_share),
             self.extra_exts,
             may_send_sct_list,

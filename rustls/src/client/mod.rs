@@ -304,7 +304,7 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 }
 
 #[allow(dead_code)]
-pub struct EncryptedHello {
+pub struct EncryptedClientHello {
     pub hostname: webpki::DnsName,
 
     pub ech_config: EchConfig,
@@ -315,16 +315,16 @@ pub struct EncryptedHello {
 }
 
 #[allow(dead_code)]
-pub enum Hello {
+pub enum ServerIdentity {
     Hostname(webpki::DnsName),
-    EncryptedHello(EncryptedHello),
+    EncryptedClientHello(EncryptedClientHello),
 }
 
-impl Hello {
+impl ServerIdentity {
     fn get_outer_hostname(&self) -> webpki::DnsNameRef {
         match self {
-            Hello::Hostname(name) => name.as_ref(),
-            Hello::EncryptedHello(encrypted) => encrypted
+            ServerIdentity::Hostname(name) => name.as_ref(),
+            ServerIdentity::EncryptedClientHello(encrypted) => encrypted
                 .ech_config
                 .contents
                 .public_name
@@ -355,30 +355,25 @@ impl ClientConnection {
         config: Arc<ClientConfig>,
         dns_name: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        Self::new_inner(
-            config,
-            Hello::Hostname(dns_name.to_owned()),
-            Vec::new(),
-            Protocol::Tcp,
-        )
+        Self::new_with_server_id(config, ServerIdentity::Hostname(dns_name.to_owned()))
     }
 
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `hello` configures the host we want to talk to.
-    pub fn new_with_hello(
+    pub fn new_with_server_id(
         config: Arc<ClientConfig>,
-        hello: Hello,
+        server_id: ServerIdentity,
     ) -> Result<ClientConnection, Error> {
-        Self::new_inner(config, hello, Vec::new(), Protocol::Tcp)
+        Self::new_inner(config, server_id, Vec::new(), Protocol::Tcp)
     }
 
     fn new_inner(
         config: Arc<ClientConfig>,
-        hello: Hello,
+        server_id: ServerIdentity,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        if let Hello::EncryptedHello(_h) = &hello {
+        if let ServerIdentity::EncryptedClientHello(_h) = &server_id {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
                 return Err(Error::General("TLS 1.3 support is required for ECH".into()));
             }
@@ -396,7 +391,7 @@ impl ClientConnection {
             data: &mut new.data,
         };
 
-        new.state = Some(hs::start_handshake(hello, extra_exts, config, &mut cx)?);
+        new.state = Some(hs::start_handshake(server_id, extra_exts, config, &mut cx)?);
         Ok(new)
     }
 
@@ -625,7 +620,7 @@ pub trait ClientQuicExt {
         Self::new_quic_with_hello(
             config,
             quic_version,
-            Hello::Hostname(hostname.to_owned()),
+            ServerIdentity::Hostname(hostname.to_owned()),
             params,
         )
     }
@@ -636,7 +631,7 @@ pub trait ClientQuicExt {
     fn new_quic_with_hello(
         config: Arc<ClientConfig>,
         quic_version: quic::Version,
-        hello: Hello,
+        server_id: ServerIdentity,
         params: Vec<u8>,
     ) -> Result<ClientConnection, Error> {
         if !config.supports_version(ProtocolVersion::TLSv1_3) {
@@ -650,7 +645,7 @@ pub trait ClientQuicExt {
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
 
-        ClientConnection::new_inner(config, hello, vec![ext], Protocol::Quic)
+        ClientConnection::new_inner(config, server_id, vec![ext], Protocol::Quic)
     }
 }
 
