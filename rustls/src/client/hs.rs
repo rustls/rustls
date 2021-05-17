@@ -28,7 +28,7 @@ use crate::ticketer::TimeBase;
 use crate::SupportedCipherSuite;
 
 use crate::client::common::ClientHelloDetails;
-use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData};
+use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData, Hello};
 
 use std::sync::Arc;
 
@@ -111,7 +111,7 @@ fn find_session(
 }
 
 pub(super) fn start_handshake(
-    dns_name: webpki::DnsName,
+    hello: Hello,
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -127,15 +127,16 @@ pub(super) fn start_handshake(
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut session_id: Option<SessionID> = None;
+    let hostname = hello.get_outer_hostname();
     let mut resuming_session = find_session(
-        dns_name.as_ref(),
+        hostname,
         &config,
         #[cfg(feature = "quic")]
         cx,
     );
 
     let key_share = if support_tls13 {
-        Some(tls13::initial_key_share(&config, dns_name.as_ref())?)
+        Some(tls13::initial_key_share(&config, hostname)?)
     } else {
         None
     };
@@ -177,7 +178,7 @@ pub(super) fn start_handshake(
         hello_details,
         session_id,
         None,
-        dns_name,
+        hello,
         key_share,
         extra_exts,
         may_send_sct_list,
@@ -188,12 +189,12 @@ pub(super) fn start_handshake(
 struct ExpectServerHello {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsName,
+    hello: Hello,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
-    hello: ClientHelloDetails,
+    hello_details: ClientHelloDetails,
     offered_key_share: Option<kx::KeyExchange>,
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
@@ -213,10 +214,10 @@ fn emit_client_hello_for_retry(
     using_ems: bool,
     mut transcript: HandshakeHash,
     mut sent_tls13_fake_ccs: bool,
-    mut hello: ClientHelloDetails,
+    mut hello_details: ClientHelloDetails,
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
-    dns_name: webpki::DnsName,
+    hello: Hello,
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
@@ -246,7 +247,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
     if config.enable_sni {
-        exts.push(ClientExtension::make_sni(dns_name.as_ref()));
+        exts.push(ClientExtension::make_sni(hello.get_outer_hostname()));
     }
     exts.push(ClientExtension::ECPointFormats(
         ECPointFormatList::supported(),
@@ -337,7 +338,7 @@ fn emit_client_hello_for_retry(
     };
 
     // Note what extensions we sent.
-    hello.sent_extensions = exts
+    hello_details.sent_extensions = exts
         .iter()
         .map(ClientExtension::get_type)
         .collect();
@@ -414,12 +415,12 @@ fn emit_client_hello_for_retry(
     let next = ExpectServerHello {
         config,
         resuming_session,
-        dns_name,
+        hello,
         randoms,
         using_ems,
         transcript,
         early_key_schedule,
-        hello,
+        hello_details: hello_details,
         offered_key_share: key_share,
         session_id,
         sent_tls13_fake_ccs,
@@ -529,7 +530,7 @@ impl State for ExpectServerHello {
 
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
         if self
-            .hello
+            .hello_details
             .server_sent_unsolicited_extensions(&server_hello.extensions, &allowed_unsolicited)
         {
             cx.common
@@ -593,12 +594,14 @@ impl State for ExpectServerHello {
                 cx,
                 server_hello,
                 self.resuming_session,
-                self.dns_name,
+                self.hello
+                    .get_outer_hostname()
+                    .to_owned(),
                 self.randoms,
                 suite,
                 self.transcript,
                 self.early_key_schedule,
-                self.hello,
+                self.hello_details,
                 // We always send a key share when TLS 1.3 is enabled.
                 self.offered_key_share.unwrap(),
                 self.sent_tls13_fake_ccs,
@@ -607,7 +610,10 @@ impl State for ExpectServerHello {
             tls12::CompleteServerHelloHandling {
                 config: self.config,
                 resuming_session: self.resuming_session,
-                dns_name: self.dns_name,
+                dns_name: self
+                    .hello
+                    .get_outer_hostname()
+                    .to_owned(),
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -726,7 +732,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let may_send_sct_list = self
             .next
-            .hello
+            .hello_details
             .server_may_send_sct_list();
 
         let key_share = match req_group {
@@ -749,10 +755,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.using_ems,
             self.next.transcript,
             self.next.sent_tls13_fake_ccs,
-            self.next.hello,
+            self.next.hello_details,
             Some(self.next.session_id),
             Some(&hrr),
-            self.next.dns_name,
+            self.next.hello,
             Some(key_share),
             self.extra_exts,
             may_send_sct_list,

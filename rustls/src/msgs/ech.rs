@@ -158,15 +158,14 @@ mod test {
         let configs = get_ech_config();
         let config = &configs[0];
         assert_eq!(config.version, EchVersion::V10);
-        let name = String::from_utf8(
+        assert_eq!(
+            b"cloudflare-esni.com",
             config
                 .contents
                 .public_name
-                .clone()
-                .into_inner(),
-        )
-        .unwrap();
-        assert_eq!("cloudflare-esni.com", name.as_str());
+                .as_ref()
+                .as_ref()
+        );
         assert_eq!(
             config
                 .contents

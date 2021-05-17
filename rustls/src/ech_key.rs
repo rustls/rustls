@@ -54,7 +54,7 @@ impl EchKey {
                         hpke_symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite::default()],
                     },
                     maximum_name_length: 255,
-                    public_name: PayloadU16::new(domain.as_ref().to_vec()),
+                    public_name: domain.to_owned(),
                     extensions: PayloadU16::empty(),
                 },
             },
@@ -178,15 +178,14 @@ mod test {
 
     fn test_decode_for_kem(config: &EchConfig, kem: KEM) {
         assert_eq!(config.version, EchVersion::V10);
-        let name = String::from_utf8(
+        assert_eq!(
+            b"cloudflare-esni.com",
             config
                 .contents
                 .public_name
-                .clone()
-                .into_inner(),
-        )
-        .unwrap();
-        assert_eq!("cloudflare-esni.com", name.as_str());
+                .as_ref()
+                .as_ref()
+        );
         assert_eq!(
             config
                 .contents
@@ -239,16 +238,7 @@ mod test {
         assert_eq!(keys.len(), 2);
 
         for key in keys {
-            let name = webpki::DnsNameRef::try_from_ascii(
-                key.config
-                    .contents
-                    .public_name
-                    .clone()
-                    .into_inner()
-                    .as_slice(),
-            )
-            .unwrap()
-            .to_owned();
+            let name = key.config.contents.public_name;
             let config_id = key
                 .config
                 .contents

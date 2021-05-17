@@ -2404,7 +2404,7 @@ impl Codec for HpkeKeyConfig {
 pub struct EchConfigContents {
     pub hpke_key_config: HpkeKeyConfig,
     pub maximum_name_length: u16,
-    pub public_name: PayloadU16,
+    pub public_name: webpki::DnsName,
     pub extensions: PayloadU16,
 }
 
@@ -2412,7 +2412,7 @@ impl Codec for EchConfigContents {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.hpke_key_config.encode(bytes);
         self.maximum_name_length.encode(bytes);
-        self.public_name.encode(bytes);
+        PayloadU16::encode_slice(self.public_name.as_ref().as_ref(), bytes);
         self.extensions.encode(bytes);
     }
 
@@ -2420,7 +2420,10 @@ impl Codec for EchConfigContents {
         Some(EchConfigContents {
             hpke_key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u16::read(r)?,
-            public_name: PayloadU16::read(r)?,
+            public_name: webpki::DnsName::from({
+                let payload = PayloadU16::read(r)?;
+                webpki::DnsNameRef::try_from_ascii(payload.into_inner().as_slice()).ok()?
+            }),
             extensions: PayloadU16::read(r)?,
         })
     }
