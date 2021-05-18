@@ -1,14 +1,12 @@
-use crate::msgs::codec::*;
+use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
-use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, EchConfig, HpkeKeyConfig, Random, SessionID,
-};
+use crate::msgs::handshake::{ClientExtension, ClientHelloPayload, EchConfig, Random, SessionID, EchConfigList, EchConfigContents};
 use crate::rand;
 use crate::Error;
 use hpke_rs::prelude::*;
 use hpke_rs::{Hpke, Mode};
-use webpki::DnsName;
+use webpki;
 
 #[allow(dead_code)]
 const HPKE_INFO: &[u8; 8] = b"tls ech\0";
@@ -22,41 +20,48 @@ fn hpke_info(config: &EchConfig) -> Vec<u8> {
 }
 
 #[allow(dead_code)]
-/// ECH data that's reused across HRR.
-pub struct EchHrrContext {
+pub struct EncryptedClientHello {
+    pub hostname: webpki::DnsName,
     pub hpke: Hpke,
-    pub name: DnsName,
-    pub config_id: u8,
+    pub config_contents: EchConfigContents,
     pub inner_random: [u8; 32],
+
+    /// Extensions that will be referenced in the ClientHelloOuter by the EncryptedClientHelloInner.
+    pub compressed_extensions: Vec<ExtensionType>,
+    // outer_only_exts?
 }
 
-impl EchHrrContext {
-    #[allow(dead_code)]
-    pub(crate) fn new(
-        name: DnsName,
-        hpke_key_config: &HpkeKeyConfig,
-    ) -> Result<EchHrrContext, Error> {
-        let hpke = hpke_key_config
-            .hpke_symmetric_cipher_suites
-            .iter()
-            .find_map(|suite| {
-                Some(hpke_rs::Hpke::new(
-                    Mode::Base,
-                    HpkeKemMode::try_from(hpke_key_config.hpke_kem_id.get_u16()).ok()?,
-                    HpkeKdfMode::try_from(suite.hpke_kdf_id.get_u16()).ok()?,
-                    HpkeAeadMode::try_from(suite.hpke_aead_id.get_u16()).ok()?,
-                ))
-            })
-            .ok_or(Error::NoHpkeConfig)?;
+impl EncryptedClientHello {
+    pub fn with_host_and_config_list(name: webpki::DnsNameRef, config_bytes: &Vec<u8>) -> Result<EncryptedClientHello, Error>  {
+        let configs: EchConfigList = EchConfigList::read(&mut Reader::init(config_bytes)).ok_or(Error::General("Couldn't parse ECH record.".to_string()))?;
+        let (config_contents, hpke) = configs.iter().find_map(|config| {
+            Some((config.contents.clone(),
+            config.contents.hpke_key_config
+                .hpke_symmetric_cipher_suites
+                .iter()
+                .find_map(|suite| {
+                    Some(hpke_rs::Hpke::new(
+                        Mode::Base,
+                        HpkeKemMode::try_from(config.contents.hpke_key_config.hpke_kem_id.get_u16()).ok()?,
+                        HpkeKdfMode::try_from(suite.hpke_kdf_id.get_u16()).ok()?,
+                        HpkeAeadMode::try_from(suite.hpke_aead_id.get_u16()).ok()?,
+                    ))
+                })?))
+        }).ok_or(Error::NoHpkeConfig)?;
+
+        // TODO: check for unknown mandatory extensions in config_contents (Section 4.1)
+        // Clients MUST parse the extension list and check for unsupported mandatory extensions.
+        // If an unsupported mandatory extension is present, clients MUST ignore the ECHConfig.
 
         let mut inner_random = [0u8; 32];
         rand::fill_random(&mut inner_random)?;
 
-        Ok(EchHrrContext {
+        Ok(EncryptedClientHello {
+            hostname: name.to_owned(),
             hpke,
-            name,
-            config_id: hpke_key_config.config_id,
+            config_contents,
             inner_random,
+            compressed_extensions: vec![]
         })
     }
 }
@@ -64,7 +69,7 @@ impl EchHrrContext {
 #[allow(dead_code)]
 fn encode_inner_hello(
     mut hello: ClientHelloPayload,
-    context: &EchHrrContext,
+    context: &EncryptedClientHello,
     outer_exts: &Vec<ExtensionType>,
 ) -> (ClientHelloPayload, Vec<u8>) {
     // Remove the ClientExtensions that match outer_exts.

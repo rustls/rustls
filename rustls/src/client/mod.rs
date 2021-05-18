@@ -5,12 +5,13 @@ use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::ech::EncryptedClientHello;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::{CipherSuite, ExtensionType};
-use crate::msgs::handshake::{CertificatePayload, ClientExtension, EchConfig};
+use crate::msgs::enums::CipherSuite;
+use crate::msgs::handshake::{CertificatePayload, ClientExtension};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
@@ -23,6 +24,7 @@ use std::fmt;
 use std::io::{self, IoSlice};
 use std::mem;
 use std::sync::Arc;
+use webpki;
 
 #[macro_use]
 mod hs;
@@ -303,20 +305,11 @@ impl<'a> io::Write for WriteEarlyData<'a> {
     }
 }
 
-#[allow(dead_code)]
-pub struct EncryptedClientHello {
-    pub hostname: webpki::DnsName,
-
-    pub ech_config: EchConfig,
-
-    /// Extensions that will be referenced in the ClientHelloOuter by the EncryptedClientHelloInner.
-    pub compressed_extensions: Vec<ExtensionType>,
-    // outer_only_exts?
-}
-
-#[allow(dead_code)]
+/// Ways to identify the server the client is connecting to.
 pub enum ServerIdentity {
+    /// Using a DNS name
     Hostname(webpki::DnsName),
+    /// Using an EncryptedClientHello (Inner and Outer DNS names)
     EncryptedClientHello(EncryptedClientHello),
 }
 
@@ -325,8 +318,7 @@ impl ServerIdentity {
         match self {
             ServerIdentity::Hostname(name) => name.as_ref(),
             ServerIdentity::EncryptedClientHello(encrypted) => encrypted
-                .ech_config
-                .contents
+                .config_contents
                 .public_name
                 .as_ref(),
         }
@@ -355,12 +347,12 @@ impl ClientConnection {
         config: Arc<ClientConfig>,
         dns_name: webpki::DnsNameRef,
     ) -> Result<ClientConnection, Error> {
-        Self::new_with_server_id(config, ServerIdentity::Hostname(dns_name.to_owned()))
+        Self::with_server_id(config, ServerIdentity::Hostname(dns_name.to_owned()))
     }
 
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `hello` configures the host we want to talk to.
-    pub fn new_with_server_id(
+    pub fn with_server_id(
         config: Arc<ClientConfig>,
         server_id: ServerIdentity,
     ) -> Result<ClientConnection, Error> {
@@ -617,7 +609,7 @@ pub trait ClientQuicExt {
         hostname: webpki::DnsNameRef,
         params: Vec<u8>,
     ) -> Result<ClientConnection, Error> {
-        Self::new_quic_with_hello(
+        Self::quic_with_server_id(
             config,
             quic_version,
             ServerIdentity::Hostname(hostname.to_owned()),
@@ -628,7 +620,7 @@ pub trait ClientQuicExt {
     /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    fn new_quic_with_hello(
+    fn quic_with_server_id(
         config: Arc<ClientConfig>,
         quic_version: quic::Version,
         server_id: ServerIdentity,

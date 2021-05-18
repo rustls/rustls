@@ -298,7 +298,7 @@ pub use crate::builder::{
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::StoresClientSessions;
-pub use crate::client::{ClientConfig, ClientConnection, WriteEarlyData};
+pub use crate::client::{ClientConfig, ClientConnection, ServerIdentity, WriteEarlyData};
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::error::Error;
 pub use crate::error::WebPkiOp;
