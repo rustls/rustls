@@ -8,9 +8,9 @@ use crate::log::trace;
 use crate::msgs::ech::EncryptedClientHello;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::enums::CipherSuite;
 use crate::msgs::handshake::{CertificatePayload, ClientExtension};
 use crate::sign;
 use crate::suites::SupportedCipherSuite;

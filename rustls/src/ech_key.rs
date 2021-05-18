@@ -86,7 +86,7 @@ impl Codec for EchKey {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::msgs::ech::EchHrrContext;
+    use crate::msgs::ech::EncryptedClientHello;
 
     #[test]
     fn test_gen_p256() {
@@ -238,16 +238,24 @@ mod test {
         assert_eq!(keys.len(), 2);
 
         for key in keys {
-            let name = key.config.contents.public_name;
+            let name = key.config.contents.public_name.clone();
+            let config_list: EchConfigList = vec![key.config.clone()];
+            let mut ech_bytes: Vec<u8> = Vec::new();
+            config_list.encode(&mut ech_bytes);
             let config_id = key
                 .config
                 .contents
                 .hpke_key_config
                 .config_id;
-            let ech_context =
-                EchHrrContext::new(name.clone(), &key.config.contents.hpke_key_config).unwrap();
-            assert_eq!(ech_context.config_id, config_id);
-            assert_eq!(ech_context.name, name);
+            let ech =
+                EncryptedClientHello::with_host_and_config_list(name.as_ref(), &ech_bytes).unwrap();
+            assert_eq!(
+                ech.config_contents
+                    .hpke_key_config
+                    .config_id,
+                config_id
+            );
+            assert_eq!(ech.hostname, name);
 
             let info = b"HPKE self test info";
             let aad = b"HPKE self test aad";
@@ -259,11 +267,11 @@ mod test {
                     .hpke_public_key
                     .into_inner(),
             );
-            let (encapped_secret, cipher_text) = ech_context
+            let (encapped_secret, cipher_text) = ech
                 .hpke
                 .seal(&public_key, info, aad, plain_txt, None, None, None)
                 .unwrap();
-            let decrypted_text = ech_context
+            let decrypted_text = ech
                 .hpke
                 .open(
                     &encapped_secret,
