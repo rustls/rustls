@@ -310,14 +310,14 @@ pub enum ServerIdentity {
     /// Using a DNS name
     Hostname(webpki::DnsName),
     /// Using an EncryptedClientHello (Inner and Outer DNS names)
-    EncryptedClientHello(EncryptedClientHello),
+    Ech(EncryptedClientHello),
 }
 
 impl ServerIdentity {
     fn get_outer_hostname(&self) -> webpki::DnsNameRef {
         match self {
             ServerIdentity::Hostname(name) => name.as_ref(),
-            ServerIdentity::EncryptedClientHello(encrypted) => encrypted
+            ServerIdentity::Ech(encrypted) => encrypted
                 .config_contents
                 .public_name
                 .as_ref(),
@@ -365,7 +365,7 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        if let ServerIdentity::EncryptedClientHello(_h) = &server_id {
+        if let ServerIdentity::Ech(_h) = &server_id {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
                 return Err(Error::General("TLS 1.3 support is required for ECH".into()));
             }

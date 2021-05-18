@@ -40,7 +40,7 @@ impl EncryptedClientHello {
         config_bytes: &Vec<u8>,
     ) -> Result<EncryptedClientHello, Error> {
         let configs: EchConfigList = EchConfigList::read(&mut Reader::init(config_bytes))
-            .ok_or(Error::General("Couldn't parse ECH record.".to_string()))?;
+            .ok_or_else(|| Error::General("Couldn't parse ECH record.".to_string()))?;
         let (config_contents, hpke) = configs
             .iter()
             .find_map(|config| {
