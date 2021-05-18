@@ -37,7 +37,7 @@ fn main() {
         .with_no_client_auth();
 
     let mut connection =
-        ClientConnection::with_server_id(Arc::new(client_config), ServerIdentity::Ech(ech))
+        ClientConnection::with_server_id(Arc::new(client_config), ServerIdentity::EncryptedClientHello(Box::new(ech)))
             .unwrap();
     let mut sock = TcpStream::connect(domain.to_owned() + ":443").unwrap();
     let mut tls = rustls::Stream::new(&mut connection, &mut sock);
