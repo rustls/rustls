@@ -2,8 +2,8 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
 use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, EchConfig, EchConfigContents, EchConfigList, Random,
-    SessionID,
+    ClientExtension, ClientHelloPayload, EchConfigContents, EchConfigList,
+    HpkeSymmetricCipherSuite, Random, SessionID,
 };
 use crate::rand;
 use crate::Error;
@@ -15,17 +15,11 @@ use webpki;
 const HPKE_INFO: &[u8; 8] = b"tls ech\0";
 
 #[allow(dead_code)]
-fn hpke_info(config: &EchConfig) -> Vec<u8> {
-    let mut info = Vec::with_capacity(128);
-    info.extend_from_slice(HPKE_INFO);
-    config.encode(&mut info);
-    info
-}
-
-#[allow(dead_code)]
 pub struct EncryptedClientHello {
     pub hostname: webpki::DnsName,
     pub hpke: Hpke,
+    pub hpke_info: Vec<u8>,
+    pub suite: HpkeSymmetricCipherSuite,
     pub config_contents: EchConfigContents,
     pub inner_random: [u8; 32],
 
@@ -41,7 +35,7 @@ impl EncryptedClientHello {
     ) -> Result<EncryptedClientHello, Error> {
         let configs: EchConfigList = EchConfigList::read(&mut Reader::init(config_bytes))
             .ok_or_else(|| Error::General("Couldn't parse ECH record.".to_string()))?;
-        let (config_contents, hpke) = configs
+        let (config_contents, (suite, hpke)) = configs
             .iter()
             .find_map(|config| {
                 Some((
@@ -52,18 +46,21 @@ impl EncryptedClientHello {
                         .hpke_symmetric_cipher_suites
                         .iter()
                         .find_map(|suite| {
-                            Some(hpke_rs::Hpke::new(
-                                Mode::Base,
-                                HpkeKemMode::try_from(
-                                    config
-                                        .contents
-                                        .hpke_key_config
-                                        .hpke_kem_id
-                                        .get_u16(),
-                                )
-                                .ok()?,
-                                HpkeKdfMode::try_from(suite.hpke_kdf_id.get_u16()).ok()?,
-                                HpkeAeadMode::try_from(suite.hpke_aead_id.get_u16()).ok()?,
+                            Some((
+                                suite,
+                                hpke_rs::Hpke::new(
+                                    Mode::Base,
+                                    HpkeKemMode::try_from(
+                                        config
+                                            .contents
+                                            .hpke_key_config
+                                            .hpke_kem_id
+                                            .get_u16(),
+                                    )
+                                    .ok()?,
+                                    HpkeKdfMode::try_from(suite.hpke_kdf_id.get_u16()).ok()?,
+                                    HpkeAeadMode::try_from(suite.hpke_aead_id.get_u16()).ok()?,
+                                ),
                             ))
                         })?,
                 ))
@@ -80,24 +77,47 @@ impl EncryptedClientHello {
         Ok(EncryptedClientHello {
             hostname: name.to_owned(),
             hpke,
+            hpke_info: HPKE_INFO.to_vec(),
+            suite: suite.clone(),
             config_contents,
             inner_random,
             compressed_extensions: vec![],
         })
     }
+
+    pub fn public_key(&self) -> HpkePublicKey {
+        HpkePublicKey::from(
+            self.config_contents
+                .hpke_key_config
+                .hpke_public_key
+                .clone()
+                .into_inner(),
+        )
+    }
 }
 
 #[allow(dead_code)]
-fn encode_inner_hello(
+pub(crate) fn encode_inner_hello(
     mut hello: ClientHelloPayload,
-    context: &EncryptedClientHello,
-    outer_exts: &Vec<ExtensionType>,
+    ech: &EncryptedClientHello,
 ) -> (ClientHelloPayload, Vec<u8>) {
+    // Swap out the SNI
+    if let Some(index) = hello
+        .extensions
+        .iter()
+        .position(|ext| ext.get_type() == ExtensionType::ServerName)
+    {
+        hello.extensions.remove(index);
+    };
+
     // Remove the ClientExtensions that match outer_exts.
     // Nightly's drain_filter would be nice here.
-    let mut indices = Vec::with_capacity(outer_exts.len());
+    let mut indices = Vec::with_capacity(ech.compressed_extensions.len());
     for (i, ext) in hello.extensions.iter().enumerate() {
-        if outer_exts.contains(&ext.get_type()) {
+        if ech
+            .compressed_extensions
+            .contains(&ext.get_type())
+        {
             indices.push(i);
         }
     }
@@ -105,6 +125,10 @@ fn encode_inner_hello(
     for index in indices.iter().rev() {
         outers.push(hello.extensions.swap_remove(*index));
     }
+
+    hello
+        .extensions
+        .push(ClientExtension::make_sni(ech.hostname.as_ref()));
 
     // Add these two extensions which can only appear in ClientHelloInner.
     let outer_extensions = EchOuterExtensions(
@@ -126,7 +150,7 @@ fn encode_inner_hello(
     hello.session_id = SessionID::empty();
 
     // The random value must be preserved across HRR for the ClientHelloInner
-    hello.random = Random::from(context.inner_random);
+    hello.random = Random::from(ech.inner_random);
 
     // Create the buffer to be encrypted.
     let mut encoded_hello = Vec::new();
@@ -135,11 +159,16 @@ fn encode_inner_hello(
     // Remove the two ClientHelloInner-only extensions.
     hello
         .extensions
-        .truncate(hello.extensions.len() - 2);
+        .truncate(hello.extensions.len() - 3);
 
     // Restore
     hello.session_id = original_session_id;
     hello.random = original_random;
+    hello
+        .extensions
+        .push(ClientExtension::make_sni(
+            ech.config_contents.public_name.as_ref(),
+        ));
 
     // PSK extensions are prohibited in the ClientHelloOuter.
     let index = hello
@@ -283,8 +312,11 @@ mod test {
             let original_random = original_hello.random.clone();
             let (_configs, bytes) = get_ech_config();
             let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
-            let ech = EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap();
-            let (hello, encoded_inner) = encode_inner_hello(original_hello, &ech, &outer_exts);
+            let mut ech =
+                EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap();
+            ech.compressed_extensions
+                .extend_from_slice(outer_exts.as_slice());
+            let (hello, encoded_inner) = encode_inner_hello(original_hello, &ech);
             assert_eq!(hello.session_id, original_session_id);
             assert_eq!(hello.random, original_random);
             // Return hello should not have a PSK
@@ -335,31 +367,24 @@ mod test {
     #[test]
     fn test_seal() {
         let (ech_list, bytes) = get_ech_config();
-
         for config in ech_list {
             let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
-            let ech = EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap();
-            let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
-            let original_hello = get_sample_clienthellopayload();
-            let (mut hello, encoded_inner) = encode_inner_hello(original_hello, &ech, &outer_exts);
-            let pk_r = HpkePublicKey::from(
-                config
-                    .contents
-                    .hpke_key_config
-                    .hpke_public_key
-                    .clone()
-                    .into_inner(),
-            );
             for suite in &config
                 .contents
                 .hpke_key_config
                 .hpke_symmetric_cipher_suites
             {
-                let ech_context =
+                let original_hello = get_sample_clienthellopayload();
+                let mut ech =
                     EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap();
-                let (enc, mut context) = ech_context
+                let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
+                ech.compressed_extensions
+                    .extend_from_slice(outer_exts.as_slice());
+                let (mut hello, encoded_inner) = encode_inner_hello(original_hello, &ech);
+                let pk_r = ech.public_key();
+                let (enc, mut context) = ech
                     .hpke
-                    .setup_sender(&pk_r, hpke_info(&config).as_slice(), None, None, None)
+                    .setup_sender(&pk_r, HPKE_INFO, None, None, None)
                     .unwrap();
                 let mut encoded_hello = Vec::new();
                 hello.encode(&mut encoded_hello);

@@ -8,14 +8,13 @@ use crate::key_schedule::KeyScheduleEarly;
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::base::Payload;
-#[cfg(feature = "quic")]
-use crate::msgs::base::PayloadU16;
+use crate::msgs::base::{Payload, PayloadU16, PayloadU24};
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::ech::encode_inner_hello;
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
+use crate::msgs::handshake::{CertificateStatusRequest, ClientEch, ClientHelloOuterAAD, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
@@ -230,7 +229,12 @@ fn emit_client_hello_for_retry(
         (Vec::new(), ProtocolVersion::Unknown(0))
     };
 
-    let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
+    let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2)
+        && !cx.common.is_quic()
+        && match server_id {
+            ServerIdentity::Hostname(_) => true,
+            ServerIdentity::EncryptedClientHello(_) => false,
+        };
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut supported_versions = Vec::new();
@@ -352,16 +356,64 @@ fn emit_client_hello_for_retry(
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
+    let initial_payload = ClientHelloPayload {
+        client_version: ProtocolVersion::TLSv1_2,
+        random: Random::from(randoms.client),
+        session_id,
+        cipher_suites,
+        compression_methods: vec![Compression::Null],
+        extensions: exts,
+    };
+
+    let payload = match server_id {
+        ServerIdentity::Hostname(_) => initial_payload,
+        ServerIdentity::EncryptedClientHello(ref ech) => {
+            let (mut outer_payload, encoded_inner) = encode_inner_hello(initial_payload, &ech);
+            let pk_r = ech.public_key();
+            let (enc, mut context) = ech
+                .hpke
+                .setup_sender(&pk_r, ech.hpke_info.as_slice(), None, None, None)
+                .unwrap();
+            let mut encoded_outer = Vec::new();
+            outer_payload.encode(&mut encoded_outer);
+            let outer_aad = ClientHelloOuterAAD {
+                cipher_suite: ech.suite.clone(),
+                config_id: ech
+                    .config_contents
+                    .hpke_key_config
+                    .config_id,
+                enc: PayloadU16::new(enc.clone()),
+                outer_hello: PayloadU24::new(encoded_outer),
+            };
+
+            let mut aad = Vec::new();
+            outer_aad.encode(&mut aad);
+
+            let payload = context
+                .seal(aad.as_slice(), encoded_inner.as_slice())
+                .unwrap();
+            assert!(payload.len() > 0);
+            let client_ech = ClientEch {
+                cipher_suite: ech.suite.clone(),
+                config_id: ech
+                    .config_contents
+                    .hpke_key_config
+                    .config_id,
+                enc: PayloadU16::new(enc),
+                payload: PayloadU16::new(payload),
+            };
+
+            outer_payload
+                .extensions
+                .push(ClientExtension::EncryptedClientHello(client_ech));
+            //hello_details.sent_extensions.push(ExtensionType::EncryptedClientHello);
+            outer_payload
+        }
+    };
+
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
-        payload: HandshakePayload::ClientHello(ClientHelloPayload {
-            client_version: ProtocolVersion::TLSv1_2,
-            random: Random::from(randoms.client),
-            session_id,
-            cipher_suites,
-            compression_methods: vec![Compression::Null],
-            extensions: exts,
-        }),
+        payload: HandshakePayload::ClientHello(payload),
     };
 
     let early_key_schedule = if let Some(resuming) = fill_in_binder {
