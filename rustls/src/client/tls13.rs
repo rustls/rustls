@@ -134,7 +134,7 @@ pub(super) fn handle_server_hello(
         }
         early_key_schedule.into_handshake(&shared.shared_secret)
     } else {
-        println!("Not resuming");
+        debug!("Not resuming");
         // Discard the early data key schedule.
         cx.data.early_data.rejected();
         cx.common.early_traffic = false;
