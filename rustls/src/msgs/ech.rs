@@ -109,7 +109,7 @@ impl EncryptedClientHello {
 #[allow(dead_code)]
 pub(crate) fn encode_inner_hello(
     mut hello: ClientHelloPayload,
-    ech: &Box<EncryptedClientHello>,
+    ech: &EncryptedClientHello,
 ) -> (ClientHelloPayload, Vec<u8>, HandshakeHash) {
     // Swap out the SNI
     if let Some(index) = hello
