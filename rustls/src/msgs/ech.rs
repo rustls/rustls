@@ -326,11 +326,12 @@ mod test {
             let original_random = original_hello.random.clone();
             let (_configs, bytes) = get_ech_config();
             let dns_name = DnsNameRef::try_from_ascii(b"test.example.com").unwrap();
-            let mut ech =
-                EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap();
+            let mut ech = Box::new(
+                EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap(),
+            );
             ech.compressed_extensions
                 .extend_from_slice(outer_exts.as_slice());
-            let (hello, encoded_inner) = encode_inner_hello(original_hello, &ech);
+            let (hello, encoded_inner, _transcript) = encode_inner_hello(original_hello, &ech);
             assert_eq!(hello.session_id, original_session_id);
             assert_eq!(hello.random, original_random);
             // Return hello should not have a PSK
@@ -389,12 +390,14 @@ mod test {
                 .hpke_symmetric_cipher_suites
             {
                 let original_hello = get_sample_clienthellopayload();
-                let mut ech =
-                    EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap();
+                let mut ech = Box::new(
+                    EncryptedClientHello::with_host_and_config_list(dns_name, &bytes).unwrap(),
+                );
                 let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
                 ech.compressed_extensions
                     .extend_from_slice(outer_exts.as_slice());
-                let (mut hello, encoded_inner) = encode_inner_hello(original_hello, &ech);
+                let (mut hello, encoded_inner, _transcript) =
+                    encode_inner_hello(original_hello, &ech);
                 let pk_r = ech.public_key();
                 let (enc, mut context) = ech
                     .hpke

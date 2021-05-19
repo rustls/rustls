@@ -14,11 +14,11 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureScheme};
+use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
-use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
@@ -156,7 +156,7 @@ pub(super) fn handle_server_hello(
     let hash_at_client_recvd_server_hello = transcript.get_current_hash();
 
     // Check if ECH was accepted
-    if let ServerIdentity::EncryptedClientHello(ref ech) = server_id {
+    if let ServerIdentity::EncryptedClientHello(ref _ech) = server_id {
         // TODO: update transcript
     }
 
