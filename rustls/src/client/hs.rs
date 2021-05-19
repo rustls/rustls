@@ -10,7 +10,6 @@ use crate::kx;
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::ech::encode_inner_hello;
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
@@ -368,9 +367,7 @@ fn emit_client_hello_for_retry(
     let payload = match server_id {
         ServerIdentity::Hostname(_) => initial_payload,
         ServerIdentity::EncryptedClientHello(ref mut ech) => {
-            let (mut outer_payload, encoded_inner, transcript) =
-                encode_inner_hello(initial_payload, &ech);
-            ech.inner_transcript = Some(transcript);
+            let mut outer_payload = ech.encode(initial_payload);
             let pk_r = ech.public_key();
             let (enc, mut context) = ech
                 .hpke
@@ -391,8 +388,9 @@ fn emit_client_hello_for_retry(
             let mut aad = Vec::new();
             outer_aad.encode(&mut aad);
 
+            let encoded = ech.encoded_inner.as_ref().unwrap();
             let payload = context
-                .seal(aad.as_slice(), encoded_inner.as_slice())
+                .seal(aad.as_slice(), encoded)
                 .unwrap();
             let client_ech = ClientEch {
                 cipher_suite: ech.suite.clone(),

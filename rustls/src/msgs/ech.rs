@@ -1,4 +1,3 @@
-use crate::hash_hs::HandshakeHash;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
@@ -29,8 +28,8 @@ pub struct EncryptedClientHello {
     pub hpke_info: Vec<u8>,
     pub suite: HpkeSymmetricCipherSuite,
     pub config_contents: EchConfigContents,
+    pub encoded_inner: Option<Vec<u8>>,
     pub inner_random: [u8; 32],
-    pub inner_transcript: Option<HandshakeHash>,
     /// Extensions that will be referenced in the ClientHelloOuter by the EncryptedClientHelloInner.
     pub compressed_extensions: Vec<ExtensionType>,
     // outer_only_exts?
@@ -89,8 +88,8 @@ impl EncryptedClientHello {
             hpke_info,
             suite: suite.clone(),
             config_contents,
+            encoded_inner: None,
             inner_random,
-            inner_transcript: None,
             compressed_extensions: vec![],
         })
     }
@@ -104,99 +103,93 @@ impl EncryptedClientHello {
                 .into_inner(),
         )
     }
-}
 
-#[allow(dead_code)]
-pub(crate) fn encode_inner_hello(
-    mut hello: ClientHelloPayload,
-    ech: &EncryptedClientHello,
-) -> (ClientHelloPayload, Vec<u8>, HandshakeHash) {
-    // Swap out the SNI
-    if let Some(index) = hello
-        .extensions
-        .iter()
-        .position(|ext| ext.get_type() == ExtensionType::ServerName)
-    {
-        hello.extensions.remove(index);
-    };
-
-    // Remove the ClientExtensions that match outer_exts.
-    // Nightly's drain_filter would be nice here.
-    let mut indices = Vec::with_capacity(ech.compressed_extensions.len());
-    for (i, ext) in hello.extensions.iter().enumerate() {
-        if ech
-            .compressed_extensions
-            .contains(&ext.get_type())
-        {
-            indices.push(i);
-        }
-    }
-    let mut outers = Vec::with_capacity(indices.len());
-    for index in indices.iter().rev() {
-        outers.push(hello.extensions.swap_remove(*index));
-    }
-
-    hello
-        .extensions
-        .push(ClientExtension::make_sni(ech.hostname.as_ref()));
-
-    // Add these two extensions which can only appear in ClientHelloInner.
-    let outer_extensions = EchOuterExtensions(
-        outers
+    pub fn encode(&mut self, mut hello: ClientHelloPayload) -> ClientHelloPayload {
+        // Swap out the SNI
+        if let Some(index) = hello
+            .extensions
             .iter()
-            .map(|ext| ext.get_type())
-            .collect(),
-    );
-    hello.extensions.push(outer_extensions);
-    hello
-        .extensions
-        .push(ClientExtension::ClientHelloInnerIndication);
+            .position(|ext| ext.get_type() == ExtensionType::ServerName)
+        {
+            hello.extensions.remove(index);
+        };
 
-    // Preserve these for reuse
-    let original_session_id = hello.session_id;
-    let original_random = hello.random;
+        // Remove the ClientExtensions that match outer_exts.
+        // Nightly's drain_filter would be nice here.
+        let mut indices = Vec::with_capacity(self.compressed_extensions.len());
+        for (i, ext) in hello.extensions.iter().enumerate() {
+            if self
+                .compressed_extensions
+                .contains(&ext.get_type())
+            {
+                indices.push(i);
+            }
+        }
+        let mut outers = Vec::with_capacity(indices.len());
+        for index in indices.iter().rev() {
+            outers.push(hello.extensions.swap_remove(*index));
+        }
 
-    // SessionID is required to be empty in the ClientHelloInner.
-    hello.session_id = SessionID::empty();
+        // Add the inner SNI
+        hello
+            .extensions
+            .push(ClientExtension::make_sni(self.hostname.as_ref()));
 
-    // The random value must be preserved across HRR for the ClientHelloInner
-    hello.random = Random::from(ech.inner_random);
+        // Add these two extensions which can only appear in ClientHelloInner.
+        let outer_extensions = EchOuterExtensions(
+            outers
+                .iter()
+                .map(|ext| ext.get_type())
+                .collect(),
+        );
+        hello.extensions.push(outer_extensions);
+        hello
+            .extensions
+            .push(ClientExtension::ClientHelloInnerIndication);
 
-    // Create the buffer to be encrypted.
-    let mut encoded_hello = Vec::new();
-    hello.encode(&mut encoded_hello);
+        // Preserve these for reuse
+        let original_session_id = hello.session_id;
+        let original_random = hello.random;
 
-    // TODO: fix this API usage
-    let mut inner_transcript = HandshakeHash::new();
-    inner_transcript.update_raw(&encoded_hello);
+        // SessionID is required to be empty in the ClientHelloInner.
+        hello.session_id = SessionID::empty();
 
-    // Remove the two ClientHelloInner-only extensions.
-    hello
-        .extensions
-        .truncate(hello.extensions.len() - 3);
+        // The random value must be preserved across HRR for the ClientHelloInner
+        hello.random = Random::from(self.inner_random);
 
-    // Restore
-    hello.session_id = original_session_id;
-    hello.random = original_random;
-    hello
-        .extensions
-        .push(ClientExtension::make_sni(
-            ech.config_contents.public_name.as_ref(),
-        ));
+        // Create the buffer to be encrypted.
+        let mut encoded_hello = Vec::new();
+        hello.encode(&mut encoded_hello);
+        self.encoded_inner = Some(encoded_hello);
 
-    // PSK extensions are prohibited in the ClientHelloOuter.
-    let index = hello
-        .extensions
-        .iter()
-        .position(|ext| ext.get_type() == ExtensionType::PreSharedKey);
-    if let Some(i) = index {
-        hello.extensions.remove(i);
+        // Remove the two ClientHelloInner-only extensions.
+        hello
+            .extensions
+            .truncate(hello.extensions.len() - 3);
+
+        // Restore
+        hello.session_id = original_session_id;
+        hello.random = original_random;
+        hello
+            .extensions
+            .push(ClientExtension::make_sni(
+                self.config_contents.public_name.as_ref(),
+            ));
+
+        // PSK extensions are prohibited in the ClientHelloOuter.
+        let index = hello
+            .extensions
+            .iter()
+            .position(|ext| ext.get_type() == ExtensionType::PreSharedKey);
+        if let Some(i) = index {
+            hello.extensions.remove(i);
+        }
+
+        // Add the extensions that appear compressed in ClientHelloInner.
+        hello.extensions.append(&mut outers);
+
+        hello
     }
-
-    // Add the extensions that appear compressed in ClientHelloInner.
-    hello.extensions.append(&mut outers);
-
-    (hello, encoded_hello, inner_transcript)
 }
 
 #[cfg(test)]
@@ -331,7 +324,7 @@ mod test {
             );
             ech.compressed_extensions
                 .extend_from_slice(outer_exts.as_slice());
-            let (hello, encoded_inner, _transcript) = encode_inner_hello(original_hello, &ech);
+            let hello = ech.encode(original_hello);
             assert_eq!(hello.session_id, original_session_id);
             assert_eq!(hello.random, original_random);
             // Return hello should not have a PSK
@@ -341,7 +334,7 @@ mod test {
                     .is_none()
             );
 
-            let mut reader = Reader::init(&encoded_inner);
+            let mut reader = Reader::init(&ech.encoded_inner.as_ref().unwrap());
             let decoded = ClientHelloPayload::read(&mut reader).unwrap();
             assert_eq!(decoded.session_id, SessionID::empty());
             assert_ne!(decoded.session_id, original_session_id);
@@ -396,8 +389,7 @@ mod test {
                 let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
                 ech.compressed_extensions
                     .extend_from_slice(outer_exts.as_slice());
-                let (mut hello, encoded_inner, _transcript) =
-                    encode_inner_hello(original_hello, &ech);
+                let mut hello = ech.encode(original_hello);
                 let pk_r = ech.public_key();
                 let (enc, mut context) = ech
                     .hpke
@@ -418,8 +410,9 @@ mod test {
                 let mut aad = Vec::new();
                 outer_aad.encode(&mut aad);
 
+                let encoded_inner = ech.encoded_inner.as_ref().unwrap();
                 let payload = context
-                    .seal(aad.as_slice(), encoded_inner.as_slice())
+                    .seal(aad.as_slice(), encoded_inner)
                     .unwrap();
                 assert!(payload.len() > 0);
 

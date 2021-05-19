@@ -156,8 +156,8 @@ pub(super) fn handle_server_hello(
     let hash_at_client_recvd_server_hello = transcript.get_current_hash();
 
     // Check if ECH was accepted
-    if let ServerIdentity::EncryptedClientHello(ref _ech) = server_id {
-        // TODO: update transcript
+    if let ServerIdentity::EncryptedClientHello(_ech) = &server_id {
+
     }
 
     let _maybe_write_key = if !cx.data.early_data.is_enabled() {
