@@ -126,7 +126,7 @@ pub(super) fn start_handshake(
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
     let mut session_id: Option<SessionID> = None;
-    let hostname = server_id.get_outer_hostname();
+    let hostname = server_id.get_inner_hostname();
     let mut resuming_session = find_session(
         hostname,
         &config,
@@ -216,7 +216,7 @@ fn emit_client_hello_for_retry(
     mut hello_details: ClientHelloDetails,
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
-    server_id: ServerIdentity,
+    mut server_id: ServerIdentity,
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
@@ -367,8 +367,10 @@ fn emit_client_hello_for_retry(
 
     let payload = match server_id {
         ServerIdentity::Hostname(_) => initial_payload,
-        ServerIdentity::EncryptedClientHello(ref ech) => {
-            let (mut outer_payload, encoded_inner) = encode_inner_hello(initial_payload, &ech);
+        ServerIdentity::EncryptedClientHello(ref mut ech) => {
+            let (mut outer_payload, encoded_inner, transcript) =
+                encode_inner_hello(initial_payload, &ech);
+            ech.inner_transcript = Some(transcript);
             let pk_r = ech.public_key();
             let (enc, mut context) = ech
                 .hpke
@@ -392,7 +394,6 @@ fn emit_client_hello_for_retry(
             let payload = context
                 .seal(aad.as_slice(), encoded_inner.as_slice())
                 .unwrap();
-            assert!(payload.len() > 0);
             let client_ech = ClientEch {
                 cipher_suite: ech.suite.clone(),
                 config_id: ech
@@ -406,7 +407,9 @@ fn emit_client_hello_for_retry(
             outer_payload
                 .extensions
                 .push(ClientExtension::EncryptedClientHello(client_ech));
-            //hello_details.sent_extensions.push(ExtensionType::EncryptedClientHello);
+            hello_details
+                .sent_extensions
+                .push(ExtensionType::EncryptedClientHello);
             outer_payload
         }
     };
@@ -646,9 +649,7 @@ impl State for ExpectServerHello {
                 cx,
                 server_hello,
                 self.resuming_session,
-                self.server_id
-                    .get_outer_hostname()
-                    .to_owned(),
+                self.server_id,
                 self.randoms,
                 suite,
                 self.transcript,

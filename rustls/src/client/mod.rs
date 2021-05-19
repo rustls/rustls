@@ -323,6 +323,13 @@ impl ServerIdentity {
                 .as_ref(),
         }
     }
+
+    fn get_inner_hostname(&self) -> webpki::DnsNameRef {
+        match self {
+            ServerIdentity::Hostname(name) => name.as_ref(),
+            ServerIdentity::EncryptedClientHello(encrypted) => encrypted.hostname.as_ref(),
+        }
+    }
 }
 
 /// This represents a single TLS client connection.

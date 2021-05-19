@@ -1,8 +1,9 @@
+use crate::hash_hs::HandshakeHash;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ClientExtension::EchOuterExtensions;
 use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, EchConfigContents, EchConfigList,
+    ClientExtension, ClientHelloPayload, EchConfig, EchConfigContents, EchConfigList,
     HpkeSymmetricCipherSuite, Random, SessionID,
 };
 use crate::rand;
@@ -14,6 +15,13 @@ use webpki;
 #[allow(dead_code)]
 const HPKE_INFO: &[u8; 8] = b"tls ech\0";
 
+fn hpke_info(config: &EchConfig) -> Vec<u8> {
+    let mut info = Vec::with_capacity(128);
+    info.extend_from_slice(HPKE_INFO);
+    config.encode(&mut info);
+    info
+}
+
 #[allow(dead_code)]
 pub struct EncryptedClientHello {
     pub hostname: webpki::DnsName,
@@ -22,7 +30,7 @@ pub struct EncryptedClientHello {
     pub suite: HpkeSymmetricCipherSuite,
     pub config_contents: EchConfigContents,
     pub inner_random: [u8; 32],
-
+    pub inner_transcript: Option<HandshakeHash>,
     /// Extensions that will be referenced in the ClientHelloOuter by the EncryptedClientHelloInner.
     pub compressed_extensions: Vec<ExtensionType>,
     // outer_only_exts?
@@ -35,11 +43,12 @@ impl EncryptedClientHello {
     ) -> Result<EncryptedClientHello, Error> {
         let configs: EchConfigList = EchConfigList::read(&mut Reader::init(config_bytes))
             .ok_or_else(|| Error::General("Couldn't parse ECH record.".to_string()))?;
-        let (config_contents, (suite, hpke)) = configs
+        let (config_contents, hpke_info, (suite, hpke)) = configs
             .iter()
             .find_map(|config| {
                 Some((
                     config.contents.clone(),
+                    hpke_info(&config),
                     config
                         .contents
                         .hpke_key_config
@@ -77,10 +86,11 @@ impl EncryptedClientHello {
         Ok(EncryptedClientHello {
             hostname: name.to_owned(),
             hpke,
-            hpke_info: HPKE_INFO.to_vec(),
+            hpke_info,
             suite: suite.clone(),
             config_contents,
             inner_random,
+            inner_transcript: None,
             compressed_extensions: vec![],
         })
     }
@@ -99,8 +109,8 @@ impl EncryptedClientHello {
 #[allow(dead_code)]
 pub(crate) fn encode_inner_hello(
     mut hello: ClientHelloPayload,
-    ech: &EncryptedClientHello,
-) -> (ClientHelloPayload, Vec<u8>) {
+    ech: &Box<EncryptedClientHello>,
+) -> (ClientHelloPayload, Vec<u8>, HandshakeHash) {
     // Swap out the SNI
     if let Some(index) = hello
         .extensions
@@ -156,6 +166,10 @@ pub(crate) fn encode_inner_hello(
     let mut encoded_hello = Vec::new();
     hello.encode(&mut encoded_hello);
 
+    // TODO: fix this API usage
+    let mut inner_transcript = HandshakeHash::new();
+    inner_transcript.update_raw(&encoded_hello);
+
     // Remove the two ClientHelloInner-only extensions.
     hello
         .extensions
@@ -182,7 +196,7 @@ pub(crate) fn encode_inner_hello(
     // Add the extensions that appear compressed in ClientHelloInner.
     hello.extensions.append(&mut outers);
 
-    (hello, encoded_hello)
+    (hello, encoded_hello, inner_transcript)
 }
 
 #[cfg(test)]
