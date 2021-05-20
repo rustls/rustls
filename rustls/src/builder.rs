@@ -45,6 +45,9 @@ use crate::versions;
 ///    make a [`ServerConfig`] or [`ClientConfig`] -- call [`ConfigBuilderWithVersions::for_server()`]
 ///    or [`ConfigBuilderWithVersions::for_client()`] respectively.
 /// 5. Now see [`ServerConfigBuilder`] or [`ClientConfigBuilder`] for further steps.
+///
+/// [`ServerConfig`]: crate::ServerConfig
+/// [`ClientConfig`]: crate::ClientConfig
 pub struct ConfigBuilder;
 
 impl ConfigBuilder {
@@ -52,6 +55,9 @@ impl ConfigBuilder {
     /// defaults for underlying cryptography.
     ///
     /// These are safe defaults, useful for 99% of applications.
+    ///
+    /// [`ServerConfig`]: crate::ServerConfig
+    /// [`ClientConfig`]: crate::ClientConfig
     pub fn with_safe_defaults() -> ConfigBuilderWithVersions {
         ConfigBuilder::with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
