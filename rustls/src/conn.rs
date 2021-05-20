@@ -25,7 +25,7 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::io;
 
-/// Values of this structure are returned from `Session::process_new_packets`
+/// Values of this structure are returned from [`Connection::process_new_packets`]
 /// and tell the caller the current I/O state of the TLS connection.
 #[derive(Debug, PartialEq)]
 pub struct IoState {
@@ -114,7 +114,7 @@ impl<'a> Writer<'a> {
 impl<'a> io::Write for Writer<'a> {
     /// Send the plaintext `buf` to the peer, encrypting
     /// and authenticating it.  Once this function succeeds
-    /// you should call `write_tls` which will output the
+    /// you should call [`write_tls`] which will output the
     /// corresponding TLS records.
     ///
     /// This function buffers plaintext sent before the
@@ -122,6 +122,8 @@ impl<'a> io::Write for Writer<'a> {
     /// as it can.  This buffer is of *unlimited size* so
     /// writing much data before it can be sent will
     /// cause excess memory usage.
+    ///
+    /// [`write_tls`]: Connection::write_tls
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.sink.write(buf)
     }
@@ -141,15 +143,17 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
     ///
-    /// You should call `process_new_packets` each time a call to
+    /// You should call [`process_new_packets`] each time a call to
     /// this function succeeds.
     ///
     /// The returned error only relates to IO on `rd`.  TLS-level
-    /// errors are emitted from `process_new_packets`.
+    /// errors are emitted from [`process_new_packets`].
     ///
     /// This function returns `Ok(0)` when the underlying `rd` does
     /// so.  This typically happens when a socket is cleanly closed,
     /// or a file is at EOF.
+    ///
+    /// [`process_new_packets`]: Connection::process_new_packets
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error>;
 
     /// Writes TLS messages to `wr`.
@@ -171,7 +175,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// Returns an object that allows writing plaintext.
     fn writer(&mut self) -> Writer;
 
-    /// Processes any new packets read by a previous call to `read_tls`.
+    /// Processes any new packets read by a previous call to [`read_tls`].
     ///
     /// Errors from this function relate to TLS protocol errors, and
     /// are fatal to the connection.  Future calls after an error will do
@@ -185,14 +189,18 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     ///
     /// Success from this function comes with some sundry state data
     /// about the connection.
+    ///
+    /// [`read_tls`]: Connection::read_tls
     fn process_new_packets(&mut self) -> Result<IoState, Error>;
 
     /// Returns true if the caller should call `read_tls` as soon
     /// as possible.
     fn wants_read(&self) -> bool;
 
-    /// Returns true if the caller should call `write_tls` as soon
+    /// Returns true if the caller should call [`write_tls`] as soon
     /// as possible.
+    ///
+    /// [`write_tls`]: Connection::write_tls
     fn wants_write(&self) -> bool;
 
     /// Returns true if the connection is currently performing the TLS
@@ -254,7 +262,9 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// "early" exporter at any point.
     ///
     /// This function fails if called prior to the handshake completing;
-    /// check with `is_handshaking()` first.
+    /// check with [`is_handshaking`] first.
+    ///
+    /// [`is_handshaking`]: Connection::is_handshaking
     fn export_keying_material(
         &self,
         output: &mut [u8],
@@ -275,11 +285,11 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     ///
     /// What this means depends on the connection  state:
     ///
-    /// - If the connection `is_handshaking()`, then IO is performed until
+    /// - If the connection [`is_handshaking`], then IO is performed until
     ///   the handshake is complete.
-    /// - Otherwise, if `wants_write` is true, `write_tls` is invoked
+    /// - Otherwise, if [`wants_write`] is true, [`write_tls`] is invoked
     ///   until it is all written.
-    /// - Otherwise, if `wants_read` is true, `read_tls` is invoked
+    /// - Otherwise, if [`wants_read`] is true, [`read_tls`] is invoked
     ///   once.
     ///
     /// The return value is the number of bytes read from and written
@@ -287,8 +297,15 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     ///
     /// This function will block if `io` blocks.
     ///
-    /// Errors from TLS record handling (i.e., from `process_new_packets()`)
+    /// Errors from TLS record handling (i.e., from [`process_new_packets`])
     /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
+    ///
+    /// [`is_handshaking`]: Connection::is_handshaking
+    /// [`wants_read`]: Connection::wants_read
+    /// [`wants_write`]: Connection::wants_write
+    /// [`write_tls`]: Connection::write_tls
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
     where
         Self: Sized,

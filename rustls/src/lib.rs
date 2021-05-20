@@ -69,9 +69,12 @@
 //! IO.
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the `ServerConnection` and `ClientConnection` types.  You supply raw TLS traffic
-//! on the left (via the `read_tls()` and `write_tls()` methods) and then read/write the
+//! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
+//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
 //! plaintext on the right:
+//!
+//! [`read_tls()`]: Connection::read_tls
+//! [`write_tls()`]: Connection::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
