@@ -668,7 +668,8 @@ impl ConnectionCommon {
             return self.process_alert(alert);
         }
 
-        self.process_main_protocol(msg, state, data)
+        self.api
+            .process_main_protocol(msg, state, data)
     }
 
     pub(crate) fn process_new_packets<Data>(
@@ -696,54 +697,11 @@ impl ConnectionCommon {
         data: &mut Data,
     ) -> Result<(), Error> {
         while let Some(msg) = self.handshake_joiner.frames.pop_front() {
-            self.process_main_protocol(msg, state, data)?;
+            self.api
+                .process_main_protocol(msg, state, data)?;
         }
 
         Ok(())
-    }
-
-    /// Process `msg`.  First, we get the current state.  Then we ask what messages
-    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
-    /// to handle the message.
-    fn process_main_protocol<Data>(
-        &mut self,
-        msg: Message<'_>,
-        state: &mut Option<Box<dyn State<Data>>>,
-        data: &mut Data,
-    ) -> Result<(), Error> {
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self.api.traffic && !self.api.is_tls13() {
-            let reject_ty = match self.api.is_client {
-                true => HandshakeType::HelloRequest,
-                false => HandshakeType::ClientHello,
-            };
-            if msg.is_handshake_type(reject_ty) {
-                self.send_warning_alert(AlertDescription::NoRenegotiation);
-                return Ok(());
-            }
-        }
-
-        let current = state.take().unwrap();
-        self.api.aligned_handshake = true;
-        let mut cx = Context {
-            common: &mut self.api,
-            data,
-        };
-
-        match current.handle(&mut cx, msg) {
-            Ok(next) => {
-                *state = Some(next);
-                Ok(())
-            }
-            Err(e @ Error::InappropriateMessage { .. })
-            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
-                self.api
-                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
-                Err(e)
-            }
-            Err(e) => Err(e),
-        }
     }
 
     /// Send plaintext application data, fragmenting and
@@ -884,11 +842,6 @@ impl ConnectionCommon {
 
         Ok(len)
     }
-
-    pub fn send_warning_alert(&mut self, desc: AlertDescription) {
-        warn!("Sending warning alert {:?}", desc);
-        self.api.send_warning_alert_no_log(desc);
-    }
 }
 
 pub(crate) trait State<Data>: Send + Sync {
@@ -936,6 +889,46 @@ pub(crate) struct CommonApi {
 }
 
 impl CommonApi {
+    /// Process `msg`.  First, we get the current state.  Then we ask what messages
+    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
+    /// to handle the message.
+    fn process_main_protocol<Data>(
+        &mut self,
+        msg: Message<'_>,
+        state: &mut Option<Box<dyn State<Data>>>,
+        data: &mut Data,
+    ) -> Result<(), Error> {
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.traffic && !self.is_tls13() {
+            let reject_ty = match self.is_client {
+                true => HandshakeType::HelloRequest,
+                false => HandshakeType::ClientHello,
+            };
+            if msg.is_handshake_type(reject_ty) {
+                self.send_warning_alert(AlertDescription::NoRenegotiation);
+                return Ok(());
+            }
+        }
+
+        let current = state.take().unwrap();
+        self.aligned_handshake = true;
+        let mut cx = Context { common: self, data };
+
+        match current.handle(&mut cx, msg) {
+            Ok(next) => {
+                *state = Some(next);
+                Ok(())
+            }
+            Err(e @ Error::InappropriateMessage { .. })
+            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
+                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
+                Err(e)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     // Changing the keys must not span any fragmented handshake
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
@@ -973,6 +966,11 @@ impl CommonApi {
     pub fn send_close_notify(&mut self) {
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+    }
+
+    pub fn send_warning_alert(&mut self, desc: AlertDescription) {
+        warn!("Sending warning alert {:?}", desc);
+        self.send_warning_alert_no_log(desc);
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
