@@ -339,10 +339,10 @@ impl ClientConnection {
             state: None,
             data: ClientConnectionData::new(),
         };
-        new.common.protocol = proto;
+        new.common.api.protocol = proto;
 
         let mut cx = hs::ClientContext {
-            common: &mut new.common,
+            common: &mut new.common.api,
             data: &mut new.data,
         };
 
@@ -408,7 +408,7 @@ impl Connection for ClientConnection {
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.common.write_tls(wr)
+        self.common.api.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
@@ -427,11 +427,11 @@ impl Connection for ClientConnection {
     }
 
     fn wants_write(&self) -> bool {
-        !self.common.sendable_tls.is_empty()
+        !self.common.api.sendable_tls.is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
-        !self.common.traffic
+        !self.common.api.traffic
     }
 
     fn set_buffer_limit(&mut self, len: usize) {
@@ -439,7 +439,7 @@ impl Connection for ClientConnection {
     }
 
     fn send_close_notify(&mut self) {
-        self.common.send_close_notify()
+        self.common.api.send_close_notify()
     }
 
     fn peer_certificates(&self) -> Option<&[key::Certificate<'static>]> {
@@ -455,7 +455,7 @@ impl Connection for ClientConnection {
     }
 
     fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common.negotiated_version
+        self.common.api.negotiated_version
     }
 
     fn export_keying_material(
@@ -470,6 +470,7 @@ impl Connection for ClientConnection {
 
     fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
         self.common
+            .api
             .get_suite()
             .or(self.data.resumption_ciphersuite)
     }
@@ -525,6 +526,7 @@ impl ClientConnectionData {
 impl quic::QuicExt for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
+            .api
             .quic
             .params
             .as_ref()
@@ -534,7 +536,11 @@ impl quic::QuicExt for ClientConnection {
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.data.resumption_ciphersuite?,
-            self.common.quic.early_secret.as_ref()?,
+            self.common
+                .api
+                .quic
+                .early_secret
+                .as_ref()?,
         ))
     }
 
@@ -545,15 +551,15 @@ impl quic::QuicExt for ClientConnection {
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
-        self.common.write_hs(buf)
+        self.common.api.write_hs(buf)
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
+        self.common.api.quic.alert
     }
 
     fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
-        self.common.next_1rtt_keys()
+        self.common.api.next_1rtt_keys()
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets, State};
+use crate::conn::{CommonApi, ConnectionRandoms, ConnectionSecrets, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -364,7 +364,7 @@ mod client_hello {
 
     fn emit_certificate(
         transcript: &mut HandshakeHash,
-        common: &mut ConnectionCommon,
+        common: &mut CommonApi,
         cert_chain: &[Certificate],
     ) {
         let c = Message {
@@ -384,11 +384,7 @@ mod client_hello {
         common.send_msg(c, false);
     }
 
-    fn emit_cert_status(
-        transcript: &mut HandshakeHash,
-        common: &mut ConnectionCommon,
-        ocsp: &[u8],
-    ) {
+    fn emit_cert_status(transcript: &mut HandshakeHash, common: &mut CommonApi, ocsp: &[u8]) {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
@@ -405,7 +401,7 @@ mod client_hello {
 
     fn emit_server_kx(
         transcript: &mut HandshakeHash,
-        common: &mut ConnectionCommon,
+        common: &mut CommonApi,
         sigschemes: Vec<SignatureScheme>,
         skxg: &'static kx::SupportedKxGroup,
         signing_key: &dyn sign::SigningKey,
@@ -488,7 +484,7 @@ mod client_hello {
         Ok(true)
     }
 
-    fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut ConnectionCommon) {
+    fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut CommonApi) {
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
@@ -790,7 +786,7 @@ fn emit_ticket(
     cx.common.send_msg(m, false);
 }
 
-fn emit_ccs(common: &mut ConnectionCommon) {
+fn emit_ccs(common: &mut CommonApi) {
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
@@ -802,7 +798,7 @@ fn emit_ccs(common: &mut ConnectionCommon) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    common: &mut ConnectionCommon,
+    common: &mut CommonApi,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.server_verify_data(&vh);

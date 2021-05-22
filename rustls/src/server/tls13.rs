@@ -1,7 +1,7 @@
 #[cfg(feature = "quic")]
 use crate::check::check_message;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms, State};
+use crate::conn::{CommonApi, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -475,7 +475,7 @@ mod client_hello {
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(common: &mut ConnectionCommon) {
+    fn emit_fake_ccs(common: &mut CommonApi) {
         if common.is_quic() {
             return;
         }
@@ -489,7 +489,7 @@ mod client_hello {
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
         suite: &'static SupportedCipherSuite,
-        common: &mut ConnectionCommon,
+        common: &mut CommonApi,
         group: NamedGroup,
     ) {
         let mut req = HelloRetryRequest {
@@ -608,7 +608,7 @@ mod client_hello {
 
     fn emit_certificate_tls13(
         transcript: &mut HandshakeHash,
-        common: &mut ConnectionCommon,
+        common: &mut CommonApi,
         cert_chain: &[Certificate],
         ocsp_response: Option<&[u8]>,
         sct_list: Option<&[u8]>,
@@ -657,7 +657,7 @@ mod client_hello {
 
     fn emit_certificate_verify_tls13(
         transcript: &mut HandshakeHash,
-        common: &mut ConnectionCommon,
+        common: &mut CommonApi,
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
@@ -1059,7 +1059,7 @@ struct ExpectTraffic {
 impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
-        common: &mut ConnectionCommon,
+        common: &mut CommonApi,
         kur: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
@@ -1135,7 +1135,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    fn perhaps_write_key_update(&mut self, common: &mut ConnectionCommon) {
+    fn perhaps_write_key_update(&mut self, common: &mut CommonApi) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
             common.send_msg_encrypt(Message::build_key_update_notify().into());

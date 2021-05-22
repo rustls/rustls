@@ -567,54 +567,42 @@ enum Limit {
     No,
 }
 
-pub struct ConnectionCommon {
-    pub negotiated_version: Option<ProtocolVersion>,
-    pub is_client: bool,
-    pub record_layer: record_layer::RecordLayer,
-    pub suite: Option<&'static SupportedCipherSuite>,
-    pub alpn_protocol: Option<Vec<u8>>,
+pub(crate) struct ConnectionCommon {
+    pub(crate) api: CommonApi,
     peer_eof: bool,
-    pub traffic: bool,
-    pub early_traffic: bool,
-    sent_fatal_alert: bool,
     received_middlebox_ccs: bool,
     error: Option<Error>,
     message_deframer: MessageDeframer,
     handshake_joiner: HandshakeJoiner,
-    message_fragmenter: MessageFragmenter,
-    received_plaintext: ChunkVecBuffer,
-    sendable_plaintext: ChunkVecBuffer,
-    pub sendable_tls: ChunkVecBuffer,
-    /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    pub protocol: Protocol,
-    #[cfg(feature = "quic")]
-    pub(crate) quic: conn_quic::Quic,
 }
 
 impl ConnectionCommon {
     pub fn new(max_fragment_size: Option<usize>, client: bool) -> Result<ConnectionCommon, Error> {
         Ok(ConnectionCommon {
-            negotiated_version: None,
-            is_client: client,
-            record_layer: record_layer::RecordLayer::new(),
-            suite: None,
-            alpn_protocol: None,
+            api: CommonApi {
+                record_layer: record_layer::RecordLayer::new(),
+                sendable_tls: ChunkVecBuffer::new(),
+                sendable_plaintext: ChunkVecBuffer::new(),
+                received_plaintext: ChunkVecBuffer::new(),
+                message_fragmenter: MessageFragmenter::new(max_fragment_size)
+                    .map_err(|_| Error::BadMaxFragmentSize)?,
+                negotiated_version: None,
+                alpn_protocol: None,
+                protocol: Protocol::Tcp,
+                is_client: client,
+                suite: None,
+                traffic: false,
+                early_traffic: false,
+                aligned_handshake: true,
+                sent_fatal_alert: false,
+                #[cfg(feature = "quic")]
+                quic: conn_quic::Quic::new(),
+            },
             peer_eof: false,
-            traffic: false,
-            early_traffic: false,
-            sent_fatal_alert: false,
             received_middlebox_ccs: false,
             error: None,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
-            message_fragmenter: MessageFragmenter::new(max_fragment_size)
-                .map_err(|_| Error::BadMaxFragmentSize)?,
-            received_plaintext: ChunkVecBuffer::new(),
-            sendable_plaintext: ChunkVecBuffer::new(),
-            sendable_tls: ChunkVecBuffer::new(),
-            protocol: Protocol::Tcp,
-            #[cfg(feature = "quic")]
-            quic: conn_quic::Quic::new(),
         })
     }
 
@@ -624,14 +612,10 @@ impl ConnectionCommon {
 
     fn current_io_state(&self) -> IoState {
         IoState {
-            tls_bytes_to_write: self.sendable_tls.len(),
-            plaintext_bytes_to_read: self.received_plaintext.len(),
+            tls_bytes_to_write: self.api.sendable_tls.len(),
+            plaintext_bytes_to_read: self.api.received_plaintext.len(),
             peer_has_closed: self.peer_eof,
         }
-    }
-
-    pub fn is_tls13(&self) -> bool {
-        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
     fn process_msg<Data>(
@@ -645,7 +629,7 @@ impl ConnectionCommon {
         // - prior to determining the version (it's illegal as a first message)
         // - if it's not a CCS at all
         // - if we've finished the handshake
-        if msg.typ == ContentType::ChangeCipherSpec && !self.traffic && self.is_tls13() {
+        if msg.typ == ContentType::ChangeCipherSpec && !self.api.traffic && self.api.is_tls13() {
             if self.received_middlebox_ccs {
                 return Err(Error::PeerMisbehavedError(
                     "illegal middlebox CCS received".into(),
@@ -658,7 +642,7 @@ impl ConnectionCommon {
         }
 
         // Decrypt if demanded by current state.
-        if self.record_layer.is_decrypting() {
+        if self.api.record_layer.is_decrypting() {
             let dm = self.decrypt_incoming(msg)?;
             msg = dm;
         }
@@ -669,7 +653,8 @@ impl ConnectionCommon {
             self.handshake_joiner
                 .take_message(msg)
                 .ok_or_else(|| {
-                    self.send_fatal_alert(AlertDescription::DecodeError);
+                    self.api
+                        .send_fatal_alert(AlertDescription::DecodeError);
                     Error::CorruptMessagePayload(ContentType::Handshake)
                 })?;
             return self.process_new_handshake_messages(state, data);
@@ -728,8 +713,8 @@ impl ConnectionCommon {
     ) -> Result<(), Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.traffic && !self.is_tls13() {
-            let reject_ty = match self.is_client {
+        if self.api.traffic && !self.api.is_tls13() {
+            let reject_ty = match self.api.is_client {
                 true => HandshakeType::HelloRequest,
                 false => HandshakeType::ClientHello,
             };
@@ -740,7 +725,11 @@ impl ConnectionCommon {
         }
 
         let current = state.take().unwrap();
-        let mut cx = Context { common: self, data };
+        self.api.aligned_handshake = true;
+        let mut cx = Context {
+            common: &mut self.api,
+            data,
+        };
 
         match current.handle(&mut cx, msg) {
             Ok(next) => {
@@ -749,7 +738,8 @@ impl ConnectionCommon {
             }
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
-                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
+                self.api
+                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
                 Err(e)
             }
             Err(e) => Err(e),
@@ -767,9 +757,9 @@ impl ConnectionCommon {
         state: &mut Option<Box<dyn State<Data>>>,
     ) -> usize {
         if let Some(st) = state {
-            st.perhaps_write_key_update(self);
+            st.perhaps_write_key_update(&mut self.api);
         }
-        self.send_plain(buf, Limit::Yes)
+        self.api.send_plain(buf, Limit::Yes)
     }
 
     pub(crate) fn export_keying_material<Data>(
@@ -785,12 +775,173 @@ impl ConnectionCommon {
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
+    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
+        self.api
+            .alpn_protocol
+            .as_ref()
+            .map(AsRef::as_ref)
+    }
+
+    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
+        if self
+            .api
+            .record_layer
+            .wants_close_before_decrypt()
+        {
+            self.api.send_close_notify();
+        }
+
+        let rc = self
+            .api
+            .record_layer
+            .decrypt_incoming(encr);
+        if let Err(Error::PeerSentOversizedRecord) = rc {
+            self.api
+                .send_fatal_alert(AlertDescription::RecordOverflow);
+        }
+        rc
+    }
+
+    pub fn has_readable_plaintext(&self) -> bool {
+        !self.api.received_plaintext.is_empty()
+    }
+
+    pub fn set_buffer_limit(&mut self, limit: usize) {
+        self.api
+            .sendable_plaintext
+            .set_limit(limit);
+        self.api.sendable_tls.set_limit(limit);
+    }
+
+    pub fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+        // Reject unknown AlertLevels.
+        if let AlertLevel::Unknown(_) = alert.level {
+            self.api
+                .send_fatal_alert(AlertDescription::IllegalParameter);
+        }
+
+        // If we get a CloseNotify, make a note to declare EOF to our
+        // caller.
+        if alert.description == AlertDescription::CloseNotify {
+            self.peer_eof = true;
+            return Ok(());
+        }
+
+        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
+        // (except, for no good reason, user_cancelled).
+        if alert.level == AlertLevel::Warning {
+            if self.api.is_tls13() && alert.description != AlertDescription::UserCanceled {
+                self.api
+                    .send_fatal_alert(AlertDescription::DecodeError);
+            } else {
+                warn!("TLS alert warning received: {:#?}", alert);
+                return Ok(());
+            }
+        }
+
+        error!("TLS alert received: {:#?}", alert);
+        Err(Error::AlertReceived(alert.description))
+    }
+
+    /// Are we done? i.e., have we processed all received messages,
+    /// and received a close_notify to indicate that no new messages
+    /// will arrive?
+    pub fn connection_at_eof(&self) -> bool {
+        self.peer_eof && !self.message_deframer.has_pending()
+    }
+
+    /// Read TLS content from `rd`.  This method does internal
+    /// buffering, so `rd` can supply TLS messages in arbitrary-
+    /// sized chunks (like a socket or pipe might).
+    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+        self.message_deframer.read(rd)
+    }
+
+    pub fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
+        debug_assert!(self.api.early_traffic);
+        debug_assert!(self.api.record_layer.is_encrypting());
+
+        if data.is_empty() {
+            // Don't send empty fragments.
+            return 0;
+        }
+
+        self.api
+            .send_appdata_encrypt(data, Limit::Yes)
+    }
+
+    pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let len = self.api.received_plaintext.read(buf)?;
+
+        if len == 0 && !buf.is_empty() {
+            // no bytes available:
+            // - if we received a close_notify, this is a genuine permanent EOF
+            // - otherwise say EWOULDBLOCK
+            if !self.connection_at_eof() {
+                return Err(io::ErrorKind::WouldBlock.into());
+            }
+        }
+
+        Ok(len)
+    }
+
+    pub fn send_warning_alert(&mut self, desc: AlertDescription) {
+        warn!("Sending warning alert {:?}", desc);
+        self.api.send_warning_alert_no_log(desc);
+    }
+}
+
+pub(crate) trait State<Data>: Send + Sync {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut Context<'_, Data>,
+        message: Message,
+    ) -> Result<Box<dyn State<Data>>, Error>;
+
+    fn export_keying_material(
+        &self,
+        _output: &mut [u8],
+        _label: &[u8],
+        _context: Option<&[u8]>,
+    ) -> Result<(), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+
+    fn perhaps_write_key_update(&mut self, _common: &mut CommonApi) {}
+}
+
+pub(crate) struct Context<'a, Data> {
+    pub(crate) common: &'a mut CommonApi,
+    pub(crate) data: &'a mut Data,
+}
+
+pub(crate) struct CommonApi {
+    pub record_layer: record_layer::RecordLayer,
+    pub sendable_tls: ChunkVecBuffer,
+    sendable_plaintext: ChunkVecBuffer,
+    received_plaintext: ChunkVecBuffer,
+    message_fragmenter: MessageFragmenter,
+    pub negotiated_version: Option<ProtocolVersion>,
+    pub alpn_protocol: Option<Vec<u8>>,
+    /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
+    pub protocol: Protocol,
+    pub is_client: bool,
+    pub suite: Option<&'static SupportedCipherSuite>,
+    pub traffic: bool,
+    pub early_traffic: bool,
+    aligned_handshake: bool,
+    sent_fatal_alert: bool,
+    #[cfg(feature = "quic")]
+    pub(crate) quic: conn_quic::Quic,
+}
+
+impl CommonApi {
     // Changing the keys must not span any fragmented handshake
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
     // which is illegal.  Not mentioned in RFC.
     pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
-        if !self.handshake_joiner.is_empty() {
+        if !self.aligned_handshake {
             self.send_fatal_alert(AlertDescription::UnexpectedMessage);
             Err(Error::PeerMisbehavedError(
                 "key epoch or handshake flight with pending fragment".to_string(),
@@ -805,66 +956,61 @@ impl ConnectionCommon {
         Error::PeerMisbehavedError(why.to_string())
     }
 
-    pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.suite
+    #[cfg(feature = "quic")]
+    pub fn missing_extension(&mut self, why: &str) -> Error {
+        self.send_fatal_alert(AlertDescription::MissingExtension);
+        Error::PeerMisbehavedError(why.to_string())
     }
 
-    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol
-            .as_ref()
-            .map(AsRef::as_ref)
+    pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
+        warn!("Sending fatal alert {:?}", desc);
+        debug_assert!(!self.sent_fatal_alert);
+        let m = Message::build_alert(AlertLevel::Fatal, desc);
+        self.send_msg(m, self.record_layer.is_encrypting());
+        self.sent_fatal_alert = true;
     }
 
-    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
-        if self
-            .record_layer
-            .wants_close_before_decrypt()
+    pub fn send_close_notify(&mut self) {
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+    }
+
+    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
+        let m = Message::build_alert(AlertLevel::Warning, desc);
+        self.send_msg(m, self.record_layer.is_encrypting());
+    }
+
+    /// Send a raw TLS message, fragmenting it if needed.
+    pub fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        #[cfg(feature = "quic")]
         {
-            self.send_close_notify();
-        }
-
-        let rc = self.record_layer.decrypt_incoming(encr);
-        if let Err(Error::PeerSentOversizedRecord) = rc {
-            self.send_fatal_alert(AlertDescription::RecordOverflow);
-        }
-        rc
-    }
-
-    pub fn has_readable_plaintext(&self) -> bool {
-        !self.received_plaintext.is_empty()
-    }
-
-    pub fn set_buffer_limit(&mut self, limit: usize) {
-        self.sendable_plaintext.set_limit(limit);
-        self.sendable_tls.set_limit(limit);
-    }
-
-    pub fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
-        // Reject unknown AlertLevels.
-        if let AlertLevel::Unknown(_) = alert.level {
-            self.send_fatal_alert(AlertDescription::IllegalParameter);
-        }
-
-        // If we get a CloseNotify, make a note to declare EOF to our
-        // caller.
-        if alert.description == AlertDescription::CloseNotify {
-            self.peer_eof = true;
-            return Ok(());
-        }
-
-        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
-        // (except, for no good reason, user_cancelled).
-        if alert.level == AlertLevel::Warning {
-            if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                self.send_fatal_alert(AlertDescription::DecodeError);
-            } else {
-                warn!("TLS alert warning received: {:#?}", alert);
-                return Ok(());
+            if let Protocol::Quic = self.protocol {
+                if let MessagePayload::Alert(alert) = m.payload {
+                    self.quic.alert = Some(alert.description);
+                } else {
+                    debug_assert!(
+                        matches!(m.payload, MessagePayload::Handshake(_)),
+                        "QUIC uses TLS for the cryptographic handshake only"
+                    );
+                    let mut bytes = Vec::new();
+                    m.payload.encode(&mut bytes);
+                    self.quic
+                        .hs_queue
+                        .push_back((must_encrypt, bytes));
+                }
+                return;
             }
         }
-
-        error!("TLS alert received: {:#?}", alert);
-        Err(Error::AlertReceived(alert.description))
+        if !must_encrypt {
+            let mut to_send = VecDeque::new();
+            self.message_fragmenter
+                .fragment(m.into(), &mut to_send);
+            for mm in to_send {
+                self.queue_tls_message(mm);
+            }
+        } else {
+            self.send_msg_encrypt(m.into());
+        }
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
@@ -927,34 +1073,30 @@ impl ConnectionCommon {
         self.queue_tls_message(em);
     }
 
-    /// Are we done? i.e., have we processed all received messages,
-    /// and received a close_notify to indicate that no new messages
-    /// will arrive?
-    pub fn connection_at_eof(&self) -> bool {
-        self.peer_eof && !self.message_deframer.has_pending()
-    }
-
-    /// Read TLS content from `rd`.  This method does internal
-    /// buffering, so `rd` can supply TLS messages in arbitrary-
-    /// sized chunks (like a socket or pipe might).
-    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        self.message_deframer.read(rd)
+    // Put m into sendable_tls for writing.
+    fn queue_tls_message(&mut self, m: OpaqueMessage) {
+        self.sendable_tls.append(m.encode());
     }
 
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         self.sendable_tls.write_to(wr)
     }
 
-    pub fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.early_traffic);
-        debug_assert!(self.record_layer.is_encrypting());
+    pub fn start_traffic(&mut self) {
+        self.traffic = true;
+        self.flush_plaintext();
+    }
 
-        if data.is_empty() {
-            // Don't send empty fragments.
-            return 0;
+    /// Send any buffered plaintext.  Plaintext is buffered if
+    /// written during handshake.
+    fn flush_plaintext(&mut self) {
+        if !self.traffic {
+            return;
         }
 
-        self.send_appdata_encrypt(data, Limit::Yes)
+        while let Some(buf) = self.sendable_plaintext.pop() {
+            self.send_plain(&buf, Limit::No);
+        }
     }
 
     /// Encrypt and send some plaintext `data`.  `limit` controls
@@ -987,81 +1129,6 @@ impl ConnectionCommon {
         self.send_appdata_encrypt(data, limit)
     }
 
-    pub fn start_traffic(&mut self) {
-        self.traffic = true;
-        self.flush_plaintext();
-    }
-
-    /// Send any buffered plaintext.  Plaintext is buffered if
-    /// written during handshake.
-    fn flush_plaintext(&mut self) {
-        if !self.traffic {
-            return;
-        }
-
-        while let Some(buf) = self.sendable_plaintext.pop() {
-            self.send_plain(&buf, Limit::No);
-        }
-    }
-
-    // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: OpaqueMessage) {
-        self.sendable_tls.append(m.encode());
-    }
-
-    /// Send a raw TLS message, fragmenting it if needed.
-    pub fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        #[cfg(feature = "quic")]
-        {
-            if let Protocol::Quic = self.protocol {
-                if let MessagePayload::Alert(alert) = m.payload {
-                    self.quic.alert = Some(alert.description);
-                } else {
-                    debug_assert!(
-                        matches!(m.payload, MessagePayload::Handshake(_)),
-                        "QUIC uses TLS for the cryptographic handshake only"
-                    );
-                    let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes);
-                    self.quic
-                        .hs_queue
-                        .push_back((must_encrypt, bytes));
-                }
-                return;
-            }
-        }
-        if !must_encrypt {
-            let mut to_send = VecDeque::new();
-            self.message_fragmenter
-                .fragment(m.into(), &mut to_send);
-            for mm in to_send {
-                self.queue_tls_message(mm);
-            }
-        } else {
-            self.send_msg_encrypt(m.into());
-        }
-    }
-
-    pub fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
-        self.received_plaintext
-            .append(bytes.0.into_owned());
-    }
-
-    pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self.received_plaintext.read(buf)?;
-
-        if len == 0 && !buf.is_empty() {
-            // no bytes available:
-            // - if we received a close_notify, this is a genuine permanent EOF
-            // - otherwise say EWOULDBLOCK
-            if !self.connection_at_eof() {
-                return Err(io::ErrorKind::WouldBlock.into());
-            }
-        }
-
-        Ok(len)
-    }
-
     pub fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets) {
         let (dec, enc) = cipher::new_tls12(secrets);
         self.record_layer
@@ -1070,33 +1137,9 @@ impl ConnectionCommon {
             .prepare_message_decrypter(dec);
     }
 
-    #[cfg(feature = "quic")]
-    pub fn missing_extension(&mut self, why: &str) -> Error {
-        self.send_fatal_alert(AlertDescription::MissingExtension);
-        Error::PeerMisbehavedError(why.to_string())
-    }
-
-    pub fn send_warning_alert(&mut self, desc: AlertDescription) {
-        warn!("Sending warning alert {:?}", desc);
-        self.send_warning_alert_no_log(desc);
-    }
-
-    pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
-        warn!("Sending fatal alert {:?}", desc);
-        debug_assert!(!self.sent_fatal_alert);
-        let m = Message::build_alert(AlertLevel::Fatal, desc);
-        self.send_msg(m, self.record_layer.is_encrypting());
-        self.sent_fatal_alert = true;
-    }
-
-    pub fn send_close_notify(&mut self) {
-        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
-    }
-
-    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
-        let m = Message::build_alert(AlertLevel::Warning, desc);
-        self.send_msg(m, self.record_layer.is_encrypting());
+    pub fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
+        self.received_plaintext
+            .append(bytes.0.into_owned());
     }
 
     pub fn is_quic(&self) -> bool {
@@ -1107,30 +1150,14 @@ impl ConnectionCommon {
         #[cfg(not(feature = "quic"))]
         false
     }
-}
 
-pub(crate) trait State<Data>: Send + Sync {
-    fn handle(
-        self: Box<Self>,
-        cx: &mut Context<'_, Data>,
-        message: Message,
-    ) -> Result<Box<dyn State<Data>>, Error>;
-
-    fn export_keying_material(
-        &self,
-        _output: &mut [u8],
-        _label: &[u8],
-        _context: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
+    pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
+        self.suite
     }
 
-    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
-}
-
-pub(crate) struct Context<'a, Data> {
-    pub(crate) common: &'a mut ConnectionCommon,
-    pub(crate) data: &'a mut Data,
+    pub fn is_tls13(&self) -> bool {
+        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+    }
 }
 
 #[cfg(feature = "quic")]
@@ -1149,12 +1176,14 @@ mod conn_quic {
                 })
                 .is_none()
             {
-                self.quic.alert = Some(AlertDescription::DecodeError);
+                self.api.quic.alert = Some(AlertDescription::DecodeError);
                 return Err(Error::CorruptMessage);
             }
             Ok(())
         }
+    }
 
+    impl CommonApi {
         pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys> {
             while let Some((_, msg)) = self.quic.hs_queue.pop_front() {
                 buf.extend_from_slice(&msg);

@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::conn::{ConnectionCommon, ConnectionRandoms, Context, State};
+use crate::conn::{CommonApi, ConnectionRandoms, Context, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::KeyScheduleEarly;
@@ -746,7 +746,7 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub(super) fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
+pub(super) fn send_cert_error_alert(common: &mut CommonApi, err: Error) -> Error {
     match err {
         Error::WebPkiError(webpki::Error::BadDer, _) => {
             common.send_fatal_alert(AlertDescription::DecodeError);

@@ -316,7 +316,7 @@ impl Connection for ServerConnection {
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.common.write_tls(wr)
+        self.common.api.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
@@ -335,11 +335,11 @@ impl Connection for ServerConnection {
     }
 
     fn wants_write(&self) -> bool {
-        !self.common.sendable_tls.is_empty()
+        !self.common.api.sendable_tls.is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
-        !self.common.traffic
+        !self.common.api.traffic
     }
 
     fn set_buffer_limit(&mut self, len: usize) {
@@ -347,7 +347,7 @@ impl Connection for ServerConnection {
     }
 
     fn send_close_notify(&mut self) {
-        self.common.send_close_notify()
+        self.common.api.send_close_notify()
     }
 
     fn peer_certificates(&self) -> Option<&[key::Certificate<'static>]> {
@@ -359,7 +359,7 @@ impl Connection for ServerConnection {
     }
 
     fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common.negotiated_version
+        self.common.api.negotiated_version
     }
 
     fn export_keying_material(
@@ -373,7 +373,7 @@ impl Connection for ServerConnection {
     }
 
     fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
-        self.common.get_suite()
+        self.common.api.get_suite()
     }
 
     fn writer(&mut self) -> Writer {
@@ -434,6 +434,7 @@ impl ServerConnectionData {
 impl quic::QuicExt for ServerConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
+            .api
             .quic
             .params
             .as_ref()
@@ -442,8 +443,12 @@ impl quic::QuicExt for ServerConnection {
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.common.get_suite()?,
-            self.common.quic.early_secret.as_ref()?,
+            self.common.api.get_suite()?,
+            self.common
+                .api
+                .quic
+                .early_secret
+                .as_ref()?,
         ))
     }
 
@@ -454,15 +459,15 @@ impl quic::QuicExt for ServerConnection {
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::Keys> {
-        self.common.write_hs(buf)
+        self.common.api.write_hs(buf)
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
+        self.common.api.quic.alert
     }
 
     fn next_1rtt_keys(&mut self) -> Option<quic::PacketKeySet> {
-        self.common.next_1rtt_keys()
+        self.common.api.next_1rtt_keys()
     }
 }
 
@@ -494,7 +499,7 @@ pub trait ServerQuicExt {
             quic::Version::V1 => ServerExtension::TransportParameters(params.into()),
         };
         let mut new = ServerConnection::from_config(config, vec![ext])?;
-        new.common.protocol = Protocol::Quic;
+        new.common.api.protocol = Protocol::Quic;
         Ok(new)
     }
 }

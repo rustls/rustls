@@ -1,6 +1,6 @@
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
-use crate::conn::{ConnectionCommon, ConnectionRandoms, Context, State};
+use crate::conn::{CommonApi, ConnectionRandoms, Context, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -28,17 +28,17 @@ pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ServerContext<'a> = Context<'a, ServerConnectionData>;
 
-pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
+pub(super) fn incompatible(common: &mut CommonApi, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::HandshakeFailure);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-fn bad_version(common: &mut ConnectionCommon, why: &str) -> Error {
+fn bad_version(common: &mut CommonApi, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::ProtocolVersion);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
+pub(super) fn decode_error(common: &mut CommonApi, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::DecodeError);
     Error::PeerMisbehavedError(why.to_string())
 }
