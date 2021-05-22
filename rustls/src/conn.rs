@@ -551,7 +551,7 @@ impl<Data> ConnectionCommon<Data> {
         if self
             .handshake_joiner
             .take_message(msg)
-            .is_none()
+            .is_err()
         {
             self.common_state
                 .send_fatal_alert(AlertDescription::DecodeError);
@@ -625,7 +625,7 @@ impl<Data> ConnectionCommon<Data> {
 
             self.handshake_joiner
                 .take_message(msg)
-                .ok_or_else(|| {
+                .map_err(|_| {
                     self.common_state
                         .send_fatal_alert(AlertDescription::DecodeError);
                     Error::CorruptMessagePayload(ContentType::Handshake)
@@ -806,7 +806,7 @@ impl<Data> ConnectionCommon<Data> {
         if self
             .handshake_joiner
             .take_message(msg)
-            .is_none()
+            .is_err()
         {
             self.common_state.quic.alert = Some(AlertDescription::DecodeError);
             return Err(Error::CorruptMessage);
