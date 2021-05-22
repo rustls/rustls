@@ -650,13 +650,7 @@ impl ConnectionCommon {
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.handshake_joiner.want_message(&msg) {
-            self.handshake_joiner
-                .take_message(msg)
-                .map_err(|_| {
-                    self.api
-                        .send_fatal_alert(AlertDescription::DecodeError);
-                    Error::CorruptMessagePayload(ContentType::Handshake)
-                })?;
+            self.handshake_joiner.take_message(msg);
             return self.process_new_handshake_messages(state, data);
         }
 
@@ -696,11 +690,20 @@ impl ConnectionCommon {
         state: &mut Option<Box<dyn State<Data>>>,
         data: &mut Data,
     ) -> Result<(), Error> {
-        while let Some(msg) = self.handshake_joiner.frames.pop_front() {
-            self.api
-                .process_main_protocol(msg, state, data)?;
+        let (mut iter, aligned) = self.handshake_joiner.iter();
+        self.api.aligned_handshake = aligned;
+        while let Some(result) = iter.pop() {
+            match result {
+                Ok(msg) => self
+                    .api
+                    .process_main_protocol(msg, state, data)?,
+                Err(_) => {
+                    self.api
+                        .send_fatal_alert(AlertDescription::DecodeError);
+                    return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+                }
+            }
         }
-
         Ok(())
     }
 
@@ -912,7 +915,6 @@ impl CommonApi {
         }
 
         let current = state.take().unwrap();
-        self.aligned_handshake = true;
         let mut cx = Context { common: self, data };
 
         match current.handle(&mut cx, msg) {
@@ -1170,11 +1172,8 @@ mod conn_quic {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
                     payload: plaintext.to_vec(),
-                })
-                .map_err(|_| {
-                    self.api.quic.alert = Some(AlertDescription::DecodeError);
-                    Error::CorruptMessage
-                })
+                });
+            Ok(())
         }
     }
 

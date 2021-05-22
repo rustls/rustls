@@ -16,10 +16,13 @@ fuzz_target!(|data: &[u8]| {
 
     let mut jnr = hsjoiner::HandshakeJoiner::new();
     if jnr.want_message(&msg) {
-        let _ = jnr.take_message(msg);
+        jnr.take_message(msg);
     }
 
-    for msg in jnr.frames {
-        message::Message::try_from(msg).unwrap();
+    let (mut iter, _) = jnr.iter();
+    while let Some(msg) = iter.pop() {
+        if let Ok(msg) = msg {
+            message::Message::try_from(msg).unwrap();
+        }
     }
 });

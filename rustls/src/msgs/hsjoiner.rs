@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use crate::msgs::codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
@@ -12,25 +10,16 @@ const HEADER_SIZE: usize = 1 + 3;
 /// TLS messages output from this layer contain precisely
 /// one handshake payload.
 pub struct HandshakeJoiner {
-    /// Completed handshake frames for output.
-    pub frames: VecDeque<Message<'static>>,
-
     /// The message payload we're currently accumulating.
     buf: Vec<u8>,
-}
-
-impl Default for HandshakeJoiner {
-    fn default() -> Self {
-        Self::new()
-    }
+    version: ProtocolVersion,
 }
 
 impl HandshakeJoiner {
-    /// Make a new HandshakeJoiner.
-    pub fn new() -> HandshakeJoiner {
+    pub fn new() -> Self {
         HandshakeJoiner {
-            frames: VecDeque::new(),
             buf: Vec::new(),
+            version: ProtocolVersion::TLSv1_2,
         }
     }
 
@@ -45,10 +34,7 @@ impl HandshakeJoiner {
     }
 
     /// Take the message, and join/split it as needed
-    ///
-    /// Returns a `DecodeError` if msg or a preceding message was corrupt.
-    /// You cannot recover from this situation.
-    pub fn take_message(&mut self, msg: OpaqueMessage) -> Result<(), DecodeError> {
+    pub fn take_message(&mut self, msg: OpaqueMessage) {
         // The vast majority of the time `self.buf` will be empty since most
         // handshake messages arrive in a single fragment. Avoid allocating and
         // copying in that common case.
@@ -59,53 +45,81 @@ impl HandshakeJoiner {
                 .extend_from_slice(&msg.payload[..]);
         }
 
-        while self.buf_contains_message() {
-            if !self.deframe_one(msg.version) {
-                return Err(DecodeError(()));
+        if msg.version == ProtocolVersion::TLSv1_3 {
+            self.version = ProtocolVersion::TLSv1_3;
+        }
+    }
+
+    pub fn iter(&mut self) -> (HandshakeMessageIter<'_>, bool) {
+        let mut buf = &self.buf[..];
+        while let Some(len) = contains_message(buf) {
+            buf = &buf[len..];
+        }
+        let aligned = buf.is_empty();
+
+        (
+            HandshakeMessageIter {
+                buf: &mut self.buf,
+                offset: 0,
+                version: self.version,
+            },
+            aligned,
+        )
+    }
+}
+
+pub struct HandshakeMessageIter<'a> {
+    buf: &'a mut Vec<u8>,
+    offset: usize,
+    version: ProtocolVersion,
+}
+
+impl<'a> HandshakeMessageIter<'a> {
+    pub fn pop(&mut self) -> Option<Result<Message<'_>, DecodeError>> {
+        let buf = self.buf.split_at(self.offset).1;
+        contains_message(buf)?;
+
+        let mut rd = codec::Reader::init(buf);
+        let payload = match HandshakeMessagePayload::read_version(&mut rd, self.version) {
+            Some(p) => p,
+            None => return Some(Err(DecodeError(()))),
+        };
+
+        self.offset += rd.used();
+        Some(Ok(Message {
+            version: self.version,
+            payload: MessagePayload::Handshake(payload),
+        }))
+    }
+}
+
+impl<'a> Drop for HandshakeMessageIter<'a> {
+    fn drop(&mut self) {
+        match self.offset == self.buf.len() {
+            true => self.buf.clear(),
+            false => {
+                let new_len = self.buf.len() - self.offset;
+                self.buf.copy_within(self.offset.., 0);
+                self.buf.truncate(new_len);
             }
         }
+    }
+}
 
-        Ok(())
+/// Does our `buf` contain a full handshake payload?  It does if it is big
+/// enough to contain a header, and that header has a length which falls
+/// within `buf`.
+fn contains_message(buf: &[u8]) -> Option<usize> {
+    if buf.len() < HEADER_SIZE {
+        return None;
     }
 
-    /// Does our `buf` contain a full handshake payload?  It does if it is big
-    /// enough to contain a header, and that header has a length which falls
-    /// within `buf`.
-    fn buf_contains_message(&self) -> bool {
-        if self.buf.len() < HEADER_SIZE {
-            return false;
-        }
-
-        let (header, rest) = self.buf.split_at(HEADER_SIZE);
-        match codec::u24::decode(&header[1..]) {
-            Some(len) => rest.get(..len.into()).is_some(),
-            None => false,
-        }
-    }
-
-    /// Take a TLS handshake payload off the front of `buf`, and put it onto
-    /// the back of our `frames` deque inside a normal `Message`.
-    ///
-    /// Returns false if the stream is desynchronised beyond repair.
-    fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
-        let used = {
-            let mut rd = codec::Reader::init(&self.buf);
-            let payload = match HandshakeMessagePayload::read_version(&mut rd, version) {
-                Some(p) => p,
-                None => return false,
-            };
-
-            let m = Message {
-                version,
-                payload: MessagePayload::Handshake(payload.to_owned()),
-            };
-
-            self.frames.push_back(m);
-            rd.used()
-        };
-        self.buf = self.buf.split_off(used);
-        true
-    }
+    let (header, rest) = buf.split_at(HEADER_SIZE);
+    codec::u24::decode(&header[1..]).and_then(|len| {
+        let len = usize::from(len);
+        rest.get(..len)
+            .map(|_| HEADER_SIZE + len)
+    })
 }
 
 #[derive(Debug)]
@@ -141,7 +155,8 @@ mod tests {
     }
 
     fn pop_eq(expect: &OpaqueMessage, hj: &mut HandshakeJoiner) {
-        let got = hj.frames.pop_front().unwrap();
+        let mut iter = hj.iter().0;
+        let got = iter.pop().unwrap().unwrap();
         assert_eq!(got.payload.content_type(), expect.typ);
         assert_eq!(got.version, expect.version);
 
@@ -150,6 +165,11 @@ mod tests {
         right.extend(&expect.payload);
 
         assert_eq!(left, right);
+    }
+
+    fn expect_err(hj: &mut HandshakeJoiner) {
+        let mut iter = hj.iter().0;
+        assert!(iter.pop().unwrap().is_err());
     }
 
     #[test]
@@ -165,8 +185,8 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap();
-        assert_eq!(hj.is_empty(), true);
+        hj.take_message(msg);
+        assert_eq!(hj.is_empty(), false);
 
         let expect = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -194,7 +214,8 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap_err();
+        hj.take_message(msg);
+        expect_err(&mut hj);
     }
 
     #[test]
@@ -211,7 +232,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap();
+        hj.take_message(msg);
         assert_eq!(hj.is_empty(), false);
 
         // 11 more bytes.
@@ -222,7 +243,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap();
+        hj.take_message(msg);
         assert_eq!(hj.is_empty(), false);
 
         // Final 1 byte.
@@ -233,8 +254,8 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap();
-        assert_eq!(hj.is_empty(), true);
+        hj.take_message(msg);
+        assert_eq!(hj.is_empty(), false);
 
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
@@ -259,7 +280,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap();
+        hj.take_message(msg);
         assert_eq!(hj.is_empty(), false);
 
         for _i in 0..8191 {
@@ -270,7 +291,7 @@ mod tests {
             };
 
             assert_eq!(hj.want_message(&msg), true);
-            hj.take_message(msg).unwrap();
+            hj.take_message(msg);
             assert_eq!(hj.is_empty(), false);
         }
 
@@ -282,6 +303,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        hj.take_message(msg).unwrap_err();
+        hj.take_message(msg);
+        expect_err(&mut hj);
     }
 }
