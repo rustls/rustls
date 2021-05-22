@@ -28,11 +28,6 @@ impl HandshakeJoiner {
         msg.typ == ContentType::Handshake
     }
 
-    /// Do we have any buffered data?
-    pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
-    }
-
     /// Take the message, and join/split it as needed
     pub fn take_message(&mut self, msg: OpaqueMessage) {
         // The vast majority of the time `self.buf` will be empty since most
@@ -136,7 +131,7 @@ mod tests {
     #[test]
     fn want() {
         let hj = HandshakeJoiner::new();
-        assert_eq!(hj.is_empty(), true);
+        assert_eq!(hj.buf.is_empty(), true);
 
         let wanted = OpaqueMessage {
             typ: ContentType::Handshake,
@@ -186,7 +181,7 @@ mod tests {
 
         assert_eq!(hj.want_message(&msg), true);
         hj.take_message(msg);
-        assert_eq!(hj.is_empty(), false);
+        assert_eq!(hj.buf.is_empty(), false);
 
         let expect = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -222,7 +217,7 @@ mod tests {
     fn join() {
         // Check we join one handshake message split over two PDUs.
         let mut hj = HandshakeJoiner::new();
-        assert_eq!(hj.is_empty(), true);
+        assert_eq!(hj.buf.is_empty(), true);
 
         // Introduce Finished of 16 bytes, providing 4.
         let mut msg = OpaqueMessage {
@@ -233,7 +228,7 @@ mod tests {
 
         assert_eq!(hj.want_message(&msg), true);
         hj.take_message(msg);
-        assert_eq!(hj.is_empty(), false);
+        assert_eq!(hj.buf.is_empty(), false);
 
         // 11 more bytes.
         msg = OpaqueMessage {
@@ -244,7 +239,7 @@ mod tests {
 
         assert_eq!(hj.want_message(&msg), true);
         hj.take_message(msg);
-        assert_eq!(hj.is_empty(), false);
+        assert_eq!(hj.buf.is_empty(), false);
 
         // Final 1 byte.
         msg = OpaqueMessage {
@@ -255,7 +250,7 @@ mod tests {
 
         assert_eq!(hj.want_message(&msg), true);
         hj.take_message(msg);
-        assert_eq!(hj.is_empty(), false);
+        assert_eq!(hj.buf.is_empty(), false);
 
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
@@ -281,7 +276,7 @@ mod tests {
 
         assert_eq!(hj.want_message(&msg), true);
         hj.take_message(msg);
-        assert_eq!(hj.is_empty(), false);
+        assert_eq!(hj.buf.is_empty(), false);
 
         for _i in 0..8191 {
             let msg = OpaqueMessage {
@@ -292,7 +287,7 @@ mod tests {
 
             assert_eq!(hj.want_message(&msg), true);
             hj.take_message(msg);
-            assert_eq!(hj.is_empty(), false);
+            assert_eq!(hj.buf.is_empty(), false);
         }
 
         // final 6 bytes
