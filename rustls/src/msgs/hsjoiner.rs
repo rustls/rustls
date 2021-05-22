@@ -44,14 +44,11 @@ impl HandshakeJoiner {
         self.buf.is_empty()
     }
 
-    /// Take the message, and join/split it as needed.
-    /// Return the number of new messages added to the
-    /// output deque as a result of this message.
+    /// Take the message, and join/split it as needed
     ///
-    /// Returns None if msg or a preceding message was corrupt.
-    /// You cannot recover from this situation.  Otherwise returns
-    /// a count of how many messages we queued.
-    pub fn take_message(&mut self, msg: OpaqueMessage) -> Option<usize> {
+    /// Returns a `DecodeError` if msg or a preceding message was corrupt.
+    /// You cannot recover from this situation.
+    pub fn take_message(&mut self, msg: OpaqueMessage) -> Result<(), DecodeError> {
         // The vast majority of the time `self.buf` will be empty since most
         // handshake messages arrive in a single fragment. Avoid allocating and
         // copying in that common case.
@@ -62,16 +59,13 @@ impl HandshakeJoiner {
                 .extend_from_slice(&msg.payload[..]);
         }
 
-        let mut count = 0;
         while self.buf_contains_message() {
             if !self.deframe_one(msg.version) {
-                return None;
+                return Err(DecodeError(()));
             }
-
-            count += 1;
         }
 
-        Some(count)
+        Ok(())
     }
 
     /// Does our `buf` contain a full handshake payload?  It does if it is big
@@ -113,6 +107,9 @@ impl HandshakeJoiner {
         true
     }
 }
+
+#[derive(Debug)]
+pub struct DecodeError(());
 
 #[cfg(test)]
 mod tests {
@@ -168,7 +165,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), Some(2));
+        hj.take_message(msg).unwrap();
         assert_eq!(hj.is_empty(), true);
 
         let expect = Message {
@@ -197,7 +194,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), None);
+        hj.take_message(msg).unwrap_err();
     }
 
     #[test]
@@ -214,7 +211,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), Some(0));
+        hj.take_message(msg).unwrap();
         assert_eq!(hj.is_empty(), false);
 
         // 11 more bytes.
@@ -225,7 +222,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), Some(0));
+        hj.take_message(msg).unwrap();
         assert_eq!(hj.is_empty(), false);
 
         // Final 1 byte.
@@ -236,7 +233,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), Some(1));
+        hj.take_message(msg).unwrap();
         assert_eq!(hj.is_empty(), true);
 
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
@@ -262,7 +259,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), Some(0));
+        hj.take_message(msg).unwrap();
         assert_eq!(hj.is_empty(), false);
 
         for _i in 0..8191 {
@@ -273,7 +270,7 @@ mod tests {
             };
 
             assert_eq!(hj.want_message(&msg), true);
-            assert_eq!(hj.take_message(msg), Some(0));
+            hj.take_message(msg).unwrap();
             assert_eq!(hj.is_empty(), false);
         }
 
@@ -285,6 +282,6 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), None);
+        hj.take_message(msg).unwrap_err();
     }
 }

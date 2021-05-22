@@ -652,7 +652,7 @@ impl ConnectionCommon {
         if self.handshake_joiner.want_message(&msg) {
             self.handshake_joiner
                 .take_message(msg)
-                .ok_or_else(|| {
+                .map_err(|_| {
                     self.api
                         .send_fatal_alert(AlertDescription::DecodeError);
                     Error::CorruptMessagePayload(ContentType::Handshake)
@@ -1165,19 +1165,16 @@ mod conn_quic {
 
     impl ConnectionCommon {
         pub(crate) fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-            if self
-                .handshake_joiner
+            self.handshake_joiner
                 .take_message(OpaqueMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
                     payload: plaintext.to_vec(),
                 })
-                .is_none()
-            {
-                self.api.quic.alert = Some(AlertDescription::DecodeError);
-                return Err(Error::CorruptMessage);
-            }
-            Ok(())
+                .map_err(|_| {
+                    self.api.quic.alert = Some(AlertDescription::DecodeError);
+                    Error::CorruptMessage
+                })
         }
     }
 
