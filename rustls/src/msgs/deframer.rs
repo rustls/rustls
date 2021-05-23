@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 use std::io;
 
 use crate::error::Error;
-use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
 
 /// This deframer works to reconstruct TLS messages
@@ -66,9 +65,7 @@ impl MessageDeframer {
             // Does our `buf` contain a full message?  It does if it is big enough to
             // contain a header, and that header has a length which falls within `buf`.
             // If so, deframe it and place the message onto the frames output queue.
-            let mut rd = codec::Reader::init(&self.buf[..self.used]);
-
-            let m = match OpaqueMessage::read(&mut rd) {
+            let (m, used) = match OpaqueMessage::read(&mut self.buf[..self.used]) {
                 Ok(m) => m,
                 Err(e) => {
                     use MessageError::*;
@@ -79,7 +76,6 @@ impl MessageDeframer {
                 }
             };
 
-            let used = rd.used();
             self.frames.push_back(m);
             if used < self.used {
                 /* Before:

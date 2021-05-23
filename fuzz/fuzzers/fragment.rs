@@ -2,16 +2,15 @@
 #[macro_use] extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::fragmenter;
 use rustls::internal::msgs::message;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 
 fuzz_target!(|data: &[u8]| {
-    let mut rdr = Reader::init(data);
-    let msg = match message::OpaqueMessage::read(&mut rdr) {
-        Ok(msg) => msg,
+    let mut buf = data.to_vec();
+    let msg = match message::OpaqueMessage::read(&mut buf) {
+        Ok((msg, _)) => msg,
         Err(_) => return,
     };
 

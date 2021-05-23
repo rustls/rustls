@@ -3,14 +3,13 @@
 extern crate rustls;
 
 use std::convert::TryFrom;
-use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::hsjoiner;
 use rustls::internal::msgs::message;
 
 fuzz_target!(|data: &[u8]| {
-    let mut rdr = Reader::init(data);
-    let msg = match message::OpaqueMessage::read(&mut rdr) {
-        Ok(msg) => msg,
+    let mut buf = data.to_vec();
+    let msg = match message::OpaqueMessage::read(&mut buf) {
+        Ok((msg, _)) => msg,
         Err(_) => return,
     };
 

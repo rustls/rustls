@@ -35,13 +35,13 @@ mod test {
 
     #[test]
     fn smoketest() {
-        use super::codec::Reader;
         use super::message::{Message, OpaqueMessage};
-        let bytes = include_bytes!("handshake-test.1.bin");
-        let mut r = Reader::init(bytes);
+        let mut bytes = include_bytes!("handshake-test.1.bin").to_vec();
+        let mut offset = 0;
 
-        while r.any_left() {
-            let m = OpaqueMessage::read(&mut r).unwrap();
+        while offset < bytes.len() {
+            let (m, used) = OpaqueMessage::read(&mut bytes[offset..]).unwrap();
+            offset += used;
 
             let out = m.to_owned().encode();
             assert!(out.len() > 0);

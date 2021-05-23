@@ -78,10 +78,11 @@ pub struct OpaqueMessage {
 impl OpaqueMessage {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader) -> Result<OpaqueMessage, MessageError> {
-        let typ = ContentType::read(r).ok_or(MessageError::TooShortForHeader)?;
-        let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
-        let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
+    pub fn read(buf: &mut [u8]) -> Result<(OpaqueMessage, usize), MessageError> {
+        let mut r = Reader::init(&buf);
+        let typ = ContentType::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
+        let version = ProtocolVersion::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
+        let len = u16::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
 
         // Reject oversize messages
         if len >= Self::MAX_PAYLOAD {
@@ -106,11 +107,12 @@ impl OpaqueMessage {
             .ok_or(MessageError::TooShortForLength)?;
         let payload = Payload::read(&mut sub);
 
-        Ok(OpaqueMessage {
+        let msg = OpaqueMessage {
             typ,
             version,
             payload: payload.0.into_owned(),
-        })
+        };
+        Ok((msg, r.used()))
     }
 
     pub fn encode(mut self) -> Vec<u8> {
