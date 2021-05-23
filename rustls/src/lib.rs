@@ -123,6 +123,7 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
+//! # use std::convert::TryInto;
 //! # let mut root_store = rustls::RootCertStore::empty();
 //! # root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
 //! # let trusted_ct_logs = &[];
@@ -132,7 +133,7 @@
 //! #     .with_root_certificates(root_store, trusted_ct_logs)
 //! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
-//! let example_com = webpki::DnsNameRef::try_from_ascii_str("example.com").unwrap();
+//! let example_com = "example.com".try_into().unwrap();
 //! let mut client = rustls::ClientConnection::new(rc_config, example_com);
 //! ```
 //!
@@ -299,6 +300,7 @@ pub use crate::builder::{
 };
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
+pub use crate::client::ServerName;
 pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientConnection, WriteEarlyData};
 pub use crate::conn::{Connection, Reader, Writer};

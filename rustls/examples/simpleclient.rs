@@ -9,11 +9,11 @@
 /// that is sensible outside of example code.
 use std::sync::Arc;
 
+use std::convert::TryInto;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
 use rustls;
-use webpki;
 use webpki_roots;
 
 use rustls::{Connection, RootCertStore};
@@ -27,8 +27,8 @@ fn main() {
         .with_root_certificates(root_store, &[])
         .with_no_client_auth();
 
-    let dns_name = webpki::DnsNameRef::try_from_ascii_str("google.com").unwrap();
-    let mut conn = rustls::ClientConnection::new(Arc::new(config), dns_name).unwrap();
+    let server_name = "google.com".try_into().unwrap();
+    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
     let mut sock = TcpStream::connect("google.com:443").unwrap();
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     tls.write(

@@ -5,12 +5,12 @@ use super::persist::*;
 use crate::key::Certificate;
 use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
 use crate::ticketer::TimeBase;
-use webpki::DnsNameRef;
+use std::convert::TryInto;
 
 #[test]
 fn clientsessionkey_is_debug() {
-    let name = DnsNameRef::try_from_ascii_str("hello").unwrap();
-    let csk = ClientSessionKey::session_for_dns_name(name);
+    let name = "hello".try_into().unwrap();
+    let csk = ClientSessionKey::session_for_server_name(&name);
     println!("{:?}", csk);
 }
 

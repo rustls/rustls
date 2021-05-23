@@ -1,17 +1,19 @@
 use std::sync::Arc;
 
+use std::convert::TryInto;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
 use env_logger;
 use rustls;
 use rustls::RootCertStore;
-use webpki;
 use webpki_roots;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
-    let dns_name = webpki::DnsNameRef::try_from_ascii_str(domain_name).unwrap();
-    let mut conn = rustls::ClientConnection::new(Arc::clone(&config), dns_name).unwrap();
+    let server_name = domain_name
+        .try_into()
+        .expect("invalid DNS name");
+    let mut conn = rustls::ClientConnection::new(Arc::clone(&config), server_name).unwrap();
     let mut sock = TcpStream::connect(format!("{}:443", domain_name)).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(

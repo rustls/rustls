@@ -22,7 +22,7 @@ use crate::{kx, tls12};
 use super::hs::ClientContext;
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
-use crate::client::{hs, ClientConfig};
+use crate::client::{hs, ClientConfig, ServerName};
 
 use crate::suites::Tls12CipherSuite;
 use crate::ticketer::TimeBase;
@@ -44,7 +44,7 @@ mod server_hello {
     pub(in crate::client) struct CompleteServerHelloHandling {
         pub config: Arc<ClientConfig>,
         pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-        pub dns_name: webpki::DnsName,
+        pub server_name: ServerName,
         pub randoms: ConnectionRandoms,
         pub using_ems: bool,
         pub transcript: HandshakeHash,
@@ -160,7 +160,7 @@ mod server_hello {
                             secrets,
                             resuming_session: self.resuming_session,
                             session_id: self.session_id,
-                            dns_name: self.dns_name,
+                            server_name: self.server_name,
                             using_ems: self.using_ems,
                             transcript: self.transcript,
                             resuming: true,
@@ -173,7 +173,7 @@ mod server_hello {
                             secrets,
                             resuming_session: self.resuming_session,
                             session_id: self.session_id,
-                            dns_name: self.dns_name,
+                            server_name: self.server_name,
                             using_ems: self.using_ems,
                             transcript: self.transcript,
                             ticket: ReceivedTicketDetails::new(),
@@ -189,7 +189,7 @@ mod server_hello {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -206,7 +206,7 @@ struct ExpectCertificate {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -234,7 +234,7 @@ impl hs::State for ExpectCertificate {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -251,7 +251,7 @@ impl hs::State for ExpectCertificate {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -267,7 +267,7 @@ struct ExpectCertificateStatusOrServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -293,7 +293,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -311,7 +311,7 @@ impl hs::State for ExpectCertificateStatusOrServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -329,7 +329,7 @@ struct ExpectCertificateStatus {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -368,7 +368,7 @@ impl hs::State for ExpectCertificateStatus {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -383,7 +383,7 @@ struct ExpectServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -425,7 +425,7 @@ impl hs::State for ExpectServerKx {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -538,11 +538,14 @@ fn emit_finished(
     common.send_msg(f, true);
 }
 
+// --- Either a CertificateRequest, or a ServerHelloDone. ---
+// Existence of the CertificateRequest tells us the server is asking for
+// client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectServerDoneOrCertReq {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -565,7 +568,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -582,7 +585,7 @@ impl hs::State for ExpectServerDoneOrCertReq {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -597,14 +600,11 @@ impl hs::State for ExpectServerDoneOrCertReq {
     }
 }
 
-// --- Either a CertificateRequest, or a ServerHelloDone. ---
-// Existence of the CertificateRequest tells us the server is asking for
-// client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -664,7 +664,7 @@ impl hs::State for ExpectCertificateRequest {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -681,7 +681,7 @@ struct ExpectServerDone {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -705,7 +705,7 @@ impl hs::State for ExpectServerDone {
         cx.common.check_aligned_handshake()?;
 
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
-        debug!("Server DNS name is {:?}", st.dns_name);
+        debug!("Server DNS name is {:?}", st.server_name);
 
         let suite = st.suite;
 
@@ -734,7 +734,7 @@ impl hs::State for ExpectServerDone {
             .verify_server_cert(
                 end_entity,
                 intermediates,
-                st.dns_name.as_ref(),
+                &st.server_name,
                 &mut st.server_cert.scts(),
                 &st.server_cert.ocsp_response,
                 now,
@@ -830,7 +830,7 @@ impl hs::State for ExpectServerDone {
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
-                dns_name: st.dns_name,
+                server_name: st.server_name,
                 using_ems: st.using_ems,
                 transcript: st.transcript,
                 resuming: false,
@@ -843,7 +843,7 @@ impl hs::State for ExpectServerDone {
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
-                dns_name: st.dns_name,
+                server_name: st.server_name,
                 using_ems: st.using_ems,
                 transcript: st.transcript,
                 ticket: ReceivedTicketDetails::new(),
@@ -860,7 +860,7 @@ pub struct ExpectNewTicket {
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
     resuming: bool,
@@ -887,7 +887,7 @@ impl hs::State for ExpectNewTicket {
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
@@ -904,7 +904,7 @@ pub struct ExpectCcs {
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: ReceivedTicketDetails,
@@ -930,7 +930,7 @@ impl hs::State for ExpectCcs {
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: self.ticket,
@@ -945,7 +945,7 @@ struct ExpectFinished {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     session_id: SessionID,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: ReceivedTicketDetails,
@@ -981,7 +981,7 @@ impl ExpectFinished {
             }
         };
 
-        let key = persist::ClientSessionKey::session_for_dns_name(self.dns_name.as_ref());
+        let key = persist::ClientSessionKey::session_for_server_name(&self.server_name);
 
         let master_secret = self.secrets.get_master_secret();
         let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(

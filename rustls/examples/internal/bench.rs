@@ -3,6 +3,7 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
+use std::convert::TryInto;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -22,7 +23,6 @@ use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
 
 use rustls_pemfile;
-use webpki;
 
 fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
@@ -370,8 +370,8 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
     let mut server_time = 0f64;
 
     for _ in 0..rounds {
-        let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
-        let mut client = ClientConnection::new(Arc::clone(&client_config), dns_name).unwrap();
+        let server_name = "localhost".try_into().unwrap();
+        let mut client = ClientConnection::new(Arc::clone(&client_config), server_name).unwrap();
         let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
         server_time += time(|| {
@@ -445,8 +445,8 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
         max_fragment_size,
     ));
 
-    let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
-    let mut client = ClientConnection::new(client_config, dns_name).unwrap();
+    let server_name = "localhost".try_into().unwrap();
+    let mut client = ClientConnection::new(client_config, server_name).unwrap();
     client.set_buffer_limit(0);
     let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
     server.set_buffer_limit(0);
@@ -519,8 +519,8 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
 
     for _i in 0..conn_count {
         servers.push(ServerConnection::new(Arc::clone(&server_config)).unwrap());
-        let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
-        clients.push(ClientConnection::new(Arc::clone(&client_config), dns_name).unwrap());
+        let server_name = "localhost".try_into().unwrap();
+        clients.push(ClientConnection::new(Arc::clone(&client_config), server_name).unwrap());
     }
 
     for _step in 0..5 {

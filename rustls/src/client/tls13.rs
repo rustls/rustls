@@ -34,7 +34,7 @@ use crate::{sign, KeyLog};
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig};
+use crate::client::{hs, ClientConfig, ServerName};
 
 use crate::ticketer::TimeBase;
 use ring::constant_time;
@@ -63,7 +63,7 @@ pub(super) fn handle_server_hello(
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -143,7 +143,7 @@ pub(super) fn handle_server_hello(
     };
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(&config, dns_name.as_ref(), their_key_share.group);
+    save_kx_hint(&config, &server_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -194,7 +194,7 @@ pub(super) fn handle_server_hello(
     Ok(Box::new(ExpectEncryptedExtensions {
         config,
         resuming_session,
-        dns_name,
+        server_name,
         randoms,
         suite,
         transcript,
@@ -222,9 +222,9 @@ fn validate_server_hello(
 
 pub(super) fn initial_key_share(
     config: &ClientConfig,
-    dns_name: webpki::DnsNameRef,
+    server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
-    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
+    let key = persist::ClientSessionKey::hint_for_server_name(server_name);
     let key_buf = key.get_encoding();
 
     let maybe_value = config.session_storage.get(&key_buf);
@@ -242,8 +242,8 @@ pub(super) fn initial_key_share(
     kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
 }
 
-fn save_kx_hint(config: &ClientConfig, dns_name: webpki::DnsNameRef, group: NamedGroup) {
-    let key = persist::ClientSessionKey::hint_for_dns_name(dns_name);
+fn save_kx_hint(config: &ClientConfig, server_name: &ServerName, group: NamedGroup) {
+    let key = persist::ClientSessionKey::hint_for_server_name(server_name);
 
     config
         .session_storage
@@ -401,7 +401,7 @@ fn validate_encrypted_extensions(
 struct ExpectEncryptedExtensions {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -473,7 +473,7 @@ impl hs::State for ExpectEncryptedExtensions {
             let sig_verified = verify::HandshakeSignatureValid::assertion();
             Ok(Box::new(ExpectFinished {
                 config: self.config,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -490,7 +490,7 @@ impl hs::State for ExpectEncryptedExtensions {
             }
             Ok(Box::new(ExpectCertificateOrCertReq {
                 config: self.config,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -504,7 +504,7 @@ impl hs::State for ExpectEncryptedExtensions {
 
 struct ExpectCertificateOrCertReq {
     config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -526,7 +526,7 @@ impl hs::State for ExpectCertificateOrCertReq {
         if m.is_handshake_type(HandshakeType::Certificate) {
             Box::new(ExpectCertificate {
                 config: self.config,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -539,7 +539,7 @@ impl hs::State for ExpectCertificateOrCertReq {
         } else {
             Box::new(ExpectCertificateRequest {
                 config: self.config,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -557,7 +557,7 @@ impl hs::State for ExpectCertificateOrCertReq {
 // in TLS1.3.
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -632,7 +632,7 @@ impl hs::State for ExpectCertificateRequest {
 
         Ok(Box::new(ExpectCertificate {
             config: self.config,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
@@ -646,7 +646,7 @@ impl hs::State for ExpectCertificateRequest {
 
 struct ExpectCertificate {
     config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -704,7 +704,7 @@ impl hs::State for ExpectCertificate {
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
@@ -719,7 +719,7 @@ impl hs::State for ExpectCertificate {
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
     config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -752,7 +752,7 @@ impl hs::State for ExpectCertificateVerify {
             .verify_server_cert(
                 end_entity,
                 intermediates,
-                self.dns_name.as_ref(),
+                &self.server_name,
                 &mut self.server_cert.scts(),
                 &self.server_cert.ocsp_response,
                 now,
@@ -776,7 +776,7 @@ impl hs::State for ExpectCertificateVerify {
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
-            dns_name: self.dns_name,
+            server_name: self.server_name,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
@@ -895,7 +895,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Con
 
 struct ExpectFinished {
     config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
@@ -998,7 +998,7 @@ impl hs::State for ExpectFinished {
 
         let st = ExpectTraffic {
             config: st.config,
-            dns_name: st.dns_name,
+            server_name: st.server_name,
             suite: st.suite,
             transcript: st.transcript,
             key_schedule: key_schedule_traffic,
@@ -1028,7 +1028,7 @@ impl hs::State for ExpectFinished {
 // and application data.
 struct ExpectTraffic {
     config: Arc<ClientConfig>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     suite: &'static SupportedCipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
@@ -1074,7 +1074,7 @@ impl ExpectTraffic {
             }
         }
 
-        let key = persist::ClientSessionKey::session_for_dns_name(self.dns_name.as_ref());
+        let key = persist::ClientSessionKey::session_for_server_name(&self.server_name);
         #[allow(unused_mut)]
         let mut ticket = value.get_encoding();
 

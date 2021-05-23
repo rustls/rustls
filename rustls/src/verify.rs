@@ -3,6 +3,7 @@ use std::time::SystemTime;
 
 use crate::anchors::OwnedTrustAnchor;
 use crate::anchors::{DistinguishedNames, RootCertStore};
+use crate::client::ServerName;
 use crate::error::Error;
 use crate::error::WebPkiOp;
 use crate::key::Certificate;
@@ -91,7 +92,7 @@ pub trait ServerCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        dns_name: webpki::DnsNameRef,
+        server_name: &ServerName,
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
@@ -285,13 +286,15 @@ impl ServerCertVerifier for WebPkiVerifier {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        dns_name: webpki::DnsNameRef,
+        server_name: &ServerName,
         scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
+
+        let ServerName::DnsName(dns_name) = server_name;
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
@@ -309,7 +312,7 @@ impl ServerCertVerifier for WebPkiVerifier {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        cert.verify_is_valid_for_dns_name(dns_name)
+        cert.verify_is_valid_for_dns_name(dns_name.as_ref())
             .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateForDnsName))
             .map(|_| ServerCertVerified::assertion())
     }

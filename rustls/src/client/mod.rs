@@ -19,6 +19,7 @@ use crate::versions;
 #[cfg(feature = "quic")]
 use crate::quic;
 
+use std::convert::TryFrom;
 use std::fmt;
 use std::io::{self, IoSlice};
 use std::mem;
@@ -172,6 +173,58 @@ impl ClientConfig {
     }
 }
 
+/// Encodes ways a client can know the expected name of the server.
+///
+/// This currently covers knowing the DNS name of the server, but
+/// will be extended in the future to knowing the IP address of the
+/// server, as well as supporting privacy-preserving names for the
+/// server ("ECH").  For this reason this enum is `non_exhaustive`.
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone)]
+pub enum ServerName {
+    /// The server is identified by a DNS name.  The name
+    /// is sent in the TLS Server Name Indication (SNI)
+    /// extension.
+    DnsName(webpki::DnsName),
+}
+
+impl ServerName {
+    /// Return the name that should go in the SNI extension.
+    /// If [`None`] is returned, the SNI extension is not included
+    /// in the handshake.
+    pub(crate) fn for_sni(&self) -> Option<webpki::DnsNameRef> {
+        match self {
+            ServerName::DnsName(dns_name) => Some(dns_name.as_ref()),
+        }
+    }
+
+    /// Return a prefix-free, unique encoding for the name.
+    pub(crate) fn encode(&self) -> Vec<u8> {
+        enum UniqueTypeCode {
+            DnsName = 0x01,
+        }
+
+        let ServerName::DnsName(dns_name) = self;
+        let bytes = dns_name.as_ref();
+
+        let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
+        r.push(UniqueTypeCode::DnsName as u8);
+        r.push(bytes.as_ref().len() as u8);
+        r.extend_from_slice(bytes.as_ref());
+
+        r
+    }
+}
+
+/// Attempt to make a ServerName from a string by parsing
+/// it as a DNS name.
+impl TryFrom<&str> for ServerName {
+    type Error = webpki::InvalidDnsNameError;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        webpki::DnsNameRef::try_from_ascii_str(s).map(|dns| ServerName::DnsName(dns.into()))
+    }
+}
+
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
 pub mod danger {
@@ -319,18 +372,15 @@ impl fmt::Debug for ClientConnection {
 
 impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
-    /// we behave in the TLS protocol, `hostname` is the
-    /// hostname of who we want to talk to.
-    pub fn new(
-        config: Arc<ClientConfig>,
-        hostname: webpki::DnsNameRef,
-    ) -> Result<ClientConnection, Error> {
-        Self::new_inner(config, hostname, Vec::new(), Protocol::Tcp)
+    /// we behave in the TLS protocol, `name` is the
+    /// name of the server we want to talk to.
+    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<ClientConnection, Error> {
+        Self::new_inner(config, name, Vec::new(), Protocol::Tcp)
     }
 
     fn new_inner(
         config: Arc<ClientConfig>,
-        hostname: webpki::DnsNameRef,
+        name: ServerName,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
@@ -346,12 +396,7 @@ impl ClientConnection {
             data: &mut new.data,
         };
 
-        new.state = Some(hs::start_handshake(
-            hostname.into(),
-            extra_exts,
-            config,
-            &mut cx,
-        )?);
+        new.state = Some(hs::start_handshake(name, extra_exts, config, &mut cx)?);
         Ok(new)
     }
 
@@ -574,7 +619,7 @@ pub trait ClientQuicExt {
     fn new_quic(
         config: Arc<ClientConfig>,
         quic_version: quic::Version,
-        hostname: webpki::DnsNameRef,
+        name: ServerName,
         params: Vec<u8>,
     ) -> Result<ClientConnection, Error> {
         if !config.supports_version(ProtocolVersion::TLSv1_3) {
@@ -588,7 +633,7 @@ pub trait ClientQuicExt {
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
 
-        ClientConnection::new_inner(config, hostname, vec![ext], Protocol::Quic)
+        ClientConnection::new_inner(config, name, vec![ext], Protocol::Quic)
     }
 }
 
