@@ -14,14 +14,15 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
 
-    let msg = match message::Message::try_from(&msg) {
+    let plain = msg.into_plain_message();
+    let msg = match message::Message::try_from(&plain) {
         Ok(msg) => msg,
         Err(_) => return,
     };
 
     let frg = fragmenter::MessageFragmenter::new(Some(32)).unwrap();
     let mut out = VecDeque::new();
-    frg.fragment(message::OpaqueMessage::from(msg), &mut out);
+    frg.fragment(message::PlainMessage::from(msg), &mut out);
 
     for msg in out {
         message::Message::try_from(&msg).ok();

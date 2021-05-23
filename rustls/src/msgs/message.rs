@@ -8,6 +8,7 @@ use crate::msgs::enums::{AlertDescription, AlertLevel};
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
 
+use std::borrow::Cow;
 use std::convert::TryFrom;
 
 #[derive(Debug)]
@@ -124,11 +125,11 @@ impl OpaqueMessage {
         buf
     }
 
-    pub fn borrow(&self) -> BorrowedOpaqueMessage<'_> {
-        BorrowedOpaqueMessage {
-            typ: self.typ,
+    pub fn into_plain_message(self) -> PlainMessage<'static> {
+        PlainMessage {
             version: self.version,
-            payload: &self.payload,
+            typ: self.typ,
+            payload: self.payload.into(),
         }
     }
 
@@ -144,7 +145,7 @@ impl OpaqueMessage {
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
 }
 
-impl From<Message<'_>> for OpaqueMessage {
+impl From<Message<'_>> for PlainMessage<'static> {
     fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
@@ -156,10 +157,27 @@ impl From<Message<'_>> for OpaqueMessage {
             }
         };
 
-        OpaqueMessage {
+        PlainMessage {
             typ,
             version: msg.version,
-            payload,
+            payload: payload.into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PlainMessage<'a> {
+    pub version: ProtocolVersion,
+    pub typ: ContentType,
+    pub payload: Cow<'a, [u8]>,
+}
+
+impl<'a> PlainMessage<'a> {
+    pub fn into_unencrypted_opaque(self) -> OpaqueMessage {
+        OpaqueMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: self.payload.into_owned(),
         }
     }
 }
@@ -199,29 +217,15 @@ impl<'a> Message<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a OpaqueMessage> for Message<'a> {
+impl<'a> TryFrom<&'a PlainMessage<'a>> for Message<'a> {
     type Error = Error;
 
-    fn try_from(opaque: &'a OpaqueMessage) -> Result<Self, Self::Error> {
+    fn try_from(plain: &'a PlainMessage<'a>) -> Result<Self, Self::Error> {
         Ok(Message {
-            version: opaque.version,
-            payload: MessagePayload::new(opaque.typ, opaque.version, &opaque.payload)?,
+            version: plain.version,
+            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.as_ref())?,
         })
     }
-}
-
-/// A TLS frame, named TLSPlaintext in the standard.
-///
-/// This type differs from `OpaqueMessage` because it borrows
-/// its payload.  You can make a `OpaqueMessage` from an
-/// `BorrowMessage`, but this involves a copy.
-///
-/// This type also cannot decode its internals and
-/// cannot be read/encoded; only `OpaqueMessage` can do that.
-pub struct BorrowedOpaqueMessage<'a> {
-    pub typ: ContentType,
-    pub version: ProtocolVersion,
-    pub payload: &'a [u8],
 }
 
 #[derive(Debug)]

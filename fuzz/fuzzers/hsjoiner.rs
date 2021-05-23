@@ -13,9 +13,10 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
 
+    let plain = msg.into_plain_message();
     let mut jnr = hsjoiner::HandshakeJoiner::new();
-    if jnr.want_message(&msg) {
-        jnr.take_message(msg);
+    if jnr.want_message(&plain) {
+        jnr.take_message(plain);
     }
 
     let (mut iter, _) = jnr.iter();

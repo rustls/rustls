@@ -11,7 +11,7 @@ use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::hsjoiner::HandshakeJoiner;
-use crate::msgs::message::{BorrowedOpaqueMessage, Message, MessagePayload, OpaqueMessage};
+use crate::msgs::message::{Message, MessagePayload, OpaqueMessage, PlainMessage};
 use crate::prf;
 use crate::quic;
 use crate::rand;
@@ -740,9 +740,9 @@ impl ConnectionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
+    fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<PlainMessage<'static>, Error> {
         if !self.api.record_layer.is_decrypting() {
-            return Ok(encr);
+            return Ok(encr.into_plain_message());
         }
 
         if self
@@ -1007,7 +1007,7 @@ impl CommonApi {
             self.message_fragmenter
                 .fragment(m.into(), &mut to_send);
             for mm in to_send {
-                self.queue_tls_message(mm);
+                self.queue_tls_message(mm.into_unencrypted_opaque());
             }
         } else {
             self.send_msg_encrypt(m.into());
@@ -1016,13 +1016,13 @@ impl CommonApi {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub fn send_msg_encrypt(&mut self, m: OpaqueMessage) {
+    pub fn send_msg_encrypt(&mut self, m: PlainMessage<'static>) {
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter
             .fragment(m, &mut plain_messages);
 
         for m in plain_messages {
-            self.send_single_fragment(m.borrow());
+            self.send_single_fragment(m);
         }
     }
 
@@ -1054,7 +1054,7 @@ impl CommonApi {
         len
     }
 
-    fn send_single_fragment(&mut self, m: BorrowedOpaqueMessage) {
+    fn send_single_fragment(&mut self, m: PlainMessage<'_>) {
         // Close connection once we start to run out of
         // sequence space.
         if self
@@ -1169,10 +1169,10 @@ mod conn_quic {
     impl ConnectionCommon {
         pub(crate) fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             self.handshake_joiner
-                .take_message(OpaqueMessage {
+                .take_message(PlainMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
-                    payload: plaintext.to_vec(),
+                    payload: plaintext.into(),
                 });
             Ok(())
         }

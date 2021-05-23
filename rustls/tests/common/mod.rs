@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rustls;
 use rustls_pemfile;
 
-use rustls::internal::msgs::message::{Message, OpaqueMessage};
+use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::Error;
@@ -155,9 +155,12 @@ where
         while offset < bytes.len() {
             let (message, used) = OpaqueMessage::read(&mut bytes[offset..]).unwrap();
             offset += used;
-            let mut message = Message::try_from(&message).unwrap();
+            let plain = message.into_plain_message();
+            let mut message = Message::try_from(&plain).unwrap();
             filter(&mut message);
-            let message_enc = OpaqueMessage::from(message).encode();
+            let message_enc = PlainMessage::from(message)
+                .into_unencrypted_opaque()
+                .encode();
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
             let len = right
                 .read_tls(message_enc_reader)

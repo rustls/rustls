@@ -1,5 +1,5 @@
 use super::enums::{AlertDescription, AlertLevel, HandshakeType};
-use super::message::{Message, OpaqueMessage};
+use super::message::{Message, OpaqueMessage, PlainMessage};
 
 use std::convert::TryFrom;
 use std::fs;
@@ -27,12 +27,15 @@ fn test_read_fuzz_corpus() {
         let (msg, used) = OpaqueMessage::read(&mut bytes).unwrap();
         println!("{:?}", msg);
 
-        let msg = match Message::try_from(&msg) {
+        let plain = msg.into_plain_message();
+        let msg = match Message::try_from(&plain) {
             Ok(msg) => msg,
             Err(_) => continue,
         };
 
-        let enc = OpaqueMessage::from(msg).encode();
+        let enc = PlainMessage::from(msg)
+            .into_unencrypted_opaque()
+            .encode();
         assert_eq!(bytes.to_vec(), enc);
         assert_eq!(bytes.len(), used);
     }
@@ -63,7 +66,7 @@ fn can_read_safari_client_hello() {
         .to_vec();
     let (m, _) = OpaqueMessage::read(&mut bytes[..]).unwrap();
     println!("m = {:?}", m);
-    assert!(Message::try_from(&m).is_err());
+    assert!(Message::try_from(&m.into_plain_message()).is_err());
 }
 
 #[test]
@@ -90,7 +93,8 @@ fn construct_all_types() {
     for bytes in samples.iter_mut() {
         let (m, _) = OpaqueMessage::read(bytes).unwrap();
         println!("m = {:?}", m);
-        let m = Message::try_from(&m);
+        let plain = m.into_plain_message();
+        let m = Message::try_from(&plain);
         println!("m' = {:?}", m);
     }
 }
