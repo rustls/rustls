@@ -179,6 +179,22 @@ impl ClientConfig {
 /// will be extended in the future to knowing the IP address of the
 /// server, as well as supporting privacy-preserving names for the
 /// server ("ECH").  For this reason this enum is `non_exhaustive`.
+///
+/// # Making one
+///
+/// If you have a DNS name as a `&str`, this type implements `TryFrom<&str>`,
+/// so you can do:
+///
+/// ```
+/// # use std::convert::{TryInto, TryFrom};
+/// # use rustls::ServerName;
+/// ServerName::try_from("example.com").expect("invalid DNS name");
+///
+/// // or, alternatively...
+///
+/// let x = "example.com".try_into().expect("invalid DNS name");
+/// # let _: ServerName = x;
+/// ```
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Clone)]
 pub enum ServerName {
