@@ -3444,7 +3444,7 @@ fn test_client_does_not_offer_sha1() {
                 .write_tls(&mut buf.as_mut())
                 .unwrap();
             let (msg, _) = OpaqueMessage::read(&mut buf[..sz]).unwrap();
-            let plain = msg.into_plain_message();
+            let plain = msg.to_plain_message();
             let msg = Message::try_from(&plain).unwrap();
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 

@@ -14,7 +14,7 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return,
     };
 
-    let plain = msg.into_plain_message();
+    let plain = msg.to_plain_message();
     let msg = match message::Message::try_from(&plain) {
         Ok(msg) => msg,
         Err(_) => return,

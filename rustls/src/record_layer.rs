@@ -119,10 +119,10 @@ impl RecordLayer {
     /// `encr` is a decoded message allegedly received from the peer.
     /// If it can be decrypted, its decryption is returned.  Otherwise,
     /// an error is returned.
-    pub fn decrypt_incoming(
+    pub fn decrypt_incoming<'a>(
         &mut self,
-        encr: OpaqueMessage,
-    ) -> Result<PlainMessage<'static>, Error> {
+        encr: &'a mut OpaqueMessage<'a>,
+    ) -> Result<PlainMessage<'a>, Error> {
         debug_assert!(self.decrypt_state == DirectionState::Active);
         let seq = self.read_seq;
         self.read_seq += 1;
@@ -134,7 +134,7 @@ impl RecordLayer {
     ///
     /// `plain` is a TLS message we'd like to send.  This function
     /// panics if the requisite keying material hasn't been established yet.
-    pub fn encrypt_outgoing(&mut self, plain: PlainMessage<'_>) -> OpaqueMessage {
+    pub fn encrypt_outgoing(&mut self, plain: PlainMessage<'_>) -> OpaqueMessage<'static> {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(!self.encrypt_exhausted());
         let seq = self.write_seq;

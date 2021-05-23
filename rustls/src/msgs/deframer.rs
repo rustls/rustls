@@ -9,7 +9,7 @@ use crate::msgs::message::{MessageError, OpaqueMessage};
 /// The input is `read()`, the output is the `frames` deque.
 pub struct MessageDeframer {
     /// Completed frames for output.
-    pub frames: VecDeque<OpaqueMessage>,
+    pub frames: VecDeque<OpaqueMessage<'static>>,
 
     /// Set to true if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
@@ -40,7 +40,7 @@ impl MessageDeframer {
         }
     }
 
-    pub fn pop(&mut self) -> Result<Option<OpaqueMessage>, Error> {
+    pub fn pop(&mut self) -> Result<Option<OpaqueMessage<'static>>, Error> {
         match self.desynced {
             false => Ok(self.frames.pop_front()),
             true => Err(Error::CorruptMessage),
@@ -76,7 +76,7 @@ impl MessageDeframer {
                 }
             };
 
-            self.frames.push_back(m);
+            self.frames.push_back(m.to_owned());
             if used < self.used {
                 /* Before:
                  * +----------+----------+----------+
@@ -220,13 +220,13 @@ mod tests {
     fn pop_first(d: &mut MessageDeframer) {
         let m = d.frames.pop_front().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::Handshake);
-        Message::try_from(&m.into_plain_message()).unwrap();
+        Message::try_from(&m.to_plain_message()).unwrap();
     }
 
     fn pop_second(d: &mut MessageDeframer) {
         let m = d.frames.pop_front().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::Alert);
-        Message::try_from(&m.into_plain_message()).unwrap();
+        Message::try_from(&m.to_plain_message()).unwrap();
     }
 
     #[test]

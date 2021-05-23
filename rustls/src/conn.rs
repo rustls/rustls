@@ -618,9 +618,9 @@ impl ConnectionCommon {
         }
     }
 
-    fn process_msg<Data>(
+    fn process_msg<'a, Data>(
         &mut self,
-        msg: OpaqueMessage,
+        msg: &'a mut OpaqueMessage<'a>,
         state: &mut Option<Box<dyn State<Data>>>,
         data: &mut Data,
     ) -> Result<(), Error> {
@@ -672,8 +672,8 @@ impl ConnectionCommon {
             return Err(err.clone());
         }
 
-        while let Some(msg) = self.message_deframer.pop()? {
-            if let Err(err) = self.process_msg(msg, state, data) {
+        while let Some(mut msg) = self.message_deframer.pop()? {
+            if let Err(err) = self.process_msg(&mut msg, state, data) {
                 self.error = Some(err.clone());
                 return Err(err);
             }
@@ -740,9 +740,12 @@ impl ConnectionCommon {
             .map(AsRef::as_ref)
     }
 
-    fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<PlainMessage<'static>, Error> {
+    fn decrypt_incoming<'a>(
+        &mut self,
+        encr: &'a mut OpaqueMessage<'a>,
+    ) -> Result<PlainMessage<'a>, Error> {
         if !self.api.record_layer.is_decrypting() {
-            return Ok(encr.into_plain_message());
+            return Ok(encr.to_plain_message());
         }
 
         if self

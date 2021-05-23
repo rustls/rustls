@@ -46,7 +46,7 @@ mod test {
             let out = m.to_owned().encode();
             assert!(out.len() > 0);
 
-            Message::try_from(&m.into_plain_message()).unwrap();
+            Message::try_from(&m.to_plain_message()).unwrap();
         }
     }
 }

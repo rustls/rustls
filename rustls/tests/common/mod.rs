@@ -155,7 +155,7 @@ where
         while offset < bytes.len() {
             let (message, used) = OpaqueMessage::read(&mut bytes[offset..]).unwrap();
             offset += used;
-            let plain = message.into_plain_message();
+            let plain = message.to_plain_message();
             let mut message = Message::try_from(&plain).unwrap();
             filter(&mut message);
             let message_enc = PlainMessage::from(message)

@@ -16,7 +16,7 @@ fuzz_target!(|data: &[u8]| {
 
     while !dfm.frames.is_empty() {
         let msg = dfm.frames.pop_front().unwrap();
-        let plain = msg.into_plain_message();
+        let plain = msg.to_plain_message();
         Message::try_from(&plain).ok();
     }
 });

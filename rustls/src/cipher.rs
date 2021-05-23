@@ -5,19 +5,23 @@ use crate::msgs::codec;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{OpaqueMessage, PlainMessage};
+use crate::msgs::message::{Buffer, OpaqueMessage, PlainMessage};
 use crate::suites::SupportedCipherSuite;
 
 use ring::{aead, hkdf};
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
-    fn decrypt(&self, m: OpaqueMessage, seq: u64) -> Result<PlainMessage<'static>, Error>;
+    fn decrypt<'a>(
+        &self,
+        m: &'a mut OpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<PlainMessage<'a>, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
-    fn encrypt(&self, m: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage, Error>;
+    fn encrypt(&self, m: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage<'static>, Error>;
 }
 
 impl dyn MessageEncrypter {
@@ -181,7 +185,11 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GcmMessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage<'static>, Error> {
+    fn decrypt<'a>(
+        &self,
+        msg: &'a mut OpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<PlainMessage<'a>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -190,7 +198,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         let nonce = {
             let mut nonce = [0u8; 12];
             nonce[..4].copy_from_slice(&self.dec_salt);
-            nonce[4..].copy_from_slice(&payload[..8]);
+            nonce[4..].copy_from_slice(&payload.as_ref()[..8]);
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
@@ -198,7 +206,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
 
         let plain_len = self
             .dec_key
-            .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
+            .open_within(nonce, aad, payload.as_mut(), GCM_EXPLICIT_NONCE_LEN..)
             .map_err(|_| Error::DecryptError)?
             .len();
 
@@ -210,13 +218,13 @@ impl MessageDecrypter for GcmMessageDecrypter {
         Ok(PlainMessage {
             version: msg.version,
             typ: msg.typ,
-            payload: msg.payload.into(),
+            payload: msg.payload.as_ref().into(),
         })
     }
 }
 
 impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt(&self, msg: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&self, msg: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage<'static>, Error> {
         let nonce = make_tls13_nonce(&self.iv, seq);
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
@@ -233,7 +241,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         Ok(OpaqueMessage {
             typ: msg.typ,
             version: msg.version,
-            payload,
+            payload: payload.into(),
         })
     }
 }
@@ -304,14 +312,19 @@ struct Tls13MessageDecrypter {
     iv: Iv,
 }
 
-fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
-    loop {
-        match v.pop() {
-            Some(0) => {}
-            Some(content_type) => return ContentType::from(content_type),
-            None => return ContentType::Unknown(0),
+fn unpad_tls13(v: &mut Buffer<'_>) -> ContentType {
+    let slice = v.as_ref();
+    let pos = match slice.iter().rposition(|&b| b != 0) {
+        Some(b) => b,
+        None => {
+            v.truncate(0);
+            return ContentType::Unknown(0);
         }
-    }
+    };
+
+    let ty = ContentType::from(slice[pos]);
+    v.truncate(pos);
+    ty
 }
 
 fn make_tls13_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
@@ -339,7 +352,7 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]> {
 }
 
 impl MessageEncrypter for Tls13MessageEncrypter {
-    fn encrypt(&self, msg: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&self, msg: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage<'static>, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(&msg.payload);
@@ -355,13 +368,17 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         Ok(OpaqueMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
-            payload,
+            payload: payload.into(),
         })
     }
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage<'static>, Error> {
+    fn decrypt<'a>(
+        &self,
+        msg: &'a mut OpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<PlainMessage<'a>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
@@ -371,7 +388,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         let aad = make_tls13_aad(payload.len());
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, payload)
+            .open_in_place(nonce, aad, payload.as_mut())
             .map_err(|_| Error::DecryptError)?
             .len();
 
@@ -395,7 +412,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         Ok(PlainMessage {
             version,
             typ,
-            payload: msg.payload.into(),
+            payload: msg.payload.as_ref().into(),
         })
     }
 }
@@ -455,7 +472,11 @@ impl ChaCha20Poly1305MessageDecrypter {
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage<'static>, Error> {
+    fn decrypt<'a>(
+        &self,
+        msg: &'a mut OpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<PlainMessage<'a>, Error> {
         let payload = &mut msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
@@ -472,7 +493,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, payload)
+            .open_in_place(nonce, aad, payload.as_mut())
             .map_err(|_| Error::DecryptError)?
             .len();
 
@@ -484,13 +505,13 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         Ok(PlainMessage {
             version: msg.version,
             typ: msg.typ,
-            payload: msg.payload.into(),
+            payload: msg.payload.as_ref().into(),
         })
     }
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&self, msg: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&self, msg: PlainMessage<'_>, seq: u64) -> Result<OpaqueMessage<'static>, Error> {
         let nonce = make_tls13_nonce(&self.enc_offset, seq);
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
@@ -505,7 +526,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         Ok(OpaqueMessage {
             typ: msg.typ,
             version: msg.version,
-            payload,
+            payload: payload.into(),
         })
     }
 }
@@ -514,7 +535,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 pub struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&self, _m: PlainMessage<'_>, _seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&self, _m: PlainMessage<'_>, _seq: u64) -> Result<OpaqueMessage<'static>, Error> {
         Err(Error::General("encrypt not yet available".to_string()))
     }
 }
@@ -523,7 +544,11 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 pub struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt(&self, _m: OpaqueMessage, _seq: u64) -> Result<PlainMessage<'static>, Error> {
+    fn decrypt<'a>(
+        &self,
+        _m: &'a mut OpaqueMessage<'a>,
+        _seq: u64,
+    ) -> Result<PlainMessage<'a>, Error> {
         Err(Error::DecryptError)
     }
 }

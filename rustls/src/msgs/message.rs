@@ -69,14 +69,14 @@ impl<'a> MessagePayload<'a> {
 /// This type owns all memory for its interior parts. It is used to read/write from/to I/O
 /// buffers as well as for fragmenting, joining and encryption/decryption. It can be converted
 /// into a `Message` by decoding the payload.
-#[derive(Clone, Debug)]
-pub struct OpaqueMessage {
+#[derive(Debug)]
+pub struct OpaqueMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: Vec<u8>,
+    pub payload: Buffer<'a>,
 }
 
-impl OpaqueMessage {
+impl<'a> OpaqueMessage<'a> {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub fn read(buf: &mut [u8]) -> Result<(OpaqueMessage, usize), MessageError> {
@@ -103,33 +103,42 @@ impl OpaqueMessage {
             _ => {}
         };
 
-        let mut sub = r
-            .sub(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
-        let payload = Payload::read(&mut sub);
+        if r.left() < len as usize {
+            return Err(MessageError::TooShortForLength);
+        }
 
+        let used = r.used() + len as usize;
+        let end = (Self::HEADER_SIZE + len) as usize;
         let msg = OpaqueMessage {
             typ,
             version,
-            payload: payload.0.into_owned(),
+            payload: Buffer::Slice(&mut buf[Self::HEADER_SIZE as usize..end]),
         };
-        Ok((msg, r.used()))
+        Ok((msg, used))
     }
 
-    pub fn encode(mut self) -> Vec<u8> {
+    pub fn encode(self) -> Vec<u8> {
         let mut buf = Vec::new();
         self.typ.encode(&mut buf);
         self.version.encode(&mut buf);
         (self.payload.len() as u16).encode(&mut buf);
-        buf.append(&mut self.payload);
+        buf.extend_from_slice(self.payload.as_ref());
         buf
     }
 
-    pub fn into_plain_message(self) -> PlainMessage<'static> {
+    pub fn to_plain_message(&self) -> PlainMessage<'_> {
         PlainMessage {
             version: self.version,
             typ: self.typ,
-            payload: self.payload.into(),
+            payload: self.payload.as_ref().into(),
+        }
+    }
+
+    pub fn to_owned(&self) -> OpaqueMessage<'static> {
+        OpaqueMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: Buffer::Vec(self.payload.as_ref().to_vec()),
         }
     }
 
@@ -173,11 +182,11 @@ pub struct PlainMessage<'a> {
 }
 
 impl<'a> PlainMessage<'a> {
-    pub fn into_unencrypted_opaque(self) -> OpaqueMessage {
+    pub fn into_unencrypted_opaque(self) -> OpaqueMessage<'static> {
         OpaqueMessage {
             version: self.version,
             typ: self.typ,
-            payload: self.payload.into_owned(),
+            payload: Buffer::Vec(self.payload.into_owned()),
         }
     }
 }
@@ -225,6 +234,52 @@ impl<'a> TryFrom<&'a PlainMessage<'a>> for Message<'a> {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version, plain.payload.as_ref())?,
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum Buffer<'a> {
+    Slice(&'a mut [u8]),
+    Vec(Vec<u8>),
+}
+
+impl<'a> Buffer<'a> {
+    pub(crate) fn truncate(&mut self, new_len: usize) {
+        match self {
+            Buffer::Slice(slice) => *slice = &mut std::mem::take(slice)[..new_len],
+            Buffer::Vec(vec) => vec.truncate(new_len),
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Buffer::Slice(slice) => slice.len(),
+            Buffer::Vec(vec) => vec.len(),
+        }
+    }
+}
+
+impl<'a> AsRef<[u8]> for Buffer<'a> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Buffer::Slice(slice) => slice,
+            Buffer::Vec(vec) => vec,
+        }
+    }
+}
+
+impl<'a> AsMut<[u8]> for Buffer<'a> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        match self {
+            Buffer::Slice(slice) => slice,
+            Buffer::Vec(vec) => vec,
+        }
+    }
+}
+
+impl From<Vec<u8>> for Buffer<'static> {
+    fn from(vec: Vec<u8>) -> Self {
+        Buffer::Vec(vec)
     }
 }
 
