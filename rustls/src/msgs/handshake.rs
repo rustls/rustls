@@ -182,19 +182,10 @@ impl SessionID {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct UnknownExtension<'a> {
     pub typ: ExtensionType,
     pub payload: Payload<'a>,
-}
-
-impl<'a> UnknownExtension<'a> {
-    fn to_owned(&self) -> UnknownExtension<'static> {
-        UnknownExtension {
-            typ: self.typ,
-            payload: self.payload.to_owned(),
-        }
-    }
 }
 
 impl<'a> UnknownExtension<'a> {
@@ -263,7 +254,7 @@ impl DecomposedSignatureScheme for SignatureScheme {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ServerNamePayload<'a> {
     // Stored twice, bytes so we can round-trip, and DnsName for use
     HostName((PayloadU16<'a>, webpki::DnsName)),
@@ -310,7 +301,7 @@ impl<'a> ServerNamePayload<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ServerName<'a> {
     pub typ: ServerNameType,
     pub payload: ServerNamePayload<'a>,
@@ -414,7 +405,7 @@ impl<'a> ConvertProtocolNameList for ProtocolNameList<'a> {
 }
 
 // --- TLS 1.3 Key shares ---
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct KeyShareEntry<'a> {
     pub group: NamedGroup,
     pub payload: PayloadU16<'a>,
@@ -425,15 +416,6 @@ impl KeyShareEntry<'static> {
         KeyShareEntry {
             group,
             payload: PayloadU16::new(payload.to_vec()),
-        }
-    }
-}
-
-impl<'a> KeyShareEntry<'a> {
-    fn to_owned(&self) -> KeyShareEntry<'static> {
-        KeyShareEntry {
-            group: self.group,
-            payload: self.payload.to_owned(),
         }
     }
 }
@@ -453,7 +435,7 @@ impl<'a> Codec<'a> for KeyShareEntry<'a> {
 }
 
 // --- TLS 1.3 PresharedKey offers ---
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PresharedKeyIdentity<'a> {
     pub identity: PayloadU16<'a>,
     pub obfuscated_ticket_age: u32,
@@ -464,15 +446,6 @@ impl PresharedKeyIdentity<'static> {
         PresharedKeyIdentity {
             identity: PayloadU16::new(id),
             obfuscated_ticket_age: age,
-        }
-    }
-}
-
-impl<'a> PresharedKeyIdentity<'a> {
-    fn to_owned(&self) -> PresharedKeyIdentity<'static> {
-        PresharedKeyIdentity {
-            identity: self.identity.to_owned(),
-            obfuscated_ticket_age: self.obfuscated_ticket_age,
         }
     }
 }
@@ -496,7 +469,7 @@ declare_u16_vec_lifetime!(PresharedKeyIdentities, PresharedKeyIdentity);
 pub type PresharedKeyBinder<'a> = PayloadU8<'a>;
 pub type PresharedKeyBinders<'a> = VecU16OfPayloadU8<'a>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PresharedKeyOffer<'a> {
     pub identities: PresharedKeyIdentities<'a>,
     pub binders: PresharedKeyBinders<'a>,
@@ -508,23 +481,6 @@ impl PresharedKeyOffer<'static> {
         PresharedKeyOffer {
             identities: vec![id],
             binders: vec![PresharedKeyBinder::new(binder)],
-        }
-    }
-}
-
-impl<'a> PresharedKeyOffer<'a> {
-    fn to_owned(&self) -> PresharedKeyOffer<'static> {
-        PresharedKeyOffer {
-            identities: self
-                .identities
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-            binders: self
-                .binders
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
         }
     }
 }
@@ -546,23 +502,10 @@ impl<'a> Codec<'a> for PresharedKeyOffer<'a> {
 // --- RFC6066 certificate status request ---
 type ResponderIDs<'a> = VecU16OfPayloadU16<'a>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OCSPCertificateStatusRequest<'a> {
     pub responder_ids: ResponderIDs<'a>,
     pub extensions: PayloadU16<'a>,
-}
-
-impl<'a> OCSPCertificateStatusRequest<'a> {
-    fn to_owned(&self) -> OCSPCertificateStatusRequest<'static> {
-        OCSPCertificateStatusRequest {
-            responder_ids: self
-                .responder_ids
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-            extensions: self.extensions.to_owned(),
-        }
-    }
 }
 
 impl<'a> Codec<'a> for OCSPCertificateStatusRequest<'a> {
@@ -580,20 +523,10 @@ impl<'a> Codec<'a> for OCSPCertificateStatusRequest<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CertificateStatusRequest<'a> {
     OCSP(OCSPCertificateStatusRequest<'a>),
     Unknown((CertificateStatusType, Payload<'a>)),
-}
-
-impl<'a> CertificateStatusRequest<'a> {
-    fn to_owned(&self) -> CertificateStatusRequest<'static> {
-        use CertificateStatusRequest::*;
-        match self {
-            OCSP(x) => OCSP(x.to_owned()),
-            Unknown((ty, payload)) => Unknown((*ty, payload.to_owned())),
-        }
-    }
 }
 
 impl<'a> Codec<'a> for CertificateStatusRequest<'a> {
@@ -644,7 +577,7 @@ declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 declare_u16_vec_lifetime!(KeyShareEntries, KeyShareEntry);
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ClientExtension<'a> {
     ECPointFormats(ECPointFormatList),
     NamedGroups(NamedGroups),
@@ -690,31 +623,6 @@ impl<'a> ClientExtension<'a> {
             ClientExtension::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
             ClientExtension::Unknown(ref r) => r.typ,
-        }
-    }
-
-    pub fn to_owned(&self) -> ClientExtension<'static> {
-        use ClientExtension::*;
-        match self {
-            ECPointFormats(x) => ECPointFormats(x.clone()),
-            NamedGroups(x) => NamedGroups(x.clone()),
-            SignatureAlgorithms(x) => SignatureAlgorithms(x.clone()),
-            ServerName(x) => ServerName(x.iter().map(|y| y.to_owned()).collect()),
-            SessionTicketRequest => SessionTicketRequest,
-            SessionTicketOffer(x) => SessionTicketOffer(x.to_owned()),
-            Protocols(x) => Protocols(x.iter().map(|y| y.to_owned()).collect()),
-            SupportedVersions(x) => SupportedVersions(x.clone()),
-            KeyShare(x) => KeyShare(x.iter().map(|y| y.to_owned()).collect()),
-            PresharedKeyModes(x) => PresharedKeyModes(x.clone()),
-            PresharedKey(x) => PresharedKey(x.to_owned()),
-            Cookie(x) => Cookie(x.to_owned()),
-            ExtendedMasterSecretRequest => ExtendedMasterSecretRequest,
-            CertificateStatusRequest(x) => CertificateStatusRequest(x.to_owned()),
-            SignedCertificateTimestampRequest => SignedCertificateTimestampRequest,
-            TransportParameters(x) => TransportParameters(x.to_vec().into()),
-            TransportParametersDraft(x) => TransportParametersDraft(x.to_vec().into()),
-            EarlyData => EarlyData,
-            Unknown(r) => Unknown(r.to_owned()),
         }
     }
 }
@@ -842,7 +750,7 @@ impl ClientExtension<'static> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ServerExtension<'a> {
     ECPointFormats(ECPointFormatList),
     ServerNameAck,
@@ -879,29 +787,6 @@ impl<'a> ServerExtension<'a> {
             ServerExtension::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             ServerExtension::EarlyData => ExtensionType::EarlyData,
             ServerExtension::Unknown(ref r) => r.typ,
-        }
-    }
-
-    pub fn to_owned(&self) -> ServerExtension<'static> {
-        use ServerExtension::*;
-        match self {
-            ECPointFormats(x) => ECPointFormats(x.clone()),
-            ServerNameAck => ServerNameAck,
-            SessionTicketAck => SessionTicketAck,
-            RenegotiationInfo(x) => RenegotiationInfo(x.to_owned()),
-            Protocols(x) => Protocols(x.iter().map(|x| x.to_owned()).collect()),
-            KeyShare(x) => KeyShare(x.to_owned()),
-            PresharedKey(x) => PresharedKey(*x),
-            ExtendedMasterSecretAck => ExtendedMasterSecretAck,
-            CertificateStatusAck => CertificateStatusAck,
-            SignedCertificateTimestamp(x) => {
-                SignedCertificateTimestamp(x.iter().map(|x| x.to_owned()).collect())
-            }
-            SupportedVersions(x) => SupportedVersions(*x),
-            TransportParameters(x) => TransportParameters(x.to_vec().into()),
-            TransportParametersDraft(x) => TransportParametersDraft(x.to_vec().into()),
-            EarlyData => EarlyData,
-            Unknown(r) => Unknown(r.to_owned()),
         }
     }
 }
@@ -985,9 +870,13 @@ impl<'a> ServerExtension<'a> {
         ServerExtension::RenegotiationInfo(PayloadU8::new(empty))
     }
 
-    pub fn make_sct(sctl: &'a [u8]) -> ServerExtension<'a> {
+    pub fn make_sct(sctl: &[u8]) -> ServerExtension<'static> {
         let scts = SCTList::read_bytes(&sctl).expect("invalid SCT list");
-        ServerExtension::SignedCertificateTimestamp(scts)
+        ServerExtension::SignedCertificateTimestamp(
+            scts.into_iter()
+                .map(|x| x.to_owned())
+                .collect(),
+        )
     }
 }
 
@@ -1192,21 +1081,6 @@ impl<'a> ClientHelloPayload<'a> {
         self.find_extension(ExtensionType::EarlyData)
             .is_some()
     }
-
-    fn to_owned(&self) -> ClientHelloPayload<'static> {
-        ClientHelloPayload {
-            client_version: self.client_version,
-            random: self.random.clone(),
-            session_id: self.session_id,
-            cipher_suites: self.cipher_suites.clone(),
-            compression_methods: self.compression_methods.clone(),
-            extensions: self
-                .extensions
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -1224,16 +1098,6 @@ impl<'a> HelloRetryExtension<'a> {
             HelloRetryExtension::Cookie(_) => ExtensionType::Cookie,
             HelloRetryExtension::SupportedVersions(_) => ExtensionType::SupportedVersions,
             HelloRetryExtension::Unknown(ref r) => r.typ,
-        }
-    }
-
-    fn to_owned(&self) -> HelloRetryExtension<'static> {
-        use HelloRetryExtension::*;
-        match self {
-            KeyShare(x) => KeyShare(x.to_owned()),
-            Cookie(x) => Cookie(x.to_owned()),
-            SupportedVersions(x) => SupportedVersions(x.to_owned()),
-            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
@@ -1363,19 +1227,6 @@ impl<'a> HelloRetryRequest<'a> {
             _ => None,
         }
     }
-
-    fn to_owned(&self) -> HelloRetryRequest<'static> {
-        HelloRetryRequest {
-            legacy_version: self.legacy_version,
-            session_id: self.session_id,
-            cipher_suite: self.cipher_suite,
-            extensions: self
-                .extensions
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -1470,21 +1321,6 @@ impl<'a> ServerHelloPayload<'a> {
             _ => None,
         }
     }
-
-    fn to_owned(&self) -> ServerHelloPayload<'static> {
-        ServerHelloPayload {
-            legacy_version: self.legacy_version,
-            random: self.random.clone(),
-            session_id: self.session_id,
-            cipher_suite: self.cipher_suite,
-            compression_method: self.compression_method,
-            extensions: self
-                .extensions
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
 }
 
 pub type CertificatePayload<'a> = Vec<key::Certificate<'a>>;
@@ -1536,17 +1372,6 @@ impl<'a> CertificateExtension<'a> {
         match *self {
             CertificateExtension::SignedCertificateTimestamp(ref sctl) => Some(sctl),
             _ => None,
-        }
-    }
-
-    fn to_owned(&self) -> CertificateExtension<'static> {
-        use CertificateExtension::*;
-        match self {
-            CertificateStatus(x) => CertificateStatus(x.to_owned()),
-            SignedCertificateTimestamp(x) => {
-                SignedCertificateTimestamp(x.iter().map(|y| y.to_owned()).collect())
-            }
-            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
@@ -1651,17 +1476,6 @@ impl<'a> CertificateEntry<'a> {
             .find(|ext| ext.get_type() == ExtensionType::SCT)
             .and_then(CertificateExtension::get_sct_list)
     }
-
-    fn to_owned(&self) -> CertificateEntry<'static> {
-        CertificateEntry {
-            cert: self.cert.to_owned(),
-            exts: self
-                .exts
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -1747,17 +1561,6 @@ impl<'a> CertificatePayloadTLS13<'a> {
             ret.push(entry.cert.to_owned());
         }
         ret
-    }
-
-    fn to_owned(&self) -> CertificatePayloadTLS13<'static> {
-        CertificatePayloadTLS13 {
-            context: self.context.to_owned(),
-            entries: self
-                .entries
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
     }
 }
 
@@ -1870,13 +1673,6 @@ impl<'a> ServerECDHParams<'a> {
             public: PayloadU8::new(pubkey.to_vec()),
         }
     }
-
-    fn to_owned(&self) -> ServerECDHParams<'static> {
-        ServerECDHParams {
-            curve_params: self.curve_params,
-            public: self.public.to_owned(),
-        }
-    }
 }
 
 impl<'a> Codec<'a> for ServerECDHParams<'a> {
@@ -1900,15 +1696,6 @@ impl<'a> Codec<'a> for ServerECDHParams<'a> {
 pub struct ECDHEServerKeyExchange<'a> {
     pub params: ServerECDHParams<'a>,
     pub dss: DigitallySignedStruct<'a>,
-}
-
-impl<'a> ECDHEServerKeyExchange<'a> {
-    fn to_owned(&self) -> ECDHEServerKeyExchange<'static> {
-        ECDHEServerKeyExchange {
-            params: self.params.to_owned(),
-            dss: self.dss.to_owned(),
-        }
-    }
 }
 
 impl<'a> Codec<'a> for ECDHEServerKeyExchange<'a> {
@@ -1978,14 +1765,6 @@ impl<'a> ServerKeyExchangePayload<'a> {
         match *self {
             ServerKeyExchangePayload::ECDHE(ref x) => Some(&x.dss),
             _ => None,
-        }
-    }
-
-    fn to_owned(&self) -> ServerKeyExchangePayload<'static> {
-        use ServerKeyExchangePayload::*;
-        match self {
-            ECDHE(x) => ECDHE(x.to_owned()),
-            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
@@ -2062,20 +1841,6 @@ pub struct CertificateRequestPayload<'a> {
     pub canames: DistinguishedNames<'a>,
 }
 
-impl<'a> CertificateRequestPayload<'a> {
-    fn to_owned(&self) -> CertificateRequestPayload<'static> {
-        CertificateRequestPayload {
-            certtypes: self.certtypes.clone(),
-            sigschemes: self.sigschemes.clone(),
-            canames: self
-                .canames
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
-}
-
 impl<'a> Codec<'a> for CertificateRequestPayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.certtypes.encode(bytes);
@@ -2114,15 +1879,6 @@ impl<'a> CertReqExtension<'a> {
             CertReqExtension::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             CertReqExtension::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
             CertReqExtension::Unknown(ref r) => r.typ,
-        }
-    }
-
-    fn to_owned(&self) -> CertReqExtension<'static> {
-        use CertReqExtension::*;
-        match self {
-            SignatureAlgorithms(x) => SignatureAlgorithms(x.clone()),
-            AuthorityNames(x) => AuthorityNames(x.iter().map(|y| y.to_owned()).collect()),
-            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
@@ -2213,17 +1969,6 @@ impl<'a> CertificateRequestPayloadTLS13<'a> {
             _ => None,
         }
     }
-
-    fn to_owned(&self) -> CertificateRequestPayloadTLS13<'static> {
-        CertificateRequestPayloadTLS13 {
-            context: self.context.to_owned(),
-            extensions: self
-                .extensions
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
 }
 
 // -- NewSessionTicket --
@@ -2238,13 +1983,6 @@ impl<'a> NewSessionTicketPayload<'a> {
         NewSessionTicketPayload {
             lifetime_hint,
             ticket: PayloadU16::new(ticket),
-        }
-    }
-
-    fn to_owned(&self) -> NewSessionTicketPayload<'static> {
-        NewSessionTicketPayload {
-            lifetime_hint: self.lifetime_hint,
-            ticket: self.ticket.to_owned(),
         }
     }
 }
@@ -2278,14 +2016,6 @@ impl<'a> NewSessionTicketExtension<'a> {
         match *self {
             NewSessionTicketExtension::EarlyData(_) => ExtensionType::EarlyData,
             NewSessionTicketExtension::Unknown(ref r) => r.typ,
-        }
-    }
-
-    fn to_owned(&self) -> NewSessionTicketExtension<'static> {
-        use NewSessionTicketExtension::*;
-        match self {
-            EarlyData(x) => EarlyData(*x),
-            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
@@ -2358,20 +2088,6 @@ impl<'a> NewSessionTicketPayloadTLS13<'a> {
             _ => None,
         }
     }
-
-    fn to_owned(&self) -> NewSessionTicketPayloadTLS13<'static> {
-        NewSessionTicketPayloadTLS13 {
-            lifetime: self.lifetime,
-            age_add: self.age_add,
-            nonce: self.nonce.to_owned(),
-            ticket: self.ticket.to_owned(),
-            exts: self
-                .exts
-                .iter()
-                .map(|x| x.to_owned())
-                .collect(),
-        }
-    }
 }
 
 impl<'a> Codec<'a> for NewSessionTicketPayloadTLS13<'a> {
@@ -2436,12 +2152,6 @@ impl<'a> CertificateStatus<'a> {
     pub fn into_inner(self) -> Vec<u8> {
         self.ocsp_response.0.into_owned()
     }
-
-    fn to_owned(&self) -> CertificateStatus<'static> {
-        CertificateStatus {
-            ocsp_response: self.ocsp_response.to_owned(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -2495,34 +2205,6 @@ impl<'a> HandshakePayload<'a> {
             HandshakePayload::CertificateStatus(ref x) => x.encode(bytes),
             HandshakePayload::MessageHash(ref x) => x.encode(bytes),
             HandshakePayload::Unknown(ref x) => x.encode(bytes),
-        }
-    }
-
-    fn to_owned(&self) -> HandshakePayload<'static> {
-        use HandshakePayload::*;
-        match self {
-            HelloRequest => HelloRequest,
-            ServerHelloDone => ServerHelloDone,
-            EarlyData => EarlyData,
-            EndOfEarlyData => EndOfEarlyData,
-            ClientHello(x) => ClientHello(x.to_owned()),
-            ServerHello(x) => ServerHello(x.to_owned()),
-            HelloRetryRequest(x) => HelloRetryRequest(x.to_owned()),
-            Certificate(x) => Certificate(x.iter().map(|y| y.to_owned()).collect()),
-            CertificateTLS13(x) => CertificateTLS13(x.to_owned()),
-            ServerKeyExchange(x) => ServerKeyExchange(x.to_owned()),
-            ClientKeyExchange(x) => ClientKeyExchange(x.to_owned()),
-            CertificateRequest(x) => CertificateRequest(x.to_owned()),
-            CertificateRequestTLS13(x) => CertificateRequestTLS13(x.to_owned()),
-            CertificateVerify(x) => CertificateVerify(x.to_owned()),
-            NewSessionTicket(x) => NewSessionTicket(x.to_owned()),
-            NewSessionTicketTLS13(x) => NewSessionTicketTLS13(x.to_owned()),
-            EncryptedExtensions(x) => EncryptedExtensions(x.iter().map(|y| y.to_owned()).collect()),
-            KeyUpdate(x) => KeyUpdate(x.to_owned()),
-            Finished(x) => Finished(x.to_owned()),
-            CertificateStatus(x) => CertificateStatus(x.to_owned()),
-            MessageHash(x) => MessageHash(x.to_owned()),
-            Unknown(x) => Unknown(x.to_owned()),
         }
     }
 }
@@ -2684,13 +2366,6 @@ impl<'a> HandshakeMessagePayload<'a> {
         HandshakeMessagePayload {
             typ: HandshakeType::MessageHash,
             payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec())),
-        }
-    }
-
-    pub fn to_owned(&self) -> HandshakeMessagePayload<'static> {
-        HandshakeMessagePayload {
-            typ: self.typ,
-            payload: self.payload.to_owned(),
         }
     }
 }

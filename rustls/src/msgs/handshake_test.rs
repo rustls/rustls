@@ -482,23 +482,29 @@ fn test_truncated_client_extension_is_detected() {
 }
 
 fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
-    let mut chp = get_sample_clienthellopayload();
-    let ext = chp
-        .find_extension(typ)
-        .unwrap()
-        .to_owned();
+    let chp = get_sample_clienthellopayload();
+    let ext = chp.find_extension(typ).unwrap().clone();
 
-    chp.extensions = vec![];
-    assert!(!getter(&chp));
+    let mut borrowed_chp = ClientHelloPayload {
+        client_version: chp.client_version,
+        random: chp.random.clone(),
+        session_id: chp.session_id,
+        cipher_suites: chp.cipher_suites.clone(),
+        compression_methods: chp.compression_methods.clone(),
+        extensions: vec![],
+    };
 
-    chp.extensions = vec![ext];
-    assert!(getter(&chp));
+    borrowed_chp.extensions = vec![];
+    assert!(!getter(&borrowed_chp));
 
-    chp.extensions = vec![ClientExtension::Unknown(UnknownExtension {
+    borrowed_chp.extensions = vec![ext];
+    assert!(getter(&borrowed_chp));
+
+    borrowed_chp.extensions = vec![ClientExtension::Unknown(UnknownExtension {
         typ,
         payload: Payload(vec![].into()),
     })];
-    assert!(!getter(&chp));
+    assert!(!getter(&borrowed_chp));
 }
 
 #[test]
@@ -673,23 +679,29 @@ fn test_truncated_server_extension_is_detected() {
 }
 
 fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPayload) -> bool) {
-    let mut shp = get_sample_serverhellopayload();
-    let ext = shp
-        .find_extension(typ)
-        .unwrap()
-        .to_owned();
+    let shp = get_sample_serverhellopayload();
+    let ext = shp.find_extension(typ).unwrap().clone();
 
-    shp.extensions = vec![];
-    assert!(!getter(&shp));
+    let mut borrowed_shp = ServerHelloPayload {
+        legacy_version: shp.legacy_version,
+        random: shp.random.clone(),
+        session_id: shp.session_id,
+        cipher_suite: shp.cipher_suite,
+        compression_method: shp.compression_method,
+        extensions: vec![],
+    };
 
-    shp.extensions = vec![ext];
-    assert!(getter(&shp));
+    borrowed_shp.extensions = vec![];
+    assert!(!getter(&borrowed_shp));
 
-    shp.extensions = vec![ServerExtension::Unknown(UnknownExtension {
+    borrowed_shp.extensions = vec![ext];
+    assert!(getter(&borrowed_shp));
+
+    borrowed_shp.extensions = vec![ServerExtension::Unknown(UnknownExtension {
         typ,
         payload: Payload(vec![].into()),
     })];
-    assert!(!getter(&shp));
+    assert!(!getter(&borrowed_shp));
 }
 
 #[test]

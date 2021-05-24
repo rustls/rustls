@@ -265,11 +265,7 @@ fn emit_client_hello_for_retry(
     }
 
     // Extra extensions must be placed before the PSK extension
-    exts.extend(
-        extra_exts
-            .iter()
-            .map(|ext| ext.to_owned()),
-    );
+    exts.append(&mut extra_exts.clone());
 
     let fill_in_binder = if support_tls13
         && config.enable_tickets

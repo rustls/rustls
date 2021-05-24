@@ -191,7 +191,7 @@ impl ExtensionProcessing {
                 // and put it in the legacy extension.
                 if let Some(sct_list) = sct_list.take() {
                     self.exts
-                        .push(ServerExtension::make_sct(sct_list).to_owned());
+                        .push(ServerExtension::make_sct(sct_list));
                 }
             }
         } else {

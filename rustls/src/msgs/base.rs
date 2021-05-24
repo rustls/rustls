@@ -4,7 +4,7 @@ use crate::msgs::codec::{Codec, Reader};
 use std::borrow::Cow;
 
 /// An externally length'd payload
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Payload<'a>(pub Cow<'a, [u8]>);
 
 impl<'a> Codec<'a> for Payload<'a> {
@@ -63,7 +63,7 @@ impl<'a> Codec<'a> for PayloadU24<'a> {
 }
 
 /// An arbitrary, unknown-content, u16-length-prefixed payload
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PayloadU16<'a>(pub Cow<'a, [u8]>);
 
 impl<'a> PayloadU16<'a> {
@@ -98,7 +98,7 @@ impl<'a> Codec<'a> for PayloadU16<'a> {
 }
 
 /// An arbitrary, unknown-content, u8-length-prefixed payload
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PayloadU8<'a>(pub Cow<'a, [u8]>);
 
 impl<'a> PayloadU8<'a> {
