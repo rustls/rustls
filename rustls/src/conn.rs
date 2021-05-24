@@ -618,49 +618,55 @@ impl ConnectionCommon {
         }
     }
 
-    fn process_msg<'a, Data>(
+    fn process_messages<Data>(
         &mut self,
-        msg: &'a mut OpaqueMessage<'a>,
         state: &mut Option<Box<dyn State<Data>>>,
         data: &mut Data,
     ) -> Result<(), Error> {
-        // pass message to handshake state machine if any of these are true:
-        // - TLS1.2 (where it's part of the state machine),
-        // - prior to determining the version (it's illegal as a first message)
-        // - if it's not a CCS at all
-        // - if we've finished the handshake
-        if msg.typ == ContentType::ChangeCipherSpec && !self.api.traffic && self.api.is_tls13() {
-            if self.received_middlebox_ccs {
-                return Err(Error::PeerMisbehavedError(
-                    "illegal middlebox CCS received".into(),
-                ));
-            } else {
-                self.received_middlebox_ccs = true;
-                trace!("Dropping CCS");
-                return Ok(());
+        while let Some(mut msg) = self.message_deframer.pop()? {
+            // pass message to handshake state machine if any of these are true:
+            // - TLS1.2 (where it's part of the state machine),
+            // - prior to determining the version (it's illegal as a first message)
+            // - if it's not a CCS at all
+            // - if we've finished the handshake
+            if msg.typ == ContentType::ChangeCipherSpec && !self.api.traffic && self.api.is_tls13()
+            {
+                if self.received_middlebox_ccs {
+                    return Err(Error::PeerMisbehavedError(
+                        "illegal middlebox CCS received".into(),
+                    ));
+                } else {
+                    self.received_middlebox_ccs = true;
+                    trace!("Dropping CCS");
+                    continue;
+                }
             }
+
+            // Decrypt if demanded by current state.
+            let msg = self.api.decrypt_incoming(&mut msg)?;
+
+            // For handshake messages, we need to join them before parsing
+            // and processing.
+            if self.handshake_joiner.want_message(&msg) {
+                self.handshake_joiner.take_message(msg);
+                self.process_new_handshake_messages(state, data)?;
+                continue;
+            }
+
+            // Now we can fully parse the message payload.
+            let msg = Message::try_from(&msg)?;
+
+            // For alerts, we have separate logic.
+            if let MessagePayload::Alert(alert) = &msg.payload {
+                self.process_alert(alert)?;
+                continue;
+            }
+
+            self.api
+                .process_main_protocol(msg, state, data)?;
         }
 
-        // Decrypt if demanded by current state.
-        let msg = self.api.decrypt_incoming(msg)?;
-
-        // For handshake messages, we need to join them before parsing
-        // and processing.
-        if self.handshake_joiner.want_message(&msg) {
-            self.handshake_joiner.take_message(msg);
-            return self.process_new_handshake_messages(state, data);
-        }
-
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(&msg)?;
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            return self.process_alert(alert);
-        }
-
-        self.api
-            .process_main_protocol(msg, state, data)
+        Ok(())
     }
 
     pub(crate) fn process_new_packets<Data>(
@@ -672,11 +678,9 @@ impl ConnectionCommon {
             return Err(err.clone());
         }
 
-        while let Some(mut msg) = self.message_deframer.pop()? {
-            if let Err(err) = self.process_msg(&mut msg, state, data) {
-                self.error = Some(err.clone());
-                return Err(err);
-            }
+        if let Err(err) = self.process_messages(state, data) {
+            self.error = Some(err.clone());
+            return Err(err);
         }
 
         Ok(self.current_io_state())
