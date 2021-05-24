@@ -620,7 +620,7 @@ impl ConnectionCommon {
 
     fn process_msg<Data>(
         &mut self,
-        mut msg: OpaqueMessage,
+        msg: OpaqueMessage,
         state: &mut Option<Box<dyn State<Data>>>,
         data: &mut Data,
     ) -> Result<(), Error> {
@@ -642,10 +642,7 @@ impl ConnectionCommon {
         }
 
         // Decrypt if demanded by current state.
-        if self.api.record_layer.is_decrypting() {
-            let dm = self.decrypt_incoming(msg)?;
-            msg = dm;
-        }
+        let msg = self.decrypt_incoming(msg)?;
 
         // For handshake messages, we need to join them before parsing
         // and processing.
@@ -744,6 +741,10 @@ impl ConnectionCommon {
     }
 
     pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
+        if !self.api.record_layer.is_decrypting() {
+            return Ok(encr);
+        }
+
         if self
             .api
             .record_layer
