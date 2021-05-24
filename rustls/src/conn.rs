@@ -642,7 +642,7 @@ impl ConnectionCommon {
         }
 
         // Decrypt if demanded by current state.
-        let msg = self.decrypt_incoming(msg)?;
+        let msg = self.api.decrypt_incoming(msg)?;
 
         // For handshake messages, we need to join them before parsing
         // and processing.
@@ -738,33 +738,6 @@ impl ConnectionCommon {
             .alpn_protocol
             .as_ref()
             .map(AsRef::as_ref)
-    }
-
-    fn decrypt_incoming<'a>(
-        &mut self,
-        encr: &'a mut OpaqueMessage<'a>,
-    ) -> Result<PlainMessage<'a>, Error> {
-        if !self.api.record_layer.is_decrypting() {
-            return Ok(encr.to_plain_message());
-        }
-
-        if self
-            .api
-            .record_layer
-            .wants_close_before_decrypt()
-        {
-            self.api.send_close_notify();
-        }
-
-        let rc = self
-            .api
-            .record_layer
-            .decrypt_incoming(encr);
-        if let Err(Error::PeerSentOversizedRecord) = rc {
-            self.api
-                .send_fatal_alert(AlertDescription::RecordOverflow);
-        }
-        rc
     }
 
     pub fn has_readable_plaintext(&self) -> bool {
@@ -933,6 +906,28 @@ impl CommonApi {
             }
             Err(e) => Err(e),
         }
+    }
+
+    fn decrypt_incoming<'a>(
+        &mut self,
+        encr: &'a mut OpaqueMessage<'a>,
+    ) -> Result<PlainMessage<'a>, Error> {
+        if !self.record_layer.is_decrypting() {
+            return Ok(encr.to_plain_message());
+        }
+
+        if self
+            .record_layer
+            .wants_close_before_decrypt()
+        {
+            self.send_close_notify();
+        }
+
+        let rc = self.record_layer.decrypt_incoming(encr);
+        if let Err(Error::PeerSentOversizedRecord) = rc {
+            self.send_fatal_alert(AlertDescription::RecordOverflow);
+        }
+        rc
     }
 
     // Changing the keys must not span any fragmented handshake
