@@ -9,3 +9,4 @@ admin/rustfmt
 ._.DS_Store
 **/.DS_Store
 **/._.DS_Store
+fuzz/corpus/*
