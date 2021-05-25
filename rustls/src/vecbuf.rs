@@ -13,10 +13,10 @@ pub struct ChunkVecBuffer {
 }
 
 impl ChunkVecBuffer {
-    pub fn new() -> ChunkVecBuffer {
+    pub fn new(limit: usize) -> ChunkVecBuffer {
         ChunkVecBuffer {
             chunks: VecDeque::new(),
-            limit: 0,
+            limit,
         }
     }
 
@@ -134,8 +134,7 @@ mod test {
 
     #[test]
     fn short_append_copy_with_limit() {
-        let mut cvb = ChunkVecBuffer::new();
-        cvb.set_limit(12);
+        let mut cvb = ChunkVecBuffer::new(12);
         assert_eq!(cvb.append_limited_copy(b"hello"), 5);
         assert_eq!(cvb.append_limited_copy(b"world"), 5);
         assert_eq!(cvb.append_limited_copy(b"hello"), 2);

@@ -21,6 +21,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+  - *Breaking change*: internal buffers are now limited to 64 kB by default. Use
+    `Connection::set_buffer_limit` to change the buffer limits to suit your application.
   - *Breaking API change*: PEM parsing now lives in the [rustls-pemfile crate](https://crates.io/crates/rustls-pemfile).
     This means `rustls::internals::pemfile` and `rustls::RootCertStore::add_pem_file` no longer exist.
   - *Breaking API change*: `ServerCertVerifier::verify_server_cert` and `ClientCertVerifier::verify_client_cert`
@@ -286,4 +288,3 @@ Rustls is distributed under the following three licenses:
 These are included as LICENSE-APACHE, LICENSE-MIT and LICENSE-ISC
 respectively.  You may use this software under the terms of any
 of these licenses, at your option.
-
