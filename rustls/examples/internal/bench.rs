@@ -447,7 +447,9 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
 
     let dns_name = webpki::DnsNameRef::try_from_ascii_str("localhost").unwrap();
     let mut client = ClientConnection::new(client_config, dns_name).unwrap();
+    client.set_buffer_limit(0);
     let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+    server.set_buffer_limit(0);
 
     do_handshake(&mut client, &mut server);
 

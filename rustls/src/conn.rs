@@ -609,9 +609,9 @@ impl ConnectionCommon {
             handshake_joiner: HandshakeJoiner::new(),
             message_fragmenter: MessageFragmenter::new(max_fragment_size)
                 .map_err(|_| Error::BadMaxFragmentSize)?,
-            received_plaintext: ChunkVecBuffer::new(),
-            sendable_plaintext: ChunkVecBuffer::new(),
-            sendable_tls: ChunkVecBuffer::new(),
+            received_plaintext: ChunkVecBuffer::new(0),
+            sendable_plaintext: ChunkVecBuffer::new(DEFAULT_BUFFER_LIMIT),
+            sendable_tls: ChunkVecBuffer::new(DEFAULT_BUFFER_LIMIT),
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
@@ -1138,3 +1138,5 @@ impl Quic {
         }
     }
 }
+
+const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
