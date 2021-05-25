@@ -1024,7 +1024,7 @@ impl hs::State for ExpectFinished {
 }
 
 // -- Traffic transit state (TLS1.3) --
-// In this state we can be sent tickets, keyupdates,
+// In this state we can be sent tickets, key updates,
 // and application data.
 struct ExpectTraffic {
     config: Arc<ClientConfig>,
