@@ -1,6 +1,6 @@
 use crate::msgs::codec::{Codec, Reader};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChangeCipherSpecPayload;
 
 impl Codec for ChangeCipherSpecPayload {
