@@ -25,7 +25,7 @@ impl EchKeyPair {
         );
         EchKeyPair {
             kem_id,
-            key_pair: hpke.generate_key_pair(),
+            key_pair: hpke.generate_key_pair().unwrap(),
         }
     }
 }

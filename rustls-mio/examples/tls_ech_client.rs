@@ -16,10 +16,8 @@ fn main() {
     let dns_config = ResolverConfig::cloudflare_https();
     let opts = ResolverOpts::default();
     let resolver = Resolver::new(dns_config, opts).unwrap();
-    let (key, value) = lookup(&resolver, domain).unwrap();
+    let (_key, value) = lookup(&resolver, domain).unwrap();
 
-    println!("key: {:?}", key);
-    assert_eq!("echconfig", key.to_string());
     let config = match value {
         SvcParamValue::EchConfig(e) => e,
         _ => unreachable!(),
@@ -47,6 +45,7 @@ fn main() {
     let mut headers = String::new();
     headers.push_str("GET / HTTP/1.1\r\n");
     headers.push_str(host_header.as_str());
+    headers.push_str("User-Agent: RustlsDemo .01\r\n");
     headers.push_str("Connection: close\r\n");
     headers.push_str("Accept-Encoding: identity\r\n");
     headers.push_str("\r\n");

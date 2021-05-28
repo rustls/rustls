@@ -865,7 +865,7 @@ impl ServerExtension {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
@@ -1305,6 +1305,19 @@ impl ServerHelloPayload {
             ServerExtension::SupportedVersions(vers) => Some(vers),
             _ => None,
         }
+    }
+
+    pub fn encode_for_ech_confirmation(&self, bytes: &mut Vec<u8>) {
+        self.legacy_version.encode(bytes);
+
+        let rand_vec = self.random.get_encoding();
+        bytes.extend_from_slice(&rand_vec.as_slice()[..24]);
+        bytes.extend_from_slice(&[0u8; 8]);
+
+        self.session_id.encode(bytes);
+        self.cipher_suite.encode(bytes);
+        self.compression_method.encode(bytes);
+        codec::encode_vec_u16(bytes, &self.extensions);
     }
 }
 

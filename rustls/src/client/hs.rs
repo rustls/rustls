@@ -8,12 +8,12 @@ use crate::key_schedule::KeyScheduleEarly;
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::base::{Payload, PayloadU16, PayloadU24};
+use crate::msgs::base::Payload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::{CertificateStatusRequest, ClientEch, ClientHelloOuterAAD, SCTList};
+use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
@@ -96,6 +96,7 @@ fn find_session(
         } else {
             #[cfg(feature = "quic")]
             {
+                use crate::msgs::base::PayloadU16;
                 if cx.common.is_quic() {
                     let params = PayloadU16::read(&mut reader)?;
                     cx.common.quic.params = Some(params.0);
@@ -364,57 +365,12 @@ fn emit_client_hello_for_retry(
         extensions: exts,
     };
 
-    let payload = match server_id {
-        ServerIdentity::Hostname(_) => initial_payload,
-        ServerIdentity::EncryptedClientHello(ref mut ech) => {
-            let mut outer_payload = ech.encode(initial_payload);
-            let pk_r = ech.public_key();
-            let (enc, mut context) = ech
-                .hpke
-                .setup_sender(&pk_r, ech.hpke_info.as_slice(), None, None, None)
-                .unwrap();
-            let mut encoded_outer = Vec::new();
-            outer_payload.encode(&mut encoded_outer);
-            let outer_aad = ClientHelloOuterAAD {
-                cipher_suite: ech.suite.clone(),
-                config_id: ech
-                    .config_contents
-                    .hpke_key_config
-                    .config_id,
-                enc: PayloadU16::new(enc.clone()),
-                outer_hello: PayloadU24::new(encoded_outer),
-            };
-
-            let mut aad = Vec::new();
-            outer_aad.encode(&mut aad);
-
-            let encoded = ech.encoded_inner.as_ref().unwrap();
-            let payload = context
-                .seal(aad.as_slice(), encoded)
-                .unwrap();
-            let client_ech = ClientEch {
-                cipher_suite: ech.suite.clone(),
-                config_id: ech
-                    .config_contents
-                    .hpke_key_config
-                    .config_id,
-                enc: PayloadU16::new(enc),
-                payload: PayloadU16::new(payload),
-            };
-
-            outer_payload
-                .extensions
-                .push(ClientExtension::EncryptedClientHello(client_ech));
-            hello_details
-                .sent_extensions
-                .push(ExtensionType::EncryptedClientHello);
-            outer_payload
-        }
-    };
-
-    let mut chp = HandshakeMessagePayload {
-        typ: HandshakeType::ClientHello,
-        payload: HandshakePayload::ClientHello(payload),
+    let mut chp = match server_id {
+        ServerIdentity::Hostname(_) => HandshakeMessagePayload {
+            typ: HandshakeType::ClientHello,
+            payload: HandshakePayload::ClientHello(initial_payload),
+        },
+        ServerIdentity::EncryptedClientHello(ref mut ech) => ech.encode(initial_payload),
     };
 
     let early_key_schedule = if let Some(resuming) = fill_in_binder {
@@ -423,6 +379,7 @@ fn emit_client_hello_for_retry(
     } else {
         None
     };
+
 
     let ch = Message {
         // "This value MUST be set to 0x0303 for all records generated
@@ -634,15 +591,16 @@ impl State for ExpectServerHello {
             }
         }
 
-        // Start our handshake hash, and input the server-hello.
-        self.transcript
-            .start_hash(suite.get_hash());
-        self.transcript.add_message(&m);
-
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         if cx.common.is_tls13() {
+            let server_message = match &m.payload {
+                MessagePayload::Handshake(hs) => Ok(hs.get_encoding()),
+                _ => Err(Error::General("wrong payload".to_string())),
+            }?;
+
             tls13::handle_server_hello(
+                server_message,
                 self.config,
                 cx,
                 server_hello,
@@ -658,6 +616,9 @@ impl State for ExpectServerHello {
                 self.sent_tls13_fake_ccs,
             )
         } else {
+            self.transcript
+                .start_hash(&suite.get_hash());
+            self.transcript.add_message(&m);
             tls12::CompleteServerHelloHandling {
                 config: self.config,
                 resuming_session: self.resuming_session,

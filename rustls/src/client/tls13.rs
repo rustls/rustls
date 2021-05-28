@@ -59,14 +59,15 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 ];
 
 pub(super) fn handle_server_hello(
+    server_message: Vec<u8>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     server_id: ServerIdentity,
-    randoms: ConnectionRandoms,
+    mut randoms: ConnectionRandoms,
     suite: &'static SupportedCipherSuite,
-    transcript: HandshakeHash,
+    mut transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     our_key_share: kx::KeyExchange,
@@ -134,7 +135,6 @@ pub(super) fn handle_server_hello(
         }
         early_key_schedule.into_handshake(&shared.shared_secret)
     } else {
-        debug!("Not resuming");
         // Discard the early data key schedule.
         cx.data.early_data.rejected();
         cx.common.early_traffic = false;
@@ -153,12 +153,20 @@ pub(super) fn handle_server_hello(
     // the two halves will have different record layer protections.  Disallow this.
     cx.common.check_aligned_handshake()?;
 
+    let (client_random, mut transcript) = match &server_id {
+        ServerIdentity::Hostname(_) => {
+            transcript.start_hash(suite.get_hash());
+            (randoms.client, transcript)
+        }
+        ServerIdentity::EncryptedClientHello(ech) => {
+            ech.confirm_ech(&mut key_schedule, server_hello, suite)?
+        }
+    };
+    randoms.client = client_random;
+
+    transcript.update_raw(&*server_message);
+
     let hash_at_client_recvd_server_hello = transcript.get_current_hash();
-
-    // Check if ECH was accepted
-    if let ServerIdentity::EncryptedClientHello(_ech) = &server_id {
-
-    }
 
     let _maybe_write_key = if !cx.data.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
@@ -489,7 +497,7 @@ impl hs::State for ExpectEncryptedExtensions {
                 config: self.config,
                 dns_name: self
                     .server_id
-                    .get_outer_hostname()
+                    .get_inner_hostname()
                     .to_owned(),
                 randoms: self.randoms,
                 suite: self.suite,
@@ -509,7 +517,7 @@ impl hs::State for ExpectEncryptedExtensions {
                 config: self.config,
                 dns_name: self
                     .server_id
-                    .get_outer_hostname()
+                    .get_inner_hostname()
                     .to_owned(),
                 randoms: self.randoms,
                 suite: self.suite,
@@ -928,7 +936,6 @@ struct ExpectFinished {
 
 impl hs::State for ExpectFinished {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        println!("ExpectFinished");
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
