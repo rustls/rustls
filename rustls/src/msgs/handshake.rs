@@ -881,7 +881,7 @@ impl Codec for ClientHelloPayload {
             ret.extensions = codec::read_vec_u16::<ClientExtension>(r)?;
         }
 
-        if r.any_left() || ret.extensions.is_empty() {
+        if r.any_left() {
             None
         } else {
             Some(ret)
@@ -1562,11 +1562,6 @@ impl Codec for ECParameters {
 
     fn read(r: &mut Reader) -> Option<Self> {
         let ct = ECCurveType::read(r)?;
-
-        if ct != ECCurveType::NamedCurve {
-            return None;
-        }
-
         let grp = NamedGroup::read(r)?;
 
         Some(Self {
@@ -1800,16 +1795,13 @@ impl Codec for CertificateRequestPayload {
         let sigschemes = SupportedSignatureSchemes::read(r)?;
         let canames = DistinguishedNames::read(r)?;
 
-        if sigschemes.is_empty() {
-            warn!("meaningless CertificateRequest message");
-            None
-        } else {
+
             Some(Self {
                 certtypes,
                 sigschemes,
                 canames,
             })
-        }
+
     }
 }
 
