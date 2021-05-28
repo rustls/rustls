@@ -272,7 +272,7 @@ impl EncryptedClientHello {
 
         // Check that first 8 digits of the derived secret match the last 8 digits of the original
         // server random. This match signals that the server accepted the ECH offer.
-        if &derived.into_inner()[..8] != &server_hello.random.get_encoding()[24..] {
+        if derived.into_inner()[..8] != server_hello.random.get_encoding()[24..] {
             return Err(Error::General("ECH didn't match".to_string()));
         }
 
@@ -295,8 +295,8 @@ fn confirmation_transcript(
     let mut confirmation_transcript = HandshakeHash::new();
     confirmation_transcript.start_hash(alg);
     confirmation_transcript.add_message(m);
-    let mut shc = server_hello_conf(server_hello);
-    confirmation_transcript.update_raw(&mut shc);
+    let shc = server_hello_conf(server_hello);
+    confirmation_transcript.update_raw(&shc);
     confirmation_transcript
 }
 
@@ -432,7 +432,6 @@ mod test {
         let ext_vecs = vec![vec![KeyShare, ECPointFormats, EllipticCurves], vec![]];
         for outer_exts in ext_vecs {
             let original_hello = get_sample_clienthellopayload();
-            let original_ext_length = original_hello.extensions.len();
             let original_session_id = original_hello.session_id;
             let original_random = original_hello.random.clone();
             let (_configs, bytes) = get_ech_config(BASE64_ECHCONFIGS);
@@ -512,9 +511,9 @@ mod test {
                 let outer_exts = vec![KeyShare, ECPointFormats, EllipticCurves];
                 ech.compressed_extensions
                     .extend_from_slice(outer_exts.as_slice());
-                let mut hello = ech.encode(original_hello);
+                let hello = ech.encode(original_hello);
                 let pk_r = ech.public_key();
-                let (enc, mut context) = ech
+                let (enc, _context) = ech
                     .hpke
                     .setup_sender(&pk_r, HPKE_INFO, None, None, None)
                     .unwrap();
@@ -656,7 +655,7 @@ mod test {
         let mut serialized_inner: Vec<u8> = Vec::new();
         inner_payload.encode(&mut serialized_inner);
         assert_eq!(hello_inner, serialized_inner);
-        let mut serialized_outer: Vec<u8> = Vec::new();
+        let _serialized_outer: Vec<u8> = Vec::new();
         assert_eq!(outer.typ, expected_outer.typ);
 
         let outer_payload = match expected_outer.payload {
@@ -706,10 +705,7 @@ mod test {
             HandshakePayload::ServerHello(payload) => payload,
             _ => unreachable!(),
         };
-        assert_eq!(
-            server_hello_conf,
-            super::server_hello_conf(&payload)
-        );
+        assert_eq!(server_hello_conf, super::server_hello_conf(&payload));
     }
 
     #[test]
@@ -742,7 +738,7 @@ mod test {
             218, 121, 130, 188, 222, 31, 54, 209, 251, 29, 50, 65, 191, 49, 29, 0, 105, 90, 252,
             225, 119, 176, 77,
         ];
-        let server_hello_conf: Vec<u8> = vec![
+        let _server_hello_conf: Vec<u8> = vec![
             2, 0, 0, 118, 3, 3, 0, 229, 178, 163, 34, 124, 224, 126, 26, 29, 35, 157, 193, 217,
             111, 255, 91, 159, 0, 164, 204, 35, 142, 224, 0, 0, 0, 0, 0, 0, 0, 0, 32, 185, 39, 132,
             239, 108, 247, 103, 96, 196, 139, 175, 141, 179, 183, 146, 233, 125, 186, 64, 150, 27,
@@ -754,7 +750,7 @@ mod test {
             21, 11, 106, 56, 81, 202, 222, 6, 28, 6, 102, 145, 242, 229, 186, 18, 1, 201, 35, 155,
             72, 221, 63, 142, 60, 93, 24, 185, 91, 21, 162, 27,
         ];
-        let handshake_secret: Vec<u8> = vec![
+        let _handshake_secret: Vec<u8> = vec![
             200, 53, 90, 169, 169, 110, 114, 247, 175, 20, 202, 151, 150, 108, 79, 41, 173, 115,
             169, 118, 196, 97, 4, 98, 236, 121, 171, 192, 218, 150, 39, 20,
         ];
@@ -776,7 +772,7 @@ mod test {
             _ => unreachable!(),
         };
 
-        conf_transcript.update_raw(&super::server_hello_conf(&payload));
+        conf_transcript.update_raw(&server_hello_conf(&payload));
         assert_eq!(
             &conf_digest,
             conf_transcript
