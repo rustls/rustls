@@ -10,7 +10,7 @@ use crate::msgs::handshake::HandshakeMessagePayload;
 
 use std::convert::TryFrom;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
     Handshake(HandshakeMessagePayload),
@@ -197,7 +197,7 @@ impl PlainMessage {
 }
 
 /// A message with decoded payload
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub version: ProtocolVersion,
     pub payload: MessagePayload,
