@@ -239,9 +239,13 @@ impl TryFrom<PlainMessage> for Message {
     type Error = Error;
 
     fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
+        let result = MessagePayload::new(plain.typ, plain.version, plain.payload);
+        if let Err(err) = result {
+            panic!("Failed to decode message! This means we maybe need to remove logical checks from rustls! {}", err)
+        }
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
+            payload: result.unwrap(),
         })
     }
 }
