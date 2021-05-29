@@ -140,7 +140,7 @@ impl HandshakeHash {
         Ok(self
             .ctx
             .as_ref()
-            .ok_or_else(|| Error::InconsistentTranscript)?
+            .ok_or(Error::InconsistentTranscript)?
             .clone()
             .finish())
     }
