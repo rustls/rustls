@@ -3,6 +3,7 @@ use crate::log::warn;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
+use crate::Error;
 use ring::digest;
 use std::mem;
 
@@ -35,9 +36,14 @@ impl HandshakeHash {
 
     /// We might be doing client auth, so need to keep a full
     /// log of the handshake.
-    pub fn set_client_auth_enabled(&mut self) {
-        debug_assert!(self.ctx.is_none()); // or we might have already discarded messages
-        self.client_auth_enabled = true;
+    pub fn set_client_auth_enabled(&mut self) -> Result<(), Error> {
+        if self.ctx.is_some() {
+            // or we might have already discarded messages
+            Err(Error::InconsistentTranscript)
+        } else {
+            self.client_auth_enabled = true;
+            Ok(())
+        }
     }
 
     /// We decided not to do client auth after all, so discard
@@ -114,8 +120,11 @@ impl HandshakeHash {
     /// Take the current hash value, and encapsulate it in a
     /// 'handshake_hash' handshake message.  Start this hash
     /// again, with that message at the front.
-    pub fn rollup_for_hrr(&mut self) {
-        let ctx = self.ctx.as_mut().unwrap();
+    pub fn rollup_for_hrr(&mut self) -> Result<(), Error> {
+        let ctx = self
+            .ctx
+            .as_mut()
+            .ok_or(Error::InconsistentTranscript)?;
 
         let old_ctx = mem::replace(ctx, digest::Context::new(ctx.algorithm()));
         let old_hash = old_ctx.finish();
@@ -123,23 +132,28 @@ impl HandshakeHash {
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
         self.update_raw(&old_handshake_hash_msg.get_encoding());
+        Ok(())
     }
 
     /// Get the current hash value.
-    pub fn get_current_hash(&self) -> digest::Digest {
-        self.ctx
+    pub fn get_current_hash(&self) -> Result<digest::Digest, Error> {
+        Ok(self
+            .ctx
             .as_ref()
-            .unwrap()
+            .ok_or_else(|| Error::InconsistentTranscript)?
             .clone()
-            .finish()
+            .finish())
     }
 
     /// Takes this object's buffer containing all handshake messages
-    /// so far.  This method only works once; it resets the buffer
+    /// so far. This method only works once; it resets the buffer
     /// to empty.
-    pub fn take_handshake_buf(&mut self) -> Vec<u8> {
-        debug_assert!(self.client_auth_enabled);
-        mem::take(&mut self.buffer)
+    pub fn take_handshake_buf(&mut self) -> Result<Vec<u8>, Error> {
+        if self.client_auth_enabled {
+            Ok(mem::take(&mut self.buffer))
+        } else {
+            Err(Error::InconsistentTranscript)
+        }
     }
 }
 
@@ -156,7 +170,7 @@ mod test {
         hh.start_hash(&digest::SHA256);
         assert_eq!(hh.buffer.len(), 0);
         hh.update_raw(b"world");
-        let h = hh.get_current_hash();
+        let h = hh.get_current_hash().unwrap();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
@@ -167,27 +181,27 @@ mod test {
     #[test]
     fn buffers_correctly() {
         let mut hh = HandshakeHash::new();
-        hh.set_client_auth_enabled();
+        hh.set_client_auth_enabled().unwrap();
         hh.update_raw(b"hello");
         assert_eq!(hh.buffer.len(), 5);
         hh.start_hash(&digest::SHA256);
         assert_eq!(hh.buffer.len(), 5);
         hh.update_raw(b"world");
         assert_eq!(hh.buffer.len(), 10);
-        let h = hh.get_current_hash();
+        let h = hh.get_current_hash().unwrap();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
         assert_eq!(h[2], 0x18);
         assert_eq!(h[3], 0x5c);
-        let buf = hh.take_handshake_buf();
+        let buf = hh.take_handshake_buf().unwrap();
         assert_eq!(b"helloworld".to_vec(), buf);
     }
 
     #[test]
     fn abandon() {
         let mut hh = HandshakeHash::new();
-        hh.set_client_auth_enabled();
+        hh.set_client_auth_enabled().unwrap();
         hh.update_raw(b"hello");
         assert_eq!(hh.buffer.len(), 5);
         hh.start_hash(&digest::SHA256);
@@ -196,7 +210,7 @@ mod test {
         assert_eq!(hh.buffer.len(), 0);
         hh.update_raw(b"world");
         assert_eq!(hh.buffer.len(), 0);
-        let h = hh.get_current_hash();
+        let h = hh.get_current_hash().unwrap();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);

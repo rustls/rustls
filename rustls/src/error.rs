@@ -109,6 +109,9 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// A transcript invariant was violated
+    InconsistentTranscript,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -161,6 +164,7 @@ impl fmt::Display for Error {
             Error::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
+            Error::InconsistentTranscript => write!(f, "invalid transcript state"),
             Error::General(ref err) => write!(f, "unexpected error: {}", err), // (please file a bug)
         }
     }
@@ -219,6 +223,7 @@ mod tests {
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
+            Error::InconsistentTranscript,
         ];
 
         for err in all {

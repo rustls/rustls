@@ -285,7 +285,10 @@ pub struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> ExpectClientHello {
+    pub fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+    ) -> Result<ExpectClientHello, Error> {
         let mut ech = ExpectClientHello {
             config,
             extra_exts,
@@ -297,10 +300,11 @@ impl ExpectClientHello {
         };
 
         if ech.config.verifier.offer_client_auth() {
-            ech.transcript.set_client_auth_enabled();
+            ech.transcript
+                .set_client_auth_enabled()?;
         }
 
-        ech
+        Ok(ech)
     }
 }
 

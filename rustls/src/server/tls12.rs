@@ -300,7 +300,7 @@ mod client_hello {
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&secrets, &mut self.transcript, &mut cx.common);
+            emit_finished(&secrets, &mut self.transcript, &mut cx.common)?;
 
             Ok(Box::new(ExpectCcs {
                 config: self.config,
@@ -600,7 +600,7 @@ impl hs::State for ExpectClientKx {
         let kxd = tls12::complete_ecdh(self.server_kx, &peer_kx_params.public.0)?;
 
         let secrets = if self.using_ems {
-            let handshake_hash = self.transcript.get_current_hash();
+            let handshake_hash = self.transcript.get_current_hash()?;
             ConnectionSecrets::new_ems(
                 &self.randoms,
                 &handshake_hash,
@@ -661,7 +661,7 @@ impl hs::State for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_msgs = self.transcript.take_handshake_buf();
+            let handshake_msgs = self.transcript.take_handshake_buf()?;
             let certs = &self.client_cert;
 
             self.config
@@ -794,8 +794,8 @@ fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     common: &mut ConnectionCommon,
-) {
-    let vh = transcript.get_current_hash();
+) -> Result<(), Error> {
+    let vh = transcript.get_current_hash()?;
     let verify_data = secrets.server_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -809,6 +809,7 @@ fn emit_finished(
 
     transcript.add_message(&f);
     common.send_msg(f, true);
+    Ok(())
 }
 
 struct ExpectFinished {
@@ -828,7 +829,7 @@ impl hs::State for ExpectFinished {
 
         cx.common.check_aligned_handshake()?;
 
-        let vh = self.transcript.get_current_hash();
+        let vh = self.transcript.get_current_hash()?;
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
         let _fin_verified =
@@ -871,7 +872,7 @@ impl hs::State for ExpectFinished {
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.transcript, &mut cx.common);
+            emit_finished(&self.secrets, &mut self.transcript, &mut cx.common)?;
         }
 
         cx.common.start_traffic();

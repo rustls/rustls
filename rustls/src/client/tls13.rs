@@ -149,7 +149,7 @@ pub(super) fn handle_server_hello(
     // the two halves will have different record layer protections.  Disallow this.
     cx.common.check_aligned_handshake()?;
 
-    let hash_at_client_recvd_server_hello = transcript.get_current_hash();
+    let hash_at_client_recvd_server_hello = transcript.get_current_hash()?;
 
     let _maybe_write_key = if !cx.data.early_data.is_enabled() {
         // Set the client encryption key for handshakes if early data is not used
@@ -760,7 +760,7 @@ impl hs::State for ExpectCertificateVerify {
             .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
         // 2. Verify their signature on the handshake.
-        let handshake_hash = self.transcript.get_current_hash();
+        let handshake_hash = self.transcript.get_current_hash()?;
         let sig_verified = self
             .config
             .verifier
@@ -836,7 +836,7 @@ fn emit_certverify_tls13(
         }
     };
 
-    let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
+    let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash()?);
 
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
@@ -859,8 +859,8 @@ fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
     key_schedule: &KeyScheduleTrafficWithClientFinishedPending,
     common: &mut ConnectionCommon,
-) {
-    let handshake_hash = transcript.get_current_hash();
+) -> Result<(), Error> {
+    let handshake_hash = transcript.get_current_hash()?;
     let verify_data = key_schedule.sign_client_finish(&handshake_hash);
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
@@ -874,6 +874,7 @@ fn emit_finished_tls13(
 
     transcript.add_message(&m);
     common.send_msg(m, true);
+    Ok(())
 }
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut ConnectionCommon) {
@@ -912,7 +913,7 @@ impl hs::State for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        let handshake_hash = st.transcript.get_current_hash();
+        let handshake_hash = st.transcript.get_current_hash()?;
         let expect_verify_data = st
             .key_schedule
             .sign_server_finish(&handshake_hash);
@@ -941,7 +942,7 @@ impl hs::State for ExpectFinished {
 
         st.transcript.add_message(&m);
 
-        let hash_after_handshake = st.transcript.get_current_hash();
+        let hash_after_handshake = st.transcript.get_current_hash()?;
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if let Some(write_key) = maybe_write_key {
@@ -963,7 +964,7 @@ impl hs::State for ExpectFinished {
         let mut key_schedule_finished = st
             .key_schedule
             .into_traffic_with_client_finished_pending();
-        emit_finished_tls13(&mut st.transcript, &key_schedule_finished, cx.common);
+        emit_finished_tls13(&mut st.transcript, &key_schedule_finished, cx.common)?;
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
@@ -1045,7 +1046,7 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTLS13,
     ) -> Result<(), Error> {
-        let handshake_hash = self.transcript.get_current_hash();
+        let handshake_hash = self.transcript.get_current_hash()?;
         let secret = self
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);

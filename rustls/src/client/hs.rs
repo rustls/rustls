@@ -121,7 +121,7 @@ pub(super) fn start_handshake(
         .client_auth_cert_resolver
         .has_certs()
     {
-        transcript.set_client_auth_enabled();
+        transcript.set_client_auth_enabled()?;
     }
 
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
@@ -716,7 +716,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         self.next
             .transcript
             .start_hash(cs.get_hash());
-        self.next.transcript.rollup_for_hrr();
+        self.next.transcript.rollup_for_hrr()?;
         self.next.transcript.add_message(&m);
 
         // Early data is not allowed after HelloRetryrequest

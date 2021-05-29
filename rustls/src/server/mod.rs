@@ -243,7 +243,7 @@ impl ServerConnection {
     ) -> Result<Self, Error> {
         Ok(ServerConnection {
             common: ConnectionCommon::new(config.max_fragment_size, false)?,
-            state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
+            state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts)?)),
             data: ServerConnectionData::default(),
         })
     }

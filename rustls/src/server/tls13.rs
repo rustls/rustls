@@ -193,7 +193,7 @@ mod client_hello {
                             suite,
                             &mut cx.common,
                             group.name,
-                        );
+                        )?;
                         emit_fake_ccs(&mut cx.common);
                         return Ok(Box::new(hs::ExpectClientHello {
                             config: self.config,
@@ -340,7 +340,7 @@ mod client_hello {
                 cx,
                 key_schedule,
                 &self.config,
-            );
+            )?;
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -442,7 +442,7 @@ mod client_hello {
             KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
         };
 
-        let handshake_hash = transcript.get_current_hash();
+        let handshake_hash = transcript.get_current_hash()?;
         let write_key = key_schedule.server_handshake_traffic_secret(
             &handshake_hash,
             &*config.key_log,
@@ -488,7 +488,7 @@ mod client_hello {
         suite: &'static SupportedCipherSuite,
         common: &mut ConnectionCommon,
         group: NamedGroup,
-    ) {
+    ) -> Result<(), Error> {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id: SessionID::empty(),
@@ -512,9 +512,10 @@ mod client_hello {
         };
 
         trace!("Requesting retry {:?}", m);
-        transcript.rollup_for_hrr();
+        transcript.rollup_for_hrr()?;
         transcript.add_message(&m);
         common.send_msg(m, false);
+        Ok(())
     }
 
     fn emit_encrypted_extensions(
@@ -658,7 +659,8 @@ mod client_hello {
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
-        let message = verify::construct_tls13_server_verify_message(&transcript.get_current_hash());
+        let message =
+            verify::construct_tls13_server_verify_message(&transcript.get_current_hash()?);
 
         let signer = signing_key
             .choose_scheme(schemes)
@@ -690,8 +692,8 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
-    ) -> (KeyScheduleTrafficWithClientFinishedPending, Digest) {
-        let handshake_hash = transcript.get_current_hash();
+    ) -> Result<(KeyScheduleTrafficWithClientFinishedPending, Digest), Error> {
+        let handshake_hash = transcript.get_current_hash()?;
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
@@ -705,7 +707,7 @@ mod client_hello {
 
         trace!("sending finished {:?}", m);
         transcript.add_message(&m);
-        let hash_at_server_fin = transcript.get_current_hash();
+        let hash_at_server_fin = transcript.get_current_hash()?;
         cx.common.send_msg(m, true);
 
         // Now move to application data keys.  Read key change is deferred until
@@ -740,7 +742,7 @@ mod client_hello {
             });
         }
 
-        (key_schedule_traffic, hash_at_server_fin)
+        Ok((key_schedule_traffic, hash_at_server_fin))
     }
 }
 
@@ -848,7 +850,7 @@ impl hs::State for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_hash = self.transcript.get_current_hash();
+            let handshake_hash = self.transcript.get_current_hash()?;
             self.transcript.abandon_client_auth();
             let certs = &self.client_cert;
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
@@ -887,14 +889,14 @@ fn get_server_session_value(
     key_schedule: &KeyScheduleTraffic,
     cx: &ServerContext<'_>,
     nonce: &[u8],
-) -> persist::ServerSessionValue {
+) -> Result<persist::ServerSessionValue, Error> {
     let version = ProtocolVersion::TLSv1_3;
 
-    let handshake_hash = transcript.get_current_hash();
+    let handshake_hash = transcript.get_current_hash()?;
     let secret =
         key_schedule.resumption_master_secret_and_derive_ticket_psk(&handshake_hash, nonce);
 
-    persist::ServerSessionValue::new(
+    Ok(persist::ServerSessionValue::new(
         cx.data.get_sni(),
         version,
         suite.suite,
@@ -902,7 +904,7 @@ fn get_server_session_value(
         &cx.data.client_cert_chain,
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
-    )
+    ))
 }
 
 struct ExpectFinished {
@@ -922,10 +924,10 @@ impl ExpectFinished {
         cx: &mut ServerContext<'_>,
         key_schedule: &KeyScheduleTraffic,
         config: &ServerConfig,
-    ) -> Result<(), rand::GetRandomFailed> {
+    ) -> Result<(), Error> {
         let nonce = rand::random_vec(32)?;
         let plain =
-            get_server_session_value(transcript, suite, key_schedule, cx, &nonce).get_encoding();
+            get_server_session_value(transcript, suite, key_schedule, cx, &nonce)?.get_encoding();
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
@@ -980,7 +982,7 @@ impl hs::State for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        let handshake_hash = self.transcript.get_current_hash();
+        let handshake_hash = self.transcript.get_current_hash()?;
         let expect_verify_data = self
             .key_schedule
             .sign_client_finish(&handshake_hash);

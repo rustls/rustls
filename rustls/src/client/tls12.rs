@@ -490,7 +490,7 @@ fn emit_certverify(
         Some(signer) => signer,
     };
 
-    let message = transcript.take_handshake_buf();
+    let message = transcript.take_handshake_buf()?;
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let body = DigitallySignedStruct::new(scheme, sig);
@@ -521,8 +521,8 @@ fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     common: &mut ConnectionCommon,
-) {
-    let vh = transcript.get_current_hash();
+) -> Result<(), Error> {
+    let vh = transcript.get_current_hash()?;
     let verify_data = secrets.client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -536,6 +536,7 @@ fn emit_finished(
 
     transcript.add_message(&f);
     common.send_msg(f, true);
+    Ok(())
 }
 
 struct ExpectServerDoneOrCertReq {
@@ -794,7 +795,7 @@ impl hs::State for ExpectServerDone {
         // 5b.
         emit_clientkx(&mut st.transcript, cx.common, &kxd);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
-        let handshake_hash = st.transcript.get_current_hash();
+        let handshake_hash = st.transcript.get_current_hash()?;
 
         // 5c.
         if let Some(client_auth) = &mut st.client_auth {
@@ -822,7 +823,7 @@ impl hs::State for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut st.transcript, cx.common);
+        emit_finished(&secrets, &mut st.transcript, cx.common)?;
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -1020,7 +1021,7 @@ impl hs::State for ExpectFinished {
         cx.common.check_aligned_handshake()?;
 
         // Work out what verify_data we expect.
-        let vh = st.transcript.get_current_hash();
+        let vh = st.transcript.get_current_hash()?;
         let expect_verify_data = st.secrets.server_verify_data(&vh);
 
         // Constant-time verification of this is relatively unimportant: they only
@@ -1044,7 +1045,7 @@ impl hs::State for ExpectFinished {
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&st.secrets, &mut st.transcript, cx.common);
+            emit_finished(&st.secrets, &mut st.transcript, cx.common)?;
         }
 
         cx.common.start_traffic();
