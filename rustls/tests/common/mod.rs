@@ -6,7 +6,7 @@ use rustls;
 use rustls_pemfile;
 
 use rustls::internal::msgs::codec::Reader;
-use rustls::internal::msgs::message::{Message, OpaqueMessage};
+use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::Error;
@@ -155,9 +155,11 @@ where
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
             let message = OpaqueMessage::read(&mut reader).unwrap();
-            let mut message = Message::try_from(message).unwrap();
+            let mut message = Message::try_from(message.into_plain_message()).unwrap();
             filter(&mut message);
-            let message_enc = OpaqueMessage::from(message).encode();
+            let message_enc = PlainMessage::from(message)
+                .into_unencrypted_opaque()
+                .encode();
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
             let len = right
                 .read_tls(message_enc_reader)

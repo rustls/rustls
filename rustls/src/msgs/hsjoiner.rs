@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::msgs::codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
-use crate::msgs::message::{Message, MessagePayload, OpaqueMessage};
+use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 
 const HEADER_SIZE: usize = 1 + 3;
 
@@ -51,7 +51,7 @@ impl HandshakeJoiner {
     }
 
     /// Do we want to process this message?
-    pub fn want_message(&self, msg: &OpaqueMessage) -> bool {
+    pub fn want_message(&self, msg: &PlainMessage) -> bool {
         msg.typ == ContentType::Handshake
     }
 
@@ -67,7 +67,7 @@ impl HandshakeJoiner {
     /// Returns None if msg or a preceding message was corrupt.
     /// You cannot recover from this situation.  Otherwise returns
     /// a count of how many messages we queued.
-    pub fn take_message(&mut self, msg: OpaqueMessage) -> Option<usize> {
+    pub fn take_message(&mut self, msg: PlainMessage) -> Option<usize> {
         // The vast majority of the time `self.buf` will be empty since most
         // handshake messages arrive in a single fragment. Avoid allocating and
         // copying in that common case.
@@ -144,20 +144,20 @@ mod tests {
     use crate::msgs::codec::Codec;
     use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
-    use crate::msgs::message::{Message, MessagePayload, OpaqueMessage};
+    use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 
     #[test]
     fn want() {
         let hj = HandshakeJoiner::new();
         assert_eq!(hj.is_empty(), true);
 
-        let wanted = OpaqueMessage {
+        let wanted = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"hello world".to_vec()),
         };
 
-        let unwanted = OpaqueMessage {
+        let unwanted = PlainMessage {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"ponytown".to_vec()),
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(hj.want_message(&unwanted), false);
     }
 
-    fn pop_eq(expect: &OpaqueMessage, hj: &mut HandshakeJoiner) {
+    fn pop_eq(expect: &PlainMessage, hj: &mut HandshakeJoiner) {
         let got = hj.frames.pop_front().unwrap();
         assert_eq!(got.payload.content_type(), expect.typ);
         assert_eq!(got.version, expect.version);
@@ -185,7 +185,7 @@ mod tests {
         let mut hj = HandshakeJoiner::new();
 
         // two HelloRequests
-        let msg = OpaqueMessage {
+        let msg = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec()),
@@ -214,7 +214,7 @@ mod tests {
         let mut hj = HandshakeJoiner::new();
 
         // short ClientHello
-        let msg = OpaqueMessage {
+        let msg = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x01\x00\x00\x02\xff\xff".to_vec()),
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(hj.is_empty(), true);
 
         // Introduce Finished of 16 bytes, providing 4.
-        let mut msg = OpaqueMessage {
+        let mut msg = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec()),
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(hj.is_empty(), false);
 
         // 11 more bytes.
-        msg = OpaqueMessage {
+        msg = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec()),
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(hj.is_empty(), false);
 
         // Final 1 byte.
-        msg = OpaqueMessage {
+        msg = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x0f".to_vec()),
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn test_rejects_giant_certs() {
         let mut hj = HandshakeJoiner::new();
-        let msg = OpaqueMessage {
+        let msg = PlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec()),
