@@ -11,7 +11,9 @@ use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::hsjoiner::HandshakeJoiner;
-use crate::msgs::message::{BorrowedOpaqueMessage, Message, MessagePayload, OpaqueMessage};
+use crate::msgs::message::{
+    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, PlainMessage,
+};
 use crate::prf;
 use crate::quic;
 use crate::rand;
@@ -630,7 +632,7 @@ impl ConnectionCommon {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    fn process_msg(&mut self, mut msg: OpaqueMessage) -> Result<Option<MessageType>, Error> {
+    fn process_msg(&mut self, msg: OpaqueMessage) -> Result<Option<MessageType>, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
@@ -649,10 +651,10 @@ impl ConnectionCommon {
         }
 
         // Decrypt if demanded by current state.
-        if self.record_layer.is_decrypting() {
-            let dm = self.decrypt_incoming(msg)?;
-            msg = dm;
-        }
+        let msg = match self.record_layer.is_decrypting() {
+            true => self.decrypt_incoming(msg)?,
+            false => msg.into_plain_message(),
+        };
 
         // For handshake messages, we need to join them before parsing
         // and processing.
@@ -789,7 +791,7 @@ impl ConnectionCommon {
             .map(AsRef::as_ref)
     }
 
-    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<OpaqueMessage, Error> {
+    pub fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<PlainMessage, Error> {
         if self
             .record_layer
             .wants_close_before_decrypt()
@@ -843,7 +845,7 @@ impl ConnectionCommon {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub fn send_msg_encrypt(&mut self, m: OpaqueMessage) {
+    pub fn send_msg_encrypt(&mut self, m: PlainMessage) {
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter
             .fragment(m, &mut plain_messages);
@@ -881,7 +883,7 @@ impl ConnectionCommon {
         len
     }
 
-    fn send_single_fragment(&mut self, m: BorrowedOpaqueMessage) {
+    fn send_single_fragment(&mut self, m: BorrowedPlainMessage) {
         // Close connection once we start to run out of
         // sequence space.
         if self
@@ -1018,7 +1020,7 @@ impl ConnectionCommon {
             self.message_fragmenter
                 .fragment(m.into(), &mut to_send);
             for mm in to_send {
-                self.queue_tls_message(mm);
+                self.queue_tls_message(mm.into_unencrypted_opaque());
             }
         } else {
             self.send_msg_encrypt(m.into());

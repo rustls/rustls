@@ -10,7 +10,7 @@ use rustls::internal::msgs::message;
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);
     let msg = match message::OpaqueMessage::read(&mut rdr) {
-        Ok(msg) => msg,
+        Ok(msg) => msg.into_plain_message(),
         Err(_) => return,
     };
 

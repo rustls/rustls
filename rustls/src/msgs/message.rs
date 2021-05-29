@@ -120,11 +120,11 @@ impl OpaqueMessage {
         buf
     }
 
-    pub fn borrow(&self) -> BorrowedOpaqueMessage<'_> {
-        BorrowedOpaqueMessage {
-            typ: self.typ,
+    pub fn into_plain_message(self) -> PlainMessage {
+        PlainMessage {
             version: self.version,
-            payload: &self.payload.0,
+            typ: self.typ,
+            payload: self.payload,
         }
     }
 
@@ -140,8 +140,8 @@ impl OpaqueMessage {
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
 }
 
-impl From<Message> for OpaqueMessage {
-    fn from(msg: Message) -> OpaqueMessage {
+impl From<Message> for PlainMessage {
+    fn from(msg: Message) -> PlainMessage {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
             MessagePayload::ApplicationData(payload) => payload,
@@ -152,10 +152,39 @@ impl From<Message> for OpaqueMessage {
             }
         };
 
-        OpaqueMessage {
+        PlainMessage {
             typ,
             version: msg.version,
             payload,
+        }
+    }
+}
+
+/// A decrypted TLS frame
+///
+/// This type owns all memory for its interior parts. It can be decrypted from an OpaqueMessage
+/// or encrypted into an OpaqueMessage, and it is also used for joining and fragmenting.
+#[derive(Clone, Debug)]
+pub struct PlainMessage {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: Payload,
+}
+
+impl PlainMessage {
+    pub fn into_unencrypted_opaque(self) -> OpaqueMessage {
+        OpaqueMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: self.payload,
+        }
+    }
+
+    pub fn borrow(&self) -> BorrowedPlainMessage<'_> {
+        BorrowedPlainMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: &self.payload.0,
         }
     }
 }
@@ -195,13 +224,13 @@ impl Message {
     }
 }
 
-impl TryFrom<OpaqueMessage> for Message {
+impl TryFrom<PlainMessage> for Message {
     type Error = Error;
 
-    fn try_from(opaque: OpaqueMessage) -> Result<Self, Self::Error> {
+    fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
         Ok(Message {
-            version: opaque.version,
-            payload: MessagePayload::new(opaque.typ, opaque.version, opaque.payload)?,
+            version: plain.version,
+            payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
         })
     }
 }
@@ -214,7 +243,7 @@ impl TryFrom<OpaqueMessage> for Message {
 ///
 /// This type also cannot decode its internals and
 /// cannot be read/encoded; only `OpaqueMessage` can do that.
-pub struct BorrowedOpaqueMessage<'a> {
+pub struct BorrowedPlainMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
     pub payload: &'a [u8],

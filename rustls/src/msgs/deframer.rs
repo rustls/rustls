@@ -243,13 +243,13 @@ mod tests {
     fn pop_first(d: &mut MessageDeframer) {
         let m = d.frames.pop_front().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::Handshake);
-        Message::try_from(m).unwrap();
+        Message::try_from(m.into_plain_message()).unwrap();
     }
 
     fn pop_second(d: &mut MessageDeframer) {
         let m = d.frames.pop_front().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::Alert);
-        Message::try_from(m).unwrap();
+        Message::try_from(m.into_plain_message()).unwrap();
     }
 
     #[test]

@@ -46,7 +46,7 @@ mod test {
             let out = m.clone().encode();
             assert!(out.len() > 0);
 
-            Message::try_from(m).unwrap();
+            Message::try_from(m.into_plain_message()).unwrap();
         }
     }
 }
