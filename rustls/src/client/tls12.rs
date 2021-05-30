@@ -15,7 +15,8 @@ use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
+use crate::ticketer::TimeBase;
 use crate::verify;
 use crate::{kx, tls12};
 
@@ -24,11 +25,8 @@ use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
 use crate::client::common::{ServerCertDetails, ServerKxDetails};
 use crate::client::{hs, ClientConfig, ServerName};
 
-use crate::suites::Tls12CipherSuite;
-use crate::ticketer::TimeBase;
 use ring::constant_time;
 
-use std::convert::TryFrom;
 use std::mem;
 use std::sync::Arc;
 
@@ -55,17 +53,10 @@ mod server_hello {
         pub(in crate::client) fn handle_server_hello(
             mut self,
             cx: &mut ClientContext,
-            suite: &'static SupportedCipherSuite,
+            suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
             tls13_supported: bool,
         ) -> hs::NextStateOrError {
-            // TLS1.2 only from here-on
-
-            let suite = Tls12CipherSuite::try_from(suite).map_err(|_| {
-                cx.common
-                    .illegal_param("server chose unusable ciphersuite for version")
-            })?;
-
             server_hello
                 .random
                 .write_slice(&mut self.randoms.server);
@@ -123,7 +114,7 @@ mod server_hello {
                     debug!("Server agreed to resume");
 
                     // Is the server telling lies about the ciphersuite?
-                    if resuming.supported_cipher_suite() != suite.supported_suite() {
+                    if resuming.supported_cipher_suite() != suite.into() {
                         let error_msg =
                             "abbreviated handshake offered, but with varied cs".to_string();
                         return Err(Error::PeerMisbehavedError(error_msg));
@@ -210,7 +201,7 @@ struct ExpectCertificate {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    pub(super) suite: Tls12CipherSuite,
+    pub(super) suite: &'static Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
     server_cert_sct_list: Option<SCTList>,
@@ -271,7 +262,7 @@ struct ExpectCertificateStatusOrServerKx {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
@@ -333,7 +324,7 @@ struct ExpectCertificateStatus {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
@@ -387,7 +378,7 @@ struct ExpectServerKx {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
 }
@@ -402,7 +393,7 @@ impl hs::State for ExpectServerKx {
         self.transcript.add_message(&m);
 
         let decoded_kx = opaque_kx
-            .unwrap_given_kxa(&self.suite.tls12().kx)
+            .unwrap_given_kxa(&self.suite.params.kx)
             .ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::DecodeError);
@@ -549,7 +540,7 @@ struct ExpectServerDoneOrCertReq {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
@@ -608,7 +599,7 @@ struct ExpectCertificateRequest {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
@@ -685,7 +676,7 @@ struct ExpectServerDone {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     client_auth: Option<ClientAuthDetails>,
@@ -752,14 +743,11 @@ impl hs::State for ExpectServerDone {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            if !suite
-                .supported_suite()
-                .usable_for_sigalg(sig.scheme.sign())
-            {
+            if !SupportedCipherSuite::from(suite).usable_for_sigalg(sig.scheme.sign()) {
                 let error_message = format!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),
-                    suite.tls12().sign
+                    suite.params.sign
                 );
                 return Err(Error::PeerMisbehavedError(error_message));
             }
@@ -986,7 +974,7 @@ impl ExpectFinished {
         let master_secret = self.secrets.get_master_secret();
         let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
             ProtocolVersion::TLSv1_2,
-            self.secrets.suite().supported_suite(),
+            self.secrets.suite().into(),
             &self.session_id,
             ticket,
             master_secret,

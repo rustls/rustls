@@ -16,7 +16,7 @@ fn main() {
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
     let config = rustls::ConfigBuilder::with_cipher_suites(&[
-        &rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256.into(),
     ])
     .with_kx_groups(&[&rustls::kx_group::X25519])
     .with_protocol_versions(&[&rustls::version::TLS13])
@@ -47,7 +47,7 @@ fn main() {
     writeln!(
         &mut std::io::stderr(),
         "Current ciphersuite: {:?}",
-        ciphersuite.suite
+        ciphersuite.suite()
     )
     .unwrap();
     let mut plaintext = Vec::new();

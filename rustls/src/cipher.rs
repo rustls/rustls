@@ -7,7 +7,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedOpaqueMessage, OpaqueMessage};
-use crate::suites::SupportedCipherSuite;
+use crate::suites::Tls13CipherSuite;
 
 use ring::{aead, hkdf};
 
@@ -117,12 +117,13 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     let key_block = secrets.make_key_block();
 
     let suite = secrets.suite();
-    let scs = suite.supported_suite();
+    let scs = &suite.common;
+    let params = &suite.params;
 
     let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
     let (server_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
-    let (client_write_iv, key_block) = key_block.split_at(suite.tls12().fixed_iv_len);
-    let (server_write_iv, extra) = key_block.split_at(suite.tls12().fixed_iv_len);
+    let (client_write_iv, key_block) = key_block.split_at(params.fixed_iv_len);
+    let (server_write_iv, extra) = key_block.split_at(params.fixed_iv_len);
 
     let (write_key, write_iv, read_key, read_iv) = if secrets.randoms.we_are_client {
         (
@@ -141,26 +142,26 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     };
 
     (
-        (suite.tls12().build_tls12_decrypter)(read_key, read_iv),
-        (suite.tls12().build_tls12_encrypter)(write_key, write_iv, extra),
+        (params.build_tls12_decrypter)(read_key, read_iv),
+        (params.build_tls12_encrypter)(write_key, write_iv, extra),
     )
 }
 
 pub fn new_tls13_read(
-    scs: &'static SupportedCipherSuite,
+    scs: &'static Tls13CipherSuite,
     secret: &hkdf::Prk,
 ) -> Box<dyn MessageDecrypter> {
-    let key = derive_traffic_key(secret, scs.aead_algorithm);
+    let key = derive_traffic_key(secret, scs.common.aead_algorithm);
     let iv = derive_traffic_iv(secret);
 
     Box::new(Tls13MessageDecrypter::new(key, iv))
 }
 
 pub fn new_tls13_write(
-    scs: &'static SupportedCipherSuite,
+    scs: &'static Tls13CipherSuite,
     secret: &hkdf::Prk,
 ) -> Box<dyn MessageEncrypter> {
-    let key = derive_traffic_key(secret, scs.aead_algorithm);
+    let key = derive_traffic_key(secret, scs.common.aead_algorithm);
     let iv = derive_traffic_iv(secret);
 
     Box::new(Tls13MessageEncrypter::new(key, iv))

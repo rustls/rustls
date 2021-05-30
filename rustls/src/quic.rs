@@ -7,7 +7,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::message::OpaqueMessage;
 pub use crate::server::ServerQuicExt;
-use crate::suites::{BulkAlgorithm, SupportedCipherSuite, TLS13_AES_128_GCM_SHA256};
+use crate::suites::{BulkAlgorithm, Tls13CipherSuite, TLS13_AES_128_GCM_SHA256_INTERNAL};
 
 use ring::{aead, hkdf};
 
@@ -74,8 +74,8 @@ pub struct DirectionalKeys {
 }
 
 impl DirectionalKeys {
-    pub(crate) fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
-        let hp_alg = match suite.bulk {
+    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
+        let hp_alg = match suite.common.bulk {
             BulkAlgorithm::Aes128Gcm => &aead::quic::AES_128,
             BulkAlgorithm::Aes256Gcm => &aead::quic::AES_256,
             BulkAlgorithm::Chacha20Poly1305 => &aead::quic::CHACHA20,
@@ -97,11 +97,11 @@ pub struct PacketKey {
 }
 
 impl PacketKey {
-    fn new(suite: &'static SupportedCipherSuite, secret: &hkdf::Prk) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
         Self {
             key: aead::LessSafeKey::new(hkdf_expand(
                 secret,
-                suite.aead_algorithm,
+                suite.common.aead_algorithm,
                 b"quic key",
                 &[],
             )),
@@ -172,10 +172,10 @@ impl Keys {
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
             server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
         };
-        Self::new(&TLS13_AES_128_GCM_SHA256, is_client, &secrets)
+        Self::new(&TLS13_AES_128_GCM_SHA256_INTERNAL, is_client, &secrets)
     }
 
-    fn new(suite: &'static SupportedCipherSuite, is_client: bool, secrets: &Secrets) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, is_client: bool, secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote(is_client);
         Keys {
             local: DirectionalKeys::new(suite, local),
@@ -211,7 +211,9 @@ pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option
         }
     }
 
-    let suite = this.get_suite()?;
+    let suite = this
+        .get_suite()
+        .and_then(|suite| suite.tls13())?;
     if let Some(secrets) = this.quic.hs_secrets.take() {
         return Some(Keys::new(suite, this.is_client, &secrets));
     }
@@ -227,7 +229,9 @@ pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option
 }
 
 pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet> {
-    let suite = this.get_suite()?;
+    let suite = this
+        .get_suite()
+        .and_then(|suite| suite.tls13())?;
     let secrets = this.quic.traffic_secrets.as_ref()?;
     let next = next_1rtt_secrets(suite.hkdf_algorithm, secrets);
 

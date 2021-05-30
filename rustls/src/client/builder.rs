@@ -54,7 +54,7 @@ use std::sync::Arc;
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
 pub struct ClientConfigBuilder {
-    pub(crate) cipher_suites: Vec<&'static SupportedCipherSuite>,
+    pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
     pub(crate) versions: versions::EnabledVersions,
 }
@@ -93,7 +93,7 @@ impl ClientConfigBuilder {
 /// A [`ClientConfigBuilder`] where we know the cipher suites, key exchange
 /// groups, enabled versions, and server certificate auth policy.
 pub struct ClientConfigBuilderWithCertVerifier {
-    cipher_suites: Vec<&'static SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,

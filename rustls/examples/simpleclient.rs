@@ -49,7 +49,7 @@ fn main() {
     writeln!(
         &mut std::io::stderr(),
         "Current ciphersuite: {:?}",
-        ciphersuite.suite
+        ciphersuite.suite()
     )
     .unwrap();
     let mut plaintext = Vec::new();

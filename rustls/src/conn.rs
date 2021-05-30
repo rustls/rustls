@@ -275,7 +275,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// Retrieves the ciphersuite agreed with the peer.
     ///
     /// This returns None until the ciphersuite is agreed.
-    fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite>;
+    fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite>;
 
     /// This function uses `io` to complete any outstanding IO for
     /// this connection.
@@ -416,14 +416,14 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 /// TLS1.2 per-connection keying material
 pub struct ConnectionSecrets {
     pub randoms: ConnectionRandoms,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     pub master_secret: [u8; 48],
 }
 
 impl ConnectionSecrets {
     pub(crate) fn new(
         randoms: &ConnectionRandoms,
-        suite: Tls12CipherSuite,
+        suite: &'static Tls12CipherSuite,
         pms: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -435,7 +435,7 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
         prf::prf(
             &mut ret.master_secret,
-            suite.supported_suite().hmac_algorithm(),
+            suite.hmac_algorithm,
             pms,
             b"master secret",
             &randoms,
@@ -446,7 +446,7 @@ impl ConnectionSecrets {
     pub(crate) fn new_ems(
         randoms: &ConnectionRandoms,
         hs_hash: &Digest,
-        suite: Tls12CipherSuite,
+        suite: &'static Tls12CipherSuite,
         pms: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -457,7 +457,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut ret.master_secret,
-            suite.supported_suite().hmac_algorithm(),
+            suite.hmac_algorithm,
             pms,
             b"extended master secret",
             hs_hash.as_ref(),
@@ -467,7 +467,7 @@ impl ConnectionSecrets {
 
     pub(crate) fn new_resume(
         randoms: &ConnectionRandoms,
-        suite: Tls12CipherSuite,
+        suite: &'static Tls12CipherSuite,
         master_secret: &[u8],
     ) -> ConnectionSecrets {
         let mut ret = ConnectionSecrets {
@@ -481,9 +481,11 @@ impl ConnectionSecrets {
     }
 
     pub fn make_key_block(&self) -> Vec<u8> {
-        let scs = self.suite.supported_suite();
-        let len = (scs.aead_algorithm.key_len() + self.suite.tls12().fixed_iv_len) * 2
-            + self.suite.tls12().explicit_nonce_len;
+        let common = &self.suite.common;
+        let params = &self.suite.params;
+
+        let len =
+            (common.aead_algorithm.key_len() + params.fixed_iv_len) * 2 + params.explicit_nonce_len;
 
         let mut out = Vec::new();
         out.resize(len, 0u8);
@@ -493,9 +495,7 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.suite
-                .supported_suite()
-                .hmac_algorithm(),
+            self.suite.hmac_algorithm,
             &self.master_secret,
             b"key expansion",
             &randoms,
@@ -504,7 +504,7 @@ impl ConnectionSecrets {
         out
     }
 
-    pub(crate) fn suite(&self) -> Tls12CipherSuite {
+    pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
         self.suite
     }
 
@@ -520,9 +520,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut out,
-            self.suite
-                .supported_suite()
-                .hmac_algorithm(),
+            self.suite.hmac_algorithm,
             &self.master_secret,
             label,
             handshake_hash.as_ref(),
@@ -550,9 +548,7 @@ impl ConnectionSecrets {
 
         prf::prf(
             output,
-            self.suite
-                .supported_suite()
-                .hmac_algorithm(),
+            self.suite.hmac_algorithm,
             &self.master_secret,
             label,
             &randoms,
@@ -571,7 +567,7 @@ pub struct ConnectionCommon {
     pub negotiated_version: Option<ProtocolVersion>,
     pub is_client: bool,
     pub record_layer: record_layer::RecordLayer,
-    pub suite: Option<&'static SupportedCipherSuite>,
+    pub suite: Option<SupportedCipherSuite>,
     pub alpn_protocol: Option<Vec<u8>>,
     peer_eof: bool,
     pub traffic: bool,
@@ -783,7 +779,7 @@ impl ConnectionCommon {
         Error::PeerMisbehavedError(why.to_string())
     }
 
-    pub fn get_suite(&self) -> Option<&'static SupportedCipherSuite> {
+    pub fn get_suite(&self) -> Option<SupportedCipherSuite> {
         self.suite
     }
 

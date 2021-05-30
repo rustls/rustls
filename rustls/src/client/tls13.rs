@@ -1,4 +1,5 @@
 use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
+use crate::cipher;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -25,8 +26,8 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID}
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::suites::Tls13CipherSuite;
 use crate::verify;
-use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
 use crate::{sign, KeyLog};
@@ -65,19 +66,13 @@ pub(super) fn handle_server_hello(
     mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     our_key_share: kx::KeyExchange,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
-    if !suite.usable_for_version(ProtocolVersion::TLSv1_3) {
-        return Err(cx
-            .common
-            .illegal_param("server chose unusable ciphersuite for version"));
-    }
-
     validate_server_hello(cx.common, &server_hello)?;
 
     let their_key_share = server_hello
@@ -102,18 +97,18 @@ pub(super) fn handle_server_hello(
         (server_hello.get_psk_index(), early_key_schedule)
     {
         if let Some(ref resuming) = resuming_session {
-            if !resuming
-                .supported_cipher_suite()
-                .can_resume_to(suite)
-            {
-                return Err(cx
-                    .common
-                    .illegal_param("server resuming incompatible suite"));
-            }
+            let resuming_suite = match suite.can_resume_from(resuming.supported_cipher_suite()) {
+                Some(resuming) => resuming,
+                None => {
+                    return Err(cx
+                        .common
+                        .illegal_param("server resuming incompatible suite"));
+                }
+            };
 
             // If the server varies the suite here, we will have encrypted early data with
             // the wrong suite.
-            if cx.data.early_data.is_enabled() && resuming.supported_cipher_suite() != suite {
+            if cx.data.early_data.is_enabled() && resuming_suite != suite {
                 return Err(cx
                     .common
                     .illegal_param("server varied suite with early data"));
@@ -254,13 +249,13 @@ fn save_kx_hint(config: &ClientConfig, server_name: &ServerName, group: NamedGro
 /// data dependency on the message they are contained within.
 pub fn fill_in_psk_binder(
     resuming: &persist::ClientSessionValueWithResolvedCipherSuite,
+    resuming_suite: &'static Tls13CipherSuite,
     transcript: &HandshakeHash,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
-    let suite = resuming.supported_cipher_suite();
-    let hkdf_alg = suite.hkdf_algorithm;
-    let suite_hash = suite.get_hash();
+    let hkdf_alg = resuming_suite.hkdf_algorithm;
+    let suite_hash = resuming_suite.get_hash();
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -284,12 +279,11 @@ pub(super) fn prepare_resumption(
     cx: &mut ClientContext<'_>,
     ticket: Vec<u8>,
     resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
+    resuming_suite: &'static Tls13CipherSuite,
     exts: &mut Vec<ClientExtension>,
     doing_retry: bool,
 ) {
-    let resuming_suite = resuming_session.supported_cipher_suite();
-
-    cx.data.resumption_ciphersuite = Some(resuming_suite);
+    cx.data.resumption_ciphersuite = Some(resuming_suite.into());
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size;
@@ -319,7 +313,7 @@ pub(super) fn prepare_resumption(
 pub(super) fn derive_early_traffic_secret(
     key_log: &dyn KeyLog,
     cx: &mut ClientContext<'_>,
-    resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
+    resuming_suite: &'static Tls13CipherSuite,
     early_key_schedule: &KeyScheduleEarly,
     sent_tls13_fake_ccs: &mut bool,
     transcript: &HandshakeHash,
@@ -327,8 +321,6 @@ pub(super) fn derive_early_traffic_secret(
 ) {
     // For middlebox compatibility
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
-
-    let resuming_suite = resuming_session.supported_cipher_suite();
 
     let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
     let client_early_traffic_secret =
@@ -403,7 +395,7 @@ struct ExpectEncryptedExtensions {
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     hello: ClientHelloDetails,
@@ -506,7 +498,7 @@ struct ExpectCertificateOrCertReq {
     config: Arc<ClientConfig>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
@@ -559,7 +551,7 @@ struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
@@ -648,7 +640,7 @@ struct ExpectCertificate {
     config: Arc<ClientConfig>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     may_send_sct_list: bool,
@@ -721,7 +713,7 @@ struct ExpectCertificateVerify {
     config: Arc<ClientConfig>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
@@ -897,7 +889,7 @@ struct ExpectFinished {
     config: Arc<ClientConfig>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -1029,7 +1021,7 @@ impl hs::State for ExpectFinished {
 struct ExpectTraffic {
     config: Arc<ClientConfig>,
     server_name: ServerName,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
@@ -1053,7 +1045,7 @@ impl ExpectTraffic {
         let time_now = TimeBase::now()?;
         let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
             ProtocolVersion::TLSv1_3,
-            self.suite,
+            self.suite.into(),
             &SessionID::empty(),
             nst.ticket.0.clone(),
             secret,

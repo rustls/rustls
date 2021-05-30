@@ -21,7 +21,6 @@ use crate::SupportedCipherSuite;
 use crate::server::common::ActiveCertifiedKey;
 use crate::server::{tls12, tls13, ServerConnectionData};
 
-use std::convert::TryFrom;
 use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State>;
@@ -77,7 +76,7 @@ pub fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
 }
 
 pub fn can_resume(
-    suite: &'static SupportedCipherSuite,
+    suite: SupportedCipherSuite,
     sni: &Option<webpki::DnsName>,
     using_ems: bool,
     resumedata: &persist::ServerSessionValue,
@@ -89,7 +88,7 @@ pub fn can_resume(
     // the request to resume the session if the server_name extension contains
     // a different name. Instead, it proceeds with a full handshake to
     // establish a new session."
-    resumedata.cipher_suite == suite.suite
+    resumedata.cipher_suite == suite.suite()
         && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
         && &resumedata.sni == sni
 }
@@ -112,7 +111,7 @@ impl ExtensionProcessing {
         config: &ServerConfig,
         cx: &mut ServerContext<'_>,
         #[allow(unused_variables)] // #[cfg(feature = "quic")] only
-        suite: &'static SupportedCipherSuite,
+        suite: SupportedCipherSuite,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -171,7 +170,7 @@ impl ExtensionProcessing {
                     if config.max_early_data_size > 0
                         && hello.early_data_extension_offered()
                         && resume.version == cx.common.negotiated_version.unwrap()
-                        && resume.cipher_suite == suite.suite
+                        && resume.cipher_suite == suite.suite()
                         && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref()
                         && !cx.data.reject_early_data
                     {
@@ -421,7 +420,7 @@ impl State for ExpectClientHello {
         common_suites.retain(|scs| {
             client_hello
                 .cipher_suites
-                .contains(&scs.suite)
+                .contains(&scs.suite())
         });
 
         let mut sigschemes_ext = client_hello
@@ -502,8 +501,8 @@ impl State for ExpectClientHello {
             .random
             .write_slice(&mut randoms.client);
 
-        if cx.common.is_tls13() {
-            tls13::CompleteClientHelloHandling {
+        match suite {
+            SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,
                 transcript: self.transcript,
                 suite,
@@ -512,10 +511,8 @@ impl State for ExpectClientHello {
                 send_ticket: self.send_ticket,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(suite, cx, certkey, &m)
-        } else {
-            let suite = suites::Tls12CipherSuite::try_from(suite).unwrap();
-            tls12::CompleteClientHelloHandling {
+            .handle_client_hello(cx, certkey, &m),
+            SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
                 config: self.config,
                 transcript: self.transcript,
                 session_id: self.session_id,
@@ -532,7 +529,7 @@ impl State for ExpectClientHello {
                 client_hello,
                 sigschemes_ext,
                 tls13_enabled,
-            )
+            ),
         }
     }
 }

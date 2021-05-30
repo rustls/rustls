@@ -67,12 +67,13 @@ pub struct ClientSessionValue {
 impl ClientSessionValue {
     pub fn resolve_cipher_suite(
         self,
-        enabled_cipher_suites: &[&'static SupportedCipherSuite],
+        enabled_cipher_suites: &[SupportedCipherSuite],
         time: TimeBase,
     ) -> Option<ClientSessionValueWithResolvedCipherSuite> {
         let supported_cipher_suite = enabled_cipher_suites
             .iter()
-            .find(|scs| scs.suite == self.cipher_suite)?;
+            .copied()
+            .find(|scs| scs.suite() == self.cipher_suite)?;
         Some(ClientSessionValueWithResolvedCipherSuite {
             value: self,
             supported_cipher_suite,
@@ -128,7 +129,7 @@ impl Codec for ClientSessionValue {
 #[derive(Debug)]
 pub struct ClientSessionValueWithResolvedCipherSuite {
     value: ClientSessionValue,
-    supported_cipher_suite: &'static SupportedCipherSuite,
+    supported_cipher_suite: SupportedCipherSuite,
     time_retrieved: TimeBase,
 }
 
@@ -144,7 +145,7 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 impl ClientSessionValueWithResolvedCipherSuite {
     pub fn new(
         v: ProtocolVersion,
-        cipher_suite: &'static SupportedCipherSuite,
+        cipher_suite: SupportedCipherSuite,
         sessid: &SessionID,
         ticket: Vec<u8>,
         ms: Vec<u8>,
@@ -154,7 +155,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
         ClientSessionValueWithResolvedCipherSuite {
             value: ClientSessionValue {
                 version: v,
-                cipher_suite: cipher_suite.suite,
+                cipher_suite: cipher_suite.suite(),
                 session_id: *sessid,
                 ticket: PayloadU16::new(ticket),
                 master_secret: PayloadU8::new(ms),
@@ -170,7 +171,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
         }
     }
 
-    pub fn supported_cipher_suite(&self) -> &'static SupportedCipherSuite {
+    pub fn supported_cipher_suite(&self) -> SupportedCipherSuite {
         self.supported_cipher_suite
     }
 
