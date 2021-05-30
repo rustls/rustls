@@ -7,6 +7,11 @@ use crate::msgs::message::{Message, MessagePayload, OpaqueMessage};
 
 const HEADER_SIZE: usize = 1 + 3;
 
+/// TLS allows for handshake messages of up to 16MB.  We
+/// restrict that to 64KB to limit potential for denial-of-
+/// service.
+const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
+
 /// This works to reconstruct TLS handshake messages
 /// from individual TLS messages.  It's guaranteed that
 /// TLS messages output from this layer contain precisely
@@ -23,6 +28,17 @@ impl Default for HandshakeJoiner {
     fn default() -> Self {
         Self::new()
     }
+}
+
+enum BufferState {
+    /// Buffer contains a header that introduces a message that is too long.
+    MessageTooLarge,
+
+    /// Buffer contains a full header and body.
+    OneMessage,
+
+    /// We need more data to see a header and complete body.
+    NeedsMoreData,
 }
 
 impl HandshakeJoiner {
@@ -63,12 +79,18 @@ impl HandshakeJoiner {
         }
 
         let mut count = 0;
-        while self.buf_contains_message() {
-            if !self.deframe_one(msg.version) {
-                return None;
-            }
+        loop {
+            match self.buf_contains_message() {
+                BufferState::MessageTooLarge => return None,
+                BufferState::NeedsMoreData => break,
+                BufferState::OneMessage => {
+                    if !self.deframe_one(msg.version) {
+                        return None;
+                    }
 
-            count += 1;
+                    count += 1;
+                }
+            }
         }
 
         Some(count)
@@ -77,15 +99,16 @@ impl HandshakeJoiner {
     /// Does our `buf` contain a full handshake payload?  It does if it is big
     /// enough to contain a header, and that header has a length which falls
     /// within `buf`.
-    fn buf_contains_message(&self) -> bool {
+    fn buf_contains_message(&self) -> BufferState {
         if self.buf.len() < HEADER_SIZE {
-            return false;
+            return BufferState::NeedsMoreData;
         }
 
         let (header, rest) = self.buf.split_at(HEADER_SIZE);
         match codec::u24::decode(&header[1..]) {
-            Some(len) => rest.get(..len.into()).is_some(),
-            None => false,
+            Some(len) if len.0 > MAX_HANDSHAKE_SIZE => BufferState::MessageTooLarge,
+            Some(len) if rest.get(..len.into()).is_some() => BufferState::OneMessage,
+            _ => BufferState::NeedsMoreData,
         }
     }
 
@@ -254,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rejoins_then_rejects_giant_certs() {
+    fn test_rejects_giant_certs() {
         let mut hj = HandshakeJoiner::new();
         let msg = OpaqueMessage {
             typ: ContentType::Handshake,
@@ -263,29 +286,7 @@ mod tests {
         };
 
         assert_eq!(hj.want_message(&msg), true);
-        assert_eq!(hj.take_message(msg), Some(0));
-        assert_eq!(hj.is_empty(), false);
-
-        for _i in 0..8191 {
-            let msg = OpaqueMessage {
-                typ: ContentType::Handshake,
-                version: ProtocolVersion::TLSv1_2,
-                payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
-            };
-
-            assert_eq!(hj.want_message(&msg), true);
-            assert_eq!(hj.take_message(msg), Some(0));
-            assert_eq!(hj.is_empty(), false);
-        }
-
-        // final 6 bytes
-        let msg = OpaqueMessage {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_2,
-            payload: Payload::new(b"\x01\x02\x03\x04\x05\x06".to_vec()),
-        };
-
-        assert_eq!(hj.want_message(&msg), true);
         assert_eq!(hj.take_message(msg), None);
+        assert_eq!(hj.is_empty(), false);
     }
 }
