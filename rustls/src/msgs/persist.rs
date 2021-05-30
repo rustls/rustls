@@ -1,3 +1,4 @@
+use crate::client::ServerName;
 use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
@@ -17,13 +18,13 @@ use std::mem;
 #[derive(Debug)]
 pub struct ClientSessionKey {
     kind: &'static [u8],
-    dns_name: PayloadU8,
+    name: Vec<u8>,
 }
 
 impl Codec for ClientSessionKey {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(self.kind);
-        self.dns_name.encode(bytes);
+        bytes.extend_from_slice(&self.name);
     }
 
     // Don't need to read these.
@@ -33,19 +34,17 @@ impl Codec for ClientSessionKey {
 }
 
 impl ClientSessionKey {
-    pub fn session_for_dns_name(dns_name: webpki::DnsNameRef) -> ClientSessionKey {
-        let dns_name_str: &str = dns_name.into();
+    pub fn session_for_server_name(server_name: &ServerName) -> ClientSessionKey {
         ClientSessionKey {
             kind: b"session",
-            dns_name: PayloadU8::new(dns_name_str.as_bytes().to_vec()),
+            name: server_name.encode(),
         }
     }
 
-    pub fn hint_for_dns_name(dns_name: webpki::DnsNameRef) -> ClientSessionKey {
-        let dns_name_str: &str = dns_name.into();
+    pub fn hint_for_server_name(server_name: &ServerName) -> ClientSessionKey {
         ClientSessionKey {
             kind: b"kx-hint",
-            dns_name: PayloadU8::new(dns_name_str.as_bytes().to_vec()),
+            name: server_name.encode(),
         }
     }
 }

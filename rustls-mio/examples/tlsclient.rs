@@ -5,6 +5,7 @@ use mio;
 use mio::net::TcpStream;
 
 use std::collections;
+use std::convert::TryInto;
 use std::fs;
 use std::io;
 use std::io::{BufReader, Read, Write};
@@ -19,7 +20,6 @@ extern crate serde_derive;
 use docopt::Docopt;
 
 use rustls;
-use webpki;
 use webpki_roots;
 
 use rustls::{Connection, RootCertStore};
@@ -38,14 +38,14 @@ struct TlsClient {
 impl TlsClient {
     fn new(
         sock: TcpStream,
-        hostname: webpki::DnsNameRef<'_>,
+        server_name: rustls::ServerName,
         cfg: Arc<rustls::ClientConfig>,
     ) -> TlsClient {
         TlsClient {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_conn: rustls::ClientConnection::new(cfg, hostname).unwrap(),
+            tls_conn: rustls::ClientConnection::new(cfg, server_name).unwrap(),
         }
     }
 
@@ -439,7 +439,6 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
     use super::rustls;
-    use webpki;
 
     pub struct NoCertificateVerification {}
 
@@ -448,7 +447,7 @@ mod danger {
             &self,
             _end_entity: &rustls::Certificate,
             _intermediates: &[rustls::Certificate],
-            _dns_name: webpki::DnsNameRef<'_>,
+            _server_name: &rustls::ServerName,
             _scts: &mut dyn Iterator<Item = &[u8]>,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
@@ -567,8 +566,12 @@ fn main() {
     let config = make_config(&args);
 
     let sock = TcpStream::connect(addr).unwrap();
-    let dns_name = webpki::DnsNameRef::try_from_ascii_str(&args.arg_hostname).unwrap();
-    let mut tlsclient = TlsClient::new(sock, dns_name, config);
+    let server_name = args
+        .arg_hostname
+        .as_str()
+        .try_into()
+        .expect("invalid DNS name");
+    let mut tlsclient = TlsClient::new(sock, server_name, config);
 
     if args.flag_http {
         let httpreq = format!(

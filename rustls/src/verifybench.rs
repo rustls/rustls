@@ -4,13 +4,13 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
+use std::convert::TryInto;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::anchors;
 use crate::key;
 use crate::verify;
 use crate::verify::ServerCertVerifier;
-use webpki;
 
 use webpki_roots;
 
@@ -212,12 +212,12 @@ impl Context {
         let (end_entity, intermediates) = self.chain.split_first().unwrap();
         for _ in 0..count {
             let start = Instant::now();
-            let dns_name = webpki::DnsNameRef::try_from_ascii_str(self.domain).unwrap();
+            let server_name = self.domain.try_into().unwrap();
             verifier
                 .verify_server_cert(
                     end_entity,
                     intermediates,
-                    dns_name,
+                    &server_name,
                     &mut SCTS.iter().copied(),
                     OCSP_RESPONSE,
                     self.now,

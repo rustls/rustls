@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::io;
 use std::sync::Arc;
 
@@ -22,6 +22,7 @@ use rustls::{
     SignatureScheme, WebPkiVerifier,
 };
 
+#[cfg(feature = "dangerous_configuration")]
 use webpki;
 
 macro_rules! embed_files {
@@ -366,7 +367,7 @@ impl ServerCertVerifier for MockServerVerifier {
         &self,
         end_entity: &rustls::Certificate,
         intermediates: &[rustls::Certificate],
-        dns_name: webpki::DnsNameRef,
+        server_name: &rustls::ServerName,
         scts: &mut dyn Iterator<Item = &[u8]>,
         oscp_response: &[u8],
         now: std::time::SystemTime,
@@ -374,7 +375,7 @@ impl ServerCertVerifier for MockServerVerifier {
         let scts: Vec<Vec<u8>> = scts.map(|x| x.to_owned()).collect();
         println!(
             "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?}, {:?})",
-            end_entity, intermediates, dns_name, scts, oscp_response, now
+            end_entity, intermediates, server_name, scts, oscp_response, now
         );
         if let Some(error) = &self.cert_rejection_error {
             Err(error.clone())
@@ -585,8 +586,8 @@ pub fn do_handshake_until_both_error(
     }
 }
 
-pub fn dns_name(name: &'static str) -> webpki::DnsNameRef<'_> {
-    webpki::DnsNameRef::try_from_ascii_str(name).unwrap()
+pub fn dns_name(name: &'static str) -> rustls::ServerName {
+    name.try_into().unwrap()
 }
 
 pub struct FailsReads {

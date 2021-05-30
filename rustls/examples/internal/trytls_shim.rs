@@ -4,10 +4,10 @@
 // See: https://github.com/HowNetWorks/trytls-rustls-stub
 //
 
-use webpki;
 use webpki_roots;
 
 use rustls::{ClientConfig, ClientConnection, ConfigBuilder, Connection, Error, RootCertStore};
+use std::convert::TryInto;
 use std::env;
 use std::error::Error as StdError;
 use std::fs::File;
@@ -51,9 +51,9 @@ fn communicate(
     port: u16,
     config: ClientConfig,
 ) -> Result<Verdict, Box<dyn StdError>> {
-    let dns_name = webpki::DnsNameRef::try_from_ascii_str(&host).unwrap();
+    let server_name = host.as_str().try_into().unwrap();
     let rc_config = Arc::new(config);
-    let mut client = ClientConnection::new(rc_config, dns_name).unwrap();
+    let mut client = ClientConnection::new(rc_config, server_name).unwrap();
     let mut stream = TcpStream::connect((&*host, port))?;
 
     client

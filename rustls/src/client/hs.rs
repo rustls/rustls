@@ -28,7 +28,7 @@ use crate::ticketer::TimeBase;
 use crate::SupportedCipherSuite;
 
 use crate::client::common::ClientHelloDetails;
-use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData};
+use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData, ServerName};
 
 use std::sync::Arc;
 
@@ -72,18 +72,18 @@ pub(super) struct ClientContext<'a> {
 }
 
 fn find_session(
-    dns_name: webpki::DnsNameRef,
+    server_name: &ServerName,
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
-    let key = persist::ClientSessionKey::session_for_dns_name(dns_name);
+    let key = persist::ClientSessionKey::session_for_server_name(server_name);
     let key_buf = key.get_encoding();
 
     let value = config
         .session_storage
         .get(&key_buf)
         .or_else(|| {
-            debug!("No cached session for {:?}", dns_name);
+            debug!("No cached session for {:?}", server_name);
             None
         })?;
 
@@ -111,7 +111,7 @@ fn find_session(
 }
 
 pub(super) fn start_handshake(
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -128,14 +128,14 @@ pub(super) fn start_handshake(
 
     let mut session_id: Option<SessionID> = None;
     let mut resuming_session = find_session(
-        dns_name.as_ref(),
+        &server_name,
         &config,
         #[cfg(feature = "quic")]
         cx,
     );
 
     let key_share = if support_tls13 {
-        Some(tls13::initial_key_share(&config, dns_name.as_ref())?)
+        Some(tls13::initial_key_share(&config, &server_name)?)
     } else {
         None
     };
@@ -177,7 +177,7 @@ pub(super) fn start_handshake(
         hello_details,
         session_id,
         None,
-        dns_name,
+        server_name,
         key_share,
         extra_exts,
         may_send_sct_list,
@@ -188,7 +188,7 @@ pub(super) fn start_handshake(
 struct ExpectServerHello {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -216,7 +216,7 @@ fn emit_client_hello_for_retry(
     mut hello: ClientHelloDetails,
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
-    dns_name: webpki::DnsName,
+    server_name: ServerName,
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
@@ -245,8 +245,8 @@ fn emit_client_hello_for_retry(
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));
     }
-    if config.enable_sni {
-        exts.push(ClientExtension::make_sni(dns_name.as_ref()));
+    if let (Some(sni_name), true) = (server_name.for_sni(), config.enable_sni) {
+        exts.push(ClientExtension::make_sni(sni_name));
     }
     exts.push(ClientExtension::ECPointFormats(
         ECPointFormatList::supported(),
@@ -414,7 +414,7 @@ fn emit_client_hello_for_retry(
     let next = ExpectServerHello {
         config,
         resuming_session,
-        dns_name,
+        server_name,
         randoms,
         using_ems,
         transcript,
@@ -593,7 +593,7 @@ impl State for ExpectServerHello {
                 cx,
                 server_hello,
                 self.resuming_session,
-                self.dns_name,
+                self.server_name,
                 self.randoms,
                 suite,
                 self.transcript,
@@ -607,7 +607,7 @@ impl State for ExpectServerHello {
             tls12::CompleteServerHelloHandling {
                 config: self.config,
                 resuming_session: self.resuming_session,
-                dns_name: self.dns_name,
+                server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -752,7 +752,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.hello,
             Some(self.next.session_id),
             Some(&hrr),
-            self.next.dns_name,
+            self.next.server_name,
             Some(key_share),
             self.extra_exts,
             may_send_sct_list,

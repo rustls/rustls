@@ -14,6 +14,7 @@ use rustls::quic;
 use rustls::quic::ClientQuicExt;
 use rustls::quic::ServerQuicExt;
 use rustls::ClientHello;
+use std::convert::TryInto;
 use std::env;
 use std::fs;
 use std::io;
@@ -215,7 +216,7 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
         &self,
         _end_entity: &rustls::Certificate,
         _certs: &[rustls::Certificate],
-        _hostname: webpki::DnsNameRef<'_>,
+        _hostname: &rustls::ServerName,
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
@@ -1102,15 +1103,19 @@ fn main() {
             };
             ClientOrServer::Server(s)
         } else {
-            let dns_name = webpki::DnsNameRef::try_from_ascii_str(&opts.host_name).unwrap();
+            let server_name = opts
+                .host_name
+                .as_str()
+                .try_into()
+                .unwrap();
             let ccfg = Arc::clone(ccfg.as_ref().unwrap());
             let c = if opts.quic_transport_params.is_empty() {
-                rustls::ClientConnection::new(ccfg, dns_name)
+                rustls::ClientConnection::new(ccfg, server_name)
             } else {
                 rustls::ClientConnection::new_quic(
                     ccfg,
                     quic::Version::V1,
-                    dns_name,
+                    server_name,
                     opts.quic_transport_params.clone(),
                 )
             }

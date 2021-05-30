@@ -51,6 +51,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     type.
   - *Breaking API change*: `peer_certificates` returns a borrow rather than a copy on the
     internally stored certificate chain.
+  - *Breaking API change*: `ClientConnection`'s DNS name parameter is now a new enum, `ServerName`, to allow future support for ECH and servers named by IP address.
 * 0.19.1 (2021-04-17):
   - Backport: fix security issue: there was a reachable panic in servers if a client
     sent an invalid `ClientECDiffieHellmanPublic` encoding, due to an errant `unwrap()`
