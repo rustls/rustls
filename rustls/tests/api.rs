@@ -197,7 +197,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        ConfigBuilder::with_cipher_suites(&[&rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
+        ConfigBuilder::with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .for_client()
@@ -233,7 +233,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        ConfigBuilder::with_cipher_suites(&[&rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
+        ConfigBuilder::with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .for_server()
@@ -2175,12 +2175,13 @@ fn test_tls13_exporter() {
 fn do_suite_test(
     client_config: ClientConfig,
     server_config: ServerConfig,
-    expect_suite: &'static SupportedCipherSuite,
+    expect_suite: SupportedCipherSuite,
     expect_version: ProtocolVersion,
 ) {
     println!(
         "do_suite_test {:?} {:?}",
-        expect_version, expect_suite.suite
+        expect_version,
+        expect_suite.suite()
     );
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
@@ -2220,9 +2221,9 @@ fn do_suite_test(
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 }
 
-fn find_suite(suite: CipherSuite) -> &'static SupportedCipherSuite {
-    for scs in ALL_CIPHERSUITES.iter() {
-        if scs.suite == suite {
+fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
+    for scs in ALL_CIPHERSUITES.iter().copied() {
+        if scs.suite() == suite {
             return scs;
         }
     }

@@ -1,7 +1,6 @@
 use crate::client::builder::ClientConfigBuilder;
 use crate::error::Error;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-use crate::msgs::enums::ProtocolVersion;
 use crate::server::builder::ServerConfigBuilder;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::versions;
@@ -65,9 +64,7 @@ impl ConfigBuilder {
     }
 
     /// Choose a specific set of cipher suites.
-    pub fn with_cipher_suites(
-        cipher_suites: &[&'static SupportedCipherSuite],
-    ) -> ConfigBuilderWithSuites {
+    pub fn with_cipher_suites(cipher_suites: &[SupportedCipherSuite]) -> ConfigBuilderWithSuites {
         ConfigBuilderWithSuites {
             cipher_suites: cipher_suites.to_vec(),
         }
@@ -85,7 +82,7 @@ impl ConfigBuilder {
 
 /// A [`ConfigBuilder`] where we know the cipher suites.
 pub struct ConfigBuilderWithSuites {
-    cipher_suites: Vec<&'static SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
 }
 
 impl ConfigBuilderWithSuites {
@@ -111,7 +108,7 @@ impl ConfigBuilderWithSuites {
 /// A [`ConfigBuilder`] where we know the cipher suites and key exchange
 /// groups.
 pub struct ConfigBuilderWithKxGroups {
-    cipher_suites: Vec<&'static SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
 }
 
@@ -137,7 +134,7 @@ impl ConfigBuilderWithKxGroups {
 /// A [`ConfigBuilder`] where we know the cipher suites, key exchange groups,
 /// and protocol versions.
 pub struct ConfigBuilderWithVersions {
-    cipher_suites: Vec<&'static SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
 }
@@ -146,11 +143,12 @@ impl ConfigBuilderWithVersions {
     fn validate(&self) -> Result<(), Error> {
         let mut any_usable_suite = false;
         for suite in &self.cipher_suites {
-            for version in &[ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3] {
-                if self.versions.contains(*version) && suite.usable_for_version(*version) {
-                    any_usable_suite = true;
-                    break;
-                }
+            if self
+                .versions
+                .contains(suite.version().version)
+            {
+                any_usable_suite = true;
+                break;
             }
         }
 

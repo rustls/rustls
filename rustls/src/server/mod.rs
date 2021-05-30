@@ -154,7 +154,7 @@ impl<'a> ClientHello<'a> {
 #[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
-    pub cipher_suites: Vec<&'static SupportedCipherSuite>,
+    pub cipher_suites: Vec<SupportedCipherSuite>,
 
     /// List of supported key exchange groups.
     ///
@@ -216,7 +216,7 @@ impl ServerConfig {
             && self
                 .cipher_suites
                 .iter()
-                .any(|cs| cs.usable_for_version(v))
+                .any(|cs| cs.version().version == v)
     }
 }
 
@@ -383,7 +383,7 @@ impl Connection for ServerConnection {
             .and_then(|st| st.export_keying_material(output, label, context))
     }
 
-    fn negotiated_cipher_suite(&self) -> Option<&'static SupportedCipherSuite> {
+    fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
         self.common.get_suite()
     }
 
@@ -449,7 +449,9 @@ impl quic::QuicExt for ServerConnection {
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.common.get_suite()?,
+            self.common
+                .get_suite()
+                .and_then(|suite| suite.tls13())?,
             self.common.quic.early_secret.as_ref()?,
         ))
     }

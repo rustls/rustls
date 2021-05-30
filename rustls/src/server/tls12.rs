@@ -47,7 +47,7 @@ mod client_hello {
         pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) session_id: SessionID,
-        pub(in crate::server) suite: Tls12CipherSuite,
+        pub(in crate::server) suite: &'static Tls12CipherSuite,
         pub(in crate::server) using_ems: bool,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) send_ticket: bool,
@@ -138,12 +138,7 @@ mod client_hello {
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
                 .filter(|resumedata| {
-                    hs::can_resume(
-                        self.suite.supported_suite(),
-                        &cx.data.sni,
-                        self.using_ems,
-                        resumedata,
-                    )
+                    hs::can_resume(self.suite.into(), &cx.data.sni, self.using_ems, resumedata)
                 });
 
             if let Some(data) = resume_data {
@@ -319,7 +314,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
         session_id: SessionID,
-        suite: Tls12CipherSuite,
+        suite: &'static Tls12CipherSuite,
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
@@ -332,7 +327,7 @@ mod client_hello {
         ep.process_common(
             config,
             cx,
-            suite.supported_suite(),
+            suite.into(),
             ocsp_response,
             sct_list,
             hello,
@@ -349,7 +344,7 @@ mod client_hello {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
                     session_id,
-                    cipher_suite: suite.supported_suite().suite,
+                    cipher_suite: suite.common.suite,
                     compression_method: Compression::Null,
                     extensions: ep.exts,
                 }),
@@ -503,7 +498,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
     send_ticket: bool,
@@ -577,7 +572,7 @@ struct ExpectClientKx {
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
-    suite: Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
     client_cert: Option<Vec<Certificate>>,
@@ -737,7 +732,7 @@ fn get_server_connection_value_tls12(
     let mut v = persist::ServerSessionValue::new(
         cx.data.get_sni(),
         version,
-        secrets.suite().supported_suite().suite,
+        secrets.suite().common.suite,
         secret,
         &cx.data.client_cert_chain,
         cx.common.alpn_protocol.clone(),

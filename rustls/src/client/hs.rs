@@ -197,7 +197,7 @@ struct ExpectServerHello {
     offered_key_share: Option<kx::KeyExchange>,
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
-    suite: Option<&'static SupportedCipherSuite>,
+    suite: Option<SupportedCipherSuite>,
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
@@ -220,7 +220,7 @@ fn emit_client_hello_for_retry(
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
-    suite: Option<&'static SupportedCipherSuite>,
+    suite: Option<SupportedCipherSuite>,
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
@@ -309,20 +309,32 @@ fn emit_client_hello_for_retry(
     {
         resuming_session
             .as_ref()
-            .filter(|resuming| match suite {
-                Some(suite) => suite.can_resume_to(&resuming.supported_cipher_suite()),
-                None => true,
+            .and_then(|resuming| {
+                let resuming_suite = resuming.supported_cipher_suite();
+                match suite {
+                    Some(suite) => {
+                        let resuming_suite = suite
+                            .tls13()?
+                            .can_resume_from(resuming_suite)?;
+                        Some((resuming, resuming_suite))
+                    }
+                    None => {
+                        let resuming_suite = resuming_suite.tls13()?;
+                        Some((resuming, resuming_suite))
+                    }
+                }
             })
-            .map(|resuming| {
+            .map(|(resuming, resuming_suite)| {
                 tls13::prepare_resumption(
                     &config,
                     cx,
                     ticket,
                     resuming,
+                    resuming_suite,
                     &mut exts,
                     retryreq.is_some(),
                 );
-                resuming
+                (resuming, resuming_suite)
             })
     } else if config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
@@ -346,7 +358,7 @@ fn emit_client_hello_for_retry(
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
-        .map(|cs| cs.suite)
+        .map(|cs| cs.suite())
         .collect();
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
@@ -363,9 +375,9 @@ fn emit_client_hello_for_retry(
         }),
     };
 
-    let early_key_schedule = if let Some(resuming) = fill_in_binder {
-        let schedule = tls13::fill_in_psk_binder(&resuming, &transcript, &mut chp);
-        Some((resuming, schedule))
+    let early_key_schedule = if let Some((resuming, resuming_suite)) = fill_in_binder {
+        let schedule = tls13::fill_in_psk_binder(&resuming, resuming_suite, &transcript, &mut chp);
+        Some((resuming_suite, schedule))
     } else {
         None
     };
@@ -394,7 +406,7 @@ fn emit_client_hello_for_retry(
     cx.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    let early_key_schedule = early_key_schedule.map(|(resuming, schedule)| {
+    let early_key_schedule = early_key_schedule.map(|(resuming_suite, schedule)| {
         if !cx.data.early_data.is_enabled() {
             return schedule;
         }
@@ -402,7 +414,7 @@ fn emit_client_hello_for_retry(
         tls13::derive_early_traffic_secret(
             &*config.key_log,
             cx,
-            resuming,
+            resuming_suite,
             &schedule,
             &mut sent_tls13_fake_ccs,
             &transcript,
@@ -567,6 +579,12 @@ impl State for ExpectServerHello {
                 Error::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
             })?;
 
+        if version != suite.version().version {
+            return Err(cx
+                .common
+                .illegal_param("server chose unusable ciphersuite for version"));
+        }
+
         match self.suite {
             Some(prev_suite) if prev_suite != suite => {
                 return Err(cx
@@ -587,24 +605,25 @@ impl State for ExpectServerHello {
 
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
-        if cx.common.is_tls13() {
-            tls13::handle_server_hello(
-                self.config,
-                cx,
-                server_hello,
-                self.resuming_session,
-                self.server_name,
-                self.randoms,
-                suite,
-                self.transcript,
-                self.early_key_schedule,
-                self.hello,
-                // We always send a key share when TLS 1.3 is enabled.
-                self.offered_key_share.unwrap(),
-                self.sent_tls13_fake_ccs,
-            )
-        } else {
-            tls12::CompleteServerHelloHandling {
+        match suite {
+            SupportedCipherSuite::Tls13(suite) => {
+                tls13::handle_server_hello(
+                    self.config,
+                    cx,
+                    server_hello,
+                    self.resuming_session,
+                    self.server_name,
+                    self.randoms,
+                    suite,
+                    self.transcript,
+                    self.early_key_schedule,
+                    self.hello,
+                    // We always send a key share when TLS 1.3 is enabled.
+                    self.offered_key_share.unwrap(),
+                    self.sent_tls13_fake_ccs,
+                )
+            }
+            SupportedCipherSuite::Tls12(suite) => tls12::CompleteServerHelloHandling {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 server_name: self.server_name,
@@ -613,7 +632,7 @@ impl State for ExpectServerHello {
                 transcript: self.transcript,
                 session_id: server_hello.session_id,
             }
-            .handle_server_hello(cx, suite, &server_hello, tls13_supported)
+            .handle_server_hello(cx, suite, &server_hello, tls13_supported),
         }
     }
 }

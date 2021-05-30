@@ -139,14 +139,14 @@ enum KeyType {
 
 struct BenchmarkParam {
     key_type: KeyType,
-    ciphersuite: &'static rustls::SupportedCipherSuite,
+    ciphersuite: rustls::SupportedCipherSuite,
     version: &'static rustls::SupportedProtocolVersion,
 }
 
 impl BenchmarkParam {
     const fn new(
         key_type: KeyType,
-        ciphersuite: &'static rustls::SupportedCipherSuite,
+        ciphersuite: rustls::SupportedCipherSuite,
         version: &'static rustls::SupportedProtocolVersion,
     ) -> BenchmarkParam {
         BenchmarkParam {
@@ -160,62 +160,62 @@ impl BenchmarkParam {
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::RSA,
-        &rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::ECDSA,
-        &rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
         KeyType::ED25519,
-        &rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
 ];
@@ -359,11 +359,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
     let client_config = Arc::new(make_client_config(params, clientauth, resume));
     let server_config = Arc::new(make_server_config(params, clientauth, resume, None));
 
-    assert!(
-        params
-            .ciphersuite
-            .usable_for_version(params.version.version)
-    );
+    assert!(params.ciphersuite.version() == params.version);
 
     let rounds = apply_work_multiplier(if resume == Resumption::No { 512 } else { 4096 });
     let mut client_time = 0f64;
@@ -396,7 +392,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
         "handshakes\t{:?}\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
         params.version,
         params.key_type,
-        params.ciphersuite.suite,
+        params.ciphersuite.suite(),
         if clientauth == ClientAuth::Yes {
             "mutual"
         } else {
@@ -409,7 +405,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
         "handshakes\t{:?}\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
         params.version,
         params.key_type,
-        params.ciphersuite.suite,
+        params.ciphersuite.suite(),
         if clientauth == ClientAuth::Yes {
             "mutual"
         } else {
@@ -489,14 +485,14 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
     println!(
         "bulk\t{:?}\t{:?}\t{}\tsend\t{:.2}\tMB/s",
         params.version,
-        params.ciphersuite.suite,
+        params.ciphersuite.suite(),
         mfs_str,
         total_mbs / time_send
     );
     println!(
         "bulk\t{:?}\t{:?}\t{}\trecv\t{:.2}\tMB/s",
         params.version,
-        params.ciphersuite.suite,
+        params.ciphersuite.suite(),
         mfs_str,
         total_mbs / time_recv
     );
@@ -553,7 +549,7 @@ fn lookup_matching_benches(name: &str) -> Vec<&BenchmarkParam> {
     let r: Vec<&BenchmarkParam> = ALL_BENCHMARKS
         .iter()
         .filter(|params| {
-            format!("{:?}", params.ciphersuite.suite).to_lowercase() == name.to_lowercase()
+            format!("{:?}", params.ciphersuite.suite()).to_lowercase() == name.to_lowercase()
         })
         .collect();
 

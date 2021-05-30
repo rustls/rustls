@@ -471,19 +471,19 @@ struct Args {
     arg_fport: Option<u16>,
 }
 
-fn find_suite(name: &str) -> Option<&'static rustls::SupportedCipherSuite> {
+fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
     for suite in rustls::ALL_CIPHERSUITES {
-        let sname = format!("{:?}", suite.suite).to_lowercase();
+        let sname = format!("{:?}", suite.suite()).to_lowercase();
 
         if sname == name.to_string().to_lowercase() {
-            return Some(suite);
+            return Some(*suite);
         }
     }
 
     None
 }
 
-fn lookup_suites(suites: &[String]) -> Vec<&'static rustls::SupportedCipherSuite> {
+fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
     let mut out = Vec::new();
 
     for csname in suites {

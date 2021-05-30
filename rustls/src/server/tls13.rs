@@ -1,6 +1,7 @@
 #[cfg(feature = "quic")]
 use crate::check::check_message;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
+use crate::cipher;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -18,8 +19,8 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerConfig;
+use crate::suites::Tls13CipherSuite;
 use crate::verify;
-use crate::{cipher, SupportedCipherSuite};
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
@@ -64,7 +65,7 @@ mod client_hello {
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
-        pub(in crate::server) suite: &'static SupportedCipherSuite,
+        pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
         pub(in crate::server) send_ticket: bool,
@@ -74,7 +75,7 @@ mod client_hello {
     impl CompleteClientHelloHandling {
         fn check_binder(
             &self,
-            suite: &'static SupportedCipherSuite,
+            suite: &'static Tls13CipherSuite,
             client_hello: &Message,
             psk: &[u8],
             binder: &[u8],
@@ -115,7 +116,6 @@ mod client_hello {
 
         pub(in crate::server) fn handle_client_hello(
             mut self,
-            suite: &'static SupportedCipherSuite,
             cx: &mut ServerContext<'_>,
             server_key: ActiveCertifiedKey,
             chm: &Message,
@@ -190,7 +190,7 @@ mod client_hello {
 
                         emit_hello_retry_request(
                             &mut self.transcript,
-                            suite,
+                            self.suite,
                             &mut cx.common,
                             group.name,
                         );
@@ -239,14 +239,14 @@ mod client_hello {
                     let resume = match self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .filter(|resumedata| {
-                            hs::can_resume(self.suite, &cx.data.sni, false, resumedata)
+                            hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
                         }) {
                         Some(resume) => resume,
                         None => continue,
                     };
 
                     if !self.check_binder(
-                        suite,
+                        self.suite,
                         chm,
                         &resume.master_secret.0,
                         &psk_offer.binders[i].0,
@@ -283,7 +283,7 @@ mod client_hello {
             let key_schedule = emit_server_hello(
                 &mut self.transcript,
                 &self.randoms,
-                suite,
+                self.suite,
                 cx,
                 &client_hello.session_id,
                 chosen_share,
@@ -301,7 +301,7 @@ mod client_hello {
                 (server_key.get_ocsp(), server_key.get_sct_list());
             emit_encrypted_extensions(
                 &mut self.transcript,
-                suite,
+                self.suite,
                 cx,
                 &mut ocsp_response,
                 &mut sct_list,
@@ -369,7 +369,7 @@ mod client_hello {
     fn emit_server_hello(
         transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
-        suite: &'static SupportedCipherSuite,
+        suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         session_id: &SessionID,
         share: &KeyShareEntry,
@@ -402,7 +402,7 @@ mod client_hello {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
                     session_id: *session_id,
-                    cipher_suite: suite.suite,
+                    cipher_suite: suite.common.suite,
                     compression_method: Compression::Null,
                     extensions,
                 }),
@@ -485,14 +485,14 @@ mod client_hello {
 
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
-        suite: &'static SupportedCipherSuite,
+        suite: &'static Tls13CipherSuite,
         common: &mut ConnectionCommon,
         group: NamedGroup,
     ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id: SessionID::empty(),
-            cipher_suite: suite.suite,
+            cipher_suite: suite.common.suite,
             extensions: Vec::new(),
         };
 
@@ -519,7 +519,7 @@ mod client_hello {
 
     fn emit_encrypted_extensions(
         transcript: &mut HandshakeHash,
-        suite: &'static SupportedCipherSuite,
+        suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
@@ -532,7 +532,7 @@ mod client_hello {
         ep.process_common(
             config,
             cx,
-            suite,
+            suite.into(),
             ocsp_response,
             sct_list,
             hello,
@@ -685,7 +685,7 @@ mod client_hello {
 
     fn emit_finished_tls13(
         transcript: &mut HandshakeHash,
-        suite: &'static SupportedCipherSuite,
+        suite: &'static Tls13CipherSuite,
         randoms: &ConnectionRandoms,
         cx: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
@@ -747,7 +747,7 @@ mod client_hello {
 struct ExpectCertificate {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_ticket: bool,
@@ -832,7 +832,7 @@ impl hs::State for ExpectCertificate {
 struct ExpectCertificateVerify {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     client_cert: Vec<Certificate>,
@@ -883,7 +883,7 @@ impl hs::State for ExpectCertificateVerify {
 // --- Process client's Finished ---
 fn get_server_session_value(
     transcript: &mut HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     key_schedule: &KeyScheduleTraffic,
     cx: &ServerContext<'_>,
     nonce: &[u8],
@@ -897,7 +897,7 @@ fn get_server_session_value(
     persist::ServerSessionValue::new(
         cx.data.get_sni(),
         version,
-        suite.suite,
+        suite.common.suite,
         secret,
         &cx.data.client_cert_chain,
         cx.common.alpn_protocol.clone(),
@@ -908,7 +908,7 @@ fn get_server_session_value(
 struct ExpectFinished {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_ticket: bool,
@@ -918,7 +918,7 @@ struct ExpectFinished {
 impl ExpectFinished {
     fn emit_ticket(
         transcript: &mut HandshakeHash,
-        suite: &'static SupportedCipherSuite,
+        suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         key_schedule: &KeyScheduleTraffic,
         config: &ServerConfig,
@@ -1047,7 +1047,7 @@ impl hs::State for ExpectFinished {
 
 // --- Process traffic ---
 struct ExpectTraffic {
-    suite: &'static SupportedCipherSuite,
+    suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
     _fin_verified: verify::FinishedMessageVerified,
