@@ -127,12 +127,11 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
 
     let suite = secrets.suite();
     let scs = &suite.common;
-    let params = &suite.params;
 
     let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
     let (server_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
-    let (client_write_iv, key_block) = key_block.split_at(params.fixed_iv_len);
-    let (server_write_iv, extra) = key_block.split_at(params.fixed_iv_len);
+    let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
+    let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
     let (write_key, write_iv, read_key, read_iv) = if secrets.randoms.we_are_client {
         (
@@ -151,10 +150,10 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     };
 
     (
-        params
+        suite
             .aead_alg
             .decrypter(read_key, read_iv),
-        params
+        suite
             .aead_alg
             .encrypter(write_key, write_iv, extra),
     )

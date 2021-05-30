@@ -481,11 +481,11 @@ impl ConnectionSecrets {
     }
 
     pub fn make_key_block(&self) -> Vec<u8> {
+        let suite = &self.suite;
         let common = &self.suite.common;
-        let params = &self.suite.params;
 
         let len =
-            (common.aead_algorithm.key_len() + params.fixed_iv_len) * 2 + params.explicit_nonce_len;
+            (common.aead_algorithm.key_len() + suite.fixed_iv_len) * 2 + suite.explicit_nonce_len;
 
         let mut out = Vec::new();
         out.resize(len, 0u8);

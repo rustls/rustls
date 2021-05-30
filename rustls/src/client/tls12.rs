@@ -393,7 +393,7 @@ impl hs::State for ExpectServerKx {
         self.transcript.add_message(&m);
 
         let decoded_kx = opaque_kx
-            .unwrap_given_kxa(&self.suite.params.kx)
+            .unwrap_given_kxa(&self.suite.kx)
             .ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::DecodeError);
@@ -747,7 +747,7 @@ impl hs::State for ExpectServerDone {
                 let error_message = format!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),
-                    suite.params.sign
+                    suite.sign
                 );
                 return Err(Error::PeerMisbehavedError(error_message));
             }
