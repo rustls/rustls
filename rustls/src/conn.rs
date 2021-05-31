@@ -1363,7 +1363,7 @@ pub(crate) struct Context<'a, Data> {
 }
 
 #[cfg(feature = "quic")]
-pub(crate) struct Quic {
+pub struct Quic {
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) alert: Option<AlertDescription>,

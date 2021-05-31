@@ -47,12 +47,12 @@ impl Iv {
     }
 
     #[cfg(test)]
-    pub(crate) fn value(&self) -> &[u8; 12] {
+    pub fn value(&self) -> &[u8; 12] {
         &self.0
     }
 }
 
-pub(crate) struct IvLen;
+pub struct IvLen;
 
 impl hkdf::KeyType for IvLen {
     fn len(&self) -> usize {

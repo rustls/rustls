@@ -477,7 +477,7 @@ impl KeySchedule {
     }
 }
 
-pub(crate) fn hkdf_expand<T, L>(secret: &hkdf::Prk, key_type: L, label: &[u8], context: &[u8]) -> T
+pub fn hkdf_expand<T, L>(secret: &hkdf::Prk, key_type: L, label: &[u8], context: &[u8]) -> T
 where
     T: for<'a> From<hkdf::Okm<'a, L>>,
     L: hkdf::KeyType,
@@ -515,7 +515,7 @@ where
     f(okm)
 }
 
-pub(crate) struct PayloadU8Len(pub(crate) usize);
+pub struct PayloadU8Len(pub usize);
 impl hkdf::KeyType for PayloadU8Len {
     fn len(&self) -> usize {
         self.0
@@ -537,7 +537,7 @@ pub(crate) fn derive_traffic_key(
     hkdf_expand(secret, aead_algorithm, b"key", &[])
 }
 
-pub(crate) fn derive_traffic_iv(secret: &hkdf::Prk) -> Iv {
+pub fn derive_traffic_iv(secret: &hkdf::Prk) -> Iv {
     hkdf_expand(secret, IvLen, b"iv", &[])
 }
 

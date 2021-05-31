@@ -66,7 +66,7 @@ impl EnabledVersions {
         ev
     }
 
-    pub(crate) fn contains(&self, version: ProtocolVersion) -> bool {
+    pub fn contains(&self, version: ProtocolVersion) -> bool {
         match version {
             #[cfg(feature = "tls12")]
             ProtocolVersion::TLSv1_2 => self.tls12.is_some(),
