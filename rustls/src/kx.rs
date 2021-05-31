@@ -68,7 +68,7 @@ pub struct SupportedKxGroup {
     pub name: NamedGroup,
 
     /// The corresponding ring agreement::Algorithm
-    agreement_algorithm: &'static ring::agreement::Algorithm,
+    pub agreement_algorithm: &'static ring::agreement::Algorithm,
 }
 
 /// Ephemeral ECDH on curve25519 (see RFC7748)
