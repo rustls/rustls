@@ -2,7 +2,7 @@ use crate::check::{check_message, inappropriate_handshake_message, inappropriate
 use crate::cipher;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
 };
@@ -232,10 +232,10 @@ fn save_kx_hint(config: &ClientConfig, server_name: &ServerName, group: NamedGro
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
-pub fn fill_in_psk_binder(
+pub(super) fn fill_in_psk_binder(
     resuming: &persist::ClientSessionValueWithResolvedCipherSuite,
     resuming_suite: &'static Tls13CipherSuite,
-    transcript: &HandshakeHash,
+    transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
@@ -301,13 +301,13 @@ pub(super) fn derive_early_traffic_secret(
     resuming_suite: &'static Tls13CipherSuite,
     early_key_schedule: &KeyScheduleEarly,
     sent_tls13_fake_ccs: &mut bool,
-    transcript: &HandshakeHash,
+    transcript_buffer: &HandshakeHashBuffer,
     client_random: &[u8; 32],
 ) {
     // For middlebox compatibility
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
-    let client_hello_hash = transcript.get_hash_given(resuming_suite.get_hash(), &[]);
+    let client_hello_hash = transcript_buffer.get_hash_given(resuming_suite.get_hash(), &[]);
     let client_early_traffic_secret =
         early_key_schedule.client_early_traffic_secret(&client_hello_hash, key_log, client_random);
     // Set early data encryption key

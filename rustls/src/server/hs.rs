@@ -2,7 +2,7 @@
 use crate::conn::Protocol;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::enums::{AlertDescription, ExtensionType};
@@ -273,10 +273,10 @@ impl ExtensionProcessing {
     }
 }
 
-pub struct ExpectClientHello {
+pub(super) struct ExpectClientHello {
     pub config: Arc<ServerConfig>,
     pub extra_exts: Vec<ServerExtension>,
-    pub transcript: HandshakeHash,
+    pub transcript: HandshakeHashOrBuffer,
     pub session_id: SessionID,
     pub using_ems: bool,
     pub done_retry: bool,
@@ -285,26 +285,26 @@ pub struct ExpectClientHello {
 
 impl ExpectClientHello {
     pub fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> ExpectClientHello {
-        let mut ech = ExpectClientHello {
+        let mut transcript_buffer = HandshakeHashBuffer::new();
+
+        if config.verifier.offer_client_auth() {
+            transcript_buffer.set_client_auth_enabled();
+        }
+
+        ExpectClientHello {
             config,
             extra_exts,
-            transcript: HandshakeHash::new(),
+            transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
             session_id: SessionID::empty(),
             using_ems: false,
             done_retry: false,
             send_ticket: false,
-        };
-
-        if ech.config.verifier.offer_client_auth() {
-            ech.transcript.set_client_auth_enabled();
         }
-
-        ech
     }
 }
 
 impl State for ExpectClientHello {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let client_hello =
             require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
         let tls13_enabled = self
@@ -484,16 +484,15 @@ impl State for ExpectClientHello {
 
         // Start handshake hash.
         let starting_hash = suite.get_hash();
-        if !self
-            .transcript
-            .start_hash(starting_hash)
-        {
-            cx.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(Error::PeerIncompatibleError(
-                "hash differed on retry".to_string(),
-            ));
-        }
+        let transcript = match self.transcript {
+            HandshakeHashOrBuffer::Buffer(inner) => inner.start_hash(starting_hash),
+            HandshakeHashOrBuffer::Hash(inner) if inner.algorithm() == starting_hash => inner,
+            _ => {
+                return Err(cx
+                    .common
+                    .illegal_param("hash differed on retry"));
+            }
+        };
 
         // Save their Random.
         let mut randoms = ConnectionRandoms::for_server()?;
@@ -504,7 +503,7 @@ impl State for ExpectClientHello {
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,
-                transcript: self.transcript,
+                transcript,
                 suite,
                 randoms,
                 done_retry: self.done_retry,
@@ -514,7 +513,7 @@ impl State for ExpectClientHello {
             .handle_client_hello(cx, certkey, &m),
             SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
                 config: self.config,
-                transcript: self.transcript,
+                transcript,
                 session_id: self.session_id,
                 suite,
                 using_ems: self.using_ems,
@@ -532,4 +531,10 @@ impl State for ExpectClientHello {
             ),
         }
     }
+}
+
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum HandshakeHashOrBuffer {
+    Buffer(HandshakeHashBuffer),
+    Hash(HandshakeHash),
 }

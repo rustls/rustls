@@ -24,7 +24,7 @@ use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
-use super::hs::{self, ServerContext};
+use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 
 use std::sync::Arc;
 
@@ -84,10 +84,9 @@ mod client_hello {
                 _ => unreachable!(),
             };
 
-            let suite_hash = suite.get_hash();
             let handshake_hash = self
                 .transcript
-                .get_hash_given(suite_hash, &binder_plaintext);
+                .get_hash_given(&binder_plaintext);
 
             let key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, &psk);
             let real_binder =
@@ -196,7 +195,7 @@ mod client_hello {
                         emit_fake_ccs(&mut cx.common);
                         return Ok(Box::new(hs::ExpectClientHello {
                             config: self.config,
-                            transcript: self.transcript,
+                            transcript: HandshakeHashOrBuffer::Hash(self.transcript),
                             session_id: SessionID::empty(),
                             using_ems: false,
                             done_retry: true,
@@ -407,7 +406,7 @@ mod client_hello {
         cx.common.check_aligned_handshake()?;
 
         #[cfg(feature = "quic")]
-        let client_hello_hash = transcript.get_hash_given(suite.get_hash(), &[]);
+        let client_hello_hash = transcript.get_hash_given(&[]);
 
         trace!("sending server hello {:?}", sh);
         transcript.add_message(&sh);
