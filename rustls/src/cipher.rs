@@ -67,35 +67,44 @@ fn make_tls12_gcm_nonce(write_iv: &[u8], explicit: &[u8]) -> Iv {
     iv
 }
 
-pub type BuildTls12Decrypter = fn(aead::LessSafeKey, &[u8]) -> Box<dyn MessageDecrypter>;
-pub type BuildTls12Encrypter = fn(aead::LessSafeKey, &[u8], &[u8]) -> Box<dyn MessageEncrypter>;
+pub(crate) struct AesGcm;
 
-pub fn build_tls12_gcm_decrypter(key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
-    Box::new(GcmMessageDecrypter::new(key, iv))
+impl Tls12AeadAlgorithm for AesGcm {
+    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        Box::new(GcmMessageDecrypter::new(key, iv))
+    }
+
+    fn encrypter(
+        &self,
+        key: aead::LessSafeKey,
+        iv: &[u8],
+        extra: &[u8],
+    ) -> Box<dyn MessageEncrypter> {
+        let nonce = make_tls12_gcm_nonce(iv, extra);
+        Box::new(GcmMessageEncrypter::new(key, nonce))
+    }
 }
 
-pub fn build_tls12_gcm_encrypter(
-    key: aead::LessSafeKey,
-    iv: &[u8],
-    extra: &[u8],
-) -> Box<dyn MessageEncrypter> {
-    let nonce = make_tls12_gcm_nonce(iv, extra);
-    Box::new(GcmMessageEncrypter::new(key, nonce))
+pub(crate) struct ChaCha20Poly1305;
+
+impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
+    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        Box::new(ChaCha20Poly1305MessageDecrypter::new(key, Iv::copy(iv)))
+    }
+
+    fn encrypter(&self, key: aead::LessSafeKey, iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+        Box::new(ChaCha20Poly1305MessageEncrypter::new(key, Iv::copy(iv)))
+    }
 }
 
-pub fn build_tls12_chacha_decrypter(
-    key: aead::LessSafeKey,
-    iv: &[u8],
-) -> Box<dyn MessageDecrypter> {
-    Box::new(ChaCha20Poly1305MessageDecrypter::new(key, Iv::copy(iv)))
-}
-
-pub fn build_tls12_chacha_encrypter(
-    key: aead::LessSafeKey,
-    iv: &[u8],
-    _: &[u8],
-) -> Box<dyn MessageEncrypter> {
-    Box::new(ChaCha20Poly1305MessageEncrypter::new(key, Iv::copy(iv)))
+pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
+    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    fn encrypter(
+        &self,
+        key: aead::LessSafeKey,
+        iv: &[u8],
+        extra: &[u8],
+    ) -> Box<dyn MessageEncrypter>;
 }
 
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
@@ -142,8 +151,12 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     };
 
     (
-        (params.build_tls12_decrypter)(read_key, read_iv),
-        (params.build_tls12_encrypter)(write_key, write_iv, extra),
+        params
+            .aead_alg
+            .decrypter(read_key, read_iv),
+        params
+            .aead_alg
+            .encrypter(write_key, write_iv, extra),
     )
 }
 
