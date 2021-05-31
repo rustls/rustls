@@ -60,7 +60,7 @@ impl SecretKind {
 /// This is the TLS1.3 key schedule.  It stores the current secret and
 /// the type of hash.  This isn't used directly; but only through the
 /// typestates.
-struct KeySchedule {
+pub struct KeySchedule {
     current: hkdf::Prk,
     algorithm: ring::hkdf::Algorithm,
 }
