@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::check_message;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::HandshakeHashBuffer;
 use crate::key_schedule::KeyScheduleEarly;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -116,12 +116,12 @@ pub(super) fn start_handshake(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
-    let mut transcript = HandshakeHash::new();
+    let mut transcript_buffer = HandshakeHashBuffer::new();
     if config
         .client_auth_cert_resolver
         .has_certs()
     {
-        transcript.set_client_auth_enabled();
+        transcript_buffer.set_client_auth_enabled();
     }
 
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
@@ -172,7 +172,7 @@ pub(super) fn start_handshake(
         resuming_session,
         randoms,
         false,
-        transcript,
+        transcript_buffer,
         sent_tls13_fake_ccs,
         hello_details,
         session_id,
@@ -191,7 +191,7 @@ struct ExpectServerHello {
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
-    transcript: HandshakeHash,
+    transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     offered_key_share: Option<kx::KeyExchange>,
@@ -211,7 +211,7 @@ fn emit_client_hello_for_retry(
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     randoms: ConnectionRandoms,
     using_ems: bool,
-    mut transcript: HandshakeHash,
+    mut transcript_buffer: HandshakeHashBuffer,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     session_id: Option<SessionID>,
@@ -376,7 +376,8 @@ fn emit_client_hello_for_retry(
     };
 
     let early_key_schedule = if let Some((resuming, resuming_suite)) = fill_in_binder {
-        let schedule = tls13::fill_in_psk_binder(&resuming, resuming_suite, &transcript, &mut chp);
+        let schedule =
+            tls13::fill_in_psk_binder(&resuming, resuming_suite, &transcript_buffer, &mut chp);
         Some((resuming_suite, schedule))
     } else {
         None
@@ -402,7 +403,7 @@ fn emit_client_hello_for_retry(
 
     trace!("Sending ClientHello {:#?}", ch);
 
-    transcript.add_message(&ch);
+    transcript_buffer.add_message(&ch);
     cx.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
@@ -417,7 +418,7 @@ fn emit_client_hello_for_retry(
             resuming_suite,
             &schedule,
             &mut sent_tls13_fake_ccs,
-            &transcript,
+            &transcript_buffer,
             &randoms.client,
         );
         schedule
@@ -429,7 +430,7 @@ fn emit_client_hello_for_retry(
         server_name,
         randoms,
         using_ems,
-        transcript,
+        transcript_buffer,
         early_key_schedule,
         hello,
         offered_key_share: key_share,
@@ -599,9 +600,10 @@ impl State for ExpectServerHello {
         }
 
         // Start our handshake hash, and input the server-hello.
-        self.transcript
+        let mut transcript = self
+            .transcript_buffer
             .start_hash(suite.get_hash());
-        self.transcript.add_message(&m);
+        transcript.add_message(&m);
 
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
@@ -615,7 +617,7 @@ impl State for ExpectServerHello {
                     self.server_name,
                     self.randoms,
                     suite,
-                    self.transcript,
+                    transcript,
                     self.early_key_schedule,
                     self.hello,
                     // We always send a key share when TLS 1.3 is enabled.
@@ -629,7 +631,7 @@ impl State for ExpectServerHello {
                 server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
-                transcript: self.transcript,
+                transcript,
                 session_id: server_hello.session_id,
             }
             .handle_server_hello(cx, suite, &server_hello, tls13_supported),
@@ -643,7 +645,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 
     fn handle_hello_retry_request(
-        mut self,
+        self,
         cx: &mut ClientContext<'_>,
         m: Message,
     ) -> NextStateOrError {
@@ -732,11 +734,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
         cx.common.suite = Some(cs);
 
         // This is the draft19 change where the transcript became a tree
-        self.next
-            .transcript
+        let transcript = self
+            .next
+            .transcript_buffer
             .start_hash(cs.get_hash());
-        self.next.transcript.rollup_for_hrr();
-        self.next.transcript.add_message(&m);
+        let mut transcript_buffer = transcript.into_hrr_buffer();
+        transcript_buffer.add_message(&m);
 
         // Early data is not allowed after HelloRetryrequest
         if cx.data.early_data.is_enabled() {
@@ -766,7 +769,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.resuming_session,
             self.next.randoms,
             self.next.using_ems,
-            self.next.transcript,
+            transcript_buffer,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(self.next.session_id),
