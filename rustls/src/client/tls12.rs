@@ -472,16 +472,19 @@ fn emit_certverify(
     client_auth: &mut ClientAuthDetails,
     common: &mut ConnectionCommon,
 ) -> Result<(), Error> {
-    let signer = match client_auth.signer.take() {
-        None => {
+    let (signer, message) = match (client_auth.signer.take(), transcript.take_handshake_buf()) {
+        (Some(signer), Some(msg)) => (signer, msg),
+        (None, _) => {
             trace!("Not sending CertificateVerify, no key");
             transcript.abandon_client_auth();
             return Ok(());
         }
-        Some(signer) => signer,
+        (_, None) => {
+            trace!("Not sending CertificateVerify, no transcript");
+            return Ok(());
+        }
     };
 
-    let message = transcript.take_handshake_buf();
     let scheme = signer.get_scheme();
     let sig = signer.sign(&message)?;
     let body = DigitallySignedStruct::new(scheme, sig);
