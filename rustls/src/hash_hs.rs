@@ -51,19 +51,15 @@ impl HandshakeHashBuffer {
     }
 
     /// We now know what hash function the verify_data will use.
-    pub(crate) fn start_hash(mut self, alg: &'static digest::Algorithm) -> HandshakeHash {
+    pub(crate) fn start_hash(self, alg: &'static digest::Algorithm) -> HandshakeHash {
         let mut ctx = digest::Context::new(alg);
         ctx.update(&self.buffer);
-
-        // Discard buffer if we don't need it now.
-        if !self.client_auth_enabled {
-            self.buffer.drain(..);
-        }
-
         HandshakeHash {
             ctx,
-            client_auth_enabled: self.client_auth_enabled,
-            buffer: self.buffer,
+            client_auth: match self.client_auth_enabled {
+                true => Some(self.buffer),
+                false => None,
+            },
         }
     }
 }
@@ -79,19 +75,15 @@ pub(crate) struct HandshakeHash {
     /// None before we know what hash function we're using
     ctx: digest::Context,
 
-    /// true if we need to keep all messages
-    client_auth_enabled: bool,
-
     /// buffer for client-auth.
-    buffer: Vec<u8>,
+    client_auth: Option<Vec<u8>>,
 }
 
 impl HandshakeHash {
     /// We decided not to do client auth after all, so discard
     /// the transcript.
     pub(crate) fn abandon_client_auth(&mut self) {
-        self.client_auth_enabled = false;
-        self.buffer.drain(..);
+        self.client_auth = None;
     }
 
     /// Hash/buffer a handshake message.
@@ -107,8 +99,8 @@ impl HandshakeHash {
     fn update_raw(&mut self, buf: &[u8]) -> &mut Self {
         self.ctx.update(buf);
 
-        if self.client_auth_enabled {
-            self.buffer.extend_from_slice(buf);
+        if let Some(buffer) = &mut self.client_auth {
+            buffer.extend_from_slice(buf);
         }
 
         self
@@ -128,7 +120,7 @@ impl HandshakeHash {
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
         HandshakeHashBuffer {
-            client_auth_enabled: self.client_auth_enabled,
+            client_auth_enabled: self.client_auth.is_some(),
             buffer: old_handshake_hash_msg.get_encoding(),
         }
     }
@@ -155,9 +147,8 @@ impl HandshakeHash {
     /// Takes this object's buffer containing all handshake messages
     /// so far.  This method only works once; it resets the buffer
     /// to empty.
-    pub fn take_handshake_buf(&mut self) -> Vec<u8> {
-        debug_assert!(self.client_auth_enabled);
-        mem::take(&mut self.buffer)
+    pub fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
+        self.client_auth.take()
     }
 
     /// The digest algorithm
@@ -177,7 +168,7 @@ mod test {
         hhb.update_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
         let mut hh = hhb.start_hash(&digest::SHA256);
-        assert_eq!(hh.buffer.len(), 0);
+        assert!(hh.client_auth.is_none());
         hh.update_raw(b"world");
         let h = hh.get_current_hash();
         let h = h.as_ref();
@@ -194,9 +185,19 @@ mod test {
         hhb.update_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
         let mut hh = hhb.start_hash(&digest::SHA256);
-        assert_eq!(hh.buffer.len(), 5);
+        assert_eq!(
+            hh.client_auth
+                .as_ref()
+                .map(|buf| buf.len()),
+            Some(5)
+        );
         hh.update_raw(b"world");
-        assert_eq!(hh.buffer.len(), 10);
+        assert_eq!(
+            hh.client_auth
+                .as_ref()
+                .map(|buf| buf.len()),
+            Some(10)
+        );
         let h = hh.get_current_hash();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
@@ -204,7 +205,7 @@ mod test {
         assert_eq!(h[2], 0x18);
         assert_eq!(h[3], 0x5c);
         let buf = hh.take_handshake_buf();
-        assert_eq!(b"helloworld".to_vec(), buf);
+        assert_eq!(Some(b"helloworld".to_vec()), buf);
     }
 
     #[test]
@@ -214,11 +215,16 @@ mod test {
         hhb.update_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
         let mut hh = hhb.start_hash(&digest::SHA256);
-        assert_eq!(hh.buffer.len(), 5);
+        assert_eq!(
+            hh.client_auth
+                .as_ref()
+                .map(|buf| buf.len()),
+            Some(5)
+        );
         hh.abandon_client_auth();
-        assert_eq!(hh.buffer.len(), 0);
+        assert_eq!(hh.client_auth, None);
         hh.update_raw(b"world");
-        assert_eq!(hh.buffer.len(), 0);
+        assert_eq!(hh.client_auth, None);
         let h = hh.get_current_hash();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);

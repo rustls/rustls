@@ -656,12 +656,25 @@ impl hs::State for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_msgs = self.transcript.take_handshake_buf();
-            let certs = &self.client_cert;
 
-            self.config
-                .verifier
-                .verify_tls12_signature(&handshake_msgs, &certs[0], sig)
+            match self.transcript.take_handshake_buf() {
+                Some(msgs) => {
+                    let certs = &self.client_cert;
+                    self.config
+                        .verifier
+                        .verify_tls12_signature(&msgs, &certs[0], sig)
+                }
+                None => {
+                    // This should be unreachable; the handshake buffer was initialized with
+                    // client authentication if the verifier wants to offer it.
+                    // `transcript.abandon_client_auth()` can extract it, but its only caller in
+                    // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
+                    // impossible to reach this state.
+                    cx.common
+                        .send_fatal_alert(AlertDescription::AccessDenied);
+                    Err(Error::General("client authentication not set up".into()))
+                }
+            }
         };
 
         if let Err(e) = rc {
