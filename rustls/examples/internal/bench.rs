@@ -443,9 +443,9 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
 
     let server_name = "localhost".try_into().unwrap();
     let mut client = ClientConnection::new(client_config, server_name).unwrap();
-    client.set_buffer_limit(0);
+    client.set_buffer_limit(None);
     let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
-    server.set_buffer_limit(0);
+    server.set_buffer_limit(None);
 
     do_handshake(&mut client, &mut server);
 

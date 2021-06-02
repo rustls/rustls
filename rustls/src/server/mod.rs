@@ -351,7 +351,7 @@ impl Connection for ServerConnection {
         !self.common.traffic
     }
 
-    fn set_buffer_limit(&mut self, len: usize) {
+    fn set_buffer_limit(&mut self, len: Option<usize>) {
         self.common.set_buffer_limit(len)
     }
 

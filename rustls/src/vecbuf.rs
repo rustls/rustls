@@ -9,11 +9,11 @@ use std::io::Read;
 /// more complexity when reading out.
 pub struct ChunkVecBuffer {
     chunks: VecDeque<Vec<u8>>,
-    limit: usize,
+    limit: Option<usize>,
 }
 
 impl ChunkVecBuffer {
-    pub fn new(limit: usize) -> ChunkVecBuffer {
+    pub fn new(limit: Option<usize>) -> ChunkVecBuffer {
         ChunkVecBuffer {
             chunks: VecDeque::new(),
             limit,
@@ -26,8 +26,8 @@ impl ChunkVecBuffer {
     /// Setting a lower limit than the currently stored
     /// data is not an error.
     ///
-    /// A zero limit is interpreted as no limit.
-    pub fn set_limit(&mut self, new_limit: usize) {
+    /// A [`None`] limit is interpreted as no limit.
+    pub fn set_limit(&mut self, new_limit: Option<usize>) {
         self.limit = new_limit;
     }
 
@@ -49,11 +49,11 @@ impl ChunkVecBuffer {
     /// bytes should we actually append to adhere to the
     /// currently set `limit`?
     pub fn apply_limit(&self, len: usize) -> usize {
-        if self.limit == 0 {
-            len
-        } else {
-            let space = self.limit.saturating_sub(self.len());
+        if let Some(limit) = self.limit {
+            let space = limit.saturating_sub(self.len());
             cmp::min(len, space)
+        } else {
+            len
         }
     }
 
@@ -134,7 +134,7 @@ mod test {
 
     #[test]
     fn short_append_copy_with_limit() {
-        let mut cvb = ChunkVecBuffer::new(12);
+        let mut cvb = ChunkVecBuffer::new(Some(12));
         assert_eq!(cvb.append_limited_copy(b"hello"), 5);
         assert_eq!(cvb.append_limited_copy(b"world"), 5);
         assert_eq!(cvb.append_limited_copy(b"hello"), 2);

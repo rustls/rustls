@@ -1223,7 +1223,7 @@ fn client_is_send_and_sync() {
 fn server_respects_buffer_limit_pre_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
-    server.set_buffer_limit(32);
+    server.set_buffer_limit(Some(32));
 
     assert_eq!(
         server
@@ -1251,7 +1251,7 @@ fn server_respects_buffer_limit_pre_handshake() {
 fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
-    server.set_buffer_limit(32);
+    server.set_buffer_limit(Some(32));
 
     assert_eq!(
         server
@@ -1277,7 +1277,7 @@ fn server_respects_buffer_limit_post_handshake() {
 
     // this test will vary in behaviour depending on the default suites
     do_handshake(&mut client, &mut server);
-    server.set_buffer_limit(48);
+    server.set_buffer_limit(Some(48));
 
     assert_eq!(
         server
@@ -1304,7 +1304,7 @@ fn server_respects_buffer_limit_post_handshake() {
 fn client_respects_buffer_limit_pre_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
-    client.set_buffer_limit(32);
+    client.set_buffer_limit(Some(32));
 
     assert_eq!(
         client
@@ -1332,7 +1332,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
-    client.set_buffer_limit(32);
+    client.set_buffer_limit(Some(32));
 
     assert_eq!(
         client
@@ -1357,7 +1357,7 @@ fn client_respects_buffer_limit_post_handshake() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
     do_handshake(&mut client, &mut server);
-    client.set_buffer_limit(48);
+    client.set_buffer_limit(Some(48));
 
     assert_eq!(
         client
@@ -2602,7 +2602,7 @@ fn vectored_write_for_client_handshake() {
 fn vectored_write_with_slow_client() {
     let (mut client, mut server) = make_pair(KeyType::RSA);
 
-    client.set_buffer_limit(32);
+    client.set_buffer_limit(Some(32));
 
     do_handshake(&mut client, &mut server);
     server
