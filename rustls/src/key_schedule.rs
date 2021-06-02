@@ -2,6 +2,7 @@ use crate::cipher::{Iv, IvLen};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
 use crate::KeyLog;
+
 /// Key schedule maintenance for TLS1.3
 use ring::{
     aead,
@@ -103,13 +104,9 @@ impl KeyScheduleEarly {
             .sign_verify_data(&resumption_psk_binder_key, hs_hash)
     }
 
-    pub fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshake {
+    pub fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshakeStart {
         self.ks.input_secret(secret);
-        KeyScheduleHandshake {
-            ks: self.ks,
-            current_client_traffic_secret: None,
-            current_server_traffic_secret: None,
-        }
+        KeyScheduleHandshakeStart { ks: self.ks }
     }
 }
 
@@ -126,64 +123,63 @@ impl KeyScheduleNonSecret {
         }
     }
 
-    pub fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshake {
+    pub fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshakeStart {
         self.ks.input_secret(secret);
-        KeyScheduleHandshake {
-            ks: self.ks,
-            current_client_traffic_secret: None,
-            current_server_traffic_secret: None,
-        }
+        KeyScheduleHandshakeStart { ks: self.ks }
     }
 }
 
 /// KeySchedule during handshake.
-pub struct KeyScheduleHandshake {
+pub struct KeyScheduleHandshakeStart {
     ks: KeySchedule,
-    current_client_traffic_secret: Option<hkdf::Prk>,
-    current_server_traffic_secret: Option<hkdf::Prk>,
 }
 
-impl KeyScheduleHandshake {
-    pub fn client_handshake_traffic_secret(
-        &mut self,
-        hs_hash: &Digest,
+impl KeyScheduleHandshakeStart {
+    pub(crate) fn derive_handshake_secrets(
+        self,
+        hs_hash: Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-    ) -> hkdf::Prk {
+    ) -> (KeyScheduleHandshake, hkdf::Prk, hkdf::Prk) {
         // Use an empty handshake hash for the initial handshake.
-        let secret = self.ks.derive_logged_secret(
+        let client_secret = self.ks.derive_logged_secret(
             SecretKind::ClientHandshakeTrafficSecret,
             hs_hash.as_ref(),
             key_log,
             client_random,
         );
-        self.current_client_traffic_secret = Some(secret.clone());
-        secret
-    }
 
-    pub fn server_handshake_traffic_secret(
-        &mut self,
-        hs_hash: &Digest,
-        key_log: &dyn KeyLog,
-        client_random: &[u8; 32],
-    ) -> hkdf::Prk {
-        let secret = self.ks.derive_logged_secret(
+        let server_secret = self.ks.derive_logged_secret(
             SecretKind::ServerHandshakeTrafficSecret,
             hs_hash.as_ref(),
             key_log,
             client_random,
         );
-        self.current_server_traffic_secret = Some(secret.clone());
-        secret
+
+        let new = KeyScheduleHandshake {
+            ks: self.ks,
+            client_handshake_traffic_secret: client_secret.clone(),
+            server_handshake_traffic_secret: server_secret.clone(),
+        };
+
+        (new, client_secret, server_secret)
+    }
+}
+
+pub(crate) struct KeyScheduleHandshake {
+    ks: KeySchedule,
+    client_handshake_traffic_secret: hkdf::Prk,
+    server_handshake_traffic_secret: hkdf::Prk,
+}
+
+impl KeyScheduleHandshake {
+    pub fn sign_server_finish(&self, hs_hash: &Digest) -> hmac::Tag {
+        self.ks
+            .sign_finish(&self.server_handshake_traffic_secret, hs_hash)
     }
 
-    pub fn sign_server_finish(&self, hs_hash: &Digest) -> hmac::Tag {
-        self.ks.sign_finish(
-            self.current_server_traffic_secret
-                .as_ref()
-                .unwrap(),
-            hs_hash,
-        )
+    pub fn client_key(&self) -> &hkdf::Prk {
+        &self.client_handshake_traffic_secret
     }
 
     pub fn into_traffic_with_client_finished_pending(
@@ -192,9 +188,7 @@ impl KeyScheduleHandshake {
         self.ks.input_empty();
         KeyScheduleTrafficWithClientFinishedPending {
             ks: self.ks,
-            handshake_client_traffic_secret: self
-                .current_client_traffic_secret
-                .unwrap(),
+            handshake_client_traffic_secret: self.client_handshake_traffic_secret,
             current_client_traffic_secret: None,
             current_server_traffic_secret: None,
             current_exporter_secret: None,

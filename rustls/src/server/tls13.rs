@@ -419,7 +419,7 @@ mod client_hello {
         cx.common.send_msg(sh, false);
 
         // Start key schedule
-        let mut key_schedule = if let Some(psk) = resuming_psk {
+        let key_schedule = if let Some(psk) = resuming_psk {
             let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
 
             #[cfg(feature = "quic")]
@@ -443,29 +443,25 @@ mod client_hello {
         };
 
         let handshake_hash = transcript.get_current_hash();
-        let write_key = key_schedule.server_handshake_traffic_secret(
-            &handshake_hash,
+        let (key_schedule, client_key, server_key) = key_schedule.derive_handshake_secrets(
+            handshake_hash,
             &*config.key_log,
             &randoms.client,
         );
-        cx.common
-            .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
 
-        let read_key = key_schedule.client_handshake_traffic_secret(
-            &handshake_hash,
-            &*config.key_log,
-            &randoms.client,
-        );
+        // Encrypt with our own key, decrypt with the peer's key
         cx.common
             .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(suite, &read_key));
+            .set_message_encrypter(cipher::new_tls13_write(suite, &server_key));
+        cx.common
+            .record_layer
+            .set_message_decrypter(cipher::new_tls13_read(suite, &client_key));
 
         #[cfg(feature = "quic")]
         {
             cx.common.quic.hs_secrets = Some(quic::Secrets {
-                client: read_key,
-                server: write_key,
+                client: client_key,
+                server: server_key,
             });
         }
 
