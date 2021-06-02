@@ -565,6 +565,7 @@ pub enum ClientExtension {
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
+    RenegotiationInfo(PayloadU8),
     Unknown(UnknownExtension),
 }
 
@@ -575,7 +576,9 @@ impl ClientExtension {
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::ServerName(_) => ExtensionType::ServerName,
-            Self::SessionTicket(_) => ExtensionType::SessionTicket,
+            Self::SessionTicketRequest | Self::SessionTicketOffer(_) => {
+                ExtensionType::SessionTicket
+            },
             Self::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
             Self::KeyShare(_) => ExtensionType::KeyShare,
@@ -588,6 +591,7 @@ impl ClientExtension {
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
+            ClientExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -603,11 +607,11 @@ impl Codec for ClientExtension {
             Self::NamedGroups(ref r) => r.encode(&mut sub),
             Self::SignatureAlgorithms(ref r) => r.encode(&mut sub),
             Self::ServerName(ref r) => r.encode(&mut sub),
-            Self::SessionTicket(ClientSessionTicket::Request)
+            Self::SessionTicketRequest
             | Self::ExtendedMasterSecretRequest
             | Self::SignedCertificateTimestampRequest
             | Self::EarlyData => {}
-            Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.encode(&mut sub),
+            Self::SessionTicketOffer(ref r) => r.encode(&mut sub),
             Self::Protocols(ref r) => r.encode(&mut sub),
             Self::SupportedVersions(ref r) => r.encode(&mut sub),
             Self::KeyShare(ref r) => r.encode(&mut sub),
@@ -615,9 +619,9 @@ impl Codec for ClientExtension {
             Self::PresharedKey(ref r) => r.encode(&mut sub),
             Self::Cookie(ref r) => r.encode(&mut sub),
             Self::CertificateStatusRequest(ref r) => r.encode(&mut sub),
-            Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                sub.extend_from_slice(r)
-            }
+            Self::TransportParameters(ref r)
+            | Self::TransportParametersDraft(ref r) => sub.extend_from_slice(r),
+            Self::RenegotiationInfo(ref r) => r.encode(&mut sub),
             Self::Unknown(ref r) => r.encode(&mut sub),
         }
 
@@ -671,6 +675,9 @@ impl Codec for ClientExtension {
             ExtensionType::TransportParameters => Self::TransportParameters(sub.rest().to_vec()),
             ExtensionType::TransportParametersDraft => {
                 Self::TransportParametersDraft(sub.rest().to_vec())
+            }
+            ExtensionType::RenegotiationInfo => {
+                Self::RenegotiationInfo(PayloadU8::new(sub.rest().to_vec()))
             }
             ExtensionType::EarlyData if !sub.any_left() => Self::EarlyData,
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
