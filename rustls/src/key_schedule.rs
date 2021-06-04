@@ -183,93 +183,57 @@ impl KeyScheduleHandshake {
     }
 
     pub fn into_traffic_with_client_finished_pending(
-        mut self,
-    ) -> KeyScheduleTrafficWithClientFinishedPending {
-        self.ks.input_empty();
-        KeyScheduleTrafficWithClientFinishedPending {
-            ks: self.ks,
+        self,
+        hs_hash: Digest,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+    ) -> (
+        KeyScheduleTrafficWithClientFinishedPending,
+        hkdf::Prk,
+        hkdf::Prk,
+    ) {
+        let traffic = KeyScheduleTraffic::new(self.ks, hs_hash, key_log, client_random);
+
+        let client_secret = traffic
+            .current_client_traffic_secret
+            .clone();
+        let server_secret = traffic
+            .current_server_traffic_secret
+            .clone();
+
+        let new = KeyScheduleTrafficWithClientFinishedPending {
             handshake_client_traffic_secret: self.client_handshake_traffic_secret,
-            current_client_traffic_secret: None,
-            current_server_traffic_secret: None,
-            current_exporter_secret: None,
-        }
+            traffic,
+        };
+
+        (new, client_secret, server_secret)
     }
 }
 
 /// KeySchedule during traffic stage, retaining the ability to calculate the client's
-/// finished verify_data, and incrementally generate the first traffic keys.
+/// finished verify_data. The traffic stage key schedule can be extracted from it
+/// through signing the client finished hash.
 pub struct KeyScheduleTrafficWithClientFinishedPending {
-    ks: KeySchedule,
     handshake_client_traffic_secret: hkdf::Prk,
-    current_client_traffic_secret: Option<hkdf::Prk>,
-    current_server_traffic_secret: Option<hkdf::Prk>,
-    current_exporter_secret: Option<hkdf::Prk>,
+    traffic: KeyScheduleTraffic,
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
-    pub fn sign_client_finish(&self, hs_hash: &Digest) -> hmac::Tag {
-        self.ks
-            .sign_finish(&self.handshake_client_traffic_secret, hs_hash)
-    }
-
-    pub fn server_application_traffic_secret(
-        &mut self,
+    pub fn sign_client_finish(
+        self,
         hs_hash: &Digest,
-        key_log: &dyn KeyLog,
-        client_random: &[u8; 32],
-    ) -> hkdf::Prk {
-        let secret = self.ks.derive_logged_secret(
-            SecretKind::ServerApplicationTrafficSecret,
-            hs_hash.as_ref(),
-            key_log,
-            client_random,
-        );
-        self.current_server_traffic_secret = Some(secret.clone());
-        secret
-    }
+    ) -> (KeyScheduleTraffic, hmac::Tag, hkdf::Prk) {
+        let tag = self
+            .traffic
+            .ks
+            .sign_finish(&self.handshake_client_traffic_secret, hs_hash);
 
-    pub fn client_application_traffic_secret(
-        &mut self,
-        hs_hash: &Digest,
-        key_log: &dyn KeyLog,
-        client_random: &[u8; 32],
-    ) -> hkdf::Prk {
-        let secret = self.ks.derive_logged_secret(
-            SecretKind::ClientApplicationTrafficSecret,
-            hs_hash.as_ref(),
-            key_log,
-            client_random,
-        );
-        self.current_client_traffic_secret = Some(secret.clone());
-        secret
-    }
+        let client_secret = self
+            .traffic
+            .current_client_traffic_secret
+            .clone();
 
-    pub fn exporter_master_secret(
-        &mut self,
-        hs_hash: &Digest,
-        key_log: &dyn KeyLog,
-        client_random: &[u8; 32],
-    ) {
-        let secret = self.ks.derive_logged_secret(
-            SecretKind::ExporterMasterSecret,
-            hs_hash.as_ref(),
-            key_log,
-            client_random,
-        );
-        self.current_exporter_secret = Some(secret);
-    }
-
-    pub fn into_traffic(self) -> KeyScheduleTraffic {
-        KeyScheduleTraffic {
-            ks: self.ks,
-            current_client_traffic_secret: self
-                .current_client_traffic_secret
-                .unwrap(),
-            current_server_traffic_secret: self
-                .current_server_traffic_secret
-                .unwrap(),
-            current_exporter_secret: self.current_exporter_secret.unwrap(),
-        }
+        (self.traffic, tag, client_secret)
     }
 }
 
@@ -283,6 +247,43 @@ pub struct KeyScheduleTraffic {
 }
 
 impl KeyScheduleTraffic {
+    fn new(
+        mut ks: KeySchedule,
+        hs_hash: Digest,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+    ) -> Self {
+        ks.input_empty();
+
+        let current_client_traffic_secret = ks.derive_logged_secret(
+            SecretKind::ClientApplicationTrafficSecret,
+            hs_hash.as_ref(),
+            key_log,
+            client_random,
+        );
+
+        let current_server_traffic_secret = ks.derive_logged_secret(
+            SecretKind::ServerApplicationTrafficSecret,
+            hs_hash.as_ref(),
+            key_log,
+            client_random,
+        );
+
+        let current_exporter_secret = ks.derive_logged_secret(
+            SecretKind::ExporterMasterSecret,
+            hs_hash.as_ref(),
+            key_log,
+            client_random,
+        );
+
+        Self {
+            ks,
+            current_client_traffic_secret,
+            current_server_traffic_secret,
+            current_exporter_secret,
+        }
+    }
+
     pub fn next_server_application_traffic_secret(&mut self) -> hkdf::Prk {
         let secret = self
             .ks

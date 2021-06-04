@@ -29,7 +29,6 @@ use super::hs::{self, ServerContext};
 use std::sync::Arc;
 
 use ring::constant_time;
-use ring::digest::Digest;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
 
@@ -333,7 +332,7 @@ mod client_hello {
             };
 
             cx.common.check_aligned_handshake()?;
-            let (key_schedule_traffic, hash_at_server_fin) = emit_finished_tls13(
+            let key_schedule_traffic = emit_finished_tls13(
                 &mut self.transcript,
                 self.suite,
                 &self.randoms,
@@ -347,20 +346,16 @@ mod client_hello {
                     config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
-                    randoms: self.randoms,
                     key_schedule: key_schedule_traffic,
                     send_ticket: self.send_ticket,
-                    hash_at_server_fin,
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
-                    randoms: self.randoms,
                     key_schedule: key_schedule_traffic,
                     send_ticket: self.send_ticket,
-                    hash_at_server_fin,
                 }))
             }
         }
@@ -686,7 +681,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
-    ) -> (KeyScheduleTrafficWithClientFinishedPending, Digest) {
+    ) -> KeyScheduleTrafficWithClientFinishedPending {
         let handshake_hash = transcript.get_current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
         let verify_data_payload = Payload::new(verify_data.as_ref());
@@ -706,37 +701,25 @@ mod client_hello {
 
         // Now move to application data keys.  Read key change is deferred until
         // the Finish message is received & validated.
-        let mut key_schedule_traffic = key_schedule.into_traffic_with_client_finished_pending();
-        let write_key = key_schedule_traffic.server_application_traffic_secret(
-            &hash_at_server_fin,
-            &*config.key_log,
-            &randoms.client,
-        );
+        let (key_schedule_traffic, _client_key, server_key) = key_schedule
+            .into_traffic_with_client_finished_pending(
+                hash_at_server_fin,
+                &*config.key_log,
+                &randoms.client,
+            );
         cx.common
             .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(suite, &write_key));
-
-        key_schedule_traffic.exporter_master_secret(
-            &hash_at_server_fin,
-            &*config.key_log,
-            &randoms.client,
-        );
-
-        let _read_key = key_schedule_traffic.client_application_traffic_secret(
-            &hash_at_server_fin,
-            &*config.key_log,
-            &randoms.client,
-        );
+            .set_message_encrypter(cipher::new_tls13_write(suite, &server_key));
 
         #[cfg(feature = "quic")]
         {
             cx.common.quic.traffic_secrets = Some(quic::Secrets {
-                client: _read_key,
-                server: write_key,
+                client: _client_key,
+                server: server_key,
             });
         }
 
-        (key_schedule_traffic, hash_at_server_fin)
+        key_schedule_traffic
     }
 }
 
@@ -744,10 +727,8 @@ struct ExpectCertificate {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
-    randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_ticket: bool,
-    hash_at_server_fin: Digest,
 }
 
 impl hs::State for ExpectCertificate {
@@ -789,10 +770,8 @@ impl hs::State for ExpectCertificate {
                         config: self.config,
                         suite: self.suite,
                         key_schedule: self.key_schedule,
-                        randoms: self.randoms,
                         transcript: self.transcript,
                         send_ticket: self.send_ticket,
-                        hash_at_server_fin: self.hash_at_server_fin,
                     }));
                 }
 
@@ -816,11 +795,9 @@ impl hs::State for ExpectCertificate {
             config: self.config,
             suite: self.suite,
             transcript: self.transcript,
-            randoms: self.randoms,
             key_schedule: self.key_schedule,
             client_cert,
             send_ticket: self.send_ticket,
-            hash_at_server_fin: self.hash_at_server_fin,
         }))
     }
 }
@@ -829,11 +806,9 @@ struct ExpectCertificateVerify {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
-    randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     client_cert: Vec<Certificate>,
     send_ticket: bool,
-    hash_at_server_fin: Digest,
 }
 
 impl hs::State for ExpectCertificateVerify {
@@ -869,9 +844,7 @@ impl hs::State for ExpectCertificateVerify {
             suite: self.suite,
             key_schedule: self.key_schedule,
             transcript: self.transcript,
-            randoms: self.randoms,
             send_ticket: self.send_ticket,
-            hash_at_server_fin: self.hash_at_server_fin,
         }))
     }
 }
@@ -905,10 +878,8 @@ struct ExpectFinished {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
-    randoms: ConnectionRandoms,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_ticket: bool,
-    hash_at_server_fin: Digest,
 }
 
 impl ExpectFinished {
@@ -977,7 +948,7 @@ impl hs::State for ExpectFinished {
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
         let handshake_hash = self.transcript.get_current_hash();
-        let expect_verify_data = self
+        let (key_schedule_traffic, expect_verify_data, client_key) = self
             .key_schedule
             .sign_client_finish(&handshake_hash);
 
@@ -997,18 +968,9 @@ impl hs::State for ExpectFinished {
         cx.common.check_aligned_handshake()?;
 
         // Install keying to read future messages.
-        let read_key = self
-            .key_schedule
-            .client_application_traffic_secret(
-                &self.hash_at_server_fin,
-                &*self.config.key_log,
-                &self.randoms.client,
-            );
         cx.common
             .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(self.suite, &read_key));
-
-        let key_schedule_traffic = self.key_schedule.into_traffic();
+            .set_message_decrypter(cipher::new_tls13_read(self.suite, &client_key));
 
         if self.send_ticket {
             Self::emit_ticket(
