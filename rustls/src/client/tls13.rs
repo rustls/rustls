@@ -5,7 +5,6 @@ use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
-    KeyScheduleTrafficWithClientFinishedPending,
 };
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -819,11 +818,9 @@ fn emit_certverify_tls13(
 
 fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
-    key_schedule: &KeyScheduleTrafficWithClientFinishedPending,
+    verify_data: ring::hmac::Tag,
     common: &mut ConnectionCommon,
 ) {
-    let handshake_hash = transcript.get_current_hash();
-    let verify_data = key_schedule.sign_client_finish(&handshake_hash);
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
     let m = Message {
@@ -910,40 +907,29 @@ impl hs::State for ExpectFinished {
             emit_certverify_tls13(&mut st.transcript, client_auth, cx.common)?;
         }
 
-        let mut key_schedule_finished = st
+        let (key_schedule_finished, client_key, server_key) = st
             .key_schedule
-            .into_traffic_with_client_finished_pending();
-        emit_finished_tls13(&mut st.transcript, &key_schedule_finished, cx.common);
+            .into_traffic_with_client_finished_pending(
+                hash_after_handshake,
+                &*st.config.key_log,
+                &st.randoms.client,
+            );
+        let handshake_hash = st.transcript.get_current_hash();
+        let (key_schedule_traffic, verify_data, _) =
+            key_schedule_finished.sign_client_finish(&handshake_hash);
+        emit_finished_tls13(&mut st.transcript, verify_data, cx.common);
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
 
-        /* Traffic from server is now decrypted with application data keys. */
-        let read_key = key_schedule_finished.server_application_traffic_secret(
-            &hash_after_handshake,
-            &*st.config.key_log,
-            &st.randoms.client,
-        );
         cx.common
             .record_layer
-            .set_message_decrypter(cipher::new_tls13_read(st.suite, &read_key));
+            .set_message_decrypter(cipher::new_tls13_read(st.suite, &server_key));
 
-        key_schedule_finished.exporter_master_secret(
-            &hash_after_handshake,
-            &*st.config.key_log,
-            &st.randoms.client,
-        );
-
-        let write_key = key_schedule_finished.client_application_traffic_secret(
-            &hash_after_handshake,
-            &*st.config.key_log,
-            &st.randoms.client,
-        );
         cx.common
             .record_layer
-            .set_message_encrypter(cipher::new_tls13_write(st.suite, &write_key));
+            .set_message_encrypter(cipher::new_tls13_write(st.suite, &client_key));
 
-        let key_schedule_traffic = key_schedule_finished.into_traffic();
         cx.common.start_traffic();
 
         let st = ExpectTraffic {
@@ -962,8 +948,8 @@ impl hs::State for ExpectFinished {
         {
             if cx.common.protocol == Protocol::Quic {
                 cx.common.quic.traffic_secrets = Some(quic::Secrets {
-                    client: write_key,
-                    server: read_key,
+                    client: client_key,
+                    server: server_key,
                 });
                 return Ok(Box::new(ExpectQuicTraffic(st)));
             }
