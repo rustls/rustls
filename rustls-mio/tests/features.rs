@@ -61,12 +61,13 @@ fn alpn_agree() {
         .http_mode()
         .run();
 
-    // Like openssl we don't fail a handshake for no ALPN overlap.
+    // We fail a handshake for no ALPN overlap.
     server
         .client()
         .arg("-alpn")
         .arg("coburn")
-        .expect("No ALPN negotiated")
+        .expect_log("SSL alert number 120")
+        .fails()
         .go();
 
     server

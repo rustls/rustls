@@ -1,5 +1,3 @@
-#[cfg(feature = "quic")]
-use crate::conn::Protocol;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -141,16 +139,10 @@ impl ExtensionProcessing {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts
                     .push(ServerExtension::make_alpn(&[selected_protocol]));
-            } else {
-                // For compatibility, strict ALPN validation is not employed unless targeting QUIC
-                #[cfg(feature = "quic")]
-                {
-                    if cx.common.protocol == Protocol::Quic && !our_protocols.is_empty() {
-                        cx.common
-                            .send_fatal_alert(AlertDescription::NoApplicationProtocol);
-                        return Err(Error::NoApplicationProtocol);
-                    }
-                }
+            } else if !our_protocols.is_empty() {
+                cx.common
+                    .send_fatal_alert(AlertDescription::NoApplicationProtocol);
+                return Err(Error::NoApplicationProtocol);
             }
         }
 

@@ -35,7 +35,12 @@ use webpki;
 mod common;
 use crate::common::*;
 
-fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: Option<&[u8]>) {
+fn alpn_test_error(
+    server_protos: Vec<Vec<u8>>,
+    client_protos: Vec<Vec<u8>>,
+    agreed: Option<&[u8]>,
+    expected_error: Option<ErrorFromPeer>,
+) {
     let mut client_config = make_client_config(KeyType::RSA);
     let mut server_config = make_server_config(KeyType::RSA);
 
@@ -50,10 +55,15 @@ fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: O
 
         assert_eq!(client.alpn_protocol(), None);
         assert_eq!(server.alpn_protocol(), None);
-        do_handshake(&mut client, &mut server);
+        let error = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(client.alpn_protocol(), agreed);
         assert_eq!(server.alpn_protocol(), agreed);
+        assert_eq!(error.err(), expected_error);
     }
+}
+
+fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: Option<&[u8]>) {
+    alpn_test_error(server_protos, client_protos, agreed, None)
 }
 
 #[test]
@@ -68,10 +78,11 @@ fn alpn() {
     alpn_test(vec![], vec![b"client-proto".to_vec()], None);
 
     // no overlap
-    alpn_test(
+    alpn_test_error(
         vec![b"server-proto".to_vec()],
         vec![b"client-proto".to_vec()],
         None,
+        Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
     );
 
     // server chooses preference
@@ -82,7 +93,12 @@ fn alpn() {
     );
 
     // case sensitive
-    alpn_test(vec![b"PROTO".to_vec()], vec![b"proto".to_vec()], None);
+    alpn_test_error(
+        vec![b"PROTO".to_vec()],
+        vec![b"proto".to_vec()],
+        None,
+        Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
+    );
 }
 
 fn version_test(
@@ -3385,13 +3401,11 @@ mod test_quic {
             client_config
                 .versions
                 .replace(&[&rustls::version::TLS13]);
-            client_config.alpn_protocols = vec!["bar".into()];
 
             let mut server_config = make_server_config(kt);
             server_config
                 .versions
                 .replace(&[&rustls::version::TLS13]);
-            server_config.alpn_protocols = vec!["foo".into()];
 
             do_exporter_test(client_config, server_config);
         }
