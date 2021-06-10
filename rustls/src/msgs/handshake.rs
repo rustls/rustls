@@ -1,23 +1,20 @@
+use std::collections;
+use std::fmt;
+
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::ECCurveType;
-use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
 use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType};
 use crate::msgs::enums::{HandshakeType, ProtocolVersion};
 use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
 use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
+use crate::msgs::enums::ECCurveType;
+use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::rand;
 
-#[cfg(feature = "logging")]
-use crate::log::warn;
-
-use std::collections;
-use std::fmt;
-
-macro_rules! declare_u8_vec(
+macro_rules! declare_u8_vec (
   ($name:ident, $itemtype:ty) => {
     pub type $name = Vec<$itemtype>;
 
@@ -33,7 +30,7 @@ macro_rules! declare_u8_vec(
   }
 );
 
-macro_rules! declare_u16_vec(
+macro_rules! declare_u16_vec (
   ($name:ident, $itemtype:ty) => {
     pub type $name = Vec<$itemtype>;
 
@@ -1810,12 +1807,11 @@ impl Codec for CertificateRequestPayload {
         let canames = DistinguishedNames::read(r)?;
 
 
-            Some(Self {
-                certtypes,
-                sigschemes,
-                canames,
-            })
-
+        Some(Self {
+            certtypes,
+            sigschemes,
+            canames,
+        })
     }
 }
 
@@ -2194,7 +2190,7 @@ impl Codec for HandshakeMessagePayload {
             HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
             _ => self.typ,
         }
-        .encode(bytes);
+            .encode(bytes);
         codec::u24(sub.len() as u32).encode(bytes);
         bytes.append(&mut sub);
     }
@@ -2207,6 +2203,13 @@ impl Codec for HandshakeMessagePayload {
 impl HandshakeMessagePayload {
     pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<Self> {
         let mut typ = HandshakeType::read(r)?;
+
+        if matches!(typ, HandshakeType::Unknown(_)) {
+            // TLs 1.2 sends Handshake messages which do not have a typ, but include encrypted data,
+            // catch this here
+            return Some(HandshakeMessagePayload { typ, payload: HandshakePayload::Unknown(Payload::read(r)) });
+        }
+
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
 
