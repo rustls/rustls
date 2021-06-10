@@ -1233,7 +1233,11 @@ impl Codec for ServerHelloPayload {
         let session_id = SessionID::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
-        let extensions = codec::read_vec_u16::<ServerExtension>(r)?;
+        let extensions = if r.any_left() {
+            codec::read_vec_u16::<ServerExtension>(r)?
+        } else {
+            vec![]
+        };
 
         let ret = Self {
             legacy_version: ProtocolVersion::Unknown(0),
