@@ -362,6 +362,19 @@ impl State for ExpectClientHello {
             ProtocolVersion::TLSv1_2
         };
 
+        if version == ProtocolVersion::TLSv1_3
+            && client_hello.client_version != ProtocolVersion::TLSv1_2
+        {
+            // RFC 8446 - 4.1.2
+            // In TLS 1.3, the client indicates its version preferences in the
+            // "supported_versions" extension (Section 4.2.1) and the
+            // legacy_version field MUST be set to 0x0303, which is the version
+            // number for TLS 1.2.
+            return Err(Error::PeerMisbehavedError(
+                "TLS 1.3 ClientHello must set legacy_version to TLS 0x0303".to_string(),
+            ));
+        }
+
         cx.common.negotiated_version = Some(version);
 
         // --- Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
