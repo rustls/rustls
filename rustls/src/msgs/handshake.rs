@@ -1042,6 +1042,11 @@ impl ClientHelloPayload {
         self.find_extension(ExtensionType::EarlyData)
             .is_some()
     }
+
+    pub fn has_cookie_extension(&self) -> bool {
+        self.find_extension(ExtensionType::Cookie)
+            .is_some()
+    }
 }
 
 #[derive(Debug)]

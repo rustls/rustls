@@ -3413,6 +3413,62 @@ mod test_quic {
 } // mod test_quic
 
 #[test]
+fn test_reject_cookie_in_initial_client_hello() {
+    let mut server_config = make_server_config(KeyType::ED25519);
+    server_config
+        .versions
+        .replace(&[&rustls::version::TLS13]);
+    server_config.alpn_protocols = vec!["foo".into()];
+    let server_config = Arc::new(server_config);
+
+    let mut server = ServerConnection::new(server_config).unwrap();
+
+    use ring::rand::SecureRandom;
+    use rustls::internal::msgs::base::PayloadU16;
+    use rustls::internal::msgs::enums::{CipherSuite, Compression, HandshakeType};
+    use rustls::internal::msgs::handshake::{
+        ClientHelloPayload, HandshakeMessagePayload, Random, SessionID,
+    };
+    use rustls::internal::msgs::message::PlainMessage;
+
+    let rng = ring::rand::SystemRandom::new();
+    let mut random = [0; 32];
+    rng.fill(&mut random).unwrap();
+    let random = Random::from(random);
+
+    let client_hello = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ClientHello,
+            payload: HandshakePayload::ClientHello(ClientHelloPayload {
+                client_version: ProtocolVersion::TLSv1_2,
+                random,
+                session_id: SessionID::random().unwrap(),
+                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                compression_methods: vec![Compression::Null],
+                extensions: vec![
+                    ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
+                    ClientExtension::Cookie(PayloadU16(b"foo".to_vec())),
+                ],
+            }),
+        }),
+    };
+
+    let buf = PlainMessage::from(client_hello)
+        .into_unencrypted_opaque()
+        .encode();
+    server
+        .read_tls(&mut buf.as_slice())
+        .unwrap();
+    assert_eq!(
+        server.process_new_packets().err(),
+        Some(Error::PeerMisbehavedError(
+            "initial ClientHello contained cookie extension".into(),
+        )),
+    );
+}
+
+#[test]
 fn test_client_does_not_offer_sha1() {
     use rustls::internal::msgs::{
         codec::Reader, enums::HandshakeType, handshake::HandshakePayload, message::MessagePayload,

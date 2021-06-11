@@ -403,6 +403,17 @@ impl State for ExpectClientHello {
             ));
         }
 
+        if version == ProtocolVersion::TLSv1_3
+            && !self.done_retry
+            && client_hello.has_cookie_extension()
+        {
+            // RFC 8446 - 4.2.2 Cookie
+            // Clients MUST NOT use cookies in their initial ClientHello in subsequent connections.
+            return Err(Error::PeerMisbehavedError(
+                "initial ClientHello contained cookie extension".to_string(),
+            ));
+        }
+
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
