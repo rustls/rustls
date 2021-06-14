@@ -48,7 +48,7 @@ use std::sync::Arc;
 ///     .with_no_client_auth();
 /// ```
 ///
-/// # Resulting [`ConfigConfig`] defaults
+/// # Resulting [`ClientConfig`] defaults
 /// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
 /// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
@@ -77,6 +77,7 @@ impl ClientConfigBuilder {
     }
 
     #[cfg(feature = "dangerous_configuration")]
+    /// Set a custom certificate verifier.
     pub fn with_custom_certificate_verifier(
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,

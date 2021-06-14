@@ -298,6 +298,7 @@ pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
     ConfigBuilder, ConfigBuilderWithKxGroups, ConfigBuilderWithSuites, ConfigBuilderWithVersions,
 };
+pub use crate::client::builder::{ClientConfigBuilder, ClientConfigBuilderWithCertVerifier};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::ServerName;
