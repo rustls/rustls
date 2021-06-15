@@ -15,17 +15,8 @@ pub struct OwnedTrustAnchor {
 }
 
 impl OwnedTrustAnchor {
-    /// Copy a `webpki::TrustAnchor` into owned memory
-    pub fn from_trust_anchor(t: &webpki::TrustAnchor) -> OwnedTrustAnchor {
-        OwnedTrustAnchor {
-            subject: t.subject.to_vec(),
-            spki: t.spki.to_vec(),
-            name_constraints: t.name_constraints.map(|x| x.to_vec()),
-        }
-    }
-
     /// Get a `webpki::TrustAnchor` by borrowing the owned elements.
-    pub fn to_trust_anchor(&self) -> webpki::TrustAnchor {
+    pub(crate) fn to_trust_anchor(&self) -> webpki::TrustAnchor {
         webpki::TrustAnchor {
             subject: &self.subject,
             spki: &self.spki,
@@ -34,15 +25,13 @@ impl OwnedTrustAnchor {
     }
 }
 
-impl From<webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
-    fn from(t: webpki::TrustAnchor) -> OwnedTrustAnchor {
-        Self::from_trust_anchor(&t)
-    }
-}
-
-impl<'a> From<&'a OwnedTrustAnchor> for webpki::TrustAnchor<'a> {
-    fn from(anchor: &'a OwnedTrustAnchor) -> Self {
-        anchor.to_trust_anchor()
+impl From<&webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
+    fn from(t: &webpki::TrustAnchor) -> Self {
+        Self {
+            subject: t.subject.to_vec(),
+            spki: t.spki.to_vec(),
+            name_constraints: t.name_constraints.map(|x| x.to_vec()),
+        }
     }
 }
 
@@ -87,8 +76,7 @@ impl RootCertStore {
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
         let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)?;
-
-        let ota = OwnedTrustAnchor::from_trust_anchor(&ta);
+        let ota = OwnedTrustAnchor::from(&ta);
         self.roots.push(ota);
         Ok(())
     }
@@ -101,7 +89,7 @@ impl RootCertStore {
     ) {
         for ta in anchors {
             self.roots
-                .push(OwnedTrustAnchor::from_trust_anchor(ta));
+                .push(OwnedTrustAnchor::from(ta));
         }
     }
 
