@@ -4,7 +4,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::Error;
 
-pub fn decode_ecdh_params<T: Codec>(
+pub(crate) fn decode_ecdh_params<T: Codec>(
     conn: &mut ConnectionCommon,
     kx_params: &[u8],
 ) -> Result<T, Error> {
@@ -23,7 +23,7 @@ fn decode_ecdh_params_<T: Codec>(kx_params: &[u8]) -> Option<T> {
     }
 }
 
-pub fn complete_ecdh(
+pub(crate) fn complete_ecdh(
     mine: kx::KeyExchange,
     peer_pub_key: &[u8],
 ) -> Result<kx::KeyExchangeResult, Error> {

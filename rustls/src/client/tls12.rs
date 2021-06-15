@@ -40,13 +40,14 @@ mod server_hello {
     use super::*;
 
     pub(in crate::client) struct CompleteServerHelloHandling {
-        pub config: Arc<ClientConfig>,
-        pub resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-        pub server_name: ServerName,
-        pub randoms: ConnectionRandoms,
-        pub using_ems: bool,
-        pub transcript: HandshakeHash,
-        pub session_id: SessionID,
+        pub(in crate::client) config: Arc<ClientConfig>,
+        pub(in crate::client) resuming_session:
+            Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+        pub(in crate::client) server_name: ServerName,
+        pub(in crate::client) randoms: ConnectionRandoms,
+        pub(in crate::client) using_ems: bool,
+        pub(in crate::client) transcript: HandshakeHash,
+        pub(in crate::client) session_id: SessionID,
     }
 
     impl CompleteServerHelloHandling {
@@ -846,7 +847,7 @@ impl hs::State for ExpectServerDone {
     }
 }
 
-pub struct ExpectNewTicket {
+struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
@@ -890,7 +891,7 @@ impl hs::State for ExpectNewTicket {
 }
 
 // -- Waiting for their CCS --
-pub struct ExpectCcs {
+struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,

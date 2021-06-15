@@ -32,7 +32,7 @@ impl TimeBase {
 /// any *ring* `aead::Algorithm` to encrypt and authentication
 /// the ticket payload.  It does not enforce any lifetime
 /// constraint.
-pub struct AeadTicketer {
+struct AeadTicketer {
     alg: &'static aead::Algorithm,
     key: aead::LessSafeKey,
     lifetime: u32,
@@ -40,7 +40,7 @@ pub struct AeadTicketer {
 
 impl AeadTicketer {
     /// Make a ticketer with recommended configuration and a random key.
-    pub fn new() -> Result<AeadTicketer, rand::GetRandomFailed> {
+    fn new() -> Result<AeadTicketer, rand::GetRandomFailed> {
         let mut key = [0u8; 32];
         rand::fill_random(&mut key)?;
 

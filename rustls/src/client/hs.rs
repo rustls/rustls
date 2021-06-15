@@ -474,7 +474,7 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
-pub fn sct_list_is_invalid(scts: &SCTList) -> bool {
+pub(super) fn sct_list_is_invalid(scts: &SCTList) -> bool {
     scts.is_empty() || scts.iter().any(|sct| sct.0.is_empty())
 }
 

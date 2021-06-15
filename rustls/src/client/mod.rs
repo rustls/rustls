@@ -27,9 +27,9 @@ use std::sync::Arc;
 
 #[macro_use]
 mod hs;
-pub mod builder;
+pub(super) mod builder;
 mod common;
-pub mod handy;
+pub(super) mod handy;
 mod tls12;
 mod tls13;
 
@@ -243,7 +243,7 @@ impl TryFrom<&str> for ServerName {
 
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
-pub mod danger {
+pub(super) mod danger {
     use std::sync::Arc;
 
     use super::verify::ServerCertVerifier;
@@ -272,7 +272,7 @@ enum EarlyDataState {
     Rejected,
 }
 
-pub struct EarlyData {
+pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
 }

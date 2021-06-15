@@ -214,6 +214,7 @@
     trivial_casts,
     trivial_numeric_casts,
     missing_docs,
+    unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
     unused_qualifications
@@ -294,7 +295,7 @@ pub mod internal {
 }
 
 // The public interface is:
-pub use crate::anchors::{DistinguishedNames, OwnedTrustAnchor, RootCertStore};
+pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
     ConfigBuilder, ConfigBuilderWithKxGroups, ConfigBuilderWithSuites, ConfigBuilderWithVersions,
 };
@@ -312,6 +313,7 @@ pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
+pub use crate::msgs::handshake::DistinguishedNames;
 pub use crate::server::builder::{ServerConfigBuilder, ServerConfigBuilderWithClientAuth};
 pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};

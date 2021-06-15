@@ -9,14 +9,14 @@ use crate::sign;
 
 use std::sync::Arc;
 
-pub struct ServerCertDetails {
-    pub cert_chain: CertificatePayload,
-    pub ocsp_response: Vec<u8>,
-    pub scts: Option<SCTList>,
+pub(super) struct ServerCertDetails {
+    pub(super) cert_chain: CertificatePayload,
+    pub(super) ocsp_response: Vec<u8>,
+    pub(super) scts: Option<SCTList>,
 }
 
 impl ServerCertDetails {
-    pub fn new(
+    pub(super) fn new(
         cert_chain: CertificatePayload,
         ocsp_response: Vec<u8>,
         scts: Option<SCTList>,
@@ -28,7 +28,7 @@ impl ServerCertDetails {
         }
     }
 
-    pub fn scts(&self) -> impl Iterator<Item = &[u8]> {
+    pub(super) fn scts(&self) -> impl Iterator<Item = &[u8]> {
         self.scts
             .as_deref()
             .unwrap_or(&[])
@@ -37,13 +37,13 @@ impl ServerCertDetails {
     }
 }
 
-pub struct ServerKxDetails {
-    pub kx_params: Vec<u8>,
-    pub kx_sig: DigitallySignedStruct,
+pub(super) struct ServerKxDetails {
+    pub(super) kx_params: Vec<u8>,
+    pub(super) kx_sig: DigitallySignedStruct,
 }
 
 impl ServerKxDetails {
-    pub fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKxDetails {
+    pub(super) fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKxDetails {
         ServerKxDetails {
             kx_params: params,
             kx_sig: sig,
@@ -51,23 +51,23 @@ impl ServerKxDetails {
     }
 }
 
-pub struct ClientHelloDetails {
-    pub sent_extensions: Vec<ExtensionType>,
+pub(super) struct ClientHelloDetails {
+    pub(super) sent_extensions: Vec<ExtensionType>,
 }
 
 impl ClientHelloDetails {
-    pub fn new() -> ClientHelloDetails {
+    pub(super) fn new() -> ClientHelloDetails {
         ClientHelloDetails {
             sent_extensions: Vec::new(),
         }
     }
 
-    pub fn server_may_send_sct_list(&self) -> bool {
+    pub(super) fn server_may_send_sct_list(&self) -> bool {
         self.sent_extensions
             .contains(&ExtensionType::SCT)
     }
 
-    pub fn server_sent_unsolicited_extensions(
+    pub(super) fn server_sent_unsolicited_extensions(
         &self,
         received_exts: &[ServerExtension],
         allowed_unsolicited: &[ExtensionType],
@@ -85,17 +85,17 @@ impl ClientHelloDetails {
     }
 }
 
-pub struct ReceivedTicketDetails {
-    pub new_ticket: Vec<u8>,
-    pub new_ticket_lifetime: u32,
+pub(super) struct ReceivedTicketDetails {
+    pub(super) new_ticket: Vec<u8>,
+    pub(super) new_ticket_lifetime: u32,
 }
 
 impl ReceivedTicketDetails {
-    pub fn new() -> ReceivedTicketDetails {
+    pub(super) fn new() -> ReceivedTicketDetails {
         ReceivedTicketDetails::from(Vec::new(), 0)
     }
 
-    pub fn from(ticket: Vec<u8>, lifetime: u32) -> ReceivedTicketDetails {
+    pub(super) fn from(ticket: Vec<u8>, lifetime: u32) -> ReceivedTicketDetails {
         ReceivedTicketDetails {
             new_ticket: ticket,
             new_ticket_lifetime: lifetime,
@@ -103,14 +103,14 @@ impl ReceivedTicketDetails {
     }
 }
 
-pub struct ClientAuthDetails {
-    pub certkey: Option<Arc<sign::CertifiedKey>>,
-    pub signer: Option<Box<dyn sign::Signer>>,
-    pub auth_context: Option<Vec<u8>>,
+pub(super) struct ClientAuthDetails {
+    pub(super) certkey: Option<Arc<sign::CertifiedKey>>,
+    pub(super) signer: Option<Box<dyn sign::Signer>>,
+    pub(super) auth_context: Option<Vec<u8>>,
 }
 
 impl ClientAuthDetails {
-    pub fn new() -> ClientAuthDetails {
+    pub(super) fn new() -> ClientAuthDetails {
         ClientAuthDetails {
             certkey: None,
             signer: None,

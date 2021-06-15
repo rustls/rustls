@@ -266,7 +266,7 @@ struct EcdsaSigningKey {
 impl EcdsaSigningKey {
     /// Make a new `ECDSASigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    pub fn new(
+    fn new(
         der: &key::PrivateKey,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
@@ -336,10 +336,7 @@ struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    pub fn new(
-        der: &key::PrivateKey,
-        scheme: SignatureScheme,
-    ) -> Result<Ed25519SigningKey, SignError> {
+    fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Ed25519SigningKey, SignError> {
         Ed25519KeyPair::from_pkcs8_maybe_unchecked(&der.0)
             .map(|kp| Ed25519SigningKey {
                 key: Arc::new(kp),

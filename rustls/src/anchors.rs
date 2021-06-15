@@ -1,7 +1,7 @@
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-pub use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
+use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
 use crate::x509;
 
 /// This is like a `webpki::TrustAnchor`, except it owns

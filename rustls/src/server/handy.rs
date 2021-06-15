@@ -64,7 +64,7 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
 }
 
 /// Something which never produces tickets.
-pub struct NeverProducesTickets {}
+pub(super) struct NeverProducesTickets {}
 
 impl server::ProducesTickets for NeverProducesTickets {
     fn enabled(&self) -> bool {
@@ -82,12 +82,12 @@ impl server::ProducesTickets for NeverProducesTickets {
 }
 
 /// Something which always resolves to the same cert chain.
-pub struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
+pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
-    pub fn new(
+    pub(super) fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
     ) -> Result<AlwaysResolvesChain, Error> {
@@ -102,7 +102,7 @@ impl AlwaysResolvesChain {
     /// key type and encoding.
     ///
     /// If non-empty, the given OCSP response and SCTs are attached.
-    pub fn new_with_extras(
+    pub(super) fn new_with_extras(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
