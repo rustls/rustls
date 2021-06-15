@@ -203,9 +203,11 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// as possible.
     fn wants_write(&self) -> bool;
 
-    /// Returns true if the connection is currently performing the TLS
-    /// handshake.  During this time plaintext written to the
-    /// connection is buffered in memory.
+    /// Returns true if the connection is currently performing the TLS handshake.
+    ///
+    /// During this time plaintext written to the connection is buffered in memory. After
+    /// [`process_new_packets()`] has been called, this might start to return `false` while the
+    /// final handshake packets still need to be extracted from the connection's buffers.
     fn is_handshaking(&self) -> bool;
 
     /// Sets a limit on the internal buffers used to buffer
