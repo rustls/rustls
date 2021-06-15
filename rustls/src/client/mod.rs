@@ -201,7 +201,7 @@ pub enum ServerName {
     /// The server is identified by a DNS name.  The name
     /// is sent in the TLS Server Name Indication (SNI)
     /// extension.
-    DnsName(webpki::DnsName),
+    DnsName(DnsName),
 }
 
 impl ServerName {
@@ -210,7 +210,7 @@ impl ServerName {
     /// in the handshake.
     pub(crate) fn for_sni(&self) -> Option<webpki::DnsNameRef> {
         match self {
-            ServerName::DnsName(dns_name) => Some(dns_name.as_ref()),
+            ServerName::DnsName(dns_name) => Some(dns_name.0.as_ref()),
         }
     }
 
@@ -221,7 +221,7 @@ impl ServerName {
         }
 
         let ServerName::DnsName(dns_name) = self;
-        let bytes = dns_name.as_ref();
+        let bytes = dns_name.0.as_ref();
 
         let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
         r.push(UniqueTypeCode::DnsName as u8);
@@ -232,14 +232,23 @@ impl ServerName {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnsName(pub(crate) webpki::DnsName);
+
 /// Attempt to make a ServerName from a string by parsing
 /// it as a DNS name.
 impl TryFrom<&str> for ServerName {
-    type Error = webpki::InvalidDnsNameError;
+    type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        webpki::DnsNameRef::try_from_ascii_str(s).map(|dns| ServerName::DnsName(dns.into()))
+        match webpki::DnsNameRef::try_from_ascii_str(s) {
+            Ok(dns) => Ok(ServerName::DnsName(DnsName(dns.into()))),
+            Err(webpki::InvalidDnsNameError) => Err(InvalidDnsNameError),
+        }
     }
 }
+
+#[derive(Debug)]
+pub struct InvalidDnsNameError;
 
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
