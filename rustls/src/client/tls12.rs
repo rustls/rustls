@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -16,8 +16,8 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
 use crate::ticketer::TimeBase;
-use crate::verify;
-use crate::{kx, tls12};
+use crate::tls12::{self, ConnectionSecrets};
+use crate::{kx, verify};
 
 use super::hs::ClientContext;
 use crate::client::common::{ClientAuthDetails, ReceivedTicketDetails};
