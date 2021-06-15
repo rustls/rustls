@@ -6,6 +6,7 @@ mod macros;
 pub mod alert;
 pub mod base;
 pub mod ccs;
+mod heartbeat;
 pub mod codec;
 pub mod deframer;
 #[allow(non_camel_case_types)]

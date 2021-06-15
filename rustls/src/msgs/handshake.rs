@@ -1,7 +1,6 @@
 use std::collections;
 use std::fmt;
 
-use crate::internal::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec;
