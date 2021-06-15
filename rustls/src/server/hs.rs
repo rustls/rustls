@@ -7,7 +7,7 @@ use crate::msgs::enums::{AlertDescription, ExtensionType};
 use crate::msgs::enums::{CipherSuite, Compression};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::SessionID;
-use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
+use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
 use crate::msgs::message::{Message, MessagePayload};
@@ -490,11 +490,7 @@ impl State for ExpectClientHello {
         };
 
         // Save their Random.
-        let mut randoms = ConnectionRandoms::for_server()?;
-        client_hello
-            .random
-            .write_slice(&mut randoms.client);
-
+        let randoms = ConnectionRandoms::new(client_hello.random, Random::new()?, false);
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,

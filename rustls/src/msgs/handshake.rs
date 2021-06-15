@@ -52,8 +52,8 @@ macro_rules! declare_u16_vec(
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Random([u8; 32]);
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Random(pub [u8; 32]);
 
 static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
     0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11, 0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
@@ -77,6 +77,12 @@ impl Codec for Random {
 }
 
 impl Random {
+    pub fn new() -> Result<Self, rand::GetRandomFailed> {
+        let mut data = [0u8; 32];
+        rand::fill_random(&mut data)?;
+        Ok(Self(data))
+    }
+
     pub fn write_slice(&self, bytes: &mut [u8]) {
         let buf = self.get_encoding();
         bytes.copy_from_slice(&buf);
@@ -1220,7 +1226,7 @@ impl Codec for ServerHelloPayload {
 
         let ret = ServerHelloPayload {
             legacy_version: ProtocolVersion::Unknown(0),
-            random: ZERO_RANDOM.clone(),
+            random: ZERO_RANDOM,
             session_id,
             cipher_suite: suite,
             compression_method: compression,

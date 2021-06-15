@@ -162,7 +162,7 @@ pub(super) fn start_handshake(
         session_id = Some(SessionID::random()?);
     }
 
-    let randoms = ConnectionRandoms::for_client()?;
+    let random = Random::new()?;
     let hello_details = ClientHelloDetails::new();
     let sent_tls13_fake_ccs = false;
     let may_send_sct_list = config.verifier.request_scts();
@@ -170,7 +170,7 @@ pub(super) fn start_handshake(
         config,
         cx,
         resuming_session,
-        randoms,
+        random,
         false,
         transcript_buffer,
         sent_tls13_fake_ccs,
@@ -189,7 +189,7 @@ struct ExpectServerHello {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
     server_name: ServerName,
-    randoms: ConnectionRandoms,
+    random: Random,
     using_ems: bool,
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
@@ -209,7 +209,7 @@ fn emit_client_hello_for_retry(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
-    randoms: ConnectionRandoms,
+    random: Random,
     using_ems: bool,
     mut transcript_buffer: HandshakeHashBuffer,
     mut sent_tls13_fake_ccs: bool,
@@ -367,7 +367,7 @@ fn emit_client_hello_for_retry(
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
-            random: Random::from(randoms.client),
+            random,
             session_id,
             cipher_suites,
             compression_methods: vec![Compression::Null],
@@ -419,7 +419,7 @@ fn emit_client_hello_for_retry(
             &schedule,
             &mut sent_tls13_fake_ccs,
             &transcript_buffer,
-            &randoms.client,
+            &random.0,
         );
         schedule
     });
@@ -428,7 +428,7 @@ fn emit_client_hello_for_retry(
         config,
         resuming_session,
         server_name,
-        randoms,
+        random,
         using_ems,
         transcript_buffer,
         early_key_schedule,
@@ -605,6 +605,7 @@ impl State for ExpectServerHello {
             .start_hash(suite.get_hash());
         transcript.add_message(&m);
 
+        let randoms = ConnectionRandoms::new(self.random, server_hello.random, true);
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {
@@ -615,7 +616,7 @@ impl State for ExpectServerHello {
                     server_hello,
                     self.resuming_session,
                     self.server_name,
-                    self.randoms,
+                    randoms,
                     suite,
                     transcript,
                     self.early_key_schedule,
@@ -629,7 +630,7 @@ impl State for ExpectServerHello {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 server_name: self.server_name,
-                randoms: self.randoms,
+                randoms,
                 using_ems: self.using_ems,
                 transcript,
                 session_id: server_hello.session_id,
@@ -767,7 +768,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.config,
             cx,
             self.next.resuming_session,
-            self.next.randoms,
+            self.next.random,
             self.next.using_ems,
             transcript_buffer,
             self.next.sent_tls13_fake_ccs,
