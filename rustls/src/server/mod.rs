@@ -20,9 +20,9 @@ use std::sync::Arc;
 
 #[macro_use]
 mod hs;
-pub mod builder;
+pub(crate) mod builder;
 mod common;
-pub mod handy;
+pub(crate) mod handy;
 mod tls12;
 mod tls13;
 

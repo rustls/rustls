@@ -374,7 +374,7 @@ pub static ALL_CIPHERSUITES: &[SupportedCipherSuite] = &[
 pub static DEFAULT_CIPHERSUITES: &[SupportedCipherSuite] = ALL_CIPHERSUITES;
 
 // These both O(N^2)!
-pub fn choose_ciphersuite_preferring_client(
+pub(crate) fn choose_ciphersuite_preferring_client(
     client_suites: &[CipherSuite],
     server_suites: &[SupportedCipherSuite],
 ) -> Option<SupportedCipherSuite> {
@@ -390,7 +390,7 @@ pub fn choose_ciphersuite_preferring_client(
     None
 }
 
-pub fn choose_ciphersuite_preferring_server(
+pub(crate) fn choose_ciphersuite_preferring_server(
     client_suites: &[CipherSuite],
     server_suites: &[SupportedCipherSuite],
 ) -> Option<SupportedCipherSuite> {
@@ -406,7 +406,7 @@ pub fn choose_ciphersuite_preferring_server(
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with `SignatureAlgorithm` `sigalg` removed.
-pub fn reduce_given_sigalg(
+pub(crate) fn reduce_given_sigalg(
     all: &[SupportedCipherSuite],
     sigalg: SignatureAlgorithm,
 ) -> Vec<SupportedCipherSuite> {
@@ -418,7 +418,7 @@ pub fn reduce_given_sigalg(
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with the chosen `version` removed.
-pub fn reduce_given_version(
+pub(crate) fn reduce_given_version(
     all: &[SupportedCipherSuite],
     version: ProtocolVersion,
 ) -> Vec<SupportedCipherSuite> {
@@ -429,7 +429,7 @@ pub fn reduce_given_version(
 }
 
 /// Return true if `sigscheme` is usable by any of the given suites.
-pub fn compatible_sigscheme_for_suites(
+pub(crate) fn compatible_sigscheme_for_suites(
     sigscheme: SignatureScheme,
     common_suites: &[SupportedCipherSuite],
 ) -> bool {

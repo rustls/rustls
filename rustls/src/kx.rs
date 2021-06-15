@@ -3,22 +3,22 @@ use crate::msgs::enums::NamedGroup;
 /// The result of a key exchange.  This has our public key,
 /// and the agreed shared secret (also known as the "premaster secret"
 /// in TLS1.0-era protocols, and "Z" in TLS1.3).
-pub struct KeyExchangeResult {
-    pub pubkey: ring::agreement::PublicKey,
-    pub shared_secret: Vec<u8>,
+pub(crate) struct KeyExchangeResult {
+    pub(crate) pubkey: ring::agreement::PublicKey,
+    pub(crate) shared_secret: Vec<u8>,
 }
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
-pub struct KeyExchange {
+pub(crate) struct KeyExchange {
     skxg: &'static SupportedKxGroup,
     privkey: ring::agreement::EphemeralPrivateKey,
-    pub pubkey: ring::agreement::PublicKey,
+    pub(crate) pubkey: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
     /// Choose a SupportedKxGroup by name, from a list of supported groups.
-    pub fn choose(
+    pub(crate) fn choose(
         name: NamedGroup,
         supported: &[&'static SupportedKxGroup],
     ) -> Option<&'static SupportedKxGroup> {
@@ -31,7 +31,7 @@ impl KeyExchange {
     /// Start a key exchange, using the given SupportedKxGroup.
     ///
     /// This generates an ephemeral key pair and stores it in the returned KeyExchange object.
-    pub fn start(skxg: &'static SupportedKxGroup) -> Option<KeyExchange> {
+    pub(crate) fn start(skxg: &'static SupportedKxGroup) -> Option<KeyExchange> {
         let rng = ring::rand::SystemRandom::new();
         let ours =
             ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).ok()?;
@@ -46,13 +46,13 @@ impl KeyExchange {
     }
 
     /// Return the group being used.
-    pub fn group(&self) -> NamedGroup {
+    pub(crate) fn group(&self) -> NamedGroup {
         self.skxg.name
     }
 
     /// Completes the key exchange, given the peer's public key.  The shared
     /// secret is returned as a KeyExchangeResult.
-    pub fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
+    pub(crate) fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
         let peer_key = ring::agreement::UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
         let pubkey = self.pubkey;
         ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), move |v| {

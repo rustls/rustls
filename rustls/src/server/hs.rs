@@ -58,7 +58,7 @@ pub(super) struct ServerContext<'a> {
     pub(super) data: &'a mut ServerConnectionData,
 }
 
-pub fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
+pub(super) fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::HandshakeFailure);
     Error::PeerIncompatibleError(why.to_string())
 }
@@ -68,12 +68,12 @@ fn bad_version(common: &mut ConnectionCommon, why: &str) -> Error {
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
+pub(super) fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::DecodeError);
     Error::PeerMisbehavedError(why.to_string())
 }
 
-pub fn can_resume(
+pub(super) fn can_resume(
     suite: SupportedCipherSuite,
     sni: &Option<webpki::DnsName>,
     using_ems: bool,
@@ -92,15 +92,15 @@ pub fn can_resume(
 }
 
 #[derive(Default)]
-pub struct ExtensionProcessing {
+pub(super) struct ExtensionProcessing {
     // extensions to reply with
-    pub exts: Vec<ServerExtension>,
+    pub(super) exts: Vec<ServerExtension>,
 
-    pub send_ticket: bool,
+    pub(super) send_ticket: bool,
 }
 
 impl ExtensionProcessing {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Default::default()
     }
 
@@ -266,17 +266,20 @@ impl ExtensionProcessing {
 }
 
 pub(super) struct ExpectClientHello {
-    pub config: Arc<ServerConfig>,
-    pub extra_exts: Vec<ServerExtension>,
-    pub transcript: HandshakeHashOrBuffer,
-    pub session_id: SessionID,
-    pub using_ems: bool,
-    pub done_retry: bool,
-    pub send_ticket: bool,
+    pub(super) config: Arc<ServerConfig>,
+    pub(super) extra_exts: Vec<ServerExtension>,
+    pub(super) transcript: HandshakeHashOrBuffer,
+    pub(super) session_id: SessionID,
+    pub(super) using_ems: bool,
+    pub(super) done_retry: bool,
+    pub(super) send_ticket: bool,
 }
 
 impl ExpectClientHello {
-    pub fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> ExpectClientHello {
+    pub(super) fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+    ) -> ExpectClientHello {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {

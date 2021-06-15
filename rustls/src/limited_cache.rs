@@ -11,7 +11,7 @@ use std::hash::Hash;
 /// storage.
 ///
 /// This is inefficient: it stores keys twice.
-pub struct LimitedCache<K: Clone + Hash + Eq, V> {
+pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
     map: HashMap<K, V>,
 
     // first item is the oldest key
@@ -23,14 +23,14 @@ where
     K: Eq + Hash + Clone + std::fmt::Debug,
 {
     /// Create a new LimitedCache with the given rough capacity.
-    pub fn new(capacity_order_of_magnitude: usize) -> LimitedCache<K, V> {
+    pub(crate) fn new(capacity_order_of_magnitude: usize) -> LimitedCache<K, V> {
         LimitedCache {
             map: HashMap::with_capacity(capacity_order_of_magnitude),
             oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
         }
     }
 
-    pub fn insert(&mut self, k: K, v: V) {
+    pub(crate) fn insert(&mut self, k: K, v: V) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(mut old) => {
                 // nb. does not freshen entry in `oldest`
@@ -54,7 +54,7 @@ where
         }
     }
 
-    pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq,
@@ -62,7 +62,7 @@ where
         self.map.get(k)
     }
 
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
+    pub(crate) fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq,

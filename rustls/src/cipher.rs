@@ -12,28 +12,28 @@ use crate::suites::Tls13CipherSuite;
 use ring::{aead, hkdf};
 
 /// Objects with this trait can decrypt TLS messages.
-pub trait MessageDecrypter: Send + Sync {
+pub(crate) trait MessageDecrypter: Send + Sync {
     fn decrypt(&self, m: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub trait MessageEncrypter: Send + Sync {
+pub(crate) trait MessageEncrypter: Send + Sync {
     fn encrypt(&self, m: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
 }
 
 impl dyn MessageEncrypter {
-    pub fn invalid() -> Box<dyn MessageEncrypter> {
+    pub(crate) fn invalid() -> Box<dyn MessageEncrypter> {
         Box::new(InvalidMessageEncrypter {})
     }
 }
 
 impl dyn MessageDecrypter {
-    pub fn invalid() -> Box<dyn MessageDecrypter> {
+    pub(crate) fn invalid() -> Box<dyn MessageDecrypter> {
         Box::new(InvalidMessageDecrypter {})
     }
 }
 
-pub type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
+pub(crate) type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 fn make_tls12_aad(
@@ -109,7 +109,7 @@ pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
 
 /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
 /// and the session's `secrets`.
-pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
+pub(crate) fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     fn split_key<'a>(
         key_block: &'a [u8],
         alg: &'static aead::Algorithm,
@@ -159,7 +159,7 @@ pub fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     )
 }
 
-pub fn new_tls13_read(
+pub(crate) fn new_tls13_read(
     scs: &'static Tls13CipherSuite,
     secret: &hkdf::Prk,
 ) -> Box<dyn MessageDecrypter> {
@@ -169,7 +169,7 @@ pub fn new_tls13_read(
     Box::new(Tls13MessageDecrypter::new(key, iv))
 }
 
-pub fn new_tls13_write(
+pub(crate) fn new_tls13_write(
     scs: &'static Tls13CipherSuite,
     secret: &hkdf::Prk,
 ) -> Box<dyn MessageEncrypter> {
@@ -180,13 +180,13 @@ pub fn new_tls13_write(
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
-pub struct GcmMessageEncrypter {
+struct GcmMessageEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
 /// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
-pub struct GcmMessageDecrypter {
+struct GcmMessageDecrypter {
     dec_key: aead::LessSafeKey,
     dec_salt: [u8; 4],
 }
@@ -427,7 +427,7 @@ impl Tls13MessageDecrypter {
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageEncrypter`.
-pub struct ChaCha20Poly1305MessageEncrypter {
+struct ChaCha20Poly1305MessageEncrypter {
     enc_key: aead::LessSafeKey,
     enc_offset: Iv,
 }
@@ -435,7 +435,7 @@ pub struct ChaCha20Poly1305MessageEncrypter {
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
 /// This implementation does the AAD construction required in TLS1.2.
 /// TLS1.3 uses `TLS13MessageDecrypter`.
-pub struct ChaCha20Poly1305MessageDecrypter {
+struct ChaCha20Poly1305MessageDecrypter {
     dec_key: aead::LessSafeKey,
     dec_offset: Iv,
 }
@@ -513,7 +513,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 }
 
 /// A `MessageEncrypter` which doesn't work.
-pub struct InvalidMessageEncrypter {}
+struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
     fn encrypt(&self, _m: BorrowedPlainMessage, _seq: u64) -> Result<OpaqueMessage, Error> {
@@ -522,7 +522,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 }
 
 /// A `MessageDecrypter` which doesn't work.
-pub struct InvalidMessageDecrypter {}
+struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
     fn decrypt(&self, _m: OpaqueMessage, _seq: u64) -> Result<PlainMessage, Error> {

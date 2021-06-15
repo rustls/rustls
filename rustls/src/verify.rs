@@ -1,8 +1,7 @@
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use crate::anchors::OwnedTrustAnchor;
-use crate::anchors::{DistinguishedNames, RootCertStore};
+use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::error::Error;
 use crate::error::WebPkiOp;
@@ -10,7 +9,7 @@ use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::DigitallySignedStruct;
+use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
 
 use ring::digest::Digest;
 use std::convert::TryFrom;
@@ -44,6 +43,7 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
 /// means their origins can be precisely determined by looking
 /// for their `assertion` constructors.
 pub struct HandshakeSignatureValid(());
+
 impl HandshakeSignatureValid {
     /// Make a `HandshakeSignatureValid`
     pub fn assertion() -> Self {
@@ -51,15 +51,19 @@ impl HandshakeSignatureValid {
     }
 }
 
-pub struct FinishedMessageVerified(());
+pub(crate) struct FinishedMessageVerified(());
+
 impl FinishedMessageVerified {
-    pub fn assertion() -> Self {
+    pub(crate) fn assertion() -> Self {
         Self { 0: () }
     }
 }
 
 /// Zero-sized marker type representing verification of a server cert chain.
+#[allow(unreachable_pub)]
 pub struct ServerCertVerified(());
+
+#[allow(unreachable_pub)]
 impl ServerCertVerified {
     /// Make a `ServerCertVerified`
     pub fn assertion() -> Self {
@@ -78,6 +82,7 @@ impl ClientCertVerified {
 
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
+#[allow(unreachable_pub)]
 pub trait ServerCertVerifier: Send + Sync {
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// hostname `dns_name` and chains to at least one trust anchor.
@@ -169,6 +174,7 @@ pub trait ServerCertVerifier: Send + Sync {
 }
 
 /// Something that can verify a client certificate chain
+#[allow(unreachable_pub)]
 pub trait ClientCertVerifier: Send + Sync {
     /// Returns `true` to enable the server to request a client certificate and
     /// `false` to skip requesting a client certificate. Defaults to `true`.
@@ -319,11 +325,13 @@ impl ServerCertVerifier for WebPkiVerifier {
 }
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
+#[allow(unreachable_pub)]
 pub struct WebPkiVerifier {
     roots: RootCertStore,
     ct_logs: &'static [&'static sct::Log<'static>],
 }
 
+#[allow(unreachable_pub)]
 impl WebPkiVerifier {
     /// Constructs a new `WebPkiVerifier`.
     ///
@@ -606,12 +614,12 @@ fn convert_alg_tls13(
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub fn construct_tls13_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+pub(crate) fn construct_tls13_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
     construct_tls13_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+pub(crate) fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
     construct_tls13_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
 }
 

@@ -15,9 +15,9 @@ use ring::{aead, hkdf};
 #[derive(Clone, Debug)]
 pub(crate) struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    pub client: hkdf::Prk,
+    pub(crate) client: hkdf::Prk,
     /// Secret used to encrypt packets transmitted by the server
-    pub server: hkdf::Prk,
+    pub(crate) server: hkdf::Prk,
 }
 
 impl Secrets {

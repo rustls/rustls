@@ -47,7 +47,7 @@ macro_rules! require_handshake_msg_move(
 /// - the type of m does not appear in `content_types`.
 /// - if m is a handshake message, the handshake message type does
 ///   not appear in `handshake_types`.
-pub fn check_message(
+pub(crate) fn check_message(
     m: &Message,
     content_types: &[ContentType],
     handshake_types: &[HandshakeType],
@@ -65,7 +65,7 @@ pub fn check_message(
     Ok(())
 }
 
-pub fn inappropriate_message(m: &Message, content_types: &[ContentType]) -> Error {
+pub(crate) fn inappropriate_message(m: &Message, content_types: &[ContentType]) -> Error {
     warn!(
         "Received a {:?} message while expecting {:?}",
         m.payload.content_type(),
@@ -77,7 +77,7 @@ pub fn inappropriate_message(m: &Message, content_types: &[ContentType]) -> Erro
     }
 }
 
-pub fn inappropriate_handshake_message(
+pub(crate) fn inappropriate_handshake_message(
     hsp: &HandshakeMessagePayload,
     handshake_types: &[HandshakeType],
 ) -> Error {

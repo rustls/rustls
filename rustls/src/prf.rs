@@ -30,7 +30,7 @@ fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
     ret
 }
 
-pub fn prf(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], label: &[u8], seed: &[u8]) {
+pub(crate) fn prf(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], label: &[u8], seed: &[u8]) {
     let joined_seed = concat(label, seed);
     p(out, alg, secret, &joined_seed);
 }

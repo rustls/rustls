@@ -328,7 +328,7 @@ pub(super) fn derive_early_traffic_secret(
     trace!("Starting early data traffic");
 }
 
-pub fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut ConnectionCommon) {
+pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut ConnectionCommon) {
     if common.is_quic() {
         return;
     }
@@ -1134,7 +1134,7 @@ impl hs::State for ExpectTraffic {
 }
 
 #[cfg(feature = "quic")]
-pub struct ExpectQuicTraffic(ExpectTraffic);
+struct ExpectQuicTraffic(ExpectTraffic);
 
 #[cfg(feature = "quic")]
 impl hs::State for ExpectQuicTraffic {
