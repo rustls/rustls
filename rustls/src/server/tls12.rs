@@ -743,7 +743,7 @@ fn get_server_connection_value_tls12(
     let secret = secrets.get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(
-        cx.data.get_sni(),
+        cx.data.sni.as_ref(),
         version,
         secrets.suite().common.suite,
         secret,

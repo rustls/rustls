@@ -188,7 +188,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
         Some(self.offer_client_auth())
     }
 
@@ -199,10 +199,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_root_subjects(
-        &self,
-        sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames>;
+    fn client_auth_root_subjects(&self, sni: Option<&str>) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// and chains to at least one of the trust anchors in `roots`.
@@ -217,7 +214,7 @@ pub trait ClientCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&webpki::DnsName>,
+        sni: Option<&str>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error>;
 
@@ -410,14 +407,11 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
         Some(true)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&str>) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
 
@@ -425,7 +419,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&str>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
@@ -467,14 +461,11 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         self.inner.offer_client_auth()
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
         Some(false)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, sni: Option<&str>) -> Option<DistinguishedNames> {
         self.inner
             .client_auth_root_subjects(sni)
     }
@@ -483,7 +474,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&webpki::DnsName>,
+        sni: Option<&str>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         self.inner
@@ -506,10 +497,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&str>) -> Option<DistinguishedNames> {
         unimplemented!();
     }
 
@@ -517,7 +505,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&str>,
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();

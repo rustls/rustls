@@ -185,14 +185,11 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
         Some(self.mandatory)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DnsName>,
-    ) -> Option<rustls::DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&str>) -> Option<rustls::DistinguishedNames> {
         Some(rustls::DistinguishedNames::new())
     }
 
@@ -200,7 +197,7 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         &self,
         _end_entity: &rustls::Certificate,
         _intermediates: &[rustls::Certificate],
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&str>,
         _now: SystemTime,
     ) -> Result<rustls::ClientCertVerified, rustls::Error> {
         Ok(rustls::ClientCertVerified::assertion())
