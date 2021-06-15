@@ -83,14 +83,13 @@ impl RootCertStore {
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
     /// fail.
-    pub fn add_server_trust_anchors(
-        &mut self,
-        &webpki::TlsServerTrustAnchors(anchors): &webpki::TlsServerTrustAnchors,
-    ) {
-        for ta in anchors {
-            self.roots
-                .push(OwnedTrustAnchor::from(ta));
-        }
+    pub fn add_server_trust_anchors<'a, I, T: 'a>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = &'a T> + 'a,
+        &'a T: Into<OwnedTrustAnchor>,
+    {
+        self.roots
+            .extend(iter.into_iter().map(|ta| ta.into()));
     }
 
     /// Parse the given DER-encoded certificates and add all that can be parsed

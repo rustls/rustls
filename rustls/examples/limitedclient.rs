@@ -14,7 +14,7 @@ use rustls::Connection;
 
 fn main() {
     let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
     let config = rustls::ConfigBuilder::with_cipher_suites(&[
         rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256.into(),
     ])
