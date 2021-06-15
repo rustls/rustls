@@ -1,4 +1,3 @@
-use crate::tls12::ConnectionSecrets;
 use crate::error::Error;
 use crate::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::msgs::base::Payload;
@@ -32,8 +31,6 @@ impl dyn MessageDecrypter {
         Box::new(InvalidMessageDecrypter {})
     }
 }
-
-pub(crate) type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 fn make_tls12_aad(
@@ -105,58 +102,6 @@ pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
         iv: &[u8],
         extra: &[u8],
     ) -> Box<dyn MessageEncrypter>;
-}
-
-/// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
-/// and the session's `secrets`.
-pub(crate) fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
-    fn split_key<'a>(
-        key_block: &'a [u8],
-        alg: &'static aead::Algorithm,
-    ) -> (aead::LessSafeKey, &'a [u8]) {
-        // Might panic if the key block is too small.
-        let (key, rest) = key_block.split_at(alg.key_len());
-        // Won't panic because its only prerequisite is that `key` is `alg.key_len()` bytes long.
-        let key = aead::UnboundKey::new(alg, key).unwrap();
-        (aead::LessSafeKey::new(key), rest)
-    }
-
-    // Make a key block, and chop it up.
-    // nb. we don't implement any ciphersuites with nonzero mac_key_len.
-    let key_block = secrets.make_key_block();
-
-    let suite = secrets.suite();
-    let scs = &suite.common;
-
-    let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
-    let (server_write_key, key_block) = split_key(key_block, scs.aead_algorithm);
-    let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
-    let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
-
-    let (write_key, write_iv, read_key, read_iv) = if secrets.randoms.we_are_client {
-        (
-            client_write_key,
-            client_write_iv,
-            server_write_key,
-            server_write_iv,
-        )
-    } else {
-        (
-            server_write_key,
-            server_write_iv,
-            client_write_key,
-            client_write_iv,
-        )
-    };
-
-    (
-        suite
-            .aead_alg
-            .decrypter(read_key, read_iv),
-        suite
-            .aead_alg
-            .encrypter(write_key, write_iv, extra),
-    )
 }
 
 pub(crate) fn new_tls13_read(

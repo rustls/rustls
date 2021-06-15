@@ -1,4 +1,3 @@
-use crate::cipher;
 use crate::error::Error;
 use crate::key;
 #[cfg(feature = "logging")]
@@ -17,8 +16,8 @@ use crate::msgs::message::{
 use crate::quic;
 use crate::record_layer;
 use crate::suites::SupportedCipherSuite;
-use crate::vecbuf::ChunkVecBuffer;
 use crate::tls12::ConnectionSecrets;
+use crate::vecbuf::ChunkVecBuffer;
 
 use std::collections::VecDeque;
 use std::convert::TryFrom;
@@ -941,7 +940,7 @@ impl ConnectionCommon {
     }
 
     pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets) {
-        let (dec, enc) = cipher::new_tls12(secrets);
+        let (dec, enc) = secrets.make_cipher_pair();
         self.record_layer
             .prepare_message_encrypter(enc);
         self.record_layer
