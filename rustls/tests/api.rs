@@ -1922,9 +1922,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let server_config = finish_server_config(
         kt,
         ServerConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-            ])
+            .with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .unwrap(),
@@ -1933,7 +1931,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let client_config = finish_client_config(
         kt,
         ClientConfig::builder()
-            .with_cipher_suites(&[rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384])
+            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .unwrap(),
