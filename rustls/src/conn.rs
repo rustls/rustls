@@ -251,7 +251,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// This buffer is emptied by [`Connection::write_tls`].
     fn set_buffer_limit(&mut self, limit: Option<usize>);
 
-    /// Queues a close_notify fatal alert to be sent in the next
+    /// Queues a close_notify warning alert to be sent in the next
     /// [`Connection::write_tls`] call.  This informs the peer that the
     /// connection is being closed.
     fn send_close_notify(&mut self);
@@ -845,8 +845,16 @@ impl ConnectionCommon {
         rc
     }
 
-    pub(crate) fn has_readable_plaintext(&self) -> bool {
-        !self.received_plaintext.is_empty()
+    pub(crate) fn wants_read(&self) -> bool {
+        // We want to read more data all the time, except when we have unprocessed plaintext.
+        // This provides back-pressure to the TCP buffers. We also don't want to read more after
+        // the peer has sent us a close notification.
+        //
+        // In the handshake case we don't have readable plaintext before the handshake has
+        // completed, but also don't want to read if we still have sendable tls.
+        self.received_plaintext.is_empty()
+            && !self.peer_eof
+            && (self.traffic || self.sendable_tls.is_empty())
     }
 
     pub(crate) fn set_buffer_limit(&mut self, limit: Option<usize>) {
