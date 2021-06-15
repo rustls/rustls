@@ -3764,8 +3764,3 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
         ))
     );
 }
-
-#[test]
-fn test_ownedtrustanchor_to_trust_anchor_is_public() {
-    let _ = rustls::OwnedTrustAnchor::to_trust_anchor;
-}
