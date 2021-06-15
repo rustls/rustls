@@ -3,11 +3,12 @@ use crate::conn::ConnectionRandoms;
 use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
-use crate::prf;
 use crate::suites::Tls12CipherSuite;
 use crate::Error;
 
 use ring::digest::Digest;
+
+mod prf;
 
 /// TLS1.2 per-connection keying material
 pub(crate) struct ConnectionSecrets {
