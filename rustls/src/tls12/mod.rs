@@ -1,3 +1,4 @@
+use crate::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::conn::ConnectionCommon;
 use crate::conn::ConnectionRandoms;
 use crate::kx;
@@ -6,6 +7,7 @@ use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::suites::Tls12CipherSuite;
 use crate::Error;
 
+use ring::aead;
 use ring::digest::Digest;
 
 mod prf;
@@ -77,7 +79,60 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub(crate) fn make_key_block(&self) -> Vec<u8> {
+
+    /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
+    /// and the session's `secrets`.
+    pub(crate) fn make_cipher_pair(&self) -> MessageCipherPair {
+        fn split_key<'a>(
+            key_block: &'a [u8],
+            alg: &'static aead::Algorithm,
+        ) -> (aead::LessSafeKey, &'a [u8]) {
+            // Might panic if the key block is too small.
+            let (key, rest) = key_block.split_at(alg.key_len());
+            // Won't panic because its only prerequisite is that `key` is `alg.key_len()` bytes long.
+            let key = aead::UnboundKey::new(alg, key).unwrap();
+            (aead::LessSafeKey::new(key), rest)
+        }
+
+        // Make a key block, and chop it up.
+        // nb. we don't implement any ciphersuites with nonzero mac_key_len.
+        let key_block = self.make_key_block();
+
+        let suite = self.suite;
+        let scs = &suite.common;
+
+        let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
+        let (server_write_key, key_block) = split_key(key_block, scs.aead_algorithm);
+        let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
+        let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
+
+        let (write_key, write_iv, read_key, read_iv) = if self.randoms.we_are_client {
+            (
+                client_write_key,
+                client_write_iv,
+                server_write_key,
+                server_write_iv,
+            )
+        } else {
+            (
+                server_write_key,
+                server_write_iv,
+                client_write_key,
+                client_write_iv,
+            )
+        };
+
+        (
+            suite
+                .aead_alg
+                .decrypter(read_key, read_iv),
+            suite
+                .aead_alg
+                .encrypter(write_key, write_iv, extra),
+        )
+    }
+
+    fn make_key_block(&self) -> Vec<u8> {
         let suite = &self.suite;
         let common = &self.suite.common;
 
@@ -164,6 +219,8 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
     randoms[32..].copy_from_slice(second);
     randoms
 }
+
+type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 pub(crate) fn decode_ecdh_params<T: Codec>(
     conn: &mut ConnectionCommon,
