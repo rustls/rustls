@@ -10,13 +10,13 @@ use crate::msgs::deframer::MessageDeframer;
 use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MessageFragmenter;
+use crate::msgs::handshake::Random;
 use crate::msgs::hsjoiner::HandshakeJoiner;
 use crate::msgs::message::{
     BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, PlainMessage,
 };
 use crate::prf;
 use crate::quic;
-use crate::rand;
 use crate::record_layer;
 use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
 use crate::vecbuf::ChunkVecBuffer;
@@ -404,26 +404,12 @@ pub(crate) struct ConnectionRandoms {
 static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 impl ConnectionRandoms {
-    pub(crate) fn for_server() -> Result<ConnectionRandoms, rand::GetRandomFailed> {
-        let mut ret = ConnectionRandoms {
-            we_are_client: false,
-            client: [0u8; 32],
-            server: [0u8; 32],
-        };
-
-        rand::fill_random(&mut ret.server)?;
-        Ok(ret)
-    }
-
-    pub(crate) fn for_client() -> Result<ConnectionRandoms, rand::GetRandomFailed> {
-        let mut ret = ConnectionRandoms {
-            we_are_client: true,
-            client: [0u8; 32],
-            server: [0u8; 32],
-        };
-
-        rand::fill_random(&mut ret.client)?;
-        Ok(ret)
+    pub(crate) fn new(client: Random, server: Random, we_are_client: bool) -> Self {
+        Self {
+            we_are_client,
+            client: client.0,
+            server: server.0,
+        }
     }
 
     pub(crate) fn set_tls12_downgrade_marker(&mut self) {
