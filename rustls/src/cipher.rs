@@ -1,4 +1,4 @@
-use crate::conn::ConnectionSecrets;
+use crate::tls12::ConnectionSecrets;
 use crate::error::Error;
 use crate::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::msgs::base::Payload;

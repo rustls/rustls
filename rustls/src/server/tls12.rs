@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms, ConnectionSecrets};
+use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -14,8 +14,8 @@ use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::Tls12CipherSuite;
-use crate::verify;
-use crate::{kx, tls12};
+use crate::tls12::{self, ConnectionSecrets};
+use crate::{kx, verify};
 
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
