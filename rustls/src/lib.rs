@@ -101,7 +101,7 @@
 //!
 //! ```rust,ignore
 //! let mut root_store = rustls::RootCertStore::empty();
-//! root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
 //! let trusted_ct_logs = &[];
 //! ```
 //!
@@ -125,7 +125,7 @@
 //! # use std::sync::Arc;
 //! # use std::convert::TryInto;
 //! # let mut root_store = rustls::RootCertStore::empty();
-//! # root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! # root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
 //! # let trusted_ct_logs = &[];
 //! # let config = rustls::ConfigBuilder::with_safe_defaults()
 //! #     .for_client()
