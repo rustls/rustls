@@ -196,7 +196,9 @@ mod client_hello {
                         return Ok(Box::new(hs::ExpectClientHello {
                             config: self.config,
                             transcript: HandshakeHashOrBuffer::Hash(self.transcript),
+                            #[cfg(feature = "tls12")]
                             session_id: SessionID::empty(),
+                            #[cfg(feature = "tls12")]
                             using_ems: false,
                             done_retry: true,
                             send_ticket: self.send_ticket,

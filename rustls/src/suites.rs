@@ -1,9 +1,13 @@
-use crate::tls12;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
 use crate::msgs::handshake::DecomposedSignatureScheme;
+#[cfg(feature = "tls12")]
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-use crate::versions::{SupportedProtocolVersion, TLS12, TLS13};
+#[cfg(feature = "tls12")]
+use crate::tls12;
+#[cfg(feature = "tls12")]
+use crate::versions::TLS12;
+use crate::versions::{SupportedProtocolVersion, TLS13};
 
 use std::fmt;
 
@@ -39,6 +43,7 @@ pub struct CipherSuiteCommon {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite
+    #[cfg(feature = "tls12")]
     Tls12(&'static Tls12CipherSuite),
     /// A TLS 1.3 cipher suite
     Tls13(&'static Tls13CipherSuite),
@@ -94,6 +99,7 @@ impl fmt::Debug for Tls13CipherSuite {
 }
 
 /// A TLS 1.2 cipher suite supported by rustls.
+#[cfg(feature = "tls12")]
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
@@ -119,6 +125,7 @@ pub struct Tls12CipherSuite {
     pub(crate) aead_alg: &'static dyn tls12::Tls12AeadAlgorithm,
 }
 
+#[cfg(feature = "tls12")]
 impl Tls12CipherSuite {
     /// Resolve the set of supported `SignatureScheme`s from the
     /// offered `SupportedSignatureSchemes`.  If we return an empty
@@ -137,18 +144,21 @@ impl Tls12CipherSuite {
     }
 }
 
+#[cfg(feature = "tls12")]
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
     fn from(s: &'static Tls12CipherSuite) -> Self {
         Self::Tls12(s)
     }
 }
 
+#[cfg(feature = "tls12")]
 impl PartialEq for Tls12CipherSuite {
     fn eq(&self, other: &Self) -> bool {
         self.common.suite == other.common.suite
     }
 }
 
+#[cfg(feature = "tls12")]
 impl fmt::Debug for Tls12CipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tls12CipherSuite")
@@ -162,6 +172,7 @@ impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
     pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         match self {
+            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(inner) => inner.hash_algorithm(),
             SupportedCipherSuite::Tls13(inner) => inner.hash_algorithm(),
         }
@@ -174,6 +185,7 @@ impl SupportedCipherSuite {
 
     pub(crate) fn common(&self) -> &CipherSuiteCommon {
         match self {
+            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(inner) => &inner.common,
             SupportedCipherSuite::Tls13(inner) => &inner.common,
         }
@@ -181,6 +193,7 @@ impl SupportedCipherSuite {
 
     pub(crate) fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
         match self {
+            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(_) => None,
             SupportedCipherSuite::Tls13(inner) => Some(inner),
         }
@@ -189,6 +202,7 @@ impl SupportedCipherSuite {
     /// Return supported protocol version for the cipher suite.
     pub fn version(&self) -> &'static SupportedProtocolVersion {
         match self {
+            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(_) => &TLS12,
             SupportedCipherSuite::Tls13(_) => &TLS13,
         }
@@ -196,17 +210,19 @@ impl SupportedCipherSuite {
 
     /// Return true if this suite is usable for a key only offering `sig_alg`
     /// signatures.  This resolves to true for all TLS1.3 suites.
-    pub fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
+    pub fn usable_for_signature_algorithm(&self, _sig_alg: SignatureAlgorithm) -> bool {
         match self {
             SupportedCipherSuite::Tls13(_) => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
+            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(inner) => inner
                 .sign
                 .iter()
-                .any(|scheme| scheme.sign() == sig_alg),
+                .any(|scheme| scheme.sign() == _sig_alg),
         }
     }
 }
 
+#[cfg(feature = "tls12")]
 static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
     SignatureScheme::ED25519,
     SignatureScheme::ECDSA_NISTP521_SHA512,
@@ -214,6 +230,7 @@ static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
     SignatureScheme::ECDSA_NISTP256_SHA256,
 ];
 
+#[cfg(feature = "tls12")]
 static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
     SignatureScheme::RSA_PSS_SHA512,
     SignatureScheme::RSA_PSS_SHA384,
@@ -224,6 +241,7 @@ static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
 ];
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
+#[cfg(feature = "tls12")]
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&Tls12CipherSuite {
         common: CipherSuiteCommon {
@@ -240,6 +258,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+#[cfg(feature = "tls12")]
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&Tls12CipherSuite {
         common: CipherSuiteCommon {
@@ -256,6 +275,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+#[cfg(feature = "tls12")]
 pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&Tls12CipherSuite {
         common: CipherSuiteCommon {
@@ -272,6 +292,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+#[cfg(feature = "tls12")]
 pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&Tls12CipherSuite {
         common: CipherSuiteCommon {
@@ -288,6 +309,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+#[cfg(feature = "tls12")]
 pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&Tls12CipherSuite {
         common: CipherSuiteCommon {
@@ -304,6 +326,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+#[cfg(feature = "tls12")]
 pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&Tls12CipherSuite {
         common: CipherSuiteCommon {
@@ -361,11 +384,17 @@ pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     TLS13_AES_128_GCM_SHA256,
     TLS13_CHACHA20_POLY1305_SHA256,
     // TLS1.2 suites
+    #[cfg(feature = "tls12")]
     TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    #[cfg(feature = "tls12")]
     TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    #[cfg(feature = "tls12")]
     TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    #[cfg(feature = "tls12")]
     TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    #[cfg(feature = "tls12")]
     TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    #[cfg(feature = "tls12")]
     TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 

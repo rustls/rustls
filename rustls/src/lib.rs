@@ -286,6 +286,7 @@ mod limited_cache;
 mod rand;
 mod record_layer;
 mod stream;
+#[cfg(feature = "tls12")]
 mod tls12;
 mod vecbuf;
 mod verify;
@@ -341,9 +342,10 @@ pub use crate::server::StoresServerSessions;
 pub use crate::server::{ClientHello, ProducesTickets, ResolvesServerCert};
 pub use crate::server::{ServerConfig, ServerConnection};
 pub use crate::stream::{Stream, StreamOwned};
+#[cfg(feature = "tls12")]
+pub use crate::suites::Tls12CipherSuite;
 pub use crate::suites::{
-    BulkAlgorithm, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite, ALL_CIPHER_SUITES,
-    DEFAULT_CIPHER_SUITES,
+    BulkAlgorithm, SupportedCipherSuite, Tls13CipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
 };
 pub use crate::ticketer::Ticketer;
 pub use crate::verify::{
@@ -358,11 +360,17 @@ pub mod cipher_suite {
     pub use crate::suites::TLS13_AES_128_GCM_SHA256;
     pub use crate::suites::TLS13_AES_256_GCM_SHA384;
     pub use crate::suites::TLS13_CHACHA20_POLY1305_SHA256;
+    #[cfg(feature = "tls12")]
     pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+    #[cfg(feature = "tls12")]
     pub use crate::suites::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
+    #[cfg(feature = "tls12")]
     pub use crate::suites::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
+    #[cfg(feature = "tls12")]
     pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+    #[cfg(feature = "tls12")]
     pub use crate::suites::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
+    #[cfg(feature = "tls12")]
     pub use crate::suites::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
 }
 
@@ -370,6 +378,7 @@ pub mod cipher_suite {
 ///
 /// ALL_VERSIONS is a provided as an array of all of these values.
 pub mod version {
+    #[cfg(feature = "tls12")]
     pub use crate::versions::TLS12;
     pub use crate::versions::TLS13;
 }

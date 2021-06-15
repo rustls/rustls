@@ -16,6 +16,7 @@ use crate::msgs::message::{
 use crate::quic;
 use crate::record_layer;
 use crate::suites::SupportedCipherSuite;
+#[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -402,6 +403,7 @@ pub(crate) struct ConnectionRandoms {
     pub(crate) server: [u8; 32],
 }
 
+#[cfg(feature = "tls12")]
 static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 impl ConnectionRandoms {
@@ -413,11 +415,13 @@ impl ConnectionRandoms {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn set_tls12_downgrade_marker(&mut self) {
         assert!(!self.we_are_client);
         self.server[24..].copy_from_slice(&TLS12_DOWNGRADE_SENTINEL);
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn has_tls12_downgrade_marker(&mut self) -> bool {
         assert!(self.we_are_client);
         // both the server random and TLS12_DOWNGRADE_SENTINEL are
@@ -939,6 +943,7 @@ impl ConnectionCommon {
         Ok(len)
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets) {
         let (dec, enc) = secrets.make_cipher_pair();
         self.record_layer

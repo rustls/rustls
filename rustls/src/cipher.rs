@@ -58,6 +58,7 @@ pub(crate) fn new_tls13_write(
 pub struct Iv(pub(crate) [u8; ring::aead::NONCE_LEN]);
 
 impl Iv {
+    #[cfg(feature = "tls12")]
     pub(crate) fn new(value: [u8; ring::aead::NONCE_LEN]) -> Self {
         Self(value)
     }
@@ -73,6 +74,7 @@ impl Iv {
         aead::Nonce::assume_unique_for_key(out)
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn copy(value: &[u8]) -> Self {
         debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
         let mut iv = Self::new(Default::default());

@@ -27,8 +27,10 @@ use crate::msgs::persist;
 use crate::ticketer::TimeBase;
 use crate::SupportedCipherSuite;
 
+#[cfg(feature = "tls12")]
+use super::tls12;
 use crate::client::common::ClientHelloDetails;
-use crate::client::{tls12, tls13, ClientConfig, ClientConnectionData, ServerName};
+use crate::client::{tls13, ClientConfig, ClientConnectionData, ServerName};
 
 use std::sync::Arc;
 
@@ -626,6 +628,7 @@ impl State for ExpectServerHello {
                     self.sent_tls13_fake_ccs,
                 )
             }
+            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => tls12::CompleteServerHelloHandling {
                 config: self.config,
                 resuming_session: self.resuming_session,
