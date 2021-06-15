@@ -863,7 +863,7 @@ fn get_server_session_value(
         key_schedule.resumption_master_secret_and_derive_ticket_psk(&handshake_hash, nonce);
 
     persist::ServerSessionValue::new(
-        cx.data.get_sni(),
+        cx.data.sni.as_ref(),
         version,
         suite.common.suite,
         secret,

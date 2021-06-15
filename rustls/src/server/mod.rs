@@ -267,9 +267,7 @@ impl ServerConnection {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn sni_hostname(&self) -> Option<&str> {
-        self.data
-            .get_sni()
-            .map(|s| s.as_ref().into())
+        self.data.get_sni()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -428,8 +426,8 @@ struct ServerConnectionData {
 }
 
 impl ServerConnectionData {
-    fn get_sni(&self) -> Option<&webpki::DnsName> {
-        self.sni.as_ref()
+    fn get_sni(&self) -> Option<&str> {
+        self.sni.as_ref().map(AsRef::as_ref)
     }
 }
 
