@@ -312,7 +312,7 @@ impl ServerCertVerifier for WebPkiVerifier {
             .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateServerCert))
             .map(|_| cert)?;
 
-        verify_scts(end_entity, now, scts, &self.ct_logs)?;
+        verify_scts(end_entity, now, scts, self.ct_logs)?;
 
         if !ocsp_response.is_empty() {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
@@ -645,7 +645,7 @@ fn verify_tls13(
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
         .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
 
-    cert.verify_signature(alg, &msg, &dss.sig.0)
+    cert.verify_signature(alg, msg, &dss.sig.0)
         .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }

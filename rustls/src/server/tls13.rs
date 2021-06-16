@@ -88,7 +88,7 @@ mod client_hello {
                 .transcript
                 .get_hash_given(&binder_plaintext);
 
-            let key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, &psk);
+            let key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
             let real_binder =
                 key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 

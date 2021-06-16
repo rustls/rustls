@@ -331,8 +331,7 @@ impl KeyScheduleTraffic {
 impl KeySchedule {
     fn new(algorithm: hkdf::Algorithm, secret: &[u8]) -> KeySchedule {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
-        let zeroes = &zeroes[..algorithm.len()];
-        let salt = hkdf::Salt::new(algorithm, &zeroes);
+        let salt = hkdf::Salt::new(algorithm, &zeroes[..algorithm.len()]);
         KeySchedule {
             current: salt.extract(secret),
             algorithm,
@@ -421,7 +420,7 @@ impl KeySchedule {
 
     /// Derive the next application traffic secret, returning it.
     fn derive_next(&self, base_key: &hkdf::Prk) -> hkdf::Prk {
-        hkdf_expand(&base_key, self.algorithm, b"traffic upd", &[])
+        hkdf_expand(base_key, self.algorithm, b"traffic upd", &[])
     }
 
     /// Derive the PSK to use given a resumption_master_secret and

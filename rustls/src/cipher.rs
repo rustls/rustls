@@ -129,7 +129,7 @@ pub(crate) fn new_tls12(secrets: &ConnectionSecrets) -> MessageCipherPair {
     let scs = &suite.common;
 
     let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
-    let (server_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
+    let (server_write_key, key_block) = split_key(key_block, scs.aead_algorithm);
     let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
     let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
@@ -233,7 +233,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(GCM_EXPLICIT_NONCE_LEN + total_len);
         payload.extend_from_slice(&nonce.as_ref()[4..]);
-        payload.extend_from_slice(&msg.payload);
+        payload.extend_from_slice(msg.payload);
 
         self.enc_key
             .seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
@@ -352,7 +352,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(total_len);
-        payload.extend_from_slice(&msg.payload);
+        payload.extend_from_slice(msg.payload);
         msg.typ.encode(&mut payload);
 
         let nonce = make_tls13_nonce(&self.iv, seq);
@@ -498,7 +498,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(&msg.payload);
+        buf.extend_from_slice(msg.payload);
 
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut buf)

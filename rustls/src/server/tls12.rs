@@ -65,7 +65,7 @@ mod client_hello {
             tls13_enabled: bool,
         ) -> hs::NextStateOrError {
             // -- TLS1.2 only from hereon in --
-            self.transcript.add_message(&chm);
+            self.transcript.add_message(chm);
 
             if client_hello.ems_support_offered() {
                 self.using_ems = true;

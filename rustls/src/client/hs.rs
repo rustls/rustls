@@ -377,7 +377,7 @@ fn emit_client_hello_for_retry(
 
     let early_key_schedule = if let Some((resuming, resuming_suite)) = fill_in_binder {
         let schedule =
-            tls13::fill_in_psk_binder(&resuming, resuming_suite, &transcript_buffer, &mut chp);
+            tls13::fill_in_psk_binder(resuming, resuming_suite, &transcript_buffer, &mut chp);
         Some((resuming_suite, schedule))
     } else {
         None
@@ -469,7 +469,7 @@ pub(super) fn process_alpn_protocol(
         cx.common
             .alpn_protocol
             .as_ref()
-            .map(|v| bs_debug::BsDebug(&v))
+            .map(|v| bs_debug::BsDebug(v))
     );
     Ok(())
 }
@@ -635,7 +635,7 @@ impl State for ExpectServerHello {
                 transcript,
                 session_id: server_hello.session_id,
             }
-            .handle_server_hello(cx, suite, &server_hello, tls13_supported),
+            .handle_server_hello(cx, suite, server_hello, tls13_supported),
         }
     }
 }
@@ -774,7 +774,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(self.next.session_id),
-            Some(&hrr),
+            Some(hrr),
             self.next.server_name,
             Some(key_share),
             self.extra_exts,

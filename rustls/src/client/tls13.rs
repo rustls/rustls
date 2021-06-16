@@ -71,7 +71,7 @@ pub(super) fn handle_server_hello(
     our_key_share: kx::KeyExchange,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
-    validate_server_hello(cx.common, &server_hello)?;
+    validate_server_hello(cx.common, server_hello)?;
 
     let their_key_share = server_hello
         .get_key_share()
@@ -396,7 +396,7 @@ impl hs::State for ExpectEncryptedExtensions {
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
         self.transcript.add_message(&m);
 
-        validate_encrypted_extensions(cx.common, &self.hello, &exts)?;
+        validate_encrypted_extensions(cx.common, &self.hello, exts)?;
         hs::process_alpn_protocol(cx, &self.config, exts.get_alpn_protocol())?;
 
         #[cfg(feature = "quic")]
@@ -729,7 +729,7 @@ impl hs::State for ExpectCertificateVerify {
             .verify_tls13_signature(
                 &verify::construct_tls13_server_verify_message(&handshake_hash),
                 &self.server_cert.cert_chain[0],
-                &cert_verify,
+                cert_verify,
             )
             .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
