@@ -444,8 +444,8 @@ impl ConnectionSecrets {
         randoms: &ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
         pms: &[u8],
-    ) -> ConnectionSecrets {
-        let mut ret = ConnectionSecrets {
+    ) -> Self {
+        let mut ret = Self {
             randoms: randoms.clone(),
             suite,
             master_secret: [0u8; 48],
@@ -467,8 +467,8 @@ impl ConnectionSecrets {
         hs_hash: &Digest,
         suite: &'static Tls12CipherSuite,
         pms: &[u8],
-    ) -> ConnectionSecrets {
-        let mut ret = ConnectionSecrets {
+    ) -> Self {
+        let mut ret = Self {
             randoms: randoms.clone(),
             master_secret: [0u8; 48],
             suite,
@@ -488,8 +488,8 @@ impl ConnectionSecrets {
         randoms: &ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
         master_secret: &[u8],
-    ) -> ConnectionSecrets {
-        let mut ret = ConnectionSecrets {
+    ) -> Self {
+        let mut ret = Self {
             randoms: randoms.clone(),
             suite,
             master_secret: [0u8; 48],
@@ -613,11 +613,8 @@ pub(crate) struct ConnectionCommon {
 }
 
 impl ConnectionCommon {
-    pub(crate) fn new(
-        max_fragment_size: Option<usize>,
-        client: bool,
-    ) -> Result<ConnectionCommon, Error> {
-        Ok(ConnectionCommon {
+    pub(crate) fn new(max_fragment_size: Option<usize>, client: bool) -> Result<Self, Error> {
+        Ok(Self {
             negotiated_version: None,
             is_client: client,
             record_layer: record_layer::RecordLayer::new(),

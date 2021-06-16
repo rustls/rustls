@@ -20,8 +20,8 @@ impl ServerCertDetails {
         cert_chain: CertificatePayload,
         ocsp_response: Vec<u8>,
         scts: Option<SCTList>,
-    ) -> ServerCertDetails {
-        ServerCertDetails {
+    ) -> Self {
+        Self {
             cert_chain,
             ocsp_response,
             scts,
@@ -43,8 +43,8 @@ pub(super) struct ServerKxDetails {
 }
 
 impl ServerKxDetails {
-    pub(super) fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> ServerKxDetails {
-        ServerKxDetails {
+    pub(super) fn new(params: Vec<u8>, sig: DigitallySignedStruct) -> Self {
+        Self {
             kx_params: params,
             kx_sig: sig,
         }
@@ -56,8 +56,8 @@ pub(super) struct ClientHelloDetails {
 }
 
 impl ClientHelloDetails {
-    pub(super) fn new() -> ClientHelloDetails {
-        ClientHelloDetails {
+    pub(super) fn new() -> Self {
+        Self {
             sent_extensions: Vec::new(),
         }
     }
@@ -91,12 +91,12 @@ pub(super) struct ReceivedTicketDetails {
 }
 
 impl ReceivedTicketDetails {
-    pub(super) fn new() -> ReceivedTicketDetails {
-        ReceivedTicketDetails::from(Vec::new(), 0)
+    pub(super) fn new() -> Self {
+        Self::from(Vec::new(), 0)
     }
 
-    pub(super) fn from(ticket: Vec<u8>, lifetime: u32) -> ReceivedTicketDetails {
-        ReceivedTicketDetails {
+    pub(super) fn from(ticket: Vec<u8>, lifetime: u32) -> Self {
+        Self {
             new_ticket: ticket,
             new_ticket_lifetime: lifetime,
         }
@@ -110,8 +110,8 @@ pub(super) struct ClientAuthDetails {
 }
 
 impl ClientAuthDetails {
-    pub(super) fn new() -> ClientAuthDetails {
-        ClientAuthDetails {
+    pub(super) fn new() -> Self {
+        Self {
             certkey: None,
             signer: None,
             auth_context: None,

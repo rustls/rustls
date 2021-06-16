@@ -249,14 +249,14 @@ impl MessageEncrypter for GcmMessageEncrypter {
 }
 
 impl GcmMessageEncrypter {
-    fn new(enc_key: aead::LessSafeKey, iv: Iv) -> GcmMessageEncrypter {
-        GcmMessageEncrypter { enc_key, iv }
+    fn new(enc_key: aead::LessSafeKey, iv: Iv) -> Self {
+        Self { enc_key, iv }
     }
 }
 
 impl GcmMessageDecrypter {
-    fn new(dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> GcmMessageDecrypter {
-        let mut ret = GcmMessageDecrypter {
+    fn new(dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> Self {
+        let mut ret = Self {
             dec_key,
             dec_salt: [0u8; 4],
         };
@@ -289,7 +289,7 @@ impl Iv {
 
     fn copy(value: &[u8]) -> Self {
         debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
-        let mut iv = Iv::new(Default::default());
+        let mut iv = Self::new(Default::default());
         iv.0.copy_from_slice(value);
         iv
     }
@@ -310,7 +310,7 @@ impl hkdf::KeyType for IvLen {
 
 impl From<hkdf::Okm<'_, IvLen>> for Iv {
     fn from(okm: hkdf::Okm<IvLen>) -> Self {
-        let mut r = Iv(Default::default());
+        let mut r = Self(Default::default());
         okm.fill(&mut r.0[..]).unwrap();
         r
     }
@@ -419,8 +419,8 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 }
 
 impl Tls13MessageEncrypter {
-    fn new(key: aead::UnboundKey, enc_iv: Iv) -> Tls13MessageEncrypter {
-        Tls13MessageEncrypter {
+    fn new(key: aead::UnboundKey, enc_iv: Iv) -> Self {
+        Self {
             enc_key: aead::LessSafeKey::new(key),
             iv: enc_iv,
         }
@@ -428,8 +428,8 @@ impl Tls13MessageEncrypter {
 }
 
 impl Tls13MessageDecrypter {
-    fn new(key: aead::UnboundKey, dec_iv: Iv) -> Tls13MessageDecrypter {
-        Tls13MessageDecrypter {
+    fn new(key: aead::UnboundKey, dec_iv: Iv) -> Self {
+        Self {
             dec_key: aead::LessSafeKey::new(key),
             iv: dec_iv,
         }
@@ -462,8 +462,8 @@ impl ChaCha20Poly1305MessageEncrypter {
 }
 
 impl ChaCha20Poly1305MessageDecrypter {
-    fn new(dec_key: aead::LessSafeKey, dec_iv: Iv) -> ChaCha20Poly1305MessageDecrypter {
-        ChaCha20Poly1305MessageDecrypter {
+    fn new(dec_key: aead::LessSafeKey, dec_iv: Iv) -> Self {
+        Self {
             dec_key,
             dec_offset: dec_iv,
         }

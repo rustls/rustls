@@ -43,8 +43,8 @@ enum BufferState {
 
 impl HandshakeJoiner {
     /// Make a new HandshakeJoiner.
-    pub fn new() -> HandshakeJoiner {
-        HandshakeJoiner {
+    pub fn new() -> Self {
+        Self {
             frames: VecDeque::new(),
             buf: Vec::new(),
         }

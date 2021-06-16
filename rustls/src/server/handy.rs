@@ -34,8 +34,8 @@ impl ServerSessionMemoryCache {
     /// Make a new ServerSessionMemoryCache.  `size` is the maximum
     /// number of stored sessions, and may be rounded-up for
     /// efficiency.
-    pub fn new(size: usize) -> Arc<ServerSessionMemoryCache> {
-        Arc::new(ServerSessionMemoryCache {
+    pub fn new(size: usize) -> Arc<Self> {
+        Arc::new(Self {
             cache: Mutex::new(limited_cache::LimitedCache::new(size)),
         })
     }
@@ -90,12 +90,10 @@ impl AlwaysResolvesChain {
     pub(super) fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesChain, Error> {
+    ) -> Result<Self, Error> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
-        Ok(AlwaysResolvesChain(Arc::new(sign::CertifiedKey::new(
-            chain, key,
-        ))))
+        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, key))))
     }
 
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
@@ -107,8 +105,8 @@ impl AlwaysResolvesChain {
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
         scts: Vec<u8>,
-    ) -> Result<AlwaysResolvesChain, Error> {
-        let mut r = AlwaysResolvesChain::new(chain, priv_key)?;
+    ) -> Result<Self, Error> {
+        let mut r = Self::new(chain, priv_key)?;
 
         {
             let cert = Arc::make_mut(&mut r.0);
@@ -138,7 +136,7 @@ pub struct ResolvesServerCertUsingSni {
 
 impl ResolvesServerCertUsingSni {
     /// Create a new and empty (i.e., knows no certificates) resolver.
-    pub fn new() -> ResolvesServerCertUsingSni {
+    pub fn new() -> Self {
         Self {
             by_name: collections::HashMap::new(),
         }

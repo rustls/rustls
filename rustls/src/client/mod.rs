@@ -210,7 +210,7 @@ impl ServerName {
     /// in the handshake.
     pub(crate) fn for_sni(&self) -> Option<webpki::DnsNameRef> {
         match self {
-            ServerName::DnsName(dns_name) => Some(dns_name.0.as_ref()),
+            Self::DnsName(dns_name) => Some(dns_name.0.as_ref()),
         }
     }
 
@@ -220,7 +220,7 @@ impl ServerName {
             DnsName = 0x01,
         }
 
-        let ServerName::DnsName(dns_name) = self;
+        let Self::DnsName(dns_name) = self;
         let bytes = dns_name.0.as_ref();
 
         let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
@@ -238,7 +238,7 @@ impl TryFrom<&str> for ServerName {
     type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match webpki::DnsNameRef::try_from_ascii_str(s) {
-            Ok(dns) => Ok(ServerName::DnsName(verify::DnsName(dns.into()))),
+            Ok(dns) => Ok(Self::DnsName(verify::DnsName(dns.into()))),
             Err(webpki::InvalidDnsNameError) => Err(InvalidDnsNameError),
         }
     }
@@ -284,8 +284,8 @@ pub(super) struct EarlyData {
 }
 
 impl EarlyData {
-    fn new() -> EarlyData {
-        EarlyData {
+    fn new() -> Self {
+        Self {
             left: 0,
             state: EarlyDataState::Disabled,
         }
@@ -396,7 +396,7 @@ impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
-    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<ClientConnection, Error> {
+    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
         Self::new_inner(config, name, Vec::new(), Protocol::Tcp)
     }
 
@@ -406,7 +406,7 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut new = ClientConnection {
+        let mut new = Self {
             common: ConnectionCommon::new(config.max_fragment_size, true)?,
             state: None,
             data: ClientConnectionData::new(),

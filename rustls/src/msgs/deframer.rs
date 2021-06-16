@@ -43,8 +43,8 @@ impl Default for MessageDeframer {
 }
 
 impl MessageDeframer {
-    pub fn new() -> MessageDeframer {
-        MessageDeframer {
+    pub fn new() -> Self {
+        Self {
             frames: VecDeque::new(),
             desynced: false,
             buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
@@ -149,7 +149,7 @@ mod tests {
     }
 
     impl<'a> ByteRead<'a> {
-        fn new(bytes: &'a [u8]) -> ByteRead {
+        fn new(bytes: &'a [u8]) -> Self {
             ByteRead {
                 buf: bytes,
                 offs: 0,
@@ -194,7 +194,7 @@ mod tests {
     }
 
     impl ErrorRead {
-        fn new(error: io::Error) -> ErrorRead {
+        fn new(error: io::Error) -> Self {
             ErrorRead { error: Some(error) }
         }
     }

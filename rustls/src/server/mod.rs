@@ -243,7 +243,7 @@ impl ServerConnection {
         config: Arc<ServerConfig>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
-        Ok(ServerConnection {
+        Ok(Self {
             common: ConnectionCommon::new(config.max_fragment_size, false)?,
             state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
             data: ServerConnectionData::default(),

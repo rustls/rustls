@@ -53,8 +53,8 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<dyn SigningKey>) -> CertifiedKey {
-        CertifiedKey {
+    pub fn new(cert: Vec<key::Certificate>, key: Arc<dyn SigningKey>) -> Self {
+        Self {
             cert,
             key,
             ocsp: None,
@@ -179,10 +179,10 @@ static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
 impl RsaSigningKey {
     /// Make a new `RSASigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &key::PrivateKey) -> Result<RsaSigningKey, SignError> {
+    pub fn new(der: &key::PrivateKey) -> Result<Self, SignError> {
         RsaKeyPair::from_der(&der.0)
             .or_else(|_| RsaKeyPair::from_pkcs8(&der.0))
-            .map(|s| RsaSigningKey { key: Arc::new(s) })
+            .map(|s| Self { key: Arc::new(s) })
             .map_err(|_| SignError(()))
     }
 }
@@ -223,7 +223,7 @@ impl RsaSigner {
             _ => unreachable!(),
         };
 
-        Box::new(RsaSigner {
+        Box::new(Self {
             key,
             scheme,
             encoding,
@@ -270,9 +270,9 @@ impl EcdsaSigningKey {
         der: &key::PrivateKey,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
-    ) -> Result<EcdsaSigningKey, ()> {
+    ) -> Result<Self, ()> {
         EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
-            .map(|kp| EcdsaSigningKey {
+            .map(|kp| Self {
                 key: Arc::new(kp),
                 scheme,
             })
@@ -336,9 +336,9 @@ struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Ed25519SigningKey, SignError> {
+    fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Self, SignError> {
         Ed25519KeyPair::from_pkcs8_maybe_unchecked(&der.0)
-            .map(|kp| Ed25519SigningKey {
+            .map(|kp| Self {
                 key: Arc::new(kp),
                 scheme,
             })

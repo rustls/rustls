@@ -91,7 +91,7 @@ impl HandshakeHash {
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message) -> &mut HandshakeHash {
+    pub(crate) fn add_message(&mut self, m: &Message) -> &mut Self {
         if let MessagePayload::Handshake(hs) = &m.payload {
             let buf = hs.get_encoding();
             self.update_raw(&buf);

@@ -76,7 +76,7 @@ impl KeyLogFileInner {
             Ok(ref s) => Path::new(s),
             Err(env::VarError::NotUnicode(ref s)) => Path::new(s),
             Err(env::VarError::NotPresent) => {
-                return KeyLogFileInner {
+                return Self {
                     file: None,
                     buf: Vec::new(),
                 };
@@ -96,7 +96,7 @@ impl KeyLogFileInner {
             }
         };
 
-        KeyLogFileInner {
+        Self {
             file,
             buf: Vec::new(),
         }
@@ -139,7 +139,7 @@ impl KeyLogFile {
     /// inspected and the named file is opened during this call.
     pub fn new() -> Self {
         let var = env::var("SSLKEYLOGFILE");
-        KeyLogFile(Mutex::new(KeyLogFileInner::new(var)))
+        Self(Mutex::new(KeyLogFileInner::new(var)))
     }
 }
 
