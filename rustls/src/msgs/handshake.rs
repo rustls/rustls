@@ -1678,14 +1678,12 @@ impl Codec for ServerKeyExchangePayload {
 }
 
 impl ServerKeyExchangePayload {
-    pub fn unwrap_given_kxa(&self, kxa: &KeyExchangeAlgorithm) -> Option<Self> {
+    pub fn unwrap_given_kxa(&self, kxa: &KeyExchangeAlgorithm) -> Option<ECDHEServerKeyExchange> {
         if let ServerKeyExchangePayload::Unknown(ref unk) = *self {
             let mut rd = Reader::init(&unk.0);
 
             let result = match *kxa {
-                KeyExchangeAlgorithm::ECDHE => {
-                    ECDHEServerKeyExchange::read(&mut rd).map(ServerKeyExchangePayload::ECDHE)
-                }
+                KeyExchangeAlgorithm::ECDHE => ECDHEServerKeyExchange::read(&mut rd),
                 _ => None,
             };
 
@@ -1695,21 +1693,6 @@ impl ServerKeyExchangePayload {
         }
 
         None
-    }
-
-    pub fn encode_params(&self, bytes: &mut Vec<u8>) {
-        bytes.clear();
-
-        if let ServerKeyExchangePayload::ECDHE(ref x) = *self {
-            x.params.encode(bytes);
-        }
-    }
-
-    pub fn get_sig(&self) -> Option<DigitallySignedStruct> {
-        match *self {
-            ServerKeyExchangePayload::ECDHE(ref x) => Some(x.dss.clone()),
-            _ => None,
-        }
     }
 }
 
