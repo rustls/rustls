@@ -126,8 +126,10 @@ impl<'a> ClientHello<'a> {
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
-    pub fn server_name(&self) -> Option<webpki::DnsNameRef> {
+    pub fn server_name(&self) -> Option<&str> {
         self.server_name
+            .as_ref()
+            .and_then(|s| std::str::from_utf8(s.as_ref()).ok())
     }
 
     /// Get the compatible signature schemes.
