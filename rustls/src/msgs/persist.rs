@@ -28,21 +28,21 @@ impl Codec for ClientSessionKey {
     }
 
     // Don't need to read these.
-    fn read(_r: &mut Reader) -> Option<ClientSessionKey> {
+    fn read(_r: &mut Reader) -> Option<Self> {
         None
     }
 }
 
 impl ClientSessionKey {
-    pub fn session_for_server_name(server_name: &ServerName) -> ClientSessionKey {
-        ClientSessionKey {
+    pub fn session_for_server_name(server_name: &ServerName) -> Self {
+        Self {
             kind: b"session",
             name: server_name.encode(),
         }
     }
 
-    pub fn hint_for_server_name(server_name: &ServerName) -> ClientSessionKey {
-        ClientSessionKey {
+    pub fn hint_for_server_name(server_name: &ServerName) -> Self {
+        Self {
             kind: b"kx-hint",
             name: server_name.encode(),
         }
@@ -97,7 +97,7 @@ impl Codec for ClientSessionValue {
         self.server_cert_chain.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ClientSessionValue> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let v = ProtocolVersion::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let sid = SessionID::read(r)?;
@@ -110,7 +110,7 @@ impl Codec for ClientSessionValue {
         let max_early_data_size = u32::read(r)?;
         let server_cert_chain = CertificatePayload::read(r)?;
 
-        Some(ClientSessionValue {
+        Some(Self {
             version: v,
             cipher_suite,
             session_id: sid,
@@ -152,7 +152,7 @@ impl ClientSessionValueWithResolvedCipherSuite {
         server_cert_chain: &CertificatePayload,
         time_now: TimeBase,
     ) -> Self {
-        ClientSessionValueWithResolvedCipherSuite {
+        Self {
             value: ClientSessionValue {
                 version: v,
                 cipher_suite: cipher_suite.suite(),
@@ -261,7 +261,7 @@ impl Codec for ServerSessionValue {
         self.application_data.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ServerSessionValue> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
@@ -288,7 +288,7 @@ impl Codec for ServerSessionValue {
         };
         let application_data = PayloadU16::read(r)?;
 
-        Some(ServerSessionValue {
+        Some(Self {
             sni,
             version: v,
             cipher_suite: cs,
@@ -310,8 +310,8 @@ impl ServerSessionValue {
         cert_chain: &Option<CertificatePayload>,
         alpn: Option<Vec<u8>>,
         application_data: Vec<u8>,
-    ) -> ServerSessionValue {
-        ServerSessionValue {
+    ) -> Self {
+        Self {
             sni: sni.cloned(),
             version: v,
             cipher_suite: cs,

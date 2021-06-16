@@ -210,7 +210,7 @@ struct PersistCache {
 impl PersistCache {
     /// Make a new cache.  If filename is Some, load the cache
     /// from it and flush changes back to that file.
-    fn new(filename: &Option<String>) -> PersistCache {
+    fn new(filename: &Option<String>) -> Self {
         let cache = PersistCache {
             cache: Mutex::new(collections::HashMap::new()),
             filename: filename.clone(),

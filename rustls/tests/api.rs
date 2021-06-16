@@ -704,7 +704,7 @@ struct ClientCheckCertResolve {
 }
 
 impl ClientCheckCertResolve {
-    fn new(expect_queries: usize) -> ClientCheckCertResolve {
+    fn new(expect_queries: usize) -> Self {
         ClientCheckCertResolve {
             query_count: AtomicUsize::new(0),
             expect_queries,
@@ -2650,7 +2650,7 @@ struct ServerStorage {
 }
 
 impl ServerStorage {
-    fn new() -> ServerStorage {
+    fn new() -> Self {
         ServerStorage {
             storage: rustls::ServerSessionMemoryCache::new(1024),
             put_count: AtomicUsize::new(0),
@@ -2708,7 +2708,7 @@ struct ClientStorage {
 }
 
 impl ClientStorage {
-    fn new() -> ClientStorage {
+    fn new() -> Self {
         ClientStorage {
             storage: rustls::ClientSessionMemoryCache::new(1024),
             put_count: AtomicUsize::new(0),

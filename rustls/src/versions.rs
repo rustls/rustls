@@ -42,7 +42,7 @@ pub struct EnabledVersions {
 
 impl EnabledVersions {
     pub(crate) fn new(versions: &[&'static SupportedProtocolVersion]) -> Self {
-        let mut ev = EnabledVersions {
+        let mut ev = Self {
             tls12: None,
             tls13: None,
         };

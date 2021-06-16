@@ -274,7 +274,7 @@ pub struct TlsClient {
 }
 
 impl TlsClient {
-    pub fn new(hostname: &str) -> TlsClient {
+    pub fn new(hostname: &str) -> Self {
         TlsClient {
             hostname: hostname.to_string(),
             port: 443,
@@ -506,7 +506,7 @@ pub struct OpenSSLServer {
 }
 
 impl OpenSSLServer {
-    pub fn new(test_ca: &Path, keytype: &str, start_port: u16) -> OpenSSLServer {
+    pub fn new(test_ca: &Path, keytype: &str, start_port: u16) -> Self {
         OpenSSLServer {
             port: unused_port(start_port),
             http: true,
@@ -810,7 +810,7 @@ pub struct OpenSSLClient {
 }
 
 impl OpenSSLClient {
-    pub fn new(port: u16) -> OpenSSLClient {
+    pub fn new(port: u16) -> Self {
         OpenSSLClient {
             port,
             cafile: PathBuf::new(),

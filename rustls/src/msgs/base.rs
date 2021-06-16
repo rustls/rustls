@@ -10,18 +10,18 @@ impl Codec for Payload {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Payload> {
-        Some(Payload::read(r))
+    fn read(r: &mut Reader) -> Option<Self> {
+        Some(Self::read(r))
     }
 }
 
 impl Payload {
-    pub fn new(bytes: impl Into<Vec<u8>>) -> Payload {
-        Payload(bytes.into())
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self(bytes.into())
     }
 
-    pub fn empty() -> Payload {
-        Payload::new(Vec::new())
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
     }
 
     pub fn read(r: &mut Reader) -> Self {
@@ -35,11 +35,11 @@ impl Codec for key::Certificate {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<key::Certificate> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(key::Certificate(body))
+        Some(Self(body))
     }
 }
 
@@ -48,8 +48,8 @@ impl Codec for key::Certificate {
 pub struct PayloadU24(pub Vec<u8>);
 
 impl PayloadU24 {
-    pub fn new(bytes: Vec<u8>) -> PayloadU24 {
-        PayloadU24(bytes)
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 }
 
@@ -59,11 +59,11 @@ impl Codec for PayloadU24 {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<PayloadU24> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(PayloadU24(body))
+        Some(Self(body))
     }
 }
 
@@ -72,12 +72,12 @@ impl Codec for PayloadU24 {
 pub struct PayloadU16(pub Vec<u8>);
 
 impl PayloadU16 {
-    pub fn new(bytes: Vec<u8>) -> PayloadU16 {
-        PayloadU16(bytes)
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 
-    pub fn empty() -> PayloadU16 {
-        PayloadU16::new(Vec::new())
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
     }
 
     pub fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
@@ -91,11 +91,11 @@ impl Codec for PayloadU16 {
         Self::encode_slice(&self.0, bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<PayloadU16> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(PayloadU16(body))
+        Some(Self(body))
     }
 }
 
@@ -104,12 +104,12 @@ impl Codec for PayloadU16 {
 pub struct PayloadU8(pub Vec<u8>);
 
 impl PayloadU8 {
-    pub fn new(bytes: Vec<u8>) -> PayloadU8 {
-        PayloadU8(bytes)
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 
-    pub fn empty() -> PayloadU8 {
-        PayloadU8(Vec::new())
+    pub fn empty() -> Self {
+        Self(Vec::new())
     }
 
     pub fn into_inner(self) -> Vec<u8> {
@@ -123,10 +123,10 @@ impl Codec for PayloadU8 {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<PayloadU8> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let len = u8::read(r)? as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(PayloadU8(body))
+        Some(Self(body))
     }
 }

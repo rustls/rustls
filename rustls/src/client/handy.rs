@@ -30,9 +30,9 @@ pub struct ClientSessionMemoryCache {
 impl ClientSessionMemoryCache {
     /// Make a new ClientSessionMemoryCache.  `size` is the
     /// maximum number of stored sessions.
-    pub fn new(size: usize) -> Arc<ClientSessionMemoryCache> {
+    pub fn new(size: usize) -> Arc<Self> {
         debug_assert!(size > 0);
-        Arc::new(ClientSessionMemoryCache {
+        Arc::new(Self {
             cache: Mutex::new(limited_cache::LimitedCache::new(size)),
         })
     }
@@ -78,12 +78,10 @@ impl AlwaysResolvesClientCert {
     pub(super) fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
-    ) -> Result<AlwaysResolvesClientCert, Error> {
+    ) -> Result<Self, Error> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
-        Ok(AlwaysResolvesClientCert(Arc::new(sign::CertifiedKey::new(
-            chain, key,
-        ))))
+        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, key))))
     }
 }
 

@@ -148,7 +148,7 @@ impl Keys {
 
     fn new(suite: &'static Tls13CipherSuite, is_client: bool, secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote(is_client);
-        Keys {
+        Self {
             local: DirectionalKeys::new(suite, local),
             remote: DirectionalKeys::new(suite, remote),
         }

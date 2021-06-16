@@ -23,8 +23,8 @@ where
     K: Eq + Hash + Clone + std::fmt::Debug,
 {
     /// Create a new LimitedCache with the given rough capacity.
-    pub(crate) fn new(capacity_order_of_magnitude: usize) -> LimitedCache<K, V> {
-        LimitedCache {
+    pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
+        Self {
             map: HashMap::with_capacity(capacity_order_of_magnitude),
             oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
         }

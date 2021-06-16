@@ -318,7 +318,7 @@ pub struct AllClientVersions {
 }
 
 impl AllClientVersions {
-    pub fn new(client_config: ClientConfig) -> AllClientVersions {
+    pub fn new(client_config: ClientConfig) -> Self {
         AllClientVersions {
             client_config,
             index: 0,
@@ -594,7 +594,7 @@ pub struct FailsReads {
 }
 
 impl FailsReads {
-    pub fn new(errkind: io::ErrorKind) -> FailsReads {
+    pub fn new(errkind: io::ErrorKind) -> Self {
         FailsReads { errkind }
     }
 }

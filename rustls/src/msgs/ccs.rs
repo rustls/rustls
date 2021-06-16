@@ -8,11 +8,11 @@ impl Codec for ChangeCipherSpecPayload {
         1u8.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<ChangeCipherSpecPayload> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let typ = u8::read(r)?;
 
         if typ == 1 && !r.any_left() {
-            Some(ChangeCipherSpecPayload {})
+            Some(Self {})
         } else {
             None
         }

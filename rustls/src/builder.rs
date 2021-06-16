@@ -58,7 +58,7 @@ impl ConfigBuilder {
     /// [`ServerConfig`]: crate::ServerConfig
     /// [`ClientConfig`]: crate::ClientConfig
     pub fn with_safe_defaults() -> ConfigBuilderWithVersions {
-        ConfigBuilder::with_safe_default_cipher_suites()
+        Self::with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
     }

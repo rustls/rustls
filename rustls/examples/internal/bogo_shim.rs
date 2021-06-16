@@ -80,7 +80,7 @@ struct Options {
 }
 
 impl Options {
-    fn new() -> Options {
+    fn new() -> Self {
         Options {
             port: 0,
             server: false,

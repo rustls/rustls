@@ -408,7 +408,7 @@ impl AllowAnyAuthenticatedClient {
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
     pub fn new(roots: RootCertStore) -> Arc<dyn ClientCertVerifier> {
-        Arc::new(AllowAnyAuthenticatedClient { roots })
+        Arc::new(Self { roots })
     }
 }
 
@@ -460,7 +460,7 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
     pub fn new(roots: RootCertStore) -> Arc<dyn ClientCertVerifier> {
-        Arc::new(AllowAnyAnonymousOrAuthenticatedClient {
+        Arc::new(Self {
             inner: AllowAnyAuthenticatedClient { roots },
         })
     }
