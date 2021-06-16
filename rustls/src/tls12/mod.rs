@@ -10,6 +10,9 @@ use crate::Error;
 use ring::aead;
 use ring::digest::Digest;
 
+mod cipher;
+pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
+
 mod prf;
 
 /// TLS1.2 per-connection keying material
