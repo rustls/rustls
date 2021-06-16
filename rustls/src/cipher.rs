@@ -47,50 +47,64 @@ fn make_tls12_aad(
     ring::aead::Aad::from(out)
 }
 
-fn make_tls12_gcm_nonce(write_iv: &[u8], explicit: &[u8]) -> Iv {
-    debug_assert_eq!(write_iv.len(), 4);
-    debug_assert_eq!(explicit.len(), 8);
-
-    // The GCM nonce is constructed from a 32-bit 'salt' derived
-    // from the master-secret, and a 64-bit explicit part,
-    // with no specified construction.  Thanks for that.
-    //
-    // We use the same construction as TLS1.3/ChaCha20Poly1305:
-    // a starting point extracted from the key block, xored with
-    // the sequence number.
-    let mut iv = Iv(Default::default());
-    iv.0[..4].copy_from_slice(write_iv);
-    iv.0[4..].copy_from_slice(explicit);
-    iv
-}
-
 pub(crate) struct AesGcm;
 
 impl Tls12AeadAlgorithm for AesGcm {
-    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
-        Box::new(GcmMessageDecrypter::new(key, iv))
+    fn decrypter(&self, dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        let mut ret = GcmMessageDecrypter {
+            dec_key,
+            dec_salt: [0u8; 4],
+        };
+
+        debug_assert_eq!(dec_iv.len(), 4);
+        ret.dec_salt.copy_from_slice(dec_iv);
+        Box::new(ret)
     }
 
     fn encrypter(
         &self,
-        key: aead::LessSafeKey,
-        iv: &[u8],
-        extra: &[u8],
+        enc_key: aead::LessSafeKey,
+        write_iv: &[u8],
+        explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
-        let nonce = make_tls12_gcm_nonce(iv, extra);
-        Box::new(GcmMessageEncrypter::new(key, nonce))
+        debug_assert_eq!(write_iv.len(), 4);
+        debug_assert_eq!(explicit.len(), 8);
+
+        // The GCM nonce is constructed from a 32-bit 'salt' derived
+        // from the master-secret, and a 64-bit explicit part,
+        // with no specified construction.  Thanks for that.
+        //
+        // We use the same construction as TLS1.3/ChaCha20Poly1305:
+        // a starting point extracted from the key block, xored with
+        // the sequence number.
+        let mut iv = Iv(Default::default());
+        iv.0[..4].copy_from_slice(write_iv);
+        iv.0[4..].copy_from_slice(explicit);
+
+        Box::new(GcmMessageEncrypter { enc_key, iv })
     }
 }
 
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
-        Box::new(ChaCha20Poly1305MessageDecrypter::new(key, Iv::copy(iv)))
+    fn decrypter(&self, dec_key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        Box::new(ChaCha20Poly1305MessageDecrypter {
+            dec_key,
+            dec_offset: Iv::copy(iv),
+        })
     }
 
-    fn encrypter(&self, key: aead::LessSafeKey, iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
-        Box::new(ChaCha20Poly1305MessageEncrypter::new(key, Iv::copy(iv)))
+    fn encrypter(
+        &self,
+        enc_key: aead::LessSafeKey,
+        enc_iv: &[u8],
+        _: &[u8],
+    ) -> Box<dyn MessageEncrypter> {
+        Box::new(ChaCha20Poly1305MessageEncrypter {
+            enc_key,
+            enc_offset: Iv::copy(enc_iv),
+        })
     }
 }
 
@@ -190,25 +204,6 @@ impl MessageEncrypter for GcmMessageEncrypter {
             version: msg.version,
             payload: Payload::new(payload),
         })
-    }
-}
-
-impl GcmMessageEncrypter {
-    fn new(enc_key: aead::LessSafeKey, iv: Iv) -> Self {
-        Self { enc_key, iv }
-    }
-}
-
-impl GcmMessageDecrypter {
-    fn new(dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> Self {
-        let mut ret = Self {
-            dec_key,
-            dec_salt: [0u8; 4],
-        };
-
-        debug_assert_eq!(dec_iv.len(), 4);
-        ret.dec_salt.copy_from_slice(dec_iv);
-        ret
     }
 }
 
@@ -397,24 +392,6 @@ struct ChaCha20Poly1305MessageEncrypter {
 struct ChaCha20Poly1305MessageDecrypter {
     dec_key: aead::LessSafeKey,
     dec_offset: Iv,
-}
-
-impl ChaCha20Poly1305MessageEncrypter {
-    fn new(enc_key: aead::LessSafeKey, enc_iv: Iv) -> Self {
-        Self {
-            enc_key,
-            enc_offset: enc_iv,
-        }
-    }
-}
-
-impl ChaCha20Poly1305MessageDecrypter {
-    fn new(dec_key: aead::LessSafeKey, dec_iv: Iv) -> Self {
-        Self {
-            dec_key,
-            dec_offset: dec_iv,
-        }
-    }
 }
 
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
