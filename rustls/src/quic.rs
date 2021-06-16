@@ -1,4 +1,6 @@
 /// This module contains optional APIs for implementing QUIC TLS.
+pub use crate::cipher::Iv;
+use crate::cipher::IvLen;
 pub use crate::client::ClientQuicExt;
 use crate::conn::ConnectionCommon;
 use crate::error::Error;
@@ -116,37 +118,6 @@ pub struct PacketKeySet {
     pub local: PacketKey,
     /// Decrypts incoming packets
     pub remote: PacketKey,
-}
-
-/// Computes unique nonces for each packet
-pub struct Iv([u8; aead::NONCE_LEN]);
-
-impl Iv {
-    /// Compute the nonce to use for encrypting or decrypting `packet_number`
-    pub fn nonce_for(&self, packet_number: u64) -> ring::aead::Nonce {
-        let mut out = [0; aead::NONCE_LEN];
-        out[4..].copy_from_slice(&packet_number.to_be_bytes());
-        for (out, inp) in out.iter_mut().zip(self.0.iter()) {
-            *out ^= inp;
-        }
-        aead::Nonce::assume_unique_for_key(out)
-    }
-}
-
-impl From<hkdf::Okm<'_, IvLen>> for Iv {
-    fn from(okm: hkdf::Okm<IvLen>) -> Self {
-        let mut iv = [0; aead::NONCE_LEN];
-        okm.fill(&mut iv[..]).unwrap();
-        Iv(iv)
-    }
-}
-
-struct IvLen;
-
-impl hkdf::KeyType for IvLen {
-    fn len(&self) -> usize {
-        aead::NONCE_LEN
-    }
 }
 
 /// Complete set of keys used to communicate with the peer
