@@ -18,7 +18,7 @@ use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerConfig;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
-use crate::tls13::{self, Tls13CipherSuite};
+use crate::tls13::Tls13CipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
@@ -449,10 +449,10 @@ mod client_hello {
         // Encrypt with our own key, decrypt with the peer's key
         cx.common
             .record_layer
-            .set_message_encrypter(tls13::new_tls13_write(suite, &server_key));
+            .set_message_encrypter(suite.derive_encrypter(&server_key));
         cx.common
             .record_layer
-            .set_message_decrypter(tls13::new_tls13_read(suite, &client_key));
+            .set_message_decrypter(suite.derive_decrypter(&client_key));
 
         #[cfg(feature = "quic")]
         {
@@ -711,7 +711,7 @@ mod client_hello {
             );
         cx.common
             .record_layer
-            .set_message_encrypter(tls13::new_tls13_write(suite, &server_key));
+            .set_message_encrypter(suite.derive_encrypter(&server_key));
 
         #[cfg(feature = "quic")]
         {
@@ -972,7 +972,7 @@ impl hs::State for ExpectFinished {
         // Install keying to read future messages.
         cx.common
             .record_layer
-            .set_message_decrypter(tls13::new_tls13_read(self.suite, &client_key));
+            .set_message_decrypter(self.suite.derive_decrypter(&client_key));
 
         if self.send_ticket {
             Self::emit_ticket(
@@ -1048,7 +1048,10 @@ impl ExpectTraffic {
             .next_client_application_traffic_secret();
         common
             .record_layer
-            .set_message_decrypter(tls13::new_tls13_read(self.suite, &new_read_key));
+            .set_message_decrypter(
+                self.suite
+                    .derive_decrypter(&new_read_key),
+            );
 
         Ok(())
     }
@@ -1102,7 +1105,7 @@ impl hs::State for ExpectTraffic {
                 .next_server_application_traffic_secret();
             common
                 .record_layer
-                .set_message_encrypter(tls13::new_tls13_write(self.suite, &write_key));
+                .set_message_encrypter(self.suite.derive_encrypter(&write_key));
         }
     }
 }
