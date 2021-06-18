@@ -4,8 +4,8 @@ use super::handshake::*;
 use super::persist::*;
 
 use crate::key::Certificate;
-use crate::suites::TLS13_AES_128_GCM_SHA256;
 use crate::ticketer::TimeBase;
+use crate::tls13::TLS13_AES_128_GCM_SHA256;
 
 use std::convert::TryInto;
 

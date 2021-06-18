@@ -21,14 +21,14 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload, SessionID}
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::suites::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
 };
+use crate::tls13::{self, Tls13CipherSuite};
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
-use crate::{sign, tls13, KeyLog};
+use crate::{sign, KeyLog};
 
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;

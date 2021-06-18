@@ -2,15 +2,101 @@ use crate::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
-use crate::suites::Tls13CipherSuite;
+use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::{aead, hkdf};
 
+use std::fmt;
+
 pub(crate) mod key_schedule;
 use key_schedule::{derive_traffic_iv, derive_traffic_key};
+
+/// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
+pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls13(&Tls13CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+            bulk: BulkAlgorithm::Chacha20Poly1305,
+            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        },
+        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    });
+
+/// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
+pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
+    SupportedCipherSuite::Tls13(&Tls13CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
+            bulk: BulkAlgorithm::Aes256Gcm,
+            aead_algorithm: &ring::aead::AES_256_GCM,
+        },
+        hkdf_algorithm: ring::hkdf::HKDF_SHA384,
+    });
+
+/// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
+pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls13(TLS13_AES_128_GCM_SHA256_INTERNAL);
+
+pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+        bulk: BulkAlgorithm::Aes128Gcm,
+        aead_algorithm: &ring::aead::AES_128_GCM,
+    },
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+};
+
+/// A TLS 1.3 cipher suite supported by rustls.
+pub struct Tls13CipherSuite {
+    /// Common cipher suite fields.
+    pub common: CipherSuiteCommon,
+    pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
+}
+
+impl Tls13CipherSuite {
+    /// Which hash function to use with this suite.
+    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
+        self.hkdf_algorithm
+            .hmac_algorithm()
+            .digest_algorithm()
+    }
+
+    /// Can a session using suite self resume from suite prev?
+    pub fn can_resume_from(&self, prev: SupportedCipherSuite) -> Option<&'static Self> {
+        match prev {
+            SupportedCipherSuite::Tls13(inner)
+                if inner.hash_algorithm() == self.hash_algorithm() =>
+            {
+                Some(inner)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl From<&'static Tls13CipherSuite> for SupportedCipherSuite {
+    fn from(s: &'static Tls13CipherSuite) -> Self {
+        Self::Tls13(s)
+    }
+}
+
+impl PartialEq for Tls13CipherSuite {
+    fn eq(&self, other: &Self) -> bool {
+        self.common.suite == other.common.suite
+    }
+}
+
+impl fmt::Debug for Tls13CipherSuite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tls13CipherSuite")
+            .field("suite", &self.common.suite)
+            .field("bulk", &self.common.bulk)
+            .finish()
+    }
+}
 
 pub(crate) fn new_tls13_read(
     scs: &'static Tls13CipherSuite,
