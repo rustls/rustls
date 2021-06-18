@@ -57,6 +57,26 @@ pub struct Tls13CipherSuite {
 }
 
 impl Tls13CipherSuite {
+    pub(crate) fn derive_encrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
+        let key = derive_traffic_key(secret, self.common.aead_algorithm);
+        let iv = derive_traffic_iv(secret);
+
+        Box::new(Tls13MessageEncrypter {
+            enc_key: aead::LessSafeKey::new(key),
+            iv,
+        })
+    }
+
+    pub(crate) fn derive_decrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageDecrypter> {
+        let key = derive_traffic_key(secret, self.common.aead_algorithm);
+        let iv = derive_traffic_iv(secret);
+
+        Box::new(Tls13MessageDecrypter {
+            dec_key: aead::LessSafeKey::new(key),
+            iv,
+        })
+    }
+
     /// Which hash function to use with this suite.
     pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         self.hkdf_algorithm
@@ -96,26 +116,6 @@ impl fmt::Debug for Tls13CipherSuite {
             .field("bulk", &self.common.bulk)
             .finish()
     }
-}
-
-pub(crate) fn new_tls13_read(
-    scs: &'static Tls13CipherSuite,
-    secret: &hkdf::Prk,
-) -> Box<dyn MessageDecrypter> {
-    let key = derive_traffic_key(secret, scs.common.aead_algorithm);
-    let iv = derive_traffic_iv(secret);
-
-    Box::new(Tls13MessageDecrypter::new(key, iv))
-}
-
-pub(crate) fn new_tls13_write(
-    scs: &'static Tls13CipherSuite,
-    secret: &hkdf::Prk,
-) -> Box<dyn MessageEncrypter> {
-    let key = derive_traffic_key(secret, scs.common.aead_algorithm);
-    let iv = derive_traffic_iv(secret);
-
-    Box::new(Tls13MessageEncrypter::new(key, iv))
 }
 
 struct Tls13MessageEncrypter {
@@ -206,23 +206,5 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         msg.version = ProtocolVersion::TLSv1_3;
         Ok(msg.into_plain_message())
-    }
-}
-
-impl Tls13MessageEncrypter {
-    fn new(key: aead::UnboundKey, enc_iv: Iv) -> Self {
-        Self {
-            enc_key: aead::LessSafeKey::new(key),
-            iv: enc_iv,
-        }
-    }
-}
-
-impl Tls13MessageDecrypter {
-    fn new(key: aead::UnboundKey, dec_iv: Iv) -> Self {
-        Self {
-            dec_key: aead::LessSafeKey::new(key),
-            iv: dec_iv,
-        }
     }
 }
