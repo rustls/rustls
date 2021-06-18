@@ -294,6 +294,7 @@ mod record_layer;
 mod stream;
 #[cfg(feature = "tls12")]
 mod tls12;
+mod tls13;
 mod vecbuf;
 mod verify;
 #[cfg(test)]
