@@ -896,7 +896,7 @@ impl hs::State for ExpectFinished {
                 .record_layer
                 .set_message_encrypter(cipher::new_tls13_write(
                     st.suite,
-                    &st.key_schedule.client_key(),
+                    st.key_schedule.client_key(),
                 ));
         }
 

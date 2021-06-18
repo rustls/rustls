@@ -172,7 +172,7 @@ impl Keys {
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
             server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
         };
-        Self::new(&TLS13_AES_128_GCM_SHA256_INTERNAL, is_client, &secrets)
+        Self::new(TLS13_AES_128_GCM_SHA256_INTERNAL, is_client, &secrets)
     }
 
     fn new(suite: &'static Tls13CipherSuite, is_client: bool, secrets: &Secrets) -> Self {
@@ -221,7 +221,7 @@ pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option
     if let Some(secrets) = this.quic.traffic_secrets.as_ref() {
         if !this.quic.returned_traffic_keys {
             this.quic.returned_traffic_keys = true;
-            return Some(Keys::new(suite, this.is_client, &secrets));
+            return Some(Keys::new(suite, this.is_client, secrets));
         }
     }
 
