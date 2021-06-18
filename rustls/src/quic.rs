@@ -4,7 +4,7 @@ use crate::cipher::IvLen;
 pub use crate::client::ClientQuicExt;
 use crate::conn::ConnectionCommon;
 use crate::error::Error;
-use crate::key_schedule::hkdf_expand;
+use crate::tls13::key_schedule::hkdf_expand;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::msgs::message::PlainMessage;

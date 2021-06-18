@@ -2,9 +2,6 @@ use crate::check::{check_message, inappropriate_handshake_message, inappropriate
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
-use crate::key_schedule::{
-    KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
-};
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -25,6 +22,9 @@ use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::Tls13CipherSuite;
+use crate::tls13::key_schedule::{
+    KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
+};
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};

@@ -1,6 +1,5 @@
 use crate::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
-use crate::key_schedule::{derive_traffic_iv, derive_traffic_key};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
@@ -9,6 +8,9 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::Tls13CipherSuite;
 
 use ring::{aead, hkdf};
+
+pub(crate) mod key_schedule;
+use key_schedule::{derive_traffic_iv, derive_traffic_key};
 
 pub(crate) fn new_tls13_read(
     scs: &'static Tls13CipherSuite,
