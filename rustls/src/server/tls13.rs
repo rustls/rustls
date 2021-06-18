@@ -5,7 +5,6 @@ use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
-use crate::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::Codec;
@@ -20,6 +19,7 @@ use crate::rand;
 use crate::server::ServerConfig;
 use crate::suites::Tls13CipherSuite;
 use crate::tls13;
+use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
@@ -33,7 +33,6 @@ use ring::constant_time;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
-    use crate::key_schedule::{KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret};
     use crate::kx;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -58,6 +57,9 @@ mod client_hello {
     use crate::quic;
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
+    use crate::tls13::key_schedule::{
+        KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret,
+    };
 
     use super::*;
 

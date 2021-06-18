@@ -287,7 +287,6 @@ mod cipher;
 mod conn;
 mod error;
 mod hash_hs;
-mod key_schedule;
 mod limited_cache;
 mod rand;
 mod record_layer;

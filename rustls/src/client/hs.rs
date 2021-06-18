@@ -4,7 +4,7 @@ use crate::check::check_message;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHashBuffer;
-use crate::key_schedule::KeyScheduleEarly;
+use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
