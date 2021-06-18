@@ -226,6 +226,12 @@
 //!   details of these.  You will only need this if you're writing a QUIC
 //!   implementation.
 //!
+//! - `tls12`: enables support for TLS version 1.2. This feature is in the default
+//!   set. Note that, due to the additive nature of Cargo features and because it
+//!   is enabled by default, other crates in your dependency graph could re-enable
+//!   it for your application. If you want to disable TLS 1.2 for security reasons,
+//!   consider explicitly enabling TLS 1.3 only in the config builder API.
+//!
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use, unstable_features)]
