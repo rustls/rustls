@@ -4,16 +4,210 @@ use crate::conn::ConnectionRandoms;
 use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
-use crate::suites::Tls12CipherSuite;
+use crate::msgs::enums::{CipherSuite, SignatureScheme};
+use crate::msgs::handshake::KeyExchangeAlgorithm;
+use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 use crate::Error;
 
 use ring::aead;
 use ring::digest::Digest;
 
+use std::fmt;
+
 mod cipher;
 pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
 
 mod prf;
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
+#[cfg(feature = "tls12")]
+pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+            bulk: BulkAlgorithm::Chacha20Poly1305,
+            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_ECDSA_SCHEMES,
+        fixed_iv_len: 12,
+        explicit_nonce_len: 0,
+        aead_alg: &ChaCha20Poly1305,
+        hmac_algorithm: ring::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+#[cfg(feature = "tls12")]
+pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+            bulk: BulkAlgorithm::Chacha20Poly1305,
+            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_RSA_SCHEMES,
+        fixed_iv_len: 12,
+        explicit_nonce_len: 0,
+        aead_alg: &ChaCha20Poly1305,
+        hmac_algorithm: ring::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+#[cfg(feature = "tls12")]
+pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            bulk: BulkAlgorithm::Aes128Gcm,
+            aead_algorithm: &ring::aead::AES_128_GCM,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_RSA_SCHEMES,
+        fixed_iv_len: 4,
+        explicit_nonce_len: 8,
+        aead_alg: &AesGcm,
+        hmac_algorithm: ring::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+#[cfg(feature = "tls12")]
+pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            bulk: BulkAlgorithm::Aes256Gcm,
+            aead_algorithm: &ring::aead::AES_256_GCM,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_RSA_SCHEMES,
+        fixed_iv_len: 4,
+        explicit_nonce_len: 8,
+        aead_alg: &AesGcm,
+        hmac_algorithm: ring::hmac::HMAC_SHA384,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+#[cfg(feature = "tls12")]
+pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            bulk: BulkAlgorithm::Aes128Gcm,
+            aead_algorithm: &ring::aead::AES_128_GCM,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_ECDSA_SCHEMES,
+        fixed_iv_len: 4,
+        explicit_nonce_len: 8,
+        aead_alg: &AesGcm,
+        hmac_algorithm: ring::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+#[cfg(feature = "tls12")]
+pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            bulk: BulkAlgorithm::Aes256Gcm,
+            aead_algorithm: &ring::aead::AES_256_GCM,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_ECDSA_SCHEMES,
+        fixed_iv_len: 4,
+        explicit_nonce_len: 8,
+        aead_alg: &AesGcm,
+        hmac_algorithm: ring::hmac::HMAC_SHA384,
+    });
+
+#[cfg(feature = "tls12")]
+static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
+    SignatureScheme::ED25519,
+    SignatureScheme::ECDSA_NISTP521_SHA512,
+    SignatureScheme::ECDSA_NISTP384_SHA384,
+    SignatureScheme::ECDSA_NISTP256_SHA256,
+];
+
+#[cfg(feature = "tls12")]
+static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
+    SignatureScheme::RSA_PSS_SHA512,
+    SignatureScheme::RSA_PSS_SHA384,
+    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PKCS1_SHA512,
+    SignatureScheme::RSA_PKCS1_SHA384,
+    SignatureScheme::RSA_PKCS1_SHA256,
+];
+
+/// A TLS 1.2 cipher suite supported by rustls.
+#[cfg(feature = "tls12")]
+pub struct Tls12CipherSuite {
+    /// Common cipher suite fields.
+    pub common: CipherSuiteCommon,
+    pub(crate) hmac_algorithm: ring::hmac::Algorithm,
+    /// How to exchange/agree keys.
+    pub kx: KeyExchangeAlgorithm,
+
+    /// How to sign messages for authentication.
+    pub sign: &'static [SignatureScheme],
+
+    /// How long the fixed part of the 'IV' is.
+    ///
+    /// This isn't usually an IV, but we continue the
+    /// terminology misuse to match the standard.
+    pub fixed_iv_len: usize,
+
+    /// This is a non-standard extension which extends the
+    /// key block to provide an initial explicit nonce offset,
+    /// in a deterministic and safe way.  GCM needs this,
+    /// chacha20poly1305 works this way by design.
+    pub explicit_nonce_len: usize,
+
+    pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
+}
+
+#[cfg(feature = "tls12")]
+impl Tls12CipherSuite {
+    /// Resolve the set of supported `SignatureScheme`s from the
+    /// offered `SupportedSignatureSchemes`.  If we return an empty
+    /// set, the handshake terminates.
+    pub fn resolve_sig_schemes(&self, offered: &[SignatureScheme]) -> Vec<SignatureScheme> {
+        self.sign
+            .iter()
+            .filter(|pref| offered.contains(pref))
+            .cloned()
+            .collect()
+    }
+
+    /// Which hash function to use with this suite.
+    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
+        self.hmac_algorithm.digest_algorithm()
+    }
+}
+
+#[cfg(feature = "tls12")]
+impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
+    fn from(s: &'static Tls12CipherSuite) -> Self {
+        Self::Tls12(s)
+    }
+}
+
+#[cfg(feature = "tls12")]
+impl PartialEq for Tls12CipherSuite {
+    fn eq(&self, other: &Self) -> bool {
+        self.common.suite == other.common.suite
+    }
+}
+
+#[cfg(feature = "tls12")]
+impl fmt::Debug for Tls12CipherSuite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tls12CipherSuite")
+            .field("suite", &self.common.suite)
+            .field("bulk", &self.common.bulk)
+            .finish()
+    }
+}
 
 /// TLS1.2 per-connection keying material
 pub(crate) struct ConnectionSecrets {

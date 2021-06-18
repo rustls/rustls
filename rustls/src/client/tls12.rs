@@ -14,9 +14,9 @@ use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::suites::{SupportedCipherSuite, Tls12CipherSuite};
+use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
-use crate::tls12::{self, ConnectionSecrets};
+use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::{kx, verify};
 
 use super::hs::ClientContext;

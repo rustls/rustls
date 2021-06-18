@@ -13,8 +13,7 @@ use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, Handshak
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::suites::Tls12CipherSuite;
-use crate::tls12::{self, ConnectionSecrets};
+use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::{kx, verify};
 
 use super::common::ActiveCertifiedKey;
@@ -41,7 +40,6 @@ mod client_hello {
     use crate::sign;
 
     use super::*;
-    use crate::suites::Tls12CipherSuite;
 
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
