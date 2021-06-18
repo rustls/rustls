@@ -29,7 +29,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     pass the end-entity and intermediate certificates separately.  This means rustls deals with the case
     where the certificate chain is empty, rather than leaving that to ServerCertVerifier/ClientCertVerifier
     implementation.
-  - There are now 40% fewer unreachable unwraps in the core crate thanks to large refactoring efforts.
+  - There are now 80% fewer unreachable unwraps in the core crate thanks to large refactoring efforts.
   - *Breaking API change*: the `WebPkiError` variant of `rustls::Error` now includes which operation failed.
   - *Breaking API changes*: These public API items have been renamed to meet naming guidelines:
     - `rustls::TLSError` to `rustls::Error`.
