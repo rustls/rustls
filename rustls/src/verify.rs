@@ -173,6 +173,16 @@ pub trait ServerCertVerifier: Send + Sync {
     }
 }
 
+/// A type which encapsuates a string that is a syntactically valid DNS name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnsName(pub(crate) webpki::DnsName);
+
+impl AsRef<str> for DnsName {
+    fn as_ref(&self) -> &str {
+        AsRef::<str>::as_ref(&self.0)
+    }
+}
+
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
 pub trait ClientCertVerifier: Send + Sync {
@@ -188,7 +198,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
         Some(self.offer_client_auth())
     }
 
@@ -199,10 +209,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_root_subjects(
-        &self,
-        sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames>;
+    fn client_auth_root_subjects(&self, sni: Option<&DnsName>) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// and chains to at least one of the trust anchors in `roots`.
@@ -217,7 +224,7 @@ pub trait ClientCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&webpki::DnsName>,
+        sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error>;
 
@@ -309,7 +316,7 @@ impl ServerCertVerifier for WebPkiVerifier {
                 &chain,
                 webpki_now,
             )
-            .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateServerCert))
+            .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateServerCert))
             .map(|_| cert)?;
 
         verify_scts(end_entity, now, scts, self.ct_logs)?;
@@ -318,8 +325,8 @@ impl ServerCertVerifier for WebPkiVerifier {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        cert.verify_is_valid_for_dns_name(dns_name.as_ref())
-            .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateForDnsName))
+        cert.verify_is_valid_for_dns_name(dns_name.0.as_ref())
+            .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateForDnsName))
             .map(|_| ServerCertVerified::assertion())
     }
 }
@@ -374,7 +381,7 @@ fn prepare<'a, 'b>(
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
     // EE cert must appear first.
     let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
 
     let intermediates: Vec<&'a [u8]> = intermediates
         .iter()
@@ -410,14 +417,11 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
         Some(true)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&DnsName>) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
 
@@ -425,7 +429,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
@@ -436,7 +440,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
             &chain,
             now,
         )
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ValidateClientCert))
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateClientCert))
         .map(|_| ClientCertVerified::assertion())
     }
 }
@@ -467,14 +471,11 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         self.inner.offer_client_auth()
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
         Some(false)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, sni: Option<&DnsName>) -> Option<DistinguishedNames> {
         self.inner
             .client_auth_root_subjects(sni)
     }
@@ -483,7 +484,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&webpki::DnsName>,
+        sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         self.inner
@@ -506,10 +507,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DnsName>,
-    ) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&DnsName>) -> Option<DistinguishedNames> {
         unimplemented!();
     }
 
@@ -517,7 +515,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&DnsName>,
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
@@ -587,10 +585,10 @@ fn verify_signed_struct(
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
@@ -643,10 +641,10 @@ fn verify_tls13(
 
 
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::ParseEndEntity))?;
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
 
     cert.verify_signature(alg, msg, &dss.sig.0)
-        .map_err(|e| Error::WebPkiError(e, WebPkiOp::VerifySignature))
+        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::VerifySignature))
         .map(|_| HandshakeSignatureValid::assertion())
 }
 

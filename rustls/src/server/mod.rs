@@ -126,8 +126,10 @@ impl<'a> ClientHello<'a> {
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
-    pub fn server_name(&self) -> Option<webpki::DnsNameRef> {
+    pub fn server_name(&self) -> Option<&str> {
         self.server_name
+            .as_ref()
+            .and_then(|s| std::str::from_utf8(s.as_ref()).ok())
     }
 
     /// Get the compatible signature schemes.
@@ -265,9 +267,7 @@ impl ServerConnection {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn sni_hostname(&self) -> Option<&str> {
-        self.data
-            .get_sni()
-            .map(|s| s.as_ref().into())
+        self.data.get_sni_str()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -421,13 +421,21 @@ struct ServerConnectionData {
     received_resumption_data: Option<Vec<u8>>,
     resumption_data: Vec<u8>,
     client_cert_chain: Option<Vec<key::Certificate>>,
+
+    #[allow(dead_code)] // only supported for QUIC currently
     /// Whether to reject early data even if it would otherwise be accepted
     reject_early_data: bool,
 }
 
 impl ServerConnectionData {
-    fn get_sni(&self) -> Option<&webpki::DnsName> {
-        self.sni.as_ref()
+    fn get_sni_str(&self) -> Option<&str> {
+        self.sni.as_ref().map(AsRef::as_ref)
+    }
+
+    fn get_sni(&self) -> Option<verify::DnsName> {
+        self.sni
+            .as_ref()
+            .map(|name| verify::DnsName(name.clone()))
     }
 }
 

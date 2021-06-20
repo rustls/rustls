@@ -101,7 +101,7 @@
 //!
 //! ```rust,ignore
 //! let mut root_store = rustls::RootCertStore::empty();
-//! root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
 //! let trusted_ct_logs = &[];
 //! ```
 //!
@@ -125,7 +125,7 @@
 //! # use std::sync::Arc;
 //! # use std::convert::TryInto;
 //! # let mut root_store = rustls::RootCertStore::empty();
-//! # root_store.add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+//! # root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
 //! # let trusted_ct_logs = &[];
 //! # let config = rustls::ConfigBuilder::with_safe_defaults()
 //! #     .for_client()
@@ -306,6 +306,7 @@ pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientConnection, WriteEarlyData};
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::error::Error;
+pub use crate::error::WebPkiError;
 pub use crate::error::WebPkiOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
@@ -386,7 +387,7 @@ pub use crate::client::danger::DangerousClientConfig;
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::verify::{
-    ClientCertVerified, ClientCertVerifier, HandshakeSignatureValid, ServerCertVerified,
+    ClientCertVerified, ClientCertVerifier, DnsName, HandshakeSignatureValid, ServerCertVerified,
     ServerCertVerifier, WebPkiVerifier,
 };
 

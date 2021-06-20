@@ -19,17 +19,15 @@ use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::Error;
 use rustls::KeyLog;
-use rustls::WebPkiOp;
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection, ResolvesClientCert};
 use rustls::{ResolvesServerCert, ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
 use rustls::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use rustls::{WebPkiError, WebPkiOp};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::ClientCertVerified;
-
-use webpki;
 
 #[allow(dead_code)]
 mod common;
@@ -692,7 +690,7 @@ fn client_checks_server_certificate_with_given_name() {
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::WebPkiError(
-                    webpki::Error::CertNotValidForName,
+                    WebPkiError::CertNotValidForName,
                     WebPkiOp::ValidateForDnsName,
                 )))
             );
@@ -3763,9 +3761,4 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
             "no kx group overlap with client".into()
         ))
     );
-}
-
-#[test]
-fn test_ownedtrustanchor_to_trust_anchor_is_public() {
-    let _ = rustls::OwnedTrustAnchor::to_trust_anchor;
 }

@@ -163,9 +163,7 @@ impl ResolvesServerCertUsingSni {
 impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
     fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
         if let Some(name) = client_hello.server_name() {
-            self.by_name
-                .get(name.into())
-                .map(Arc::clone)
+            self.by_name.get(name).map(Arc::clone)
         } else {
             // This kind of resolver requires SNI
             None

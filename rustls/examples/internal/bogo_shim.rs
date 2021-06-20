@@ -7,7 +7,6 @@
 use base64;
 use env_logger;
 use rustls;
-use webpki;
 
 use rustls::internal::msgs::enums::ProtocolVersion;
 use rustls::quic;
@@ -185,13 +184,13 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&rustls::DnsName>) -> Option<bool> {
         Some(self.mandatory)
     }
 
     fn client_auth_root_subjects(
         &self,
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&rustls::DnsName>,
     ) -> Option<rustls::DistinguishedNames> {
         Some(rustls::DistinguishedNames::new())
     }
@@ -200,7 +199,7 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         &self,
         _end_entity: &rustls::Certificate,
         _intermediates: &[rustls::Certificate],
-        _sni: Option<&webpki::DnsName>,
+        _sni: Option<&rustls::DnsName>,
         _now: SystemTime,
     ) -> Result<rustls::ClientCertVerified, rustls::Error> {
         Ok(rustls::ClientCertVerified::assertion())
@@ -503,7 +502,7 @@ fn quit_err(why: &str) -> ! {
 
 fn handle_err(err: rustls::Error) -> ! {
     use rustls::internal::msgs::enums::{AlertDescription, ContentType};
-    use rustls::Error;
+    use rustls::{Error, WebPkiError};
     use std::{thread, time};
 
     println!("TLS error: {:?}", err);
@@ -536,11 +535,11 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        Error::WebPkiError(webpki::Error::BadDer, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
-        Error::WebPkiError(webpki::Error::InvalidSignatureForPublicKey, ..) => {
+        Error::WebPkiError(WebPkiError::BadEncoding, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
+        Error::WebPkiError(WebPkiError::InvalidSignatureForPublicKey, ..) => {
             quit(":BAD_SIGNATURE:")
         }
-        Error::WebPkiError(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey, ..) => {
+        Error::WebPkiError(WebPkiError::UnsupportedSignatureAlgorithmForPublicKey, ..) => {
             quit(":WRONG_SIGNATURE_TYPE:")
         }
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
