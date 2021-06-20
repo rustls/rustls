@@ -9,7 +9,7 @@ verification.
 
 # Status
 Rustls is ready for use.  There are no major breaking interface changes
-expected.  [Here's what I'm working on now](https://github.com/ctz/rustls/projects/1).
+envisioned after the set included in the 0.20 release.
 
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -21,6 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.0 (pending, 2021-06-xx)
   - *Breaking change*: internal buffers are now limited to 64 kB by default. Use
     `Connection::set_buffer_limit` to change the buffer limits to suit your application.
   - *Breaking API change*: PEM parsing now lives in the [rustls-pemfile crate](https://crates.io/crates/rustls-pemfile).
