@@ -7,7 +7,6 @@
 use base64;
 use env_logger;
 use rustls;
-use webpki;
 
 use rustls::internal::msgs::enums::ProtocolVersion;
 use rustls::quic;
@@ -185,11 +184,14 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&rustls::DnsName>) -> Option<bool> {
         Some(self.mandatory)
     }
 
-    fn client_auth_root_subjects(&self, _sni: Option<&str>) -> Option<rustls::DistinguishedNames> {
+    fn client_auth_root_subjects(
+        &self,
+        _sni: Option<&rustls::DnsName>,
+    ) -> Option<rustls::DistinguishedNames> {
         Some(rustls::DistinguishedNames::new())
     }
 
@@ -197,7 +199,7 @@ impl rustls::ClientCertVerifier for DummyClientAuth {
         &self,
         _end_entity: &rustls::Certificate,
         _intermediates: &[rustls::Certificate],
-        _sni: Option<&str>,
+        _sni: Option<&rustls::DnsName>,
         _now: SystemTime,
     ) -> Result<rustls::ClientCertVerified, rustls::Error> {
         Ok(rustls::ClientCertVerified::assertion())

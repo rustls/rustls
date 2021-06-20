@@ -387,7 +387,7 @@ pub use crate::client::danger::DangerousClientConfig;
 #[cfg(feature = "dangerous_configuration")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub use crate::verify::{
-    ClientCertVerified, ClientCertVerifier, HandshakeSignatureValid, ServerCertVerified,
+    ClientCertVerified, ClientCertVerifier, DnsName, HandshakeSignatureValid, ServerCertVerified,
     ServerCertVerifier, WebPkiVerifier,
 };
 

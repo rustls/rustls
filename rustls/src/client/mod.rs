@@ -201,7 +201,7 @@ pub enum ServerName {
     /// The server is identified by a DNS name.  The name
     /// is sent in the TLS Server Name Indication (SNI)
     /// extension.
-    DnsName(DnsName),
+    DnsName(verify::DnsName),
 }
 
 impl ServerName {
@@ -232,16 +232,13 @@ impl ServerName {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct DnsName(pub(crate) webpki::DnsName);
-
 /// Attempt to make a ServerName from a string by parsing
 /// it as a DNS name.
 impl TryFrom<&str> for ServerName {
     type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match webpki::DnsNameRef::try_from_ascii_str(s) {
-            Ok(dns) => Ok(ServerName::DnsName(DnsName(dns.into()))),
+            Ok(dns) => Ok(ServerName::DnsName(verify::DnsName(dns.into()))),
             Err(webpki::InvalidDnsNameError) => Err(InvalidDnsNameError),
         }
     }

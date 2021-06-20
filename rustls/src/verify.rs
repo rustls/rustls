@@ -173,6 +173,16 @@ pub trait ServerCertVerifier: Send + Sync {
     }
 }
 
+/// A type which encapsuates a string that is a syntactically valid DNS name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DnsName(pub(crate) webpki::DnsName);
+
+impl AsRef<str> for DnsName {
+    fn as_ref(&self) -> &str {
+        AsRef::<str>::as_ref(&self.0)
+    }
+}
+
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
 pub trait ClientCertVerifier: Send + Sync {
@@ -188,7 +198,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
         Some(self.offer_client_auth())
     }
 
@@ -199,7 +209,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// `sni` is the server name quoted by the client in its ClientHello; it has
     /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_root_subjects(&self, sni: Option<&str>) -> Option<DistinguishedNames>;
+    fn client_auth_root_subjects(&self, sni: Option<&DnsName>) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// and chains to at least one of the trust anchors in `roots`.
@@ -214,7 +224,7 @@ pub trait ClientCertVerifier: Send + Sync {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&str>,
+        sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error>;
 
@@ -407,11 +417,11 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
         Some(true)
     }
 
-    fn client_auth_root_subjects(&self, _sni: Option<&str>) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&DnsName>) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
 
@@ -419,7 +429,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        _sni: Option<&str>,
+        _sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
@@ -461,11 +471,11 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         self.inner.offer_client_auth()
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&str>) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
         Some(false)
     }
 
-    fn client_auth_root_subjects(&self, sni: Option<&str>) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, sni: Option<&DnsName>) -> Option<DistinguishedNames> {
         self.inner
             .client_auth_root_subjects(sni)
     }
@@ -474,7 +484,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&str>,
+        sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         self.inner
@@ -497,7 +507,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(&self, _sni: Option<&str>) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni: Option<&DnsName>) -> Option<DistinguishedNames> {
         unimplemented!();
     }
 
@@ -505,7 +515,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        _sni: Option<&str>,
+        _sni: Option<&DnsName>,
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
