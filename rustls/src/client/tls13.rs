@@ -167,6 +167,7 @@ pub(super) fn handle_server_hello(
             server: server_key,
             client: client_key,
             suite,
+            is_client: true,
         });
     }
 
@@ -950,6 +951,7 @@ impl hs::State for ExpectFinished {
                     client: client_key,
                     server: server_key,
                     suite: st.suite,
+                    is_client: true,
                 });
                 return Ok(Box::new(ExpectQuicTraffic(st)));
             }

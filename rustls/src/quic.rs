@@ -22,11 +22,12 @@ pub(crate) struct Secrets {
     pub(crate) server: hkdf::Prk,
     /// Cipher suite used with these secrets
     pub(crate) suite: &'static Tls13CipherSuite,
+    pub(crate) is_client: bool,
 }
 
 impl Secrets {
-    fn local_remote(&self, is_client: bool) -> (&hkdf::Prk, &hkdf::Prk) {
-        if is_client {
+    fn local_remote(&self) -> (&hkdf::Prk, &hkdf::Prk) {
+        if self.is_client {
             (&self.client, &self.server)
         } else {
             (&self.server, &self.client)
@@ -226,12 +227,13 @@ impl Keys {
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
             server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
+            is_client,
         };
-        Self::new(&secrets, is_client)
+        Self::new(&secrets)
     }
 
-    fn new(secrets: &Secrets, is_client: bool) -> Self {
-        let (local, remote) = secrets.local_remote(is_client);
+    fn new(secrets: &Secrets) -> Self {
+        let (local, remote) = secrets.local_remote();
         Self {
             local: DirectionalKeys::new(secrets.suite, local),
             remote: DirectionalKeys::new(secrets.suite, remote),
@@ -267,13 +269,13 @@ pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option
     }
 
     if let Some(secrets) = this.quic.hs_secrets.take() {
-        return Some(Keys::new(&secrets, this.is_client));
+        return Some(Keys::new(&secrets));
     }
 
     if let Some(secrets) = this.quic.traffic_secrets.as_ref() {
         if !this.quic.returned_traffic_keys {
             this.quic.returned_traffic_keys = true;
-            return Some(Keys::new(secrets, this.is_client));
+            return Some(Keys::new(secrets));
         }
     }
 
@@ -284,7 +286,7 @@ pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet
     let secrets = this.quic.traffic_secrets.as_ref()?;
     let next = next_1rtt_secrets(secrets);
 
-    let (local, remote) = next.local_remote(this.is_client);
+    let (local, remote) = next.local_remote();
     let keys = PacketKeySet {
         local: PacketKey::new(secrets.suite, local),
         remote: PacketKey::new(secrets.suite, remote),
@@ -300,6 +302,7 @@ fn next_1rtt_secrets(prev: &Secrets) -> Secrets {
         client: hkdf_expand(&prev.client, hkdf_alg, b"quic ku", &[]),
         server: hkdf_expand(&prev.server, hkdf_alg, b"quic ku", &[]),
         suite: prev.suite,
+        is_client: prev.is_client,
     }
 }
 
@@ -497,6 +500,7 @@ mod test {
                 ],
             ),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
+            is_client: true,
         };
         let updated = next_1rtt_secrets(&initial);
 
