@@ -3496,15 +3496,9 @@ mod test_quic {
 
     #[test]
     fn packet_key_api() {
-        use ring::hkdf;
-        use rustls::quic::Keys;
+        use rustls::quic::{Keys, Version};
 
         // Test vectors: https://www.rfc-editor.org/rfc/rfc9001.html#name-client-initial
-        const INITIAL_SALT: [u8; 20] = [
-            0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
-            0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a,
-        ];
-
         const CONNECTION_ID: &[u8] = &[0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         const PACKET_NUMBER: u64 = 2;
         const PLAIN_HEADER: &[u8] = &[
@@ -3533,8 +3527,7 @@ mod test_quic {
             0x08, 0x06, 0x04, 0x80, 0x00, 0xff, 0xff,
         ];
 
-        let initial_salt = hkdf::Salt::new(hkdf::HKDF_SHA256, &INITIAL_SALT);
-        let client_keys = Keys::initial(&initial_salt, &CONNECTION_ID, true);
+        let client_keys = Keys::initial(Version::V1, &CONNECTION_ID, true);
         assert_eq!(
             client_keys
                 .local
@@ -3676,7 +3669,7 @@ mod test_quic {
         }
 
         let (header, payload) = buf.split_at_mut(header_len);
-        let server_keys = Keys::initial(&initial_salt, &CONNECTION_ID, false);
+        let server_keys = Keys::initial(Version::V1, &CONNECTION_ID, false);
         let payload = server_keys
             .remote
             .packet
