@@ -460,6 +460,7 @@ mod client_hello {
                 client: client_key,
                 server: server_key,
                 suite,
+                is_client: false,
             });
         }
 
@@ -720,6 +721,7 @@ mod client_hello {
                 client: _client_key,
                 server: server_key,
                 suite,
+                is_client: false,
             });
         }
 
