@@ -26,6 +26,12 @@ pub(crate) struct Secrets {
 }
 
 impl Secrets {
+    fn update(&mut self) {
+        let hkdf_alg = self.suite.hkdf_algorithm;
+        self.client = hkdf_expand(&self.client, hkdf_alg, b"quic ku", &[]);
+        self.server = hkdf_expand(&self.server, hkdf_alg, b"quic ku", &[]);
+    }
+
     fn local_remote(&self) -> (&hkdf::Prk, &hkdf::Prk) {
         if self.is_client {
             (&self.client, &self.server)
@@ -283,27 +289,16 @@ pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option
 }
 
 pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet> {
-    let secrets = this.quic.traffic_secrets.as_ref()?;
-    let next = next_1rtt_secrets(secrets);
+    let secrets = this.quic.traffic_secrets.as_mut()?;
+    secrets.update();
 
-    let (local, remote) = next.local_remote();
+    let (local, remote) = secrets.local_remote();
     let keys = PacketKeySet {
         local: PacketKey::new(secrets.suite, local),
         remote: PacketKey::new(secrets.suite, remote),
     };
 
-    this.quic.traffic_secrets = Some(next);
     Some(keys)
-}
-
-fn next_1rtt_secrets(prev: &Secrets) -> Secrets {
-    let hkdf_alg = prev.suite.hkdf_algorithm;
-    Secrets {
-        client: hkdf_expand(&prev.client, hkdf_alg, b"quic ku", &[]),
-        server: hkdf_expand(&prev.server, hkdf_alg, b"quic ku", &[]),
-        suite: prev.suite,
-        is_client: prev.is_client,
-    }
 }
 
 /// Compute the nonce to use for encrypting or decrypting `packet_number`
@@ -481,7 +476,7 @@ mod test {
             x_data == y_data
         }
 
-        let initial = Secrets {
+        let mut secrets = Secrets {
             // Constant dummy values for reproducibility
             client: hkdf::Prk::new_less_safe(
                 hkdf::HKDF_SHA256,
@@ -502,10 +497,10 @@ mod test {
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
             is_client: true,
         };
-        let updated = next_1rtt_secrets(&initial);
+        secrets.update();
 
         assert!(equal_prk(
-            &updated.client,
+            &secrets.client,
             &hkdf::Prk::new_less_safe(
                 hkdf::HKDF_SHA256,
                 &[
@@ -516,7 +511,7 @@ mod test {
             )
         ));
         assert!(equal_prk(
-            &updated.server,
+            &secrets.server,
             &hkdf::Prk::new_less_safe(
                 hkdf::HKDF_SHA256,
                 &[
