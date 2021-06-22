@@ -1,6 +1,5 @@
 /// This module contains optional APIs for implementing QUIC TLS.
-pub use crate::cipher::Iv;
-use crate::cipher::IvLen;
+use crate::cipher::{Iv, IvLen};
 pub use crate::client::ClientQuicExt;
 use crate::conn::ConnectionCommon;
 use crate::error::Error;
@@ -94,9 +93,11 @@ impl DirectionalKeys {
 /// Keys to encrypt or decrypt the payload of a packet
 pub struct PacketKey {
     /// Encrypts or decrypts a packet's payload
-    pub key: aead::LessSafeKey,
+    key: aead::LessSafeKey,
     /// Computes unique nonces for each packet
-    pub iv: Iv,
+    iv: Iv,
+    /// The cipher suite used for this packet key
+    suite: &'static Tls13CipherSuite,
 }
 
 impl PacketKey {
@@ -109,7 +110,86 @@ impl PacketKey {
                 &[],
             )),
             iv: hkdf_expand(secret, IvLen, b"quic iv", &[]),
+            suite,
         }
+    }
+
+    /// Encrypt a QUIC packet
+    ///
+    /// Takes a `packet_number`, used to derive the nonce; the packet `header`, which is used as
+    /// the additional authenticated data; and the `payload`. The authentication tag is returned if
+    /// encryption succeeds.
+    ///
+    /// Fails iff the payload is longer than allowed by the cipher suite's AEAD algorithm.
+    pub fn encrypt_in_place(
+        &self,
+        packet_number: u64,
+        header: &[u8],
+        payload: &mut [u8],
+    ) -> Result<Tag, Error> {
+        let aad = aead::Aad::from(header);
+        let nonce = self.iv.nonce_for(packet_number);
+        let tag = self
+            .key
+            .seal_in_place_separate_tag(nonce, aad, payload)
+            .map_err(|_| Error::EncryptError)?;
+        Ok(Tag(tag))
+    }
+
+    /// Decrypt a QUIC packet
+    ///
+    /// Takes the packet `header`, which is used as the additional authenticated data, and the
+    /// `payload`, which includes the authentication tag.
+    ///
+    /// If the return value is `Ok`, the decrypted payload can be found in `payload`, up to the
+    /// length found in the return value.
+    pub fn decrypt_in_place<'a>(
+        &self,
+        packet_number: u64,
+        header: &[u8],
+        payload: &'a mut [u8],
+    ) -> Result<&'a [u8], Error> {
+        let payload_len = payload.len();
+        let aad = aead::Aad::from(header);
+        let nonce = self.iv.nonce_for(packet_number);
+        self.key
+            .open_in_place(nonce, aad, payload)
+            .map_err(|_| Error::DecryptError)?;
+
+        let plain_len = payload_len - self.key.algorithm().tag_len();
+        Ok(&payload[..plain_len])
+    }
+
+    /// Number of times the packet key can be used without sacrificing confidentiality
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-confidentiality-limit>.
+    #[inline]
+    pub fn confidentiality_limit(&self) -> u64 {
+        self.suite.confidentiality_limit
+    }
+
+    /// Number of times the packet key can be used without sacrificing integrity
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-integrity-limit>.
+    #[inline]
+    pub fn integrity_limit(&self) -> u64 {
+        self.suite.integrity_limit
+    }
+
+    /// Tag length for the underlying AEAD algorithm
+    #[inline]
+    pub fn tag_len(&self) -> usize {
+        self.key.algorithm().tag_len()
+    }
+}
+
+/// AEAD tag, must be appended to encrypted cipher text
+pub struct Tag(aead::Tag);
+
+impl AsRef<[u8]> for Tag {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
     }
 }
 
