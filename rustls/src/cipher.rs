@@ -27,19 +27,18 @@ impl dyn MessageDecrypter {
 }
 
 /// A write or read IV.
-#[allow(unreachable_pub)] // Only exposed as part of `crate::quic`
 #[derive(Default)]
-pub struct Iv(pub(crate) [u8; ring::aead::NONCE_LEN]);
+pub(crate) struct Iv(pub(crate) [u8; ring::aead::NONCE_LEN]);
 
 impl Iv {
     #[cfg(feature = "tls12")]
-    pub(crate) fn new(value: [u8; ring::aead::NONCE_LEN]) -> Self {
+    fn new(value: [u8; ring::aead::NONCE_LEN]) -> Self {
         Self(value)
     }
 
     /// Compute the nonce to use for encrypting or decrypting `packet_number`
     #[cfg(feature = "quic")]
-    pub fn nonce_for(&self, packet_number: u64) -> ring::aead::Nonce {
+    pub(crate) fn nonce_for(&self, packet_number: u64) -> ring::aead::Nonce {
         let mut out = [0; aead::NONCE_LEN];
         out[4..].copy_from_slice(&packet_number.to_be_bytes());
         for (out, inp) in out.iter_mut().zip(self.0.iter()) {
