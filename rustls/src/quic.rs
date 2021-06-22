@@ -246,14 +246,11 @@ pub struct Keys {
 
 impl Keys {
     /// Construct keys for use with initial packets
-    pub fn initial(
-        initial_salt: &hkdf::Salt,
-        client_dst_connection_id: &[u8],
-        is_client: bool,
-    ) -> Self {
+    pub fn initial(version: Version, client_dst_connection_id: &[u8], is_client: bool) -> Self {
         const CLIENT_LABEL: &[u8] = b"client in";
         const SERVER_LABEL: &[u8] = b"server in";
-        let hs_secret = initial_salt.extract(client_dst_connection_id);
+        let salt = version.initial_salt();
+        let hs_secret = hkdf::Salt::new(hkdf::HKDF_SHA256, salt).extract(client_dst_connection_id);
 
         let secrets = Secrets {
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
@@ -364,11 +361,29 @@ fn nonce_for(packet_number: u64, iv: &Iv) -> ring::aead::Nonce {
 ///
 /// Governs version-specific behavior in the TLS layer
 #[non_exhaustive]
+#[derive(Clone, Copy)]
 pub enum Version {
-    /// Draft versions prior to V1
+    /// Draft versions 29, 30, 31 and 32
     V1Draft,
     /// First stable RFC
     V1,
+}
+
+impl Version {
+    fn initial_salt(self) -> &'static [u8; 20] {
+        match self {
+            Version::V1Draft => &[
+                // https://datatracker.ietf.org/doc/html/draft-ietf-quic-tls-32#section-5.2
+                0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61,
+                0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99,
+            ],
+            Version::V1 => &[
+                // https://www.rfc-editor.org/rfc/rfc9001.html#name-initial-secrets
+                0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
+                0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a,
+            ],
+        }
+    }
 }
 
 #[cfg(test)]
