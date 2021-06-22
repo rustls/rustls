@@ -95,23 +95,152 @@ pub trait QuicExt {
 /// Keys used to communicate in a single direction
 pub struct DirectionalKeys {
     /// Encrypts or decrypts a packet's headers
-    pub header: aead::quic::HeaderProtectionKey,
+    pub header: HeaderProtectionKey,
     /// Encrypts or decrypts the payload of a packet
     pub packet: PacketKey,
 }
 
 impl DirectionalKeys {
     pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
-        let hp_alg = match suite.common.bulk {
+        Self {
+            header: HeaderProtectionKey::new(suite, secret),
+            packet: PacketKey::new(suite, secret),
+        }
+    }
+}
+
+/// A QUIC header protection key
+pub struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
+
+impl HeaderProtectionKey {
+    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
+        let alg = match suite.common.bulk {
             BulkAlgorithm::Aes128Gcm => &aead::quic::AES_128,
             BulkAlgorithm::Aes256Gcm => &aead::quic::AES_256,
             BulkAlgorithm::Chacha20Poly1305 => &aead::quic::CHACHA20,
         };
 
-        Self {
-            header: hkdf_expand(secret, hp_alg, b"quic hp", &[]),
-            packet: PacketKey::new(suite, secret),
+        Self(hkdf_expand(secret, alg, b"quic hp", &[]))
+    }
+
+    /// Adds QUIC Header Protection.
+    ///
+    /// `sample` must contain the sample of encrypted payload; see
+    /// [Header Protection Sample].
+    ///
+    /// `first` must reference the first byte of the header, referred to as
+    /// `packet[0]` in [Header Protection Application].
+    ///
+    /// `packet_number` must reference the Packet Number field; this is
+    /// `packet[pn_offset:pn_offset+pn_length]` in [Header Protection Application].
+    ///
+    /// Returns an error without modifying anything if `sample` is not
+    /// the correct length (see [Header Protection Sample] and [`Self::sample_len()`]),
+    /// or `packet_number` is longer than allowed (see [Packet Number Encoding and Decoding]).
+    ///
+    /// Otherwise, `first` and `packet_number` will have the header protection added.
+    ///
+    /// [Header Protection Application]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1
+    /// [Header Protection Sample]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.2
+    /// [Packet Number Encoding and Decoding]: https://datatracker.ietf.org/doc/html/rfc9000#section-17.1
+    #[inline]
+    pub fn encrypt_in_place(
+        &self,
+        sample: &[u8],
+        first: &mut u8,
+        packet_number: &mut [u8],
+    ) -> Result<(), Error> {
+        self.xor_in_place(sample, first, packet_number, false)
+    }
+
+    /// Removes QUIC Header Protection.
+    ///
+    /// `sample` must contain the sample of encrypted payload; see
+    /// [Header Protection Sample].
+    ///
+    /// `first` must reference the first byte of the header, referred to as
+    /// `packet[0]` in [Header Protection Application].
+    ///
+    /// `packet_number` must reference the Packet Number field; this is
+    /// `packet[pn_offset:pn_offset+pn_length]` in [Header Protection Application].
+    ///
+    /// Returns an error without modifying anything if `sample` is not
+    /// the correct length (see [Header Protection Sample] and [`Self::sample_len()`]),
+    /// or `packet_number` is longer than allowed (see
+    /// [Packet Number Encoding and Decoding]).
+    ///
+    /// Otherwise, `first` and `packet_number` will have the header protection removed.
+    ///
+    /// [Header Protection Application]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1
+    /// [Header Protection Sample]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.2
+    /// [Packet Number Encoding and Decoding]: https://datatracker.ietf.org/doc/html/rfc9000#section-17.1
+    #[inline]
+    pub fn decrypt_in_place(
+        &self,
+        sample: &[u8],
+        first: &mut u8,
+        packet_number: &mut [u8],
+    ) -> Result<(), Error> {
+        self.xor_in_place(sample, first, packet_number, true)
+    }
+
+    fn xor_in_place(
+        &self,
+        sample: &[u8],
+        first: &mut u8,
+        packet_number: &mut [u8],
+        masked: bool,
+    ) -> Result<(), Error> {
+        // This implements [Header Protection Application] almost verbatim.
+
+        let mask = self
+            .0
+            .new_mask(sample)
+            .map_err(|_| Error::General("sample of invalid length".into()))?;
+
+        // The `unwrap()` will not panic because `new_mask` returns a
+        // non-empty result.
+        let (first_mask, pn_mask) = mask.split_first().unwrap();
+
+        // It is OK for the `mask` to be longer than `packet_number`,
+        // but a valid `packet_number` will never be longer than `mask`.
+        if packet_number.len() > pn_mask.len() {
+            return Err(Error::General("packet number too long".into()));
         }
+
+        // Infallible from this point on. Before this point, `first` and
+        // `packet_number` are unchanged.
+
+        const LONG_HEADER_FORM: u8 = 0x80;
+        let bits = match *first & LONG_HEADER_FORM == LONG_HEADER_FORM {
+            true => 0x0f,  // Long header: 4 bits masked
+            false => 0x1f, // Short header: 5 bits masked
+        };
+
+        let first_plain = match masked {
+            // When unmasking, use the packet length bits after unmasking
+            true => (*first ^ (first_mask & bits)),
+            // When masking, use the packet length bits before masking
+            false => *first,
+        };
+        let pn_len = (first_plain & 0x03) as usize + 1;
+
+        *first ^= first_mask & bits;
+        for (dst, m) in packet_number
+            .iter_mut()
+            .zip(pn_mask)
+            .take(pn_len)
+        {
+            *dst ^= m;
+        }
+
+        Ok(())
+    }
+
+    /// Expected sample length for the key's algorithm
+    #[inline]
+    pub fn sample_len(&self) -> usize {
+        self.0.algorithm().sample_len()
     }
 }
 

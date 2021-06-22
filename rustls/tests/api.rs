@@ -3557,20 +3557,16 @@ mod test_quic {
             .packet
             .encrypt_in_place(PACKET_NUMBER, &*header, payload)
             .unwrap();
-        buf.extend_from_slice(tag.as_ref());
 
-        let sample = &buf[header_len..header_len + 16];
-        let mask = client_keys
+        let sample_len = client_keys.local.header.sample_len();
+        let sample = &payload[..sample_len];
+        let (first, rest) = header.split_at_mut(1);
+        client_keys
             .local
             .header
-            .new_mask(&sample)
+            .encrypt_in_place(sample, &mut first[0], &mut rest[17..21])
             .unwrap();
-        assert_eq!(mask, [0x43, 0x7b, 0x9a, 0xec, 0x36]);
-
-        buf[0] ^= mask[0] & 0x0f;
-        for (i, b) in buf[18..22].iter_mut().enumerate() {
-            *b ^= mask[i + 1];
-        }
+        buf.extend_from_slice(tag.as_ref());
 
         const PROTECTED: &[u8] = &[
             0xc0, 0x00, 0x00, 0x00, 0x01, 0x08, 0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08,
@@ -3663,13 +3659,16 @@ mod test_quic {
 
         assert_eq!(&buf, PROTECTED);
 
-        buf[0] ^= mask[0] & 0x0f;
-        for (i, b) in buf[18..22].iter_mut().enumerate() {
-            *b ^= mask[i + 1];
-        }
-
         let (header, payload) = buf.split_at_mut(header_len);
+        let (first, rest) = header.split_at_mut(1);
+        let sample = &payload[..sample_len];
+
         let server_keys = Keys::initial(Version::V1, &CONNECTION_ID, false);
+        server_keys
+            .remote
+            .header
+            .decrypt_in_place(sample, &mut first[0], &mut rest[17..21])
+            .unwrap();
         let payload = server_keys
             .remote
             .packet
