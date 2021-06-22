@@ -128,7 +128,7 @@ impl PacketKey {
         payload: &mut [u8],
     ) -> Result<Tag, Error> {
         let aad = aead::Aad::from(header);
-        let nonce = self.iv.nonce_for(packet_number);
+        let nonce = nonce_for(packet_number, &self.iv);
         let tag = self
             .key
             .seal_in_place_separate_tag(nonce, aad, payload)
@@ -151,7 +151,7 @@ impl PacketKey {
     ) -> Result<&'a [u8], Error> {
         let payload_len = payload.len();
         let aad = aead::Aad::from(header);
-        let nonce = self.iv.nonce_for(packet_number);
+        let nonce = nonce_for(packet_number, &self.iv);
         self.key
             .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?;
@@ -304,6 +304,16 @@ fn next_1rtt_secrets(hkdf_alg: hkdf::Algorithm, prev: &Secrets) -> Secrets {
     }
 }
 
+/// Compute the nonce to use for encrypting or decrypting `packet_number`
+fn nonce_for(packet_number: u64, iv: &Iv) -> ring::aead::Nonce {
+    let mut out = [0; aead::NONCE_LEN];
+    out[4..].copy_from_slice(&packet_number.to_be_bytes());
+    for (out, inp) in out.iter_mut().zip(iv.0.iter()) {
+        *out ^= inp;
+    }
+    aead::Nonce::assume_unique_for_key(out)
+}
+
 /// QUIC protocol version
 ///
 /// Governs version-specific behavior in the TLS layer
@@ -339,42 +349,22 @@ mod test {
             0x5e, 0x5a, 0xe6, 0x51, 0xfd, 0x1e, 0x84, 0x95, 0xaf, 0x13, 0x50, 0xa1,
         ];
         assert_eq!(
-            server_keys
-                .local
-                .packet
-                .iv
-                .nonce_for(PACKET_NUMBER)
-                .as_ref(),
+            nonce_for(PACKET_NUMBER, &server_keys.local.packet.iv).as_ref(),
             &SERVER_NONCE
         );
         assert_eq!(
-            client_keys
-                .remote
-                .packet
-                .iv
-                .nonce_for(PACKET_NUMBER)
-                .as_ref(),
+            nonce_for(PACKET_NUMBER, &client_keys.remote.packet.iv).as_ref(),
             &SERVER_NONCE
         );
         const CLIENT_NONCE: [u8; 12] = [
             0x86, 0x81, 0x35, 0x94, 0x10, 0xa7, 0x0b, 0xb9, 0xc9, 0x2f, 0x04, 0x0a,
         ];
         assert_eq!(
-            server_keys
-                .remote
-                .packet
-                .iv
-                .nonce_for(PACKET_NUMBER)
-                .as_ref(),
+            nonce_for(PACKET_NUMBER, &server_keys.remote.packet.iv).as_ref(),
             &CLIENT_NONCE
         );
         assert_eq!(
-            client_keys
-                .local
-                .packet
-                .iv
-                .nonce_for(PACKET_NUMBER)
-                .as_ref(),
+            nonce_for(PACKET_NUMBER, &client_keys.local.packet.iv).as_ref(),
             &CLIENT_NONCE
         );
 
@@ -428,11 +418,7 @@ mod test {
             0x0d, 0x00, 0x00, 0x00, 0x00, 0x18, 0x41, 0x0a, 0x02, 0x00, 0x00, 0x56,
         ];
         let mut payload = PLAINTEXT;
-        let server_nonce = server_keys
-            .local
-            .packet
-            .iv
-            .nonce_for(PACKET_NUMBER);
+        let server_nonce = nonce_for(PACKET_NUMBER, &server_keys.local.packet.iv);
         let tag = server_keys
             .local
             .packet
@@ -455,11 +441,7 @@ mod test {
 
         let aad = aead::Aad::from(AAD);
         let mut payload = PLAINTEXT;
-        let client_nonce = client_keys
-            .local
-            .packet
-            .iv
-            .nonce_for(PACKET_NUMBER);
+        let client_nonce = nonce_for(PACKET_NUMBER, &client_keys.local.packet.iv);
         let tag = client_keys
             .local
             .packet

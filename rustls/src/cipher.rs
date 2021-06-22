@@ -36,17 +36,6 @@ impl Iv {
         Self(value)
     }
 
-    /// Compute the nonce to use for encrypting or decrypting `packet_number`
-    #[cfg(feature = "quic")]
-    pub(crate) fn nonce_for(&self, packet_number: u64) -> ring::aead::Nonce {
-        let mut out = [0; aead::NONCE_LEN];
-        out[4..].copy_from_slice(&packet_number.to_be_bytes());
-        for (out, inp) in out.iter_mut().zip(self.0.iter()) {
-            *out ^= inp;
-        }
-        aead::Nonce::assume_unique_for_key(out)
-    }
-
     #[cfg(feature = "tls12")]
     pub(crate) fn copy(value: &[u8]) -> Self {
         debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
