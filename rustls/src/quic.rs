@@ -15,7 +15,7 @@ use ring::{aead, hkdf};
 
 /// Secrets used to encrypt/decrypt traffic
 #[derive(Clone, Debug)]
-pub(crate) struct Secrets {
+pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
     pub(crate) client: hkdf::Prk,
     /// Secret used to encrypt packets transmitted by the server
@@ -26,6 +26,13 @@ pub(crate) struct Secrets {
 }
 
 impl Secrets {
+    /// Derive the next set of packet keys
+    pub fn next_packet_keys(&mut self) -> PacketKeySet {
+        let keys = PacketKeySet::new(self);
+        self.update();
+        keys
+    }
+
     fn update(&mut self) {
         let hkdf_alg = self.suite.hkdf_algorithm;
         self.client = hkdf_expand(&self.client, hkdf_alg, b"quic ku", &[]);
@@ -63,17 +70,12 @@ pub trait QuicExt {
     /// Emit unencrypted TLS handshake data.
     ///
     /// When this returns `Some(_)`, the new keys must be used for future handshake data.
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<Keys>;
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange>;
 
     /// Emit the TLS description code of a fatal alert, if one has arisen.
     ///
     /// Check after `read_hs` returns `Err(_)`.
     fn alert(&self) -> Option<AlertDescription>;
-
-    /// Compute the keys to use following a 1-RTT key update
-    ///
-    /// Will return `None` until the handshake is complete.
-    fn next_1rtt_keys(&mut self) -> Option<PacketKeySet>;
 }
 
 /// Keys used to communicate in a single direction
@@ -210,6 +212,16 @@ pub struct PacketKeySet {
     pub remote: PacketKey,
 }
 
+impl PacketKeySet {
+    fn new(secrets: &Secrets) -> Self {
+        let (local, remote) = secrets.local_remote();
+        Self {
+            local: PacketKey::new(secrets.suite, local),
+            remote: PacketKey::new(secrets.suite, remote),
+        }
+    }
+}
+
 /// Complete set of keys used to communicate with the peer
 pub struct Keys {
     /// Encrypts outgoing packets
@@ -263,7 +275,7 @@ pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(
     Ok(())
 }
 
-pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option<Keys> {
+pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option<KeyChange> {
     while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
         buf.extend_from_slice(&msg);
         if let Some(&(true, _)) = this.quic.hs_queue.front() {
@@ -275,30 +287,53 @@ pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option
     }
 
     if let Some(secrets) = this.quic.hs_secrets.take() {
-        return Some(Keys::new(&secrets));
+        return Some(KeyChange::Handshake {
+            keys: Keys::new(&secrets),
+        });
     }
 
-    if let Some(secrets) = this.quic.traffic_secrets.as_ref() {
+    if let Some(mut secrets) = this.quic.traffic_secrets.take() {
         if !this.quic.returned_traffic_keys {
             this.quic.returned_traffic_keys = true;
-            return Some(Keys::new(secrets));
+            let keys = Keys::new(&secrets);
+            secrets.update();
+            return Some(KeyChange::OneRtt {
+                keys,
+                next: secrets,
+            });
         }
     }
 
     None
 }
 
-pub(crate) fn next_1rtt_keys(this: &mut ConnectionCommon) -> Option<PacketKeySet> {
-    let secrets = this.quic.traffic_secrets.as_mut()?;
-    secrets.update();
-
-    let (local, remote) = secrets.local_remote();
-    let keys = PacketKeySet {
-        local: PacketKey::new(secrets.suite, local),
-        remote: PacketKey::new(secrets.suite, remote),
-    };
-
-    Some(keys)
+/// Key material for use in QUIC packet spaces
+///
+/// QUIC uses 4 different sets of keys (and progressive key updates for long-running connections):
+///
+/// * Initial: these can be created from [`Keys::initial()`]
+/// * 0-RTT keys: can be retrieved from [`QuicExt::zero_rtt_keys()`]
+/// * Handshake: these are returned from [`QuicExt::write_hs()`] after `ClientHello` and
+///   `ServerHello` messages have been exchanged
+/// * 1-RTT keys: these are returned from [`QuicExt::write_hs()`] after the handshake is done
+///
+/// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
+/// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
+/// only packet keys are updated by key updates; header protection keys remain the same.
+#[allow(clippy::large_enum_variant)]
+pub enum KeyChange {
+    /// Keys for the handshake space
+    Handshake {
+        /// Header and packet keys for the handshake space
+        keys: Keys,
+    },
+    /// Keys for 1-RTT data
+    OneRtt {
+        /// Header and packet keys for 1-RTT data
+        keys: Keys,
+        /// Secrets to derive updated keys from
+        next: Secrets,
+    },
 }
 
 /// Compute the nonce to use for encrypting or decrypting `packet_number`
