@@ -163,12 +163,7 @@ pub(super) fn handle_server_hello(
 
     #[cfg(feature = "quic")]
     {
-        cx.common.quic.hs_secrets = Some(quic::Secrets {
-            server: server_key,
-            client: client_key,
-            suite,
-            is_client: true,
-        });
+        cx.common.quic.hs_secrets = Some(quic::Secrets::new(client_key, server_key, suite, true));
     }
 
     emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
@@ -947,12 +942,8 @@ impl hs::State for ExpectFinished {
         #[cfg(feature = "quic")]
         {
             if cx.common.protocol == Protocol::Quic {
-                cx.common.quic.traffic_secrets = Some(quic::Secrets {
-                    client: client_key,
-                    server: server_key,
-                    suite: st.suite,
-                    is_client: true,
-                });
+                cx.common.quic.traffic_secrets =
+                    Some(quic::Secrets::new(client_key, server_key, st.suite, true));
                 return Ok(Box::new(ExpectQuicTraffic(st)));
             }
         }

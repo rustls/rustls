@@ -17,15 +17,29 @@ use ring::{aead, hkdf};
 #[derive(Clone, Debug)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    pub(crate) client: hkdf::Prk,
+    client: hkdf::Prk,
     /// Secret used to encrypt packets transmitted by the server
-    pub(crate) server: hkdf::Prk,
+    server: hkdf::Prk,
     /// Cipher suite used with these secrets
-    pub(crate) suite: &'static Tls13CipherSuite,
-    pub(crate) is_client: bool,
+    suite: &'static Tls13CipherSuite,
+    is_client: bool,
 }
 
 impl Secrets {
+    pub(crate) fn new(
+        client: hkdf::Prk,
+        server: hkdf::Prk,
+        suite: &'static Tls13CipherSuite,
+        is_client: bool,
+    ) -> Self {
+        Self {
+            client,
+            server,
+            suite,
+            is_client,
+        }
+    }
+
     /// Derive the next set of packet keys
     pub fn next_packet_keys(&mut self) -> PacketKeySet {
         let keys = PacketKeySet::new(self);
