@@ -196,7 +196,7 @@ pub struct ServerConfig {
     pub versions: crate::versions::EnabledVersions,
 
     /// How to verify client certificates.
-    verifier: Arc<dyn verify::ClientCertVerifier>,
+    pub verifier: Arc<dyn verify::ClientCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.

@@ -132,7 +132,7 @@ pub struct ClientConfig {
     pub enable_sni: bool,
 
     /// How to verify the server certificate chain.
-    verifier: Arc<dyn verify::ServerCertVerifier>,
+    pub verifier: Arc<dyn verify::ServerCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.
