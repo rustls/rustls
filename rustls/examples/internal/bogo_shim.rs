@@ -348,7 +348,8 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         rustls::ALL_KX_GROUPS.to_vec()
     };
 
-    let mut cfg = rustls::ConfigBuilder::with_safe_default_cipher_suites()
+    let mut cfg = rustls::config_builder()
+        .with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
         .with_safe_default_protocol_versions()
         .for_server()
@@ -399,7 +400,6 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
             .enable(&rustls::version::TLS13);
     }
 
-
     Arc::new(cfg)
 }
 
@@ -428,7 +428,7 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
-    let cfg = rustls::ConfigBuilder::with_safe_defaults()
+    let cfg = rustls::config_builder_with_safe_defaults()
         .for_client()
         .unwrap()
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
