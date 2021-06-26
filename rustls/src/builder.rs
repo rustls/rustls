@@ -35,16 +35,16 @@ use crate::versions;
 /// The types used here fit together like this:
 ///
 /// 1. You must make a decision on which cipher suites to use, typically
-///    by calling [`ConfigBuilder::with_safe_default_cipher_suites()`].
-/// 2. You now have a [`ConfigBuilderWithSuites`].  You must make a decision
-///    on key exchange groups: typically by calling [`ConfigBuilderWithSuites::with_safe_default_kx_groups()`].
-/// 3. You now have a [`ConfigBuilderWithKxGroups`].  You must make
+///    by calling [`ConfigWantsCipherSuites::with_safe_default_cipher_suites()`].
+/// 2. Now you must make a decision
+///    on key exchange groups: typically by calling [`ConfigWantsKxGroups::with_safe_default_kx_groups()`].
+/// 3. Now you must make
 ///    a decision on which protocol versions to support, typically by calling
-///    [`ConfigBuilderWithKxGroups::with_safe_default_protocol_versions()`].
-/// 4. You now have a [`ConfigBuilderWithVersions`] and need to decide whether to
-///    make a [`ServerConfig`] or [`ClientConfig`] -- call [`ConfigBuilderWithVersions::for_server()`]
-///    or [`ConfigBuilderWithVersions::for_client()`] respectively.
-/// 5. Now see [`ServerConfigBuilder`] or [`ClientConfigBuilder`] for further steps.
+///    [`ConfigWantsVersions::with_safe_default_protocol_versions()`].
+/// 4. You now need to indicate whether to make a [`ServerConfig`] or [`ClientConfig`],
+///    by calling [`ConfigWantsPeerType::for_server()`]
+///    or [`ConfigWantsPeerType::for_client()`] respectively.
+/// 5. Now see [`ConfigWantsServerVerifier`] or [`ConfigWantsClientVerifier`] for further steps.
 ///
 /// [`ServerConfig`]: crate::ServerConfig
 /// [`ClientConfig`]: crate::ClientConfig
@@ -137,7 +137,7 @@ impl ConfigWantsVersions {
     }
 }
 
-/// A [`ConfigBuilder`] where we know the cipher suites, key exchange groups,
+/// A config builder where we know the cipher suites, key exchange groups,
 /// and protocol versions.
 pub struct ConfigWantsPeerType {
     cipher_suites: Vec<SupportedCipherSuite>,
