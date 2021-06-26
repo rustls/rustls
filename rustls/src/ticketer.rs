@@ -40,14 +40,14 @@ struct AeadTicketer {
 
 impl AeadTicketer {
     /// Make a ticketer with recommended configuration and a random key.
-    fn new() -> Result<AeadTicketer, rand::GetRandomFailed> {
+    fn new() -> Result<Self, rand::GetRandomFailed> {
         let mut key = [0u8; 32];
         rand::fill_random(&mut key)?;
 
         let alg = &aead::CHACHA20_POLY1305;
         let key = aead::UnboundKey::new(alg, &key).unwrap();
 
-        Ok(AeadTicketer {
+        Ok(Self {
             alg,
             key: aead::LessSafeKey::new(key),
             lifetime: 60 * 60 * 12,
@@ -129,9 +129,9 @@ impl TicketSwitcher {
     fn new(
         lifetime: u32,
         generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
-    ) -> Result<TicketSwitcher, Error> {
+    ) -> Result<Self, Error> {
         let now = TimeBase::now()?;
-        Ok(TicketSwitcher {
+        Ok(Self {
             generator,
             lifetime,
             state: Mutex::new(TicketSwitcherState {

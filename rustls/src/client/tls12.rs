@@ -9,7 +9,6 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::ServerKeyExchangePayload;
 use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID};
 use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
@@ -393,7 +392,7 @@ impl hs::State for ExpectServerKx {
         )?;
         self.transcript.add_message(&m);
 
-        let decoded_kx = opaque_kx
+        let ecdhe = opaque_kx
             .unwrap_given_kxa(&self.suite.kx)
             .ok_or_else(|| {
                 cx.common
@@ -403,14 +402,12 @@ impl hs::State for ExpectServerKx {
 
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
-        decoded_kx.encode_params(&mut kx_params);
-        let server_kx = ServerKxDetails::new(kx_params, decoded_kx.get_sig().unwrap());
+        ecdhe.params.encode(&mut kx_params);
+        let server_kx = ServerKxDetails::new(kx_params, ecdhe.dss);
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
-            if let ServerKeyExchangePayload::ECDHE(ecdhe) = decoded_kx {
-                debug!("ECDHE curve is {:?}", ecdhe.params.curve_params);
-            }
+            debug!("ECDHE curve is {:?}", ecdhe.params.curve_params);
         }
 
         Ok(Box::new(ExpectServerDoneOrCertReq {

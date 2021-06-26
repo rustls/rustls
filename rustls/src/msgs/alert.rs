@@ -13,10 +13,10 @@ impl Codec for AlertMessagePayload {
         self.description.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<AlertMessagePayload> {
+    fn read(r: &mut Reader) -> Option<Self> {
         let level = AlertLevel::read(r)?;
         let description = AlertDescription::read(r)?;
 
-        Some(AlertMessagePayload { level, description })
+        Some(Self { level, description })
     }
 }

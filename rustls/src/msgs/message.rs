@@ -21,21 +21,17 @@ pub enum MessagePayload {
 impl MessagePayload {
     pub fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            MessagePayload::Alert(ref x) => x.encode(bytes),
-            MessagePayload::Handshake(ref x) => x.encode(bytes),
-            MessagePayload::ChangeCipherSpec(ref x) => x.encode(bytes),
-            MessagePayload::ApplicationData(ref x) => x.encode(bytes),
+            Self::Alert(ref x) => x.encode(bytes),
+            Self::Handshake(ref x) => x.encode(bytes),
+            Self::ChangeCipherSpec(ref x) => x.encode(bytes),
+            Self::ApplicationData(ref x) => x.encode(bytes),
         }
     }
 
-    pub fn new(
-        typ: ContentType,
-        vers: ProtocolVersion,
-        payload: Payload,
-    ) -> Result<MessagePayload, Error> {
+    pub fn new(typ: ContentType, vers: ProtocolVersion, payload: Payload) -> Result<Self, Error> {
         let mut r = Reader::init(&payload.0);
         let parsed = match typ {
-            ContentType::ApplicationData => return Ok(MessagePayload::ApplicationData(payload)),
+            ContentType::ApplicationData => return Ok(Self::ApplicationData(payload)),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
             ContentType::Handshake => {
                 HandshakeMessagePayload::read_version(&mut r, vers).map(MessagePayload::Handshake)
@@ -53,10 +49,10 @@ impl MessagePayload {
 
     pub fn content_type(&self) -> ContentType {
         match self {
-            MessagePayload::Alert(_) => ContentType::Alert,
-            MessagePayload::Handshake(_) => ContentType::Handshake,
-            MessagePayload::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
-            MessagePayload::ApplicationData(_) => ContentType::ApplicationData,
+            Self::Alert(_) => ContentType::Alert,
+            Self::Handshake(_) => ContentType::Handshake,
+            Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
+            Self::ApplicationData(_) => ContentType::ApplicationData,
         }
     }
 }
@@ -76,7 +72,7 @@ pub struct OpaqueMessage {
 impl OpaqueMessage {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader) -> Result<OpaqueMessage, MessageError> {
+    pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
         let typ = ContentType::read(r).ok_or(MessageError::TooShortForHeader)?;
         let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
         let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
@@ -104,7 +100,7 @@ impl OpaqueMessage {
             .ok_or(MessageError::TooShortForLength)?;
         let payload = Payload::read(&mut sub);
 
-        Ok(OpaqueMessage {
+        Ok(Self {
             typ,
             version,
             payload,
@@ -141,7 +137,7 @@ impl OpaqueMessage {
 }
 
 impl From<Message> for PlainMessage {
-    fn from(msg: Message) -> PlainMessage {
+    fn from(msg: Message) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
             MessagePayload::ApplicationData(payload) => payload,
@@ -152,7 +148,7 @@ impl From<Message> for PlainMessage {
             }
         };
 
-        PlainMessage {
+        Self {
             typ,
             version: msg.version,
             payload,
@@ -206,8 +202,8 @@ impl Message {
         }
     }
 
-    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Message {
-        Message {
+    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
+        Self {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
                 level,
@@ -216,8 +212,8 @@ impl Message {
         }
     }
 
-    pub fn build_key_update_notify() -> Message {
-        Message {
+    pub fn build_key_update_notify() -> Self {
+        Self {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
@@ -228,7 +224,7 @@ impl TryFrom<PlainMessage> for Message {
     type Error = Error;
 
     fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
-        Ok(Message {
+        Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
         })

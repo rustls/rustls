@@ -27,8 +27,8 @@ pub(crate) struct RecordLayer {
 }
 
 impl RecordLayer {
-    pub(crate) fn new() -> RecordLayer {
-        RecordLayer {
+    pub(crate) fn new() -> Self {
+        Self {
             message_encrypter: <dyn MessageEncrypter>::invalid(),
             message_decrypter: <dyn MessageDecrypter>::invalid(),
             write_seq: 0,

@@ -76,8 +76,8 @@ pub(crate) struct KeyScheduleEarly {
 }
 
 impl KeyScheduleEarly {
-    pub(crate) fn new(algorithm: hkdf::Algorithm, secret: &[u8]) -> KeyScheduleEarly {
-        KeyScheduleEarly {
+    pub(crate) fn new(algorithm: hkdf::Algorithm, secret: &[u8]) -> Self {
+        Self {
             ks: KeySchedule::new(algorithm, secret),
         }
     }
@@ -120,8 +120,8 @@ pub(crate) struct KeyScheduleNonSecret {
 }
 
 impl KeyScheduleNonSecret {
-    pub(crate) fn new(algorithm: hkdf::Algorithm) -> KeyScheduleNonSecret {
-        KeyScheduleNonSecret {
+    pub(crate) fn new(algorithm: hkdf::Algorithm) -> Self {
+        Self {
             ks: KeySchedule::new_with_empty_secret(algorithm),
         }
     }
@@ -329,10 +329,10 @@ impl KeyScheduleTraffic {
 }
 
 impl KeySchedule {
-    fn new(algorithm: hkdf::Algorithm, secret: &[u8]) -> KeySchedule {
+    fn new(algorithm: hkdf::Algorithm, secret: &[u8]) -> Self {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
         let salt = hkdf::Salt::new(algorithm, &zeroes[..algorithm.len()]);
-        KeySchedule {
+        Self {
             current: salt.extract(secret),
             algorithm,
         }
@@ -343,7 +343,7 @@ impl KeySchedule {
         self.algorithm
     }
 
-    fn new_with_empty_secret(algorithm: hkdf::Algorithm) -> KeySchedule {
+    fn new_with_empty_secret(algorithm: hkdf::Algorithm) -> Self {
         let zeroes = [0u8; digest::MAX_OUTPUT_LEN];
         Self::new(algorithm, &zeroes[..algorithm.len()])
     }
@@ -518,7 +518,7 @@ impl From<hkdf::Okm<'_, PayloadU8Len>> for PayloadU8 {
     fn from(okm: hkdf::Okm<PayloadU8Len>) -> Self {
         let mut r = vec![0u8; okm.len().0];
         okm.fill(&mut r[..]).unwrap();
-        PayloadU8::new(r)
+        Self::new(r)
     }
 }
 

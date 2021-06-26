@@ -13,8 +13,8 @@ pub(crate) struct ChunkVecBuffer {
 }
 
 impl ChunkVecBuffer {
-    pub(crate) fn new(limit: Option<usize>) -> ChunkVecBuffer {
-        ChunkVecBuffer {
+    pub(crate) fn new(limit: Option<usize>) -> Self {
+        Self {
             chunks: VecDeque::new(),
             limit,
         }

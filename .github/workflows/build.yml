@@ -159,9 +159,6 @@ jobs:
         with:
           go-version: "1.14"
 
-      - name: Install dependencies
-        run: sudo apt-get install llvm llvm-7 libclang-common-7-dev llvm-7-dev
-
       - name: Build lcov
         run: admin/build-lcov
 

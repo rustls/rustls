@@ -21,8 +21,8 @@ where
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Stream<'a, C, T> {
-        Stream { conn, sock }
+    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Self {
+        Self { conn, sock }
     }
 
     /// If we're handshaking, complete all the IO for that.
@@ -139,8 +139,8 @@ where
     ///
     /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(conn: C, sock: T) -> StreamOwned<C, T> {
-        StreamOwned { conn, sock }
+    pub fn new(conn: C, sock: T) -> Self {
+        Self { conn, sock }
     }
 
     /// Get a reference to the underlying socket

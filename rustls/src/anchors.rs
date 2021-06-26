@@ -45,8 +45,8 @@ pub struct RootCertStore {
 
 impl RootCertStore {
     /// Make a new, empty `RootCertStore`.
-    pub fn empty() -> RootCertStore {
-        RootCertStore { roots: Vec::new() }
+    pub fn empty() -> Self {
+        Self { roots: Vec::new() }
     }
 
     /// Return true if there are no certificates.

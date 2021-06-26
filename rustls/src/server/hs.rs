@@ -276,17 +276,14 @@ pub(super) struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub(super) fn new(
-        config: Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
-    ) -> ExpectClientHello {
+    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
             transcript_buffer.set_client_auth_enabled();
         }
 
-        ExpectClientHello {
+        Self {
             config,
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),

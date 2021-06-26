@@ -55,7 +55,7 @@ struct TlsServer {
 }
 
 impl TlsServer {
-    fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig>) -> TlsServer {
+    fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig>) -> Self {
         TlsServer {
             server,
             connections: HashMap::new(),
