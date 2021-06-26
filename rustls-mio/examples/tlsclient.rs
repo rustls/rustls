@@ -498,7 +498,8 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         rustls::DEFAULT_VERSIONS.to_vec()
     };
 
-    let config = rustls::ConfigBuilder::with_cipher_suites(&suites)
+    let config = rustls::config_builder()
+        .with_cipher_suites(&suites)
         .with_safe_default_kx_groups()
         .with_protocol_versions(&versions)
         .for_client()

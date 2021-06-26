@@ -10,12 +10,12 @@ use std::sync::Mutex;
 
 use rustls;
 
+use rustls::config_builder;
 use rustls::internal::msgs::{codec::Codec, persist::ClientSessionValue};
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::sign;
 use rustls::ClientHello;
-use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::Error;
 use rustls::KeyLog;
@@ -187,7 +187,8 @@ fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
 #[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
-        ConfigBuilder::with_safe_default_cipher_suites()
+        config_builder()
+            .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
             .for_client()
@@ -199,7 +200,8 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_client_rejects_empty_cipher_suites() {
     assert_eq!(
-        ConfigBuilder::with_cipher_suites(&[])
+        config_builder()
+            .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .for_client()
@@ -211,7 +213,8 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        ConfigBuilder::with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
+        config_builder()
+            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .for_client()
@@ -223,7 +226,8 @@ fn config_builder_for_client_rejects_incompatible_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_empty_kx_groups() {
     assert_eq!(
-        ConfigBuilder::with_safe_default_cipher_suites()
+        config_builder()
+            .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
             .for_server()
@@ -235,7 +239,8 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_server_rejects_empty_cipher_suites() {
     assert_eq!(
-        ConfigBuilder::with_cipher_suites(&[])
+        config_builder()
+            .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .for_server()
@@ -247,7 +252,8 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        ConfigBuilder::with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
+        config_builder()
+            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .for_server()
@@ -784,6 +790,7 @@ fn client_auth_works() {
 mod test_clientverifier {
     use super::*;
     use crate::common::MockClientVerifier;
+    use rustls::config_builder_with_safe_defaults;
     use rustls::internal::msgs::enums::AlertDescription;
     use rustls::internal::msgs::enums::ContentType;
 
@@ -806,7 +813,7 @@ mod test_clientverifier {
         kt: KeyType,
         client_cert_verifier: MockClientVerifier,
     ) -> ServerConfig {
-        ConfigBuilder::with_safe_defaults()
+        config_builder_with_safe_defaults()
             .for_server()
             .unwrap()
             .with_client_cert_verifier(Arc::new(client_cert_verifier))
@@ -3033,16 +3040,12 @@ mod test_quic {
         assert!(!server.is_handshaking());
         assert!(compatible_keys(&server_1rtt, &client_1rtt));
         assert!(!compatible_keys(&server_hs, &server_1rtt));
-        assert!(
-            step(&mut client, &mut server)
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            step(&mut server, &mut client)
-                .unwrap()
-                .is_none()
-        );
+        assert!(step(&mut client, &mut server)
+            .unwrap()
+            .is_none());
+        assert!(step(&mut server, &mut client)
+            .unwrap()
+            .is_none());
 
         // 0-RTT handshake
         let mut client = ClientConnection::new_quic(
@@ -3052,11 +3055,9 @@ mod test_quic {
             client_params.into(),
         )
         .unwrap();
-        assert!(
-            client
-                .negotiated_cipher_suite()
-                .is_some()
-        );
+        assert!(client
+            .negotiated_cipher_suite()
+            .is_some());
 
         let mut server = ServerConnection::new_quic(
             Arc::clone(&server_config),
@@ -3196,15 +3197,13 @@ mod test_quic {
         client_config.alpn_protocols = vec!["foo".into()];
         let client_config = Arc::new(client_config);
 
-        assert!(
-            ClientConnection::new_quic(
-                client_config,
-                quic::Version::V1,
-                dns_name("localhost"),
-                b"client params".to_vec(),
-            )
-            .is_err()
-        );
+        assert!(ClientConnection::new_quic(
+            client_config,
+            quic::Version::V1,
+            dns_name("localhost"),
+            b"client params".to_vec(),
+        )
+        .is_err());
 
         let mut server_config = make_server_config(KeyType::ED25519);
         server_config
@@ -3213,14 +3212,12 @@ mod test_quic {
         server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
 
-        assert!(
-            ServerConnection::new_quic(
-                server_config,
-                quic::Version::V1,
-                b"server params".to_vec(),
-            )
-            .is_err()
-        );
+        assert!(ServerConnection::new_quic(
+            server_config,
+            quic::Version::V1,
+            b"server params".to_vec(),
+        )
+        .is_err());
     }
 
     #[test]
@@ -3482,7 +3479,6 @@ fn test_client_sends_helloretryrequest() {
     // but server only accepts x25519, so a HRR is required
     let mut server_config = make_server_config(KeyType::RSA);
     server_config.kx_groups = vec![&rustls::kx_group::X25519];
-
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 

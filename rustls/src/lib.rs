@@ -109,7 +109,7 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,ignore
-//! let config = rustls::ConfigBuilder::with_safe_defaults()
+//! let config = rustls::config_builder_with_safe_defaults()
 //!     .for_client()
 //!     .unwrap()
 //!     .with_root_certificates(root_store, trusted_ct_logs)
@@ -127,7 +127,7 @@
 //! # let mut root_store = rustls::RootCertStore::empty();
 //! # root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
 //! # let trusted_ct_logs = &[];
-//! # let config = rustls::ConfigBuilder::with_safe_defaults()
+//! # let config = rustls::config_builder_with_safe_defaults()
 //! #     .for_client()
 //! #     .unwrap()
 //! #     .with_root_certificates(root_store, trusted_ct_logs)
@@ -298,9 +298,10 @@ pub mod internal {
 // The public interface is:
 pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
-    ConfigBuilder, ConfigBuilderWithKxGroups, ConfigBuilderWithSuites, ConfigBuilderWithVersions,
+    config_builder, config_builder_with_safe_defaults, ConfigWantsCipherSuites,
+    ConfigWantsKxGroups, ConfigWantsPeerType, ConfigWantsVersions,
 };
-pub use crate::client::builder::{ClientConfigBuilder, ClientConfigBuilderWithCertVerifier};
+pub use crate::client::builder::{ConfigWantsClientCert, ConfigWantsServerVerifier};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::ServerName;
@@ -317,7 +318,7 @@ pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
 pub use crate::msgs::handshake::DistinguishedNames;
-pub use crate::server::builder::{ServerConfigBuilder, ServerConfigBuilderWithClientAuth};
+pub use crate::server::builder::{ConfigWantsClientVerifier, ConfigWantsServerCert};
 pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::StoresServerSessions;
