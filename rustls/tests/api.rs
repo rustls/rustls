@@ -3040,12 +3040,16 @@ mod test_quic {
         assert!(!server.is_handshaking());
         assert!(compatible_keys(&server_1rtt, &client_1rtt));
         assert!(!compatible_keys(&server_hs, &server_1rtt));
-        assert!(step(&mut client, &mut server)
-            .unwrap()
-            .is_none());
-        assert!(step(&mut server, &mut client)
-            .unwrap()
-            .is_none());
+        assert!(
+            step(&mut client, &mut server)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            step(&mut server, &mut client)
+                .unwrap()
+                .is_none()
+        );
 
         // 0-RTT handshake
         let mut client = ClientConnection::new_quic(
@@ -3055,9 +3059,11 @@ mod test_quic {
             client_params.into(),
         )
         .unwrap();
-        assert!(client
-            .negotiated_cipher_suite()
-            .is_some());
+        assert!(
+            client
+                .negotiated_cipher_suite()
+                .is_some()
+        );
 
         let mut server = ServerConnection::new_quic(
             Arc::clone(&server_config),
@@ -3197,13 +3203,15 @@ mod test_quic {
         client_config.alpn_protocols = vec!["foo".into()];
         let client_config = Arc::new(client_config);
 
-        assert!(ClientConnection::new_quic(
-            client_config,
-            quic::Version::V1,
-            dns_name("localhost"),
-            b"client params".to_vec(),
-        )
-        .is_err());
+        assert!(
+            ClientConnection::new_quic(
+                client_config,
+                quic::Version::V1,
+                dns_name("localhost"),
+                b"client params".to_vec(),
+            )
+            .is_err()
+        );
 
         let mut server_config = make_server_config(KeyType::ED25519);
         server_config
