@@ -83,7 +83,7 @@ impl ConfigWantsServerVerifier {
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,
     ) -> ConfigWantsClientCert {
-        ClientConfigBuilderWithCertVerifier {
+        ConfigWantsClientCert {
             cipher_suites: self.cipher_suites,
             kx_groups: self.kx_groups,
             versions: self.versions,
