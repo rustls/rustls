@@ -20,12 +20,13 @@ use std::sync::Arc;
 /// Example:
 ///
 /// ```no_run
-/// # use rustls::ConfigBuilder;
+/// # use rustls::config_builder;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let trusted_ct_logs = &[];
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// ConfigBuilder::with_safe_default_cipher_suites()
+/// config_builder()
+///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
 ///     .for_client()
@@ -38,10 +39,10 @@ use std::sync::Arc;
 /// This may be shortened to:
 ///
 /// ```
-/// # use rustls::ConfigBuilder;
+/// # use rustls::config_builder_with_safe_defaults;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let trusted_ct_logs = &[];
-/// ConfigBuilder::with_safe_defaults()
+/// config_builder_with_safe_defaults()
 ///     .for_client()
 ///     .unwrap()
 ///     .with_root_certificates(root_certs, trusted_ct_logs)
@@ -53,22 +54,22 @@ use std::sync::Arc;
 /// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
-pub struct ClientConfigBuilder {
+pub struct ConfigWantsServerVerifier {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
     pub(crate) versions: versions::EnabledVersions,
 }
 
-impl ClientConfigBuilder {
+impl ConfigWantsServerVerifier {
     /// Choose how to verify client certificates.
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
         ct_logs: &'static [&'static sct::Log],
-    ) -> ClientConfigBuilderWithCertVerifier {
+    ) -> ConfigWantsClientCert {
         let verifier = Arc::new(verify::WebPkiVerifier::new(root_store, ct_logs));
 
-        ClientConfigBuilderWithCertVerifier {
+        ConfigWantsClientCert {
             cipher_suites: self.cipher_suites,
             kx_groups: self.kx_groups,
             versions: self.versions,
@@ -81,7 +82,7 @@ impl ClientConfigBuilder {
     pub fn with_custom_certificate_verifier(
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,
-    ) -> ClientConfigBuilderWithCertVerifier {
+    ) -> ConfigWantsClientCert {
         ClientConfigBuilderWithCertVerifier {
             cipher_suites: self.cipher_suites,
             kx_groups: self.kx_groups,
@@ -91,16 +92,16 @@ impl ClientConfigBuilder {
     }
 }
 
-/// A [`ClientConfigBuilder`] where we know the cipher suites, key exchange
-/// groups, enabled versions, and server certificate auth policy.
-pub struct ClientConfigBuilderWithCertVerifier {
+/// A config builder for a client, where we want to know whether and how a
+/// client certificate should be provided.
+pub struct ConfigWantsClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
 }
 
-impl ClientConfigBuilderWithCertVerifier {
+impl ConfigWantsClientCert {
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
