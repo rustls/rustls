@@ -10,48 +10,8 @@ use crate::versions;
 
 use std::sync::Arc;
 
-/// Building a [`ServerConfig`] in a linker-friendly way.
-///
-/// Linker-friendly: meaning unused cipher suites, protocol
-/// versions, key exchange mechanisms, etc. can be discarded
-/// by the linker as they'll be unreferenced.
-///
-/// Example:
-///
-/// ```no_run
-/// # use rustls::config_builder;
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// config_builder()
-///     .with_safe_default_cipher_suites()
-///     .with_safe_default_kx_groups()
-///     .with_safe_default_protocol_versions()
-///     .for_server()
-///     .unwrap()
-///     .with_no_client_auth()
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
-/// ```
-///
-/// This may be shortened to:
-///
-/// ```no_run
-/// # use rustls::config_builder_with_safe_defaults;
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// config_builder_with_safe_defaults()
-///     .for_server()
-///     .unwrap()
-///     .with_no_client_auth()
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
-/// ```
-///
-/// # Resulting [`ServerConfig`] defaults
-/// * [`ServerConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
-/// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
-/// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
-/// * [`ServerConfig::key_log`]: key material is not logged.
+/// A server config in progress, where the next step is to configure whether
+/// and how to authenticate clients.
 pub struct ConfigWantsClientVerifier {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,

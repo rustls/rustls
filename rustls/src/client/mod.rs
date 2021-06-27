@@ -83,6 +83,15 @@ pub trait ResolvesClientCert: Send + Sync {
 ///
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
+///
+/// These cannot be constructed directly. Create one via [`config_builder`](crate::config_builder).
+///
+/// # Defaults
+///
+/// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
+/// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
+/// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
+/// * [`ClientConfig::key_log`]: key material is not logged.
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
