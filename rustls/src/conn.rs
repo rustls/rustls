@@ -178,7 +178,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// Errors from this function relate to TLS protocol errors, and
     /// are fatal to the connection.  Future calls after an error will do
     /// no new work and will return the same error. After an error is
-    /// received from `process_new_packets`, you should not call `read_tls`
+    /// received from [`process_new_packets`], you should not call [`read_tls`]
     /// any more (it will fill up buffers to no purpose). However, you
     /// may call the other methods on the connection, including `write`,
     /// `send_close_notify`, and `write_tls`. Most likely you will want to
@@ -189,6 +189,7 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// about the connection.
     ///
     /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     fn process_new_packets(&mut self) -> Result<IoState, Error>;
 
     /// Returns true if the caller should call [`Connection::read_tls`] as soon
@@ -206,8 +207,8 @@ pub trait Connection: quic::QuicExt + Send + Sync {
     /// Returns true if the connection is currently performing the TLS handshake.
     ///
     /// During this time plaintext written to the connection is buffered in memory. After
-    /// [`process_new_packets()`] has been called, this might start to return `false` while the
-    /// final handshake packets still need to be extracted from the connection's buffers.
+    /// [`Connection::process_new_packets`] has been called, this might start to return `false`
+    /// while the final handshake packets still need to be extracted from the connection's buffers.
     fn is_handshaking(&self) -> bool;
 
     /// Sets a limit on the internal buffers used to buffer
