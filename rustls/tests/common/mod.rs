@@ -222,11 +222,14 @@ impl KeyType {
     }
 }
 
-pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    server_config_builder_with_safe_defaults()
-        .with_no_client_auth()
+pub fn finish_server_config(kt: KeyType, conf: rustls::ConfigWantsClientVerifier) -> ServerConfig {
+    conf.with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
+}
+
+pub fn make_server_config(kt: KeyType) -> ServerConfig {
+    finish_server_config(kt, server_config_builder_with_safe_defaults())
 }
 
 pub fn make_server_config_with_kx_groups(

@@ -1845,10 +1845,17 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
 
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::RSA;
-    let mut server_config = make_server_config(kt);
-    server_config.cipher_suites = vec![find_suite(
-        CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    )];
+    let server_config = finish_server_config(
+        kt,
+        rustls::config_builder()
+            .with_cipher_suites(&[
+                rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+            ])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .for_server()
+            .unwrap(),
+    );
 
     let client_config = finish_client_config(
         kt,
@@ -2355,11 +2362,15 @@ fn negotiated_ciphersuite_server() {
     for item in TEST_CIPHERSUITES.iter() {
         let (version, kt, suite) = *item;
         let scs = find_suite(suite);
-        let mut server_config = make_server_config(kt);
-        server_config.cipher_suites = vec![scs];
-        server_config
-            .versions
-            .replace(&[version]);
+        let server_config = finish_server_config(
+            kt,
+            rustls::config_builder()
+                .with_cipher_suites(&[scs])
+                .with_safe_default_kx_groups()
+                .with_protocol_versions(&[version])
+                .for_server()
+                .unwrap(),
+        );
 
         do_suite_test(make_client_config(kt), server_config, scs, version.version);
     }
