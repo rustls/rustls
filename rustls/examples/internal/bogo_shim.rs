@@ -133,13 +133,24 @@ impl Options {
     }
 
     fn tls13_supported(&self) -> bool {
-        self.support_tls13
-            && (self.version_allowed(ProtocolVersion::TLSv1_3)
-                || self.version_allowed(ProtocolVersion::Unknown(0x7f17)))
+        self.support_tls13 && self.version_allowed(ProtocolVersion::TLSv1_3)
     }
 
     fn tls12_supported(&self) -> bool {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
+    }
+
+    fn supported_versions(&self) -> Vec<&'static rustls::SupportedProtocolVersion> {
+        let mut versions = vec![];
+
+        if self.tls12_supported() {
+            versions.push(&rustls::version::TLS12);
+        }
+
+        if self.tls13_supported() {
+            versions.push(&rustls::version::TLS13);
+        }
+        versions
     }
 }
 
@@ -348,9 +359,10 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         rustls::ALL_KX_GROUPS.to_vec()
     };
 
-    let mut cfg = rustls::ConfigBuilder::with_safe_default_cipher_suites()
+    let mut cfg = rustls::config_builder()
+        .with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
-        .with_safe_default_protocol_versions()
+        .with_protocol_versions(&opts.supported_versions())
         .for_server()
         .unwrap()
         .with_client_cert_verifier(client_auth)
@@ -387,19 +399,6 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
             .collect::<Vec<_>>();
     }
 
-    cfg.versions.replace(&[]);
-
-    if opts.tls12_supported() {
-        cfg.versions
-            .enable(&rustls::version::TLS12);
-    }
-
-    if opts.tls13_supported() {
-        cfg.versions
-            .enable(&rustls::version::TLS13);
-    }
-
-
     Arc::new(cfg)
 }
 
@@ -428,9 +427,21 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
-    let cfg = rustls::ConfigBuilder::with_safe_defaults()
+    let kx_groups = if let Some(curves) = &opts.curves {
+        curves
+            .iter()
+            .map(|curveid| lookup_kx_group(*curveid))
+            .collect()
+    } else {
+        rustls::ALL_KX_GROUPS.to_vec()
+    };
+
+    let cfg = rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(&kx_groups)
+        .with_protocol_versions(&opts.supported_versions())
         .for_client()
-        .unwrap()
+        .expect("inconsistent settings")
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
             send_sct: opts.send_sct,
         }));
@@ -464,27 +475,8 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
             .collect();
     }
 
-    cfg.versions.replace(&[]);
-
-    if opts.tls12_supported() {
-        cfg.versions
-            .enable(&rustls::version::TLS12);
-    }
-
-    if opts.tls13_supported() {
-        cfg.versions
-            .enable(&rustls::version::TLS13);
-    }
-
     if opts.enable_early_data {
         cfg.enable_early_data = true;
-    }
-
-    if let Some(curves) = &opts.curves {
-        cfg.kx_groups = curves
-            .iter()
-            .map(|curveid| lookup_kx_group(*curveid))
-            .collect();
     }
 
     Arc::new(cfg)

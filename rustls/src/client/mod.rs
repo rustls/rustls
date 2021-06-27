@@ -83,17 +83,26 @@ pub trait ResolvesClientCert: Send + Sync {
 ///
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
+///
+/// These cannot be constructed directly. Create one via [`config_builder`](crate::config_builder).
+///
+/// # Defaults
+///
+/// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
+/// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
+/// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
+/// * [`ClientConfig::key_log`]: key material is not logged.
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
-    pub cipher_suites: Vec<SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
 
     /// List of supported key exchange algorithms, in preference order -- the
     /// first element is the highest priority.
     ///
     /// The first element in this list is the _default key share algorithm_,
     /// and in TLS1.3 a key share for it is sent in the client hello.
-    pub kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static SupportedKxGroup>,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -123,7 +132,7 @@ pub struct ClientConfig {
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
-    pub versions: versions::EnabledVersions,
+    versions: versions::EnabledVersions,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.

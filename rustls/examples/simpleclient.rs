@@ -21,9 +21,7 @@ use rustls::{Connection, RootCertStore};
 fn main() {
     let mut root_store = RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
-    let config = rustls::ConfigBuilder::with_safe_defaults()
-        .for_client()
-        .unwrap()
+    let config = rustls::client_config_builder_with_safe_defaults()
         .with_root_certificates(root_store, &[])
         .with_no_client_auth();
 

@@ -10,60 +10,21 @@ use crate::versions;
 
 use std::sync::Arc;
 
-/// Building a [`ServerConfig`] in a linker-friendly way.
-///
-/// Linker-friendly: meaning unused cipher suites, protocol
-/// versions, key exchange mechanisms, etc. can be discarded
-/// by the linker as they'll be unreferenced.
-///
-/// Example:
-///
-/// ```no_run
-/// # use rustls::ConfigBuilder;
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// ConfigBuilder::with_safe_default_cipher_suites()
-///     .with_safe_default_kx_groups()
-///     .with_safe_default_protocol_versions()
-///     .for_server()
-///     .unwrap()
-///     .with_no_client_auth()
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
-/// ```
-///
-/// This may be shortened to:
-///
-/// ```no_run
-/// # use rustls::ConfigBuilder;
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// ConfigBuilder::with_safe_defaults()
-///     .for_server()
-///     .unwrap()
-///     .with_no_client_auth()
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
-/// ```
-///
-/// # Resulting [`ServerConfig`] defaults
-/// * [`ServerConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
-/// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
-/// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
-/// * [`ServerConfig::key_log`]: key material is not logged.
-pub struct ServerConfigBuilder {
+/// A server config in progress, where the next step is to configure whether
+/// and how to authenticate clients.
+pub struct ConfigWantsClientVerifier {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
     pub(crate) versions: versions::EnabledVersions,
 }
 
-impl ServerConfigBuilder {
+impl ConfigWantsClientVerifier {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
         client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
-    ) -> ServerConfigBuilderWithClientAuth {
-        ServerConfigBuilderWithClientAuth {
+    ) -> ConfigWantsServerCert {
+        ConfigWantsServerCert {
             cipher_suites: self.cipher_suites,
             kx_groups: self.kx_groups,
             versions: self.versions,
@@ -72,21 +33,21 @@ impl ServerConfigBuilder {
     }
 
     /// Disable client authentication.
-    pub fn with_no_client_auth(self) -> ServerConfigBuilderWithClientAuth {
+    pub fn with_no_client_auth(self) -> ConfigWantsServerCert {
         self.with_client_cert_verifier(verify::NoClientAuth::new())
     }
 }
 
-/// A [`ServerConfigBuilder`] where we know the cipher suites, key exchange
-/// groups, enabled versions, and client auth policy.
-pub struct ServerConfigBuilderWithClientAuth {
+/// A config builder for a server, where we want to know how to provide a
+/// server certificate to a connecting peer.
+pub struct ConfigWantsServerCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ClientCertVerifier>,
 }
 
-impl ServerConfigBuilderWithClientAuth {
+impl ConfigWantsServerCert {
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.

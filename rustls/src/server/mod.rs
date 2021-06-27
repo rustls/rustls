@@ -152,17 +152,24 @@ impl<'a> ClientHello<'a> {
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
 ///
-/// Create one of these via `ServerConfigBuilder`.
+/// These cannot be constructed directly. Create one via [`config_builder`](crate::config_builder).
+///
+/// # Defaults
+///
+/// * [`ServerConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
+/// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
+/// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
+/// * [`ServerConfig::key_log`]: key material is not logged.
 #[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
-    pub cipher_suites: Vec<SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
 
     /// List of supported key exchange groups.
     ///
     /// The first is the highest priority: they will be
     /// offered to the client in this order.
-    pub kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static SupportedKxGroup>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -193,7 +200,7 @@ pub struct ServerConfig {
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
-    pub versions: crate::versions::EnabledVersions,
+    versions: crate::versions::EnabledVersions,
 
     /// How to verify client certificates.
     verifier: Arc<dyn verify::ClientCertVerifier>,

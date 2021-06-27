@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustls;
+use rustls::config_builder;
 use rustls::ClientSessionMemoryCache;
-use rustls::ConfigBuilder;
 use rustls::Connection;
 use rustls::NoClientSessionStorage;
 use rustls::NoServerSessionStorage;
@@ -288,7 +288,10 @@ fn make_server_config(
         ClientAuth::No => NoClientAuth::new(),
     };
 
-    let mut cfg = ConfigBuilder::with_safe_defaults()
+    let mut cfg = rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[params.version])
         .for_server()
         .unwrap()
         .with_client_cert_verifier(client_auth)
@@ -303,7 +306,6 @@ fn make_server_config(
         cfg.session_storage = Arc::new(NoServerSessionStorage {});
     }
 
-    cfg.versions.replace(&[params.version]);
     cfg.max_fragment_size = max_fragment_size;
     cfg
 }
@@ -318,7 +320,8 @@ fn make_client_config(
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
-    let cfg = ConfigBuilder::with_cipher_suites(&[params.ciphersuite])
+    let cfg = config_builder()
+        .with_cipher_suites(&[params.ciphersuite])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[params.version])
         .for_client()
