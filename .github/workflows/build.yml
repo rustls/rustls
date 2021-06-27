@@ -131,6 +131,26 @@ jobs:
       - name: Smoke-test benchmark program
         run: cargo run --release --example bench
 
+  docs:
+    name: Check for documentation errors
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          default: true
+
+      - name: cargo doc (all features)
+        run: cargo doc --all-features --no-deps --workspace
+        env:
+          RUSTDOCFLAGS: -Dwarnings
 
   coverage:
     name: Measure coverage
