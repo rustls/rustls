@@ -11,49 +11,8 @@ use crate::versions;
 
 use std::sync::Arc;
 
-/// Building a [`ClientConfig`] in a linker-friendly way.
-///
-/// Linker-friendly: meaning unused cipher suites, protocol
-/// versions, key exchange mechanisms, etc. can be discarded
-/// by the linker as they'll be unreferenced.
-///
-/// Example:
-///
-/// ```no_run
-/// # use rustls::config_builder;
-/// # let root_certs = rustls::RootCertStore::empty();
-/// # let trusted_ct_logs = &[];
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// config_builder()
-///     .with_safe_default_cipher_suites()
-///     .with_safe_default_kx_groups()
-///     .with_safe_default_protocol_versions()
-///     .for_client()
-///     .unwrap()
-///     .with_root_certificates(root_certs, trusted_ct_logs)
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
-/// ```
-///
-/// This may be shortened to:
-///
-/// ```
-/// # use rustls::config_builder_with_safe_defaults;
-/// # let root_certs = rustls::RootCertStore::empty();
-/// # let trusted_ct_logs = &[];
-/// config_builder_with_safe_defaults()
-///     .for_client()
-///     .unwrap()
-///     .with_root_certificates(root_certs, trusted_ct_logs)
-///     .with_no_client_auth();
-/// ```
-///
-/// # Resulting [`ClientConfig`] defaults
-/// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
-/// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
-/// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
-/// * [`ClientConfig::key_log`]: key material is not logged.
+/// A client config in progress, where the next step is to configure how
+/// to validate server certificates (typically with a set root certificates).
 pub struct ConfigWantsServerVerifier {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,

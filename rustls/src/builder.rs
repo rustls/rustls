@@ -13,24 +13,67 @@ use crate::versions;
 ///
 /// Example, to make a [`ServerConfig`]:
 ///
-/// ```
+/// ```no_run
 /// # use rustls::config_builder;
+/// # let certs = vec![];
+/// # let private_key = rustls::PrivateKey(vec![]);
 /// config_builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
 ///     .for_server()
-///     .unwrap();
+///     .unwrap()
+///     .with_no_client_auth()
+///     .with_single_cert(certs, private_key)
+///     .expect("bad certificate/key");
+/// ```
+///
+/// This may be shortened to:
+///
+/// ```no_run
+/// # let certs = vec![];
+/// # let private_key = rustls::PrivateKey(vec![]);
+/// # use rustls::config_builder_with_safe_defaults;
+/// config_builder_with_safe_defaults()
+///     .for_server()
+///     .unwrap()
+///     .with_no_client_auth()
+///     .with_single_cert(certs, private_key)
+///     .expect("bad certificate/key");
+/// ```
+///
+/// To make a [`ClientConfig`]:
+///
+/// ```no_run
+/// # use rustls::config_builder;
+/// # let root_certs = rustls::RootCertStore::empty();
+/// # let trusted_ct_logs = &[];
+/// # let certs = vec![];
+/// # let private_key = rustls::PrivateKey(vec![]);
+/// config_builder()
+///     .with_safe_default_cipher_suites()
+///     .with_safe_default_kx_groups()
+///     .with_safe_default_protocol_versions()
+///     .for_client()
+///     .unwrap()
+///     .with_root_certificates(root_certs, trusted_ct_logs)
+///     .with_single_cert(certs, private_key)
+///     .expect("bad certificate/key");
 /// ```
 ///
 /// This may be shortened to:
 ///
 /// ```
 /// # use rustls::config_builder_with_safe_defaults;
+/// # let root_certs = rustls::RootCertStore::empty();
+/// # let trusted_ct_logs = &[];
 /// config_builder_with_safe_defaults()
-///     .for_server()
-///     .unwrap();
+///     .for_client()
+///     .unwrap()
+///     .with_root_certificates(root_certs, trusted_ct_logs)
+///     .with_no_client_auth();
 /// ```
+///
 ///
 /// The types used here fit together like this:
 ///
@@ -90,7 +133,7 @@ impl ConfigWantsCipherSuites {
     }
 }
 
-/// A config builder where we want to know the key exchange groups.
+/// A config builder where we want to know which key exchange groups to use.
 pub struct ConfigWantsKxGroups {
     cipher_suites: Vec<SupportedCipherSuite>,
 }
@@ -137,8 +180,7 @@ impl ConfigWantsVersions {
     }
 }
 
-/// A config builder where we know the cipher suites, key exchange groups,
-/// and protocol versions.
+/// A config builder where we want to know whether this will be a client or a server.
 pub struct ConfigWantsPeerType {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
@@ -169,7 +211,7 @@ impl ConfigWantsPeerType {
         Ok(())
     }
 
-    /// Continue building a `ClientConfig`.
+    /// This config is for a client. Continue by setting client-related options.
     ///
     /// This may fail, if the previous selections are contradictory or
     /// not useful (for example, if no protocol versions are enabled).
@@ -182,7 +224,7 @@ impl ConfigWantsPeerType {
         })
     }
 
-    /// Continue building a `ServerConfig`.
+    /// This config is for a server. Continue by setting server-related options.
     ///
     /// This may fail, if the previous selections are contradictory or
     /// not useful (for example, if no protocol versions are enabled).
