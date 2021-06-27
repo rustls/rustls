@@ -200,7 +200,7 @@ pub struct ServerConfig {
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
-    pub versions: crate::versions::EnabledVersions,
+    versions: crate::versions::EnabledVersions,
 
     /// How to verify client certificates.
     verifier: Arc<dyn verify::ClientCertVerifier>,

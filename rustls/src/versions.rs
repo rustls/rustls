@@ -35,7 +35,7 @@ pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[&TLS13, &TLS12];
 pub static DEFAULT_VERSIONS: &[&SupportedProtocolVersion] = ALL_VERSIONS;
 
 #[derive(Debug, Clone)]
-pub struct EnabledVersions {
+pub(crate) struct EnabledVersions {
     tls12: Option<&'static SupportedProtocolVersion>,
     tls13: Option<&'static SupportedProtocolVersion>,
 }
@@ -46,7 +46,15 @@ impl EnabledVersions {
             tls12: None,
             tls13: None,
         };
-        ev.replace(versions);
+
+        for v in versions {
+            match v.version {
+                ProtocolVersion::TLSv1_2 => ev.tls12 = Some(v),
+                ProtocolVersion::TLSv1_3 => ev.tls13 = Some(v),
+                _ => {}
+            }
+        }
+
         ev
     }
 
@@ -55,25 +63,6 @@ impl EnabledVersions {
             ProtocolVersion::TLSv1_2 => self.tls12.is_some(),
             ProtocolVersion::TLSv1_3 => self.tls13.is_some(),
             _ => false,
-        }
-    }
-
-    /// Enable the single version `v`.
-    pub fn enable(&mut self, v: &'static SupportedProtocolVersion) {
-        match v.version {
-            ProtocolVersion::TLSv1_2 => self.tls12 = Some(v),
-            ProtocolVersion::TLSv1_3 => self.tls13 = Some(v),
-            _ => {}
-        }
-    }
-
-    /// Replace the set of enabled versions with precisely those present in
-    /// `versions`.  Duplicates are ignored.
-    pub fn replace(&mut self, versions: &[&'static SupportedProtocolVersion]) {
-        self.tls12.take();
-        self.tls13.take();
-        for v in versions {
-            self.enable(v);
         }
     }
 }

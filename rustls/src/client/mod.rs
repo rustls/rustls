@@ -132,7 +132,7 @@ pub struct ClientConfig {
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
-    pub versions: versions::EnabledVersions,
+    versions: versions::EnabledVersions,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.

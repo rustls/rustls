@@ -349,7 +349,7 @@ pub mod cipher_suite {
 
 /// All defined protocol versions appear in this module.
 ///
-/// ALL_VERSIONS is a provided as an arry of all of these values.
+/// ALL_VERSIONS is a provided as an array of all of these values.
 pub mod version {
     pub use crate::versions::TLS12;
     pub use crate::versions::TLS13;

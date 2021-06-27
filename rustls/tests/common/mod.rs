@@ -232,19 +232,34 @@ pub fn make_server_config(kt: KeyType) -> ServerConfig {
     finish_server_config(kt, server_config_builder_with_safe_defaults())
 }
 
+pub fn make_server_config_with_versions(
+    kt: KeyType,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> ServerConfig {
+    finish_server_config(
+        kt,
+        rustls::config_builder()
+            .with_safe_default_cipher_suites()
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(versions)
+            .for_server()
+            .unwrap(),
+    )
+}
+
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
     kx_groups: &[&'static rustls::SupportedKxGroup],
 ) -> ServerConfig {
-    rustls::config_builder()
-        .with_safe_default_cipher_suites()
-        .with_kx_groups(kx_groups)
-        .with_safe_default_protocol_versions()
-        .for_server()
-        .unwrap()
-        .with_no_client_auth()
-        .with_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap()
+    finish_server_config(
+        kt,
+        rustls::config_builder()
+            .with_safe_default_cipher_suites()
+            .with_kx_groups(kx_groups)
+            .with_safe_default_protocol_versions()
+            .for_server()
+            .unwrap(),
+    )
 }
 
 pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
@@ -280,6 +295,20 @@ pub fn finish_client_config(
         .with_no_client_auth()
 }
 
+pub fn finish_client_config_with_creds(
+    kt: KeyType,
+    config: rustls::ConfigWantsServerVerifier,
+) -> ClientConfig {
+    let mut root_store = RootCertStore::empty();
+    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+
+    config
+        .with_root_certificates(root_store, &[])
+        .with_single_cert(kt.get_client_chain(), kt.get_client_key())
+        .unwrap()
+}
+
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
     finish_client_config(kt, client_config_builder_with_safe_defaults())
 }
@@ -297,15 +326,34 @@ pub fn make_client_config_with_kx_groups(
     finish_client_config(kt, builder)
 }
 
-pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    let mut root_store = RootCertStore::empty();
-    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
-    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
+pub fn make_client_config_with_versions(
+    kt: KeyType,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> ClientConfig {
+    let builder = rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(versions)
+        .for_client()
+        .unwrap();
+    finish_client_config(kt, builder)
+}
 
-    client_config_builder_with_safe_defaults()
-        .with_root_certificates(root_store, &[])
-        .with_single_cert(kt.get_client_chain(), kt.get_client_key())
-        .unwrap()
+pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
+    finish_client_config_with_creds(kt, client_config_builder_with_safe_defaults())
+}
+
+pub fn make_client_config_with_versions_with_auth(
+    kt: KeyType,
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> ClientConfig {
+    let builder = rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(versions)
+        .for_client()
+        .unwrap();
+    finish_client_config_with_creds(kt, builder)
 }
 
 pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
@@ -341,45 +389,6 @@ pub fn do_handshake(
         client.process_new_packets().unwrap();
     }
     (to_server, to_client)
-}
-
-pub struct AllClientVersions {
-    client_config: ClientConfig,
-    index: usize,
-}
-
-impl AllClientVersions {
-    pub fn new(client_config: ClientConfig) -> Self {
-        AllClientVersions {
-            client_config,
-            index: 0,
-        }
-    }
-}
-
-impl Iterator for AllClientVersions {
-    type Item = ClientConfig;
-
-    fn next(&mut self) -> Option<ClientConfig> {
-        let mut config = self.client_config.clone();
-        self.index += 1;
-
-        match self.index {
-            1 => {
-                config
-                    .versions
-                    .replace(&[&rustls::version::TLS12]);
-                Some(config)
-            }
-            2 => {
-                config
-                    .versions
-                    .replace(&[&rustls::version::TLS13]);
-                Some(config)
-            }
-            _ => None,
-        }
-    }
 }
 
 #[cfg(feature = "dangerous_configuration")]

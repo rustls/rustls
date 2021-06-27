@@ -12,7 +12,6 @@ use std::time::{Duration, Instant};
 
 use rustls;
 use rustls::config_builder;
-use rustls::server_config_builder_with_safe_defaults;
 use rustls::ClientSessionMemoryCache;
 use rustls::Connection;
 use rustls::NoClientSessionStorage;
@@ -289,7 +288,12 @@ fn make_server_config(
         ClientAuth::No => NoClientAuth::new(),
     };
 
-    let mut cfg = server_config_builder_with_safe_defaults()
+    let mut cfg = rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[params.version])
+        .for_server()
+        .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
         .expect("bad certs/private key?");
@@ -302,7 +306,6 @@ fn make_server_config(
         cfg.session_storage = Arc::new(NoServerSessionStorage {});
     }
 
-    cfg.versions.replace(&[params.version]);
     cfg.max_fragment_size = max_fragment_size;
     cfg
 }
