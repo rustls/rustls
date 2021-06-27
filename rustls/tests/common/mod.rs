@@ -2,7 +2,9 @@ use std::convert::{TryFrom, TryInto};
 use std::io;
 use std::sync::Arc;
 
-use rustls::{self, config_builder_with_safe_defaults};
+use rustls::{
+    self, client_config_builder_with_safe_defaults, server_config_builder_with_safe_defaults,
+};
 use rustls_pemfile;
 
 use rustls::internal::msgs::codec::Reader;
@@ -221,9 +223,7 @@ impl KeyType {
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    config_builder_with_safe_defaults()
-        .for_server()
-        .unwrap()
+    server_config_builder_with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -243,9 +243,7 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
 
-    config_builder_with_safe_defaults()
-        .for_server()
-        .unwrap()
+    server_config_builder_with_safe_defaults()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -256,9 +254,7 @@ pub fn make_client_config(kt: KeyType) -> ClientConfig {
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
-    config_builder_with_safe_defaults()
-        .for_client()
-        .unwrap()
+    client_config_builder_with_safe_defaults()
         .with_root_certificates(root_store, &[])
         .with_no_client_auth()
 }
@@ -268,9 +264,7 @@ pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
-    config_builder_with_safe_defaults()
-        .for_client()
-        .unwrap()
+    client_config_builder_with_safe_defaults()
         .with_root_certificates(root_store, &[])
         .with_single_cert(kt.get_client_chain(), kt.get_client_key())
         .unwrap()

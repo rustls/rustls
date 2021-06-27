@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use rustls;
 use rustls::config_builder;
-use rustls::config_builder_with_safe_defaults;
+use rustls::server_config_builder_with_safe_defaults;
 use rustls::ClientSessionMemoryCache;
 use rustls::Connection;
 use rustls::NoClientSessionStorage;
@@ -289,9 +289,7 @@ fn make_server_config(
         ClientAuth::No => NoClientAuth::new(),
     };
 
-    let mut cfg = config_builder_with_safe_defaults()
-        .for_server()
-        .unwrap()
+    let mut cfg = server_config_builder_with_safe_defaults()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
         .expect("bad certs/private key?");

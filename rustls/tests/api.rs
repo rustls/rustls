@@ -790,9 +790,9 @@ fn client_auth_works() {
 mod test_clientverifier {
     use super::*;
     use crate::common::MockClientVerifier;
-    use rustls::config_builder_with_safe_defaults;
     use rustls::internal::msgs::enums::AlertDescription;
     use rustls::internal::msgs::enums::ContentType;
+    use rustls::server_config_builder_with_safe_defaults;
 
     // Client is authorized!
     fn ver_ok() -> Result<ClientCertVerified, Error> {
@@ -813,9 +813,7 @@ mod test_clientverifier {
         kt: KeyType,
         client_cert_verifier: MockClientVerifier,
     ) -> ServerConfig {
-        config_builder_with_safe_defaults()
-            .for_server()
-            .unwrap()
+        server_config_builder_with_safe_defaults()
             .with_client_cert_verifier(Arc::new(client_cert_verifier))
             .with_single_cert(kt.get_chain(), kt.get_key())
             .unwrap()

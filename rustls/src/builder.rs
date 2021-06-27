@@ -33,10 +33,8 @@ use crate::versions;
 /// ```no_run
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// # use rustls::config_builder_with_safe_defaults;
-/// config_builder_with_safe_defaults()
-///     .for_server()
-///     .unwrap()
+/// # use rustls::server_config_builder_with_safe_defaults;
+/// server_config_builder_with_safe_defaults()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");
@@ -64,12 +62,10 @@ use crate::versions;
 /// This may be shortened to:
 ///
 /// ```
-/// # use rustls::config_builder_with_safe_defaults;
+/// # use rustls::client_config_builder_with_safe_defaults;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let trusted_ct_logs = &[];
-/// config_builder_with_safe_defaults()
-///     .for_client()
-///     .unwrap()
+/// client_config_builder_with_safe_defaults()
 ///     .with_root_certificates(root_certs, trusted_ct_logs)
 ///     .with_no_client_auth();
 /// ```
@@ -95,18 +91,39 @@ pub fn config_builder() -> ConfigWantsCipherSuites {
     ConfigWantsCipherSuites {}
 }
 
-/// Start building a [`ServerConfig`] or [`ClientConfig`], and accept
-/// defaults for underlying cryptography.
+fn config_builder_with_safe_defaults() -> ConfigWantsPeerType {
+    config_builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_safe_default_protocol_versions()
+}
+
+/// Start building a [`ClientConfig`] and accept defaults for underlying
+/// cryptography.
+///
+/// These are safe defaults, useful for 99% of applications.
+///
+/// [`ClientConfig`]: crate::ClientConfig
+pub fn client_config_builder_with_safe_defaults() -> ConfigWantsServerVerifier {
+    // this function exists to express that for_client is infallible when
+    // using defaults.
+    config_builder_with_safe_defaults()
+        .for_client()
+        .unwrap()
+}
+
+/// Start building a [`ServerConfig`] and accept defaults for underlying
+/// cryptography.
 ///
 /// These are safe defaults, useful for 99% of applications.
 ///
 /// [`ServerConfig`]: crate::ServerConfig
-/// [`ClientConfig`]: crate::ClientConfig
-pub fn config_builder_with_safe_defaults() -> ConfigWantsPeerType {
-    ConfigWantsCipherSuites {}
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_safe_default_protocol_versions()
+pub fn server_config_builder_with_safe_defaults() -> ConfigWantsClientVerifier {
+    // this function exists to express that for_server is infallible when
+    // using defaults.
+    config_builder_with_safe_defaults()
+        .for_server()
+        .unwrap()
 }
 
 /// A config builder where we want to know the cipher suites.

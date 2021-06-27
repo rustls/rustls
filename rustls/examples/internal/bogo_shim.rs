@@ -428,12 +428,11 @@ impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
-    let cfg = rustls::config_builder_with_safe_defaults()
-        .for_client()
-        .unwrap()
-        .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
+    let cfg = rustls::client_config_builder_with_safe_defaults().with_custom_certificate_verifier(
+        Arc::new(DummyServerAuth {
             send_sct: opts.send_sct,
-        }));
+        }),
+    );
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
