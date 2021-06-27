@@ -264,7 +264,10 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
         .unwrap()
 }
 
-fn finish_client_config(kt: KeyType, config: rustls::ConfigWantsServerVerifier) -> ClientConfig {
+pub fn finish_client_config(
+    kt: KeyType,
+    config: rustls::ConfigWantsServerVerifier,
+) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());

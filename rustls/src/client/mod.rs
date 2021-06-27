@@ -95,7 +95,7 @@ pub trait ResolvesClientCert: Send + Sync {
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
-    pub cipher_suites: Vec<SupportedCipherSuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
 
     /// List of supported key exchange algorithms, in preference order -- the
     /// first element is the highest priority.

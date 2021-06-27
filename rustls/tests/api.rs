@@ -601,8 +601,15 @@ fn check_sigalgs_reduced_by_ciphersuite(
     suite: CipherSuite,
     expected_sigalgs: Vec<SignatureScheme>,
 ) {
-    let mut client_config = make_client_config(kt);
-    client_config.cipher_suites = vec![find_suite(suite)];
+    let client_config = finish_client_config(
+        kt,
+        rustls::config_builder()
+            .with_cipher_suites(&[find_suite(suite)])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .for_client()
+            .unwrap(),
+    );
 
     let mut server_config = make_server_config(kt);
 
@@ -1843,10 +1850,15 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
         CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     )];
 
-    let mut client_config = make_client_config(kt);
-    client_config.cipher_suites = vec![find_suite(
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    )];
+    let client_config = finish_client_config(
+        kt,
+        rustls::config_builder()
+            .with_cipher_suites(&[rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .for_client()
+            .unwrap(),
+    );
 
     (client_config, server_config)
 }
@@ -2324,11 +2336,15 @@ fn negotiated_ciphersuite_client() {
     for item in TEST_CIPHERSUITES.iter() {
         let (version, kt, suite) = *item;
         let scs = find_suite(suite);
-        let mut client_config = make_client_config(kt);
-        client_config.cipher_suites = vec![scs];
-        client_config
-            .versions
-            .replace(&[version]);
+        let client_config = finish_client_config(
+            kt,
+            rustls::config_builder()
+                .with_cipher_suites(&[scs])
+                .with_safe_default_kx_groups()
+                .with_protocol_versions(&[version])
+                .for_client()
+                .unwrap(),
+        );
 
         do_suite_test(client_config, make_server_config(kt), scs, version.version);
     }
