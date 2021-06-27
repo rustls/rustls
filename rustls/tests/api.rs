@@ -3455,20 +3455,20 @@ fn test_client_does_not_offer_sha1() {
 
 #[test]
 fn test_client_config_keyshare() {
-    let mut client_config = make_client_config(KeyType::RSA);
-    client_config.kx_groups = vec![&rustls::kx_group::SECP384R1];
-    let mut server_config = make_server_config(KeyType::RSA);
-    server_config.kx_groups = vec![&rustls::kx_group::SECP384R1];
+    let client_config =
+        make_client_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::SECP384R1]);
+    let server_config =
+        make_server_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::SECP384R1]);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake_until_error(&mut client, &mut server).unwrap();
 }
 
 #[test]
 fn test_client_config_keyshare_mismatch() {
-    let mut client_config = make_client_config(KeyType::RSA);
-    client_config.kx_groups = vec![&rustls::kx_group::SECP384R1];
-    let mut server_config = make_server_config(KeyType::RSA);
-    server_config.kx_groups = vec![&rustls::kx_group::X25519];
+    let client_config =
+        make_client_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::SECP384R1]);
+    let server_config =
+        make_server_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::X25519]);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
@@ -3476,15 +3476,17 @@ fn test_client_config_keyshare_mismatch() {
 #[test]
 fn test_client_sends_helloretryrequest() {
     // client sends a secp384r1 key share
-    let mut client_config = make_client_config(KeyType::RSA);
-    client_config.kx_groups = vec![&rustls::kx_group::SECP384R1, &rustls::kx_group::X25519];
+    let mut client_config = make_client_config_with_kx_groups(
+        KeyType::RSA,
+        &[&rustls::kx_group::SECP384R1, &rustls::kx_group::X25519],
+    );
 
     let storage = Arc::new(ClientStorage::new());
     client_config.session_storage = storage.clone();
 
     // but server only accepts x25519, so a HRR is required
-    let mut server_config = make_server_config(KeyType::RSA);
-    server_config.kx_groups = vec![&rustls::kx_group::X25519];
+    let server_config =
+        make_server_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::X25519]);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
@@ -3538,14 +3540,14 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
 
     // first, client sends a x25519 and server agrees. x25519 is inserted
     //   into kx group cache.
-    let mut client_config_1 = make_client_config(KeyType::RSA);
-    client_config_1.kx_groups = vec![&rustls::kx_group::X25519];
+    let mut client_config_1 =
+        make_client_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::X25519]);
     client_config_1.session_storage = shared_storage.clone();
 
     // second, client only supports secp-384 and so kx group cache
     //   contains an unusable value.
-    let mut client_config_2 = make_client_config(KeyType::RSA);
-    client_config_2.kx_groups = vec![&rustls::kx_group::SECP384R1];
+    let mut client_config_2 =
+        make_client_config_with_kx_groups(KeyType::RSA, &[&rustls::kx_group::SECP384R1]);
     client_config_2.session_storage = shared_storage.clone();
 
     let server_config = make_server_config(KeyType::RSA);

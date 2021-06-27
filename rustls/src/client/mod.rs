@@ -102,7 +102,7 @@ pub struct ClientConfig {
     ///
     /// The first element in this list is the _default key share algorithm_,
     /// and in TLS1.3 a key share for it is sent in the client hello.
-    pub kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static SupportedKxGroup>,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.

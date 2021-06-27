@@ -229,6 +229,21 @@ pub fn make_server_config(kt: KeyType) -> ServerConfig {
         .unwrap()
 }
 
+pub fn make_server_config_with_kx_groups(
+    kt: KeyType,
+    kx_groups: &[&'static rustls::SupportedKxGroup],
+) -> ServerConfig {
+    rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(kx_groups)
+        .with_safe_default_protocol_versions()
+        .for_server()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap()
+}
+
 pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
     let roots = kt.get_chain();
     let mut client_auth_roots = RootCertStore::empty();
@@ -249,14 +264,31 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
         .unwrap()
 }
 
-pub fn make_client_config(kt: KeyType) -> ClientConfig {
+fn finish_client_config(kt: KeyType, config: rustls::ConfigWantsServerVerifier) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
-    client_config_builder_with_safe_defaults()
+    config
         .with_root_certificates(root_store, &[])
         .with_no_client_auth()
+}
+
+pub fn make_client_config(kt: KeyType) -> ClientConfig {
+    finish_client_config(kt, client_config_builder_with_safe_defaults())
+}
+
+pub fn make_client_config_with_kx_groups(
+    kt: KeyType,
+    kx_groups: &[&'static rustls::SupportedKxGroup],
+) -> ClientConfig {
+    let builder = rustls::config_builder()
+        .with_safe_default_cipher_suites()
+        .with_kx_groups(kx_groups)
+        .with_safe_default_protocol_versions()
+        .for_client()
+        .unwrap();
+    finish_client_config(kt, builder)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {

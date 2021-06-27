@@ -169,7 +169,7 @@ pub struct ServerConfig {
     ///
     /// The first is the highest priority: they will be
     /// offered to the client in this order.
-    pub kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static SupportedKxGroup>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
