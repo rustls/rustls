@@ -3499,8 +3499,7 @@ mod test_quic {
         use ring::hkdf;
         use rustls::quic::Keys;
 
-        // Initial salt from RFC 9001
-        // https://www.rfc-editor.org/rfc/rfc9001.html#name-initial-secrets
+        // Test vectors: https://www.rfc-editor.org/rfc/rfc9001.html#name-client-initial
         const INITIAL_SALT: [u8; 20] = [
             0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
             0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a,
@@ -3553,16 +3552,32 @@ mod test_quic {
         assert_eq!(client_keys.local.packet.tag_len(), 16);
 
         let mut buf = Vec::new();
+        buf.extend(PLAIN_HEADER);
         buf.extend(PAYLOAD);
-        let plain_header_len = PLAIN_HEADER.len();
+        let header_len = PLAIN_HEADER.len();
         let tag_len = client_keys.local.packet.tag_len();
-        let padding_len = 1200 - plain_header_len - PAYLOAD.len() - tag_len;
+        let padding_len = 1200 - header_len - PAYLOAD.len() - tag_len;
         buf.extend(std::iter::repeat(0).take(padding_len));
+        let (header, payload) = buf.split_at_mut(header_len);
         let tag = client_keys
             .local
             .packet
-            .encrypt_in_place(PACKET_NUMBER, PLAIN_HEADER, &mut buf)
+            .encrypt_in_place(PACKET_NUMBER, &*header, payload)
             .unwrap();
+        buf.extend_from_slice(tag.as_ref());
+
+        let sample = &buf[header_len..header_len + 16];
+        let mask = client_keys
+            .local
+            .header
+            .new_mask(&sample)
+            .unwrap();
+        assert_eq!(mask, [0x43, 0x7b, 0x9a, 0xec, 0x36]);
+
+        buf[0] ^= mask[0] & 0x0f;
+        for (i, b) in buf[18..22].iter_mut().enumerate() {
+            *b ^= mask[i + 1];
+        }
 
         const PROTECTED: &[u8] = &[
             0xc0, 0x00, 0x00, 0x00, 0x01, 0x08, 0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08,
@@ -3653,22 +3668,23 @@ mod test_quic {
             0x18, 0xab, 0x08, 0x56, 0x97, 0x2e, 0x19, 0x4c, 0xd9, 0x34,
         ];
 
-        assert_eq!(buf.len(), PROTECTED.len() - PLAIN_HEADER.len() - tag_len);
-        assert_eq!(
-            &buf,
-            &PROTECTED[plain_header_len..PROTECTED.len() - tag_len]
-        );
-        assert_eq!(tag.as_ref(), &PROTECTED[PROTECTED.len() - tag_len..]);
+        assert_eq!(&buf, PROTECTED);
 
-        buf.extend_from_slice(tag.as_ref());
+        buf[0] ^= mask[0] & 0x0f;
+        for (i, b) in buf[18..22].iter_mut().enumerate() {
+            *b ^= mask[i + 1];
+        }
+
+        let (header, payload) = buf.split_at_mut(header_len);
         let server_keys = Keys::initial(&initial_salt, &CONNECTION_ID, false);
-        server_keys
+        let payload = server_keys
             .remote
             .packet
-            .decrypt_in_place(PACKET_NUMBER, PLAIN_HEADER, &mut buf)
+            .decrypt_in_place(PACKET_NUMBER, &*header, payload)
             .unwrap();
 
-        assert_eq!(&buf[..PAYLOAD.len()], PAYLOAD);
+        assert_eq!(&payload[..PAYLOAD.len()], PAYLOAD);
+        assert_eq!(payload.len(), buf.len() - header_len - tag_len);
     }
 
     #[test]
