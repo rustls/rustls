@@ -2208,113 +2208,99 @@ impl HandshakeMessagePayload {
     pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<Self> {
         let mut typ = HandshakeType::read(r)?;
 
-        if matches!(typ, HandshakeType::Unknown(_)) {
-            // TLs 1.2 sends Handshake messages which do not have a typ, but include encrypted data,
-            // catch this here
-            return Some(HandshakeMessagePayload { typ, payload: HandshakePayload::Unknown(Payload::read(r)) });
-        }
+        let len = codec::u24::read(r)?.0 as usize;
+        let mut sub = r.sub(len)?;
 
-        if let Some(len_u24) = codec::u24::read(r) {
-            let len = len_u24.0 as usize;
+        let payload = match typ {
+            HandshakeType::HelloRequest if sub.left() == 0 => HandshakePayload::HelloRequest,
+            HandshakeType::ClientHello => {
+                HandshakePayload::ClientHello(ClientHelloPayload::read(&mut sub)?)
+            }
+            HandshakeType::ServerHello => {
+                let version = ProtocolVersion::read(&mut sub)?;
+                let random = Random::read(&mut sub)?;
 
-            if let Some(mut sub) = r.sub(len) {
-                let payload = match typ {
-                    HandshakeType::HelloRequest if sub.left() == 0 => HandshakePayload::HelloRequest,
-                    HandshakeType::ClientHello => {
-                        HandshakePayload::ClientHello(ClientHelloPayload::read(&mut sub)?)
-                    }
-                    HandshakeType::ServerHello => {
-                        let version = ProtocolVersion::read(&mut sub)?;
-                        let random = Random::read(&mut sub)?;
-
-                        if random == HELLO_RETRY_REQUEST_RANDOM {
-                            let mut hrr = HelloRetryRequest::read(&mut sub)?;
-                            hrr.legacy_version = version;
-                            typ = HandshakeType::HelloRetryRequest;
-                            HandshakePayload::HelloRetryRequest(hrr)
-                        } else {
-                            let mut shp = ServerHelloPayload::read(&mut sub)?;
-                            shp.legacy_version = version;
-                            shp.random = random;
-                            HandshakePayload::ServerHello(shp)
-                        }
-                    }
-                    HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
-                        let p = CertificatePayloadTLS13::read(&mut sub)?;
-                        HandshakePayload::CertificateTLS13(p)
-                    }
-                    HandshakeType::Certificate => {
-                        HandshakePayload::Certificate(CertificatePayload::read(&mut sub)?)
-                    }
-                    HandshakeType::ServerKeyExchange => {
-                        let p = ServerKeyExchangePayload::read(&mut sub)?;
-                        HandshakePayload::ServerKeyExchange(p)
-                    }
-                    HandshakeType::ServerHelloDone => {
-                        if sub.any_left() {
-                            return None;
-                        }
-                        HandshakePayload::ServerHelloDone
-                    }
-                    HandshakeType::ClientKeyExchange => {
-                        HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
-                    }
-                    HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
-                        let p = CertificateRequestPayloadTLS13::read(&mut sub)?;
-                        HandshakePayload::CertificateRequestTLS13(p)
-                    }
-                    HandshakeType::CertificateRequest => {
-                        let p = CertificateRequestPayload::read(&mut sub)?;
-                        HandshakePayload::CertificateRequest(p)
-                    }
-                    HandshakeType::CertificateVerify => {
-                        HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
-                    }
-                    HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
-                        let p = NewSessionTicketPayloadTLS13::read(&mut sub)?;
-                        HandshakePayload::NewSessionTicketTLS13(p)
-                    }
-                    HandshakeType::NewSessionTicket => {
-                        let p = NewSessionTicketPayload::read(&mut sub)?;
-                        HandshakePayload::NewSessionTicket(p)
-                    }
-                    HandshakeType::EncryptedExtensions => {
-                        HandshakePayload::EncryptedExtensions(EncryptedExtensions::read(&mut sub)?)
-                    }
-                    HandshakeType::KeyUpdate => {
-                        HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
-                    }
-                    HandshakeType::EndOfEarlyData => {
+                if random == HELLO_RETRY_REQUEST_RANDOM {
+                    let mut hrr = HelloRetryRequest::read(&mut sub)?;
+                    hrr.legacy_version = version;
+                    typ = HandshakeType::HelloRetryRequest;
+                    HandshakePayload::HelloRetryRequest(hrr)
+                } else {
+                    let mut shp = ServerHelloPayload::read(&mut sub)?;
+                    shp.legacy_version = version;
+                    shp.random = random;
+                    HandshakePayload::ServerHello(shp)
+                }
+            }
+            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
+                let p = CertificatePayloadTLS13::read(&mut sub)?;
+                HandshakePayload::CertificateTLS13(p)
+            }
+            HandshakeType::Certificate => {
+                HandshakePayload::Certificate(CertificatePayload::read(&mut sub)?)
+            }
+            HandshakeType::ServerKeyExchange => {
+                let p = ServerKeyExchangePayload::read(&mut sub)?;
+                HandshakePayload::ServerKeyExchange(p)
+            }
+            HandshakeType::ServerHelloDone => {
+                if sub.any_left() {
+                    return None;
+                }
+                HandshakePayload::ServerHelloDone
+            }
+            HandshakeType::ClientKeyExchange => {
+                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
+            }
+            HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
+                let p = CertificateRequestPayloadTLS13::read(&mut sub)?;
+                HandshakePayload::CertificateRequestTLS13(p)
+            }
+            HandshakeType::CertificateRequest => {
+                let p = CertificateRequestPayload::read(&mut sub)?;
+                HandshakePayload::CertificateRequest(p)
+            }
+            HandshakeType::CertificateVerify => {
+                HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
+            }
+            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
+                let p = NewSessionTicketPayloadTLS13::read(&mut sub)?;
+                HandshakePayload::NewSessionTicketTLS13(p)
+            }
+            HandshakeType::NewSessionTicket => {
+                let p = NewSessionTicketPayload::read(&mut sub)?;
+                HandshakePayload::NewSessionTicket(p)
+            }
+            HandshakeType::EncryptedExtensions => {
+                HandshakePayload::EncryptedExtensions(EncryptedExtensions::read(&mut sub)?)
+            }
+            HandshakeType::KeyUpdate => {
+                HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
+            }
+            HandshakeType::EndOfEarlyData => {
                         if sub.any_left() {
                             return None;
                         }
                         HandshakePayload::EndOfEarlyData
-                    }
-                    HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
-                    HandshakeType::CertificateStatus => {
-                        HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
-                    }
-                    HandshakeType::MessageHash => {
-                        // does not appear on the wire
-                        return None;
-                    }
-                    HandshakeType::HelloRetryRequest => {
-                        // not legal on wire
-                        return None;
-                    }
-                    _ => HandshakePayload::Unknown(Payload::read(&mut sub)),
-                };
-
-                if sub.any_left() {
-                    None
-                } else {
-                    Some(Self { typ, payload })
-                }
-            } else {
-                return Some(Self { typ, payload: HandshakePayload::Unknown(Payload::read(r)) });
+                    }HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
+            HandshakeType::CertificateStatus => {
+                HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
             }
+            HandshakeType::MessageHash => {
+                // does not appear on the wire
+                return None;
+            }
+            HandshakeType::HelloRetryRequest => {
+                // not legal on wire
+                return None;
+            }
+            _ => HandshakePayload::Unknown(Payload::read(&mut sub)),
+        };
+
+        if sub.any_left() {
+            None
         } else {
-            return Some(Self { typ, payload: HandshakePayload::Unknown(Payload::read(r)) });
+            Some(Self { typ, payload })
         }
     }
 
