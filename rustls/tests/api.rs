@@ -3050,7 +3050,7 @@ mod test_quic {
     fn step(
         send: &mut dyn Connection,
         recv: &mut dyn Connection,
-    ) -> Result<Option<quic::Keys>, Error> {
+    ) -> Result<Option<quic::KeyChange>, Error> {
         let mut buf = Vec::new();
         let change = loop {
             let prev = buf.len();
@@ -3067,36 +3067,39 @@ mod test_quic {
             assert_eq!(recv.alert(), None);
         }
 
-        Ok(change.map(|change| match change {
-            quic::KeyChange::Handshake { keys } => keys,
-            quic::KeyChange::OneRtt { keys, .. } => keys,
-        }))
+        Ok(change)
     }
 
     #[test]
     fn test_quic_handshake() {
-        fn equal_dir_keys(x: &quic::DirectionalKeys, y: &quic::DirectionalKeys) -> bool {
+        fn equal_packet_keys(x: &quic::PacketKey, y: &quic::PacketKey) -> bool {
             // Check that these two sets of keys are equal.
             let mut buf = vec![0; 32];
             let (header, payload_tag) = buf.split_at_mut(8);
             let (payload, tag_buf) = payload_tag.split_at_mut(8);
             let tag = x
-                .packet
                 .encrypt_in_place(42, &*header, payload)
                 .unwrap();
             tag_buf.copy_from_slice(tag.as_ref());
 
-            let result = y
-                .packet
-                .decrypt_in_place(42, &*header, payload_tag);
+            let result = y.decrypt_in_place(42, &*header, payload_tag);
             match result {
                 Ok(payload) => payload == &[0; 8],
                 Err(_) => false,
             }
         }
 
-        fn compatible_keys(x: &quic::Keys, y: &quic::Keys) -> bool {
-            equal_dir_keys(&x.local, &y.remote) && equal_dir_keys(&x.remote, &y.local)
+        fn compatible_keys(x: &quic::KeyChange, y: &quic::KeyChange) -> bool {
+            fn keys(kc: &quic::KeyChange) -> &quic::Keys {
+                match kc {
+                    quic::KeyChange::Handshake { keys } => keys,
+                    quic::KeyChange::OneRtt { keys, .. } => keys,
+                }
+            }
+
+            let (x, y) = (keys(x), keys(y));
+            equal_packet_keys(&x.local.packet, &y.remote.packet)
+                && equal_packet_keys(&x.remote.packet, &y.local.packet)
         }
 
         let kt = KeyType::RSA;
@@ -3188,7 +3191,10 @@ mod test_quic {
         {
             let client_early = client.zero_rtt_keys().unwrap();
             let server_early = server.zero_rtt_keys().unwrap();
-            assert!(equal_dir_keys(&client_early, &server_early));
+            assert!(equal_packet_keys(
+                &client_early.packet,
+                &server_early.packet
+            ));
         }
         step(&mut server, &mut client)
             .unwrap()
@@ -3258,6 +3264,25 @@ mod test_quic {
             client.alert(),
             Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
         );
+
+        // Key updates
+
+        let (mut client_secrets, mut server_secrets) = match (client_1rtt, server_1rtt) {
+            (quic::KeyChange::OneRtt { next: c, .. }, quic::KeyChange::OneRtt { next: s, .. }) => {
+                (c, s)
+            }
+            _ => unreachable!(),
+        };
+
+        let mut client_next = client_secrets.next_packet_keys();
+        let mut server_next = server_secrets.next_packet_keys();
+        assert!(equal_packet_keys(&client_next.local, &server_next.remote));
+        assert!(equal_packet_keys(&server_next.local, &client_next.remote));
+
+        client_next = client_secrets.next_packet_keys();
+        server_next = server_secrets.next_packet_keys();
+        assert!(equal_packet_keys(&client_next.local, &server_next.remote));
+        assert!(equal_packet_keys(&server_next.local, &client_next.remote));
     }
 
     #[test]
