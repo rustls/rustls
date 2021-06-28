@@ -350,7 +350,9 @@ fn make_tls13_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
     aead::Nonce::assume_unique_for_key(nonce)
 }
 
-fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; 1 + 2 + 2]> {
+// https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
+const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
+fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
     ring::aead::Aad::from([
         0x17, // ContentType::ApplicationData
         0x3,  // ProtocolVersion (major)
