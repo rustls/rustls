@@ -218,6 +218,9 @@ pub enum Error {
     /// The peer didn't give us any certificates.
     NoCertificatesPresented,
 
+    /// The certificate verifier doesn't support the given type of name.
+    UnsupportedNameType,
+
     /// We couldn't decrypt a message.  This is invariably fatal.
     DecryptError,
 
@@ -305,6 +308,7 @@ impl fmt::Display for Error {
             }
             Error::CorruptMessage => write!(f, "received corrupt message"),
             Error::NoCertificatesPresented => write!(f, "peer sent no certificates"),
+            Error::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
             Error::DecryptError => write!(f, "cannot decrypt peer's message"),
             Error::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
             Error::HandshakeNotComplete => write!(f, "handshake not complete"),
