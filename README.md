@@ -36,6 +36,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     `AllowAnyAuthenticatedClient`, `NoClientAuth`, `ResolvesServerCertUsingSni`, `NoServerSessionStorage`,
     `ServerSessionMemoryCache`, `StoresServerSessions`, `ClientHello`, `ProducesTickets`, `ResolvesServerCert`,
     `ClientCertVerified` and `ClientCertVerifier`.
+  - *Breaking API change*: `QuicExt::write_hs()` now returns a `KeyChange` type that returns handshake or 1-RTT keys. In the case of 1-RTT keys, a `KeyChange` also
+    includes a `Secrets` type that must be used to derive further key updates, independent from the rustls `Connection`. The `QuicExt::next_1rtt_keys()` method
+    has been removed.
+  - *Breaking API change*: QUIC header protection keys now use a new type that directly exposes a masking/unmasking operation.
 * 0.20.0-beta2 (2021-07-04)
   - *Breaking change*: internal buffers are now limited to 64 kB by default. Use
     `Connection::set_buffer_limit` to change the buffer limits to suit your application.
