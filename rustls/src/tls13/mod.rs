@@ -16,18 +16,20 @@ use key_schedule::{derive_traffic_iv, derive_traffic_key};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls13(&Tls13CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-            bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
-        },
-        hkdf_algorithm: ring::hkdf::HKDF_SHA256,
-        #[cfg(feature = "quic")]
-        confidentiality_limit: u64::MAX,
-        #[cfg(feature = "quic")]
-        integrity_limit: 1 << 36,
-    });
+    SupportedCipherSuite::Tls13(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);
+
+pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+        bulk: BulkAlgorithm::Chacha20Poly1305,
+        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+    },
+    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    #[cfg(feature = "quic")]
+    confidentiality_limit: u64::MAX,
+    #[cfg(feature = "quic")]
+    integrity_limit: 1 << 36,
+};
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
 pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
