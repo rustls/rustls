@@ -1,9 +1,9 @@
-use crate::client::builder::ConfigWantsServerVerifier;
 use crate::error::Error;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-use crate::server::builder::ConfigWantsClientVerifier;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::versions;
+
+use std::marker::PhantomData;
 
 /// Building a [`ServerConfig`] or [`ClientConfig`] in a linker-friendly way.
 ///
@@ -14,14 +14,13 @@ use crate::versions;
 /// Example, to make a [`ServerConfig`]:
 ///
 /// ```no_run
-/// # use rustls::config_builder;
+/// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// config_builder()
+/// ServerConfig::builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
-///     .for_server()
 ///     .unwrap()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
@@ -31,10 +30,11 @@ use crate::versions;
 /// This may be shortened to:
 ///
 /// ```no_run
+/// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// # use rustls::server_config_builder_with_safe_defaults;
-/// server_config_builder_with_safe_defaults()
+/// ServerConfig::builder()
+///     .with_safe_defaults()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");
@@ -43,16 +43,15 @@ use crate::versions;
 /// To make a [`ClientConfig`]:
 ///
 /// ```no_run
-/// # use rustls::config_builder;
+/// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let trusted_ct_logs = &[];
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// config_builder()
+/// ClientConfig::builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
-///     .for_client()
 ///     .unwrap()
 ///     .with_root_certificates(root_certs, trusted_ct_logs)
 ///     .with_single_cert(certs, private_key)
@@ -62,10 +61,11 @@ use crate::versions;
 /// This may be shortened to:
 ///
 /// ```
-/// # use rustls::client_config_builder_with_safe_defaults;
+/// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let trusted_ct_logs = &[];
-/// client_config_builder_with_safe_defaults()
+/// ClientConfig::builder()
+///     .with_safe_defaults()
 ///     .with_root_certificates(root_certs, trusted_ct_logs)
 ///     .with_no_client_auth();
 /// ```
@@ -73,6 +73,7 @@ use crate::versions;
 ///
 /// The types used here fit together like this:
 ///
+/// 1. Call [`ClientConfig::builder()`] or [`ServerConfig::builder()`] to initialize a builder.
 /// 1. You must make a decision on which cipher suites to use, typically
 ///    by calling [`ConfigWantsCipherSuites::with_safe_default_cipher_suites()`].
 /// 2. Now you must make a decision
@@ -80,63 +81,38 @@ use crate::versions;
 /// 3. Now you must make
 ///    a decision on which protocol versions to support, typically by calling
 ///    [`ConfigWantsVersions::with_safe_default_protocol_versions()`].
-/// 4. You now need to indicate whether to make a [`ServerConfig`] or [`ClientConfig`],
-///    by calling [`ConfigWantsPeerType::for_server()`]
-///    or [`ConfigWantsPeerType::for_client()`] respectively.
 /// 5. Now see [`ConfigWantsServerVerifier`] or [`ConfigWantsClientVerifier`] for further steps.
 ///
 /// [`ServerConfig`]: crate::ServerConfig
 /// [`ClientConfig`]: crate::ClientConfig
-pub fn config_builder() -> ConfigWantsCipherSuites {
-    ConfigWantsCipherSuites {}
-}
-
-fn config_builder_with_safe_defaults() -> ConfigWantsPeerType {
-    config_builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_safe_default_protocol_versions()
-}
-
-/// Start building a [`ClientConfig`] and accept defaults for underlying
-/// cryptography.
-///
-/// These are safe defaults, useful for 99% of applications.
-///
-/// [`ClientConfig`]: crate::ClientConfig
-pub fn client_config_builder_with_safe_defaults() -> ConfigWantsServerVerifier {
-    // this function exists to express that for_client is infallible when
-    // using defaults.
-    config_builder_with_safe_defaults()
-        .for_client()
-        .unwrap()
-}
-
-/// Start building a [`ServerConfig`] and accept defaults for underlying
-/// cryptography.
-///
-/// These are safe defaults, useful for 99% of applications.
-///
-/// [`ServerConfig`]: crate::ServerConfig
-pub fn server_config_builder_with_safe_defaults() -> ConfigWantsClientVerifier {
-    // this function exists to express that for_server is infallible when
-    // using defaults.
-    config_builder_with_safe_defaults()
-        .for_server()
-        .unwrap()
-}
+/// [`ClientConfig::builder()`]: crate::ClientConfig::builder()
+/// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
+/// [`ConfigWantsServerVerifier`]: crate::ConfigWantsServerVerifier
+/// [`ConfigWantsClientVerifier`]: crate::ConfigWantsClientVerifier
 
 /// A config builder where we want to know the cipher suites.
-pub struct ConfigWantsCipherSuites;
+pub struct ConfigWantsCipherSuites<S: ConfigSide>(pub(crate) PhantomData<S>);
 
-impl ConfigWantsCipherSuites {
+impl<S: ConfigSide> ConfigWantsCipherSuites<S> {
+    /// Start side-specific config with defaults for underlying cryptography.
+    ///
+    /// These are safe defaults, useful for 99% of applications.
+    pub fn with_safe_defaults(&self) -> S::Builder {
+        S::Builder::validated(
+            DEFAULT_CIPHERSUITES.to_vec(),
+            ALL_KX_GROUPS.to_vec(),
+            versions::DEFAULT_VERSIONS,
+        )
+    }
+
     /// Choose a specific set of cipher suites.
     pub fn with_cipher_suites(
         &self,
         cipher_suites: &[SupportedCipherSuite],
-    ) -> ConfigWantsKxGroups {
+    ) -> ConfigWantsKxGroups<S> {
         ConfigWantsKxGroups {
             cipher_suites: cipher_suites.to_vec(),
+            side: PhantomData::default(),
         }
     }
 
@@ -145,42 +121,45 @@ impl ConfigWantsCipherSuites {
     /// Note that this default provides only high-quality suites: there is no need
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
     /// implement these.
-    pub fn with_safe_default_cipher_suites(&self) -> ConfigWantsKxGroups {
+    pub fn with_safe_default_cipher_suites(&self) -> ConfigWantsKxGroups<S> {
         self.with_cipher_suites(DEFAULT_CIPHERSUITES)
     }
 }
 
 /// A config builder where we want to know which key exchange groups to use.
-pub struct ConfigWantsKxGroups {
+pub struct ConfigWantsKxGroups<S: ConfigSide> {
     cipher_suites: Vec<SupportedCipherSuite>,
+    side: PhantomData<S>,
 }
 
-impl ConfigWantsKxGroups {
+impl<S: ConfigSide> ConfigWantsKxGroups<S> {
     /// Choose a specific set of key exchange groups.
-    pub fn with_kx_groups(self, kx_groups: &[&'static SupportedKxGroup]) -> ConfigWantsVersions {
+    pub fn with_kx_groups(self, kx_groups: &[&'static SupportedKxGroup]) -> ConfigWantsVersions<S> {
         ConfigWantsVersions {
             cipher_suites: self.cipher_suites,
             kx_groups: kx_groups.to_vec(),
+            side: PhantomData::default(),
         }
     }
 
     /// Choose the default set of key exchange groups.
     ///
     /// This is a safe default: rustls doesn't implement any poor-quality groups.
-    pub fn with_safe_default_kx_groups(self) -> ConfigWantsVersions {
+    pub fn with_safe_default_kx_groups(self) -> ConfigWantsVersions<S> {
         self.with_kx_groups(&ALL_KX_GROUPS)
     }
 }
 
 /// A config builder where we want to know the TLS versions.
-pub struct ConfigWantsVersions {
+pub struct ConfigWantsVersions<S: ConfigSide> {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
+    side: PhantomData<S>,
 }
 
-impl ConfigWantsVersions {
+impl<S: ConfigSide> ConfigWantsVersions<S> {
     /// Accept the default protocol versions: both TLS1.2 and TLS1.3 are enabled.
-    pub fn with_safe_default_protocol_versions(self) -> ConfigWantsPeerType {
+    pub fn with_safe_default_protocol_versions(self) -> Result<S::Builder, Error> {
         self.with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
 
@@ -188,30 +167,10 @@ impl ConfigWantsVersions {
     pub fn with_protocol_versions(
         self,
         versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> ConfigWantsPeerType {
-        ConfigWantsPeerType {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            versions: versions::EnabledVersions::new(versions),
-        }
-    }
-}
-
-/// A config builder where we want to know whether this will be a client or a server.
-pub struct ConfigWantsPeerType {
-    cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static SupportedKxGroup>,
-    versions: versions::EnabledVersions,
-}
-
-impl ConfigWantsPeerType {
-    fn validate(&self) -> Result<(), Error> {
+    ) -> Result<S::Builder, Error> {
         let mut any_usable_suite = false;
         for suite in &self.cipher_suites {
-            if self
-                .versions
-                .contains(suite.version().version)
-            {
+            if versions.contains(&suite.version()) {
                 any_usable_suite = true;
                 break;
             }
@@ -225,32 +184,36 @@ impl ConfigWantsPeerType {
             return Err(Error::General("no kx groups configured".into()));
         }
 
-        Ok(())
+        Ok(S::Builder::validated(
+            self.cipher_suites,
+            self.kx_groups,
+            versions,
+        ))
     }
+}
 
-    /// This config is for a client. Continue by setting client-related options.
-    ///
-    /// This may fail, if the previous selections are contradictory or
-    /// not useful (for example, if no protocol versions are enabled).
-    pub fn for_client(self) -> Result<ConfigWantsServerVerifier, Error> {
-        self.validate()?;
-        Ok(ConfigWantsServerVerifier {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            versions: self.versions,
-        })
-    }
+/// Helper trait to abstract config builders over building a [`ClientConfig`] or [`ServerConfig`].
+///
+/// [`ClientConfig`]: crate::ClientConfig
+/// [`ServerConfig`]: crate::ServerConfig
+pub trait ConfigSide: sealed::Sealed {
+    /// Refer to side-specific builder type
+    type Builder: BuilderSide;
+}
 
-    /// This config is for a server. Continue by setting server-related options.
-    ///
-    /// This may fail, if the previous selections are contradictory or
-    /// not useful (for example, if no protocol versions are enabled).
-    pub fn for_server(self) -> Result<ConfigWantsClientVerifier, Error> {
-        self.validate()?;
-        Ok(ConfigWantsClientVerifier {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            versions: self.versions,
-        })
-    }
+#[allow(unreachable_pub)]
+pub trait BuilderSide: sealed::Sealed + Sized {
+    fn validated(
+        cipher_suites: Vec<SupportedCipherSuite>,
+        kx_groups: Vec<&'static SupportedKxGroup>,
+        versions: &[&'static versions::SupportedProtocolVersion],
+    ) -> Self;
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for crate::ClientConfig {}
+    impl Sealed for crate::ServerConfig {}
+    impl Sealed for crate::ConfigWantsClientVerifier {}
+    impl Sealed for crate::ConfigWantsServerVerifier {}
 }

@@ -1,6 +1,5 @@
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
-use crate::key;
 use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "quic")]
@@ -13,6 +12,7 @@ use crate::suites::SupportedCipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, quic};
+use crate::{key, ConfigWantsCipherSuites};
 
 use std::fmt;
 use std::io::{self, IoSlice};
@@ -152,7 +152,7 @@ impl<'a> ClientHello<'a> {
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
 ///
-/// These cannot be constructed directly. Create one via [`config_builder`](crate::config_builder).
+/// These must be created via the [`ServerConfig::builder()`] function.
 ///
 /// # Defaults
 ///
@@ -216,6 +216,11 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
+    /// Create builder to build up the server configuration
+    pub fn builder() -> ConfigWantsCipherSuites<Self> {
+        ConfigWantsCipherSuites(Default::default())
+    }
+
     #[doc(hidden)]
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
@@ -227,6 +232,10 @@ impl ServerConfig {
                 .iter()
                 .any(|cs| cs.version().version == v)
     }
+}
+
+impl crate::builder::ConfigSide for ServerConfig {
+    type Builder = builder::ConfigWantsClientVerifier;
 }
 
 /// This represents a single TLS server connection.

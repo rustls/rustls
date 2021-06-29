@@ -15,11 +15,10 @@ use rustls::Connection;
 fn main() {
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
-    let config = rustls::config_builder()
+    let config = rustls::ClientConfig::builder()
         .with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256.into()])
         .with_kx_groups(&[&rustls::kx_group::X25519])
         .with_protocol_versions(&[&rustls::version::TLS13])
-        .for_client()
         .unwrap()
         .with_root_certificates(root_store, &[])
         .with_no_client_auth();

@@ -4,7 +4,7 @@ extern crate libfuzzer_sys;
 extern crate rustls;
 
 use rustls::{
-    server_config_builder_with_safe_defaults,
+    ServerConfig,
     Connection,
     ResolvesServerCert,
     ServerConnection
@@ -25,7 +25,8 @@ impl ResolvesServerCert for Fail {
 
 fuzz_target!(|data: &[u8]| {
     let config = Arc::new(
-        server_config_builder_with_safe_defaults()
+        ServerConfig::builder()
+            .with_safe_defaults()
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(Fail)),
     );

@@ -5,7 +5,7 @@ extern crate rustls;
 extern crate webpki;
 
 use rustls::{
-    client_config_builder_with_safe_defaults,
+    ClientConfig,
     ClientConnection,
     Connection,
     RootCertStore
@@ -17,7 +17,8 @@ use std::sync::Arc;
 fuzz_target!(|data: &[u8]| {
     let root_store = RootCertStore::empty();
     let config = Arc::new(
-        client_config_builder_with_safe_defaults()
+        ClientConfig::builder()
+            .with_safe_defaults()
             .with_root_certificates(root_store, &[])
             .with_no_client_auth(),
     );

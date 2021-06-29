@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustls;
-use rustls::config_builder;
 use rustls::ClientSessionMemoryCache;
 use rustls::Connection;
 use rustls::NoClientSessionStorage;
@@ -288,11 +287,10 @@ fn make_server_config(
         ClientAuth::No => NoClientAuth::new(),
     };
 
-    let mut cfg = rustls::config_builder()
+    let mut cfg = ServerConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[params.version])
-        .for_server()
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
@@ -320,11 +318,10 @@ fn make_client_config(
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
-    let cfg = config_builder()
+    let cfg = ClientConfig::builder()
         .with_cipher_suites(&[params.ciphersuite])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[params.version])
-        .for_client()
         .unwrap()
         .with_root_certificates(root_store, &[]);
 
