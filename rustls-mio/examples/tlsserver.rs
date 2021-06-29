@@ -19,7 +19,7 @@ use docopt::Docopt;
 
 use env_logger;
 
-use rustls::{self, config_builder};
+use rustls;
 use rustls_pemfile;
 
 use rustls::{
@@ -598,11 +598,10 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     );
     let ocsp = load_ocsp(&args.flag_ocsp);
 
-    let mut config = config_builder()
+    let mut config = rustls::ServerConfig::builder()
         .with_cipher_suites(&suites)
         .with_safe_default_kx_groups()
         .with_protocol_versions(&versions)
-        .for_server()
         .expect("inconsistent cipher-suites/versions specified")
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])

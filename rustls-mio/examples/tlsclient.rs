@@ -498,11 +498,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         rustls::DEFAULT_VERSIONS.to_vec()
     };
 
-    let config = rustls::config_builder()
+    let config = rustls::ClientConfig::builder()
         .with_cipher_suites(&suites)
         .with_safe_default_kx_groups()
         .with_protocol_versions(&versions)
-        .for_client()
         .expect("inconsistent cipher-suite/versions selected")
         .with_root_certificates(root_store, &[]);
 

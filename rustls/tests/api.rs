@@ -10,7 +10,6 @@ use std::sync::Mutex;
 
 use rustls;
 
-use rustls::config_builder;
 use rustls::internal::msgs::{codec::Codec, persist::ClientSessionValue};
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
@@ -186,11 +185,10 @@ fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
 #[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
-        config_builder()
+        ClientConfig::builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
-            .for_client()
             .err(),
         Some(Error::General("no kx groups configured".into()))
     );
@@ -199,11 +197,10 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_client_rejects_empty_cipher_suites() {
     assert_eq!(
-        config_builder()
+        ClientConfig::builder()
             .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
-            .for_client()
             .err(),
         Some(Error::General("no usable cipher suites configured".into()))
     );
@@ -212,11 +209,10 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        config_builder()
+        ClientConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
-            .for_client()
             .err(),
         Some(Error::General("no usable cipher suites configured".into()))
     );
@@ -225,11 +221,10 @@ fn config_builder_for_client_rejects_incompatible_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_empty_kx_groups() {
     assert_eq!(
-        config_builder()
+        ServerConfig::builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
-            .for_server()
             .err(),
         Some(Error::General("no kx groups configured".into()))
     );
@@ -238,11 +233,10 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_server_rejects_empty_cipher_suites() {
     assert_eq!(
-        config_builder()
+        ServerConfig::builder()
             .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
-            .for_server()
             .err(),
         Some(Error::General("no usable cipher suites configured".into()))
     );
@@ -251,11 +245,10 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        config_builder()
+        ServerConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
-            .for_server()
             .err(),
         Some(Error::General("no usable cipher suites configured".into()))
     );
@@ -607,11 +600,10 @@ fn check_sigalgs_reduced_by_ciphersuite(
 ) {
     let client_config = finish_client_config(
         kt,
-        rustls::config_builder()
+        ClientConfig::builder()
             .with_cipher_suites(&[find_suite(suite)])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
-            .for_client()
             .unwrap(),
     );
 
@@ -803,7 +795,6 @@ mod test_clientverifier {
     use crate::common::MockClientVerifier;
     use rustls::internal::msgs::enums::AlertDescription;
     use rustls::internal::msgs::enums::ContentType;
-    use rustls::server_config_builder_with_safe_defaults;
 
     // Client is authorized!
     fn ver_ok() -> Result<ClientCertVerified, Error> {
@@ -824,7 +815,8 @@ mod test_clientverifier {
         kt: KeyType,
         client_cert_verifier: MockClientVerifier,
     ) -> ServerConfig {
-        server_config_builder_with_safe_defaults()
+        ServerConfig::builder()
+            .with_safe_defaults()
             .with_client_cert_verifier(Arc::new(client_cert_verifier))
             .with_single_cert(kt.get_chain(), kt.get_key())
             .unwrap()
@@ -1843,23 +1835,21 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::RSA;
     let server_config = finish_server_config(
         kt,
-        rustls::config_builder()
+        ServerConfig::builder()
             .with_cipher_suites(&[
                 rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             ])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
-            .for_server()
             .unwrap(),
     );
 
     let client_config = finish_client_config(
         kt,
-        rustls::config_builder()
+        ClientConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
-            .for_client()
             .unwrap(),
     );
 
@@ -2338,11 +2328,10 @@ fn negotiated_ciphersuite_client() {
         let scs = find_suite(suite);
         let client_config = finish_client_config(
             kt,
-            rustls::config_builder()
+            ClientConfig::builder()
                 .with_cipher_suites(&[scs])
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[version])
-                .for_client()
                 .unwrap(),
         );
 
@@ -2357,11 +2346,10 @@ fn negotiated_ciphersuite_server() {
         let scs = find_suite(suite);
         let server_config = finish_server_config(
             kt,
-            rustls::config_builder()
+            ServerConfig::builder()
                 .with_cipher_suites(&[scs])
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[version])
-                .for_server()
                 .unwrap(),
         );
 

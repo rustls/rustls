@@ -38,6 +38,20 @@ impl ConfigWantsClientVerifier {
     }
 }
 
+impl crate::builder::BuilderSide for ConfigWantsClientVerifier {
+    fn validated(
+        cipher_suites: Vec<SupportedCipherSuite>,
+        kx_groups: Vec<&'static SupportedKxGroup>,
+        versions: &[&'static versions::SupportedProtocolVersion],
+    ) -> Self {
+        Self {
+            cipher_suites,
+            kx_groups,
+            versions: versions::EnabledVersions::new(versions),
+        }
+    }
+}
+
 /// A config builder for a server, where we want to know how to provide a
 /// server certificate to a connecting peer.
 pub struct ConfigWantsServerCert {

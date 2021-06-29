@@ -51,6 +51,20 @@ impl ConfigWantsServerVerifier {
     }
 }
 
+impl crate::builder::BuilderSide for ConfigWantsServerVerifier {
+    fn validated(
+        cipher_suites: Vec<SupportedCipherSuite>,
+        kx_groups: Vec<&'static SupportedKxGroup>,
+        versions: &[&'static versions::SupportedProtocolVersion],
+    ) -> Self {
+        Self {
+            cipher_suites,
+            kx_groups,
+            versions: versions::EnabledVersions::new(versions),
+        }
+    }
+}
+
 /// A config builder for a client, where we want to know whether and how a
 /// client certificate should be provided.
 pub struct ConfigWantsClientCert {

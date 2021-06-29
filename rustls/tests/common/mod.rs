@@ -2,9 +2,6 @@ use std::convert::{TryFrom, TryInto};
 use std::io;
 use std::sync::Arc;
 
-use rustls::{
-    self, client_config_builder_with_safe_defaults, server_config_builder_with_safe_defaults,
-};
 use rustls_pemfile;
 
 use rustls::internal::msgs::codec::Reader;
@@ -229,7 +226,7 @@ pub fn finish_server_config(kt: KeyType, conf: rustls::ConfigWantsClientVerifier
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    finish_server_config(kt, server_config_builder_with_safe_defaults())
+    finish_server_config(kt, ServerConfig::builder().with_safe_defaults())
 }
 
 pub fn make_server_config_with_versions(
@@ -238,11 +235,10 @@ pub fn make_server_config_with_versions(
 ) -> ServerConfig {
     finish_server_config(
         kt,
-        rustls::config_builder()
+        ServerConfig::builder()
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
             .with_protocol_versions(versions)
-            .for_server()
             .unwrap(),
     )
 }
@@ -253,11 +249,10 @@ pub fn make_server_config_with_kx_groups(
 ) -> ServerConfig {
     finish_server_config(
         kt,
-        rustls::config_builder()
+        ServerConfig::builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(kx_groups)
             .with_safe_default_protocol_versions()
-            .for_server()
             .unwrap(),
     )
 }
@@ -276,7 +271,8 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
 
-    server_config_builder_with_safe_defaults()
+    ServerConfig::builder()
+        .with_safe_defaults()
         .with_client_cert_verifier(client_auth)
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -310,18 +306,17 @@ pub fn finish_client_config_with_creds(
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    finish_client_config(kt, client_config_builder_with_safe_defaults())
+    finish_client_config(kt, ClientConfig::builder().with_safe_defaults())
 }
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
     kx_groups: &[&'static rustls::SupportedKxGroup],
 ) -> ClientConfig {
-    let builder = rustls::config_builder()
+    let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_kx_groups(kx_groups)
         .with_safe_default_protocol_versions()
-        .for_client()
         .unwrap();
     finish_client_config(kt, builder)
 }
@@ -330,28 +325,26 @@ pub fn make_client_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
-    let builder = rustls::config_builder()
+    let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_protocol_versions(versions)
-        .for_client()
         .unwrap();
     finish_client_config(kt, builder)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    finish_client_config_with_creds(kt, client_config_builder_with_safe_defaults())
+    finish_client_config_with_creds(kt, ClientConfig::builder().with_safe_defaults())
 }
 
 pub fn make_client_config_with_versions_with_auth(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
-    let builder = rustls::config_builder()
+    let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_protocol_versions(versions)
-        .for_client()
         .unwrap();
     finish_client_config_with_creds(kt, builder)
 }

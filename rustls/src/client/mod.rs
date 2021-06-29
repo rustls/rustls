@@ -15,6 +15,7 @@ use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
+use crate::ConfigWantsCipherSuites;
 
 #[cfg(feature = "quic")]
 use crate::quic;
@@ -84,7 +85,7 @@ pub trait ResolvesClientCert: Send + Sync {
 /// Making one of these can be expensive, and should be
 /// once per process rather than once per connection.
 ///
-/// These cannot be constructed directly. Create one via [`config_builder`](crate::config_builder).
+/// These must be created via the [`ClientConfig::builder()`] function.
 ///
 /// # Defaults
 ///
@@ -155,6 +156,11 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
+    /// Create a builder to build up the client configuration
+    pub fn builder() -> ConfigWantsCipherSuites<Self> {
+        ConfigWantsCipherSuites(Default::default())
+    }
+
     #[doc(hidden)]
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
@@ -180,6 +186,10 @@ impl ClientConfig {
             .copied()
             .find(|&scs| scs.suite() == suite)
     }
+}
+
+impl crate::builder::ConfigSide for ClientConfig {
+    type Builder = builder::ConfigWantsServerVerifier;
 }
 
 /// Encodes ways a client can know the expected name of the server.

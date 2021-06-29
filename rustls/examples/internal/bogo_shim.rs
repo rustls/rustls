@@ -359,11 +359,10 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         rustls::ALL_KX_GROUPS.to_vec()
     };
 
-    let mut cfg = rustls::config_builder()
+    let mut cfg = rustls::ServerConfig::builder()
         .with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
         .with_protocol_versions(&opts.supported_versions())
-        .for_server()
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(
@@ -436,11 +435,10 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         rustls::ALL_KX_GROUPS.to_vec()
     };
 
-    let cfg = rustls::config_builder()
+    let cfg = rustls::ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
         .with_protocol_versions(&opts.supported_versions())
-        .for_client()
         .expect("inconsistent settings")
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
             send_sct: opts.send_sct,

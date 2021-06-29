@@ -109,7 +109,8 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,ignore
-//! let config = rustls::client_config_builder_with_safe_defaults()
+//! let config = rustls::ClientConfig::builder()
+//!     .with_safe_defaults()
 //!     .with_root_certificates(root_store, trusted_ct_logs)
 //!     .with_no_client_auth();
 //! ```
@@ -125,7 +126,8 @@
 //! # let mut root_store = rustls::RootCertStore::empty();
 //! # root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
 //! # let trusted_ct_logs = &[];
-//! # let config = rustls::client_config_builder_with_safe_defaults()
+//! # let config = rustls::ClientConfig::builder()
+//! #     .with_safe_defaults()
 //! #     .with_root_certificates(root_store, trusted_ct_logs)
 //! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
@@ -294,9 +296,7 @@ pub mod internal {
 // The public interface is:
 pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
-    client_config_builder_with_safe_defaults, config_builder,
-    server_config_builder_with_safe_defaults, ConfigWantsCipherSuites, ConfigWantsKxGroups,
-    ConfigWantsPeerType, ConfigWantsVersions,
+    ConfigSide, ConfigWantsCipherSuites, ConfigWantsKxGroups, ConfigWantsVersions,
 };
 pub use crate::client::builder::{ConfigWantsClientCert, ConfigWantsServerVerifier};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
