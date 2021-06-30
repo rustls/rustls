@@ -483,7 +483,7 @@ fn emit_certverify(
         }
     };
 
-    let scheme = signer.get_scheme();
+    let scheme = signer.scheme();
     let sig = signer.sign(&message)?;
     let body = DigitallySignedStruct::new(scheme, sig);
 

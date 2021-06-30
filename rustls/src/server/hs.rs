@@ -475,7 +475,7 @@ impl State for ExpectClientHello {
         cx.common.suite = Some(suite);
 
         // Start handshake hash.
-        let starting_hash = suite.get_hash();
+        let starting_hash = suite.hash_algorithm();
         let transcript = match self.transcript {
             HandshakeHashOrBuffer::Buffer(inner) => inner.start_hash(starting_hash),
             HandshakeHashOrBuffer::Hash(inner) if inner.algorithm() == starting_hash => inner,

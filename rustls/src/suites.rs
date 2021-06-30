@@ -53,7 +53,7 @@ pub struct Tls13CipherSuite {
 
 impl Tls13CipherSuite {
     /// Which hash function to use with this suite.
-    pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
+    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         self.hkdf_algorithm
             .hmac_algorithm()
             .digest_algorithm()
@@ -62,7 +62,9 @@ impl Tls13CipherSuite {
     /// Can a session using suite self resume from suite prev?
     pub fn can_resume_from(&self, prev: SupportedCipherSuite) -> Option<&'static Self> {
         match prev {
-            SupportedCipherSuite::Tls13(inner) if inner.get_hash() == self.get_hash() => {
+            SupportedCipherSuite::Tls13(inner)
+                if inner.hash_algorithm() == self.hash_algorithm() =>
+            {
                 Some(inner)
             }
             _ => None,
@@ -130,7 +132,7 @@ impl Tls12CipherSuite {
     }
 
     /// Which hash function to use with this suite.
-    pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
+    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         self.hmac_algorithm.digest_algorithm()
     }
 }
@@ -158,10 +160,10 @@ impl fmt::Debug for Tls12CipherSuite {
 
 impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
-    pub fn get_hash(&self) -> &'static ring::digest::Algorithm {
+    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         match self {
-            SupportedCipherSuite::Tls12(inner) => inner.get_hash(),
-            SupportedCipherSuite::Tls13(inner) => inner.get_hash(),
+            SupportedCipherSuite::Tls12(inner) => inner.hash_algorithm(),
+            SupportedCipherSuite::Tls13(inner) => inner.hash_algorithm(),
         }
     }
 

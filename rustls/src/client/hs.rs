@@ -602,7 +602,7 @@ impl State for ExpectServerHello {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = self
             .transcript_buffer
-            .start_hash(suite.get_hash());
+            .start_hash(suite.hash_algorithm());
         transcript.add_message(&m);
 
         let randoms = ConnectionRandoms::new(self.random, server_hello.random, true);
@@ -738,7 +738,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let transcript = self
             .next
             .transcript_buffer
-            .start_hash(cs.get_hash());
+            .start_hash(cs.hash_algorithm());
         let mut transcript_buffer = transcript.into_hrr_buffer();
         transcript_buffer.add_message(&m);
 
