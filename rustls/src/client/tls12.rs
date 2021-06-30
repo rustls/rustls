@@ -744,7 +744,8 @@ impl hs::State for ExpectServerDone {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            if !SupportedCipherSuite::from(suite).usable_for_sigalg(sig.scheme.sign()) {
+            if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig.scheme.sign())
+            {
                 let error_message = format!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),

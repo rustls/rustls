@@ -194,15 +194,15 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Return true if this suite is usable for a key only offering `sigalg`
+    /// Return true if this suite is usable for a key only offering `sig_alg`
     /// signatures.  This resolves to true for all TLS1.3 suites.
-    pub fn usable_for_sigalg(&self, sigalg: SignatureAlgorithm) -> bool {
+    pub fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
         match self {
             SupportedCipherSuite::Tls13(_) => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
             SupportedCipherSuite::Tls12(inner) => inner
                 .sign
                 .iter()
-                .any(|scheme| scheme.sign() == sigalg),
+                .any(|scheme| scheme.sign() == sig_alg),
         }
     }
 }
@@ -413,7 +413,7 @@ pub(crate) fn reduce_given_sigalg(
     sigalg: SignatureAlgorithm,
 ) -> Vec<SupportedCipherSuite> {
     all.iter()
-        .filter(|&&suite| suite.usable_for_sigalg(sigalg))
+        .filter(|&&suite| suite.usable_for_signature_algorithm(sigalg))
         .copied()
         .collect()
 }
@@ -438,7 +438,7 @@ pub(crate) fn compatible_sigscheme_for_suites(
     let sigalg = sigscheme.sign();
     common_suites
         .iter()
-        .any(|&suite| suite.usable_for_sigalg(sigalg))
+        .any(|&suite| suite.usable_for_signature_algorithm(sigalg))
 }
 
 #[cfg(test)]
