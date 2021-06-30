@@ -654,7 +654,7 @@ mod client_hello {
             .choose_scheme(schemes)
             .ok_or_else(|| hs::incompatible(common, "no overlapping sigschemes"))?;
 
-        let scheme = signer.get_scheme();
+        let scheme = signer.scheme();
         let sig = signer.sign(&message)?;
 
         let cv = DigitallySignedStruct::new(scheme, sig);

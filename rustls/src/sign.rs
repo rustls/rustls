@@ -25,7 +25,7 @@ pub trait Signer: Send + Sync {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
 
     /// Reveals which scheme will be used when you call `sign()`.
-    fn get_scheme(&self) -> SignatureScheme;
+    fn scheme(&self) -> SignatureScheme;
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and
@@ -242,7 +242,7 @@ impl Signer for RsaSigner {
             .map_err(|_| Error::General("signing failed".to_string()))
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         self.scheme
     }
 }
@@ -312,7 +312,7 @@ impl Signer for EcdsaSigner {
             .map(|sig| sig.as_ref().into())
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         self.scheme
     }
 }
@@ -374,7 +374,7 @@ impl Signer for Ed25519Signer {
         Ok(self.key.sign(message).as_ref().into())
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         self.scheme
     }
 }

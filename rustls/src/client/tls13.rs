@@ -240,7 +240,7 @@ pub(super) fn fill_in_psk_binder(
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
     let hkdf_alg = resuming_suite.hkdf_algorithm;
-    let suite_hash = resuming_suite.get_hash();
+    let suite_hash = resuming_suite.hash_algorithm();
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -287,7 +287,9 @@ pub(super) fn prepare_resumption(
     let obfuscated_ticket_age =
         resuming_session.get_obfuscated_ticket_age(resuming_session.time_retrieved());
 
-    let binder_len = resuming_suite.get_hash().output_len;
+    let binder_len = resuming_suite
+        .hash_algorithm()
+        .output_len;
     let binder = vec![0u8; binder_len];
 
     let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
@@ -307,7 +309,7 @@ pub(super) fn derive_early_traffic_secret(
     // For middlebox compatibility
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
-    let client_hello_hash = transcript_buffer.get_hash_given(resuming_suite.get_hash(), &[]);
+    let client_hello_hash = transcript_buffer.get_hash_given(resuming_suite.hash_algorithm(), &[]);
     let client_early_traffic_secret =
         early_key_schedule.client_early_traffic_secret(&client_hello_hash, key_log, client_random);
     // Set early data encryption key
@@ -799,7 +801,7 @@ fn emit_certverify_tls13(
 
     let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
 
-    let scheme = signer.get_scheme();
+    let scheme = signer.scheme();
     let sig = signer.sign(&message)?;
     let dss = DigitallySignedStruct::new(scheme, sig);
 
