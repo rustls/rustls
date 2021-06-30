@@ -30,6 +30,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     pass the end-entity and intermediate certificates separately.  This means rustls deals with the case
     where the certificate chain is empty, rather than leaving that to ServerCertVerifier/ClientCertVerifier
     implementation.
+  - *Breaking API change*: `SupportedCipherSuite` is now an enum with TLS 1.2 and TLS 1.3 variants. Some of its
+    methods have moved to the inner `Tls12CipherSuite` and `Tls13CipherSuite` types. Instead of
+    `usable_for_version()`, it now has a `version()` method. `get_hash()` has been renamed
+    to `hash_algorithm()` and `usable_for_sigalg()` to `usable_for_signature_algorithm()`.
   - There are now 80% fewer unreachable unwraps in the core crate thanks to large refactoring efforts.
   - *Breaking API change*: the `WebPkiError` variant of `rustls::Error` now includes which operation failed.
   - *Breaking API changes*: These public API items have been renamed to meet naming guidelines:
