@@ -81,7 +81,8 @@ use std::marker::PhantomData;
 /// 3. Now you must make
 ///    a decision on which protocol versions to support, typically by calling
 ///    [`ConfigBuilder<S, WantsVersions>::with_safe_default_protocol_versions()`].
-/// 5. Now see [`ConfigWantsServerVerifier`] or [`ConfigWantsClientVerifier`] for further steps.
+/// 5. Now see [`ConfigBuilder<ClientConfig, WantsVerifier>`] or
+///    [`ConfigBuilder<ServerConfig, WantsVerifier>`] for further steps.
 ///
 /// [`ServerConfig`]: crate::ServerConfig
 /// [`ClientConfig`]: crate::ClientConfig
@@ -103,12 +104,15 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
     ///
     /// These are safe defaults, useful for 99% of applications.
-    pub fn with_safe_defaults(self) -> S::Builder {
-        S::Builder::validated(
-            DEFAULT_CIPHERSUITES.to_vec(),
-            ALL_KX_GROUPS.to_vec(),
-            versions::DEFAULT_VERSIONS,
-        )
+    pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier> {
+        ConfigBuilder {
+            state: WantsVerifier {
+                cipher_suites: DEFAULT_CIPHERSUITES.to_vec(),
+                kx_groups: ALL_KX_GROUPS.to_vec(),
+                versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
+            },
+            side: self.side,
+        }
     }
 
     /// Choose a specific set of cipher suites.
@@ -171,7 +175,9 @@ pub struct WantsVersions {
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     /// Accept the default protocol versions: both TLS1.2 and TLS1.3 are enabled.
-    pub fn with_safe_default_protocol_versions(self) -> Result<S::Builder, Error> {
+    pub fn with_safe_default_protocol_versions(
+        self,
+    ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
         self.with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
 
@@ -179,7 +185,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     pub fn with_protocol_versions(
         self,
         versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> Result<S::Builder, Error> {
+    ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
         let mut any_usable_suite = false;
         for suite in &self.state.cipher_suites {
             if versions.contains(&suite.version()) {
@@ -196,36 +202,35 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             return Err(Error::General("no kx groups configured".into()));
         }
 
-        Ok(S::Builder::validated(
-            self.state.cipher_suites,
-            self.state.kx_groups,
-            versions,
-        ))
+        Ok(ConfigBuilder {
+            state: WantsVerifier {
+                cipher_suites: self.state.cipher_suites,
+                kx_groups: self.state.kx_groups,
+                versions: versions::EnabledVersions::new(versions),
+            },
+            side: self.side,
+        })
     }
 }
 
-/// Helper trait to abstract config builders over building a [`ClientConfig`] or [`ServerConfig`].
+/// Config builder state where the caller must supply a verifier.
+pub struct WantsVerifier {
+    pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
+    pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
+    pub(crate) versions: versions::EnabledVersions,
+}
+
+/// Helper trait to abstract [`ConfigBuilder`] over building a [`ClientConfig`] or [`ServerConfig`].
 ///
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ServerConfig`]: crate::ServerConfig
-pub trait ConfigSide: sealed::Sealed {
-    /// Refer to side-specific builder type
-    type Builder: BuilderSide;
-}
+pub trait ConfigSide: sealed::Sealed {}
 
-#[allow(unreachable_pub)]
-pub trait BuilderSide: sealed::Sealed + Sized {
-    fn validated(
-        cipher_suites: Vec<SupportedCipherSuite>,
-        kx_groups: Vec<&'static SupportedKxGroup>,
-        versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> Self;
-}
+impl ConfigSide for crate::ClientConfig {}
+impl ConfigSide for crate::ServerConfig {}
 
 mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::ClientConfig {}
     impl Sealed for crate::ServerConfig {}
-    impl Sealed for crate::ConfigWantsClientVerifier {}
-    impl Sealed for crate::ConfigWantsServerVerifier {}
 }

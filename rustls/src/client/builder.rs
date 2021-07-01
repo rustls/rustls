@@ -1,4 +1,5 @@
 use crate::anchors;
+use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::error::Error;
@@ -9,30 +10,25 @@ use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
-/// A client config in progress, where the next step is to configure how
-/// to validate server certificates (typically with a set root certificates).
-pub struct ConfigWantsServerVerifier {
-    pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
-    pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
-    pub(crate) versions: versions::EnabledVersions,
-}
-
-impl ConfigWantsServerVerifier {
+impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
         ct_logs: &'static [&'static sct::Log],
-    ) -> ConfigWantsClientCert {
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         let verifier = Arc::new(verify::WebPkiVerifier::new(root_store, ct_logs));
-
-        ConfigWantsClientCert {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            versions: self.versions,
-            verifier,
+        ConfigBuilder {
+            state: WantsClientCert {
+                cipher_suites: self.state.cipher_suites,
+                kx_groups: self.state.kx_groups,
+                versions: self.state.versions,
+                verifier,
+            },
+            side: PhantomData::default(),
         }
     }
 
@@ -41,40 +37,29 @@ impl ConfigWantsServerVerifier {
     pub fn with_custom_certificate_verifier(
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,
-    ) -> ConfigWantsClientCert {
-        ConfigWantsClientCert {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            versions: self.versions,
-            verifier,
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+        ConfigBuilder {
+            state: WantsClientCert {
+                cipher_suites: self.state.cipher_suites,
+                kx_groups: self.state.kx_groups,
+                versions: self.state.versions,
+                verifier,
+            },
+            side: PhantomData::default(),
         }
     }
 }
 
-impl crate::builder::BuilderSide for ConfigWantsServerVerifier {
-    fn validated(
-        cipher_suites: Vec<SupportedCipherSuite>,
-        kx_groups: Vec<&'static SupportedKxGroup>,
-        versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> Self {
-        Self {
-            cipher_suites,
-            kx_groups,
-            versions: versions::EnabledVersions::new(versions),
-        }
-    }
-}
-
-/// A config builder for a client, where we want to know whether and how a
-/// client certificate should be provided.
-pub struct ConfigWantsClientCert {
+/// A config builder state where the caller needs to supply whether and how to provide a client
+/// certificate.
+pub struct WantsClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
 }
 
-impl ConfigWantsClientCert {
+impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
@@ -102,16 +87,16 @@ impl ConfigWantsClientCert {
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
         ClientConfig {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
+            cipher_suites: self.state.cipher_suites,
+            kx_groups: self.state.kx_groups,
             alpn_protocols: Vec::new(),
             session_storage: handy::ClientSessionMemoryCache::new(256),
             max_fragment_size: None,
             client_auth_cert_resolver,
             enable_tickets: true,
-            versions: self.versions,
+            versions: self.state.versions,
             enable_sni: true,
-            verifier: self.verifier,
+            verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),
             enable_early_data: false,
         }

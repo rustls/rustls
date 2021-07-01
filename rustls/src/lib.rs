@@ -296,9 +296,9 @@ pub mod internal {
 // The public interface is:
 pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
-    ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVersions,
+    ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
 };
-pub use crate::client::builder::{ConfigWantsClientCert, ConfigWantsServerVerifier};
+pub use crate::client::builder::WantsClientCert;
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 pub use crate::client::ResolvesClientCert;
 pub use crate::client::ServerName;
@@ -315,7 +315,7 @@ pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
 pub use crate::msgs::enums::SignatureScheme;
 pub use crate::msgs::handshake::DistinguishedNames;
-pub use crate::server::builder::{ConfigWantsClientVerifier, ConfigWantsServerCert};
+pub use crate::server::builder::WantsServerCert;
 pub use crate::server::handy::ResolvesServerCertUsingSni;
 pub use crate::server::handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 pub use crate::server::StoresServerSessions;
