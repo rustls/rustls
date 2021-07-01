@@ -296,7 +296,7 @@ pub mod internal {
 // The public interface is:
 pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
-    ConfigSide, ConfigWantsCipherSuites, ConfigWantsKxGroups, ConfigWantsVersions,
+    ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVersions,
 };
 pub use crate::client::builder::{ConfigWantsClientCert, ConfigWantsServerVerifier};
 pub use crate::client::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
