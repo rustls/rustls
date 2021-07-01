@@ -1,5 +1,7 @@
+use crate::builder::{WantsCipherSuites, ConfigBuilder};
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
+use crate::key;
 use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "quic")]
@@ -12,10 +14,10 @@ use crate::suites::SupportedCipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, quic};
-use crate::{key, ConfigWantsCipherSuites};
 
 use std::fmt;
 use std::io::{self, IoSlice};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 #[macro_use]
@@ -217,8 +219,11 @@ pub struct ServerConfig {
 
 impl ServerConfig {
     /// Create builder to build up the server configuration
-    pub fn builder() -> ConfigWantsCipherSuites<Self> {
-        ConfigWantsCipherSuites(Default::default())
+    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
+        ConfigBuilder {
+            state: WantsCipherSuites,
+            side: PhantomData::default(),
+        }
     }
 
     #[doc(hidden)]

@@ -70,17 +70,17 @@ use std::marker::PhantomData;
 ///     .with_no_client_auth();
 /// ```
 ///
-///
 /// The types used here fit together like this:
 ///
 /// 1. Call [`ClientConfig::builder()`] or [`ServerConfig::builder()`] to initialize a builder.
 /// 1. You must make a decision on which cipher suites to use, typically
-///    by calling [`ConfigWantsCipherSuites::with_safe_default_cipher_suites()`].
+///    by calling [`ConfigBuilder<S, WantsCipherSuites>::with_safe_default_cipher_suites()`].
 /// 2. Now you must make a decision
-///    on key exchange groups: typically by calling [`ConfigWantsKxGroups::with_safe_default_kx_groups()`].
+///    on key exchange groups: typically by calling
+///    [`ConfigBuilder<S, WantsKxGroups>::with_safe_default_kx_groups()`].
 /// 3. Now you must make
 ///    a decision on which protocol versions to support, typically by calling
-///    [`ConfigWantsVersions::with_safe_default_protocol_versions()`].
+///    [`ConfigBuilder<S, WantsVersions>::with_safe_default_protocol_versions()`].
 /// 5. Now see [`ConfigWantsServerVerifier`] or [`ConfigWantsClientVerifier`] for further steps.
 ///
 /// [`ServerConfig`]: crate::ServerConfig
@@ -89,15 +89,21 @@ use std::marker::PhantomData;
 /// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
 /// [`ConfigWantsServerVerifier`]: crate::ConfigWantsServerVerifier
 /// [`ConfigWantsClientVerifier`]: crate::ConfigWantsClientVerifier
+#[derive(Clone)]
+pub struct ConfigBuilder<Side: ConfigSide, State> {
+    pub(crate) state: State,
+    pub(crate) side: PhantomData<Side>,
+}
 
-/// A config builder where we want to know the cipher suites.
-pub struct ConfigWantsCipherSuites<S: ConfigSide>(pub(crate) PhantomData<S>);
+/// Config builder state where the caller must supply cipher suites.
+#[derive(Clone)]
+pub struct WantsCipherSuites;
 
-impl<S: ConfigSide> ConfigWantsCipherSuites<S> {
+impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
     ///
     /// These are safe defaults, useful for 99% of applications.
-    pub fn with_safe_defaults(&self) -> S::Builder {
+    pub fn with_safe_defaults(self) -> S::Builder {
         S::Builder::validated(
             DEFAULT_CIPHERSUITES.to_vec(),
             ALL_KX_GROUPS.to_vec(),
@@ -107,12 +113,14 @@ impl<S: ConfigSide> ConfigWantsCipherSuites<S> {
 
     /// Choose a specific set of cipher suites.
     pub fn with_cipher_suites(
-        &self,
+        self,
         cipher_suites: &[SupportedCipherSuite],
-    ) -> ConfigWantsKxGroups<S> {
-        ConfigWantsKxGroups {
-            cipher_suites: cipher_suites.to_vec(),
-            side: PhantomData::default(),
+    ) -> ConfigBuilder<S, WantsKxGroups> {
+        ConfigBuilder {
+            state: WantsKxGroups {
+                cipher_suites: cipher_suites.to_vec(),
+            },
+            side: self.side,
         }
     }
 
@@ -121,43 +129,47 @@ impl<S: ConfigSide> ConfigWantsCipherSuites<S> {
     /// Note that this default provides only high-quality suites: there is no need
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
     /// implement these.
-    pub fn with_safe_default_cipher_suites(&self) -> ConfigWantsKxGroups<S> {
+    pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
         self.with_cipher_suites(DEFAULT_CIPHERSUITES)
     }
 }
 
-/// A config builder where we want to know which key exchange groups to use.
-pub struct ConfigWantsKxGroups<S: ConfigSide> {
+/// Config builder state where the caller must supply key exchange groups.
+#[derive(Clone)]
+pub struct WantsKxGroups {
     cipher_suites: Vec<SupportedCipherSuite>,
-    side: PhantomData<S>,
 }
 
-impl<S: ConfigSide> ConfigWantsKxGroups<S> {
+impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
     /// Choose a specific set of key exchange groups.
-    pub fn with_kx_groups(self, kx_groups: &[&'static SupportedKxGroup]) -> ConfigWantsVersions<S> {
-        ConfigWantsVersions {
-            cipher_suites: self.cipher_suites,
-            kx_groups: kx_groups.to_vec(),
-            side: PhantomData::default(),
+    pub fn with_kx_groups(
+        self,
+        kx_groups: &[&'static SupportedKxGroup],
+    ) -> ConfigBuilder<S, WantsVersions> {
+        ConfigBuilder {
+            state: WantsVersions {
+                cipher_suites: self.state.cipher_suites,
+                kx_groups: kx_groups.to_vec(),
+            },
+            side: self.side,
         }
     }
 
     /// Choose the default set of key exchange groups.
     ///
     /// This is a safe default: rustls doesn't implement any poor-quality groups.
-    pub fn with_safe_default_kx_groups(self) -> ConfigWantsVersions<S> {
+    pub fn with_safe_default_kx_groups(self) -> ConfigBuilder<S, WantsVersions> {
         self.with_kx_groups(&ALL_KX_GROUPS)
     }
 }
 
-/// A config builder where we want to know the TLS versions.
-pub struct ConfigWantsVersions<S: ConfigSide> {
+/// Config builder state where the caller must supply TLS protocol versions.
+pub struct WantsVersions {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
-    side: PhantomData<S>,
 }
 
-impl<S: ConfigSide> ConfigWantsVersions<S> {
+impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     /// Accept the default protocol versions: both TLS1.2 and TLS1.3 are enabled.
     pub fn with_safe_default_protocol_versions(self) -> Result<S::Builder, Error> {
         self.with_protocol_versions(versions::DEFAULT_VERSIONS)
@@ -169,7 +181,7 @@ impl<S: ConfigSide> ConfigWantsVersions<S> {
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> Result<S::Builder, Error> {
         let mut any_usable_suite = false;
-        for suite in &self.cipher_suites {
+        for suite in &self.state.cipher_suites {
             if versions.contains(&suite.version()) {
                 any_usable_suite = true;
                 break;
@@ -180,13 +192,13 @@ impl<S: ConfigSide> ConfigWantsVersions<S> {
             return Err(Error::General("no usable cipher suites configured".into()));
         }
 
-        if self.kx_groups.is_empty() {
+        if self.state.kx_groups.is_empty() {
             return Err(Error::General("no kx groups configured".into()));
         }
 
         Ok(S::Builder::validated(
-            self.cipher_suites,
-            self.kx_groups,
+            self.state.cipher_suites,
+            self.state.kx_groups,
             versions,
         ))
     }
