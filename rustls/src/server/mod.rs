@@ -1,4 +1,4 @@
-use crate::builder::{WantsCipherSuites, ConfigBuilder};
+use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Reader, Writer};
 use crate::error::Error;
 use crate::key;
@@ -237,10 +237,6 @@ impl ServerConfig {
                 .iter()
                 .any(|cs| cs.version().version == v)
     }
-}
-
-impl crate::builder::ConfigSide for ServerConfig {
-    type Builder = builder::ConfigWantsClientVerifier;
 }
 
 /// This represents a single TLS server connection.

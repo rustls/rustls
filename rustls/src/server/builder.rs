@@ -1,3 +1,4 @@
+use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::NoKeyLog;
@@ -8,60 +9,42 @@ use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
-/// A server config in progress, where the next step is to configure whether
-/// and how to authenticate clients.
-pub struct ConfigWantsClientVerifier {
-    pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
-    pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
-    pub(crate) versions: versions::EnabledVersions,
-}
-
-impl ConfigWantsClientVerifier {
+impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
         client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
-    ) -> ConfigWantsServerCert {
-        ConfigWantsServerCert {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            versions: self.versions,
-            verifier: client_cert_verifier,
+    ) -> ConfigBuilder<ServerConfig, WantsServerCert> {
+        ConfigBuilder {
+            state: WantsServerCert {
+                cipher_suites: self.state.cipher_suites,
+                kx_groups: self.state.kx_groups,
+                versions: self.state.versions,
+                verifier: client_cert_verifier,
+            },
+            side: PhantomData::default(),
         }
     }
 
     /// Disable client authentication.
-    pub fn with_no_client_auth(self) -> ConfigWantsServerCert {
+    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig, WantsServerCert> {
         self.with_client_cert_verifier(verify::NoClientAuth::new())
     }
 }
 
-impl crate::builder::BuilderSide for ConfigWantsClientVerifier {
-    fn validated(
-        cipher_suites: Vec<SupportedCipherSuite>,
-        kx_groups: Vec<&'static SupportedKxGroup>,
-        versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> Self {
-        Self {
-            cipher_suites,
-            kx_groups,
-            versions: versions::EnabledVersions::new(versions),
-        }
-    }
-}
-
-/// A config builder for a server, where we want to know how to provide a
-/// server certificate to a connecting peer.
-pub struct ConfigWantsServerCert {
+/// A config builder state where the caller must supply how to provide a server certificate to
+/// the connecting peer.
+pub struct WantsServerCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ClientCertVerifier>,
 }
 
-impl ConfigWantsServerCert {
+impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
@@ -110,16 +93,16 @@ impl ConfigWantsServerCert {
     /// Sets a custom [`ResolvesServerCert`].
     pub fn with_cert_resolver(self, cert_resolver: Arc<dyn ResolvesServerCert>) -> ServerConfig {
         ServerConfig {
-            cipher_suites: self.cipher_suites,
-            kx_groups: self.kx_groups,
-            verifier: self.verifier,
+            cipher_suites: self.state.cipher_suites,
+            kx_groups: self.state.kx_groups,
+            verifier: self.state.verifier,
             cert_resolver,
             ignore_client_order: false,
             max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
-            versions: self.versions,
+            versions: self.state.versions,
             key_log: Arc::new(NoKeyLog {}),
             #[cfg(feature = "quic")]
             max_early_data_size: 0,

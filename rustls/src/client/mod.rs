@@ -192,10 +192,6 @@ impl ClientConfig {
     }
 }
 
-impl crate::builder::ConfigSide for ClientConfig {
-    type Builder = builder::ConfigWantsServerVerifier;
-}
-
 /// Encodes ways a client can know the expected name of the server.
 ///
 /// This currently covers knowing the DNS name of the server, but
