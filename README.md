@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
-* 0.20.0 (pending, 2021-06-xx)
+* 0.20.0-beta2 (2021-07-04)
   - *Breaking change*: internal buffers are now limited to 64 kB by default. Use
     `Connection::set_buffer_limit` to change the buffer limits to suit your application.
   - *Breaking API change*: PEM parsing now lives in the [rustls-pemfile crate](https://crates.io/crates/rustls-pemfile).
@@ -192,7 +192,7 @@ Options:
     --no-sni            Disable server name indication support.
     --insecure          Disable certificate verification.
     --verbose           Emit log output.
-    --mtu MTU           Limit outgoing messages to MTU bytes.
+    --max-frag-size M   Limit outgoing messages to M bytes.
     --version, -v       Show tool version.
     --help, -h          Show this screen.
 ```
