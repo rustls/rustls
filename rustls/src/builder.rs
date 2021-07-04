@@ -5,11 +5,15 @@ use crate::versions;
 
 use std::marker::PhantomData;
 
-/// Building a [`ServerConfig`] or [`ClientConfig`] in a linker-friendly way.
+/// Building a [`ServerConfig`] or [`ClientConfig`] in a linker-friendly and
+/// complete way.
 ///
 /// Linker-friendly: meaning unused cipher suites, protocol
 /// versions, key exchange mechanisms, etc. can be discarded
 /// by the linker as they'll be unreferenced.
+///
+/// Complete: the type system ensures all decisions required to run a
+/// server or client have been made by the time the process finishes.
 ///
 /// Example, to make a [`ServerConfig`]:
 ///
