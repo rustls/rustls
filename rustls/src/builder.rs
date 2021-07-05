@@ -120,7 +120,13 @@ pub struct WantsCipherSuites(pub(crate) ());
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
     ///
+    /// If used, this will enable all safe supported cipher suites ([`DEFAULT_CIPHERSUITES`]), all
+    /// safe supported key exchange groups ([`ALL_KX_GROUPS`]) and all safe supported protocol
+    /// versions ([`DEFAULT_VERSIONS`]).
+    ///
     /// These are safe defaults, useful for 99% of applications.
+    ///
+    /// [`DEFAULT_VERSIONS`]: versions::DEFAULT_VERSIONS
     pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier> {
         ConfigBuilder {
             state: WantsVerifier {
@@ -145,7 +151,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
         }
     }
 
-    /// Choose the default set of cipher suites.
+    /// Choose the default set of cipher suites ([`DEFAULT_CIPHERSUITES`]).
     ///
     /// Note that this default provides only high-quality suites: there is no need
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
@@ -176,7 +182,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
         }
     }
 
-    /// Choose the default set of key exchange groups.
+    /// Choose the default set of key exchange groups ([`ALL_KX_GROUPS`]).
     ///
     /// This is a safe default: rustls doesn't implement any poor-quality groups.
     pub fn with_safe_default_kx_groups(self) -> ConfigBuilder<S, WantsVersions> {
