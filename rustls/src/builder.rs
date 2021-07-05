@@ -3,6 +3,7 @@ use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
 use crate::versions;
 
+use std::fmt;
 use std::marker::PhantomData;
 
 /// Building a [`ServerConfig`] or [`ClientConfig`] in a linker-friendly and
@@ -98,6 +99,18 @@ use std::marker::PhantomData;
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
     pub(crate) side: PhantomData<Side>,
+}
+
+impl<Side: ConfigSide, State> fmt::Debug for ConfigBuilder<Side, State> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConfigBuilder")
+            .field("side", &format_args!("{}", &std::any::type_name::<Side>()))
+            .field(
+                "state",
+                &format_args!("{}", &std::any::type_name::<State>()),
+            )
+            .finish()
+    }
 }
 
 /// Config builder state where the caller must supply cipher suites.
