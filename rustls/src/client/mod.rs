@@ -160,7 +160,7 @@ impl ClientConfig {
     /// Create a builder to build up the client configuration
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
         ConfigBuilder {
-            state: WantsCipherSuites,
+            state: WantsCipherSuites(()),
             side: PhantomData::default(),
         }
     }

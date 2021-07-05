@@ -102,7 +102,7 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
 
 /// Config builder state where the caller must supply cipher suites.
 #[derive(Clone)]
-pub struct WantsCipherSuites;
+pub struct WantsCipherSuites(pub(crate) ());
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
