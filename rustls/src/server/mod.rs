@@ -221,7 +221,7 @@ impl ServerConfig {
     /// Create builder to build up the server configuration
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
         ConfigBuilder {
-            state: WantsCipherSuites,
+            state: WantsCipherSuites(()),
             side: PhantomData::default(),
         }
     }
