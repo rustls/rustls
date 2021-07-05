@@ -22,7 +22,7 @@ use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection, ResolvesClientCert};
 use rustls::{ResolvesServerCert, ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
-use rustls::{SupportedCipherSuite, ALL_CIPHERSUITES};
+use rustls::{SupportedCipherSuite, ALL_CIPHER_SUITES};
 use rustls::{WebPkiError, WebPkiOp};
 
 #[cfg(feature = "dangerous_configuration")]
@@ -2243,7 +2243,7 @@ fn do_suite_test(
 }
 
 fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
-    for scs in ALL_CIPHERSUITES.iter().copied() {
+    for scs in ALL_CIPHER_SUITES.iter().copied() {
         if scs.suite() == suite {
             return scs;
         }
@@ -2318,7 +2318,7 @@ fn negotiated_ciphersuite_default() {
 
 #[test]
 fn all_suites_covered() {
-    assert_eq!(ALL_CIPHERSUITES.len(), TEST_CIPHERSUITES.len());
+    assert_eq!(ALL_CIPHER_SUITES.len(), TEST_CIPHERSUITES.len());
 }
 
 #[test]

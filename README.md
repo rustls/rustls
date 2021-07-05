@@ -41,6 +41,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     - `rustls::ResolvesServerCertUsingSNI` to `rustls::ResolvesServerCertUsingSni`.
     - `rustls::WebPKIVerifier` to `rustls::WebPkiVerifier`.
     - `rustls::ciphersuites` to `rustls::cipher_suites`.
+    - `rustls::ALL_CIPHERSUITES` to `ALL_CIPHER_SUITES`; `rustls::DEFAULT_CIPHERSUITES` to `DEFAULT_CIPHER_SUITES`.
     - `rustls::ClientHello::sigschemes` to `rustls::ClientHello::signature_schemes`.
     - `rustls::RootCertStore::get_subjects` to `rustls::RootCertStore::subjects`.
     - `rustls::ServerSession` to `rustls::ServerConnection`.
