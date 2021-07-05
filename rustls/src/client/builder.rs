@@ -52,6 +52,8 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 
 /// A config builder state where the caller needs to supply whether and how to provide a client
 /// certificate.
+///
+/// For more information, see the [`ConfigBuilder`] documentation.
 pub struct WantsClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,

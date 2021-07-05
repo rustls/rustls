@@ -157,7 +157,9 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    /// Create a builder to build up the client configuration
+    /// Create a builder to build up the client configuration.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
         ConfigBuilder {
             state: WantsCipherSuites(()),
