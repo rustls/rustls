@@ -218,7 +218,9 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// Create builder to build up the server configuration
+    /// Create builder to build up the server configuration.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
         ConfigBuilder {
             state: WantsCipherSuites(()),

@@ -37,6 +37,8 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 
 /// A config builder state where the caller must supply how to provide a server certificate to
 /// the connecting peer.
+///
+/// For more information, see the [`ConfigBuilder`] documentation.
 pub struct WantsServerCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
