@@ -35,7 +35,7 @@ pub struct CipherSuiteCommon {
 /// A cipher suite supported by rustls.
 ///
 /// All possible instances of this type are provided by the library in
-/// the `ALL_CIPHERSUITES` array.
+/// the [`ALL_CIPHER_SUITES`] array.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite
@@ -355,7 +355,7 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(TLS13_AES_128_GCM_SHA256_INTERNAL);
 
 /// A list of all the cipher suites supported by rustls.
-pub static ALL_CIPHERSUITES: &[SupportedCipherSuite] = &[
+pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     // TLS1.3 suites
     TLS13_AES_256_GCM_SHA384,
     TLS13_AES_128_GCM_SHA256,
@@ -371,9 +371,9 @@ pub static ALL_CIPHERSUITES: &[SupportedCipherSuite] = &[
 
 /// The cipher suite configuration that an application should use by default.
 ///
-/// This will be `ALL_CIPHERSUITES` sans any supported cipher suites that
+/// This will be [`ALL_CIPHER_SUITES`] sans any supported cipher suites that
 /// shouldn't be enabled by most applications.
-pub static DEFAULT_CIPHERSUITES: &[SupportedCipherSuite] = ALL_CIPHERSUITES;
+pub static DEFAULT_CIPHER_SUITES: &[SupportedCipherSuite] = ALL_CIPHER_SUITES;
 
 // These both O(N^2)!
 pub(crate) fn choose_ciphersuite_preferring_client(
@@ -481,14 +481,14 @@ mod test {
         assert!(
             choose_ciphersuite_preferring_client(
                 &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-                ALL_CIPHERSUITES
+                ALL_CIPHER_SUITES
             )
             .is_none()
         );
         assert!(
             choose_ciphersuite_preferring_server(
                 &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-                ALL_CIPHERSUITES
+                ALL_CIPHER_SUITES
             )
             .is_none()
         );
@@ -496,7 +496,7 @@ mod test {
 
     #[test]
     fn test_scs_is_debug() {
-        println!("{:?}", ALL_CIPHERSUITES);
+        println!("{:?}", ALL_CIPHER_SUITES);
     }
 
     #[test]

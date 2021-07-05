@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHERSUITES};
+use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHER_SUITES};
 use crate::versions;
 
 use std::fmt;
@@ -120,7 +120,7 @@ pub struct WantsCipherSuites(pub(crate) ());
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
     ///
-    /// If used, this will enable all safe supported cipher suites ([`DEFAULT_CIPHERSUITES`]), all
+    /// If used, this will enable all safe supported cipher suites ([`DEFAULT_CIPHER_SUITES`]), all
     /// safe supported key exchange groups ([`ALL_KX_GROUPS`]) and all safe supported protocol
     /// versions ([`DEFAULT_VERSIONS`]).
     ///
@@ -130,7 +130,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier> {
         ConfigBuilder {
             state: WantsVerifier {
-                cipher_suites: DEFAULT_CIPHERSUITES.to_vec(),
+                cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
                 kx_groups: ALL_KX_GROUPS.to_vec(),
                 versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
             },
@@ -151,13 +151,13 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
         }
     }
 
-    /// Choose the default set of cipher suites ([`DEFAULT_CIPHERSUITES`]).
+    /// Choose the default set of cipher suites ([`DEFAULT_CIPHER_SUITES`]).
     ///
     /// Note that this default provides only high-quality suites: there is no need
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
     /// implement these.
     pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
-        self.with_cipher_suites(DEFAULT_CIPHERSUITES)
+        self.with_cipher_suites(DEFAULT_CIPHER_SUITES)
     }
 }
 
