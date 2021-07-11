@@ -614,7 +614,6 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
     ];
     let mut conn = net::TcpStream::connect(&addrs[..]).expect("cannot connect");
     let mut sent_shutdown = false;
-    let mut seen_eof = false;
     let mut sent_exporter = false;
     let mut quench_writes = false;
 
@@ -629,19 +628,6 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
                 Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => 0,
                 err @ Err(_) => err.expect("read failed"),
             };
-
-            if len == 0 {
-                if opts.check_close_notify {
-                    if !seen_eof {
-                        seen_eof = true;
-                    } else {
-                        quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
-                    }
-                } else {
-                    println!("EOF (plain)");
-                    return;
-                }
-            }
 
             if let Err(err) = sess.process_new_packets() {
                 flush(&mut sess, &mut conn); /* send any alerts before exiting */
@@ -728,6 +714,13 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
             }
             Ok(len) => len,
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => 0,
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                if opts.check_close_notify {
+                    quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
+                }
+                println!("EOF (tcp)");
+                return;
+            }
             Err(err) => panic!("unhandled read error {:?}", err),
         };
 
