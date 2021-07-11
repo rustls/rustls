@@ -126,6 +126,13 @@ pub fn transfer(left: &mut dyn Connection, right: &mut dyn Connection) -> usize 
     total
 }
 
+pub fn transfer_eof(conn: &mut dyn Connection) {
+    let empty_buf = [0u8; 0];
+    let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
+    let sz = conn.read_tls(empty_cursor).unwrap();
+    assert_eq!(sz, 0);
+}
+
 pub fn transfer_altered<F>(
     left: &mut dyn Connection,
     filter: F,
