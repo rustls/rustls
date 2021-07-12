@@ -7,10 +7,10 @@
 use std::convert::TryInto;
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::anchors;
 use crate::key;
 use crate::verify;
 use crate::verify::ServerCertVerifier;
+use crate::{anchors, OwnedTrustAnchor};
 
 use webpki_roots;
 
@@ -189,7 +189,18 @@ struct Context {
 impl Context {
     fn new(name: &'static str, domain: &'static str, certs: &[&'static [u8]]) -> Self {
         let mut roots = anchors::RootCertStore::empty();
-        roots.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
+        roots.add_server_trust_anchors(
+            webpki_roots::TLS_SERVER_ROOTS
+                .0
+                .iter()
+                .map(|ta| {
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                }),
+        );
         Self {
             name,
             domain,

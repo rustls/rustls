@@ -4,9 +4,7 @@ use crate::log::{debug, trace};
 use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
 use crate::x509;
 
-/// This is like a `webpki::TrustAnchor`, except it owns
-/// rather than borrows its memory.  That prevents lifetimes
-/// leaking up the object tree.
+/// A trust anchor, commonly known as a "Root Certificate."
 #[derive(Debug, Clone)]
 pub struct OwnedTrustAnchor {
     subject: Vec<u8>,
@@ -23,14 +21,24 @@ impl OwnedTrustAnchor {
             name_constraints: self.name_constraints.as_deref(),
         }
     }
-}
 
-impl From<&webpki::TrustAnchor<'_>> for OwnedTrustAnchor {
-    fn from(t: &webpki::TrustAnchor) -> Self {
+    /// Constructs an `OwnedTrustAnchor` from its components.
+    ///
+    /// `subject` is the subject field of the trust anchor.
+    ///
+    /// `spki` is the `subjectPublicKeyInfo` field of the trust anchor.
+    ///
+    /// `name_constraints` is the value of a DER-encoded name constraints to
+    /// apply for this trust anchor, if any.
+    pub fn from_subject_spki_name_constraints(
+        subject: impl Into<Vec<u8>>,
+        spki: impl Into<Vec<u8>>,
+        name_constraints: Option<impl Into<Vec<u8>>>,
+    ) -> Self {
         Self {
-            subject: t.subject.to_vec(),
-            spki: t.spki.to_vec(),
-            name_constraints: t.name_constraints.map(|x| x.to_vec()),
+            subject: subject.into(),
+            spki: spki.into(),
+            name_constraints: name_constraints.map(|x| x.into()),
         }
     }
 }
@@ -76,20 +84,22 @@ impl RootCertStore {
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
         let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)?;
-        let ota = OwnedTrustAnchor::from(&ta);
+        let ota = OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        );
         self.roots.push(ota);
         Ok(())
     }
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
     /// fail.
-    pub fn add_server_trust_anchors<'a, I, T: 'a>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = &'a T> + 'a,
-        &'a T: Into<OwnedTrustAnchor>,
-    {
-        self.roots
-            .extend(iter.into_iter().map(|ta| ta.into()));
+    pub fn add_server_trust_anchors(
+        &mut self,
+        trust_anchors: impl Iterator<Item = OwnedTrustAnchor>,
+    ) {
+        self.roots.extend(trust_anchors)
     }
 
     /// Parse the given DER-encoded certificates and add all that can be parsed
