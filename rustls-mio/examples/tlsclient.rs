@@ -22,7 +22,7 @@ use docopt::Docopt;
 use rustls;
 use webpki_roots;
 
-use rustls::{Connection, RootCertStore};
+use rustls::{Connection, OwnedTrustAnchor, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -483,7 +483,18 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         let mut reader = BufReader::new(certfile);
         root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
     } else {
-        root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
+        root_store.add_server_trust_anchors(
+            webpki_roots::TLS_SERVER_ROOTS
+                .0
+                .iter()
+                .map(|ta| {
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                }),
+        );
     }
 
     let suites = if !args.flag_suite.is_empty() {

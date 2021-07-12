@@ -6,7 +6,7 @@ use std::net::TcpStream;
 
 use env_logger;
 use rustls;
-use rustls::RootCertStore;
+use rustls::{OwnedTrustAnchor, RootCertStore};
 use webpki_roots;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
@@ -58,7 +58,18 @@ fn main() {
     env_logger::init();
 
     let mut root_store = RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0);
+    root_store.add_server_trust_anchors(
+        webpki_roots::TLS_SERVER_ROOTS
+            .0
+            .iter()
+            .map(|ta| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            }),
+    );
 
     let mut config = rustls::ClientConfig::builder()
         .with_safe_defaults()
