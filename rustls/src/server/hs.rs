@@ -19,10 +19,11 @@ use crate::server::{ClientHello, ServerConfig};
 use crate::suites;
 use crate::SupportedCipherSuite;
 
+use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
 use crate::server::common::ActiveCertifiedKey;
-use crate::server::{tls13, ServerConnectionData};
+use crate::server::tls13;
 
 use std::sync::Arc;
 
