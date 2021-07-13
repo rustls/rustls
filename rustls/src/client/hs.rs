@@ -30,7 +30,8 @@ use crate::SupportedCipherSuite;
 #[cfg(feature = "tls12")]
 use super::tls12;
 use crate::client::common::ClientHelloDetails;
-use crate::client::{tls13, ClientConfig, ClientConnectionData, ServerName};
+use crate::client::{tls13, ClientConfig, ServerName};
+use crate::client::client_conn::ClientConnectionData;
 
 use std::sync::Arc;
 

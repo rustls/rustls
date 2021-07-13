@@ -14,10 +14,13 @@ use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
 
 #[cfg(feature = "dangerous_configuration")]
+use rustls::client::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
+};
+#[cfg(feature = "dangerous_configuration")]
 use rustls::{
     internal::msgs::handshake::DigitallySignedStruct, ClientCertVerified, ClientCertVerifier,
-    DistinguishedNames, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-    SignatureScheme, WebPkiVerifier,
+    DistinguishedNames, SignatureScheme,
 };
 
 macro_rules! embed_files {

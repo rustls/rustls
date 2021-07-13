@@ -221,7 +221,7 @@ struct DummyServerAuth {
     send_sct: bool,
 }
 
-impl rustls::ServerCertVerifier for DummyServerAuth {
+impl rustls::client::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
         _end_entity: &rustls::Certificate,
@@ -230,8 +230,8 @@ impl rustls::ServerCertVerifier for DummyServerAuth {
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
-    ) -> Result<rustls::ServerCertVerified, rustls::Error> {
-        Ok(rustls::ServerCertVerified::assertion())
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
     }
 
     fn request_scts(&self) -> bool {
@@ -277,11 +277,11 @@ impl rustls::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
 }
 
 struct FixedSignatureSchemeClientCertResolver {
-    resolver: Arc<dyn rustls::ResolvesClientCert>,
+    resolver: Arc<dyn rustls::client::ResolvesClientCert>,
     scheme: rustls::SignatureScheme,
 }
 
-impl rustls::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
+impl rustls::client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
     fn resolve(
         &self,
         acceptable_issuers: &[&[u8]],
@@ -401,17 +401,17 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     Arc::new(cfg)
 }
 
-struct ClientCacheWithoutKxHints(Arc<rustls::ClientSessionMemoryCache>);
+struct ClientCacheWithoutKxHints(Arc<rustls::client::ClientSessionMemoryCache>);
 
 impl ClientCacheWithoutKxHints {
     fn new() -> Arc<ClientCacheWithoutKxHints> {
         Arc::new(ClientCacheWithoutKxHints(
-            rustls::ClientSessionMemoryCache::new(32),
+            rustls::client::ClientSessionMemoryCache::new(32),
         ))
     }
 }
 
-impl rustls::StoresClientSessions for ClientCacheWithoutKxHints {
+impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         if key.len() > 2 && key[0] == b'k' && key[1] == b'x' {
             true
