@@ -11,9 +11,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustls;
-use rustls::ClientSessionMemoryCache;
+use rustls::client::{ClientSessionMemoryCache, NoClientSessionStorage};
 use rustls::Connection;
-use rustls::NoClientSessionStorage;
 use rustls::NoServerSessionStorage;
 use rustls::ServerSessionMemoryCache;
 use rustls::Ticketer;
