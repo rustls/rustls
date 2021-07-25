@@ -1,5 +1,5 @@
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
-use crate::conn::ConnectionCommon;
+use crate::conn::CommonState;
 use crate::conn::ConnectionRandoms;
 use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
@@ -420,11 +420,11 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 pub(crate) fn decode_ecdh_params<T: Codec>(
-    conn: &mut ConnectionCommon,
+    common: &mut CommonState,
     kx_params: &[u8],
 ) -> Result<T, Error> {
     decode_ecdh_params_::<T>(kx_params).ok_or_else(|| {
-        conn.send_fatal_alert(AlertDescription::DecodeError);
+        common.send_fatal_alert(AlertDescription::DecodeError);
         Error::CorruptMessagePayload(ContentType::Handshake)
     })
 }
