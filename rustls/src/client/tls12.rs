@@ -142,7 +142,7 @@ mod server_hello {
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    cx.data.server_cert_chain = resuming.server_cert_chain.clone();
+                    cx.common.peer_certificates = Some(resuming.server_cert_chain.clone());
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -792,7 +792,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
                 .map_err(|err| hs::send_cert_error_alert(cx.common, err))?
         };
-        cx.data.server_cert_chain = st.server_cert.cert_chain;
+        cx.common.peer_certificates = Some(st.server_cert.cert_chain);
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {
@@ -1013,7 +1013,10 @@ impl ExpectFinished {
             &self.session_id,
             ticket,
             master_secret,
-            &cx.data.server_cert_chain,
+            cx.common
+                .peer_certificates
+                .clone()
+                .unwrap_or_default(),
             time_now,
         );
         value.set_times(self.ticket.new_ticket_lifetime, 0);

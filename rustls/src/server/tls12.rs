@@ -278,7 +278,7 @@ mod client_hello {
             );
             cx.common
                 .start_encryption_tls12(&secrets);
-            cx.data.client_cert_chain = resumedata.client_cert_chain;
+            cx.common.peer_certificates = resumedata.client_cert_chain;
 
             if self.send_ticket {
                 emit_ticket(
@@ -678,7 +678,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.data.client_cert_chain = Some(self.client_cert);
+        cx.common.peer_certificates = Some(self.client_cert);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
@@ -741,7 +741,7 @@ fn get_server_connection_value_tls12(
         version,
         secrets.suite().common.suite,
         secret,
-        &cx.data.client_cert_chain,
+        cx.common.peer_certificates.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
     );

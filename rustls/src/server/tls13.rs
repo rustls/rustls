@@ -277,7 +277,7 @@ mod client_hello {
 
             if let Some(ref resume) = resumedata {
                 cx.data.received_resumption_data = Some(resume.application_data.0.clone());
-                cx.data.client_cert_chain = resume.client_cert_chain.clone();
+                cx.common.peer_certificates = resume.client_cert_chain.clone();
             }
 
             let full_handshake = resumedata.is_none();
@@ -835,7 +835,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.data.client_cert_chain = Some(self.client_cert);
+        cx.common.peer_certificates = Some(self.client_cert);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -867,7 +867,7 @@ fn get_server_session_value(
         version,
         suite.common.suite,
         secret,
-        &cx.data.client_cert_chain,
+        cx.common.peer_certificates.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
     )
