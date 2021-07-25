@@ -38,7 +38,9 @@ mod online {
         polite();
         connect("expired.badssl.com")
             .fails()
-            .expect(r"TLS error: WebPkiError\(CertExpired, ValidateServerCert\)")
+            .expect(
+                r#"TLS error: InvalidCertificateData\("invalid peer certificate: CertExpired"\)"#,
+            )
             .go()
             .unwrap();
     }
@@ -48,7 +50,7 @@ mod online {
         polite();
         connect("wrong.host.badssl.com")
             .fails()
-            .expect(r"TLS error: WebPkiError\(CertNotValidForName, ValidateForDnsName\)")
+            .expect(r#"TLS error: InvalidCertificateData\("invalid peer certificate: CertNotValidForName"\)"#)
             .go()
             .unwrap();
     }
@@ -58,7 +60,9 @@ mod online {
         polite();
         connect("self-signed.badssl.com")
             .fails()
-            .expect(r"TLS error: WebPkiError\((UnknownIssuer|CertExpired), ValidateServerCert\)")
+            .expect(
+                r#"TLS error: InvalidCertificateData\("invalid peer certificate: UnknownIssuer"\)"#,
+            )
             .go()
             .unwrap();
     }
@@ -133,7 +137,9 @@ mod online {
         polite();
         connect("sha1-2016.badssl.com")
             .fails()
-            .expect(r"TLS error: WebPkiError\(CertExpired, ValidateServerCert\)")
+            .expect(
+                r#"TLS error: InvalidCertificateData\("invalid peer certificate: CertExpired"\)"#,
+            )
             .go()
             .unwrap();
     }

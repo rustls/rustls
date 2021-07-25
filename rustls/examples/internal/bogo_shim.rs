@@ -492,7 +492,7 @@ fn quit_err(why: &str) -> ! {
 
 fn handle_err(err: rustls::Error) -> ! {
     use rustls::internal::msgs::enums::{AlertDescription, ContentType};
-    use rustls::{Error, WebPkiError};
+    use rustls::Error;
     use std::{thread, time};
 
     println!("TLS error: {:?}", err);
@@ -525,13 +525,9 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        Error::WebPkiError(WebPkiError::BadEncoding, ..) => quit(":CANNOT_PARSE_LEAF_CERT:"),
-        Error::WebPkiError(WebPkiError::InvalidSignatureForPublicKey, ..) => {
-            quit(":BAD_SIGNATURE:")
-        }
-        Error::WebPkiError(WebPkiError::UnsupportedSignatureAlgorithmForPublicKey, ..) => {
-            quit(":WRONG_SIGNATURE_TYPE:")
-        }
+        Error::InvalidCertificateEncoding => quit(":CANNOT_PARSE_LEAF_CERT:"),
+        Error::InvalidCertificateSignature => quit(":BAD_SIGNATURE:"),
+        Error::InvalidCertificateSignatureType => quit(":WRONG_SIGNATURE_TYPE:"),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
             println_err!("unhandled error: {:?}", err);

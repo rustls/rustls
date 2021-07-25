@@ -4,7 +4,6 @@ use std::time::SystemTime;
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::error::Error;
-use crate::error::WebPkiOp;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -316,7 +315,7 @@ impl ServerCertVerifier for WebPkiVerifier {
                 &chain,
                 webpki_now,
             )
-            .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateServerCert))
+            .map_err(pki_error)
             .map(|_| cert)?;
 
         verify_scts(end_entity, now, scts, self.ct_logs)?;
@@ -326,7 +325,7 @@ impl ServerCertVerifier for WebPkiVerifier {
         }
 
         cert.verify_is_valid_for_dns_name(dns_name.0.as_ref())
-            .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateForDnsName))
+            .map_err(pki_error)
             .map(|_| ServerCertVerified::assertion())
     }
 }
@@ -380,8 +379,7 @@ fn prepare<'a, 'b>(
     roots: &'b RootCertStore,
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
     // EE cert must appear first.
-    let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref()).map_err(pki_error)?;
 
     let intermediates: Vec<&'a [u8]> = intermediates
         .iter()
@@ -440,7 +438,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
             &chain,
             now,
         )
-        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ValidateClientCert))
+        .map_err(pki_error)
         .map(|_| ClientCertVerified::assertion())
     }
 }
@@ -489,6 +487,18 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
     ) -> Result<ClientCertVerified, Error> {
         self.inner
             .verify_client_cert(end_entity, intermediates, sni, now)
+    }
+}
+
+fn pki_error(error: webpki::Error) -> Error {
+    use webpki::Error::*;
+    match error {
+        BadDer | BadDerTime => Error::InvalidCertificateEncoding,
+        InvalidSignatureForPublicKey => Error::InvalidCertificateSignature,
+        UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
+            Error::InvalidCertificateSignatureType
+        }
+        e => Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
     }
 }
 
@@ -584,11 +594,10 @@ fn verify_signed_struct(
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
-        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::VerifySignature))
+        .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
@@ -639,12 +648,10 @@ fn verify_tls13(
 ) -> Result<HandshakeSignatureValid, Error> {
     let alg = convert_alg_tls13(dss.scheme)?;
 
-
-    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref())
-        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::ParseEndEntity))?;
+    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
 
     cert.verify_signature(alg, msg, &dss.sig.0)
-        .map_err(|e| Error::WebPkiError(e.into(), WebPkiOp::VerifySignature))
+        .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
 }
 

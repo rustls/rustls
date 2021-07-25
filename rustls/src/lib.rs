@@ -328,8 +328,6 @@ pub use crate::client::StoresClientSessions;
 pub use crate::client::{ClientConfig, ClientConnection, WriteEarlyData};
 pub use crate::conn::{Connection, IoState, Reader, Writer};
 pub use crate::error::Error;
-pub use crate::error::WebPkiError;
-pub use crate::error::WebPkiOp;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};

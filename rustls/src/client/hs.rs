@@ -2,7 +2,7 @@
 use crate::bs_debug;
 use crate::check::check_message;
 use crate::conn::{ConnectionCommon, ConnectionRandoms};
-use crate::error::{Error, WebPkiError};
+use crate::error::Error;
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::key_schedule::KeyScheduleEarly;
 use crate::kx;
@@ -802,7 +802,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
 
 pub(super) fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
     match err {
-        Error::WebPkiError(WebPkiError::BadEncoding, _) => {
+        Error::InvalidCertificateEncoding => {
             common.send_fatal_alert(AlertDescription::DecodeError);
         }
         Error::PeerMisbehavedError(_) => {
