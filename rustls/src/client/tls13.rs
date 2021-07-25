@@ -30,8 +30,8 @@ use crate::verify;
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
 use crate::{sign, KeyLog};
 
+use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
-use super::ClientConnectionData;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::{hs, ClientConfig, ServerName};

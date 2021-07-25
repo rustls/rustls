@@ -1,7 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{
-    CommonState, Connection, ConnectionCommon, IoState, PlaintextSink, Reader, State, Writer,
-};
+use crate::conn::{CommonState, Connection, ConnectionCommon, IoState, Reader, Writer};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::KeyLog;
@@ -19,10 +17,9 @@ use crate::{conn::Protocol, quic};
 
 use super::hs;
 
-use std::fmt;
-use std::io::{self, IoSlice};
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::{fmt, io};
 
 /// A trait for the ability to store server session data.
 ///
@@ -242,9 +239,7 @@ impl ServerConfig {
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
-    common: ConnectionCommon,
-    state: Option<Box<dyn State<ServerConnectionData>>>,
-    data: ServerConnectionData,
+    inner: ConnectionCommon<ServerConnectionData>,
 }
 
 impl ServerConnection {
@@ -258,10 +253,13 @@ impl ServerConnection {
         config: Arc<ServerConfig>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
+        let common = CommonState::new(config.max_fragment_size, false)?;
         Ok(Self {
-            common: ConnectionCommon::new(CommonState::new(config.max_fragment_size, false)?),
-            state: Some(Box::new(hs::ExpectClientHello::new(config, extra_exts))),
-            data: ServerConnectionData::default(),
+            inner: ConnectionCommon::new(
+                Box::new(hs::ExpectClientHello::new(config, extra_exts)),
+                ServerConnectionData::default(),
+                common,
+            ),
         })
     }
 
@@ -282,7 +280,7 @@ impl ServerConnection {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn sni_hostname(&self) -> Option<&str> {
-        self.data.get_sni_str()
+        self.inner.data.get_sni_str()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -291,7 +289,8 @@ impl ServerConnection {
     ///
     /// Returns `Some` iff a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.data
+        self.inner
+            .data
             .received_resumption_data
             .as_ref()
             .map(|x| &x[..])
@@ -307,7 +306,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) {
         assert!(data.len() < 2usize.pow(15));
-        self.data.resumption_data = data.into();
+        self.inner.data.resumption_data = data.into();
     }
 
     /// Explicitly discard early data, notifying the client
@@ -320,76 +319,67 @@ impl ServerConnection {
             self.is_handshaking(),
             "cannot retroactively reject early data"
         );
-        self.data.reject_early_data = true;
-    }
-
-    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        let mut st = self.state.take();
-        if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(&mut self.common.common_state);
-        }
-        self.state = st;
-        self.common
-            .common_state
-            .send_some_plaintext(buf)
+        self.inner.data.reject_early_data = true;
     }
 }
 
 impl Connection for ServerConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        self.common.read_tls(rd)
+        self.inner.read_tls(rd)
     }
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.common.common_state.write_tls(wr)
+        self.inner.common_state.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        self.common
-            .process_new_packets(&mut self.state, &mut self.data)
+        self.inner.process_new_packets()
     }
 
     fn wants_read(&self) -> bool {
-        self.common.common_state.wants_read()
+        self.inner.common_state.wants_read()
     }
 
     fn wants_write(&self) -> bool {
         !self
-            .common
+            .inner
             .common_state
             .sendable_tls
             .is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
-        !self.common.common_state.traffic
+        !self.inner.common_state.traffic
     }
 
     fn set_buffer_limit(&mut self, len: Option<usize>) {
-        self.common
+        self.inner
             .common_state
             .set_buffer_limit(len)
     }
 
     fn send_close_notify(&mut self) {
-        self.common
+        self.inner
             .common_state
             .send_close_notify()
     }
 
     fn peer_certificates(&self) -> Option<&[key::Certificate]> {
-        self.data.client_cert_chain.as_deref()
+        self.inner
+            .data
+            .client_cert_chain
+            .as_deref()
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
-        self.common
+        self.inner
             .common_state
             .get_alpn_protocol()
     }
 
     fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common
+        self.inner
             .common_state
             .negotiated_version
     }
@@ -400,40 +390,20 @@ impl Connection for ServerConnection {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
-        self.state
-            .as_ref()
-            .ok_or(Error::HandshakeNotComplete)
-            .and_then(|st| st.export_keying_material(output, label, context))
+        self.inner
+            .export_keying_material(output, label, context)
     }
 
     fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
-        self.common.common_state.get_suite()
+        self.inner.common_state.get_suite()
     }
 
     fn writer(&mut self) -> Writer {
-        Writer::new(self)
+        Writer::new(&mut self.inner)
     }
 
     fn reader(&mut self) -> Reader {
-        self.common.reader()
-    }
-}
-
-impl PlaintextSink for ServerConnection {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.send_some_plaintext(buf))
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        let mut sz = 0;
-        for buf in bufs {
-            sz += self.send_some_plaintext(buf);
-        }
-        Ok(sz)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        self.inner.reader()
     }
 }
 
@@ -471,7 +441,7 @@ impl ServerConnectionData {
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ServerConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.common
+        self.inner
             .common_state
             .quic
             .params
@@ -481,11 +451,11 @@ impl quic::QuicExt for ServerConnection {
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.common
+            self.inner
                 .common_state
                 .get_suite()
                 .and_then(|suite| suite.tls13())?,
-            self.common
+            self.inner
                 .common_state
                 .quic
                 .early_secret
@@ -494,17 +464,15 @@ impl quic::QuicExt for ServerConnection {
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        quic::read_hs(&mut self.common, plaintext)?;
-        self.common
-            .process_new_handshake_messages(&mut self.state, &mut self.data)
+        self.inner.read_quic_hs(plaintext)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        quic::write_hs(&mut self.common.common_state, buf)
+        quic::write_hs(&mut self.inner.common_state, buf)
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.common_state.quic.alert
+        self.inner.common_state.quic.alert
     }
 }
 
@@ -536,7 +504,7 @@ pub trait ServerQuicExt {
             quic::Version::V1 => ServerExtension::TransportParameters(params),
         };
         let mut new = ServerConnection::from_config(config, vec![ext])?;
-        new.common.common_state.protocol = Protocol::Quic;
+        new.inner.common_state.protocol = Protocol::Quic;
         Ok(new)
     }
 }

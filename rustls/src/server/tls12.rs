@@ -18,7 +18,7 @@ use crate::{kx, verify};
 
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
-use super::{ProducesTickets, ServerConfig, ServerConnectionData};
+use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
 use ring::constant_time;
 

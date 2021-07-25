@@ -1,7 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{
-    CommonState, Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer,
-};
+use crate::conn::{CommonState, Connection, ConnectionCommon, IoState, Protocol, Reader, Writer};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::KeyLog;
@@ -24,11 +22,9 @@ use crate::quic;
 use super::hs;
 
 use std::convert::TryFrom;
-use std::fmt;
-use std::io::{self, IoSlice};
 use std::marker::PhantomData;
-use std::mem;
 use std::sync::Arc;
+use std::{fmt, io, mem};
 
 /// A trait for the ability to store client session data.
 /// The keys and values are opaque.
@@ -380,7 +376,11 @@ impl<'a> WriteEarlyData<'a> {
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.sess.data.early_data.bytes_left()
+        self.sess
+            .inner
+            .data
+            .early_data
+            .bytes_left()
     }
 }
 
@@ -396,9 +396,7 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    common: ConnectionCommon,
-    state: Option<hs::NextState>,
-    data: ClientConnectionData,
+    inner: ConnectionCommon<ClientConnectionData>,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -431,13 +429,10 @@ impl ClientConnection {
             data: &mut data,
         };
 
-        let state = Some(hs::start_handshake(name, extra_exts, config, &mut cx)?);
+        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        let inner = ConnectionCommon::new(state, data, common_state);
 
-        Ok(Self {
-            common: ConnectionCommon::new(common_state),
-            state,
-            data,
-        })
+        Ok(Self { inner })
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
@@ -459,7 +454,7 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-        if self.data.early_data.is_enabled() {
+        if self.inner.data.early_data.is_enabled() {
             Some(WriteEarlyData::new(self))
         } else {
             None
@@ -472,92 +467,85 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.data.early_data.is_accepted()
+        self.inner.data.early_data.is_accepted()
     }
 
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.data
+        self.inner
+            .data
             .early_data
             .check_write(data.len())
             .map(|sz| {
-                self.common
+                self.inner
                     .common_state
                     .send_early_plaintext(&data[..sz])
             })
-    }
-
-    fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        let mut st = self.state.take();
-        if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(&mut self.common.common_state);
-        }
-        self.state = st;
-
-        self.common
-            .common_state
-            .send_some_plaintext(buf)
     }
 }
 
 impl Connection for ClientConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        self.common.read_tls(rd)
+        self.inner.read_tls(rd)
     }
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.common.common_state.write_tls(wr)
+        self.inner.common_state.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        self.common
-            .process_new_packets(&mut self.state, &mut self.data)
+        self.inner.process_new_packets()
     }
 
     fn wants_read(&self) -> bool {
-        self.common.common_state.wants_read()
+        self.inner.common_state.wants_read()
     }
 
     fn wants_write(&self) -> bool {
         !self
-            .common
+            .inner
             .common_state
             .sendable_tls
             .is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
-        !self.common.common_state.traffic
+        !self.inner.common_state.traffic
     }
 
     fn set_buffer_limit(&mut self, len: Option<usize>) {
-        self.common
+        self.inner
             .common_state
             .set_buffer_limit(len)
     }
 
     fn send_close_notify(&mut self) {
-        self.common
+        self.inner
             .common_state
             .send_close_notify()
     }
 
     fn peer_certificates(&self) -> Option<&[key::Certificate]> {
-        if self.data.server_cert_chain.is_empty() {
+        if self
+            .inner
+            .data
+            .server_cert_chain
+            .is_empty()
+        {
             return None;
         }
 
-        Some(&self.data.server_cert_chain)
+        Some(&self.inner.data.server_cert_chain)
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
-        self.common
+        self.inner
             .common_state
             .get_alpn_protocol()
     }
 
     fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common
+        self.inner
             .common_state
             .negotiated_version
     }
@@ -568,43 +556,23 @@ impl Connection for ClientConnection {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
-        self.state
-            .as_ref()
-            .ok_or(Error::HandshakeNotComplete)
-            .and_then(|st| st.export_keying_material(output, label, context))
+        self.inner
+            .export_keying_material(output, label, context)
     }
 
     fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
-        self.common
+        self.inner
             .common_state
             .get_suite()
-            .or(self.data.resumption_ciphersuite)
+            .or(self.inner.data.resumption_ciphersuite)
     }
 
     fn writer(&mut self) -> Writer {
-        Writer::new(self)
+        Writer::new(&mut self.inner)
     }
 
     fn reader(&mut self) -> Reader {
-        self.common.reader()
-    }
-}
-
-impl PlaintextSink for ClientConnection {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.send_some_plaintext(buf))
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        let mut sz = 0;
-        for buf in bufs {
-            sz += self.send_some_plaintext(buf);
-        }
-        Ok(sz)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        self.inner.reader()
     }
 }
 
@@ -627,7 +595,7 @@ impl ClientConnectionData {
 #[cfg(feature = "quic")]
 impl quic::QuicExt for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.common
+        self.inner
             .common_state
             .quic
             .params
@@ -637,10 +605,11 @@ impl quic::QuicExt for ClientConnection {
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
-            self.data
+            self.inner
+                .data
                 .resumption_ciphersuite
                 .and_then(|suite| suite.tls13())?,
-            self.common
+            self.inner
                 .common_state
                 .quic
                 .early_secret
@@ -649,17 +618,15 @@ impl quic::QuicExt for ClientConnection {
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        quic::read_hs(&mut self.common, plaintext)?;
-        self.common
-            .process_new_handshake_messages(&mut self.state, &mut self.data)
+        self.inner.read_quic_hs(plaintext)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        quic::write_hs(&mut self.common.common_state, buf)
+        quic::write_hs(&mut self.inner.common_state, buf)
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.common_state.quic.alert
+        self.inner.common_state.quic.alert
     }
 }
 

@@ -19,8 +19,8 @@ use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::{kx, verify};
 
+use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
-use super::ClientConnectionData;
 use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
