@@ -61,7 +61,9 @@ impl IoState {
 
 /// A structure that implements [`std::io::Read`] for reading plaintext.
 pub struct Reader<'a> {
-    common: &'a mut ConnectionCommon,
+    received_plaintext: &'a mut ChunkVecBuffer,
+    peer_cleanly_closed: bool,
+    has_seen_eof: bool,
 }
 
 impl<'a> io::Read for Reader<'a> {
@@ -86,7 +88,22 @@ impl<'a> io::Read for Reader<'a> {
     /// You may learn the number of bytes available at any time by inspecting
     /// the return of [`Connection::process_new_packets`].
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.common.read(buf)
+        let len = self.received_plaintext.read(buf)?;
+
+        if len == 0 && !buf.is_empty() {
+            // No bytes available:
+            match (self.peer_cleanly_closed, self.has_seen_eof) {
+                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                (true, _) => {}
+                // unclean closure
+                (false, true) => return Err(io::ErrorKind::UnexpectedEof.into()),
+                // connection still going, but need more data: signal `WouldBlock` so that
+                // the caller knows this
+                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
+            }
+        }
+
+        Ok(len)
     }
 }
 
@@ -455,7 +472,16 @@ impl ConnectionCommon {
     }
 
     pub(crate) fn reader(&mut self) -> Reader {
-        Reader { common: self }
+        Reader {
+            received_plaintext: &mut self.common_state.received_plaintext,
+            /// Are we done? i.e., have we processed all received messages, and received a
+            /// close_notify to indicate that no new messages will arrive?
+            peer_cleanly_closed: self
+                .common_state
+                .has_received_close_notify
+                && !self.message_deframer.has_pending(),
+            has_seen_eof: self.common_state.has_seen_eof,
+        }
     }
 
     fn process_msg(&mut self, msg: OpaqueMessage) -> Result<Option<MessageType>, Error> {
@@ -567,15 +593,6 @@ impl ConnectionCommon {
         Ok(())
     }
 
-    /// Are we done? i.e., have we processed all received messages,
-    /// and received a close_notify to indicate that no new messages
-    /// will arrive?
-    fn connection_was_cleanly_closed(&self) -> bool {
-        self.common_state
-            .has_received_close_notify
-            && !self.message_deframer.has_pending()
-    }
-
     /// Read TLS content from `rd`.  This method does internal
     /// buffering, so `rd` can supply TLS messages in arbitrary-
     /// sized chunks (like a socket or pipe might).
@@ -585,36 +602,6 @@ impl ConnectionCommon {
             self.common_state.has_seen_eof = true;
         }
         res
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self
-            .common_state
-            .received_plaintext
-            .read(buf)?;
-
-        if len == 0 && !buf.is_empty() {
-            // No bytes available:
-            match (
-                self.connection_was_cleanly_closed(),
-                self.common_state.has_seen_eof,
-            ) {
-                (true, _) => {
-                    // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                }
-                (false, true) => {
-                    // unclean closure
-                    return Err(io::ErrorKind::UnexpectedEof.into());
-                }
-                (false, false) => {
-                    // connection still going, but need more data: signal `WouldBlock` so that
-                    // the caller knows this
-                    return Err(io::ErrorKind::WouldBlock.into());
-                }
-            }
-        }
-
-        Ok(len)
     }
 }
 
