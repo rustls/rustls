@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{ConnectionCommon, ConnectionRandoms};
+use crate::conn::{CommonState, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -447,7 +447,7 @@ impl hs::State for ExpectServerKx {
 fn emit_certificate(
     transcript: &mut HandshakeHash,
     cert_chain: CertificatePayload,
-    common: &mut ConnectionCommon,
+    common: &mut CommonState,
 ) {
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -463,7 +463,7 @@ fn emit_certificate(
 
 fn emit_clientkx(
     transcript: &mut HandshakeHash,
-    common: &mut ConnectionCommon,
+    common: &mut CommonState,
     kxd: &kx::KeyExchangeResult,
 ) {
     let mut buf = Vec::new();
@@ -486,7 +486,7 @@ fn emit_clientkx(
 fn emit_certverify(
     transcript: &mut HandshakeHash,
     client_auth: &mut ClientAuthDetails,
-    common: &mut ConnectionCommon,
+    common: &mut CommonState,
 ) -> Result<(), Error> {
     let (signer, message) = match (client_auth.signer.take(), transcript.take_handshake_buf()) {
         (Some(signer), Some(msg)) => (signer, msg),
@@ -518,7 +518,7 @@ fn emit_certverify(
     Ok(())
 }
 
-fn emit_ccs(common: &mut ConnectionCommon) {
+fn emit_ccs(common: &mut CommonState) {
     let ccs = Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
@@ -530,7 +530,7 @@ fn emit_ccs(common: &mut ConnectionCommon) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    common: &mut ConnectionCommon,
+    common: &mut CommonState,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);

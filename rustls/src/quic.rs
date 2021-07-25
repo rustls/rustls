@@ -1,7 +1,7 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::cipher::{Iv, IvLen};
 pub use crate::client::ClientQuicExt;
-use crate::conn::ConnectionCommon;
+use crate::conn::{CommonState, ConnectionCommon};
 use crate::error::Error;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, ProtocolVersion};
@@ -409,13 +409,13 @@ pub(crate) fn read_hs(this: &mut ConnectionCommon, plaintext: &[u8]) -> Result<(
         })
         .is_none()
     {
-        this.quic.alert = Some(AlertDescription::DecodeError);
+        this.common_state.quic.alert = Some(AlertDescription::DecodeError);
         return Err(Error::CorruptMessage);
     }
     Ok(())
 }
 
-pub(crate) fn write_hs(this: &mut ConnectionCommon, buf: &mut Vec<u8>) -> Option<KeyChange> {
+pub(crate) fn write_hs(this: &mut CommonState, buf: &mut Vec<u8>) -> Option<KeyChange> {
     while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
         buf.extend_from_slice(&msg);
         if let Some(&(true, _)) = this.quic.hs_queue.front() {

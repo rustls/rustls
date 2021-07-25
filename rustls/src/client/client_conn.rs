@@ -1,5 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer};
+use crate::conn::{
+    CommonState, Connection, ConnectionCommon, IoState, PlaintextSink, Protocol, Reader, Writer,
+};
 use crate::error::Error;
 use crate::key;
 use crate::keylog::KeyLog;
@@ -420,20 +422,22 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut new = Self {
-            common: ConnectionCommon::new(config.max_fragment_size, true)?,
-            state: None,
-            data: ClientConnectionData::new(),
-        };
-        new.common.protocol = proto;
+        let mut common_state = CommonState::new(config.max_fragment_size, true)?;
+        common_state.protocol = proto;
+        let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {
-            common: &mut new.common,
-            data: &mut new.data,
+            common: &mut common_state,
+            data: &mut data,
         };
 
-        new.state = Some(hs::start_handshake(name, extra_exts, config, &mut cx)?);
-        Ok(new)
+        let state = Some(hs::start_handshake(name, extra_exts, config, &mut cx)?);
+
+        Ok(Self {
+            common: ConnectionCommon::new(common_state),
+            state,
+            data,
+        })
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
@@ -477,6 +481,7 @@ impl ClientConnection {
             .check_write(data.len())
             .map(|sz| {
                 self.common
+                    .common_state
                     .send_early_plaintext(&data[..sz])
             })
     }
@@ -484,11 +489,13 @@ impl ClientConnection {
     fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         let mut st = self.state.take();
         if let Some(st) = st.as_mut() {
-            st.perhaps_write_key_update(&mut self.common);
+            st.perhaps_write_key_update(&mut self.common.common_state);
         }
         self.state = st;
 
-        self.common.send_some_plaintext(buf)
+        self.common
+            .common_state
+            .send_some_plaintext(buf)
     }
 }
 
@@ -499,7 +506,7 @@ impl Connection for ClientConnection {
 
     /// Writes TLS messages to `wr`.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        self.common.write_tls(wr)
+        self.common.common_state.write_tls(wr)
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
@@ -508,23 +515,31 @@ impl Connection for ClientConnection {
     }
 
     fn wants_read(&self) -> bool {
-        self.common.wants_read()
+        self.common.common_state.wants_read()
     }
 
     fn wants_write(&self) -> bool {
-        !self.common.sendable_tls.is_empty()
+        !self
+            .common
+            .common_state
+            .sendable_tls
+            .is_empty()
     }
 
     fn is_handshaking(&self) -> bool {
-        !self.common.traffic
+        !self.common.common_state.traffic
     }
 
     fn set_buffer_limit(&mut self, len: Option<usize>) {
-        self.common.set_buffer_limit(len)
+        self.common
+            .common_state
+            .set_buffer_limit(len)
     }
 
     fn send_close_notify(&mut self) {
-        self.common.send_close_notify()
+        self.common
+            .common_state
+            .send_close_notify()
     }
 
     fn peer_certificates(&self) -> Option<&[key::Certificate]> {
@@ -536,11 +551,15 @@ impl Connection for ClientConnection {
     }
 
     fn alpn_protocol(&self) -> Option<&[u8]> {
-        self.common.get_alpn_protocol()
+        self.common
+            .common_state
+            .get_alpn_protocol()
     }
 
     fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.common.negotiated_version
+        self.common
+            .common_state
+            .negotiated_version
     }
 
     fn export_keying_material(
@@ -557,6 +576,7 @@ impl Connection for ClientConnection {
 
     fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
         self.common
+            .common_state
             .get_suite()
             .or(self.data.resumption_ciphersuite)
     }
@@ -608,6 +628,7 @@ impl ClientConnectionData {
 impl quic::QuicExt for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.common
+            .common_state
             .quic
             .params
             .as_ref()
@@ -619,7 +640,11 @@ impl quic::QuicExt for ClientConnection {
             self.data
                 .resumption_ciphersuite
                 .and_then(|suite| suite.tls13())?,
-            self.common.quic.early_secret.as_ref()?,
+            self.common
+                .common_state
+                .quic
+                .early_secret
+                .as_ref()?,
         ))
     }
 
@@ -630,11 +655,11 @@ impl quic::QuicExt for ClientConnection {
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        quic::write_hs(&mut self.common, buf)
+        quic::write_hs(&mut self.common.common_state, buf)
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.common.quic.alert
+        self.common.common_state.quic.alert
     }
 }
 

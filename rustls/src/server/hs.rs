@@ -1,4 +1,4 @@
-use crate::conn::{ConnectionCommon, ConnectionRandoms};
+use crate::conn::{CommonState, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
@@ -42,7 +42,7 @@ pub(super) trait State: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
+    fn perhaps_write_key_update(&mut self, _common: &mut CommonState) {}
 }
 
 impl<'a> crate::conn::HandleState for Box<dyn State> {
@@ -52,7 +52,7 @@ impl<'a> crate::conn::HandleState for Box<dyn State> {
         self,
         message: Message,
         data: &mut Self::Data,
-        common: &mut ConnectionCommon,
+        common: &mut CommonState,
     ) -> Result<Self, Error> {
         let mut cx = ServerContext { common, data };
         self.handle(&mut cx, message)
@@ -60,21 +60,21 @@ impl<'a> crate::conn::HandleState for Box<dyn State> {
 }
 
 pub(super) struct ServerContext<'a> {
-    pub(super) common: &'a mut ConnectionCommon,
+    pub(super) common: &'a mut CommonState,
     pub(super) data: &'a mut ServerConnectionData,
 }
 
-pub(super) fn incompatible(common: &mut ConnectionCommon, why: &str) -> Error {
+pub(super) fn incompatible(common: &mut CommonState, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::HandshakeFailure);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-fn bad_version(common: &mut ConnectionCommon, why: &str) -> Error {
+fn bad_version(common: &mut CommonState, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::ProtocolVersion);
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub(super) fn decode_error(common: &mut ConnectionCommon, why: &str) -> Error {
+pub(super) fn decode_error(common: &mut CommonState, why: &str) -> Error {
     common.send_fatal_alert(AlertDescription::DecodeError);
     Error::PeerMisbehavedError(why.to_string())
 }

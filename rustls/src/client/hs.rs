@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::check_message;
-use crate::conn::{ConnectionCommon, ConnectionRandoms};
+use crate::conn::{CommonState, ConnectionRandoms};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
@@ -52,7 +52,7 @@ pub(super) trait State: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn perhaps_write_key_update(&mut self, _common: &mut ConnectionCommon) {}
+    fn perhaps_write_key_update(&mut self, _common: &mut CommonState) {}
 }
 
 impl crate::conn::HandleState for Box<dyn State> {
@@ -62,7 +62,7 @@ impl crate::conn::HandleState for Box<dyn State> {
         self,
         message: Message,
         data: &mut Self::Data,
-        common: &mut ConnectionCommon,
+        common: &mut CommonState,
     ) -> Result<Self, Error> {
         let mut cx = ClientContext { common, data };
         self.handle(&mut cx, message)
@@ -70,7 +70,7 @@ impl crate::conn::HandleState for Box<dyn State> {
 }
 
 pub(super) struct ClientContext<'a> {
-    pub(super) common: &'a mut ConnectionCommon,
+    pub(super) common: &'a mut CommonState,
     pub(super) data: &'a mut ClientConnectionData,
 }
 
@@ -804,7 +804,7 @@ impl State for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub(super) fn send_cert_error_alert(common: &mut ConnectionCommon, err: Error) -> Error {
+pub(super) fn send_cert_error_alert(common: &mut CommonState, err: Error) -> Error {
     match err {
         Error::InvalidCertificateEncoding => {
             common.send_fatal_alert(AlertDescription::DecodeError);
