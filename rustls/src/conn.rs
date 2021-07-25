@@ -544,10 +544,10 @@ impl ConnectionCommon {
         Ok(Some(MessageType::Data(msg)))
     }
 
-    pub(crate) fn process_new_packets<S: HandleState>(
+    pub(crate) fn process_new_packets<Data>(
         &mut self,
-        state: &mut Option<S>,
-        data: &mut S::Data,
+        state: &mut Option<Box<dyn State<Data>>>,
+        data: &mut Data,
     ) -> Result<IoState, Error> {
         if let Some(ref err) = self.error {
             return Err(err.clone());
@@ -579,10 +579,10 @@ impl ConnectionCommon {
         Ok(self.common_state.current_io_state())
     }
 
-    pub(crate) fn process_new_handshake_messages<S: HandleState>(
+    pub(crate) fn process_new_handshake_messages<Data>(
         &mut self,
-        state: &mut Option<S>,
-        data: &mut S::Data,
+        state: &mut Option<Box<dyn State<Data>>>,
+        data: &mut Data,
     ) -> Result<(), Error> {
         self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
         while let Some(msg) = self.handshake_joiner.frames.pop_front() {
@@ -664,11 +664,11 @@ impl CommonState {
     /// Process `msg`.  First, we get the current state.  Then we ask what messages
     /// that state expects, enforced via `check_message`.  Finally, we ask the handler
     /// to handle the message.
-    fn process_main_protocol<S: HandleState>(
+    fn process_main_protocol<Data>(
         &mut self,
         msg: Message,
-        state: &mut Option<S>,
-        data: &mut S::Data,
+        state: &mut Option<Box<dyn State<Data>>>,
+        data: &mut Data,
     ) -> Result<(), Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
@@ -684,7 +684,8 @@ impl CommonState {
         }
 
         let current = state.take().unwrap();
-        match current.handle(msg, data, self) {
+        let mut cx = Context { common: self, data };
+        match current.handle(&mut cx, msg) {
             Ok(next) => {
                 *state = Some(next);
                 Ok(())
@@ -1018,15 +1019,28 @@ impl CommonState {
     }
 }
 
-pub(crate) trait HandleState: Sized {
-    type Data;
-
+pub(crate) trait State<Data>: Send + Sync {
     fn handle(
-        self,
+        self: Box<Self>,
+        cx: &mut Context<'_, Data>,
         message: Message,
-        data: &mut Self::Data,
-        common: &mut CommonState,
-    ) -> Result<Self, Error>;
+    ) -> Result<Box<dyn State<Data>>, Error>;
+
+    fn export_keying_material(
+        &self,
+        _output: &mut [u8],
+        _label: &[u8],
+        _context: Option<&[u8]>,
+    ) -> Result<(), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+
+    fn perhaps_write_key_update(&mut self, _cx: &mut CommonState) {}
+}
+
+pub(crate) struct Context<'a, Data> {
+    pub(crate) common: &'a mut CommonState,
+    pub(crate) data: &'a mut Data,
 }
 
 enum MessageType {
