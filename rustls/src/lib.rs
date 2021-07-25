@@ -324,7 +324,7 @@ pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
     ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
 };
-pub use crate::conn::{Connection, IoState, Reader, Writer};
+pub use crate::conn::{CommonState, Connection, IoState, Reader, Writer};
 pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
