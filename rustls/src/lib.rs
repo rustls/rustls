@@ -420,8 +420,10 @@ pub mod server {
     #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
     pub use server_conn::ServerQuicExt;
     pub use server_conn::StoresServerSessions;
+    pub use server_conn::{
+        Accepted, Acceptor, ServerConfig, ServerConnection, ServerConnectionData,
+    };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
-    pub use server_conn::{ServerConfig, ServerConnection, ServerConnectionData};
 
     #[cfg(feature = "dangerous_configuration")]
     #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]

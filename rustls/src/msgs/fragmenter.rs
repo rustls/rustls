@@ -19,15 +19,9 @@ impl MessageFragmenter {
     /// this includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
     /// up to 10 bytes.
     pub fn new(max_fragment_size: Option<usize>) -> Result<Self, Error> {
-        let max_fragment_len = match max_fragment_size {
-            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
-            None => MAX_FRAGMENT_LEN,
-            _ => return Err(Error::BadMaxFragmentSize),
-        };
-
-        Ok(Self {
-            max_frag: max_fragment_len,
-        })
+        let mut new = Self { max_frag: 0 };
+        new.set_max_fragment_size(max_fragment_size)?;
+        Ok(new)
     }
 
     /// Take the Message `msg` and re-fragment it into new
@@ -67,6 +61,15 @@ impl MessageFragmenter {
             };
             out.push_back(cm);
         }
+    }
+
+    pub fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
+        self.max_frag = match new {
+            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
+            None => MAX_FRAGMENT_LEN,
+            _ => return Err(Error::BadMaxFragmentSize),
+        };
+        Ok(())
     }
 }
 

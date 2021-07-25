@@ -471,6 +471,43 @@ impl<Data> ConnectionCommon<Data> {
         }
     }
 
+    /// Extract the first handshake message.
+    ///
+    /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
+    /// `process_handshake_messages()` path, specialized for the first handshake message.
+    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
+        if self.message_deframer.desynced {
+            return Err(Error::CorruptMessage);
+        }
+
+        let msg = match self.message_deframer.frames.pop_front() {
+            Some(msg) => msg,
+            None => return Ok(None),
+        };
+
+        let msg = msg.into_plain_message();
+        if !self.handshake_joiner.want_message(&msg) {
+            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+        }
+
+        if self
+            .handshake_joiner
+            .take_message(msg)
+            .is_none()
+        {
+            self.common_state
+                .send_fatal_alert(AlertDescription::DecodeError);
+            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+        }
+
+        self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
+        Ok(self.handshake_joiner.frames.pop_front())
+    }
+
+    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
+        self.state = Ok(new);
+    }
+
     fn process_msg(
         &mut self,
         msg: OpaqueMessage,
@@ -1175,6 +1212,11 @@ impl CommonState {
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
         let m = Message::build_alert(AlertLevel::Warning, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
+    }
+
+    pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
+        self.message_fragmenter
+            .set_max_fragment_size(new)
     }
 
     pub(crate) fn get_alpn_protocol(&self) -> Option<&[u8]> {

@@ -615,7 +615,8 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         if let Some(expected_alpn) = &self.expected_alpn {
             let alpn = client_hello
                 .alpn()
-                .expect("alpn unexpectedly absent");
+                .expect("alpn unexpectedly absent")
+                .collect::<Vec<_>>();
             assert_eq!(alpn.len(), expected_alpn.len());
 
             for (got, wanted) in alpn.iter().zip(expected_alpn.iter()) {
@@ -4132,4 +4133,70 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
     common::do_handshake(&mut client_2, &mut server_2);
     assert_eq!(client_storage.puts(), 2);
+}
+
+#[test]
+fn test_acceptor() {
+    use rustls::server::Acceptor;
+
+    let client_config = Arc::new(make_client_config(KeyType::ED25519));
+    let mut client = ClientConnection::new(client_config, dns_name("localhost")).unwrap();
+    let mut buf = Vec::new();
+    client.write_tls(&mut buf).unwrap();
+
+    let server_config = Arc::new(make_server_config(KeyType::ED25519));
+    let mut acceptor = Acceptor::new().unwrap();
+    assert!(acceptor.wants_read());
+    acceptor
+        .read_tls(&mut buf.as_slice())
+        .unwrap();
+    let accepted = acceptor.accept().unwrap().unwrap();
+    let ch = accepted.client_hello();
+    assert_eq!(ch.server_name(), Some("localhost"));
+
+    let server = accepted
+        .into_connection(server_config)
+        .unwrap();
+    assert!(server.wants_write());
+
+    // Reusing an acceptor is not allowed
+    assert_eq!(
+        acceptor
+            .read_tls(&mut [0u8].as_ref())
+            .err()
+            .unwrap()
+            .kind(),
+        io::ErrorKind::Other,
+    );
+    assert_eq!(
+        acceptor.accept().err(),
+        Some(Error::General(
+            "cannot accept after successful acceptance".into()
+        ))
+    );
+
+    let mut acceptor = Acceptor::new().unwrap();
+    assert!(acceptor.accept().unwrap().is_none());
+    acceptor
+        .read_tls(&mut &buf[..3])
+        .unwrap(); // incomplete message
+    assert!(acceptor.accept().unwrap().is_none());
+    acceptor
+        .read_tls(&mut [0x80, 0x00].as_ref())
+        .unwrap(); // invalid message (len = 32k bytes)
+    assert!(acceptor.accept().is_err());
+
+    let mut acceptor = Acceptor::new().unwrap();
+    // Minimal valid 1-byte application data message is not a handshake message
+    acceptor
+        .read_tls(&mut [0x17, 0x03, 0x03, 0x00, 0x01, 0x00].as_ref())
+        .unwrap();
+    assert!(acceptor.accept().is_err());
+
+    let mut acceptor = Acceptor::new().unwrap();
+    // Minimal 1-byte ClientHello message is not a legal handshake message
+    acceptor
+        .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
+        .unwrap();
+    assert!(acceptor.accept().is_err());
 }
