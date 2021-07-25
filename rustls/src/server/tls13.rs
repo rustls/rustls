@@ -24,7 +24,7 @@ use crate::verify;
 use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
-use super::ServerConnectionData;
+use super::server_conn::ServerConnectionData;
 
 use std::sync::Arc;
 

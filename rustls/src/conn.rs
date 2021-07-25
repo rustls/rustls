@@ -23,6 +23,7 @@ use crate::vecbuf::ChunkVecBuffer;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::io;
+use std::mem;
 
 /// Values of this structure are returned from [`Connection::process_new_packets`]
 /// and tell the caller the current I/O state of the TLS connection.
@@ -113,6 +114,24 @@ pub trait PlaintextSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
     fn flush(&mut self) -> io::Result<()>;
+}
+
+impl<T> PlaintextSink for ConnectionCommon<T> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Ok(self.send_some_plaintext(buf))
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let mut sz = 0;
+        for buf in bufs {
+            sz += self.send_some_plaintext(buf);
+        }
+        Ok(sz)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// A structure that implements [`std::io::Write`] for writing plaintext.
@@ -454,18 +473,20 @@ enum Limit {
     No,
 }
 
-pub(crate) struct ConnectionCommon {
+pub(crate) struct ConnectionCommon<Data> {
+    state: Result<Box<dyn State<Data>>, Error>,
+    pub(crate) data: Data,
     pub(crate) common_state: CommonState,
-    error: Option<Error>,
     message_deframer: MessageDeframer,
-    pub(crate) handshake_joiner: HandshakeJoiner,
+    handshake_joiner: HandshakeJoiner,
 }
 
-impl ConnectionCommon {
-    pub(crate) fn new(common_state: CommonState) -> Self {
+impl<Data> ConnectionCommon<Data> {
+    pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
         Self {
+            state: Ok(state),
+            data,
             common_state,
-            error: None,
             message_deframer: MessageDeframer::new(),
             handshake_joiner: HandshakeJoiner::new(),
         }
@@ -484,12 +505,11 @@ impl ConnectionCommon {
         }
     }
 
-    fn process_msg<Data>(
+    fn process_msg(
         &mut self,
         msg: OpaqueMessage,
-        state: &mut Option<Box<dyn State<Data>>>,
-        data: &mut Data,
-    ) -> Result<(), Error> {
+        state: Box<dyn State<Data>>,
+    ) -> Result<Box<dyn State<Data>>, Error> {
         // pass message to handshake state machine if any of these are true:
         // - TLS1.2 (where it's part of the state machine),
         // - prior to determining the version (it's illegal as a first message)
@@ -506,7 +526,7 @@ impl ConnectionCommon {
             } else {
                 self.common_state.received_middlebox_ccs = true;
                 trace!("Dropping CCS");
-                return Ok(());
+                return Ok(state);
             }
         }
 
@@ -532,7 +552,7 @@ impl ConnectionCommon {
                         .send_fatal_alert(AlertDescription::DecodeError);
                     Error::CorruptMessagePayload(ContentType::Handshake)
                 })?;
-            return self.process_new_handshake_messages(state, data);
+            return self.process_new_handshake_messages(state);
         }
 
         // Now we can fully parse the message payload.
@@ -540,48 +560,61 @@ impl ConnectionCommon {
 
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &msg.payload {
-            return self.common_state.process_alert(alert);
+            self.common_state.process_alert(alert)?;
+            return Ok(state);
         }
 
         self.common_state
-            .process_main_protocol(msg, state, data)
+            .process_main_protocol(msg, state, &mut self.data)
     }
 
-    pub(crate) fn process_new_packets<Data>(
-        &mut self,
-        state: &mut Option<Box<dyn State<Data>>>,
-        data: &mut Data,
-    ) -> Result<IoState, Error> {
-        if let Some(ref err) = self.error {
-            return Err(err.clone());
-        }
+    pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
+            Ok(state) => state,
+            Err(e) => {
+                self.state = Err(e.clone());
+                return Err(e);
+            }
+        };
 
         if self.message_deframer.desynced {
             return Err(Error::CorruptMessage);
         }
 
         while let Some(msg) = self.message_deframer.frames.pop_front() {
-            if let Err(err) = self.process_msg(msg, state, data) {
-                self.error = Some(err.clone());
-                return Err(err);
+            match self.process_msg(msg, state) {
+                Ok(new) => state = new,
+                Err(e) => {
+                    self.state = Err(e.clone());
+                    return Err(e);
+                }
             }
         }
 
+        self.state = Ok(state);
         Ok(self.common_state.current_io_state())
     }
 
-    pub(crate) fn process_new_handshake_messages<Data>(
+    fn process_new_handshake_messages(
         &mut self,
-        state: &mut Option<Box<dyn State<Data>>>,
-        data: &mut Data,
-    ) -> Result<(), Error> {
+        mut state: Box<dyn State<Data>>,
+    ) -> Result<Box<dyn State<Data>>, Error> {
         self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
         while let Some(msg) = self.handshake_joiner.frames.pop_front() {
-            self.common_state
-                .process_main_protocol(msg, state, data)?;
+            state = self
+                .common_state
+                .process_main_protocol(msg, state, &mut self.data)?;
         }
 
-        Ok(())
+        Ok(state)
+    }
+
+    pub(crate) fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
+        if let Ok(st) = &mut self.state {
+            st.perhaps_write_key_update(&mut self.common_state);
+        }
+        self.common_state
+            .send_some_plaintext(buf)
     }
 
     /// Read TLS content from `rd`.  This method does internal
@@ -593,6 +626,49 @@ impl ConnectionCommon {
             self.common_state.has_seen_eof = true;
         }
         res
+    }
+
+    pub(crate) fn export_keying_material(
+        &self,
+        output: &mut [u8],
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<(), Error> {
+        match self.state.as_ref() {
+            Ok(st) => st.export_keying_material(output, label, context),
+            Err(e) => Err(e.clone()),
+        }
+    }
+}
+
+#[cfg(feature = "quic")]
+impl<Data> ConnectionCommon<Data> {
+    pub(crate) fn read_quic_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        let state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
+            Ok(state) => state,
+            Err(e) => {
+                self.state = Err(e.clone());
+                return Err(e);
+            }
+        };
+
+        let msg = PlainMessage {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_3,
+            payload: Payload::new(plaintext.to_vec()),
+        };
+
+        if self
+            .handshake_joiner
+            .take_message(msg)
+            .is_none()
+        {
+            self.common_state.quic.alert = Some(AlertDescription::DecodeError);
+            return Err(Error::CorruptMessage);
+        }
+
+        self.process_new_handshake_messages(state)
+            .map(|state| self.state = Ok(state))
     }
 }
 
@@ -658,9 +734,9 @@ impl CommonState {
     fn process_main_protocol<Data>(
         &mut self,
         msg: Message,
-        state: &mut Option<Box<dyn State<Data>>>,
+        mut state: Box<dyn State<Data>>,
         data: &mut Data,
-    ) -> Result<(), Error> {
+    ) -> Result<Box<dyn State<Data>>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if self.traffic && !self.is_tls13() {
@@ -670,16 +746,15 @@ impl CommonState {
             };
             if msg.is_handshake_type(reject_ty) {
                 self.send_warning_alert(AlertDescription::NoRenegotiation);
-                return Ok(());
+                return Ok(state);
             }
         }
 
-        let current = state.take().unwrap();
         let mut cx = Context { common: self, data };
-        match current.handle(&mut cx, msg) {
+        match state.handle(&mut cx, msg) {
             Ok(next) => {
-                *state = Some(next);
-                Ok(())
+                state = next;
+                Ok(state)
             }
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
