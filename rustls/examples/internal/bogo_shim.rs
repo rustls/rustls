@@ -623,10 +623,10 @@ fn exec(opts: &Options, mut sess: ClientOrServer, count: usize) {
         }
 
         if sess.wants_read() {
-            let len = match sess.read_tls(&mut conn) {
-                Ok(len) => len,
-                Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => 0,
-                err @ Err(_) => err.expect("read failed"),
+            match sess.read_tls(&mut conn) {
+                Ok(_) => {}
+                Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => {}
+                Err(err) => panic!("invalid read: {}", err),
             };
 
             if let Err(err) = sess.process_new_packets() {
