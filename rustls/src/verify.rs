@@ -194,10 +194,7 @@ pub trait ClientCertVerifier: Send + Sync {
     /// Return `Some(true)` to require a client certificate and `Some(false)` to make
     /// client authentication optional. Return `None` to abort the connection.
     /// Defaults to `Some(self.offer_client_auth())`.
-    ///
-    /// `sni` is the server name quoted by the client in its ClientHello; it has
-    /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self) -> Option<bool> {
         Some(self.offer_client_auth())
     }
 
@@ -205,10 +202,7 @@ pub trait ClientCertVerifier: Send + Sync {
     /// share with the client when requesting client authentication.
     ///
     /// Return `None` to abort the connection.
-    ///
-    /// `sni` is the server name quoted by the client in its ClientHello; it has
-    /// been validated as a proper DNS name but is otherwise untrusted.
-    fn client_auth_root_subjects(&self, sni: Option<&DnsName>) -> Option<DistinguishedNames>;
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// and chains to at least one of the trust anchors in `roots`.
@@ -216,14 +210,10 @@ pub trait ClientCertVerifier: Send + Sync {
     /// `intermediates` contains the intermediate certificates the
     /// client sent along with the end-entity certificate; it is in the same
     /// order that the peer sent them and may be empty.
-    ///
-    /// `sni` is the server name quoted by the client in its ClientHello; it has
-    /// been validated as a proper DNS name but is otherwise untrusted.
     fn verify_client_cert(
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error>;
 
@@ -414,11 +404,11 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self) -> Option<bool> {
         Some(true)
     }
 
-    fn client_auth_root_subjects(&self, _sni: Option<&DnsName>) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
 
@@ -426,7 +416,6 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        _sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
@@ -468,24 +457,22 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         self.inner.offer_client_auth()
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self) -> Option<bool> {
         Some(false)
     }
 
-    fn client_auth_root_subjects(&self, sni: Option<&DnsName>) -> Option<DistinguishedNames> {
-        self.inner
-            .client_auth_root_subjects(sni)
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+        self.inner.client_auth_root_subjects()
     }
 
     fn verify_client_cert(
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        sni: Option<&DnsName>,
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         self.inner
-            .verify_client_cert(end_entity, intermediates, sni, now)
+            .verify_client_cert(end_entity, intermediates, now)
     }
 }
 
@@ -516,7 +503,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(&self, _sni: Option<&DnsName>) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         unimplemented!();
     }
 
@@ -524,7 +511,6 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        _sni: Option<&DnsName>,
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();

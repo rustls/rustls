@@ -194,14 +194,11 @@ impl rustls::server::ClientCertVerifier for DummyClientAuth {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&rustls::server::DnsName>) -> Option<bool> {
+    fn client_auth_mandatory(&self) -> Option<bool> {
         Some(self.mandatory)
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&rustls::server::DnsName>,
-    ) -> Option<rustls::DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<rustls::DistinguishedNames> {
         Some(rustls::DistinguishedNames::new())
     }
 
@@ -209,7 +206,6 @@ impl rustls::server::ClientCertVerifier for DummyClientAuth {
         &self,
         _end_entity: &rustls::Certificate,
         _intermediates: &[rustls::Certificate],
-        _sni: Option<&rustls::server::DnsName>,
         _now: SystemTime,
     ) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
         Ok(rustls::server::ClientCertVerified::assertion())

@@ -543,18 +543,11 @@ pub struct MockClientVerifier {
 
 #[cfg(feature = "dangerous_configuration")]
 impl ClientCertVerifier for MockClientVerifier {
-    fn client_auth_mandatory(&self, sni: Option<&rustls::server::DnsName>) -> Option<bool> {
-        // This is just an added 'test' to make sure we plumb through the SNI,
-        // although its valid for it to be None, its just our tests should (as of now) always provide it
-        assert!(sni.is_some());
+    fn client_auth_mandatory(&self) -> Option<bool> {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        sni: Option<&rustls::server::DnsName>,
-    ) -> Option<DistinguishedNames> {
-        assert!(sni.is_some());
+    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         self.subjects.as_ref().cloned()
     }
 
@@ -562,10 +555,8 @@ impl ClientCertVerifier for MockClientVerifier {
         &self,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
-        sni: Option<&rustls::server::DnsName>,
         _now: std::time::SystemTime,
     ) -> Result<ClientCertVerified, Error> {
-        assert!(sni.is_some());
         (self.verified)()
     }
 

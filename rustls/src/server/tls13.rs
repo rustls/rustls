@@ -568,7 +568,7 @@ mod client_hello {
 
         let names = config
             .verifier
-            .client_auth_root_subjects(cx.data.get_sni().as_ref())
+            .client_auth_root_subjects()
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
                 cx.common
@@ -752,7 +752,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         let mandatory = self
             .config
             .verifier
-            .client_auth_mandatory(cx.data.get_sni().as_ref())
+            .client_auth_mandatory()
             .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 cx.common
@@ -784,7 +784,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         let now = std::time::SystemTime::now();
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, cx.data.get_sni().as_ref(), now)
+            .verify_client_cert(end_entity, intermediates, now)
             .map_err(|err| {
                 hs::incompatible(&mut cx.common, "certificate invalid");
                 err
