@@ -1,13 +1,17 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{CommonState, ConnectionCommon};
+use crate::conn::{CommonState, ConnectionCommon, State};
 use crate::error::Error;
 use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
+#[cfg(feature = "logging")]
+use crate::log::trace;
+use crate::msgs::base::PayloadU8;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::ServerExtension;
+use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
+use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
@@ -16,10 +20,10 @@ use crate::{conn::Protocol, quic};
 
 use super::hs;
 
-use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use std::{fmt, io};
 
 /// A trait for the ability to store server session data.
 ///
@@ -104,18 +108,22 @@ pub trait ResolvesServerCert: Send + Sync {
 
 /// A struct representing the received Client Hello
 pub struct ClientHello<'a> {
-    server_name: Option<webpki::DnsNameRef<'a>>,
+    server_name: &'a Option<webpki::DnsName>,
     signature_schemes: &'a [SignatureScheme],
-    alpn: Option<&'a [&'a [u8]]>,
+    alpn: Option<&'a Vec<PayloadU8>>,
 }
 
 impl<'a> ClientHello<'a> {
     /// Creates a new ClientHello
     pub(super) fn new(
-        server_name: Option<webpki::DnsNameRef<'a>>,
+        server_name: &'a Option<webpki::DnsName>,
         signature_schemes: &'a [SignatureScheme],
-        alpn: Option<&'a [&'a [u8]]>,
+        alpn: Option<&'a Vec<PayloadU8>>,
     ) -> Self {
+        trace!("sni {:?}", server_name);
+        trace!("sig schemes {:?}", signature_schemes);
+        trace!("alpn protocols {:?}", alpn);
+
         ClientHello {
             server_name,
             signature_schemes,
@@ -129,7 +137,7 @@ impl<'a> ClientHello<'a> {
     pub fn server_name(&self) -> Option<&str> {
         self.server_name
             .as_ref()
-            .and_then(|s| std::str::from_utf8(s.as_ref()).ok())
+            .map(|s| <webpki::DnsName as AsRef<str>>::as_ref(s))
     }
 
     /// Get the compatible signature schemes.
@@ -142,8 +150,12 @@ impl<'a> ClientHello<'a> {
     /// Get the alpn.
     ///
     /// Returns `None` if the client did not include an ALPN extension
-    pub fn alpn(&self) -> Option<&'a [&'a [u8]]> {
-        self.alpn
+    pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
+        self.alpn.map(|protocols| {
+            protocols
+                .iter()
+                .map(|proto| proto.0.as_slice())
+        })
     }
 }
 
@@ -352,6 +364,164 @@ impl DerefMut for ServerConnection {
 impl From<ServerConnection> for crate::Connection {
     fn from(conn: ServerConnection) -> Self {
         Self::Server(conn)
+    }
+}
+
+/// Handle on a server-side connection before configuration is available.
+///
+/// The `Acceptor` allows the caller to provide a [`ServerConfig`] based on the [`ClientHello`] of
+/// the incoming connection.
+pub struct Acceptor {
+    inner: Option<ConnectionCommon<ServerConnectionData>>,
+}
+
+impl Acceptor {
+    /// Create a new `Acceptor`.
+    pub fn new() -> Result<Self, Error> {
+        let common = CommonState::new(None, false)?;
+        let state = Box::new(Accepting);
+        Ok(Self {
+            inner: Some(ConnectionCommon::new(state, Default::default(), common)),
+        })
+    }
+
+    /// Returns true if the caller should call [`Connection::read_tls()`] as soon as possible.
+    ///
+    /// For more details, refer to [`CommonState::wants_read()`].
+    ///
+    /// [`Connection::read_tls()`]: crate::Connection::read_tls
+    pub fn wants_read(&self) -> bool {
+        self.inner
+            .as_ref()
+            .map(|conn| conn.common_state.wants_read())
+            .unwrap_or(false)
+    }
+
+    /// Read TLS content from `rd`.
+    ///
+    /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
+    /// refer to [`Connection::read_tls()`].
+    ///
+    /// [`Connection::read_tls()`]: crate::Connection::read_tls
+    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        match &mut self.inner {
+            Some(conn) => conn.read_tls(rd),
+            None => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "acceptor cannot read after successful acceptance",
+            )),
+        }
+    }
+
+    /// Check if a `ClientHello` message has been received.
+    ///
+    /// Returns an error if the `ClientHello` message is invalid or if the acceptor has already
+    /// yielded an [`Accepted`]. Returns `Ok(None)` if no complete `ClientHello` has been received
+    /// yet.
+    pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
+        let mut connection = match self.inner.take() {
+            Some(conn) => conn,
+            None => {
+                return Err(Error::General(
+                    "cannot accept after successful acceptance".into(),
+                ));
+            }
+        };
+
+        let message = match connection.first_handshake_message() {
+            Ok(Some(msg)) => msg,
+            Ok(None) => {
+                self.inner = Some(connection);
+                return Ok(None);
+            }
+            Err(e) => {
+                self.inner = Some(connection);
+                return Err(e);
+            }
+        };
+
+        let (_, sig_schemes) = hs::process_client_hello(
+            &message,
+            false,
+            &mut connection.common_state,
+            &mut connection.data,
+        )?;
+
+        Ok(Some(Accepted {
+            connection,
+            message,
+            sig_schemes,
+        }))
+    }
+}
+
+/// Represents a `ClientHello` message received through the [`Acceptor`].
+///
+/// Contains the state required to resume the connection through [`Accepted::into_connection()`].
+pub struct Accepted {
+    connection: ConnectionCommon<ServerConnectionData>,
+    message: Message,
+    sig_schemes: Vec<SignatureScheme>,
+}
+
+impl Accepted {
+    /// Get the [`ClientHello`] for this connection.
+    pub fn client_hello(&self) -> ClientHello<'_> {
+        ClientHello::new(
+            &self.connection.data.sni,
+            &self.sig_schemes,
+            Self::client_hello_payload(&self.message).get_alpn_extension(),
+        )
+    }
+
+    /// Convert the [`Accepted`] into a [`ServerConnection`].
+    ///
+    /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
+    /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
+    /// configuration-dependent validation of the received `ClientHello` message fails.
+    pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
+        self.connection
+            .common_state
+            .set_max_fragment_size(config.max_fragment_size)?;
+        let state = hs::ExpectClientHello::new(config, Vec::new());
+        let mut cx = hs::ServerContext {
+            common: &mut self.connection.common_state,
+            data: &mut self.connection.data,
+        };
+
+        let new = state.with_certified_key(
+            self.sig_schemes,
+            Self::client_hello_payload(&self.message),
+            &self.message,
+            &mut cx,
+        )?;
+
+        self.connection.replace_state(new);
+        Ok(ServerConnection {
+            inner: self.connection,
+        })
+    }
+
+    fn client_hello_payload(message: &Message) -> &ClientHelloPayload {
+        match &message.payload {
+            crate::msgs::message::MessagePayload::Handshake(inner) => match &inner.payload {
+                crate::msgs::handshake::HandshakePayload::ClientHello(ch) => ch,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+}
+
+struct Accepting;
+
+impl State<ServerConnectionData> for Accepting {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut hs::ServerContext<'_>,
+        _m: Message,
+    ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
+        Err(Error::General("unreachable state".into()))
     }
 }
 

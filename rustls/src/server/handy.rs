@@ -259,16 +259,18 @@ mod test {
     fn test_resolvesservercertusingsni_requires_sni() {
         let rscsni = ResolvesServerCertUsingSni::new();
         assert!(rscsni
-            .resolve(ClientHello::new(None, &[], None))
+            .resolve(ClientHello::new(&None, &[], None))
             .is_none());
     }
 
     #[test]
     fn test_resolvesservercertusingsni_handles_unknown_name() {
         let rscsni = ResolvesServerCertUsingSni::new();
-        let name = webpki::DnsNameRef::try_from_ascii_str("hello.com").unwrap();
+        let name = webpki::DnsNameRef::try_from_ascii_str("hello.com")
+            .unwrap()
+            .to_owned();
         assert!(rscsni
-            .resolve(ClientHello::new(Some(name), &[], None))
+            .resolve(ClientHello::new(&Some(name), &[], None))
             .is_none());
     }
 }

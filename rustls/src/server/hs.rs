@@ -5,9 +5,8 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 #[cfg(feature = "tls12")]
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::Compression;
-use crate::msgs::enums::{AlertDescription, ExtensionType};
-use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
+use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::msgs::handshake::HandshakePayload;
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
@@ -16,8 +15,8 @@ use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig};
-use crate::suites;
 use crate::SupportedCipherSuite;
+use crate::{suites, ALL_CIPHER_SUITES};
 
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
@@ -271,40 +270,21 @@ impl ExpectClientHello {
             send_ticket: false,
         }
     }
-}
 
-impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
-        let client_hello =
-            require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
+    /// Continues handling of a `ClientHello` message once config and certificate are available.
+    pub(super) fn with_certified_key(
+        self,
+        sig_schemes: Vec<SignatureScheme>,
+        client_hello: &ClientHelloPayload,
+        m: &Message,
+        cx: &mut ServerContext<'_>,
+    ) -> NextStateOrError {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2);
-        trace!("we got a clienthello {:?}", client_hello);
-
-        if !client_hello
-            .compression_methods
-            .contains(&Compression::Null)
-        {
-            cx.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(Error::PeerIncompatibleError(
-                "client did not offer Null compression".to_string(),
-            ));
-        }
-
-        if client_hello.has_duplicate_extension() {
-            return Err(decode_error(
-                &mut cx.common,
-                "client sent duplicate extensions",
-            ));
-        }
-
-        // No handshake messages should follow this one in this flight.
-        cx.common.check_aligned_handshake()?;
 
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.get_versions_extension();
@@ -342,84 +322,19 @@ impl State<ServerConnectionData> for ExpectClientHello {
 
         cx.common.negotiated_version = Some(version);
 
-        // --- Common to TLS1.2 and TLS1.3: ciphersuite and certificate selection.
-
-        // Extract and validate the SNI DNS name, if any, before giving it to
-        // the cert resolver. In particular, if it is invalid then we should
-        // send an Illegal Parameter alert instead of the Internal Error alert
-        // (or whatever) that we'd send if this were checked later or in a
-        // different way.
-        let sni: Option<webpki::DnsName> = match client_hello.get_sni_extension() {
-            Some(sni) => {
-                if sni.has_duplicate_names_for_type() {
-                    return Err(decode_error(
-                        &mut cx.common,
-                        "ClientHello SNI contains duplicate name types",
-                    ));
-                }
-
-                if let Some(hostname) = sni.get_single_hostname() {
-                    Some(hostname.into())
-                } else {
-                    return Err(cx
-                        .common
-                        .illegal_param("ClientHello SNI did not contain a hostname"));
-                }
-            }
-            None => None,
-        };
-
-        // save only the first SNI
-        if let (Some(sni), false) = (&sni, self.done_retry) {
-            // Save the SNI into the session.
-            // The SNI hostname is immutable once set.
-            assert!(cx.data.sni.is_none());
-            cx.data.sni = Some(sni.clone());
-        } else if cx.data.sni != sni {
-            return Err(Error::PeerIncompatibleError(
-                "SNI differed on retry".to_string(),
-            ));
-        }
-
-        // We communicate to the upper layer what kind of key they should choose
-        // via the sigschemes value.  Clients tend to treat this extension
-        // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
-        // So: reduce the offered sigschemes to those compatible with the
-        // intersection of ciphersuites.
-        let mut common_suites = self.config.cipher_suites.clone();
-        common_suites.retain(|scs| {
-            client_hello
-                .cipher_suites
-                .contains(&scs.suite())
-        });
-
-        let mut sigschemes_ext = client_hello
-            .get_sigalgs_extension()
-            .cloned()
-            .unwrap_or_default();
-        sigschemes_ext
-            .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &common_suites));
-
-        let alpn_protocols = client_hello
-            .get_alpn_extension()
-            .map(|protos| protos.to_slices());
-
         // Choose a certificate.
         let certkey = {
-            let sni_ref = sni
-                .as_ref()
-                .map(webpki::DnsName::as_ref);
-            trace!("sni {:?}", sni_ref);
-            trace!("sig schemes {:?}", sigschemes_ext);
-            trace!("alpn protocols {:?}", alpn_protocols);
-
-            let alpn_slices = alpn_protocols.as_deref();
-            let client_hello = ClientHello::new(sni_ref, &sigschemes_ext, alpn_slices);
+            let client_hello = ClientHello::new(
+                &cx.data.sni,
+                &sig_schemes,
+                client_hello.get_alpn_extension(),
+            );
 
             let certkey = self
                 .config
                 .cert_resolver
                 .resolve(client_hello);
+
             certkey.ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::AccessDenied);
@@ -476,7 +391,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
                 send_ticket: self.send_ticket,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(cx, certkey, &m),
+            .handle_client_hello(cx, certkey, m),
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
                 config: self.config,
@@ -491,13 +406,114 @@ impl State<ServerConnectionData> for ExpectClientHello {
             .handle_client_hello(
                 cx,
                 certkey,
-                &m,
+                m,
                 client_hello,
-                sigschemes_ext,
+                sig_schemes,
                 tls13_enabled,
             ),
         }
     }
+}
+
+impl State<ServerConnectionData> for ExpectClientHello {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
+        let (client_hello, sig_schemes) =
+            process_client_hello(&m, self.done_retry, cx.common, cx.data)?;
+        self.with_certified_key(sig_schemes, client_hello, &m, cx)
+    }
+}
+
+/// Configuration-independent validation of a `ClientHello` message.
+///
+/// This represents the first part of the `ClientHello` handling, where we do all validation that
+/// doesn't depend on a `ServerConfig` being available and extract everything needed to build a
+/// [`ClientHello`] value for a [`ResolvesServerConfig`]/`ResolvesServerCert`].
+///
+/// Note that this will modify `data.sni` even if config or certificate resolution fail.
+pub(super) fn process_client_hello<'a>(
+    m: &'a Message,
+    done_retry: bool,
+    common: &mut CommonState,
+    data: &mut ServerConnectionData,
+) -> Result<(&'a ClientHelloPayload, Vec<SignatureScheme>), Error> {
+    let client_hello =
+        require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
+    trace!("we got a clienthello {:?}", client_hello);
+
+    if !client_hello
+        .compression_methods
+        .contains(&Compression::Null)
+    {
+        common.send_fatal_alert(AlertDescription::IllegalParameter);
+        return Err(Error::PeerIncompatibleError(
+            "client did not offer Null compression".to_string(),
+        ));
+    }
+
+    if client_hello.has_duplicate_extension() {
+        return Err(decode_error(common, "client sent duplicate extensions"));
+    }
+
+    // No handshake messages should follow this one in this flight.
+    common.check_aligned_handshake()?;
+
+    // Extract and validate the SNI DNS name, if any, before giving it to
+    // the cert resolver. In particular, if it is invalid then we should
+    // send an Illegal Parameter alert instead of the Internal Error alert
+    // (or whatever) that we'd send if this were checked later or in a
+    // different way.
+    let sni: Option<webpki::DnsName> = match client_hello.get_sni_extension() {
+        Some(sni) => {
+            if sni.has_duplicate_names_for_type() {
+                return Err(decode_error(
+                    common,
+                    "ClientHello SNI contains duplicate name types",
+                ));
+            }
+
+            if let Some(hostname) = sni.get_single_hostname() {
+                Some(hostname.into())
+            } else {
+                return Err(common.illegal_param("ClientHello SNI did not contain a hostname"));
+            }
+        }
+        None => None,
+    };
+
+    // save only the first SNI
+    if let (Some(sni), false) = (&sni, done_retry) {
+        // Save the SNI into the session.
+        // The SNI hostname is immutable once set.
+        assert!(data.sni.is_none());
+        data.sni = Some(sni.clone())
+    } else if data.sni != sni {
+        return Err(Error::PeerIncompatibleError(
+            "SNI differed on retry".to_string(),
+        ));
+    }
+
+    // We communicate to the upper layer what kind of key they should choose
+    // via the sigschemes value.  Clients tend to treat this extension
+    // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
+    // So: reduce the offered sigschemes to those compatible with the
+    // intersection of ciphersuites.
+    let client_suites = ALL_CIPHER_SUITES
+        .iter()
+        .copied()
+        .filter(|scs| {
+            client_hello
+                .cipher_suites
+                .contains(&scs.suite())
+        })
+        .collect::<Vec<_>>();
+
+    let mut sig_schemes = client_hello
+        .get_sigalgs_extension()
+        .cloned()
+        .unwrap_or_default();
+    sig_schemes.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
+
+    Ok((client_hello, sig_schemes))
 }
 
 #[allow(clippy::large_enum_variant)]
