@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
-use crate::conn::{CommonState, ConnectionRandoms};
+use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kx;
@@ -31,6 +31,7 @@ use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
 use crate::{sign, KeyLog};
 
 use super::hs::ClientContext;
+use super::ClientConnectionData;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::{hs, ClientConfig, ServerName};
@@ -381,7 +382,7 @@ struct ExpectEncryptedExtensions {
     hello: ClientHelloDetails,
 }
 
-impl hs::State for ExpectEncryptedExtensions {
+impl State<ClientConnectionData> for ExpectEncryptedExtensions {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let exts = require_handshake_msg!(
             m,
@@ -477,7 +478,7 @@ struct ExpectCertificateOrCertReq {
     may_send_sct_list: bool,
 }
 
-impl hs::State for ExpectCertificateOrCertReq {
+impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         check_message(
             &m,
@@ -527,7 +528,7 @@ struct ExpectCertificateRequest {
     may_send_sct_list: bool,
 }
 
-impl hs::State for ExpectCertificateRequest {
+impl State<ClientConnectionData> for ExpectCertificateRequest {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
             m,
@@ -615,7 +616,7 @@ struct ExpectCertificate {
     client_auth: Option<ClientAuthDetails>,
 }
 
-impl hs::State for ExpectCertificate {
+impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let cert_chain = require_handshake_msg!(
             m,
@@ -686,7 +687,7 @@ struct ExpectCertificateVerify {
     client_auth: Option<ClientAuthDetails>,
 }
 
-impl hs::State for ExpectCertificateVerify {
+impl State<ClientConnectionData> for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
             m,
@@ -859,7 +860,7 @@ struct ExpectFinished {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl hs::State for ExpectFinished {
+impl State<ClientConnectionData> for ExpectFinished {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =
@@ -1073,7 +1074,7 @@ impl ExpectTraffic {
     }
 }
 
-impl hs::State for ExpectTraffic {
+impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
@@ -1133,7 +1134,7 @@ impl hs::State for ExpectTraffic {
 struct ExpectQuicTraffic(ExpectTraffic);
 
 #[cfg(feature = "quic")]
-impl hs::State for ExpectQuicTraffic {
+impl State<ClientConnectionData> for ExpectQuicTraffic {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let nst = require_handshake_msg!(
             m,
