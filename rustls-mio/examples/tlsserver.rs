@@ -19,11 +19,10 @@ use docopt::Docopt;
 
 use env_logger;
 
-use rustls;
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
 };
-use rustls::{Connection, RootCertStore};
+use rustls::{self, RootCertStore};
 use rustls_pemfile;
 
 // Token for our listening socket.

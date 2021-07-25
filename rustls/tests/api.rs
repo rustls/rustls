@@ -5,6 +5,7 @@ use std::env;
 use std::fmt;
 use std::io::{self, IoSlice, Read, Write};
 use std::mem;
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -16,10 +17,7 @@ use rustls::internal::msgs::{codec::Codec, persist::ClientSessionValue};
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{ClientHello, ResolvesServerCert};
-use rustls::sign;
-use rustls::Connection;
-use rustls::Error;
-use rustls::KeyLog;
+use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
@@ -1493,8 +1491,12 @@ fn client_respects_buffer_limit_post_handshake() {
     check_read(&mut server.reader(), b"01234567890123456789012345");
 }
 
-struct OtherSession<'a> {
-    sess: &'a mut dyn Connection,
+struct OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    sess: &'a mut C,
     pub reads: usize,
     pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
@@ -1502,8 +1504,12 @@ struct OtherSession<'a> {
     pub last_error: Option<rustls::Error>,
 }
 
-impl<'a> OtherSession<'a> {
-    fn new(sess: &'a mut dyn Connection) -> OtherSession<'a> {
+impl<'a, C, S> OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn new(sess: &'a mut C) -> OtherSession<'a, C, S> {
         OtherSession {
             sess,
             reads: 0,
@@ -1514,21 +1520,29 @@ impl<'a> OtherSession<'a> {
         }
     }
 
-    fn new_fails(sess: &'a mut dyn Connection) -> OtherSession<'a> {
+    fn new_fails(sess: &'a mut C) -> OtherSession<'a, C, S> {
         let mut os = OtherSession::new(sess);
         os.fail_ok = true;
         os
     }
 }
 
-impl<'a> io::Read for OtherSession<'a> {
+impl<'a, C, S> io::Read for OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
     fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         self.sess.write_tls(b.by_ref())
     }
 }
 
-impl<'a> io::Write for OtherSession<'a> {
+impl<'a, C, S> io::Write for OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         unreachable!()
     }
@@ -3050,11 +3064,12 @@ fn early_data_is_available_on_resumption() {
 #[cfg(feature = "quic")]
 mod test_quic {
     use super::*;
+    use rustls::Connection;
 
     // Returns the sender's next secrets to use, or the receiver's error.
     fn step(
-        send: &mut dyn Connection,
-        recv: &mut dyn Connection,
+        send: &mut dyn QuicExt,
+        recv: &mut dyn QuicExt,
     ) -> Result<Option<quic::KeyChange>, Error> {
         let mut buf = Vec::new();
         let change = loop {
@@ -3119,20 +3134,24 @@ mod test_quic {
         let server_params = &b"server params"[..];
 
         // full handshake
-        let mut client = ClientConnection::new_quic(
-            Arc::clone(&client_config),
-            quic::Version::V1,
-            dns_name("localhost"),
-            client_params.into(),
-        )
-        .unwrap();
+        let mut client = Connection::from(
+            ClientConnection::new_quic(
+                Arc::clone(&client_config),
+                quic::Version::V1,
+                dns_name("localhost"),
+                client_params.into(),
+            )
+            .unwrap(),
+        );
 
-        let mut server = ServerConnection::new_quic(
-            Arc::clone(&server_config),
-            quic::Version::V1,
-            server_params.into(),
-        )
-        .unwrap();
+        let mut server = Connection::from(
+            ServerConnection::new_quic(
+                Arc::clone(&server_config),
+                quic::Version::V1,
+                server_params.into(),
+            )
+            .unwrap(),
+        );
 
         let client_initial = step(&mut client, &mut server).unwrap();
         assert!(client_initial.is_none());
@@ -4016,7 +4035,8 @@ fn test_server_rejects_duplicate_sni_names() {
         }
     }
 
-    let (mut client, mut server) = make_pair(KeyType::RSA);
+    let (client, server) = make_pair(KeyType::RSA);
+    let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, duplicate_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
@@ -4040,7 +4060,8 @@ fn test_server_rejects_empty_sni_extension() {
         }
     }
 
-    let (mut client, mut server) = make_pair(KeyType::RSA);
+    let (client, server) = make_pair(KeyType::RSA);
+    let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, empty_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
@@ -4067,7 +4088,8 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
         }
     }
 
-    let (mut client, mut server) = make_pair(KeyType::RSA);
+    let (client, server) = make_pair(KeyType::RSA);
+    let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, different_kx_group, &mut server);
     assert_eq!(
         server.process_new_packets(),

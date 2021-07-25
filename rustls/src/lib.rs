@@ -345,7 +345,9 @@ pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
     ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
 };
-pub use crate::conn::{CommonState, Connection, IoState, Reader, Writer};
+pub use crate::conn::{
+    CommonState, Connection, ConnectionCommon, IoState, Reader, SideData, Writer,
+};
 pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
@@ -382,7 +384,7 @@ pub mod client {
     pub use client_conn::ResolvesClientCert;
     pub use client_conn::ServerName;
     pub use client_conn::StoresClientSessions;
-    pub use client_conn::{ClientConfig, ClientConnection, WriteEarlyData};
+    pub use client_conn::{ClientConfig, ClientConnection, ClientConnectionData, WriteEarlyData};
     pub use handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 
     #[cfg(feature = "dangerous_configuration")]
@@ -419,7 +421,7 @@ pub mod server {
     pub use server_conn::ServerQuicExt;
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
-    pub use server_conn::{ServerConfig, ServerConnection};
+    pub use server_conn::{ServerConfig, ServerConnection, ServerConnectionData};
 
     #[cfg(feature = "dangerous_configuration")]
     #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
@@ -474,15 +476,6 @@ pub mod sign;
 #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
 /// APIs for implementing QUIC TLS
 pub mod quic;
-
-#[cfg(not(feature = "quic"))]
-// If QUIC support is disabled, just define a private module with an empty
-// trait to allow Connection having QuicExt as a trait bound.
-mod quic {
-    pub trait QuicExt {}
-    impl QuicExt for super::ClientConnection {}
-    impl QuicExt for super::ServerConnection {}
-}
 
 /// This is the rustls manual.
 pub mod manual;
