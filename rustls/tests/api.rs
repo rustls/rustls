@@ -23,7 +23,6 @@ use rustls::{ClientConfig, ClientConnection, ResolvesClientCert};
 use rustls::{ResolvesServerCert, ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
 use rustls::{SupportedCipherSuite, ALL_CIPHER_SUITES};
-use rustls::{WebPkiError, WebPkiOp};
 
 #[cfg(feature = "dangerous_configuration")]
 use rustls::ClientCertVerified;
@@ -786,9 +785,8 @@ fn client_checks_server_certificate_with_given_name() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
-                Err(ErrorFromPeer::Client(Error::WebPkiError(
-                    WebPkiError::CertNotValidForName,
-                    WebPkiOp::ValidateForDnsName,
+                Err(ErrorFromPeer::Client(Error::InvalidCertificateData(
+                    "invalid peer certificate: CertNotValidForName".into(),
                 )))
             );
         }
