@@ -48,6 +48,7 @@ jobs:
         run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
+          RUSTFLAGS: -D warnings
 
       - name: cargo build (debug; no default features)
         run: cargo build --no-default-features
