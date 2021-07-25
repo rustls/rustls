@@ -690,7 +690,7 @@ impl ConnectionCommon {
         // In the handshake case we don't have readable plaintext before the handshake has
         // completed, but also don't want to read if we still have sendable tls.
         self.received_plaintext.is_empty()
-            && !self.connection_was_cleanly_closed()
+            && !self.has_received_close_notify
             && (self.traffic || self.sendable_tls.is_empty())
     }
 
