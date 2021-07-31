@@ -27,6 +27,15 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - *Breaking change*: insulate the rustls public API from webpki API changes:
     - PKI errors are now reported using rustls-specific errors.
     - There is now a rustls-specific root trust anchor type.
+  - *Breaking change*: the following types are no longer exposed in the crate root, and can instead be imported
+    through the `client` module exposed in the crate root: `ResolvesClientCert`, `StoresClientSessions`,
+    `WriteEarlyData`, `ClientSessionMemoryCache`, `NoClientSessionStorage`, `HandshakeSignatureValid`,
+    `ServerCertVerified`, `ServerCertVerifier`, `WebPkiVerifier` and `DangerousClientConfig`.
+  - *Breaking change*: the following types are no longer exposed in the crate root, and can instead be imported
+    through the `server` module exposed in the crate root: `AllowAnonymousOrAuthenticatedClient`,
+    `AllowAnyAuthenticatedClient`, `NoClientAuth`, `ResolvesServerCertUsingSni`, `NoServerSessionStorage`,
+    `ServerSessionMemoryCache`, `StoresServerSessions`, `ClientHello`, `ProducesTickets`, `ResolvesServerCert`,
+    `ClientCertVerified` and `ClientCertVerifier`.
 * 0.20.0-beta2 (2021-07-04)
   - *Breaking change*: internal buffers are now limited to 64 kB by default. Use
     `Connection::set_buffer_limit` to change the buffer limits to suit your application.
