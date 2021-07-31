@@ -21,6 +21,12 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.0-beta3 (2021-xx-xx)
+  - Unclean TCP closure is now tracked by the library.  This means a new error is possible when reading plaintext:
+    `ErrorKind::UnexpectedEof` will be returned in this case.
+  - *Breaking change*: insulate the rustls public API from webpki API changes:
+    - PKI errors are now reported using rustls-specific errors.
+    - There is now a rustls-specific root trust anchor type.
 * 0.20.0-beta2 (2021-07-04)
   - *Breaking change*: internal buffers are now limited to 64 kB by default. Use
     `Connection::set_buffer_limit` to change the buffer limits to suit your application.

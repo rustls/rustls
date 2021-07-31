@@ -74,7 +74,11 @@ impl<'a> io::Read for Reader<'a> {
     /// the pending data has been read. No further data can be received on that
     /// connection, so the underlying TCP connection should half-closed too.
     ///
-    /// Note that support `close_notify` varies in peer TLS libraries: many do not
+    /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
+    /// `close_notify` alert) this function returns `Err(ErrorKind::UnexpectedEof.into())`
+    /// once any pending data has been read.
+    ///
+    /// Note that support for `close_notify` varies in peer TLS libraries: many do not
     /// support it and uncleanly close the TCP connection (this might be
     /// vulnerable to truncation attacks depending on the application protocol).
     /// This means applications using rustls must both handle EOF
