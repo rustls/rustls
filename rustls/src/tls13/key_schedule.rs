@@ -151,14 +151,14 @@ impl KeyScheduleHandshakeStart {
         // Use an empty handshake hash for the initial handshake.
         let client_secret = self.ks.derive_logged_secret(
             SecretKind::ClientHandshakeTrafficSecret,
-            hs_hash.as_ref(),
+            &[],
             key_log,
             client_random,
         );
 
         let server_secret = self.ks.derive_logged_secret(
             SecretKind::ServerHandshakeTrafficSecret,
-            hs_hash.as_ref(),
+            &[],
             key_log,
             client_random,
         );
@@ -268,21 +268,21 @@ impl KeyScheduleTraffic {
 
         let current_client_traffic_secret = ks.derive_logged_secret(
             SecretKind::ClientApplicationTrafficSecret,
-            hs_hash.as_ref(),
+            &[],
             key_log,
             client_random,
         );
 
         let current_server_traffic_secret = ks.derive_logged_secret(
             SecretKind::ServerApplicationTrafficSecret,
-            hs_hash.as_ref(),
+            &[],
             key_log,
             client_random,
         );
 
         let current_exporter_secret = ks.derive_logged_secret(
             SecretKind::ExporterMasterSecret,
-            hs_hash.as_ref(),
+            &[],
             key_log,
             client_random,
         );
@@ -319,7 +319,7 @@ impl KeyScheduleTraffic {
         let resumption_master_secret = self.ks.derive(
             self.ks.algorithm(),
             SecretKind::ResumptionMasterSecret,
-            hs_hash.as_ref(),
+            &[],
         );
         self.ks
             .derive_ticket_psk(&resumption_master_secret, nonce)
