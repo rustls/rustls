@@ -423,7 +423,7 @@ impl KeySchedule {
     fn sign_verify_data(&self, base_key: &hkdf::Prk, hs_hash: &Digest) -> hmac::Tag {
         let hmac_alg = self.algorithm.hmac_algorithm();
         let hmac_key = hkdf_expand(base_key, hmac_alg, b"finished", &[]);
-        hmac::sign(&hmac_key, hs_hash.as_ref())
+        hmac::sign(&hmac_key, &[])
     }
 
     /// Derive the next application traffic secret, returning it.
