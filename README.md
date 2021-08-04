@@ -147,8 +147,7 @@ obsolete cryptography.
 
 ## Non-features
 
-The following things are broken, obsolete, badly designed, underspecified,
-dangerous and/or insane. Rustls does not support:
+Rustls does not support:
 
 * SSL1, SSL2, SSL3, TLS1 or TLS1.1.
 * RC4.
