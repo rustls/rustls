@@ -345,7 +345,7 @@ impl WebPkiVerifier {
     ///
     /// `ct_logs` is the list of logs that are trusted for Certificate
     /// Transparency. Currently CT log enforcement is opportunistic; see
-    /// <https://github.com/ctz/rustls/issues/479>.
+    /// <https://github.com/rustls/rustls/issues/479>.
     pub fn new(roots: RootCertStore, ct_logs: &'static [&'static sct::Log<'static>]) -> Self {
         Self { roots, ct_logs }
     }

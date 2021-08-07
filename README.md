@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="460" height="300" src="https://raw.githubusercontent.com/ctz/rustls/main/admin/rustls-logo-web.png">
+  <img width="460" height="300" src="https://raw.githubusercontent.com/rustls/rustls/main/admin/rustls-logo-web.png">
 </p>
 
 <p align="center">
@@ -13,8 +13,8 @@ envisioned after the set included in the 0.20 release.
 
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-[![Build Status](https://github.com/ctz/rustls/workflows/rustls/badge.svg)](https://github.com/ctz/rustls/actions)
-[![Coverage Status (codecov.io)](https://codecov.io/gh/ctz/rustls/branch/main/graph/badge.svg)](https://codecov.io/gh/ctz/rustls/)
+[![Build Status](https://github.com/rustls/rustls/workflows/rustls/badge.svg)](https://github.com/rustls/rustls/actions)
+[![Coverage Status (codecov.io)](https://codecov.io/gh/rustls/rustls/branch/main/graph/badge.svg)](https://codecov.io/gh/rustls/rustls/)
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 
 ## Release history:
@@ -89,7 +89,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * 0.18.1 (2020-08-16):
   - Fix DoS vulnerability in TLS1.3 "Middlebox Compatibility Mode" CCS handling.
     This is thought to be quite minor -- see
-    [this commit message](https://github.com/ctz/rustls/commit/e51bf92afcd9dfbd5f4e8154b847aa5cc380913c)
+    [this commit message](https://github.com/rustls/rustls/commit/e51bf92afcd9dfbd5f4e8154b847aa5cc380913c)
     for a full discussion.
 * 0.18.0 (2020-07-04):
   - Allow custom certificate validation implementations to also

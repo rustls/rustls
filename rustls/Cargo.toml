@@ -6,8 +6,8 @@ authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
 readme = "../README.md"
 description = "Rustls is a modern TLS library written in Rust."
-homepage = "https://github.com/ctz/rustls"
-repository = "https://github.com/ctz/rustls"
+homepage = "https://github.com/rustls/rustls"
+repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
 
