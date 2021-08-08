@@ -6,8 +6,8 @@ Security fixes will be backported to the most recent three minor version lines.
 
 ## Reporting a Vulnerability
 
-Please report security bugs by filing a github issue, or by
-email to jbp@jbp.io if you want to disclose privately.  I'll then:
+Please report security bugs by email to rustls-security@googlegroups.com.
+We'll then:
 
 - Prepare a fix and regression tests.
 - Backport the fix and make a patch release for most recent release.
