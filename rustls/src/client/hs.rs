@@ -488,9 +488,11 @@ impl State<ClientConnectionData> for ExpectServerHello {
             _ => {
                 cx.common
                     .send_fatal_alert(AlertDescription::ProtocolVersion);
-                return Err(Error::PeerIncompatibleError(
-                    "server does not support TLS v1.2/v1.3".to_string(),
-                ));
+                let msg = match server_version {
+                    TLSv1_2 | TLSv1_3 => "server's TLS version is disabled in client",
+                    _ => "server does not support TLS v1.2/v1.3",
+                };
+                return Err(Error::PeerIncompatibleError(msg.to_string()));
             }
         };
 
