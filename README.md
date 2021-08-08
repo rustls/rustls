@@ -147,8 +147,8 @@ obsolete cryptography.
 
 ## Non-features
 
-The following things are broken, obsolete, badly designed, underspecified,
-dangerous and/or insane. Rustls does not support:
+For reasons [explained in the manual](https://docs.rs/rustls/latest/rustls/manual/_02_tls_vulnerabilities/index.html),
+rustls does not and will not support:
 
 * SSL1, SSL2, SSL3, TLS1 or TLS1.1.
 * RC4.
@@ -161,7 +161,6 @@ dangerous and/or insane. Rustls does not support:
 * Compression.
 * Discrete-log Diffie-Hellman.
 * Automatic protocol version downgrade.
-* AES-GCM with unsafe nonces.
 
 There are plenty of other libraries that provide these features should you
 need them.
