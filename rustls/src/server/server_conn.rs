@@ -321,6 +321,26 @@ impl ServerConnection {
         );
         self.inner.data.reject_early_data = true;
     }
+
+    /// Minimize state kept around in memory.
+    ///
+    /// If called when [`CommonState::is_handshaking()`] is `false`, this will minimize the amount
+    /// of state kept for this connection (and return `true`). If the connection is still
+    /// handshaking, returns `true` and does nothing else.
+    ///
+    /// After calling this, the state of the handshake has been discarded, and the connection can
+    /// only be used to decrypt/encrypt traffic.
+    pub fn minimize(&mut self) -> bool {
+        if self.is_handshaking() {
+            return false;
+        }
+
+        self.inner.minimize();
+        self.inner.data.sni = None;
+        self.inner.data.received_resumption_data = None;
+        self.inner.data.resumption_data = Vec::new();
+        true
+    }
 }
 
 impl Connection for ServerConnection {

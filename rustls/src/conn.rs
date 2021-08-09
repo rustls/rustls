@@ -530,6 +530,12 @@ impl<Data> ConnectionCommon<Data> {
             Err(e) => Err(e.clone()),
         }
     }
+
+    pub(crate) fn minimize(&mut self) {
+        self.handshake_joiner = HandshakeJoiner::new();
+        self.common_state.alpn_protocol = None;
+        self.common_state.peer_certificates = None;
+    }
 }
 
 #[cfg(feature = "quic")]
