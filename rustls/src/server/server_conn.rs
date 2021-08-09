@@ -326,7 +326,7 @@ impl ServerConnection {
     ///
     /// If called when [`CommonState::is_handshaking()`] is `false`, this will minimize the amount
     /// of state kept for this connection (and return `true`). If the connection is still
-    /// handshaking, returns `true` and does nothing else.
+    /// handshaking, returns `false` and does nothing else.
     ///
     /// After calling this, the state of the handshake has been discarded, and the connection can
     /// only be used to decrypt/encrypt traffic.
