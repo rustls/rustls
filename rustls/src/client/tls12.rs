@@ -46,7 +46,6 @@ mod server_hello {
         pub(in crate::client) randoms: ConnectionRandoms,
         pub(in crate::client) using_ems: bool,
         pub(in crate::client) transcript: HandshakeHash,
-        pub(in crate::client) session_id: SessionID,
     }
 
     impl CompleteServerHelloHandling {
@@ -110,7 +109,7 @@ mod server_hello {
 
             // See if we're successfully resuming.
             if let Some(ref resuming) = self.resuming_session {
-                if resuming.session_id == self.session_id {
+                if resuming.session_id == server_hello.session_id {
                     debug!("Server agreed to resume");
 
                     // Is the server telling lies about the ciphersuite?
@@ -147,7 +146,7 @@ mod server_hello {
                             config: self.config,
                             secrets,
                             resuming_session: self.resuming_session,
-                            session_id: self.session_id,
+                            session_id: server_hello.session_id,
                             server_name: self.server_name,
                             using_ems: self.using_ems,
                             transcript: self.transcript,
@@ -160,7 +159,7 @@ mod server_hello {
                             config: self.config,
                             secrets,
                             resuming_session: self.resuming_session,
-                            session_id: self.session_id,
+                            session_id: server_hello.session_id,
                             server_name: self.server_name,
                             using_ems: self.using_ems,
                             transcript: self.transcript,
@@ -176,7 +175,7 @@ mod server_hello {
             Ok(Box::new(ExpectCertificate {
                 config: self.config,
                 resuming_session: self.resuming_session,
-                session_id: self.session_id,
+                session_id: server_hello.session_id,
                 server_name: self.server_name,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
