@@ -174,9 +174,10 @@ mod client_hello {
             let (mut ocsp_response, mut sct_list) =
                 (server_key.get_ocsp(), server_key.get_sct_list());
 
-            // If we're not offered a ticket or a potential connection ID,
-            // allocate a connection ID.
-            if self.session_id.is_empty() && !ticket_received {
+            // If we're not offered a ticket or a potential session ID, allocate a session ID.
+            if !self.config.session_storage.can_cache() {
+                self.session_id = SessionID::empty();
+            } else if self.session_id.is_empty() && !ticket_received {
                 self.session_id = SessionID::random()?;
             }
 
