@@ -21,6 +21,9 @@ impl server::StoresServerSessions for NoServerSessionStorage {
     fn take(&self, _id: &[u8]) -> Option<Vec<u8>> {
         None
     }
+    fn can_cache(&self) -> bool {
+        false
+    }
 }
 
 /// An implementer of `StoresServerSessions` that stores everything
@@ -60,6 +63,10 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
 
     fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
         self.cache.lock().unwrap().remove(key)
+    }
+
+    fn can_cache(&self) -> bool {
+        true
     }
 }
 

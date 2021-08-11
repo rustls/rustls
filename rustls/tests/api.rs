@@ -2809,6 +2809,10 @@ impl rustls::server::StoresServerSessions for ServerStorage {
             .fetch_add(1, Ordering::SeqCst);
         self.storage.take(key)
     }
+
+    fn can_cache(&self) -> bool {
+        true
+    }
 }
 
 struct ClientStorage {
