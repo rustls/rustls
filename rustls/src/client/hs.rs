@@ -29,9 +29,9 @@ use crate::SupportedCipherSuite;
 
 #[cfg(feature = "tls12")]
 use super::tls12;
+use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::{tls13, ClientConfig, ServerName};
-use crate::client::client_conn::ClientConnectionData;
 
 use std::sync::Arc;
 
@@ -109,14 +109,15 @@ pub(super) fn start_handshake(
     };
 
     if let Some(resuming) = &mut resuming_session {
-        if resuming.version == ProtocolVersion::TLSv1_2 {
-            // If we have a ticket, we use the sessionid as a signal that
-            // we're  doing an abbreviated handshake.  See section 3.4 in
-            // RFC5077.
-            if !resuming.ticket.0.is_empty() {
-                resuming.set_session_id(SessionID::random()?);
+        let has_ticket = !resuming.ticket.0.is_empty();
+        if let Some(sid) = resuming.session_id_mut() {
+            // We only get a `SessionID` from the resuming session if it was on TLS 1.2. If we
+            // have a ticket, we use it as a signal that we're  doing an abbreviated handshake.
+            // See section 3.4 in RFC 5077.
+            if has_ticket {
+                *sid = SessionID::random()?;
             }
-            session_id = Some(resuming.session_id);
+            session_id = Some(*sid);
         }
 
         debug!("Resuming session");
@@ -192,7 +193,7 @@ fn emit_client_hello_for_retry(
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
-        (resuming.ticket.0.clone(), resuming.version)
+        (resuming.ticket.0.clone(), resuming.version.version())
     } else {
         (Vec::new(), ProtocolVersion::Unknown(0))
     };

@@ -111,7 +111,7 @@ mod server_hello {
 
             // See if we're successfully resuming.
             if let Some(ref resuming) = self.resuming_session {
-                if resuming.session_id == self.session_id {
+                if resuming.session_id() == Some(&self.session_id) {
                     debug!("Server agreed to resume");
 
                     // Is the server telling lies about the ciphersuite?
@@ -1008,9 +1008,8 @@ impl ExpectFinished {
 
         let master_secret = self.secrets.get_master_secret();
         let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
-            ProtocolVersion::TLSv1_2,
+            persist::ResumeVersionWithSessionId::Tls12(self.session_id),
             self.secrets.suite().into(),
-            &self.session_id,
             ticket,
             master_secret,
             cx.common

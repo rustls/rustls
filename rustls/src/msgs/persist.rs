@@ -52,8 +52,7 @@ impl ClientSessionKey {
 
 #[derive(Debug)]
 pub struct ClientSessionValue {
-    pub version: ProtocolVersion,
-    pub session_id: SessionID,
+    pub version: ResumeVersionWithSessionId,
     cipher_suite: CipherSuite,
     pub ticket: PayloadU16,
     pub master_secret: PayloadU8,
@@ -87,7 +86,6 @@ impl Codec for ClientSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
-        self.session_id.encode(bytes);
         self.ticket.encode(bytes);
         self.master_secret.encode(bytes);
         self.epoch.encode(bytes);
@@ -99,9 +97,8 @@ impl Codec for ClientSessionValue {
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
-        let v = ProtocolVersion::read(r)?;
+        let version = ResumeVersionWithSessionId::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
-        let sid = SessionID::read(r)?;
         let ticket = PayloadU16::read(r)?;
         let ms = PayloadU8::read(r)?;
         let epoch = u64::read(r)?;
@@ -112,9 +109,8 @@ impl Codec for ClientSessionValue {
         let server_cert_chain = CertificatePayload::read(r)?;
 
         Some(Self {
-            version: v,
+            version,
             cipher_suite,
-            session_id: sid,
             ticket,
             master_secret: ms,
             epoch,
@@ -124,6 +120,43 @@ impl Codec for ClientSessionValue {
             max_early_data_size,
             server_cert_chain,
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum ResumeVersionWithSessionId {
+    /// No `SessionID` for TLS 1.3 sessions.
+    Tls13,
+    /// A non-empty session ID is always stored for TLS 1.2 sessions.
+    Tls12(SessionID),
+}
+
+impl ResumeVersionWithSessionId {
+    pub fn version(&self) -> ProtocolVersion {
+        match self {
+            Self::Tls13 => ProtocolVersion::TLSv1_3,
+            Self::Tls12(_) => ProtocolVersion::TLSv1_2,
+        }
+    }
+}
+
+impl Codec for ResumeVersionWithSessionId {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Tls13 => ProtocolVersion::TLSv1_3.encode(bytes),
+            Self::Tls12(sid) => {
+                ProtocolVersion::TLSv1_2.encode(bytes);
+                sid.encode(bytes);
+            }
+        }
+    }
+
+    fn read(r: &mut Reader) -> Option<Self> {
+        match ProtocolVersion::read(r)? {
+            ProtocolVersion::TLSv1_3 => Some(Self::Tls13),
+            ProtocolVersion::TLSv1_2 => Some(Self::Tls12(SessionID::read(r)?)),
+            _ => None,
+        }
     }
 }
 
@@ -145,9 +178,8 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 
 impl ClientSessionValueWithResolvedCipherSuite {
     pub fn new(
-        v: ProtocolVersion,
+        version: ResumeVersionWithSessionId,
         cipher_suite: SupportedCipherSuite,
-        sessid: &SessionID,
         ticket: Vec<u8>,
         ms: Vec<u8>,
         server_cert_chain: Vec<key::Certificate>,
@@ -155,9 +187,8 @@ impl ClientSessionValueWithResolvedCipherSuite {
     ) -> Self {
         Self {
             value: ClientSessionValue {
-                version: v,
+                version,
                 cipher_suite: cipher_suite.suite(),
-                session_id: *sessid,
                 ticket: PayloadU16::new(ticket),
                 master_secret: PayloadU8::new(ms),
                 epoch: 0,
@@ -176,8 +207,18 @@ impl ClientSessionValueWithResolvedCipherSuite {
         self.supported_cipher_suite
     }
 
-    pub fn set_session_id(&mut self, id: SessionID) {
-        self.value.session_id = id;
+    pub fn session_id(&self) -> Option<&SessionID> {
+        match &self.value.version {
+            ResumeVersionWithSessionId::Tls12(sid) => Some(sid),
+            ResumeVersionWithSessionId::Tls13 => None,
+        }
+    }
+
+    pub fn session_id_mut(&mut self) -> Option<&mut SessionID> {
+        match &mut self.value.version {
+            ResumeVersionWithSessionId::Tls12(sid) => Some(sid),
+            ResumeVersionWithSessionId::Tls13 => None,
+        }
     }
 
     pub fn set_extended_ms_used(&mut self) {
