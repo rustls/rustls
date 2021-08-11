@@ -104,11 +104,9 @@ pub struct SessionID {
 
 impl fmt::Debug for SessionID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut t = f.debug_tuple("SessionID");
-        for i in 0..self.len() {
-            t.field(&self.data[i]);
-        }
-        t.finish()
+        f.debug_tuple("SessionID")
+            .field(&&self.data[..self.len]) // must be `Sized` to cast to `dyn Debug`
+            .finish()
     }
 }
 
