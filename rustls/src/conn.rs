@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::key;
+use crate::{key, ServerName};
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -308,7 +308,7 @@ pub trait Connection: DerefMut + Deref<Target = CommonState> + quic::QuicExt + S
 
             match (eof, until_handshaked, self.is_handshaking()) {
                 (_, true, false) => return Ok((rdlen, wrlen)),
-                (_, false, _) => return Ok((rdlen, wrlen)),
+                (_, false, false) => return Ok((rdlen, wrlen)),
                 (true, true, true) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
                 (..) => {}
             }
@@ -420,6 +420,8 @@ impl<Data> ConnectionCommon<Data> {
                 return Ok(state);
             }
         }
+        trace!("process mesg : {:?}", msg);
+
 
         // Decrypt if demanded by current state.
         let msg = match self
@@ -432,6 +434,7 @@ impl<Data> ConnectionCommon<Data> {
                 .decrypt_incoming(msg)?,
             false => msg.into_plain_message(),
         };
+        trace!("process mesg : {:?}", msg);
 
         // For handshake messages, we need to join them before parsing
         // and processing.
@@ -588,10 +591,15 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     #[cfg(feature = "quic")]
     pub(crate) quic: Quic,
+    pub is_renego: bool,
+    /// server name
+    pub server_name: Option<ServerName>,
+    /// verify Data
+    pub verify_data: Option<Vec<u8>>,
 }
 
 impl CommonState {
-    pub(crate) fn new(max_fragment_size: Option<usize>, is_client: bool) -> Result<Self, Error> {
+    pub(crate) fn new(max_fragment_size: Option<usize>, is_client: bool, name: Option<ServerName>) -> Result<Self, Error> {
         Ok(Self {
             negotiated_version: None,
             is_client,
@@ -615,6 +623,9 @@ impl CommonState {
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
+            is_renego: false,
+            verify_data: None,
+            server_name: name,
         })
     }
 
@@ -690,7 +701,7 @@ impl CommonState {
     ) -> Result<Box<dyn State<Data>>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.traffic && !self.is_tls13() {
+        /*if self.traffic && !self.is_tls13() {
             let reject_ty = match self.is_client {
                 true => HandshakeType::HelloRequest,
                 false => HandshakeType::ClientHello,
@@ -699,9 +710,11 @@ impl CommonState {
                 self.send_warning_alert(AlertDescription::NoRenegotiation);
                 return Ok(state);
             }
-        }
+        }*/
 
-        let mut cx = Context { common: self, data };
+        let name = self.server_name.clone().unwrap();
+
+        let mut cx = Context { common: self, data, server_name: &name };
         match state.handle(&mut cx, msg) {
             Ok(next) => {
                 state = next;
@@ -873,6 +886,9 @@ impl CommonState {
         self.send_appdata_encrypt(data, limit)
     }
 
+    pub(crate) fn stop_traffic(&mut self) {
+        self.traffic = false;
+    }
     pub(crate) fn start_traffic(&mut self) {
         self.traffic = true;
         self.flush_plaintext();
@@ -960,6 +976,7 @@ impl CommonState {
                 return;
             }
         }
+        trace!("Send message : {:?}", m);
         if !must_encrypt {
             let mut to_send = VecDeque::new();
             self.message_fragmenter
@@ -974,6 +991,13 @@ impl CommonState {
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext.append(bytes.0);
+    }
+
+    #[cfg(feature = "tls12")]
+    pub(crate) fn start_encryption_only_tls12(&mut self, secrets: &ConnectionSecrets) {
+        let (dec, enc) = secrets.make_cipher_pair();
+        self.record_layer
+            .prepare_message_encrypter(enc);
     }
 
     #[cfg(feature = "tls12")]
@@ -1087,7 +1111,7 @@ impl CommonState {
     }
 }
 
-pub(crate) trait State<Data>: Send + Sync {
+pub trait State<Data>: Send + Sync {
     fn handle(
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
@@ -1106,9 +1130,10 @@ pub(crate) trait State<Data>: Send + Sync {
     fn perhaps_write_key_update(&mut self, _cx: &mut CommonState) {}
 }
 
-pub(crate) struct Context<'a, Data> {
-    pub(crate) common: &'a mut CommonState,
-    pub(crate) data: &'a mut Data,
+pub struct Context<'a, Data> {
+    pub common: &'a mut CommonState,
+    pub data: &'a mut Data,
+    pub server_name: &'a ServerName
 }
 
 #[cfg(feature = "quic")]

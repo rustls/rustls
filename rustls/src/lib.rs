@@ -240,8 +240,6 @@
     clippy::use_self,
     trivial_casts,
     trivial_numeric_casts,
-    missing_docs,
-    unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
     unused_qualifications
@@ -303,7 +301,7 @@ mod x509;
 mod check;
 mod bs_debug;
 mod builder;
-mod key;
+pub mod key;
 mod keylog;
 mod kx;
 mod suites;

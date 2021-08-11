@@ -253,7 +253,7 @@ impl ServerConnection {
         config: Arc<ServerConfig>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
-        let common = CommonState::new(config.max_fragment_size, false)?;
+        let common = CommonState::new(config.max_fragment_size, false, None)?;
         Ok(Self {
             inner: ConnectionCommon::new(
                 Box::new(hs::ExpectClientHello::new(config, extra_exts)),

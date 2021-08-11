@@ -1,7 +1,7 @@
 use crate::check::{check_message, inappropriate_message};
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
-use crate::hash_hs::HandshakeHash;
+use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -9,7 +9,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID};
+use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID, Random, ClientExtension};
 use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
@@ -21,7 +21,7 @@ use crate::{kx, verify};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
-use crate::client::common::ClientAuthDetails;
+use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
@@ -31,6 +31,7 @@ use std::mem;
 use std::sync::Arc;
 
 pub(super) use server_hello::CompleteServerHelloHandling;
+use crate::client::hs::emit_client_hello_for_retry;
 
 mod server_hello {
     use crate::msgs::enums::ExtensionType;
@@ -535,8 +536,8 @@ fn emit_finished(
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
+    common.verify_data = Some(verify_data.clone());
     let verify_data_payload = Payload::new(verify_data);
-
     let f = Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
@@ -838,8 +839,15 @@ impl State<ClientConnectionData> for ExpectServerDone {
             &secrets.randoms.client,
             &secrets.master_secret,
         );
-        cx.common
-            .start_encryption_tls12(&secrets);
+
+        if cx.common.is_renego {
+            cx.common
+                .start_encryption_only_tls12(&secrets);
+        } else {
+            cx.common
+                .start_encryption_tls12(&secrets);
+        }
+
         cx.common
             .record_layer
             .start_encrypting();
@@ -1078,6 +1086,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             secrets: st.secrets,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
+            config: st.config,
             _fin_verified,
         }))
     }
@@ -1089,11 +1098,17 @@ struct ExpectTraffic {
     _cert_verified: verify::ServerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
+    config: Arc<ClientConfig>,
 }
 
 impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
+            MessagePayload::Handshake(payload) => {
+                cx.common.stop_traffic();
+                cx.common.is_renego = true;
+                return start_renego(self.config, cx)
+            }
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
@@ -1114,4 +1129,63 @@ impl State<ClientConnectionData> for ExpectTraffic {
             .export_keying_material(output, label, context);
         Ok(())
     }
+}
+
+fn start_renego(config: Arc<ClientConfig>, cx: &mut ClientContext<'_>) -> hs::NextStateOrError {
+    let mut transcript_buffer = HandshakeHashBuffer::new();
+    transcript_buffer.set_client_auth_enabled();
+
+
+    let mut session_id: Option<SessionID> = None;
+    /*let mut resuming_session = None;/*find_session(
+        &server_name,
+        &config,
+        #[cfg(feature = "quic")]
+            cx,
+    );*/
+
+    let key_share = None;
+
+    if let Some(resuming) = &mut resuming_session {
+        if resuming.version == ProtocolVersion::TLSv1_2 {
+            // If we have a ticket, we use the sessionid as a signal that
+            // we're  doing an abbreviated handshake.  See section 3.4 in
+            // RFC5077.
+            if !resuming.ticket.0.is_empty() {
+                resuming.set_session_id(SessionID::random()?);
+            }
+            session_id = Some(resuming.session_id);
+        }
+
+        debug!("Resuming session");
+    } else {
+        debug!("Not resuming any session");
+    }*/
+
+    // https://tools.ietf.org/html/rfc8446#appendix-D.4
+    // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
+    if session_id.is_none() {
+        session_id = Some(SessionID::random()?);
+    }
+
+    let random = Random::new()?;
+    let hello_details = ClientHelloDetails::new();
+    let sent_tls13_fake_ccs = false;
+    Ok(emit_client_hello_for_retry(
+        config,
+        cx,
+        None,
+        random,
+        false,
+        transcript_buffer,
+        sent_tls13_fake_ccs,
+        hello_details,
+        session_id,
+        None,
+        cx.server_name.clone(),
+        None,
+        vec![ClientExtension::RenegotiationInfo(PayloadU8(cx.common.verify_data.clone().unwrap()))],
+        false,
+        None,
+    ))
 }

@@ -10,7 +10,7 @@ pub(crate) struct KeyExchangeResult {
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
-pub(crate) struct KeyExchange {
+pub struct KeyExchange {
     skxg: &'static SupportedKxGroup,
     privkey: ring::agreement::EphemeralPrivateKey,
     pub(crate) pubkey: ring::agreement::PublicKey,

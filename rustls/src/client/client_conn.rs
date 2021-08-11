@@ -420,13 +420,14 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(config.max_fragment_size, true)?;
+        let mut common_state = CommonState::new(config.max_fragment_size, true, Some(name.clone()))?;
         common_state.protocol = proto;
         let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
             data: &mut data,
+            server_name: &name.clone(),
         };
 
         let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
@@ -525,7 +526,7 @@ impl DerefMut for ClientConnection {
     }
 }
 
-pub(super) struct ClientConnectionData {
+pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
 }

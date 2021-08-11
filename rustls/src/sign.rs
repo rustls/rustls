@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::key;
+pub use crate::key;
 use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};

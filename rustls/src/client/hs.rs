@@ -173,7 +173,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: Vec<ClientExtension>,
 }
 
-fn emit_client_hello_for_retry(
+pub fn emit_client_hello_for_retry(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
     resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
@@ -329,7 +329,9 @@ fn emit_client_hello_for_retry(
         .map(|cs| cs.suite())
         .collect();
     // We don't do renegotiation at all, in fact.
-    cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+    if !cx.common.is_renego {
+        cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+    }
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -355,11 +357,8 @@ fn emit_client_hello_for_retry(
         // "This value MUST be set to 0x0303 for all records generated
         //  by a TLS 1.3 implementation other than an initial ClientHello
         //  (i.e., one not generated after a HelloRetryRequest)"
-        version: if retryreq.is_some() {
-            ProtocolVersion::TLSv1_2
-        } else {
-            ProtocolVersion::TLSv1_0
-        },
+        version:
+            ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(chp),
     };
 
@@ -372,7 +371,7 @@ fn emit_client_hello_for_retry(
     trace!("Sending ClientHello {:#?}", ch);
 
     transcript_buffer.add_message(&ch);
-    cx.common.send_msg(ch, false);
+    cx.common.send_msg(ch, cx.common.is_renego);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_key_schedule = early_key_schedule.map(|(resuming_suite, schedule)| {

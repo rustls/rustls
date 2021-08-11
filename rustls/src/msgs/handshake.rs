@@ -568,6 +568,7 @@ pub enum ClientExtension {
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
+    RenegotiationInfo(PayloadU8),
     Unknown(UnknownExtension),
 }
 
@@ -591,6 +592,7 @@ impl ClientExtension {
             Self::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
             Self::SignedCertificateTimestampRequest => ExtensionType::SCT,
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
+            Self::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
             Self::Unknown(ref r) => r.typ,
@@ -618,6 +620,7 @@ impl Codec for ClientExtension {
             Self::KeyShare(ref r) => r.encode(&mut sub),
             Self::PresharedKeyModes(ref r) => r.encode(&mut sub),
             Self::PresharedKey(ref r) => r.encode(&mut sub),
+            Self::RenegotiationInfo(ref r) => r.encode(&mut sub),
             Self::Cookie(ref r) => r.encode(&mut sub),
             Self::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {

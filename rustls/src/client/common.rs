@@ -36,7 +36,7 @@ impl ServerCertDetails {
     }
 }
 
-pub(super) struct ClientHelloDetails {
+pub struct ClientHelloDetails {
     pub(super) sent_extensions: Vec<ExtensionType>,
 }
 
