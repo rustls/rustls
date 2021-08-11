@@ -1,5 +1,6 @@
 //! Assorted public API tests.
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::env;
 use std::fmt;
 use std::io::{self, IoSlice, Read, Write};
@@ -4074,4 +4075,42 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
             "no kx group overlap with client".into()
         ))
     );
+}
+
+/// https://github.com/rustls/rustls/issues/797
+#[cfg(feature = "tls12")]
+#[test]
+fn test_client_tls12_no_resume_after_server_downgrade() {
+    let mut client_config = common::make_client_config(KeyType::ED25519);
+    client_config.session_storage = rustls::client::ClientSessionMemoryCache::new(4);
+    let client_config = Arc::new(client_config);
+
+    let server_config_1 = Arc::new(common::finish_server_config(
+        KeyType::ED25519,
+        ServerConfig::builder()
+            .with_safe_default_cipher_suites()
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap(),
+    ));
+
+    let mut server_config_2 = common::finish_server_config(
+        KeyType::ED25519,
+        ServerConfig::builder()
+            .with_safe_default_cipher_suites()
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS12])
+            .unwrap(),
+    );
+    server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
+
+    let mut client_1 =
+        ClientConnection::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
+    let mut server_1 = ServerConnection::new(server_config_1).unwrap();
+    common::do_handshake(&mut client_1, &mut server_1);
+
+    let mut client_2 =
+        ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
+    let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
+    common::do_handshake(&mut client_2, &mut server_2);
 }
