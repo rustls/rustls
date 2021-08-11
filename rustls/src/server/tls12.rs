@@ -176,7 +176,9 @@ mod client_hello {
 
             // If we're not offered a ticket or a potential connection ID,
             // allocate a connection ID.
-            if self.session_id.is_empty() && !ticket_received {
+            if !self.config.session_storage.can_cache() {
+                self.session_id = SessionID::empty();
+            } else if self.session_id.is_empty() && !ticket_received {
                 self.session_id = SessionID::random()?;
             }
 

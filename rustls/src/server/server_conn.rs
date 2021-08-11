@@ -52,6 +52,11 @@ pub trait StoresServerSessions: Send + Sync {
     /// Find a value with the given `key`.  Return it and delete it;
     /// or None if it doesn't exist.
     fn take(&self, key: &[u8]) -> Option<Vec<u8>>;
+
+    /// Whether the store can cache another session. This is used to indicate to clients
+    /// whether their session can be resumed; the implementation is not required to remember
+    /// a session even if it returns `true` here.
+    fn can_cache(&self) -> bool;
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.
