@@ -631,7 +631,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     randoms,
                     using_ems: self.using_ems,
                     transcript,
-                    session_id: server_hello.session_id,
                 }
                 .handle_server_hello(cx, suite, server_hello, tls13_supported)
             }
