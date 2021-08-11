@@ -81,9 +81,21 @@ pub(crate) struct HandshakeHash {
 
     /// buffer for client-auth.
     client_auth: Option<Vec<u8>>,
+
+    override_buffer: Option<Vec<u8>>,
 }
 
 impl HandshakeHash {
+    /// Creates a Handshake hash which return the same override hash always
+    pub fn new_override(static_buffer: Vec<u8>) -> HandshakeHash {
+        HandshakeHash {
+            ctx: None,
+            client_auth_enabled: false,
+            buffer: Vec::new(),
+            override_buffer: Some(static_buffer)
+        }
+    }
+
     /// We decided not to do client auth after all, so discard
     /// the transcript.
     pub(crate) fn abandon_client_auth(&mut self) {
@@ -146,6 +158,14 @@ impl HandshakeHash {
     /// Get the current hash value.
     pub(crate) fn get_current_hash(&self) -> digest::Digest {
         self.ctx.clone().finish()
+    }
+
+    pub fn get_current_hash_raw(&self) -> Vec<u8> {
+        if let Some(static_buffer) = &self.override_buffer {
+            return static_buffer.clone()
+        } else {
+            Vec::from(self.get_current_hash().as_ref())
+        }
     }
 
     /// Takes this object's buffer containing all handshake messages
