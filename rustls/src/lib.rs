@@ -99,7 +99,7 @@
 //! The recommended way is to depend on the `webpki_roots` crate which contains
 //! the Mozilla set of root certificates.
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! let mut root_store = rustls::RootCertStore::empty();
 //! root_store.add_server_trust_anchors(
 //!     webpki_roots::TLS_SERVER_ROOTS
@@ -113,13 +113,14 @@
 //!             )
 //!         })
 //! );
-//! let trusted_ct_logs = &[];
 //! ```
 //!
 //! Next, we make a `ClientConfig`.  You're likely to make one of these per process,
 //! and use it for all connections made by that process.
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # let root_store: rustls::RootCertStore = panic!();
+//! let trusted_ct_logs = &[];
 //! let config = rustls::ClientConfig::builder()
 //!     .with_safe_defaults()
 //!     .with_root_certificates(root_store, trusted_ct_logs)
@@ -129,7 +130,7 @@
 //! Now we can make a connection.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
-//! ```
+//! ```rust
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
@@ -180,8 +181,29 @@
 //! The following code uses a fictional socket IO API for illustration, and does not handle
 //! errors.
 //!
-//! ```text
+//! ```rust,no_run
+//! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
+//! # struct Socket { }
+//! # impl Socket {
+//! #   fn ready_for_write(&self) -> bool { false }
+//! #   fn ready_for_read(&self) -> bool { false }
+//! #   fn wait_for_something_to_happen(&self) { }
+//! # }
+//! #
+//! # use std::io::{Read, Write, Result};
+//! # impl Read for Socket {
+//! #   fn read(&mut self, buf: &mut [u8]) -> Result<usize> { panic!() }
+//! # }
+//! # impl Write for Socket {
+//! #   fn write(&mut self, buf: &[u8]) -> Result<usize> { panic!() }
+//! #   fn flush(&mut self) -> Result<()> { panic!() }
+//! # }
+//! #
+//! # fn connect(_address: &str, _port: u16) -> Socket {
+//! #   panic!();
+//! # }
 //! use std::io;
+//! use rustls::Connection;
 //!
 //! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
