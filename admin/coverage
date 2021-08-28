@@ -62,7 +62,7 @@ def rustc_llvm_version():
     ln = [ln for ln in lines if ln.split(':', 1)[0] == 'LLVM version'][0]
     return int(ln.split(':')[1].split('.')[0].strip())
 
-LLVM_VERSION = 12
+LLVM_VERSION = 13
 llvm_version = rustc_llvm_version()
 if llvm_version != LLVM_VERSION:
     print('expected rustc to use LLVM {}, found {}'.format(LLVM_VERSION, llvm_version))

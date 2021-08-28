@@ -189,8 +189,8 @@ jobs:
       - name: Install LLVM12
         run: |
           curl https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo apt-add-repository -y 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-12 main'
-          sudo apt-get install -y clang-12
+          sudo apt-add-repository -y 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-13 main'
+          sudo apt-get install -y clang-13
 
       - name: Install rust toolchain
         uses: actions-rs/toolchain@v1
