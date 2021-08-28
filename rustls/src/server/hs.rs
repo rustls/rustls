@@ -12,7 +12,7 @@ use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
-use crate::msgs::handshake::{HandshakePayload, SupportedSignatureSchemes};
+use crate::msgs::handshake::HandshakePayload;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig};
@@ -396,7 +396,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
         let mut sigschemes_ext = client_hello
             .get_sigalgs_extension()
             .cloned()
-            .unwrap_or_else(SupportedSignatureSchemes::default);
+            .unwrap_or_default();
         sigschemes_ext
             .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &common_suites));
 
