@@ -14,7 +14,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::{CertificateStatusRequest, SCTList};
+use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
@@ -319,9 +319,11 @@ fn emit_client_hello_for_retry(
     } else if config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
-            exts.push(ClientExtension::SessionTicketRequest);
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
         } else {
-            exts.push(ClientExtension::SessionTicketOffer(Payload::new(ticket)));
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                Payload::new(ticket),
+            )));
         }
         None
     } else {
