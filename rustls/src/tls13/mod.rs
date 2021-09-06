@@ -105,15 +105,8 @@ impl Tls13CipherSuite {
     }
 
     /// Can a session using suite self resume from suite prev?
-    pub fn can_resume_from(&self, prev: SupportedCipherSuite) -> Option<&'static Self> {
-        match prev {
-            SupportedCipherSuite::Tls13(inner)
-                if inner.hash_algorithm() == self.hash_algorithm() =>
-            {
-                Some(inner)
-            }
-            _ => None,
-        }
+    pub fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
+        (prev.hash_algorithm() == self.hash_algorithm()).then(|| prev)
     }
 }
 

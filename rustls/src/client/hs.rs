@@ -43,7 +43,7 @@ fn find_session(
     server_name: &ServerName,
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
-) -> Option<persist::ClientSessionValueWithResolvedCipherSuite> {
+) -> Option<persist::Retrieved<persist::ClientSessionValue>> {
     let key = persist::ClientSessionKey::session_for_server_name(server_name);
     let key_buf = key.get_encoding();
 
@@ -56,26 +56,35 @@ fn find_session(
         })?;
 
     let mut reader = Reader::init(&value[..]);
-    let result = persist::ClientSessionValue::read(&mut reader).and_then(|csv| {
-        let time = TimeBase::now().ok()?;
-        csv.resolve_cipher_suite(&config.cipher_suites, time)
-    });
-    if let Some(result) = result {
-        if result.has_expired() {
-            None
-        } else {
-            #[cfg(feature = "quic")]
-            {
-                if cx.common.is_quic() {
-                    let params = PayloadU16::read(&mut reader)?;
-                    cx.common.quic.params = Some(params.0);
-                }
+    CipherSuite::read_bytes(&value[..2])
+        .and_then(|suite| {
+            config
+                .cipher_suites
+                .iter()
+                .find(|s| s.suite() == suite)
+        })
+        .and_then(|suite| match suite {
+            SupportedCipherSuite::Tls13(_) => persist::Tls13ClientSessionValue::read(&mut reader)
+                .map(persist::ClientSessionValue::from),
+            #[cfg(feature = "tls12")]
+            SupportedCipherSuite::Tls12(_) => persist::Tls12ClientSessionValue::read(&mut reader)
+                .map(persist::ClientSessionValue::from),
+        })
+        .and_then(|resuming| {
+            let retrieved = persist::Retrieved::new(resuming, TimeBase::now().ok()?);
+            match retrieved.has_expired() {
+                false => Some(retrieved),
+                true => None,
             }
-            Some(result)
-        }
-    } else {
-        None
-    }
+        })
+        .and_then(|resuming| {
+            #[cfg(feature = "quic")]
+            if cx.common.is_quic() {
+                let params = PayloadU16::read(&mut reader)?;
+                cx.common.quic.params = Some(params.0);
+            }
+            Some(resuming)
+        })
 }
 
 pub(super) fn start_handshake(
@@ -109,15 +118,15 @@ pub(super) fn start_handshake(
     };
 
     if let Some(resuming) = &mut resuming_session {
-        let has_ticket = !resuming.ticket.0.is_empty();
-        if let Some(sid) = resuming.session_id_mut() {
-            // We only get a `SessionID` from the resuming session if it was on TLS 1.2. If we
-            // have a ticket, we use it as a signal that we're  doing an abbreviated handshake.
-            // See section 3.4 in RFC 5077.
-            if has_ticket {
-                *sid = SessionID::random()?;
+        #[cfg(feature = "tls12")]
+        if let persist::ClientSessionValue::Tls12(inner) = &mut resuming.value {
+            // If we have a ticket, we use the sessionid as a signal that
+            // we're  doing an abbreviated handshake.  See section 3.4 in
+            // RFC5077.
+            if !inner.ticket().is_empty() {
+                inner.session_id = SessionID::random()?;
             }
-            session_id = Some(*sid);
+            session_id = Some(inner.session_id);
         }
 
         debug!("Resuming session");
@@ -156,7 +165,7 @@ pub(super) fn start_handshake(
 
 struct ExpectServerHello {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Retrieved<persist::ClientSessionValue>>,
     server_name: ServerName,
     random: Random,
     using_ems: bool,
@@ -177,7 +186,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 fn emit_client_hello_for_retry(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Retrieved<persist::ClientSessionValue>>,
     random: Random,
     using_ems: bool,
     mut transcript_buffer: HandshakeHashBuffer,
@@ -193,7 +202,15 @@ fn emit_client_hello_for_retry(
 ) -> NextState {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
-        (resuming.ticket.0.clone(), resuming.version.version())
+        match &resuming.value {
+            persist::ClientSessionValue::Tls13(inner) => {
+                (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3)
+            }
+            #[cfg(feature = "tls12")]
+            persist::ClientSessionValue::Tls12(inner) => {
+                (inner.ticket().to_vec(), ProtocolVersion::TLSv1_2)
+            }
+        }
     } else {
         (Vec::new(), ProtocolVersion::Unknown(0))
     };
@@ -278,32 +295,26 @@ fn emit_client_hello_for_retry(
     {
         resuming_session
             .as_ref()
-            .and_then(|resuming| {
-                let resuming_suite = resuming.supported_cipher_suite();
-                match suite {
-                    Some(suite) => {
-                        let resuming_suite = suite
-                            .tls13()?
-                            .can_resume_from(resuming_suite)?;
-                        Some((resuming, resuming_suite))
-                    }
-                    None => {
-                        let resuming_suite = resuming_suite.tls13()?;
-                        Some((resuming, resuming_suite))
-                    }
+            .and_then(|resuming| match (suite, resuming.tls13()) {
+                (Some(suite), Some(resuming)) => {
+                    suite
+                        .tls13()?
+                        .can_resume_from(resuming.suite())?;
+                    Some(resuming)
                 }
+                (None, Some(resuming)) => Some(resuming),
+                _ => None,
             })
-            .map(|(resuming, resuming_suite)| {
+            .map(|resuming| {
                 tls13::prepare_resumption(
                     &config,
                     cx,
                     ticket,
-                    resuming,
-                    resuming_suite,
+                    &resuming,
                     &mut exts,
                     retryreq.is_some(),
                 );
-                (resuming, resuming_suite)
+                resuming
             })
     } else if config.enable_tickets {
         // If we have a ticket, include it.  Otherwise, request one.
@@ -344,10 +355,9 @@ fn emit_client_hello_for_retry(
         }),
     };
 
-    let early_key_schedule = if let Some((resuming, resuming_suite)) = fill_in_binder {
-        let schedule =
-            tls13::fill_in_psk_binder(resuming, resuming_suite, &transcript_buffer, &mut chp);
-        Some((resuming_suite, schedule))
+    let early_key_schedule = if let Some(resuming) = fill_in_binder {
+        let schedule = tls13::fill_in_psk_binder(&resuming, &transcript_buffer, &mut chp);
+        Some((resuming.suite(), schedule))
     } else {
         None
     };
@@ -577,14 +587,18 @@ impl State<ClientConnectionData> for ExpectServerHello {
         transcript.add_message(&m);
 
         let randoms = ConnectionRandoms::new(self.random, server_hello.random, true);
-        let resuming_session = self
-            .resuming_session
-            .filter(|resuming| resuming.version.version() == version);
-
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => {
+                let resuming_session = self
+                    .resuming_session
+                    .and_then(|resuming| match resuming.value {
+                        persist::ClientSessionValue::Tls13(inner) => Some(inner),
+                        #[cfg(feature = "tls12")]
+                        persist::ClientSessionValue::Tls12(_) => None,
+                    });
+
                 tls13::handle_server_hello(
                     self.config,
                     cx,
@@ -602,16 +616,25 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             }
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => tls12::CompleteServerHelloHandling {
-                config: self.config,
-                resuming_session,
-                server_name: self.server_name,
-                randoms,
-                using_ems: self.using_ems,
-                transcript,
-                session_id: server_hello.session_id,
+            SupportedCipherSuite::Tls12(suite) => {
+                let resuming_session = self
+                    .resuming_session
+                    .and_then(|resuming| match resuming.value {
+                        persist::ClientSessionValue::Tls12(inner) => Some(inner),
+                        persist::ClientSessionValue::Tls13(_) => None,
+                    });
+
+                tls12::CompleteServerHelloHandling {
+                    config: self.config,
+                    resuming_session,
+                    server_name: self.server_name,
+                    randoms,
+                    using_ems: self.using_ems,
+                    transcript,
+                    session_id: server_hello.session_id,
+                }
+                .handle_server_hello(cx, suite, server_hello, tls13_supported)
             }
-            .handle_server_hello(cx, suite, server_hello, tls13_supported),
         }
     }
 }

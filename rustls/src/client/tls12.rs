@@ -41,8 +41,7 @@ mod server_hello {
 
     pub(in crate::client) struct CompleteServerHelloHandling {
         pub(in crate::client) config: Arc<ClientConfig>,
-        pub(in crate::client) resuming_session:
-            Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+        pub(in crate::client) resuming_session: Option<persist::Tls12ClientSessionValue>,
         pub(in crate::client) server_name: ServerName,
         pub(in crate::client) randoms: ConnectionRandoms,
         pub(in crate::client) using_ems: bool,
@@ -111,27 +110,24 @@ mod server_hello {
 
             // See if we're successfully resuming.
             if let Some(ref resuming) = self.resuming_session {
-                if resuming.session_id() == Some(&self.session_id) {
+                if resuming.session_id == self.session_id {
                     debug!("Server agreed to resume");
 
                     // Is the server telling lies about the ciphersuite?
-                    if resuming.supported_cipher_suite() != suite.into() {
+                    if resuming.suite() != suite {
                         let error_msg =
                             "abbreviated handshake offered, but with varied cs".to_string();
                         return Err(Error::PeerMisbehavedError(error_msg));
                     }
 
                     // And about EMS support?
-                    if resuming.extended_ms != self.using_ems {
+                    if resuming.extended_ms() != self.using_ems {
                         let error_msg = "server varied ems support over resume".to_string();
                         return Err(Error::PeerMisbehavedError(error_msg));
                     }
 
-                    let secrets = ConnectionSecrets::new_resume(
-                        &self.randoms,
-                        suite,
-                        &resuming.master_secret.0,
-                    );
+                    let secrets =
+                        ConnectionSecrets::new_resume(&self.randoms, suite, resuming.secret());
                     self.config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,
@@ -142,7 +138,7 @@ mod server_hello {
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    cx.common.peer_certificates = Some(resuming.server_cert_chain.clone());
+                    cx.common.peer_certificates = Some(resuming.server_cert_chain().to_vec());
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -214,7 +210,7 @@ impl ReceivedTicketDetails {
 
 struct ExpectCertificate {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -275,7 +271,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
 
 struct ExpectCertificateStatusOrServerKx {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -337,7 +333,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
 
 struct ExpectCertificateStatus {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -391,7 +387,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
 
 struct ExpectServerKx {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -568,7 +564,7 @@ impl ServerKxDetails {
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectServerDoneOrCertReq {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -627,7 +623,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
 
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -704,7 +700,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
 
 struct ExpectServerDone {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -881,7 +877,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     using_ems: bool,
@@ -925,7 +921,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
 struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     using_ems: bool,
@@ -966,7 +962,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
 struct ExpectFinished {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionID,
     server_name: ServerName,
     using_ems: bool,
@@ -1005,23 +1001,19 @@ impl ExpectFinished {
         };
 
         let key = persist::ClientSessionKey::session_for_server_name(&self.server_name);
-
-        let master_secret = self.secrets.get_master_secret();
-        let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
-            persist::ResumeVersionWithSessionId::Tls12(self.session_id),
-            self.secrets.suite().into(),
+        let value = persist::Tls12ClientSessionValue::new(
+            self.secrets.suite(),
+            self.session_id,
             ticket,
-            master_secret,
+            self.secrets.get_master_secret(),
             cx.common
                 .peer_certificates
                 .clone()
                 .unwrap_or_default(),
             time_now,
+            self.ticket.new_ticket_lifetime,
+            self.using_ems,
         );
-        value.set_times(self.ticket.new_ticket_lifetime, 0);
-        if self.using_ems {
-            value.set_extended_ms_used();
-        }
 
         let worked = self
             .config
