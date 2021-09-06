@@ -577,6 +577,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
         transcript.add_message(&m);
 
         let randoms = ConnectionRandoms::new(self.random, server_hello.random, true);
+        let resuming_session = self
+            .resuming_session
+            .filter(|resuming| resuming.version.version() == version);
+
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {
@@ -585,7 +589,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     self.config,
                     cx,
                     server_hello,
-                    self.resuming_session,
+                    resuming_session,
                     self.server_name,
                     randoms,
                     suite,
@@ -600,7 +604,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => tls12::CompleteServerHelloHandling {
                 config: self.config,
-                resuming_session: self.resuming_session,
+                resuming_session,
                 server_name: self.server_name,
                 randoms,
                 using_ems: self.using_ems,

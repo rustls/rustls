@@ -4082,7 +4082,8 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
 #[test]
 fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut client_config = common::make_client_config(KeyType::ED25519);
-    client_config.session_storage = rustls::client::ClientSessionMemoryCache::new(4);
+    let client_storage = Arc::new(ClientStorage::new());
+    client_config.session_storage = client_storage.clone();
     let client_config = Arc::new(client_config);
 
     let server_config_1 = Arc::new(common::finish_server_config(
@@ -4104,13 +4105,17 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     );
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
+    dbg!("handshake 1");
     let mut client_1 =
         ClientConnection::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
     let mut server_1 = ServerConnection::new(server_config_1).unwrap();
     common::do_handshake(&mut client_1, &mut server_1);
+    assert_eq!(client_storage.puts(), 2);
 
+    dbg!("handshake 2");
     let mut client_2 =
         ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
     common::do_handshake(&mut client_2, &mut server_2);
+    assert_eq!(client_storage.puts(), 2);
 }
