@@ -106,6 +106,9 @@ jobs:
         with:
           go-version: "1.14"
 
+      - name: Build bogo shim
+        run: cargo build --example bogo_shim --features=dangerous_configuration,quic
+
       - name: Run test suite
         working-directory: bogo
         run: ./runme -test TLS-TLS12-ECDHE_ECDSA_WITH_AES_128_GCM_SHA256-client
