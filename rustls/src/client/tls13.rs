@@ -981,7 +981,14 @@ impl ExpectTraffic {
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
 
-        let time_now = TimeBase::now()?;
+        let time_now = match TimeBase::now() {
+            Ok(t) => t,
+            Err(e) => {
+                debug!("Session not saved: {}", e);
+                return Ok(());
+            }
+        };
+
         let value = persist::Tls13ClientSessionValue::new(
             self.suite,
             nst.ticket.0.clone(),
