@@ -29,7 +29,7 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 mod client_hello {
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression, SignatureScheme};
-    use crate::msgs::handshake::{CertificateRequestPayload, Random};
+    use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
     use crate::msgs::handshake::{
         CertificateStatus, DigitallySignedStruct, ECDHEServerKeyExchange,
     };
@@ -111,7 +111,9 @@ mod client_hello {
             let resume_data = client_hello
                 .get_ticket_extension()
                 .and_then(|ticket_ext| match ticket_ext {
-                    ClientExtension::SessionTicketOffer(ticket) => Some(ticket),
+                    ClientExtension::SessionTicket(ClientSessionTicket::Offer(ticket)) => {
+                        Some(ticket)
+                    }
                     _ => None,
                 })
                 .and_then(|ticket| {
