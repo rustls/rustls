@@ -11,7 +11,7 @@ use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
 use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID};
 use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
-use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
+use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
@@ -27,7 +27,6 @@ use crate::client::{hs, ClientConfig, ServerName};
 
 use ring::constant_time;
 
-use std::mem;
 use std::sync::Arc;
 
 pub(super) use server_hello::CompleteServerHelloHandling;
@@ -163,7 +162,7 @@ mod server_hello {
                             server_name: self.server_name,
                             using_ems: self.using_ems,
                             transcript: self.transcript,
-                            ticket: ReceivedTicketDetails::new(),
+                            ticket: None,
                             resuming: true,
                             cert_verified,
                             sig_verified,
@@ -185,24 +184,6 @@ mod server_hello {
                 must_issue_new_ticket,
                 server_cert_sct_list,
             }))
-        }
-    }
-}
-
-struct ReceivedTicketDetails {
-    new_ticket: Vec<u8>,
-    new_ticket_lifetime: u32,
-}
-
-impl ReceivedTicketDetails {
-    fn new() -> Self {
-        Self::from(Vec::new(), 0)
-    }
-
-    fn from(ticket: Vec<u8>, lifetime: u32) -> Self {
-        Self {
-            new_ticket: ticket,
-            new_ticket_lifetime: lifetime,
         }
     }
 }
@@ -864,7 +845,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 server_name: st.server_name,
                 using_ems: st.using_ems,
                 transcript: st.transcript,
-                ticket: ReceivedTicketDetails::new(),
+                ticket: None,
                 resuming: false,
                 cert_verified,
                 sig_verified,
@@ -908,7 +889,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             server_name: self.server_name,
             using_ems: self.using_ems,
             transcript: self.transcript,
-            ticket: ReceivedTicketDetails::from(nst.ticket.0, nst.lifetime_hint),
+            ticket: Some(nst),
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
@@ -925,7 +906,7 @@ struct ExpectCcs {
     server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
-    ticket: ReceivedTicketDetails,
+    ticket: Option<NewSessionTicketPayload>,
     resuming: bool,
     cert_verified: verify::ServerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
@@ -966,7 +947,7 @@ struct ExpectFinished {
     server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
-    ticket: ReceivedTicketDetails,
+    ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
     resuming: bool,
     cert_verified: verify::ServerCertVerified,
@@ -978,7 +959,10 @@ impl ExpectFinished {
     fn save_session(&mut self, cx: &mut ClientContext<'_>) {
         // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
         // original ticket again.
-        let mut ticket = mem::take(&mut self.ticket.new_ticket);
+        let (mut ticket, lifetime) = match self.ticket.take() {
+            Some(nst) => (nst.ticket.0, nst.lifetime_hint),
+            None => (Vec::new(), 0),
+        };
 
         if ticket.is_empty() {
             if let Some(resuming_session) = &mut self.resuming_session {
@@ -1010,7 +994,7 @@ impl ExpectFinished {
                 .clone()
                 .unwrap_or_default(),
             time_now,
-            self.ticket.new_ticket_lifetime,
+            lifetime,
             self.using_ems,
         );
 
