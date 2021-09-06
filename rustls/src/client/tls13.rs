@@ -61,7 +61,7 @@ pub(super) fn handle_server_hello(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
-    mut resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    mut resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -95,7 +95,7 @@ pub(super) fn handle_server_hello(
         (server_hello.get_psk_index(), early_key_schedule)
     {
         if let Some(ref resuming) = resuming_session {
-            let resuming_suite = match suite.can_resume_from(resuming.supported_cipher_suite()) {
+            let resuming_suite = match suite.can_resume_from(resuming.suite()) {
                 Some(resuming) => resuming,
                 None => {
                     return Err(cx
@@ -230,14 +230,13 @@ fn save_kx_hint(config: &ClientConfig, server_name: &ServerName, group: NamedGro
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
 pub(super) fn fill_in_psk_binder(
-    resuming: &persist::ClientSessionValueWithResolvedCipherSuite,
-    resuming_suite: &'static Tls13CipherSuite,
+    resuming: &persist::Tls13ClientSessionValue,
     transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
-    let hkdf_alg = resuming_suite.hkdf_algorithm;
-    let suite_hash = resuming_suite.hash_algorithm();
+    let hkdf_alg = resuming.suite().hkdf_algorithm;
+    let suite_hash = resuming.suite().hash_algorithm();
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -246,7 +245,7 @@ pub(super) fn fill_in_psk_binder(
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
-    let key_schedule = KeyScheduleEarly::new(hkdf_alg, &resuming.master_secret.0);
+    let key_schedule = KeyScheduleEarly::new(hkdf_alg, resuming.secret());
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
     if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
@@ -260,16 +259,16 @@ pub(super) fn prepare_resumption(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
     ticket: Vec<u8>,
-    resuming_session: &persist::ClientSessionValueWithResolvedCipherSuite,
-    resuming_suite: &'static Tls13CipherSuite,
+    resuming_session: &persist::Retrieved<&persist::Tls13ClientSessionValue>,
     exts: &mut Vec<ClientExtension>,
     doing_retry: bool,
 ) {
+    let resuming_suite = resuming_session.suite();
     cx.common.suite = Some(resuming_suite.into());
     cx.data.resumption_ciphersuite = Some(resuming_suite.into());
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
-    let max_early_data_size = resuming_session.max_early_data_size;
+    let max_early_data_size = resuming_session.max_early_data_size();
     if config.enable_early_data && max_early_data_size > 0 && !doing_retry {
         cx.data
             .early_data
@@ -282,8 +281,7 @@ pub(super) fn prepare_resumption(
     //
     // Include an empty binder. It gets filled in below because it depends on
     // the message it's contained in (!!!).
-    let obfuscated_ticket_age =
-        resuming_session.get_obfuscated_ticket_age(resuming_session.time_retrieved());
+    let obfuscated_ticket_age = resuming_session.obfuscated_ticket_age();
 
     let binder_len = resuming_suite
         .hash_algorithm()
@@ -374,7 +372,7 @@ fn validate_encrypted_extensions(
 
 struct ExpectEncryptedExtensions {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::ClientSessionValueWithResolvedCipherSuite>,
+    resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -434,8 +432,8 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
             cx.common.peer_certificates = Some(
                 resuming_session
-                    .server_cert_chain
-                    .clone(),
+                    .server_cert_chain()
+                    .to_vec(),
             );
 
             // We *don't* reverify the certificate chain here: resumption is a
@@ -984,9 +982,8 @@ impl ExpectTraffic {
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
 
         let time_now = TimeBase::now()?;
-        let mut value = persist::ClientSessionValueWithResolvedCipherSuite::new(
-            persist::ResumeVersionWithSessionId::Tls13,
-            self.suite.into(),
+        let value = persist::Tls13ClientSessionValue::new(
+            self.suite,
             nst.ticket.0.clone(),
             secret,
             cx.common
@@ -994,18 +991,18 @@ impl ExpectTraffic {
                 .clone()
                 .unwrap_or_default(),
             time_now,
+            nst.lifetime,
+            nst.age_add,
+            nst.get_max_early_data_size()
+                .unwrap_or_default(),
         );
-        value.set_times(nst.lifetime, nst.age_add);
 
+        #[cfg(feature = "quic")]
         if let Some(sz) = nst.get_max_early_data_size() {
-            value.set_max_early_data_size(sz);
-            #[cfg(feature = "quic")]
-            {
-                if cx.common.protocol == Protocol::Quic && sz != 0 && sz != 0xffff_ffff {
-                    return Err(Error::PeerMisbehavedError(
-                        "invalid max_early_data_size".into(),
-                    ));
-                }
+            if cx.common.protocol == Protocol::Quic && sz != 0 && sz != 0xffff_ffff {
+                return Err(Error::PeerMisbehavedError(
+                    "invalid max_early_data_size".into(),
+                ));
             }
         }
 
@@ -1014,12 +1011,10 @@ impl ExpectTraffic {
         let mut ticket = value.get_encoding();
 
         #[cfg(feature = "quic")]
+        if let (Protocol::Quic, Some(ref quic_params)) =
+            (cx.common.protocol, &cx.common.quic.params)
         {
-            if let (Protocol::Quic, Some(ref quic_params)) =
-                (cx.common.protocol, &cx.common.quic.params)
-            {
-                PayloadU16::encode_slice(quic_params, &mut ticket);
-            }
+            PayloadU16::encode_slice(quic_params, &mut ticket);
         }
 
         let worked = self

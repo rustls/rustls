@@ -5,10 +5,14 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
-use crate::SupportedCipherSuite;
-
+use crate::suites::{SupportedCipherSuite, ALL_CIPHER_SUITES};
 use crate::ticketer::TimeBase;
+#[cfg(feature = "tls12")]
+use crate::tls12::Tls12CipherSuite;
+use crate::tls13::Tls13CipherSuite;
+
 use std::cmp;
+#[cfg(feature = "tls12")]
 use std::mem;
 
 // These are the keys and values we store in session storage.
@@ -51,214 +55,305 @@ impl ClientSessionKey {
 }
 
 #[derive(Debug)]
-pub struct ClientSessionValue {
-    pub version: ResumeVersionWithSessionId,
-    cipher_suite: CipherSuite,
-    pub ticket: PayloadU16,
-    pub master_secret: PayloadU8,
-    pub epoch: u64,
-    pub lifetime: u32,
-    pub age_add: u32,
-    pub extended_ms: bool,
-    pub max_early_data_size: u32,
-    pub server_cert_chain: CertificatePayload,
+pub enum ClientSessionValue {
+    Tls13(Tls13ClientSessionValue),
+    #[cfg(feature = "tls12")]
+    Tls12(Tls12ClientSessionValue),
 }
 
 impl ClientSessionValue {
-    pub fn resolve_cipher_suite(
-        self,
-        enabled_cipher_suites: &[SupportedCipherSuite],
-        time: TimeBase,
-    ) -> Option<ClientSessionValueWithResolvedCipherSuite> {
-        let supported_cipher_suite = enabled_cipher_suites
-            .iter()
-            .copied()
-            .find(|scs| scs.suite() == self.cipher_suite)?;
-        Some(ClientSessionValueWithResolvedCipherSuite {
-            value: self,
-            supported_cipher_suite,
-            time_retrieved: time,
-        })
-    }
-}
-
-impl Codec for ClientSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.version.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        self.ticket.encode(bytes);
-        self.master_secret.encode(bytes);
-        self.epoch.encode(bytes);
-        self.lifetime.encode(bytes);
-        self.age_add.encode(bytes);
-        (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
-        self.max_early_data_size.encode(bytes);
-        self.server_cert_chain.encode(bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<Self> {
-        let version = ResumeVersionWithSessionId::read(r)?;
-        let cipher_suite = CipherSuite::read(r)?;
-        let ticket = PayloadU16::read(r)?;
-        let ms = PayloadU8::read(r)?;
-        let epoch = u64::read(r)?;
-        let lifetime = u32::read(r)?;
-        let age_add = u32::read(r)?;
-        let extended_ms = u8::read(r)?;
-        let max_early_data_size = u32::read(r)?;
-        let server_cert_chain = CertificatePayload::read(r)?;
-
-        Some(Self {
-            version,
-            cipher_suite,
-            ticket,
-            master_secret: ms,
-            epoch,
-            lifetime,
-            age_add,
-            extended_ms: extended_ms == 1u8,
-            max_early_data_size,
-            server_cert_chain,
-        })
-    }
-}
-
-#[derive(Debug)]
-pub enum ResumeVersionWithSessionId {
-    /// No `SessionID` for TLS 1.3 sessions.
-    Tls13,
-    /// A non-empty session ID is always stored for TLS 1.2 sessions.
-    Tls12(SessionID),
-}
-
-impl ResumeVersionWithSessionId {
-    pub fn version(&self) -> ProtocolVersion {
+    fn common(&self) -> &ClientSessionCommon {
         match self {
-            Self::Tls13 => ProtocolVersion::TLSv1_3,
-            Self::Tls12(_) => ProtocolVersion::TLSv1_2,
+            ClientSessionValue::Tls13(inner) => &inner.common,
+            #[cfg(feature = "tls12")]
+            ClientSessionValue::Tls12(inner) => &inner.common,
         }
     }
 }
 
-impl Codec for ResumeVersionWithSessionId {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Self::Tls13 => ProtocolVersion::TLSv1_3.encode(bytes),
-            Self::Tls12(sid) => {
-                ProtocolVersion::TLSv1_2.encode(bytes);
-                sid.encode(bytes);
-            }
-        }
+impl From<Tls13ClientSessionValue> for ClientSessionValue {
+    fn from(v: Tls13ClientSessionValue) -> Self {
+        Self::Tls13(v)
     }
+}
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        match ProtocolVersion::read(r)? {
-            ProtocolVersion::TLSv1_3 => Some(Self::Tls13),
-            ProtocolVersion::TLSv1_2 => Some(Self::Tls12(SessionID::read(r)?)),
-            _ => None,
+#[cfg(feature = "tls12")]
+impl From<Tls12ClientSessionValue> for ClientSessionValue {
+    fn from(v: Tls12ClientSessionValue) -> Self {
+        Self::Tls12(v)
+    }
+}
+
+pub struct Retrieved<T> {
+    pub value: T,
+    retrieved_at: TimeBase,
+}
+
+impl<T> Retrieved<T> {
+    pub fn new(value: T, retrieved_at: TimeBase) -> Self {
+        Self {
+            value,
+            retrieved_at,
         }
     }
 }
 
-#[derive(Debug)]
-pub struct ClientSessionValueWithResolvedCipherSuite {
-    value: ClientSessionValue,
-    supported_cipher_suite: SupportedCipherSuite,
-    time_retrieved: TimeBase,
+impl Retrieved<&Tls13ClientSessionValue> {
+    pub fn obfuscated_ticket_age(&self) -> u32 {
+        let age_secs = self
+            .retrieved_at
+            .as_secs()
+            .saturating_sub(self.value.common.epoch);
+        let age_millis = age_secs as u32 * 1000;
+        age_millis.wrapping_add(self.value.age_add)
+    }
 }
 
-impl std::ops::Deref for ClientSessionValueWithResolvedCipherSuite {
-    type Target = ClientSessionValue;
+impl Retrieved<ClientSessionValue> {
+    pub fn tls13(&self) -> Option<Retrieved<&Tls13ClientSessionValue>> {
+        match &self.value {
+            ClientSessionValue::Tls13(value) => Some(Retrieved::new(value, self.retrieved_at)),
+            #[cfg(feature = "tls12")]
+            ClientSessionValue::Tls12(_) => None,
+        }
+    }
+
+    pub fn has_expired(&self) -> bool {
+        let common = self.value.common();
+        common.lifetime_secs != 0
+            && common.epoch + u64::from(common.lifetime_secs) < self.retrieved_at.as_secs()
+    }
+}
+
+impl<T> std::ops::Deref for Retrieved<T> {
+    type Target = T;
+
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
 
-static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
+#[derive(Debug)]
+pub struct Tls13ClientSessionValue {
+    suite: &'static Tls13CipherSuite,
+    age_add: u32,
+    max_early_data_size: u32,
+    common: ClientSessionCommon,
+}
 
-impl ClientSessionValueWithResolvedCipherSuite {
+impl Tls13ClientSessionValue {
     pub fn new(
-        version: ResumeVersionWithSessionId,
-        cipher_suite: SupportedCipherSuite,
+        suite: &'static Tls13CipherSuite,
         ticket: Vec<u8>,
-        ms: Vec<u8>,
+        secret: Vec<u8>,
         server_cert_chain: Vec<key::Certificate>,
         time_now: TimeBase,
+        lifetime_secs: u32,
+        age_add: u32,
+        max_early_data_size: u32,
     ) -> Self {
         Self {
-            value: ClientSessionValue {
-                version,
-                cipher_suite: cipher_suite.suite(),
-                ticket: PayloadU16::new(ticket),
-                master_secret: PayloadU8::new(ms),
-                epoch: 0,
-                lifetime: 0,
-                age_add: 0,
-                extended_ms: false,
-                max_early_data_size: 0,
+            suite,
+            age_add,
+            max_early_data_size,
+            common: ClientSessionCommon::new(
+                ticket,
+                secret,
+                time_now,
+                lifetime_secs,
                 server_cert_chain,
-            },
-            supported_cipher_suite: cipher_suite,
-            time_retrieved: time_now,
+            ),
         }
     }
 
-    pub fn supported_cipher_suite(&self) -> SupportedCipherSuite {
-        self.supported_cipher_suite
+    // Test-only
+    pub fn set_max_early_data_size(&mut self, new: u32) {
+        self.max_early_data_size = new;
     }
 
-    pub fn session_id(&self) -> Option<&SessionID> {
-        match &self.value.version {
-            ResumeVersionWithSessionId::Tls12(sid) => Some(sid),
-            ResumeVersionWithSessionId::Tls13 => None,
+    pub fn max_early_data_size(&self) -> u32 {
+        self.max_early_data_size
+    }
+
+    pub fn suite(&self) -> &'static Tls13CipherSuite {
+        self.suite
+    }
+}
+
+impl Codec for Tls13ClientSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.suite.common.suite.encode(bytes);
+        self.age_add.encode(bytes);
+        self.max_early_data_size.encode(bytes);
+        self.common.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<Self> {
+        let cs = CipherSuite::read(r)?;
+        Some(Self {
+            suite: ALL_CIPHER_SUITES
+                .iter()
+                .find_map(|suite| match suite {
+                    SupportedCipherSuite::Tls13(inner) if suite.suite() == cs => Some(*inner),
+                    _ => None,
+                })?,
+            age_add: u32::read(r)?,
+            max_early_data_size: u32::read(r)?,
+            common: ClientSessionCommon::read(r)?,
+        })
+    }
+}
+
+impl std::ops::Deref for Tls13ClientSessionValue {
+    type Target = ClientSessionCommon;
+
+    fn deref(&self) -> &Self::Target {
+        &self.common
+    }
+}
+
+#[cfg(feature = "tls12")]
+#[derive(Debug)]
+pub struct Tls12ClientSessionValue {
+    suite: &'static Tls12CipherSuite,
+    pub session_id: SessionID,
+    extended_ms: bool,
+    common: ClientSessionCommon,
+}
+
+#[cfg(feature = "tls12")]
+impl Tls12ClientSessionValue {
+    pub fn new(
+        suite: &'static Tls12CipherSuite,
+        session_id: SessionID,
+        ticket: Vec<u8>,
+        master_secret: Vec<u8>,
+        server_cert_chain: Vec<key::Certificate>,
+        time_now: TimeBase,
+        lifetime_secs: u32,
+        extended_ms: bool,
+    ) -> Self {
+        Self {
+            suite,
+            session_id,
+            extended_ms,
+            common: ClientSessionCommon::new(
+                ticket,
+                master_secret,
+                time_now,
+                lifetime_secs,
+                server_cert_chain,
+            ),
         }
-    }
-
-    pub fn session_id_mut(&mut self) -> Option<&mut SessionID> {
-        match &mut self.value.version {
-            ResumeVersionWithSessionId::Tls12(sid) => Some(sid),
-            ResumeVersionWithSessionId::Tls13 => None,
-        }
-    }
-
-    pub fn set_extended_ms_used(&mut self) {
-        self.value.extended_ms = true;
-    }
-
-    pub fn set_times(&mut self, lifetime_secs: u32, age_add: u32) {
-        self.value.epoch = self.time_retrieved.as_secs();
-        self.value.lifetime = cmp::min(lifetime_secs, MAX_TICKET_LIFETIME);
-        self.value.age_add = age_add;
-    }
-
-    pub fn has_expired(&self) -> bool {
-        self.value.lifetime != 0
-            && self.value.epoch + u64::from(self.value.lifetime) < self.time_retrieved.as_secs()
-    }
-
-    pub fn get_obfuscated_ticket_age(&self, time_now: TimeBase) -> u32 {
-        let age_secs = time_now
-            .as_secs()
-            .saturating_sub(self.value.epoch);
-        let age_millis = age_secs as u32 * 1000;
-        age_millis.wrapping_add(self.value.age_add)
     }
 
     pub fn take_ticket(&mut self) -> Vec<u8> {
-        let new_ticket = PayloadU16::new(Vec::new());
-        let old_ticket = mem::replace(&mut self.value.ticket, new_ticket);
-        old_ticket.0
+        mem::take(&mut self.common.ticket.0)
     }
 
-    pub fn set_max_early_data_size(&mut self, sz: u32) {
-        self.value.max_early_data_size = sz;
+    pub fn extended_ms(&self) -> bool {
+        self.extended_ms
     }
 
-    #[inline]
-    pub fn time_retrieved(&self) -> TimeBase {
-        self.time_retrieved
+    pub fn suite(&self) -> &'static Tls12CipherSuite {
+        self.suite
     }
 }
+
+#[cfg(feature = "tls12")]
+impl Codec for Tls12ClientSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.suite.common.suite.encode(bytes);
+        self.session_id.encode(bytes);
+        (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
+        self.common.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<Self> {
+        let cs = CipherSuite::read(r)?;
+        Some(Self {
+            suite: ALL_CIPHER_SUITES
+                .iter()
+                .find_map(|suite| match suite {
+                    SupportedCipherSuite::Tls12(inner) if suite.suite() == cs => Some(*inner),
+                    _ => None,
+                })?,
+            session_id: SessionID::read(r)?,
+            extended_ms: u8::read(r)? == 1,
+            common: ClientSessionCommon::read(r)?,
+        })
+    }
+}
+
+#[cfg(feature = "tls12")]
+impl std::ops::Deref for Tls12ClientSessionValue {
+    type Target = ClientSessionCommon;
+
+    fn deref(&self) -> &Self::Target {
+        &self.common
+    }
+}
+
+#[derive(Debug)]
+pub struct ClientSessionCommon {
+    ticket: PayloadU16,
+    secret: PayloadU8,
+    epoch: u64,
+    lifetime_secs: u32,
+    server_cert_chain: CertificatePayload,
+}
+
+impl ClientSessionCommon {
+    fn new(
+        ticket: Vec<u8>,
+        secret: Vec<u8>,
+        time_now: TimeBase,
+        lifetime_secs: u32,
+        server_cert_chain: Vec<key::Certificate>,
+    ) -> Self {
+        Self {
+            ticket: PayloadU16(ticket),
+            secret: PayloadU8(secret),
+            epoch: time_now.as_secs(),
+            lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
+            server_cert_chain,
+        }
+    }
+
+    pub fn server_cert_chain(&self) -> &[key::Certificate] {
+        self.server_cert_chain.as_ref()
+    }
+
+    pub fn secret(&self) -> &[u8] {
+        self.secret.0.as_ref()
+    }
+
+    pub fn ticket(&self) -> &[u8] {
+        self.ticket.0.as_ref()
+    }
+}
+
+impl Codec for ClientSessionCommon {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.ticket.encode(bytes);
+        self.secret.encode(bytes);
+        self.epoch.encode(bytes);
+        self.lifetime_secs.encode(bytes);
+        self.server_cert_chain.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Option<Self> {
+        Some(Self {
+            ticket: PayloadU16::read(r)?,
+            secret: PayloadU8::read(r)?,
+            epoch: u64::read(r)?,
+            lifetime_secs: u32::read(r)?,
+            server_cert_chain: CertificatePayload::read(r)?,
+        })
+    }
+}
+
+static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 
 // --- Server types ---
 pub type ServerSessionKey = SessionID;
