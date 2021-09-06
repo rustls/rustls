@@ -993,8 +993,8 @@ impl ExpectFinished {
 
         let time_now = match TimeBase::now() {
             Ok(time_now) => time_now,
-            Err(_) => {
-                debug!("Session not saved: failed to get system time");
+            Err(e) => {
+                debug!("Session not saved: {}", e);
                 return;
             }
         };
