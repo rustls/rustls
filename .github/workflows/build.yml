@@ -108,7 +108,9 @@ jobs:
 
       - name: Run test suite
         working-directory: bogo
-        run: ./runme
+        run: ./runme -test TLS-TLS12-ECDHE_ECDSA_WITH_AES_128_GCM_SHA256-client
+        env:
+          PERNOSCO_ENABLE: 1
 
 
   fuzz:
