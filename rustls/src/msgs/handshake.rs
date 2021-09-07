@@ -1,5 +1,5 @@
 use crate::key;
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::ECCurveType;
@@ -681,7 +681,11 @@ impl Codec for ClientExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() { None } else { Some(ext) }
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -815,7 +819,11 @@ impl Codec for ServerExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() { None } else { Some(ext) }
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1019,7 +1027,6 @@ impl ClientHelloPayload {
             .unwrap_or(false)
     }
 
-
     pub fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
         let last_extension = self.extensions.last_mut();
         if let Some(ClientExtension::PresharedKey(ref mut offer)) = last_extension {
@@ -1087,7 +1094,11 @@ impl Codec for HelloRetryExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() { None } else { Some(ext) }
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1221,7 +1232,11 @@ impl Codec for ServerHelloPayload {
             extensions,
         };
 
-        if r.any_left() { None } else { Some(ret) }
+        if r.any_left() {
+            None
+        } else {
+            Some(ret)
+        }
     }
 }
 
@@ -1363,7 +1378,11 @@ impl Codec for CertificateExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() { None } else { Some(ext) }
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1845,7 +1864,11 @@ impl Codec for CertReqExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() { None } else { Some(ext) }
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
@@ -1971,7 +1994,11 @@ impl Codec for NewSessionTicketExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() { None } else { Some(ext) }
+        if sub.any_left() {
+            None
+        } else {
+            Some(ext)
+        }
     }
 }
 
