@@ -247,12 +247,15 @@ jobs:
       - name: Install rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2021-03-30
+          toolchain: stable
           override: true
           default: true
+          components: rustfmt
       - name: Check formatting
-        run: |
-          ./admin/fmt -- --check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
 
   clippy:
     name: Clippy
