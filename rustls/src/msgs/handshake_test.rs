@@ -1,4 +1,4 @@
-use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use super::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use super::codec::{put_u16, Codec, Reader};
 use super::enums::*;
 use super::handshake::*;
@@ -1021,13 +1021,11 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
                 _ => {}
             };
 
-            assert!(
-                HandshakeMessagePayload::read_version(
-                    &mut Reader::init(&enc),
-                    ProtocolVersion::TLSv1_2
-                )
-                .is_none()
-            );
+            assert!(HandshakeMessagePayload::read_version(
+                &mut Reader::init(&enc),
+                ProtocolVersion::TLSv1_2
+            )
+            .is_none());
             assert!(HandshakeMessagePayload::read_bytes(&enc).is_none());
         }
     }
@@ -1170,13 +1168,11 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
                 _ => {}
             };
 
-            assert!(
-                HandshakeMessagePayload::read_version(
-                    &mut Reader::init(&enc),
-                    ProtocolVersion::TLSv1_3
-                )
-                .is_none()
-            );
+            assert!(HandshakeMessagePayload::read_version(
+                &mut Reader::init(&enc),
+                ProtocolVersion::TLSv1_3
+            )
+            .is_none());
         }
     }
 }

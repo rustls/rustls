@@ -276,7 +276,6 @@ impl ConnectionSecrets {
         ret
     }
 
-
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
     /// and the session's `secrets`.
     pub(crate) fn make_cipher_pair(&self) -> MessageCipherPair {

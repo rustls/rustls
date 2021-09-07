@@ -237,20 +237,16 @@ mod test {
 
     #[test]
     fn test_pref_fails() {
-        assert!(
-            choose_ciphersuite_preferring_client(
-                &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-                ALL_CIPHER_SUITES
-            )
-            .is_none()
-        );
-        assert!(
-            choose_ciphersuite_preferring_server(
-                &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-                ALL_CIPHER_SUITES
-            )
-            .is_none()
-        );
+        assert!(choose_ciphersuite_preferring_client(
+            &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
+            ALL_CIPHER_SUITES
+        )
+        .is_none());
+        assert!(choose_ciphersuite_preferring_server(
+            &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
+            ALL_CIPHER_SUITES
+        )
+        .is_none());
     }
 
     #[test]
@@ -260,19 +256,15 @@ mod test {
 
     #[test]
     fn test_can_resume_to() {
-        assert!(
-            TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap()
-                .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256)
-                .is_some()
-        );
-        assert!(
-            TLS13_AES_256_GCM_SHA384
-                .tls13()
-                .unwrap()
-                .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256)
-                .is_none()
-        );
+        assert!(TLS13_AES_128_GCM_SHA256
+            .tls13()
+            .unwrap()
+            .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256)
+            .is_some());
+        assert!(TLS13_AES_256_GCM_SHA384
+            .tls13()
+            .unwrap()
+            .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256)
+            .is_none());
     }
 }

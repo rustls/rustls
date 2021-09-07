@@ -16,9 +16,9 @@ use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
 
+use super::hs;
 #[cfg(feature = "quic")]
 use crate::quic;
-use super::hs;
 
 use std::convert::TryFrom;
 use std::marker::PhantomData;

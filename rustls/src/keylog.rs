@@ -176,43 +176,35 @@ mod test {
         let mut inner = KeyLogFileInner::new(Err(env::VarError::NotUnicode(
             "/tmp/keylogfileinnertest".into(),
         )));
-        assert!(
-            inner
-                .try_write("label", b"random", b"secret")
-                .is_ok()
-        );
+        assert!(inner
+            .try_write("label", b"random", b"secret")
+            .is_ok());
     }
 
     #[test]
     fn test_env_var_is_not_set() {
         init();
         let mut inner = KeyLogFileInner::new(Err(env::VarError::NotPresent));
-        assert!(
-            inner
-                .try_write("label", b"random", b"secret")
-                .is_ok()
-        );
+        assert!(inner
+            .try_write("label", b"random", b"secret")
+            .is_ok());
     }
 
     #[test]
     fn test_env_var_cannot_be_opened() {
         init();
         let mut inner = KeyLogFileInner::new(Ok("/dev/does-not-exist".into()));
-        assert!(
-            inner
-                .try_write("label", b"random", b"secret")
-                .is_ok()
-        );
+        assert!(inner
+            .try_write("label", b"random", b"secret")
+            .is_ok());
     }
 
     #[test]
     fn test_env_var_cannot_be_written() {
         init();
         let mut inner = KeyLogFileInner::new(Ok("/dev/full".into()));
-        assert!(
-            inner
-                .try_write("label", b"random", b"secret")
-                .is_err()
-        );
+        assert!(inner
+            .try_write("label", b"random", b"secret")
+            .is_err());
     }
 }

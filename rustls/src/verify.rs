@@ -255,7 +255,6 @@ pub trait ClientCertVerifier: Send + Sync {
         verify_signed_struct(message, cert, dss)
     }
 
-
     /// Verify a signature allegedly by the given server certificate.
     ///
     /// This method is only called for TLS1.3 handshakes.
