@@ -5,7 +5,9 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use ring::{aead, hkdf};
 
 /// Objects with this trait can decrypt TLS messages.
-pub(crate) trait MessageDecrypter: Send + Sync {
+pub trait MessageDecrypter: Send + Sync {
+    /// Perform the decryption over the concerned TLS message.
+
     fn decrypt(&self, m: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
 }
 
