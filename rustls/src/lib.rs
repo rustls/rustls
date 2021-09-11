@@ -338,6 +338,10 @@ pub mod internal {
     pub mod msgs {
         pub use crate::msgs::*;
     }
+    /// Low-level TLS message decryption functions.
+    pub mod cipher {
+        pub use crate::cipher::*;
+    }
 }
 
 // The public interface is:
