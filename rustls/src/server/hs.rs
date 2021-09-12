@@ -7,11 +7,10 @@ use crate::log::{debug, trace};
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
-use crate::msgs::handshake::HandshakePayload;
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
-use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList};
+use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig};
@@ -391,7 +390,7 @@ impl ExpectClientHello {
                 send_ticket: self.send_ticket,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(cx, certkey, m),
+            .handle_client_hello(cx, certkey, m, client_hello, sig_schemes),
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
                 config: self.config,
@@ -509,8 +508,8 @@ pub(super) fn process_client_hello<'a>(
 
     let mut sig_schemes = client_hello
         .get_sigalgs_extension()
-        .cloned()
-        .unwrap_or_default();
+        .ok_or_else(|| incompatible(common, "client didn't describe signature schemes"))?
+        .clone();
     sig_schemes.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
     Ok((client_hello, sig_schemes))

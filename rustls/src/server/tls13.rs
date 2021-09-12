@@ -119,13 +119,9 @@ mod client_hello {
             cx: &mut ServerContext<'_>,
             server_key: ActiveCertifiedKey,
             chm: &Message,
+            client_hello: &ClientHelloPayload,
+            mut sigschemes_ext: Vec<SignatureScheme>,
         ) -> hs::NextStateOrError {
-            let client_hello = require_handshake_msg!(
-                chm,
-                HandshakeType::ClientHello,
-                HandshakePayload::ClientHello
-            )?;
-
             if client_hello.compression_methods.len() != 1 {
                 return Err(cx
                     .common
@@ -135,13 +131,6 @@ mod client_hello {
             let groups_ext = client_hello
                 .get_namedgroups_extension()
                 .ok_or_else(|| hs::incompatible(&mut cx.common, "client didn't describe groups"))?;
-
-            let mut sigschemes_ext = client_hello
-                .get_sigalgs_extension()
-                .ok_or_else(|| {
-                    hs::incompatible(&mut cx.common, "client didn't describe sigschemes")
-                })?
-                .clone();
 
             let tls13_schemes = sign::supported_sign_tls13();
             sigschemes_ext.retain(|scheme| tls13_schemes.contains(scheme));
