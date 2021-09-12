@@ -340,7 +340,7 @@ pub mod internal {
     }
     /// Low-level TLS message decryption functions.
     pub mod cipher {
-        pub use crate::cipher::*;
+        pub use crate::cipher::MessageDecrypter;
     }
 }
 
