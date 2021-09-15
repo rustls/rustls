@@ -302,7 +302,8 @@ pub fn finish_client_config(
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
     config
-        .with_root_certificates(root_store, &[])
+        .with_root_certificates(root_store)
+        .without_certificate_transparency_logs()
         .with_no_client_auth()
 }
 
@@ -315,7 +316,8 @@ pub fn finish_client_config_with_creds(
     root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
     config
-        .with_root_certificates(root_store, &[])
+        .with_root_certificates(root_store)
+        .without_certificate_transparency_logs()
         .with_single_cert(kt.get_client_chain(), kt.get_client_key())
         .unwrap()
 }

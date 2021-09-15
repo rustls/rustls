@@ -19,7 +19,8 @@ fuzz_target!(|data: &[u8]| {
     let config = Arc::new(
         ClientConfig::builder()
             .with_safe_defaults()
-            .with_root_certificates(root_store, &[])
+            .with_root_certificates(root_store)
+            .without_certificate_transparency_logs()
             .with_no_client_auth(),
     );
     let example_com = "example.com".try_into().unwrap();

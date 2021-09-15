@@ -119,10 +119,10 @@
 //!
 //! ```rust,no_run
 //! # let root_store: rustls::RootCertStore = panic!();
-//! let trusted_ct_logs = &[];
 //! let config = rustls::ClientConfig::builder()
 //!     .with_safe_defaults()
-//!     .with_root_certificates(root_store, trusted_ct_logs)
+//!     .with_root_certificates(root_store)
+//!     .without_certificate_transparency_logs()
 //!     .with_no_client_auth();
 //! ```
 //!
@@ -147,10 +147,10 @@
 //! #          )
 //! #      })
 //! # );
-//! # let trusted_ct_logs = &[];
 //! # let config = rustls::ClientConfig::builder()
 //! #     .with_safe_defaults()
-//! #     .with_root_certificates(root_store, trusted_ct_logs)
+//! #     .with_root_certificates(root_store)
+//! #     .without_certificate_transparency_logs()
 //! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();

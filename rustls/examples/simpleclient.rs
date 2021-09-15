@@ -34,7 +34,8 @@ fn main() {
     );
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
-        .with_root_certificates(root_store, &[])
+        .with_root_certificates(root_store)
+        .without_certificate_transparency_logs()
         .with_no_client_auth();
 
     let server_name = "google.com".try_into().unwrap();

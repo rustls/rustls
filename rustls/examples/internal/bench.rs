@@ -342,7 +342,8 @@ fn make_client_config(
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[params.version])
         .unwrap()
-        .with_root_certificates(root_store, &[]);
+        .with_root_certificates(root_store)
+        .without_certificate_transparency_logs();
 
     let mut cfg = if clientauth == ClientAuth::Yes {
         cfg.with_single_cert(
