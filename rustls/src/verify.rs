@@ -308,13 +308,7 @@ impl ServerCertVerifier for WebPkiVerifier {
             .map(|_| cert)?;
 
         if let Some(policy) = &self.ct_policy {
-            match policy
-                .validation_deadline
-                .duration_since(now)
-            {
-                Ok(_) => verify_scts(end_entity, now, scts, policy.logs)?,
-                Err(_) => warn!("certificate transparency logs have expired, validation disabled"),
-            }
+            policy.verify(end_entity, now, scts)?;
         }
 
         if !ocsp_response.is_empty() {
@@ -388,6 +382,55 @@ impl CertificateTransparencyPolicy {
             logs,
             validation_deadline,
         }
+    }
+
+    fn verify(
+        &self,
+        cert: &Certificate,
+        now: SystemTime,
+        scts: &mut dyn Iterator<Item = &[u8]>,
+    ) -> Result<(), Error> {
+        if self.logs.is_empty() {
+            return Ok(());
+        } else if self
+            .validation_deadline
+            .duration_since(now)
+            .is_err()
+        {
+            warn!("certificate transparency logs have expired, validation disabled");
+            return Ok(());
+        }
+
+        let now = unix_time_millis(now)?;
+        let mut last_sct_error = None;
+        for sct in scts {
+            #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+            match sct::verify_sct(&cert.0, sct, now, self.logs) {
+                Ok(index) => {
+                    debug!(
+                        "Valid SCT signed by {} on {}",
+                        self.logs[index].operated_by, self.logs[index].description
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    if e.should_be_fatal() {
+                        return Err(Error::InvalidSct(e));
+                    }
+                    debug!("SCT ignored because {:?}", e);
+                    last_sct_error = Some(e);
+                }
+            }
+        }
+
+        /* If we were supplied with some logs, and some SCTs,
+         * but couldn't verify any of them, fail the handshake. */
+        if let Some(last_sct_error) = last_sct_error {
+            warn!("No valid SCTs provided");
+            return Err(Error::InvalidSct(last_sct_error));
+        }
+
+        Ok(())
     }
 }
 
@@ -683,46 +726,4 @@ fn unix_time_millis(now: SystemTime) -> Result<u64, Error> {
             secs.checked_mul(1000)
                 .ok_or(Error::FailedToGetCurrentTime)
         })
-}
-
-fn verify_scts(
-    cert: &Certificate,
-    now: SystemTime,
-    scts: &mut dyn Iterator<Item = &[u8]>,
-    logs: &[&sct::Log],
-) -> Result<(), Error> {
-    if logs.is_empty() {
-        return Ok(());
-    }
-
-    let now = unix_time_millis(now)?;
-    let mut last_sct_error = None;
-    for sct in scts {
-        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-        match sct::verify_sct(&cert.0, sct, now, logs) {
-            Ok(index) => {
-                debug!(
-                    "Valid SCT signed by {} on {}",
-                    logs[index].operated_by, logs[index].description
-                );
-                return Ok(());
-            }
-            Err(e) => {
-                if e.should_be_fatal() {
-                    return Err(Error::InvalidSct(e));
-                }
-                debug!("SCT ignored because {:?}", e);
-                last_sct_error = Some(e);
-            }
-        }
-    }
-
-    /* If we were supplied with some logs, and some SCTs,
-     * but couldn't verify any of them, fail the handshake. */
-    if let Some(last_sct_error) = last_sct_error {
-        warn!("No valid SCTs provided");
-        return Err(Error::InvalidSct(last_sct_error));
-    }
-
-    Ok(())
 }
