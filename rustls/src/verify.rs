@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use std::time::SystemTime;
-
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::error::Error;
@@ -11,7 +8,10 @@ use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
 
 use ring::digest::Digest;
+
 use std::convert::TryFrom;
+use std::sync::Arc;
+use std::time::SystemTime;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
 
@@ -307,7 +307,15 @@ impl ServerCertVerifier for WebPkiVerifier {
             .map_err(pki_error)
             .map(|_| cert)?;
 
-        verify_scts(end_entity, now, scts, self.ct_logs)?;
+        if let Some(policy) = &self.ct_policy {
+            match policy
+                .validation_deadline
+                .duration_since(now)
+            {
+                Ok(_) => verify_scts(end_entity, now, scts, policy.logs)?,
+                Err(_) => warn!("certificate transparency logs have expired, validation disabled"),
+            }
+        }
 
         if !ocsp_response.is_empty() {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
@@ -323,7 +331,7 @@ impl ServerCertVerifier for WebPkiVerifier {
 #[allow(unreachable_pub)]
 pub struct WebPkiVerifier {
     roots: RootCertStore,
-    ct_logs: &'static [&'static sct::Log<'static>],
+    ct_policy: Option<CertificateTransparencyPolicy>,
 }
 
 #[allow(unreachable_pub)]
@@ -335,8 +343,8 @@ impl WebPkiVerifier {
     /// `ct_logs` is the list of logs that are trusted for Certificate
     /// Transparency. Currently CT log enforcement is opportunistic; see
     /// <https://github.com/rustls/rustls/issues/479>.
-    pub fn new(roots: RootCertStore, ct_logs: &'static [&'static sct::Log<'static>]) -> Self {
-        Self { roots, ct_logs }
+    pub fn new(roots: RootCertStore, ct_policy: Option<CertificateTransparencyPolicy>) -> Self {
+        Self { roots, ct_policy }
     }
 
     /// Returns the signature verification methods supported by
@@ -353,6 +361,33 @@ impl WebPkiVerifier {
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
         ]
+    }
+}
+
+/// Policy for enforcing Certificate Transparency.
+///
+/// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
+/// distrusted relatively quickly, rustls stores a validation deadline. Server certificates will
+/// be validated against the configured CT logs until the deadline expires. After the deadline,
+/// certificates will no longer be validated, and a warning message will be logged. The deadline
+/// may vary depending on how often you deploy builds with updated dependencies.
+#[allow(unreachable_pub)]
+pub struct CertificateTransparencyPolicy {
+    logs: &'static [&'static sct::Log<'static>],
+    validation_deadline: SystemTime,
+}
+
+impl CertificateTransparencyPolicy {
+    /// Create a new policy.
+    #[allow(unreachable_pub)]
+    pub fn new(
+        logs: &'static [&'static sct::Log<'static>],
+        validation_deadline: SystemTime,
+    ) -> Self {
+        Self {
+            logs,
+            validation_deadline,
+        }
     }
 }
 
