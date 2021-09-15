@@ -18,15 +18,13 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
-        ct_logs: &'static [&'static sct::Log],
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        let verifier = Arc::new(verify::WebPkiVerifier::new(root_store, ct_logs));
+    ) -> ConfigBuilder<ClientConfig, WantsTransparencyPolicy> {
         ConfigBuilder {
-            state: WantsClientCert {
+            state: WantsTransparencyPolicy {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
-                verifier,
+                root_store,
             },
             side: PhantomData::default(),
         }
@@ -46,6 +44,45 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 verifier,
             },
             side: PhantomData::default(),
+        }
+    }
+}
+
+pub struct WantsTransparencyPolicy {
+    cipher_suites: Vec<SupportedCipherSuite>,
+    kx_groups: Vec<&'static SupportedKxGroup>,
+    versions: versions::EnabledVersions,
+    root_store: anchors::RootCertStore,
+}
+
+impl ConfigBuilder<ClientConfig, WantsTransparencyPolicy> {
+    /// Do not verify server certificates against a Certificate Transparency log.
+    pub fn without_certificate_transparency_logs(
+        self,
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+        self.with_logs(&[])
+    }
+
+    /// Set Certificate Transparency logs to use for server certificate validation.
+    pub fn with_certificate_transparency_logs(
+        self,
+        ct_logs: &'static [&'static sct::Log],
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+        self.with_logs(ct_logs)
+    }
+
+    fn with_logs(
+        self,
+        ct_logs: &'static [&'static sct::Log],
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+        ConfigBuilder {
+            state: WantsClientCert {
+                cipher_suites: self.state.cipher_suites,
+                kx_groups: self.state.kx_groups,
+                versions: self.state.versions,
+                verifier: Arc::new(verify::WebPkiVerifier::new(self.state.root_store, ct_logs)),
+            },
+            side: PhantomData,
         }
     }
 }

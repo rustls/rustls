@@ -50,7 +50,6 @@ use std::marker::PhantomData;
 /// ```no_run
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
-/// # let trusted_ct_logs = &[];
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
 /// ClientConfig::builder()
@@ -58,7 +57,8 @@ use std::marker::PhantomData;
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
 ///     .unwrap()
-///     .with_root_certificates(root_certs, trusted_ct_logs)
+///     .with_root_certificates(root_certs)
+///     .without_certificate_transparency_logs()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");
 /// ```
@@ -68,10 +68,10 @@ use std::marker::PhantomData;
 /// ```
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
-/// # let trusted_ct_logs = &[];
 /// ClientConfig::builder()
 ///     .with_safe_defaults()
-///     .with_root_certificates(root_certs, trusted_ct_logs)
+///     .with_root_certificates(root_certs)
+///     .without_certificate_transparency_logs()
 ///     .with_no_client_auth();
 /// ```
 ///

@@ -32,7 +32,8 @@ fn main() {
         .with_kx_groups(&[&rustls::kx_group::X25519])
         .with_protocol_versions(&[&rustls::version::TLS13])
         .unwrap()
-        .with_root_certificates(root_store, &[])
+        .with_root_certificates(root_store)
+        .without_certificate_transparency_logs()
         .with_no_client_auth();
 
     let server_name = "google.com".try_into().unwrap();
