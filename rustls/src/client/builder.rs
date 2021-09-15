@@ -7,11 +7,12 @@ use crate::key;
 use crate::keylog::NoKeyLog;
 use crate::kx::SupportedKxGroup;
 use crate::suites::SupportedCipherSuite;
-use crate::verify;
+use crate::verify::{self, CertificateTransparencyPolicy};
 use crate::versions;
 
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
@@ -60,27 +61,40 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicy> {
     pub fn without_certificate_transparency_logs(
         self,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        self.with_logs(&[])
+        self.with_logs(None)
     }
 
     /// Set Certificate Transparency logs to use for server certificate validation.
+    ///
+    /// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
+    /// distrusted relatively quickly, rustls stores a validation deadline. Server certificates will
+    /// be validated against the configured CT logs until the deadline expires. After the deadline,
+    /// certificates will no longer be validated, and a warning message will be logged. The deadline
+    /// may vary depending on how often you deploy builds with updated dependencies.
     pub fn with_certificate_transparency_logs(
         self,
-        ct_logs: &'static [&'static sct::Log],
+        logs: &'static [&'static sct::Log],
+        validation_deadline: SystemTime,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        self.with_logs(ct_logs)
+        self.with_logs(Some(CertificateTransparencyPolicy::new(
+            logs,
+            validation_deadline,
+        )))
     }
 
     fn with_logs(
         self,
-        ct_logs: &'static [&'static sct::Log],
+        ct_policy: Option<CertificateTransparencyPolicy>,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
-                verifier: Arc::new(verify::WebPkiVerifier::new(self.state.root_store, ct_logs)),
+                verifier: Arc::new(verify::WebPkiVerifier::new(
+                    self.state.root_store,
+                    ct_policy,
+                )),
             },
             side: PhantomData,
         }
