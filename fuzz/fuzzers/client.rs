@@ -7,7 +7,6 @@ extern crate webpki;
 use rustls::{
     ClientConfig,
     ClientConnection,
-    Connection,
     RootCertStore
 };
 use std::convert::TryInto;

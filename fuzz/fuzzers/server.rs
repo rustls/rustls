@@ -3,7 +3,7 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::{ServerConfig, Connection, ServerConnection};
+use rustls::{ServerConfig, ServerConnection};
 use rustls::server::ResolvesServerCert;
 
 use std::io;
