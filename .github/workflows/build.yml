@@ -104,7 +104,7 @@ jobs:
       - name: Install golang toolchain
         uses: actions/setup-go@v2
         with:
-          go-version: "1.14"
+          go-version: "1.17"
 
       - name: Run test suite
         working-directory: bogo
@@ -202,7 +202,7 @@ jobs:
       - name: Install golang toolchain
         uses: actions/setup-go@v2
         with:
-          go-version: "1.14"
+          go-version: "1.17"
 
       - name: Build lcov
         run: admin/build-lcov
