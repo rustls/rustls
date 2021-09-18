@@ -9,6 +9,7 @@ git init
 git config core.sparsecheckout 1
 cat << EOF > .git/info/sparse-checkout
 go.mod
+go.sum
 ssl/test/runner
 util/testresult
 EOF
