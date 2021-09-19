@@ -9,6 +9,7 @@ git init
 git config core.sparsecheckout 1
 cat << EOF > .git/info/sparse-checkout
 go.mod
+go.sum
 ssl/test/runner
 util/testresult
 EOF
@@ -17,9 +18,6 @@ EOF
 COMMIT=3fea50a7cb55bb72e4a69d34015f1a6971e7934c
 git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
 git checkout $COMMIT
-(cd ssl/test/runner &&
- go mod download golang.org/x/crypto &&
- go get golang.org/x/crypto/chacha20poly1305@v0.0.0-20200622213623-75b288015ac9 &&
- go test -c)
+(cd ssl/test/runner && go test -c)
 
 popd
