@@ -13,7 +13,7 @@ envisioned after the set included in the 0.20 release.
 
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-[![Build Status](https://github.com/rustls/rustls/workflows/rustls/badge.svg)](https://github.com/rustls/rustls/actions)
+[![Build Status](https://github.com/rustls/rustls/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rustls/rustls/actions/workflows/build.yml?query=branch%3Amain)
 [![Coverage Status (codecov.io)](https://codecov.io/gh/rustls/rustls/branch/main/graph/badge.svg)](https://codecov.io/gh/rustls/rustls/)
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 
