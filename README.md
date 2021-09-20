@@ -22,6 +22,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
 * 0.20.0-beta3 (2021-xx-xx)
+  - *Breaking change*: `Connection` is now an enum instead of a trait. You can abstract over
+    `ClientConnection` and `ServerConnection` with a bound like `where C: Deref<ConnectionCommon<SD>>, SD: SideData`.
+  - *Breaking change*: the SNI arguments to `ClientCertVerifier` methods have been removed.
+    The `Acceptor` API now allows selecting a `ServerConfig` based on the `ClientHello` instead.
   - Unclean TCP closure is now tracked by the library.  This means a new error is possible when reading plaintext:
     `ErrorKind::UnexpectedEof` will be returned in this case.
   - *Breaking change*: insulate the rustls public API from webpki API changes:
