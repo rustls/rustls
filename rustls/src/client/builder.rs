@@ -19,9 +19,9 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
-    ) -> ConfigBuilder<ClientConfig, WantsTransparencyPolicy> {
+    ) -> ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
         ConfigBuilder {
-            state: WantsTransparencyPolicy {
+            state: WantsTransparencyPolicyOrClientCert {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
@@ -49,21 +49,14 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     }
 }
 
-pub struct WantsTransparencyPolicy {
+pub struct WantsTransparencyPolicyOrClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     root_store: anchors::RootCertStore,
 }
 
-impl ConfigBuilder<ClientConfig, WantsTransparencyPolicy> {
-    /// Do not verify server certificates against a Certificate Transparency log.
-    pub fn without_certificate_transparency_logs(
-        self,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        self.with_logs(None)
-    }
-
+impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
     /// Set Certificate Transparency logs to use for server certificate validation.
     ///
     /// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
@@ -80,6 +73,37 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicy> {
             logs,
             validation_deadline,
         )))
+    }
+
+    /// Sets a single certificate chain and matching private key for use
+    /// in client authentication.
+    ///
+    /// `cert_chain` is a vector of DER-encoded certificates.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    ///
+    /// This function fails if `key_der` is invalid.
+    pub fn with_single_cert(
+        self,
+        cert_chain: Vec<key::Certificate>,
+        key_der: key::PrivateKey,
+    ) -> Result<ClientConfig, Error> {
+        self.with_logs(None)
+            .with_single_cert(cert_chain, key_der)
+    }
+
+    /// Do not support client auth.
+    pub fn with_no_client_auth(self) -> ClientConfig {
+        self.with_logs(None)
+            .with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
+    }
+
+    /// Sets a custom [`ResolvesClientCert`].
+    pub fn with_client_cert_resolver(
+        self,
+        client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
+    ) -> ClientConfig {
+        self.with_logs(None)
+            .with_client_cert_resolver(client_auth_cert_resolver)
     }
 
     fn with_logs(

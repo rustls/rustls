@@ -303,7 +303,6 @@ pub fn finish_client_config(
 
     config
         .with_root_certificates(root_store)
-        .without_certificate_transparency_logs()
         .with_no_client_auth()
 }
 
@@ -317,7 +316,6 @@ pub fn finish_client_config_with_creds(
 
     config
         .with_root_certificates(root_store)
-        .without_certificate_transparency_logs()
         .with_single_cert(kt.get_client_chain(), kt.get_client_key())
         .unwrap()
 }

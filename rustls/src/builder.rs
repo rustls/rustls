@@ -58,7 +58,6 @@ use std::marker::PhantomData;
 ///     .with_safe_default_protocol_versions()
 ///     .unwrap()
 ///     .with_root_certificates(root_certs)
-///     .without_certificate_transparency_logs()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");
 /// ```
@@ -71,7 +70,6 @@ use std::marker::PhantomData;
 /// ClientConfig::builder()
 ///     .with_safe_defaults()
 ///     .with_root_certificates(root_certs)
-///     .without_certificate_transparency_logs()
 ///     .with_no_client_auth();
 /// ```
 ///

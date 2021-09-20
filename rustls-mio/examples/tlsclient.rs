@@ -514,8 +514,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         .with_safe_default_kx_groups()
         .with_protocol_versions(&versions)
         .expect("inconsistent cipher-suite/versions selected")
-        .with_root_certificates(root_store)
-        .without_certificate_transparency_logs();
+        .with_root_certificates(root_store);
 
     let mut config = match (&args.flag_auth_key, &args.flag_auth_certs) {
         (Some(key_file), Some(certs_file)) => {
