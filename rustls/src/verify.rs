@@ -201,7 +201,8 @@ pub trait ClientCertVerifier: Send + Sync {
     /// Returns the subject names of the client authentication trust anchors to
     /// share with the client when requesting client authentication.
     ///
-    /// Return `None` to abort the connection.
+    /// Return `None` to abort the connection. Return an empty `Vec` to continue
+    /// the handshake without passing a list of CA DNs.
     fn client_auth_root_subjects(&self) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
