@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
-* 0.20.0-beta3 (2021-xx-xx)
+* 0.20.0 (2021-09-26)
   - *Breaking change*: `Connection` is now an enum instead of a trait. You can abstract over
     `ClientConnection` and `ServerConnection` with a bound like `where C: Deref<ConnectionCommon<SD>>, SD: SideData`.
   - *Breaking change*: the SNI arguments to `ClientCertVerifier` methods have been removed.
