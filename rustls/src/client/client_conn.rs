@@ -21,6 +21,7 @@ use super::hs;
 use crate::quic;
 
 use std::convert::TryFrom;
+use std::error::Error as StdError;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -258,6 +259,14 @@ impl TryFrom<&str> for ServerName {
 
 #[derive(Debug)]
 pub struct InvalidDnsNameError;
+
+impl fmt::Display for InvalidDnsNameError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("invalid dns name")
+    }
+}
+
+impl StdError for InvalidDnsNameError {}
 
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
