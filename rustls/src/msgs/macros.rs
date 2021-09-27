@@ -59,6 +59,13 @@ macro_rules! enum_builder {
                     ,$enum_name::Unknown(x) => x
                 }
             }
+
+            pub fn as_str(&self) -> Option<&'static str> {
+                match self {
+                    $( $enum_name::$enum_var => Some(stringify!($enum_val))),*
+                    ,$enum_name::Unknown(_) => None,
+                }
+            }
         }
         impl Codec for $enum_name {
             fn encode(&self, bytes: &mut Vec<u8>) {
