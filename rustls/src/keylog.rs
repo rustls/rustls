@@ -18,7 +18,7 @@ use crate::log::warn;
 /// You'll likely want some interior mutability in your
 /// implementation to make this useful.
 ///
-/// See `KeyLogFile` that implements the standard `SSLKEYLOGFILE`
+/// See [`KeyLogFile`] that implements the standard `SSLKEYLOGFILE`
 /// environment variable behaviour.
 pub trait KeyLog: Send + Sync {
     /// Log the given `secret`.  `client_random` is provided for
@@ -124,7 +124,7 @@ impl KeyLogFileInner {
     }
 }
 
-/// `KeyLog` implementation that opens a file whose name is
+/// [`KeyLog`] implementation that opens a file whose name is
 /// given by the `SSLKEYLOGFILE` environment variable, and writes
 /// keys into it.
 ///
