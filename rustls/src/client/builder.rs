@@ -49,6 +49,13 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     }
 }
 
+/// A config builder state where the caller needs to supply a certificate transparency policy or
+/// client certificate resolver.
+///
+/// In this state, the caller can optionally enable certificate transparency, or ignore CT and
+/// invoke one of the methods related to client certificates (as in the [`WantsClientCert`] state).
+///
+/// For more information, see the [`ConfigBuilder`] documentation.
 pub struct WantsTransparencyPolicyOrClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,

@@ -379,7 +379,7 @@ pub mod client {
     mod tls12;
     mod tls13;
 
-    pub use builder::WantsClientCert;
+    pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
     #[cfg(feature = "quic")]
     #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
     pub use client_conn::ClientQuicExt;
