@@ -14,6 +14,7 @@ fn ecdhe_rsa_aes_128_gcm_sha256() {
     server
         .client()
         .verbose()
+        .version("1.2")
         .suite("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
         .expect("Ciphers common between both SSL end points:\nECDHE-RSA-AES128-GCM-SHA256")
         .go();
@@ -29,6 +30,7 @@ fn ecdhe_rsa_aes_256_gcm_sha384() {
     server
         .client()
         .verbose()
+        .version("1.2")
         .suite("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")
         .expect("Ciphers common between both SSL end points:\nECDHE-RSA-AES256-GCM-SHA384")
         .go();
@@ -44,6 +46,7 @@ fn ecdhe_ecdsa_aes_128_gcm_sha256() {
     server
         .client()
         .verbose()
+        .version("1.2")
         .suite("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")
         .expect("Ciphers common between both SSL end points:\nECDHE-ECDSA-AES128-GCM-SHA256")
         .go();
@@ -59,6 +62,7 @@ fn ecdhe_ecdsa_aes_256_gcm_sha384() {
     server
         .client()
         .verbose()
+        .version("1.2")
         .suite("TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384")
         .expect("Ciphers common between both SSL end points:\nECDHE-ECDSA-AES256-GCM-SHA384")
         .go();

@@ -13,6 +13,7 @@ fn ecdhe_rsa_aes_128_gcm_sha256() {
 
     server
         .echo_mode()
+        .version("1.2")
         .suite("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
         .run();
 
@@ -32,6 +33,7 @@ fn ecdhe_rsa_aes_256_gcm_sha384() {
 
     server
         .echo_mode()
+        .version("1.2")
         .suite("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384")
         .run();
 
@@ -51,6 +53,7 @@ fn ecdhe_ecdsa_aes_128_gcm_sha256() {
 
     server
         .echo_mode()
+        .version("1.2")
         .suite("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256")
         .run();
 
@@ -70,6 +73,7 @@ fn ecdhe_ecdsa_aes_256_gcm_sha384() {
 
     server
         .echo_mode()
+        .version("1.2")
         .suite("TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384")
         .run();
 

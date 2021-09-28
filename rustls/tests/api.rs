@@ -207,7 +207,21 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .err(),
-        Some(Error::General("no usable cipher suites configured".into()))
+        Some(Error::General(
+            "no cipher suite for version TLSv1_3 configured".into()
+        ))
+    );
+}
+
+#[test]
+fn config_builder_for_client_rejects_empty_versions() {
+    assert_eq!(
+        ClientConfig::builder()
+            .with_cipher_suites(&[])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[])
+            .err(),
+        Some(Error::General("no versions configured".into()))
     );
 }
 
@@ -220,7 +234,42 @@ fn config_builder_for_client_rejects_incompatible_cipher_suites() {
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .err(),
-        Some(Error::General("no usable cipher suites configured".into()))
+        Some(Error::General(
+            "no version matching cipher suite TLS13_AES_256_GCM_SHA384".into()
+        ))
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn config_builder_for_client_rejects_version_without_compatible_cipher_suite() {
+    assert_eq!(
+        ClientConfig::builder()
+            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS12, &rustls::version::TLS13])
+            .err(),
+        Some(Error::General(
+            "no cipher suite for version TLSv1_2 configured".into()
+        ))
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn config_builder_for_client_rejects_cipher_suite_without_matching_version() {
+    assert_eq!(
+        ClientConfig::builder()
+            .with_cipher_suites(&[
+                rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()
+            ])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS12])
+            .err(),
+        Some(Error::General(
+            "no version matching cipher suite TLS13_AES_256_GCM_SHA384".into()
+        ))
     );
 }
 
@@ -244,7 +293,21 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .err(),
-        Some(Error::General("no usable cipher suites configured".into()))
+        Some(Error::General(
+            "no cipher suite for version TLSv1_3 configured".into()
+        ))
+    );
+}
+
+#[test]
+fn config_builder_for_server_rejects_empty_versions() {
+    assert_eq!(
+        ServerConfig::builder()
+            .with_cipher_suites(&[])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[])
+            .err(),
+        Some(Error::General("no versions configured".into()))
     );
 }
 
@@ -257,7 +320,42 @@ fn config_builder_for_server_rejects_incompatible_cipher_suites() {
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .err(),
-        Some(Error::General("no usable cipher suites configured".into()))
+        Some(Error::General(
+            "no version matching cipher suite TLS13_AES_256_GCM_SHA384".into()
+        ))
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn config_builder_for_server_rejects_version_without_compatible_cipher_suite() {
+    assert_eq!(
+        ServerConfig::builder()
+            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS12, &rustls::version::TLS13])
+            .err(),
+        Some(Error::General(
+            "no cipher suite for version TLSv1_2 configured".into()
+        ))
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn config_builder_for_server_rejects_cipher_suite_without_matching_version() {
+    assert_eq!(
+        ServerConfig::builder()
+            .with_cipher_suites(&[
+                rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384.into()
+            ])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS12])
+            .err(),
+        Some(Error::General(
+            "no version matching cipher suite TLS13_AES_256_GCM_SHA384".into()
+        ))
     );
 }
 
@@ -700,7 +798,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
         ClientConfig::builder()
             .with_cipher_suites(&[find_suite(suite)])
             .with_safe_default_kx_groups()
-            .with_safe_default_protocol_versions()
+            .with_protocol_versions(&[&rustls::version::TLS12])
             .unwrap(),
     );
 
@@ -1952,7 +2050,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
         ServerConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
             .with_safe_default_kx_groups()
-            .with_safe_default_protocol_versions()
+            .with_protocol_versions(&[&rustls::version::TLS13])
             .unwrap(),
     );
 
@@ -1961,7 +2059,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
         ClientConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
-            .with_safe_default_protocol_versions()
+            .with_protocol_versions(&[&rustls::version::TLS13])
             .unwrap(),
     );
 

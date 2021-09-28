@@ -145,7 +145,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     ) -> ConfigBuilder<S, WantsKxGroups> {
         ConfigBuilder {
             state: WantsKxGroups {
-                cipher_suites: cipher_suites.to_vec(),
+                cipher_suites: Some(cipher_suites.to_vec()),
             },
             side: self.side,
         }
@@ -157,7 +157,12 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
     /// implement these.
     pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
-        self.with_cipher_suites(DEFAULT_CIPHER_SUITES)
+        ConfigBuilder {
+            state: WantsKxGroups {
+                cipher_suites: None,
+            },
+            side: self.side,
+        }
     }
 }
 
@@ -166,7 +171,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsKxGroups {
-    cipher_suites: Vec<SupportedCipherSuite>,
+    cipher_suites: Option<Vec<SupportedCipherSuite>>,
 }
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
@@ -196,7 +201,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 pub struct WantsVersions {
-    cipher_suites: Vec<SupportedCipherSuite>,
+    cipher_suites: Option<Vec<SupportedCipherSuite>>,
     kx_groups: Vec<&'static SupportedKxGroup>,
 }
 
@@ -211,18 +216,48 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     /// Use a specific set of protocol versions.
     pub fn with_protocol_versions(
         self,
-        versions: &[&'static versions::SupportedProtocolVersion],
+        slice: &[&'static versions::SupportedProtocolVersion],
     ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
-        let mut any_usable_suite = false;
-        for suite in &self.state.cipher_suites {
-            if versions.contains(&suite.version()) {
-                any_usable_suite = true;
-                break;
-            }
+        // Since the checks below are keyed off of iterators over versions and cipher suites,
+        // we need to check the case where both are empty separately.
+        if slice.is_empty() {
+            return Err(Error::General("no versions configured".into()));
         }
 
-        if !any_usable_suite {
-            return Err(Error::General("no usable cipher suites configured".into()));
+        let versions = versions::EnabledVersions::new(slice);
+        let cipher_suites = match self.state.cipher_suites {
+            // Configured cipher suites: make sure each cipher suite's version has been configured.
+            Some(suites) => {
+                if let Some(cs) = suites
+                    .iter()
+                    .find(|cs| !versions.contains(cs.version().version))
+                {
+                    return Err(Error::General(format!(
+                        "no version matching cipher suite {:?}",
+                        cs.suite()
+                    )));
+                }
+                suites
+            }
+            // Default cipher suites: only select the ones matching the selected versions.
+            None => DEFAULT_CIPHER_SUITES
+                .iter()
+                .copied()
+                .filter(|cs| versions.contains(cs.version().version))
+                .collect(),
+        };
+
+        // Check to make sure each configured version has at least one matching cipher suite.
+        for version in slice {
+            if !cipher_suites
+                .iter()
+                .any(|cs| cs.version() == *version)
+            {
+                return Err(Error::General(format!(
+                    "no cipher suite for version {:?} configured",
+                    version.version
+                )));
+            }
         }
 
         if self.state.kx_groups.is_empty() {
@@ -231,9 +266,9 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 
         Ok(ConfigBuilder {
             state: WantsVerifier {
-                cipher_suites: self.state.cipher_suites,
+                cipher_suites,
                 kx_groups: self.state.kx_groups,
-                versions: versions::EnabledVersions::new(versions),
+                versions,
             },
             side: self.side,
         })

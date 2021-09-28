@@ -261,6 +261,7 @@ pub struct TlsClient {
     pub client_auth_key: Option<PathBuf>,
     pub client_auth_certs: Option<PathBuf>,
     pub cache: Option<String>,
+    pub versions: Vec<String>,
     pub suites: Vec<String>,
     pub protos: Vec<Vec<u8>>,
     pub no_tickets: bool,
@@ -288,6 +289,7 @@ impl TlsClient {
             insecure: false,
             verbose: false,
             max_fragment_size: None,
+            versions: Vec::new(),
             suites: Vec::new(),
             protos: Vec::new(),
             expect_fails: false,
@@ -351,6 +353,11 @@ impl TlsClient {
     pub fn expect_log(&mut self, expect: &str) -> &mut TlsClient {
         self.verbose = true;
         self.expect_log.push(expect.to_string());
+        self
+    }
+
+    pub fn version(&mut self, version: &str) -> &mut TlsClient {
+        self.versions.push(version.to_string());
         self
     }
 
@@ -430,6 +437,11 @@ impl TlsClient {
                     .to_str()
                     .unwrap(),
             );
+        }
+
+        for version in &self.versions {
+            args.push("--protover");
+            args.push(version.as_ref());
         }
 
         for suite in &self.suites {
@@ -618,6 +630,7 @@ pub struct TlsServer {
     pub certs: PathBuf,
     pub key: PathBuf,
     pub cafile: PathBuf,
+    pub versions: Vec<String>,
     pub suites: Vec<String>,
     pub protos: Vec<Vec<u8>>,
     used_suites: Vec<String>,
@@ -646,6 +659,7 @@ impl TlsServer {
                 .join("end.fullchain"),
             cafile: test_ca.join(keytype).join("ca.cert"),
             verbose: false,
+            versions: Vec::new(),
             suites: Vec::new(),
             protos: Vec::new(),
             used_suites: Vec::new(),
@@ -677,6 +691,11 @@ impl TlsServer {
 
     pub fn port(&mut self, port: u16) -> &mut Self {
         self.port = port;
+        self
+    }
+
+    pub fn version(&mut self, version: &str) -> &mut Self {
+        self.versions.push(version.to_string());
         self
     }
 
@@ -719,6 +738,11 @@ impl TlsServer {
         args.push(self.key.to_str().unwrap());
         args.push("--certs");
         args.push(self.certs.to_str().unwrap());
+
+        for version in &self.versions {
+            args.push("--protover");
+            args.push(version.as_ref());
+        }
 
         self.used_suites = self.suites.clone();
         for suite in &self.used_suites {
