@@ -244,10 +244,6 @@ impl ServerConfig {
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(v)
-            && self
-                .cipher_suites
-                .iter()
-                .any(|cs| cs.version().version == v)
     }
 }
 

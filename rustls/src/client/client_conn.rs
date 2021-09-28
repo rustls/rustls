@@ -165,10 +165,6 @@ impl ClientConfig {
     /// also configured.
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(v)
-            && self
-                .cipher_suites
-                .iter()
-                .any(|cs| cs.version().version == v)
     }
 
     /// Access configuration options whose use is dangerous and requires
