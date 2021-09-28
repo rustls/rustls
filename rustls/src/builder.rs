@@ -91,8 +91,6 @@ use std::marker::PhantomData;
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ClientConfig::builder()`]: crate::ClientConfig::builder()
 /// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
-/// [`ConfigWantsServerVerifier`]: crate::ConfigWantsServerVerifier
-/// [`ConfigWantsClientVerifier`]: crate::ConfigWantsClientVerifier
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
