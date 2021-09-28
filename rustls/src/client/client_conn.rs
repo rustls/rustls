@@ -89,6 +89,9 @@ pub trait ResolvesClientCert: Send + Sync {
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
+    ///
+    /// Invariants enforced by the builder: the version matching a given configured cipher suite
+    /// is also enabled.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
     /// List of supported key exchange algorithms, in preference order -- the
@@ -124,8 +127,10 @@ pub struct ClientConfig {
     /// The default is true.
     pub enable_tickets: bool,
 
-    /// Supported versions, in no particular order.  The default
-    /// is all supported versions.
+    /// Supported protocol versions, in no particular order.
+    ///
+    /// The default is all supported versions. Invariants enforced by the builder: at least one
+    /// version is enabled, and cipher suites matching the enabled versions are also configured.
     pub(super) versions: versions::EnabledVersions,
 
     /// Whether to send the Server Name Indication (SNI) extension
@@ -159,10 +164,9 @@ impl ClientConfig {
         }
     }
 
-    #[doc(hidden)]
-    /// We support a given TLS version if it's quoted in the configured
-    /// versions *and* at least one ciphersuite for this version is
-    /// also configured.
+    /// We support a given TLS version if it was configured through the builder.
+    ///
+    /// (The builder ensures that matching cipher suites are configured as well.)
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(v)
     }

@@ -175,6 +175,9 @@ impl<'a> ClientHello<'a> {
 #[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
+    ///
+    /// Invariants enforced by the builder: the version matching a given configured cipher suite
+    /// is also enabled.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
     /// List of supported key exchange groups.
@@ -211,7 +214,9 @@ pub struct ServerConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// Supported protocol versions, in no particular order.
-    /// The default is all supported versions.
+    ///
+    /// The default is all supported versions. Invariants enforced by the builder: at least one
+    /// version is enabled, and cipher suites matching the enabled versions are also configured.
     pub(super) versions: crate::versions::EnabledVersions,
 
     /// How to verify client certificates.
@@ -238,10 +243,9 @@ impl ServerConfig {
         }
     }
 
-    #[doc(hidden)]
-    /// We support a given TLS version if it's quoted in the configured
-    /// versions *and* at least one ciphersuite for this version is
-    /// also configured.
+    /// We support a given TLS version if it was configured through the builder.
+    ///
+    /// (The builder ensures that matching cipher suites are configured as well.)
     pub fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(v)
     }
