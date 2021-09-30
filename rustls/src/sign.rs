@@ -5,6 +5,8 @@ use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
 use std::convert::TryFrom;
+use std::error::Error as StdError;
+use std::fmt;
 use std::sync::Arc;
 
 /// An abstract signing key.
@@ -395,3 +397,11 @@ pub fn supported_sign_tls13() -> &'static [SignatureScheme] {
 /// Errors while signing
 #[derive(Debug)]
 pub struct SignError(());
+
+impl fmt::Display for SignError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("sign error")
+    }
+}
+
+impl StdError for SignError {}
