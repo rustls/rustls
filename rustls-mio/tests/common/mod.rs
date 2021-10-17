@@ -196,7 +196,7 @@ pub fn openssl_find() -> String {
     // 0.9.8y or something equally ancient.
     if cfg!(target_os = "macos") {
         match process::Command::new("brew")
-            .args(&["--prefix", "openssl"])
+            .args(&["--prefix", "openssl@1.1"])
             .output()
         {
             Ok(output) => {
