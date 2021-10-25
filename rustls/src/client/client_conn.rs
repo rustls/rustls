@@ -257,6 +257,8 @@ impl TryFrom<&str> for ServerName {
     }
 }
 
+/// The provided input could not be parsed because
+/// it is not a syntactically-valid DNS Name.
 #[derive(Debug)]
 pub struct InvalidDnsNameError;
 
