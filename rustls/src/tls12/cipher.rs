@@ -184,7 +184,7 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let mut payload = &mut msg.payload.0;
+        let payload = &mut msg.payload.0;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
@@ -200,7 +200,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, &mut payload)
+            .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?
             .len();
 
