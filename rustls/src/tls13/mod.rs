@@ -188,7 +188,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let mut payload = &mut msg.payload.0;
+        let payload = &mut msg.payload.0;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
@@ -197,7 +197,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         let aad = make_tls13_aad(payload.len());
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, &mut payload)
+            .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?
             .len();
 
@@ -207,7 +207,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        msg.typ = unpad_tls13(&mut payload);
+        msg.typ = unpad_tls13(payload);
         if msg.typ == ContentType::Unknown(0) {
             let msg = "peer sent bad TLSInnerPlaintext".to_string();
             return Err(Error::PeerMisbehavedError(msg));

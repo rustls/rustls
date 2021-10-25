@@ -294,25 +294,22 @@ impl ExpectClientHello {
                 return Err(bad_version(&mut cx.common, "TLS1.2 not offered/enabled"));
             } else if cx.common.is_quic() {
                 return Err(bad_version(
-                    &mut cx.common,
+                    cx.common,
                     "Expecting QUIC connection, but client does not support TLSv1_3",
                 ));
             } else {
                 ProtocolVersion::TLSv1_2
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
-            return Err(bad_version(
-                &mut cx.common,
-                "Client does not support TLSv1_2",
-            ));
+            return Err(bad_version(cx.common, "Client does not support TLSv1_2"));
         } else if !tls12_enabled && tls13_enabled {
             return Err(bad_version(
-                &mut cx.common,
+                cx.common,
                 "Server requires TLS1.3, but client omitted versions ext",
             ));
         } else if cx.common.is_quic() {
             return Err(bad_version(
-                &mut cx.common,
+                cx.common,
                 "Expecting QUIC connection, but client does not support TLSv1_3",
             ));
         } else {
@@ -361,7 +358,7 @@ impl ExpectClientHello {
                 &suitable_suites,
             )
         }
-        .ok_or_else(|| incompatible(&mut cx.common, "no ciphersuites in common"))?;
+        .ok_or_else(|| incompatible(cx.common, "no ciphersuites in common"))?;
 
         debug!("decided upon suite {:?}", suite);
         cx.common.suite = Some(suite);
