@@ -383,6 +383,7 @@ pub mod client {
     #[cfg(feature = "quic")]
     #[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
     pub use client_conn::ClientQuicExt;
+    pub use client_conn::InvalidDnsNameError;
     pub use client_conn::ResolvesClientCert;
     pub use client_conn::ServerName;
     pub use client_conn::StoresClientSessions;
