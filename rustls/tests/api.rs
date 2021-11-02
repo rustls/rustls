@@ -1,5 +1,6 @@
 //! Assorted public API tests.
 use std::convert::TryFrom;
+#[cfg(feature = "tls12")]
 use std::convert::TryInto;
 use std::env;
 use std::fmt;
@@ -3034,6 +3035,7 @@ fn early_data_is_available_on_resumption() {
         .find(|supported| supported.suite() == cs)
         .unwrap()
     {
+        #[cfg(feature = "tls12")]
         SupportedCipherSuite::Tls12(_) => unreachable!(),
         SupportedCipherSuite::Tls13(inner) => inner,
     };

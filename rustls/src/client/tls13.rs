@@ -983,6 +983,7 @@ impl ExpectTraffic {
 
         let time_now = match TimeBase::now() {
             Ok(t) => t,
+            #[allow(unused_variables)]
             Err(e) => {
                 debug!("Session not saved: {}", e);
                 return Ok(());
