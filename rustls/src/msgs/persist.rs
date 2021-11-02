@@ -5,7 +5,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
-use crate::suites::{SupportedCipherSuite, ALL_CIPHER_SUITES};
+use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -62,6 +62,25 @@ pub enum ClientSessionValue {
 }
 
 impl ClientSessionValue {
+    pub(crate) fn read(
+        reader: &mut Reader<'_>,
+        suite: CipherSuite,
+        supported: &[SupportedCipherSuite],
+    ) -> Option<Self> {
+        match supported
+            .iter()
+            .find(|s| s.suite() == suite)?
+        {
+            SupportedCipherSuite::Tls13(inner) => {
+                Tls13ClientSessionValue::read(inner, reader).map(ClientSessionValue::Tls13)
+            }
+            #[cfg(feature = "tls12")]
+            SupportedCipherSuite::Tls12(inner) => {
+                Tls12ClientSessionValue::read(inner, reader).map(ClientSessionValue::Tls12)
+            }
+        }
+    }
+
     fn common(&self) -> &ClientSessionCommon {
         match self {
             ClientSessionValue::Tls13(inner) => &inner.common,
@@ -166,6 +185,35 @@ impl Tls13ClientSessionValue {
         }
     }
 
+    /// [`Codec::read()`] with an extra `suite` argument.
+    ///
+    /// We decode the `suite` argument separately because it allows us to
+    /// decide whether we're decoding an 1.2 or 1.3 session value.
+    pub fn read(suite: &'static Tls13CipherSuite, r: &mut Reader) -> Option<Self> {
+        Some(Self {
+            suite,
+            age_add: u32::read(r)?,
+            max_early_data_size: u32::read(r)?,
+            common: ClientSessionCommon::read(r)?,
+        })
+    }
+
+    /// Inherent implementation of the [`Codec::get_encoding()`] method.
+    ///
+    /// (See `read()` for why this is inherent here.)
+    pub fn get_encoding(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(16);
+        self.suite
+            .common
+            .suite
+            .encode(&mut bytes);
+        self.age_add.encode(&mut bytes);
+        self.max_early_data_size
+            .encode(&mut bytes);
+        self.common.encode(&mut bytes);
+        bytes
+    }
+
     // Test-only
     pub fn set_max_early_data_size(&mut self, new: u32) {
         self.max_early_data_size = new;
@@ -177,30 +225,6 @@ impl Tls13ClientSessionValue {
 
     pub fn suite(&self) -> &'static Tls13CipherSuite {
         self.suite
-    }
-}
-
-impl Codec for Tls13ClientSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.suite.common.suite.encode(bytes);
-        self.age_add.encode(bytes);
-        self.max_early_data_size.encode(bytes);
-        self.common.encode(bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<Self> {
-        let cs = CipherSuite::read(r)?;
-        Some(Self {
-            suite: ALL_CIPHER_SUITES
-                .iter()
-                .find_map(|suite| match suite {
-                    SupportedCipherSuite::Tls13(inner) if suite.suite() == cs => Some(*inner),
-                    _ => None,
-                })?,
-            age_add: u32::read(r)?,
-            max_early_data_size: u32::read(r)?,
-            common: ClientSessionCommon::read(r)?,
-        })
     }
 }
 
@@ -247,6 +271,34 @@ impl Tls12ClientSessionValue {
         }
     }
 
+    /// [`Codec::read()`] with an extra `suite` argument.
+    ///
+    /// We decode the `suite` argument separately because it allows us to
+    /// decide whether we're decoding an 1.2 or 1.3 session value.
+    fn read(suite: &'static Tls12CipherSuite, r: &mut Reader) -> Option<Self> {
+        Some(Self {
+            suite,
+            session_id: SessionID::read(r)?,
+            extended_ms: u8::read(r)? == 1,
+            common: ClientSessionCommon::read(r)?,
+        })
+    }
+
+    /// Inherent implementation of the [`Codec::get_encoding()`] method.
+    ///
+    /// (See `read()` for why this is inherent here.)
+    pub(crate) fn get_encoding(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(16);
+        self.suite
+            .common
+            .suite
+            .encode(&mut bytes);
+        self.session_id.encode(&mut bytes);
+        (if self.extended_ms { 1u8 } else { 0u8 }).encode(&mut bytes);
+        self.common.encode(&mut bytes);
+        bytes
+    }
+
     pub fn take_ticket(&mut self) -> Vec<u8> {
         mem::take(&mut self.common.ticket.0)
     }
@@ -257,31 +309,6 @@ impl Tls12ClientSessionValue {
 
     pub fn suite(&self) -> &'static Tls12CipherSuite {
         self.suite
-    }
-}
-
-#[cfg(feature = "tls12")]
-impl Codec for Tls12ClientSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.suite.common.suite.encode(bytes);
-        self.session_id.encode(bytes);
-        (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
-        self.common.encode(bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<Self> {
-        let cs = CipherSuite::read(r)?;
-        Some(Self {
-            suite: ALL_CIPHER_SUITES
-                .iter()
-                .find_map(|suite| match suite {
-                    SupportedCipherSuite::Tls12(inner) if suite.suite() == cs => Some(*inner),
-                    _ => None,
-                })?,
-            session_id: SessionID::read(r)?,
-            extended_ms: u8::read(r)? == 1,
-            common: ClientSessionCommon::read(r)?,
-        })
     }
 }
 
@@ -320,6 +347,30 @@ impl ClientSessionCommon {
         }
     }
 
+    /// [`Codec::read()`] is inherent here to avoid leaking the [`Codec`]
+    /// implementation through [`Deref`] implementations on
+    /// [`Tls12ClientSessionValue`] and [`Tls13ClientSessionValue`].
+    fn read(r: &mut Reader) -> Option<Self> {
+        Some(Self {
+            ticket: PayloadU16::read(r)?,
+            secret: PayloadU8::read(r)?,
+            epoch: u64::read(r)?,
+            lifetime_secs: u32::read(r)?,
+            server_cert_chain: CertificatePayload::read(r)?,
+        })
+    }
+
+    /// [`Codec::encode()`] is inherent here to avoid leaking the [`Codec`]
+    /// implementation through [`Deref`] implementations on
+    /// [`Tls12ClientSessionValue`] and [`Tls13ClientSessionValue`].
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.ticket.encode(bytes);
+        self.secret.encode(bytes);
+        self.epoch.encode(bytes);
+        self.lifetime_secs.encode(bytes);
+        self.server_cert_chain.encode(bytes);
+    }
+
     pub fn server_cert_chain(&self) -> &[key::Certificate] {
         self.server_cert_chain.as_ref()
     }
@@ -330,26 +381,6 @@ impl ClientSessionCommon {
 
     pub fn ticket(&self) -> &[u8] {
         self.ticket.0.as_ref()
-    }
-}
-
-impl Codec for ClientSessionCommon {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.ticket.encode(bytes);
-        self.secret.encode(bytes);
-        self.epoch.encode(bytes);
-        self.lifetime_secs.encode(bytes);
-        self.server_cert_chain.encode(bytes);
-    }
-
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
-            ticket: PayloadU16::read(r)?,
-            secret: PayloadU8::read(r)?,
-            epoch: u64::read(r)?,
-            lifetime_secs: u32::read(r)?,
-            server_cert_chain: CertificatePayload::read(r)?,
-        })
     }
 }
 

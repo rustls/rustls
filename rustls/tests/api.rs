@@ -13,7 +13,8 @@ use std::sync::Mutex;
 use rustls;
 
 use rustls::client::ResolvesClientCert;
-use rustls::internal::msgs::{codec::Codec, persist::Tls13ClientSessionValue};
+use rustls::internal::msgs::codec::{Codec, Reader};
+use rustls::internal::msgs::persist::Tls13ClientSessionValue;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{ClientHello, ResolvesServerCert};
@@ -3027,7 +3028,17 @@ fn early_data_is_available_on_resumption() {
         .get(&session_key)
         .unwrap();
 
-    let mut session_value = Tls13ClientSessionValue::read_bytes(&session_value_bytes).unwrap();
+    let cs = CipherSuite::read_bytes(&session_value_bytes[..2]).unwrap();
+    let suite = match ALL_CIPHER_SUITES
+        .iter()
+        .find(|supported| supported.suite() == cs)
+        .unwrap()
+    {
+        SupportedCipherSuite::Tls12(_) => unreachable!(),
+        SupportedCipherSuite::Tls13(inner) => inner,
+    };
+    let mut reader = Reader::init(&session_value_bytes[2..]);
+    let mut session_value = Tls13ClientSessionValue::read(suite, &mut reader).unwrap();
     session_value.set_max_early_data_size(128);
 
     storage

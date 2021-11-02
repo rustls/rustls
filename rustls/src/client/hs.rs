@@ -55,20 +55,11 @@ fn find_session(
             None
         })?;
 
-    let mut reader = Reader::init(&value[..]);
+    #[allow(unused_mut)]
+    let mut reader = Reader::init(&value[2..]);
     CipherSuite::read_bytes(&value[..2])
         .and_then(|suite| {
-            config
-                .cipher_suites
-                .iter()
-                .find(|s| s.suite() == suite)
-        })
-        .and_then(|suite| match suite {
-            SupportedCipherSuite::Tls13(_) => persist::Tls13ClientSessionValue::read(&mut reader)
-                .map(persist::ClientSessionValue::from),
-            #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(_) => persist::Tls12ClientSessionValue::read(&mut reader)
-                .map(persist::ClientSessionValue::from),
+            persist::ClientSessionValue::read(&mut reader, suite, &config.cipher_suites)
         })
         .and_then(|resuming| {
             let retrieved = persist::Retrieved::new(resuming, TimeBase::now().ok()?);
