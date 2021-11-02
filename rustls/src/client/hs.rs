@@ -108,9 +108,9 @@ pub(super) fn start_handshake(
         None
     };
 
-    if let Some(resuming) = &mut resuming_session {
+    if let Some(_resuming) = &mut resuming_session {
         #[cfg(feature = "tls12")]
-        if let persist::ClientSessionValue::Tls12(inner) = &mut resuming.value {
+        if let persist::ClientSessionValue::Tls12(inner) = &mut _resuming.value {
             // If we have a ticket, we use the sessionid as a signal that
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
