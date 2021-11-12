@@ -143,6 +143,13 @@ mod tests {
     const FIRST_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.1.bin");
     const SECOND_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.2.bin");
 
+    const INVALID_CONTENTTYPE_MESSAGE: &'static [u8] =
+        include_bytes!("../testdata/deframer-invalid-contenttype.bin");
+    const INVALID_VERSION_MESSAGE: &'static [u8] =
+        include_bytes!("../testdata/deframer-invalid-version.bin");
+    const INVALID_LENGTH_MESSAGE: &'static [u8] =
+        include_bytes!("../testdata/deframer-invalid-length.bin");
+
     struct ByteRead<'a> {
         buf: &'a [u8],
         offs: usize,
@@ -261,6 +268,7 @@ mod tests {
         assert_eq!(1, d.frames.len());
         pop_first(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
     }
 
     #[test]
@@ -276,6 +284,7 @@ mod tests {
         assert_eq!(d.has_pending(), true);
         pop_second(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
     }
 
     #[test]
@@ -287,6 +296,7 @@ mod tests {
         assert_eq!(d.frames.len(), 1);
         pop_first(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
     }
 
     #[test]
@@ -299,6 +309,7 @@ mod tests {
         pop_first(&mut d);
         pop_second(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
     }
 
     #[test]
@@ -313,6 +324,7 @@ mod tests {
         pop_first(&mut d);
         pop_second(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
     }
 
     #[test]
@@ -327,6 +339,7 @@ mod tests {
         pop_second(&mut d);
         pop_first(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
     }
 
     #[test]
@@ -341,5 +354,36 @@ mod tests {
         assert_eq!(d.frames.len(), 1);
         pop_first(&mut d);
         assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
+    }
+
+    #[test]
+    fn test_invalid_contenttype_errors() {
+        let mut d = MessageDeframer::new();
+        assert_len(
+            INVALID_CONTENTTYPE_MESSAGE.len(),
+            input_bytes(&mut d, &INVALID_CONTENTTYPE_MESSAGE),
+        );
+        assert_eq!(d.desynced, true);
+    }
+
+    #[test]
+    fn test_invalid_version_errors() {
+        let mut d = MessageDeframer::new();
+        assert_len(
+            INVALID_VERSION_MESSAGE.len(),
+            input_bytes(&mut d, &INVALID_VERSION_MESSAGE),
+        );
+        assert_eq!(d.desynced, true);
+    }
+
+    #[test]
+    fn test_invalid_length_errors() {
+        let mut d = MessageDeframer::new();
+        assert_len(
+            INVALID_LENGTH_MESSAGE.len(),
+            input_bytes(&mut d, &INVALID_LENGTH_MESSAGE),
+        );
+        assert_eq!(d.desynced, true);
     }
 }
