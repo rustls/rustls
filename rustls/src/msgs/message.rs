@@ -77,6 +77,13 @@ impl OpaqueMessage {
         let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
         let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
 
+        // Reject undersize messages
+        //  implemented per section 5.1 of RFC8446 (TLSv1.3)
+        //              per section 6.2.1 of RFC5246 (TLSv1.2)
+        if typ != ContentType::ApplicationData && len == 0 {
+            return Err(MessageError::IllegalLength);
+        }
+
         // Reject oversize messages
         if len >= Self::MAX_PAYLOAD {
             return Err(MessageError::IllegalLength);
