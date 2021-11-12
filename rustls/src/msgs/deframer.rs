@@ -143,6 +143,11 @@ mod tests {
     const FIRST_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.1.bin");
     const SECOND_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.2.bin");
 
+    const EMPTY_APPLICATIONDATA_MESSAGE: &'static [u8] =
+        include_bytes!("../testdata/deframer-empty-applicationdata.bin");
+
+    const INVALID_EMPTY_MESSAGE: &'static [u8] =
+        include_bytes!("../testdata/deframer-invalid-empty.bin");
     const INVALID_CONTENTTYPE_MESSAGE: &'static [u8] =
         include_bytes!("../testdata/deframer-invalid-contenttype.bin");
     const INVALID_VERSION_MESSAGE: &'static [u8] =
@@ -383,6 +388,30 @@ mod tests {
         assert_len(
             INVALID_LENGTH_MESSAGE.len(),
             input_bytes(&mut d, &INVALID_LENGTH_MESSAGE),
+        );
+        assert_eq!(d.desynced, true);
+    }
+
+    #[test]
+    fn test_empty_applicationdata() {
+        let mut d = MessageDeframer::new();
+        assert_len(
+            EMPTY_APPLICATIONDATA_MESSAGE.len(),
+            input_bytes(&mut d, &EMPTY_APPLICATIONDATA_MESSAGE),
+        );
+        let m = d.frames.pop_front().unwrap();
+        assert_eq!(m.typ, msgs::enums::ContentType::ApplicationData);
+        assert_eq!(m.payload.0.len(), 0);
+        assert_eq!(d.has_pending(), false);
+        assert_eq!(d.desynced, false);
+    }
+
+    #[test]
+    fn test_invalid_empty_errors() {
+        let mut d = MessageDeframer::new();
+        assert_len(
+            INVALID_EMPTY_MESSAGE.len(),
+            input_bytes(&mut d, &INVALID_EMPTY_MESSAGE),
         );
         assert_eq!(d.desynced, true);
     }
