@@ -148,17 +148,36 @@ impl TicketSwitcher {
     ///
     /// Calling this regularly will ensure timely key erasure.  Otherwise,
     /// key erasure will be delayed until the next encrypt/decrypt call.
-    fn maybe_roll(
-        &self,
-        now: TimeBase,
-        state: &mut MutexGuard<TicketSwitcherState>,
-    ) -> Result<(), rand::GetRandomFailed> {
+    ///
+    /// In order to reduce the ammount of lock/unlock operations in the
+    /// common case that no new ticketer is needed, we return the mutex-
+    /// guard taken here
+    fn maybe_roll(&self, now: TimeBase) -> Option<MutexGuard<TicketSwitcherState>> {
         let now = now.as_secs();
+
+        // First lock section, check whether we need a new ticketer
+        // We make this a block to ensure the take is dropped before
+        // generating the new ticketer
+        {
+            let state = self.state.lock().ok()?;
+            if now <= state.next_switch_time {
+                return Some(state); // No need for action now
+            }
+        }
+
+        // Generate the new ticketer
+        let new_ticketer = (self.generator)().ok()?;
+
+        // Second lock section, check for generation race and replace
+        // if still needed. Note that this must be checked, as otherwise
+        // we could replace a just-replaced ticketer, and then validity
+        // times are no longer guaranteed.
+        let mut state = self.state.lock().ok()?;
         if now > state.next_switch_time {
-            state.previous = Some(mem::replace(&mut state.current, (self.generator)()?));
+            state.previous = Some(mem::replace(&mut state.current, new_ticketer));
             state.next_switch_time = now + u64::from(self.lifetime);
         }
-        Ok(())
+        Some(state)
     }
 }
 
@@ -172,18 +191,13 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        let mut state = self.state.lock().ok()?;
-        self.maybe_roll(TimeBase::now().ok()?, &mut state)
-            .ok()?;
+        let state = self.maybe_roll(TimeBase::now().ok()?)?;
 
         state.current.encrypt(message)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        let mut state = self.state.lock().ok()?;
-
-        self.maybe_roll(TimeBase::now().ok()?, &mut state)
-            .ok()?;
+        let state = self.maybe_roll(TimeBase::now().ok()?)?;
 
         // Decrypt with the current key; if that fails, try with the previous.
         state
