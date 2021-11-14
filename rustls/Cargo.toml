@@ -1,6 +1,6 @@
 [package]
 name = "rustls"
-version = "0.20.0"
+version = "0.20.1"
 edition = "2018"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"

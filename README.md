@@ -21,6 +21,11 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.1 (2021-11-14)
+  - Allow cipher suite enum items to be stringified.
+  - Improve documentation of configuration builder types.
+  - Ensure unused cipher suites can be removed at link-time.
+  - Ensure single-use error types implement `std::error::Error`, and are public.
 * 0.20.0 (2021-09-26)
   - *Breaking change*: `Connection` is now an enum instead of a trait. You can abstract over
     `ClientConnection` and `ServerConnection` with a bound like `where C: Deref<ConnectionCommon<SD>>, SD: SideData`.
