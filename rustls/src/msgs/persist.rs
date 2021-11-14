@@ -62,7 +62,7 @@ pub enum ClientSessionValue {
 }
 
 impl ClientSessionValue {
-    pub(crate) fn read(
+    pub fn read(
         reader: &mut Reader<'_>,
         suite: CipherSuite,
         supported: &[SupportedCipherSuite],
