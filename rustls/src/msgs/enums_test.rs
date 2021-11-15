@@ -92,3 +92,10 @@ fn test_enums() {
     );
     test_enum8::<CertificateStatusType>(CertificateStatusType::OCSP, CertificateStatusType::OCSP);
 }
+
+#[test]
+fn test_string_macro() {
+    let suite = CipherSuite::TLS13_AES_256_GCM_SHA384;
+    let s = suite.as_str().unwrap();
+    assert_eq!(s, "TLS13_AES_256_GCM_SHA384")
+}
