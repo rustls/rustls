@@ -23,7 +23,7 @@ sct = "0.7"
 ct-logs = "0.9"
 docopt = "~1.1"
 env_logger = "0.9.0"
-mio = { version = "0.7", features = ["os-poll", "tcp"] }
+mio = { version = "0.8", features = ["net", "os-poll"] }
 regex = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
