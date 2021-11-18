@@ -298,7 +298,7 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient [options] [--suite SUITE ...] [--proto PROTO ...] <hostname>
+  tlsclient [options] [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] <hostname>
   tlsclient (--version | -v)
   tlsclient (--help | -h)
 

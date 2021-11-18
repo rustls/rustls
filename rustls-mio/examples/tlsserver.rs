@@ -414,11 +414,11 @@ RSA private key.
 
 Usage:
   tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] \
-     [--proto PROTO ...] [options] echo
+     [--proto PROTO ...] [--protover PROTOVER ...] [options] echo
   tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] \
-     [--proto PROTO ...] [options] http
+     [--proto PROTO ...] [--protover PROTOVER ...] [options] http
   tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] \
-     [--proto PROTO ...] [options] forward <fport>
+     [--proto PROTO ...] [--protover PROTOVER ...] [options] forward <fport>
   tlsserver (--version | -v)
   tlsserver (--help | -h)
 
