@@ -84,7 +84,8 @@ impl RootCertStore {
 
     /// Add a single DER-encoded certificate to the store.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), Error> {
-        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0).map_err(|e| Error::InvalidCertificateData(format!("{}", e)))?;
+        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)
+            .map_err(|e| Error::InvalidCertificateData(format!("{}", e)))?;
         let ota = OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
