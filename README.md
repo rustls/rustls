@@ -21,7 +21,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
-* 0.20.2 (2021-11-26)
+* 0.20.2 (2021-11-21)
   - Fix `CipherSuite::as_str()` value (as introduced in 0.20.1).
 * 0.20.1 (2021-11-14)
   - Allow cipher suite enum items to be stringified.
