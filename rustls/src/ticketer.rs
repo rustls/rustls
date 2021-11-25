@@ -304,3 +304,33 @@ fn ticketswitcher_switching_test() {
     assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
     assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
 }
+
+#[cfg(test)]
+fn fail_generator() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed> {
+    Err(rand::GetRandomFailed)
+}
+
+#[test]
+fn ticketswitcher_recover_test() {
+    let mut t = TicketSwitcher::new(1, generate_inner).unwrap();
+    let now = TimeBase::now().unwrap();
+    let cipher1 = t.encrypt(b"ticket 1").unwrap();
+    assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+    t.generator = fail_generator;
+    {
+        // Failed new ticketer
+        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
+    }
+    t.generator = generate_inner;
+    let cipher2 = t.encrypt(b"ticket 2").unwrap();
+    assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+    assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+    {
+        // recover
+        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
+    }
+    let cipher3 = t.encrypt(b"ticket 3").unwrap();
+    assert!(t.decrypt(&cipher1).is_none());
+    assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+    assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
+}
