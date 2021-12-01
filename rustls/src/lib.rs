@@ -499,7 +499,7 @@ pub type ResolvesServerCertUsingSNI = server::ResolvesServerCertUsingSni;
 pub type WebPKIVerifier = client::WebPkiVerifier;
 #[allow(clippy::upper_case_acronyms)]
 #[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use TlsError")]
+#[deprecated(since = "0.20.0", note = "Use Error")]
 pub type TLSError = Error;
 #[doc(hidden)]
 #[deprecated(since = "0.20.0", note = "Use ClientConnection")]
