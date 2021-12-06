@@ -130,14 +130,14 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| hs::incompatible(&mut cx.common, "client didn't describe groups"))?;
+                .ok_or_else(|| hs::incompatible(cx.common, "client didn't describe groups"))?;
 
             let tls13_schemes = sign::supported_sign_tls13();
             sigschemes_ext.retain(|scheme| tls13_schemes.contains(scheme));
 
             let shares_ext = client_hello
                 .get_keyshare_extension()
-                .ok_or_else(|| hs::incompatible(&mut cx.common, "client didn't send keyshares"))?;
+                .ok_or_else(|| hs::incompatible(cx.common, "client didn't send keyshares"))?;
 
             if client_hello.has_keyshare_extension_with_duplicates() {
                 return Err(cx
@@ -180,10 +180,10 @@ mod client_hello {
                         emit_hello_retry_request(
                             &mut self.transcript,
                             self.suite,
-                            &mut cx.common,
+                            cx.common,
                             group.name,
                         );
-                        emit_fake_ccs(&mut cx.common);
+                        emit_fake_ccs(cx.common);
                         return Ok(Box::new(hs::ExpectClientHello {
                             config: self.config,
                             transcript: HandshakeHashOrBuffer::Hash(self.transcript),
@@ -198,7 +198,7 @@ mod client_hello {
                     }
 
                     return Err(hs::incompatible(
-                        &mut cx.common,
+                        cx.common,
                         "no kx group overlap with client",
                     ));
                 }
@@ -214,10 +214,7 @@ mod client_hello {
                 }
 
                 if psk_offer.binders.is_empty() {
-                    return Err(hs::decode_error(
-                        &mut cx.common,
-                        "psk extension missing binder",
-                    ));
+                    return Err(hs::decode_error(cx.common, "psk extension missing binder"));
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
@@ -285,7 +282,7 @@ mod client_hello {
                 &self.config,
             )?;
             if !self.done_retry {
-                emit_fake_ccs(&mut cx.common);
+                emit_fake_ccs(cx.common);
             }
 
             let (mut ocsp_response, mut sct_list) =
@@ -307,14 +304,14 @@ mod client_hello {
                     emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
                 emit_certificate_tls13(
                     &mut self.transcript,
-                    &mut cx.common,
+                    cx.common,
                     server_key.get_cert(),
                     ocsp_response,
                     sct_list,
                 );
                 emit_certificate_verify_tls13(
                     &mut self.transcript,
-                    &mut cx.common,
+                    cx.common,
                     server_key.get_key(),
                     &sigschemes_ext,
                 )?;
@@ -775,7 +772,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .verify_client_cert(end_entity, intermediates, now)
             .map_err(|err| {
-                hs::incompatible(&mut cx.common, "certificate invalid");
+                hs::incompatible(cx.common, "certificate invalid");
                 err
             })?;
 

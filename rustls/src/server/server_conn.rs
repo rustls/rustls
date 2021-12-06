@@ -137,7 +137,7 @@ impl<'a> ClientHello<'a> {
     pub fn server_name(&self) -> Option<&str> {
         self.server_name
             .as_ref()
-            .map(|s| <webpki::DnsName as AsRef<str>>::as_ref(s))
+            .map(<webpki::DnsName as AsRef<str>>::as_ref)
     }
 
     /// Get the compatible signature schemes.

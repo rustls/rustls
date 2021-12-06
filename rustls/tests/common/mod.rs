@@ -3,8 +3,6 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use rustls_pemfile;
-
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::server::AllowAnyAuthenticatedClient;
@@ -180,19 +178,19 @@ where
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum KeyType {
-    RSA,
-    ECDSA,
-    ED25519,
+    Rsa,
+    Ecdsa,
+    Ed25519,
 }
 
-pub static ALL_KEY_TYPES: [KeyType; 3] = [KeyType::RSA, KeyType::ECDSA, KeyType::ED25519];
+pub static ALL_KEY_TYPES: [KeyType; 3] = [KeyType::Rsa, KeyType::Ecdsa, KeyType::Ed25519];
 
 impl KeyType {
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
-            KeyType::RSA => bytes_for("rsa", part),
-            KeyType::ECDSA => bytes_for("ecdsa", part),
-            KeyType::ED25519 => bytes_for("eddsa", part),
+            KeyType::Rsa => bytes_for("rsa", part),
+            KeyType::Ecdsa => bytes_for("ecdsa", part),
+            KeyType::Ed25519 => bytes_for("eddsa", part),
         }
     }
 
@@ -380,7 +378,7 @@ pub fn make_pair_for_arc_configs(
     server_config: &Arc<ServerConfig>,
 ) -> (ClientConnection, ServerConnection) {
     (
-        ClientConnection::new(Arc::clone(&client_config), dns_name("localhost")).unwrap(),
+        ClientConnection::new(Arc::clone(client_config), dns_name("localhost")).unwrap(),
         ServerConnection::new(Arc::clone(server_config)).unwrap(),
     )
 }
@@ -583,11 +581,11 @@ pub fn do_handshake_until_error(
         transfer(client, server);
         server
             .process_new_packets()
-            .map_err(|err| ErrorFromPeer::Server(err))?;
+            .map_err(ErrorFromPeer::Server)?;
         transfer(server, client);
         client
             .process_new_packets()
-            .map_err(|err| ErrorFromPeer::Client(err))?;
+            .map_err(ErrorFromPeer::Client)?;
     }
 
     Ok(())
@@ -603,7 +601,7 @@ pub fn do_handshake_until_both_error(
             transfer(server, client);
             let client_err = client
                 .process_new_packets()
-                .map_err(|err| ErrorFromPeer::Client(err))
+                .map_err(ErrorFromPeer::Client)
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
             Err(errors)
@@ -614,7 +612,7 @@ pub fn do_handshake_until_both_error(
             transfer(client, server);
             let server_err = server
                 .process_new_packets()
-                .map_err(|err| ErrorFromPeer::Server(err))
+                .map_err(ErrorFromPeer::Server)
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
             Err(errors)

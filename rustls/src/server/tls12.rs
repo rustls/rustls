@@ -71,12 +71,10 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| hs::incompatible(&mut cx.common, "client didn't describe groups"))?;
+                .ok_or_else(|| hs::incompatible(cx.common, "client didn't describe groups"))?;
             let ecpoints_ext = client_hello
                 .get_ecpoints_extension()
-                .ok_or_else(|| {
-                    hs::incompatible(&mut cx.common, "client didn't describe ec points")
-                })?;
+                .ok_or_else(|| hs::incompatible(cx.common, "client didn't describe ec points"))?;
 
             trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
@@ -151,10 +149,7 @@ mod client_hello {
                 .resolve_sig_schemes(&sigschemes_ext);
 
             if sigschemes.is_empty() {
-                return Err(hs::incompatible(
-                    &mut cx.common,
-                    "no overlapping sigschemes",
-                ));
+                return Err(hs::incompatible(cx.common, "no overlapping sigschemes"));
             }
 
             let group = self
@@ -163,13 +158,13 @@ mod client_hello {
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(&mut cx.common, "no supported group"))?;
+                .ok_or_else(|| hs::incompatible(cx.common, "no supported group"))?;
 
             let ecpoint = ECPointFormatList::supported()
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(&mut cx.common, "no supported point format"))?;
+                .ok_or_else(|| hs::incompatible(cx.common, "no supported point format"))?;
 
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
@@ -197,20 +192,20 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.transcript, &mut cx.common, server_key.get_cert());
+            emit_certificate(&mut self.transcript, cx.common, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut self.transcript, &mut cx.common, ocsp_response);
+                emit_cert_status(&mut self.transcript, cx.common, ocsp_response);
             }
             let server_kx = emit_server_kx(
                 &mut self.transcript,
-                &mut cx.common,
+                cx.common,
                 sigschemes,
                 group,
                 server_key.get_key(),
                 &self.randoms,
             )?;
             let doing_client_auth = emit_certificate_req(&self.config, &mut self.transcript, cx)?;
-            emit_server_hello_done(&mut self.transcript, &mut cx.common);
+            emit_server_hello_done(&mut self.transcript, cx.common);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -292,11 +287,11 @@ mod client_hello {
                     &*self.config.ticketer,
                 );
             }
-            emit_ccs(&mut cx.common);
+            emit_ccs(cx.common);
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&secrets, &mut self.transcript, &mut cx.common);
+            emit_finished(&secrets, &mut self.transcript, cx.common);
 
             Ok(Box::new(ExpectCcs {
                 config: self.config,
@@ -541,7 +536,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                     .verifier
                     .verify_client_cert(end_entity, intermediates, now)
                     .map_err(|err| {
-                        hs::incompatible(&mut cx.common, "certificate invalid");
+                        hs::incompatible(cx.common, "certificate invalid");
                         err
                     })?;
 
@@ -588,7 +583,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
-            tls12::decode_ecdh_params::<ClientECDHParams>(&mut cx.common, &client_kx.0)?;
+            tls12::decode_ecdh_params::<ClientECDHParams>(cx.common, &client_kx.0)?;
         let kxd = tls12::complete_ecdh(self.server_kx, &peer_kx_params.public.0)?;
 
         let secrets = if self.using_ems {
@@ -872,11 +867,11 @@ impl State<ServerConnectionData> for ExpectFinished {
                     &*self.config.ticketer,
                 );
             }
-            emit_ccs(&mut cx.common);
+            emit_ccs(cx.common);
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.transcript, &mut cx.common);
+            emit_finished(&self.secrets, &mut self.transcript, cx.common);
         }
 
         cx.common.start_traffic();

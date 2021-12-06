@@ -1,7 +1,6 @@
 use std::process;
 use std::sync::{Arc, Mutex};
 
-use mio;
 use mio::net::TcpStream;
 
 use std::collections;
@@ -12,15 +11,10 @@ use std::io::{BufReader, Read, Write};
 use std::net::SocketAddr;
 use std::str;
 
-use env_logger;
-
 #[macro_use]
 extern crate serde_derive;
 
 use docopt::Docopt;
-
-use rustls;
-use webpki_roots;
 
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
@@ -135,7 +129,6 @@ impl TlsClient {
         if io_state.peer_has_closed() {
             self.clean_closure = true;
             self.closing = true;
-            return;
         }
     }
 
@@ -288,7 +281,7 @@ impl rustls::client::StoresClientSessions for PersistCache {
     }
 }
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Connects to the TLS server at hostname:PORT.  The default PORT
 is 443.  By default, this reads a request from stdin (to EOF)
 before making the connection.  --http replaces this with a
@@ -438,8 +431,6 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
 
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
-    use super::rustls;
-
     pub struct NoCertificateVerification {}
 
     impl rustls::client::ServerCertVerifier for NoCertificateVerification {
@@ -560,8 +551,8 @@ fn main() {
     let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
 
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| Ok(d.help(true)))
-        .and_then(|d| Ok(d.version(Some(version))))
+        .map(|d| d.help(true))
+        .map(|d| d.version(Some(version)))
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
@@ -608,7 +599,7 @@ fn main() {
         poll.poll(&mut events, None).unwrap();
 
         for ev in events.iter() {
-            tlsclient.ready(&ev);
+            tlsclient.ready(ev);
             tlsclient.reregister(poll.registry());
         }
     }

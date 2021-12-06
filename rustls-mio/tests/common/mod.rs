@@ -71,7 +71,7 @@ macro_rules! embed_files {
             $(
                 let filename = deleter.path.join($keytype).join($path);
                 let mut f = File::create(&filename).unwrap();
-                f.write($name).unwrap();
+                f.write_all($name).unwrap();
             )+
 
             deleter
@@ -206,7 +206,7 @@ pub fn openssl_find() -> String {
                 return format!("{}/bin/openssl", dir);
             }
             Err(_) => {
-                const SEARCH_PATHS: [&'static str; 3] = [
+                const SEARCH_PATHS: [&str; 3] = [
                     "/usr/local/opt/openssl@1.1/bin/openssl",
                     "/usr/local/opt/openssl/bin/openssl",
                     // This may return LibreSSL 2.8.3 on Big Sur, and will currently fail a test.
