@@ -4,8 +4,6 @@
 // See: https://github.com/HowNetWorks/trytls-rustls-stub
 //
 
-use webpki_roots;
-
 use rustls::{ClientConfig, ClientConnection, Error, OwnedTrustAnchor, RootCertStore};
 use std::convert::TryInto;
 use std::env;

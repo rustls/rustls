@@ -291,7 +291,7 @@ impl ExpectClientHello {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
-                return Err(bad_version(&mut cx.common, "TLS1.2 not offered/enabled"));
+                return Err(bad_version(cx.common, "TLS1.2 not offered/enabled"));
             } else if cx.common.is_quic() {
                 return Err(bad_version(
                     cx.common,

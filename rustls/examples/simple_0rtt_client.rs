@@ -4,16 +4,13 @@ use std::convert::TryInto;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
-use env_logger;
-use rustls;
 use rustls::{OwnedTrustAnchor, RootCertStore};
-use webpki_roots;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     let server_name = domain_name
         .try_into()
         .expect("invalid DNS name");
-    let mut conn = rustls::ClientConnection::new(Arc::clone(&config), server_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(Arc::clone(config), server_name).unwrap();
     let mut sock = TcpStream::connect(format!("{}:443", domain_name)).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(
@@ -30,7 +27,7 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
     // io::Write.  Use this to send the request.
     if let Some(mut early_data) = conn.early_data() {
         early_data
-            .write(request.as_bytes())
+            .write_all(request.as_bytes())
             .unwrap();
     }
 

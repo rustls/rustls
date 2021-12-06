@@ -140,20 +140,18 @@ mod tests {
     use std::convert::TryFrom;
     use std::io;
 
-    const FIRST_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.1.bin");
-    const SECOND_MESSAGE: &'static [u8] = include_bytes!("../testdata/deframer-test.2.bin");
+    const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");
+    const SECOND_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.2.bin");
 
-    const EMPTY_APPLICATIONDATA_MESSAGE: &'static [u8] =
+    const EMPTY_APPLICATIONDATA_MESSAGE: &[u8] =
         include_bytes!("../testdata/deframer-empty-applicationdata.bin");
 
-    const INVALID_EMPTY_MESSAGE: &'static [u8] =
-        include_bytes!("../testdata/deframer-invalid-empty.bin");
-    const INVALID_CONTENTTYPE_MESSAGE: &'static [u8] =
+    const INVALID_EMPTY_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-empty.bin");
+    const INVALID_CONTENTTYPE_MESSAGE: &[u8] =
         include_bytes!("../testdata/deframer-invalid-contenttype.bin");
-    const INVALID_VERSION_MESSAGE: &'static [u8] =
+    const INVALID_VERSION_MESSAGE: &[u8] =
         include_bytes!("../testdata/deframer-invalid-version.bin");
-    const INVALID_LENGTH_MESSAGE: &'static [u8] =
-        include_bytes!("../testdata/deframer-invalid-length.bin");
+    const INVALID_LENGTH_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-length.bin");
 
     struct ByteRead<'a> {
         buf: &'a [u8],
@@ -207,7 +205,7 @@ mod tests {
 
     impl ErrorRead {
         fn new(error: io::Error) -> Self {
-            ErrorRead { error: Some(error) }
+            Self { error: Some(error) }
         }
     }
 
@@ -234,7 +232,7 @@ mod tests {
 
         for i in 0..bytes.len() {
             assert_len(1, input_bytes(d, &bytes[i..i + 1]));
-            assert_eq!(d.has_pending(), true);
+            assert!(d.has_pending());
 
             if i < bytes.len() - 1 {
                 assert_eq!(frames_before, d.frames.len());
@@ -248,7 +246,7 @@ mod tests {
         if let Ok(gotval) = got {
             assert_eq!(gotval, want);
         } else {
-            assert!(false, "read failed, expected {:?} bytes", want);
+            panic!("read failed, expected {:?} bytes", want);
         }
     }
 
@@ -267,60 +265,60 @@ mod tests {
     #[test]
     fn check_incremental() {
         let mut d = MessageDeframer::new();
-        assert_eq!(d.has_pending(), false);
+        assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
-        assert_eq!(d.has_pending(), true);
+        assert!(d.has_pending());
         assert_eq!(1, d.frames.len());
         pop_first(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
     fn check_incremental_2() {
         let mut d = MessageDeframer::new();
-        assert_eq!(d.has_pending(), false);
+        assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
-        assert_eq!(d.has_pending(), true);
+        assert!(d.has_pending());
         input_whole_incremental(&mut d, SECOND_MESSAGE);
-        assert_eq!(d.has_pending(), true);
+        assert!(d.has_pending());
         assert_eq!(2, d.frames.len());
         pop_first(&mut d);
-        assert_eq!(d.has_pending(), true);
+        assert!(d.has_pending());
         pop_second(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
     fn check_whole() {
         let mut d = MessageDeframer::new();
-        assert_eq!(d.has_pending(), false);
+        assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
-        assert_eq!(d.has_pending(), true);
+        assert!(d.has_pending());
         assert_eq!(d.frames.len(), 1);
         pop_first(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
     fn check_whole_2() {
         let mut d = MessageDeframer::new();
-        assert_eq!(d.has_pending(), false);
+        assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert_len(SECOND_MESSAGE.len(), input_bytes(&mut d, SECOND_MESSAGE));
         assert_eq!(d.frames.len(), 2);
         pop_first(&mut d);
         pop_second(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
     fn test_two_in_one_read() {
         let mut d = MessageDeframer::new();
-        assert_eq!(d.has_pending(), false);
+        assert!(!d.has_pending());
         assert_len(
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, FIRST_MESSAGE, SECOND_MESSAGE),
@@ -328,14 +326,14 @@ mod tests {
         assert_eq!(d.frames.len(), 2);
         pop_first(&mut d);
         pop_second(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
     fn test_two_in_one_read_shortest_first() {
         let mut d = MessageDeframer::new();
-        assert_eq!(d.has_pending(), false);
+        assert!(!d.has_pending());
         assert_len(
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, SECOND_MESSAGE, FIRST_MESSAGE),
@@ -343,8 +341,8 @@ mod tests {
         assert_eq!(d.frames.len(), 2);
         pop_second(&mut d);
         pop_first(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
@@ -358,8 +356,8 @@ mod tests {
         );
         assert_eq!(d.frames.len(), 1);
         pop_first(&mut d);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
@@ -367,9 +365,9 @@ mod tests {
         let mut d = MessageDeframer::new();
         assert_len(
             INVALID_CONTENTTYPE_MESSAGE.len(),
-            input_bytes(&mut d, &INVALID_CONTENTTYPE_MESSAGE),
+            input_bytes(&mut d, INVALID_CONTENTTYPE_MESSAGE),
         );
-        assert_eq!(d.desynced, true);
+        assert!(d.desynced);
     }
 
     #[test]
@@ -377,9 +375,9 @@ mod tests {
         let mut d = MessageDeframer::new();
         assert_len(
             INVALID_VERSION_MESSAGE.len(),
-            input_bytes(&mut d, &INVALID_VERSION_MESSAGE),
+            input_bytes(&mut d, INVALID_VERSION_MESSAGE),
         );
-        assert_eq!(d.desynced, true);
+        assert!(d.desynced);
     }
 
     #[test]
@@ -387,9 +385,9 @@ mod tests {
         let mut d = MessageDeframer::new();
         assert_len(
             INVALID_LENGTH_MESSAGE.len(),
-            input_bytes(&mut d, &INVALID_LENGTH_MESSAGE),
+            input_bytes(&mut d, INVALID_LENGTH_MESSAGE),
         );
-        assert_eq!(d.desynced, true);
+        assert!(d.desynced);
     }
 
     #[test]
@@ -397,13 +395,13 @@ mod tests {
         let mut d = MessageDeframer::new();
         assert_len(
             EMPTY_APPLICATIONDATA_MESSAGE.len(),
-            input_bytes(&mut d, &EMPTY_APPLICATIONDATA_MESSAGE),
+            input_bytes(&mut d, EMPTY_APPLICATIONDATA_MESSAGE),
         );
         let m = d.frames.pop_front().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
-        assert_eq!(d.has_pending(), false);
-        assert_eq!(d.desynced, false);
+        assert!(!d.has_pending());
+        assert!(!d.desynced);
     }
 
     #[test]
@@ -411,8 +409,8 @@ mod tests {
         let mut d = MessageDeframer::new();
         assert_len(
             INVALID_EMPTY_MESSAGE.len(),
-            input_bytes(&mut d, &INVALID_EMPTY_MESSAGE),
+            input_bytes(&mut d, INVALID_EMPTY_MESSAGE),
         );
-        assert_eq!(d.desynced, true);
+        assert!(d.desynced);
     }
 }

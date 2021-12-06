@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use mio;
 use mio::net::{TcpListener, TcpStream};
 
 #[macro_use]
@@ -17,13 +16,10 @@ extern crate serde_derive;
 
 use docopt::Docopt;
 
-use env_logger;
-
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
 };
 use rustls::{self, RootCertStore};
-use rustls_pemfile;
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -338,7 +334,6 @@ impl OpenConnection {
         if rc.is_err() {
             error!("write failed {:?}", rc);
             self.closing = true;
-            return;
         }
     }
 
@@ -398,7 +393,7 @@ impl OpenConnection {
     }
 }
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Runs a TLS server on :PORT.  The default PORT is 443.
 
 `echo' mode means the server echoes received data on each connection.
@@ -453,7 +448,6 @@ Options:
 struct Args {
     cmd_echo: bool,
     cmd_http: bool,
-    cmd_forward: bool,
     flag_port: Option<u16>,
     flag_verbose: bool,
     flag_protover: Vec<String>,
@@ -628,8 +622,8 @@ fn main() {
     let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
 
     let args: Args = Docopt::new(USAGE)
-        .and_then(|d| Ok(d.help(true)))
-        .and_then(|d| Ok(d.version(Some(version))))
+        .map(|d| d.help(true))
+        .map(|d| d.version(Some(version)))
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
@@ -671,7 +665,7 @@ fn main() {
                         .accept(poll.registry())
                         .expect("error accepting socket");
                 }
-                _ => tlsserv.conn_event(poll.registry(), &event),
+                _ => tlsserv.conn_event(poll.registry(), event),
             }
         }
     }

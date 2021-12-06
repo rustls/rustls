@@ -75,7 +75,7 @@ fn can_read_safari_client_hello() {
 #[test]
 fn alert_is_not_handshake() {
     let m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
-    assert_eq!(false, m.is_handshake_type(HandshakeType::ClientHello));
+    assert!(!m.is_handshake_type(HandshakeType::ClientHello));
 }
 
 #[test]
