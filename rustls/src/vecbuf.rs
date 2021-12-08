@@ -99,7 +99,11 @@ impl ChunkVecBuffer {
         Ok(offs)
     }
 
-    fn consume(&mut self, mut used: usize) {
+    pub(crate) fn get(&self) -> Option<&[u8]> {
+        Some(&self.chunks.get(0)?[..])
+    }
+
+    pub(crate) fn consume(&mut self, mut used: usize) {
         while let Some(mut buf) = self.chunks.pop_front() {
             if used < buf.len() {
                 self.chunks

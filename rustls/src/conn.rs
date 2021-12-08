@@ -202,6 +202,21 @@ pub struct Reader<'a> {
     has_seen_eof: bool,
 }
 
+impl<'a> Reader<'a> {
+    #[inline]
+    fn handle_zero_read(&self) -> io::Result<()> {
+        match (self.peer_cleanly_closed, self.has_seen_eof) {
+            // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+            (true, _) => Ok(()),
+            // unclean closure
+            (false, true) => Err(io::ErrorKind::UnexpectedEof.into()),
+            // connection still going, but need more data: signal `WouldBlock` so that
+            // the caller knows this
+            (false, false) => Err(io::ErrorKind::WouldBlock.into()),
+        }
+    }
+}
+
 impl<'a> io::Read for Reader<'a> {
     /// Obtain plaintext data received from the peer over this TLS connection.
     ///
@@ -228,18 +243,34 @@ impl<'a> io::Read for Reader<'a> {
 
         if len == 0 && !buf.is_empty() {
             // No bytes available:
-            match (self.peer_cleanly_closed, self.has_seen_eof) {
-                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                (true, _) => {}
-                // unclean closure
-                (false, true) => return Err(io::ErrorKind::UnexpectedEof.into()),
-                // connection still going, but need more data: signal `WouldBlock` so that
-                // the caller knows this
-                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
-            }
+            self.handle_zero_read()?
         }
 
         Ok(len)
+    }
+}
+
+impl<'a> io::BufRead for Reader<'a> {
+    /// Obtain plaintext data received from the peer over this TLS connection.
+    ///
+    /// If the TLS session is closed cleanly by the peer, this returns
+    /// `Ok(&[])`. On error cases, the error is exposed. If there are currently
+    /// no bytes to be read, but the connection has not been closed,
+    /// `Err(ErrorKind::WouldBlock.into())` is returned.
+    ///
+    /// Please refer to `read()` for details.
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self.received_plaintext.get() {
+            None => {
+                self.handle_zero_read()?;
+                Ok(&[])
+            }
+            Some(buf) => Ok(buf),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.received_plaintext.consume(amt)
     }
 }
 
