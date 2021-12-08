@@ -207,7 +207,7 @@ impl<'a> io::Read for Reader<'a> {
     ///
     /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
     /// the pending data has been read. No further data can be received on that
-    /// connection, so the underlying TCP connection should half-closed too.
+    /// connection, so the underlying TCP connection should be half-closed too.
     ///
     /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
     /// `close_notify` alert) this function returns `Err(ErrorKind::UnexpectedEof.into())`
