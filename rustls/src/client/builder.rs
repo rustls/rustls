@@ -4,7 +4,7 @@ use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::error::Error;
 use crate::key;
-use crate::keylog::NoKeyLog;
+use crate::keylog::KeyLogFile;
 use crate::kx::SupportedKxGroup;
 use crate::suites::SupportedCipherSuite;
 use crate::verify::{self, CertificateTransparencyPolicy};
@@ -181,7 +181,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             versions: self.state.versions,
             enable_sni: true,
             verifier: self.state.verifier,
-            key_log: Arc::new(NoKeyLog {}),
+            key_log: Arc::new(KeyLogFile::new()),
             enable_early_data: false,
         }
     }
