@@ -120,6 +120,21 @@ impl ExtensionProcessing {
         #[cfg(feature = "quic")]
         {
             if cx.common.is_quic() {
+                // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
+                // says: "The server MUST treat the inability to select a compatible application
+                // protocol as a connection error of type 0x0178". We judge that ALPN was desired
+                // (rather than some out-of-band protocol negotiation mechanism) iff any ALPN
+                // protocols were configured locally or offered by the client. This helps prevent
+                // successful establishment of connections between peers that can't understand
+                // each other.
+                if cx.common.alpn_protocol.is_none()
+                    && (!our_protocols.is_empty() || maybe_their_protocols.is_some())
+                {
+                    cx.common
+                        .send_fatal_alert(AlertDescription::NoApplicationProtocol);
+                    return Err(Error::NoApplicationProtocol);
+                }
+
                 match hello.get_quic_params_extension() {
                     Some(params) => cx.common.quic.params = Some(params),
                     None => {
