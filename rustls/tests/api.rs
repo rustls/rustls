@@ -3160,7 +3160,6 @@ mod test_quic {
         let client_config = Arc::new(client_config);
         let mut server_config = make_server_config_with_versions(kt, &[&rustls::version::TLS13]);
         server_config.max_early_data_size = 0xffffffff;
-        server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
         let client_params = &b"client params"[..];
         let server_params = &b"server params"[..];
@@ -3259,8 +3258,7 @@ mod test_quic {
 
         // 0-RTT rejection
         {
-            let mut client_config = (*client_config).clone();
-            client_config.alpn_protocols = vec!["foo".into()];
+            let client_config = (*client_config).clone();
             let mut client = ClientConnection::new_quic(
                 Arc::new(client_config),
                 quic::Version::V1,
@@ -3341,9 +3339,7 @@ mod test_quic {
         let server_params = &b"server params"[..];
 
         for &kt in ALL_KEY_TYPES.iter() {
-            let mut client_config =
-                make_client_config_with_versions(kt, &[&rustls::version::TLS13]);
-            client_config.alpn_protocols = vec!["bar".into()];
+            let client_config = make_client_config_with_versions(kt, &[&rustls::version::TLS13]);
             let client_config = Arc::new(client_config);
 
             let mut server_config =
@@ -3434,9 +3430,8 @@ mod test_quic {
 
     #[test]
     fn test_quic_server_no_params_received() {
-        let mut server_config =
+        let server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
-        server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
 
         let mut server =
