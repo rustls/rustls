@@ -241,6 +241,49 @@ impl<'a> io::Read for Reader<'a> {
 
         Ok(len)
     }
+
+    /// Obtain plaintext data received from the peer over this TLS connection.
+    ///
+    /// If the peer closes the TLS session, this returns `Ok(())` without filling
+    /// any more of the buffer once all the pending data has been read. No further
+    /// data can be received on that connection, so the underlying TCP connection
+    /// should be half-closed too.
+    ///
+    /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
+    /// `close_notify` alert) this function returns `Err(ErrorKind::UnexpectedEof.into())`
+    /// once any pending data has been read.
+    ///
+    /// Note that support for `close_notify` varies in peer TLS libraries: many do not
+    /// support it and uncleanly close the TCP connection (this might be
+    /// vulnerable to truncation attacks depending on the application protocol).
+    /// This means applications using rustls must both handle EOF
+    /// from this function, *and* unexpected EOF of the underlying TCP connection.
+    ///
+    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
+    ///
+    /// You may learn the number of bytes available at any time by inspecting
+    /// the return of [`Connection::process_new_packets`].
+    #[cfg(feature = "read_buf")]
+    fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
+        let before = buf.filled_len();
+        self.received_plaintext.read_buf(buf)?;
+        let len = buf.filled_len() - before;
+
+        if len == 0 && buf.capacity() > 0 {
+            // No bytes available:
+            match (self.peer_cleanly_closed, self.has_seen_eof) {
+                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                (true, _) => {}
+                // unclean closure
+                (false, true) => return Err(io::ErrorKind::UnexpectedEof.into()),
+                // connection still going, but need more data: signal `WouldBlock` so that
+                // the caller knows this
+                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]

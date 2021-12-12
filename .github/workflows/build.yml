@@ -31,9 +31,18 @@ jobs:
           persist-credentials: false
 
       - name: Install ${{ matrix.rust }} toolchain
+        if: ${{ matrix.rust != 'nightly' }}
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
+          override: true
+
+      - name: Install ${{ matrix.rust }} toolchain (with Miri)
+        if: ${{ matrix.rust == 'nightly' }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: miri
           override: true
 
       - name: cargo build (debug; default features)
@@ -43,6 +52,10 @@ jobs:
         run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
+
+      - name: Miri test
+        if: ${{ matrix.rust == 'nightly' }}
+        run: cargo miri test --features=read_buf --lib -- vecbuf
 
 
   features:
@@ -68,12 +81,6 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      - name: cargo test (debug; all features)
-        run: cargo test --all-features
-        env:
-          RUST_BACKTRACE: 1
-          RUSTFLAGS: -D warnings
-
       - name: cargo build (debug; no default features)
         run: cargo build --no-default-features
         working-directory: rustls
@@ -84,6 +91,18 @@ jobs:
 
       - name: cargo test (release; no run)
         run: cargo test --release --no-run
+
+      - name: Install nightly toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+
+      - name: cargo test (debug; all features)
+        run: cargo test --all-features
+        env:
+          RUST_BACKTRACE: 1
+          RUSTFLAGS: -D warnings
 
 
   bogo:
@@ -275,7 +294,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -p rustls --all-features -- -D warnings
+          args: -p rustls --features="logging,dangerous_configuration,quic,tls12" -- -D warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
