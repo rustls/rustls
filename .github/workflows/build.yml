@@ -48,7 +48,14 @@ jobs:
       - name: cargo build (debug; default features)
         run: cargo build
 
+      - name: cargo test (debug; stable features)
+        if: ${{ matrix.rust != 'nightly' }}
+        run: cargo test --features=logging,dangerous_configuration,quic,tls12
+        env:
+          RUST_BACKTRACE: 1
+
       - name: cargo test (debug; all features)
+        if: ${{ matrix.rust == 'nightly' }}
         run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
@@ -294,7 +301,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -p rustls --features="logging,dangerous_configuration,quic,tls12" -- -D warnings
+          args: -p rustls --features=logging,dangerous_configuration,quic,tls12 -- -D warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
