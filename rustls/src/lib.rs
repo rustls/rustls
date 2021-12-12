@@ -256,9 +256,8 @@
 //!   buffers.
 
 // Require docs for public APIs, deny unsafe code, etc.
-#![forbid(unused_must_use)]
-#![deny(unsafe_code)]
-#![cfg_attr(not(feature = "read_buf"), forbid(unsafe_code, unstable_features))]
+#![forbid(unsafe_code, unused_must_use)]
+#![cfg_attr(not(feature = "read_buf"), forbid(unstable_features))]
 #![deny(
     clippy::clone_on_ref_ptr,
     clippy::use_self,

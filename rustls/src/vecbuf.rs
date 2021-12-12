@@ -100,50 +100,13 @@ impl ChunkVecBuffer {
     }
 
     #[cfg(feature = "read_buf")]
-    #[allow(unsafe_code)]
     /// Read data out of this object, writing it into `buf`.
     pub(crate) fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
-        use std::mem::MaybeUninit;
-
-        while !self.is_empty() {
-            // There are three unsafe calls in this block to justify. First,
-            // `ReadBuf::unfilled_mut()` requires that we "not de-initialize portions of the buffer
-            // that have already been initialized." We write to the buffer using
-            // `std::ptr::copy_nonoverlapping`, with a `[u8]` slice from this `ChunkVecBuffer` as
-            // the source. All memory in the `[u8]` slice must be initialized, and the length of
-            // the copy is less than or equal to the length of the `[u8]` slice, so we will not
-            // de-initialize any of the `ReadBuf` buffer by performing this copy.
-            //
-            // Second, `std::ptr::copy_nonoverlapping` has several requirements. First, note that
-            // the source and destination buffers do not overlap because the source is part of
-            // `self`, which is mutably borrowed, so we can assume the other buffer does not alias
-            // it. As we are copying `T=u8`, the alignment requirements on the source and
-            // destination are trivially satisfied. Additionally, `u8` is `Copy`, so creating
-            // bitwise copies is acceptible. The count argument is less than or equal to both the
-            // length of the slice we are copying from, and the length of the unfilled part of the
-            // buffer we are copying to. Thus, the source pointer is valid for reads of this
-            // length, and the destination pointer is valid for writes of this length.
-            //
-            // Lastly, `ReadBuf::assume_init` requires that "the first `n` unfilled bytes of the
-            // buffer have already been initialized". We write into the unfilled part of the buffer
-            // using `std::ptr::copy_nonoverlapping`, and, as argued above, this causes these bytes
-            // to become initialized, since we are copying from another buffer that is initialized.
-            unsafe {
-                let unfilled: &mut [MaybeUninit<u8>] = buf.unfilled_mut();
-                if unfilled.is_empty() {
-                    break;
-                }
-                let chunk = self.chunks[0].as_slice();
-                let used = std::cmp::min(chunk.len(), unfilled.len());
-                let unfilled_ptr: *mut MaybeUninit<u8> = unfilled.as_mut_ptr();
-                // This pointer cast is fine because `MaybeUninit<u8>` and `u8` are guaranteed to
-                // have the same memory layout.
-                let unfilled_ptr = unfilled_ptr as *mut u8;
-                std::ptr::copy_nonoverlapping(chunk.as_ptr(), unfilled_ptr, used);
-                buf.assume_init(used);
-                buf.add_filled(used);
-                self.consume(used);
-            }
+        while !self.is_empty() && buf.remaining() > 0 {
+            let chunk = self.chunks[0].as_slice();
+            let used = std::cmp::min(chunk.len(), buf.remaining());
+            buf.append(&chunk[..used]);
+            self.consume(used);
         }
 
         Ok(())
@@ -198,7 +161,6 @@ mod test {
     #[cfg(feature = "read_buf")]
     #[test]
     fn read_buf() {
-        use std::alloc::{self, GlobalAlloc, Layout};
         use std::{io::ReadBuf, mem::MaybeUninit};
 
         {
@@ -219,23 +181,14 @@ mod test {
             assert_eq!(buf.filled(), b"a");
         }
 
-        #[allow(unsafe_code)]
         {
-            const BUFFER_SIZE: usize = 1024 * 1024;
-
             let mut cvb = ChunkVecBuffer::new(None);
             cvb.append(b"short message".to_vec());
 
-            let layout = Layout::new::<[MaybeUninit<u8>; BUFFER_SIZE]>();
-            let byte_ptr: *mut u8 = unsafe { alloc::System.alloc(layout) };
-            {
-                let ptr = byte_ptr as *mut [MaybeUninit<u8>; BUFFER_SIZE];
-                let buf: &mut [MaybeUninit<u8>; BUFFER_SIZE] = unsafe { &mut *ptr };
-                let mut buf = ReadBuf::uninit(buf.as_mut());
-                cvb.read_buf(&mut buf).unwrap();
-                assert_eq!(buf.filled(), b"short message");
-            }
-            unsafe { alloc::System.dealloc(byte_ptr, layout) };
+            let mut buf = [MaybeUninit::<u8>::uninit(); 1024];
+            let mut buf = ReadBuf::uninit(&mut buf);
+            cvb.read_buf(&mut buf).unwrap();
+            assert_eq!(buf.filled(), b"short message");
         }
     }
 }
