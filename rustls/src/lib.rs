@@ -251,9 +251,14 @@
 //!   it for your application. If you want to disable TLS 1.2 for security reasons,
 //!   consider explicitly enabling TLS 1.3 only in the config builder API.
 //!
+//! - `read_buf`: this nightly-only feature adds support for the unstable
+//!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
+//!   buffers.
 
 // Require docs for public APIs, deny unsafe code, etc.
-#![forbid(unsafe_code, unused_must_use, unstable_features)]
+#![forbid(unused_must_use)]
+#![deny(unsafe_code)]
+#![cfg_attr(not(feature = "read_buf"), forbid(unsafe_code, unstable_features))]
 #![deny(
     clippy::clone_on_ref_ptr,
     clippy::use_self,
@@ -284,6 +289,8 @@
 )]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// Early testing of the read_buf nightly feature
+#![cfg_attr(feature = "read_buf", feature(read_buf))]
 
 // log for logging (optional).
 #[cfg(feature = "logging")]
