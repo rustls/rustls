@@ -31,18 +31,9 @@ jobs:
           persist-credentials: false
 
       - name: Install ${{ matrix.rust }} toolchain
-        if: ${{ matrix.rust != 'nightly' }}
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
-          override: true
-
-      - name: Install ${{ matrix.rust }} toolchain (with Miri)
-        if: ${{ matrix.rust == 'nightly' }}
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          components: miri
           override: true
 
       - name: cargo build (debug; default features)
@@ -59,10 +50,6 @@ jobs:
         run: cargo test --all-features
         env:
           RUST_BACKTRACE: 1
-
-      - name: Miri test
-        if: ${{ matrix.rust == 'nightly' }}
-        run: cargo miri test --features=read_buf --lib -- vecbuf
 
 
   features:
