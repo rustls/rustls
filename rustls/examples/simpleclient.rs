@@ -13,9 +13,6 @@ use std::convert::TryInto;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
-use rustls;
-use webpki_roots;
-
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
 fn main() {

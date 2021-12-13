@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn want() {
         let hj = HandshakeJoiner::new();
-        assert_eq!(hj.is_empty(), true);
+        assert!(hj.is_empty());
 
         let wanted = PlainMessage {
             typ: ContentType::Handshake,
@@ -163,8 +163,8 @@ mod tests {
             payload: Payload::new(b"ponytown".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&wanted), true);
-        assert_eq!(hj.want_message(&unwanted), false);
+        assert!(hj.want_message(&wanted));
+        assert!(!hj.want_message(&unwanted));
     }
 
     fn pop_eq(expect: &PlainMessage, hj: &mut HandshakeJoiner) {
@@ -191,9 +191,9 @@ mod tests {
             payload: Payload::new(b"\x00\x00\x00\x00\x00\x00\x00\x00".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&msg), true);
+        assert!(hj.want_message(&msg));
         assert_eq!(hj.take_message(msg), Some(2));
-        assert_eq!(hj.is_empty(), true);
+        assert!(hj.is_empty());
 
         let expect = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -220,7 +220,7 @@ mod tests {
             payload: Payload::new(b"\x01\x00\x00\x02\xff\xff".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&msg), true);
+        assert!(hj.want_message(&msg));
         assert_eq!(hj.take_message(msg), None);
     }
 
@@ -228,7 +228,7 @@ mod tests {
     fn join() {
         // Check we join one handshake message split over two PDUs.
         let mut hj = HandshakeJoiner::new();
-        assert_eq!(hj.is_empty(), true);
+        assert!(hj.is_empty());
 
         // Introduce Finished of 16 bytes, providing 4.
         let mut msg = PlainMessage {
@@ -237,9 +237,9 @@ mod tests {
             payload: Payload::new(b"\x14\x00\x00\x10\x00\x01\x02\x03\x04".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&msg), true);
+        assert!(hj.want_message(&msg));
         assert_eq!(hj.take_message(msg), Some(0));
-        assert_eq!(hj.is_empty(), false);
+        assert!(!hj.is_empty());
 
         // 11 more bytes.
         msg = PlainMessage {
@@ -248,9 +248,9 @@ mod tests {
             payload: Payload::new(b"\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&msg), true);
+        assert!(hj.want_message(&msg));
         assert_eq!(hj.take_message(msg), Some(0));
-        assert_eq!(hj.is_empty(), false);
+        assert!(!hj.is_empty());
 
         // Final 1 byte.
         msg = PlainMessage {
@@ -259,9 +259,9 @@ mod tests {
             payload: Payload::new(b"\x0f".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&msg), true);
+        assert!(hj.want_message(&msg));
         assert_eq!(hj.take_message(msg), Some(1));
-        assert_eq!(hj.is_empty(), true);
+        assert!(hj.is_empty());
 
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
@@ -285,8 +285,8 @@ mod tests {
             payload: Payload::new(b"\x0b\x01\x00\x04\x01\x00\x01\x00\xff\xfe".to_vec()),
         };
 
-        assert_eq!(hj.want_message(&msg), true);
+        assert!(hj.want_message(&msg));
         assert_eq!(hj.take_message(msg), None);
-        assert_eq!(hj.is_empty(), false);
+        assert!(!hj.is_empty());
     }
 }

@@ -12,7 +12,6 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rustls;
 use rustls::client::{ClientSessionMemoryCache, NoClientSessionStorage};
 use rustls::server::{
     AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, ServerSessionMemoryCache,
@@ -22,8 +21,6 @@ use rustls::Ticketer;
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, SideData};
 use rustls::{ServerConfig, ServerConnection};
-
-use rustls_pemfile;
 
 fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
@@ -54,8 +51,7 @@ where
     let start = Instant::now();
     f();
     let end = Instant::now();
-    let dur = duration_nanos(end.duration_since(start));
-    f64::from(dur)
+    duration_nanos(end.duration_since(start))
 }
 
 fn transfer<L, R, LS, RS>(left: &mut L, right: &mut R) -> f64
@@ -93,7 +89,7 @@ where
                 .read_tls(&mut buf[offs..sz].as_ref())
                 .unwrap();
             let end = Instant::now();
-            read_time += f64::from(duration_nanos(end.duration_since(start)));
+            read_time += duration_nanos(end.duration_since(start));
             if sz == offs {
                 break;
             }
@@ -143,9 +139,9 @@ impl Resumption {
 // copied from tests/api.rs
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum KeyType {
-    RSA,
-    ECDSA,
-    ED25519,
+    Rsa,
+    Ecdsa,
+    Ed25519,
 }
 
 struct BenchmarkParam {
@@ -171,68 +167,68 @@ impl BenchmarkParam {
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::ECDSA,
+        KeyType::Ecdsa,
         rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::ECDSA,
+        KeyType::Ecdsa,
         rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::ECDSA,
+        KeyType::Ecdsa,
         rustls::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::RSA,
+        KeyType::Rsa,
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::ECDSA,
+        KeyType::Ecdsa,
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::ED25519,
+        KeyType::Ed25519,
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
@@ -241,9 +237,9 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
 impl KeyType {
     fn path_for(&self, part: &str) -> String {
         match self {
-            KeyType::RSA => format!("test-ca/rsa/{}", part),
-            KeyType::ECDSA => format!("test-ca/ecdsa/{}", part),
-            KeyType::ED25519 => format!("test-ca/eddsa/{}", part),
+            KeyType::Rsa => format!("test-ca/rsa/{}", part),
+            KeyType::Ecdsa => format!("test-ca/ecdsa/{}", part),
+            KeyType::Ed25519 => format!("test-ca/eddsa/{}", part),
         }
     }
 
@@ -483,7 +479,6 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
     for _ in 0..rounds {
         time_send += time(|| {
             server.writer().write_all(&buf).unwrap();
-            ()
         });
 
         time_recv += transfer(&mut server, &mut client);
@@ -498,7 +493,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
         "max_fragment_size:{}",
         max_fragment_size
             .map(|v| v.to_string())
-            .unwrap_or("default".to_string())
+            .unwrap_or_else(|| "default".to_string())
     );
     let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
     println!(
@@ -539,11 +534,11 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     }
 
     for _step in 0..5 {
-        for (mut client, mut server) in clients
+        for (client, server) in clients
             .iter_mut()
             .zip(servers.iter_mut())
         {
-            do_handshake_step(&mut client, &mut server);
+            do_handshake_step(client, server);
         }
     }
 

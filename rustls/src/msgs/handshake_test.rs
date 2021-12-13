@@ -5,8 +5,6 @@ use super::handshake::*;
 use crate::key::Certificate;
 use webpki::DnsNameRef;
 
-use std::mem;
-
 #[test]
 fn rejects_short_random() {
     let bytes = [0x01; 31];
@@ -21,7 +19,7 @@ fn reads_random() {
     let rnd = Random::read(&mut rd).unwrap();
     println!("{:?}", rnd);
 
-    assert_eq!(rd.any_left(), false);
+    assert!(!rd.any_left());
 }
 
 #[test]
@@ -42,8 +40,6 @@ fn rejects_sessionid_with_bad_length() {
 fn sessionid_with_different_lengths_are_unequal() {
     let a = SessionID::read(&mut Reader::init(&[1u8, 1])).unwrap();
     let b = SessionID::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
-    assert_eq!(a, a);
-    assert_eq!(b, b);
     assert_ne!(a, b);
 }
 
@@ -54,9 +50,9 @@ fn accepts_short_sessionid() {
     let sess = SessionID::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
-    assert_eq!(sess.is_empty(), false);
+    assert!(!sess.is_empty());
     assert_eq!(sess.len(), 1);
-    assert_eq!(rd.any_left(), false);
+    assert!(!rd.any_left());
 }
 
 #[test]
@@ -66,9 +62,9 @@ fn accepts_empty_sessionid() {
     let sess = SessionID::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
-    assert_eq!(sess.is_empty(), true);
+    assert!(sess.is_empty());
     assert_eq!(sess.len(), 0);
-    assert_eq!(rd.any_left(), false);
+    assert!(!rd.any_left());
 }
 
 #[test]
@@ -148,7 +144,7 @@ fn can_round_trip_mixed_case_sni() {
 
 #[test]
 fn can_roundtrip_other_sni_name_types() {
-    let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 02, 0x6c, 0x6f];
+    let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 2, 0x6c, 0x6f];
     let mut rd = Reader::init(&bytes);
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
@@ -159,7 +155,7 @@ fn can_roundtrip_other_sni_name_types() {
 
 #[test]
 fn get_single_hostname_returns_none_for_other_sni_name_types() {
-    let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 02, 0x6c, 0x6f];
+    let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 2, 0x6c, 0x6f];
     let mut rd = Reader::init(&bytes);
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
@@ -405,9 +401,7 @@ fn can_print_all_clientextensions() {
 
 #[test]
 fn can_clone_all_clientextensions() {
-    let _ = get_sample_serverhellopayload()
-        .extensions
-        .clone();
+    let _ = get_sample_serverhellopayload().extensions;
 }
 
 #[test]
@@ -590,12 +584,9 @@ fn test_truncated_helloretry_extension_is_detected() {
         }
 
         // these extension types don't have any internal encoding that rustls validates:
-        match ext.get_type() {
-            ExtensionType::Unknown(_) => {
-                continue;
-            }
-            _ => {}
-        };
+        if let ExtensionType::Unknown(_) = ext.get_type() {
+            continue;
+        }
 
         // "inner" truncation, where the extension-level length agrees with the input
         // length, but isn't long enough for the type of extension
@@ -609,7 +600,7 @@ fn test_truncated_helloretry_extension_is_detected() {
 
 fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
     let mut hrr = get_sample_helloretryrequest();
-    let mut exts = mem::replace(&mut hrr.extensions, vec![]);
+    let mut exts = std::mem::take(&mut hrr.extensions);
     exts.retain(|ext| ext.get_type() == typ);
 
     assert!(!getter(&hrr));
@@ -728,7 +719,7 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
     let mut ce = get_sample_certificatepayloadtls13()
         .entries
         .remove(0);
-    let mut exts = mem::replace(&mut ce.exts, vec![]);
+    let mut exts = std::mem::take(&mut ce.exts);
     exts.retain(|ext| ext.get_type() == typ);
 
     assert!(!getter(&ce));
@@ -790,9 +781,7 @@ fn can_print_all_serverextensions() {
 
 #[test]
 fn can_clone_all_serverextensions() {
-    let _ = get_sample_serverhellopayload()
-        .extensions
-        .clone();
+    let _ = get_sample_serverhellopayload().extensions;
 }
 
 fn get_sample_helloretryrequest() -> HelloRetryRequest {
@@ -987,7 +976,7 @@ fn can_roundtrip_all_tls12_handshake_payloads() {
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();
-        assert_eq!(rd.any_left(), false);
+        assert!(!rd.any_left());
         assert_eq!(hm.get_encoding(), other.get_encoding());
 
         println!("{:?}", hm);
@@ -1128,7 +1117,7 @@ fn can_roundtrip_all_tls13_handshake_payloads() {
 
         let other =
             HandshakeMessagePayload::read_version(&mut rd, ProtocolVersion::TLSv1_3).unwrap();
-        assert_eq!(rd.any_left(), false);
+        assert!(!rd.any_left());
         assert_eq!(hm.get_encoding(), other.get_encoding());
 
         println!("{:?}", hm);

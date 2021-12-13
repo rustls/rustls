@@ -678,7 +678,7 @@ mod test {
             }
         }
         let log = Log(expected_traffic_secret);
-        let traffic_secret = ks.derive_logged_secret(kind, &hash, &log, &[0; 32]);
+        let traffic_secret = ks.derive_logged_secret(kind, hash, &log, &[0; 32]);
 
         // Since we can't test key equality, we test the output of sealing with the key instead.
         let aead_alg = &aead::AES_128_GCM;

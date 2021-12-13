@@ -44,7 +44,7 @@ mod test {
             let m = OpaqueMessage::read(&mut r).unwrap();
 
             let out = m.clone().encode();
-            assert!(out.len() > 0);
+            assert!(!out.is_empty());
 
             Message::try_from(m.into_plain_message()).unwrap();
         }
