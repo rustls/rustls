@@ -654,8 +654,10 @@ fn main() {
         ServerMode::Echo
     } else if args.cmd_http {
         ServerMode::Http
-    } else {
+    } else if args.cmd_forward {
         ServerMode::Forward(args.arg_fport.expect("fport required"))
+    } else {
+        panic!("server mode not set");
     };
 
     let mut tlsserv = TlsServer::new(listener, mode, config);
