@@ -18,8 +18,7 @@ fuzz_target!(|data: &[u8]| {
     }
     dfm.has_pending();
 
-    while !dfm.frames.is_empty() {
-        let msg = dfm.frames.pop_front().unwrap();
+    while let Ok(Some(msg)) = dfm.pop() {
         Message::try_from(msg.into_plain_message()).ok();
     }
 });

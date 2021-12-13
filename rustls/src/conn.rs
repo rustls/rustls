@@ -538,11 +538,7 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
-        if self.message_deframer.desynced {
-            return Err(Error::CorruptMessage);
-        }
-
-        let msg = match self.message_deframer.frames.pop_front() {
+        let msg = match self.message_deframer.pop()? {
             Some(msg) => msg,
             None => return Ok(None),
         };
@@ -677,11 +673,7 @@ impl<Data> ConnectionCommon<Data> {
             }
         };
 
-        if self.message_deframer.desynced {
-            return Err(Error::CorruptMessage);
-        }
-
-        while let Some(msg) = self.message_deframer.frames.pop_front() {
+        while let Some(msg) = self.message_deframer.pop()? {
             match self.process_msg(msg, state) {
                 Ok(new) => state = new,
                 Err(e) => {
