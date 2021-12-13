@@ -1,20 +1,21 @@
 use std::collections::VecDeque;
 use std::io;
 
+use crate::error::Error;
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
 
 /// This deframer works to reconstruct TLS messages
 /// from arbitrary-sized reads, buffering as necessary.
-/// The input is `read()`, the output is the `frames` deque.
+/// The input is `read()`, get the output from `pop()`.
 pub struct MessageDeframer {
     /// Completed frames for output.
-    pub frames: VecDeque<OpaqueMessage>,
+    frames: VecDeque<OpaqueMessage>,
 
     /// Set to true if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
     /// the deframer cannot recover.
-    pub desynced: bool,
+    desynced: bool,
 
     /// A fixed-size buffer containing the currently-accumulating
     /// TLS message.
@@ -49,6 +50,17 @@ impl MessageDeframer {
             desynced: false,
             buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
             used: 0,
+        }
+    }
+
+    /// Return any complete messages that the deframer has been able to parse.
+    ///
+    /// Returns an `Error` if the deframer failed to parse some message contents,
+    /// `Ok(None)` if no full message is buffered, and `Ok(Some(_))` if a valid message was found.
+    pub fn pop(&mut self) -> Result<Option<OpaqueMessage>, Error> {
+        match self.desynced {
+            false => Ok(self.frames.pop_front()),
+            true => Err(Error::CorruptMessage),
         }
     }
 
