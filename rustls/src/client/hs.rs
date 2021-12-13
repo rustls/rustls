@@ -419,20 +419,18 @@ fn emit_client_hello_for_retry(
 }
 
 pub(super) fn process_alpn_protocol(
-    cx: &mut ClientContext<'_>,
+    common: &mut CommonState,
     config: &ClientConfig,
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
-    cx.common.alpn_protocol = proto.map(ToOwned::to_owned);
+    common.alpn_protocol = proto.map(ToOwned::to_owned);
 
-    if let Some(alpn_protocol) = &cx.common.alpn_protocol {
+    if let Some(alpn_protocol) = &common.alpn_protocol {
         if !config
             .alpn_protocols
             .contains(alpn_protocol)
         {
-            return Err(cx
-                .common
-                .illegal_param("server sent non-offered ALPN protocol"));
+            return Err(common.illegal_param("server sent non-offered ALPN protocol"));
         }
     }
 
@@ -456,7 +454,7 @@ pub(super) fn process_alpn_protocol(
 
     debug!(
         "ALPN protocol is {:?}",
-        cx.common
+        common
             .alpn_protocol
             .as_ref()
             .map(|v| bs_debug::BsDebug(v))
@@ -548,7 +546,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx, &self.config, server_hello.get_alpn_protocol())?;
+            process_alpn_protocol(cx.common, &self.config, server_hello.get_alpn_protocol())?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
