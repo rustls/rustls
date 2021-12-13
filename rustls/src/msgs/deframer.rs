@@ -65,12 +65,12 @@ impl MessageDeframer {
         let new_bytes = rd.read(&mut self.buf[self.used..])?;
 
         self.used += new_bytes;
-
+        let mut taken = 0;
         loop {
             // Does our `buf` contain a full message?  It does if it is big enough to
             // contain a header, and that header has a length which falls within `buf`.
             // If so, deframe it and place the message onto the frames output queue.
-            let mut rd = codec::Reader::init(&self.buf[..self.used]);
+            let mut rd = codec::Reader::init(&self.buf[taken..self.used]);
             let m = match OpaqueMessage::read(&mut rd) {
                 Ok(m) => m,
                 Err(e) => {
@@ -82,27 +82,29 @@ impl MessageDeframer {
                 }
             };
 
-            let taken = rd.used();
+            taken += rd.used();
             self.frames.push_back(m);
-            if taken < self.used {
-                /* Before:
-                 * +----------+----------+----------+
-                 * | taken    | pending  |xxxxxxxxxx|
-                 * +----------+----------+----------+
-                 * 0          ^ taken    ^ self.used
-                 *
-                 * After:
-                 * +----------+----------+----------+
-                 * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-                 * +----------+----------+----------+
-                 * 0          ^ self.used
-                 */
+        }
 
-                self.buf.copy_within(taken..self.used, 0);
-                self.used -= taken;
-            } else if taken == self.used {
-                self.used = 0;
-            }
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken == self.used {
+            self.used = 0;
         }
 
         Ok(new_bytes)
