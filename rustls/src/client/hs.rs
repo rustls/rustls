@@ -442,12 +442,8 @@ pub(super) fn process_alpn_protocol(
         // mechanism) iff any ALPN protocols were configured. This defends against badly-behaved
         // servers which accept a connection that requires an application-layer protocol they do not
         // understand.
-        if cx.common.is_quic()
-            && cx.common.alpn_protocol.is_none()
-            && !config.alpn_protocols.is_empty()
-        {
-            cx.common
-                .send_fatal_alert(AlertDescription::NoApplicationProtocol);
+        if common.is_quic() && common.alpn_protocol.is_none() && !config.alpn_protocols.is_empty() {
+            common.send_fatal_alert(AlertDescription::NoApplicationProtocol);
             return Err(Error::NoApplicationProtocol);
         }
     }
