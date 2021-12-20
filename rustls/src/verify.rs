@@ -283,7 +283,6 @@ impl ServerCertVerifier for WebPkiVerifier {
     /// - Signed by a  trusted `RootCertStore` CA
     /// - Not Expired
     /// - Valid for DNS entry
-    /// - OCSP data is present
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
