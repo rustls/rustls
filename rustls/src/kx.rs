@@ -1,12 +1,5 @@
+use crate::error::Error;
 use crate::msgs::enums::NamedGroup;
-
-/// The result of a key exchange.  This has our public key,
-/// and the agreed shared secret (also known as the "premaster secret"
-/// in TLS1.0-era protocols, and "Z" in TLS1.3).
-pub(crate) struct KeyExchangeResult {
-    pub(crate) pubkey: ring::agreement::PublicKey,
-    pub(crate) shared_secret: Vec<u8>,
-}
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
@@ -50,18 +43,18 @@ impl KeyExchange {
         self.skxg.name
     }
 
-    /// Completes the key exchange, given the peer's public key.  The shared
-    /// secret is returned as a KeyExchangeResult.
-    pub(crate) fn complete(self, peer: &[u8]) -> Option<KeyExchangeResult> {
+    /// Completes the key exchange, given the peer's public key.
+    ///
+    /// The shared secret is passed into the closure passed down in `f`, and the result of calling
+    /// `f` is returned to the caller.
+    pub(crate) fn complete<T>(
+        self,
+        peer: &[u8],
+        f: impl FnOnce(&[u8]) -> Result<T, ()>,
+    ) -> Result<T, Error> {
         let peer_key = ring::agreement::UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
-        let pubkey = self.pubkey;
-        ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), move |v| {
-            Ok(KeyExchangeResult {
-                pubkey,
-                shared_secret: Vec::from(v),
-            })
-        })
-        .ok()
+        ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), f)
+            .map_err(|()| Error::PeerMisbehavedError("key agreement failed".to_string()))
     }
 }
 
