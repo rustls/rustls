@@ -106,20 +106,17 @@ impl KeyScheduleEarly {
         self.ks
             .sign_verify_data(&resumption_psk_binder_key, hs_hash)
     }
-
-    pub(crate) fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshakeStart {
-        self.ks.input_secret(secret);
-        KeyScheduleHandshakeStart { ks: self.ks }
-    }
 }
 
-/// KeySchedule for skipping early data stage.  No secrets can be extracted
-/// (since there are none), but the handshake secret can be input.
-pub(crate) struct KeyScheduleNonSecret {
+/// Pre-handshake key schedule
+///
+/// The inner `KeySchedule` is either constructed without any secrets based on ths HKDF algorithm
+/// or is extracted from a `KeyScheduleEarly`. This can then be used to derive the `KeyScheduleHandshakeStart`.
+pub(crate) struct KeySchedulePreHandshake {
     ks: KeySchedule,
 }
 
-impl KeyScheduleNonSecret {
+impl KeySchedulePreHandshake {
     pub(crate) fn new(algorithm: hkdf::Algorithm) -> Self {
         Self {
             ks: KeySchedule::new_with_empty_secret(algorithm),
@@ -129,6 +126,12 @@ impl KeyScheduleNonSecret {
     pub(crate) fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshakeStart {
         self.ks.input_secret(secret);
         KeyScheduleHandshakeStart { ks: self.ks }
+    }
+}
+
+impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
+    fn from(KeyScheduleEarly { ks }: KeyScheduleEarly) -> Self {
+        Self { ks }
     }
 }
 

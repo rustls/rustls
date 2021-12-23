@@ -22,7 +22,7 @@ use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::tls13::key_schedule::{
-    KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret, KeyScheduleTraffic,
+    KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
@@ -125,15 +125,16 @@ pub(super) fn handle_server_hello(
                 "server selected unoffered psk".to_string(),
             ));
         }
-        early_key_schedule.into_handshake(&shared.shared_secret)
+        KeySchedulePreHandshake::from(early_key_schedule)
     } else {
         debug!("Not resuming");
         // Discard the early data key schedule.
         cx.data.early_data.rejected();
         cx.common.early_traffic = false;
         resuming_session.take();
-        KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&shared.shared_secret)
-    };
+        KeySchedulePreHandshake::new(suite.hkdf_algorithm)
+    }
+    .into_handshake(&shared.shared_secret);
 
     // Remember what KX group the server liked for next time.
     save_kx_hint(&config, &server_name, their_key_share.group);
