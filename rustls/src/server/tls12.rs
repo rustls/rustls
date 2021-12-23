@@ -265,7 +265,7 @@ mod client_hello {
             )?;
 
             let secrets = ConnectionSecrets::new_resume(
-                &self.randoms,
+                self.randoms,
                 self.suite,
                 &resumedata.master_secret.0,
             );

@@ -253,12 +253,12 @@ impl ConnectionSecrets {
     }
 
     pub(crate) fn new_resume(
-        randoms: &ConnectionRandoms,
+        randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
         master_secret: &[u8],
     ) -> Self {
         let mut ret = Self {
-            randoms: randoms.clone(),
+            randoms,
             suite,
             master_secret: [0u8; 48],
         };
