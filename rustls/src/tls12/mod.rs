@@ -224,51 +224,32 @@ impl ConnectionSecrets {
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
     ) -> Result<Self, Error> {
-        let kxd = complete_ecdh(kx, peer_pub_key)?;
-        Ok(match ems_seed {
-            Some(seed) => Self::new_ems(&randoms, &seed, suite, &kxd.shared_secret),
-            None => Self::new(&randoms, suite, &kxd.shared_secret),
-        })
-    }
+        let kxr = kx
+            .complete(peer_pub_key)
+            .ok_or_else(|| Error::PeerMisbehavedError("key agreement failed".to_string()))?;
 
-    fn new(randoms: &ConnectionRandoms, suite: &'static Tls12CipherSuite, pms: &[u8]) -> Self {
         let mut ret = Self {
-            randoms: randoms.clone(),
+            randoms,
             suite,
             master_secret: [0u8; 48],
         };
 
-        let randoms = join_randoms(&ret.randoms.client, &ret.randoms.server);
-        prf::prf(
-            &mut ret.master_secret,
-            suite.hmac_algorithm,
-            pms,
-            b"master secret",
-            &randoms,
-        );
-        ret
-    }
-
-    fn new_ems(
-        randoms: &ConnectionRandoms,
-        hs_hash: &Digest,
-        suite: &'static Tls12CipherSuite,
-        pms: &[u8],
-    ) -> Self {
-        let mut ret = Self {
-            randoms: randoms.clone(),
-            master_secret: [0u8; 48],
-            suite,
+        let (label, seed) = match ems_seed {
+            Some(seed) => ("extended master secret", Seed::Ems(seed)),
+            None => (
+                "master secret",
+                Seed::Randoms(join_randoms(&ret.randoms.client, &ret.randoms.server)),
+            ),
         };
 
         prf::prf(
             &mut ret.master_secret,
             suite.hmac_algorithm,
-            pms,
-            b"extended master secret",
-            hs_hash.as_ref(),
+            &kxr.shared_secret,
+            label.as_bytes(),
+            seed.as_ref(),
         );
-        ret
+        Ok(ret)
     }
 
     pub(crate) fn new_resume(
@@ -419,6 +400,20 @@ impl ConnectionSecrets {
     }
 }
 
+enum Seed {
+    Ems(Digest),
+    Randoms([u8; 64]),
+}
+
+impl AsRef<[u8]> for Seed {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Seed::Ems(seed) => seed.as_ref(),
+            Seed::Randoms(randoms) => randoms.as_ref(),
+        }
+    }
+}
+
 fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
     let mut randoms = [0u8; 64];
     randoms[..32].copy_from_slice(first);
@@ -445,14 +440,6 @@ fn decode_ecdh_params_<T: Codec>(kx_params: &[u8]) -> Option<T> {
         false => Some(ecdh_params),
         true => None,
     }
-}
-
-fn complete_ecdh(
-    mine: kx::KeyExchange,
-    peer_pub_key: &[u8],
-) -> Result<kx::KeyExchangeResult, Error> {
-    mine.complete(peer_pub_key)
-        .ok_or_else(|| Error::PeerMisbehavedError("key agreement failed".to_string()))
 }
 
 #[cfg(test)]
