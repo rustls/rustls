@@ -358,7 +358,7 @@ pub(crate) enum Protocol {
     Quic,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
     pub(crate) we_are_client: bool,
     pub(crate) client: [u8; 32],

@@ -126,7 +126,7 @@ mod server_hello {
                     }
 
                     let secrets =
-                        ConnectionSecrets::new_resume(&self.randoms, suite, resuming.secret());
+                        ConnectionSecrets::new_resume(self.randoms, suite, resuming.secret());
                     self.config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,
