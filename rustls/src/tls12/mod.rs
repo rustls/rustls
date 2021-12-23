@@ -224,10 +224,6 @@ impl ConnectionSecrets {
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
     ) -> Result<Self, Error> {
-        let kxr = kx
-            .complete(peer_pub_key)
-            .ok_or_else(|| Error::PeerMisbehavedError("key agreement failed".to_string()))?;
-
         let mut ret = Self {
             randoms,
             suite,
@@ -242,13 +238,17 @@ impl ConnectionSecrets {
             ),
         };
 
-        prf::prf(
-            &mut ret.master_secret,
-            suite.hmac_algorithm,
-            &kxr.shared_secret,
-            label.as_bytes(),
-            seed.as_ref(),
-        );
+        kx.complete(peer_pub_key, |secret| {
+            prf::prf(
+                &mut ret.master_secret,
+                suite.hmac_algorithm,
+                secret,
+                label.as_bytes(),
+                seed.as_ref(),
+            );
+            Ok(())
+        })?;
+
         Ok(ret)
     }
 

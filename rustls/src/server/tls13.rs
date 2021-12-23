@@ -400,15 +400,9 @@ mod client_hello {
         transcript.add_message(&sh);
         cx.common.send_msg(sh, false);
 
-        // Do key exchange
-        let kxr = kx
-            .complete(&share.payload.0)
-            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
-
         // Start key schedule
-        let key_schedule = if let Some(psk) = resuming_psk {
+        let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
             let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
-
             #[cfg(feature = "quic")]
             {
                 if cx.common.protocol == Protocol::Quic {
@@ -427,8 +421,12 @@ mod client_hello {
             KeySchedulePreHandshake::from(early_key_schedule)
         } else {
             KeySchedulePreHandshake::new(suite.hkdf_algorithm)
-        }
-        .into_handshake(&kxr.shared_secret);
+        };
+
+        // Do key exchange
+        let key_schedule = kx.complete(&share.payload.0, |secret| {
+            Ok(key_schedule_pre_handshake.into_handshake(secret))
+        })?;
 
         let handshake_hash = transcript.get_current_hash();
         let (key_schedule, client_key, server_key) = key_schedule.derive_handshake_secrets(

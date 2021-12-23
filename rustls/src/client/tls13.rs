@@ -87,11 +87,7 @@ pub(super) fn handle_server_hello(
             .illegal_param("wrong group for key share"));
     }
 
-    let shared = our_key_share
-        .complete(&their_key_share.payload.0)
-        .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
-
-    let key_schedule = if let (Some(selected_psk), Some(early_key_schedule)) =
+    let key_schedule_pre_handshake = if let (Some(selected_psk), Some(early_key_schedule)) =
         (server_hello.get_psk_index(), early_key_schedule)
     {
         if let Some(ref resuming) = resuming_session {
@@ -133,8 +129,11 @@ pub(super) fn handle_server_hello(
         cx.common.early_traffic = false;
         resuming_session.take();
         KeySchedulePreHandshake::new(suite.hkdf_algorithm)
-    }
-    .into_handshake(&shared.shared_secret);
+    };
+
+    let key_schedule = our_key_share.complete(&their_key_share.payload.0, |secret| {
+        Ok(key_schedule_pre_handshake.into_handshake(secret))
+    })?;
 
     // Remember what KX group the server liked for next time.
     save_kx_hint(&config, &server_name, their_key_share.group);
