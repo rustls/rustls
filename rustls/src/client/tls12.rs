@@ -25,6 +25,7 @@ use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
+use ring::agreement::PublicKey;
 use ring::constant_time;
 
 use std::sync::Arc;
@@ -438,13 +439,9 @@ fn emit_certificate(
     common.send_msg(cert, false);
 }
 
-fn emit_clientkx(
-    transcript: &mut HandshakeHash,
-    common: &mut CommonState,
-    kxd: &kx::KeyExchangeResult,
-) {
+fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pubkey: &PublicKey) {
     let mut buf = Vec::new();
-    let ecpoint = PayloadU8::new(Vec::from(kxd.pubkey.as_ref()));
+    let ecpoint = PayloadU8::new(Vec::from(pubkey.as_ref()));
     ecpoint.encode(&mut buf);
     let pubkey = Payload::new(buf);
 
@@ -788,27 +785,32 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     Error::PeerMisbehavedError("peer chose an unsupported group".to_string())
                 })?;
         let kx = kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?;
-        let kxd = tls12::complete_ecdh(kx, &ecdh_params.public.0)?;
 
         // 5b.
-        emit_clientkx(&mut st.transcript, cx.common, &kxd);
+        let mut transcript = st.transcript;
+        emit_clientkx(&mut transcript, cx.common, &kx.pubkey);
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
-        let handshake_hash = st.transcript.get_current_hash();
+        let ems_seed = st
+            .using_ems
+            .then(|| transcript.get_current_hash());
 
         // 5c.
         if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut st.transcript, client_auth, cx.common)?;
+            emit_certverify(&mut transcript, client_auth, cx.common)?;
         }
 
         // 5d.
         emit_ccs(cx.common);
 
         // 5e. Now commit secrets.
-        let secrets = if st.using_ems {
-            ConnectionSecrets::new_ems(&st.randoms, &handshake_hash, suite, &kxd.shared_secret)
-        } else {
-            ConnectionSecrets::new(&st.randoms, suite, &kxd.shared_secret)
-        };
+        let secrets = ConnectionSecrets::from_key_exchange(
+            kx,
+            &ecdh_params.public.0,
+            ems_seed,
+            st.randoms,
+            suite,
+        )?;
+
         st.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
@@ -821,7 +823,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut st.transcript, cx.common);
+        emit_finished(&secrets, &mut transcript, cx.common);
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -831,7 +833,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 session_id: st.session_id,
                 server_name: st.server_name,
                 using_ems: st.using_ems,
-                transcript: st.transcript,
+                transcript,
                 resuming: false,
                 cert_verified,
                 sig_verified,
@@ -844,7 +846,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 session_id: st.session_id,
                 server_name: st.server_name,
                 using_ems: st.using_ems,
-                transcript: st.transcript,
+                transcript,
                 ticket: None,
                 resuming: false,
                 cert_verified,
