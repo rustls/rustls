@@ -217,6 +217,20 @@ pub(crate) struct ConnectionSecrets {
 }
 
 impl ConnectionSecrets {
+    pub(crate) fn from_key_exchange(
+        kx: kx::KeyExchange,
+        peer_pub_key: &[u8],
+        ems_seed: Option<Digest>,
+        randoms: ConnectionRandoms,
+        suite: &'static Tls12CipherSuite,
+    ) -> Result<Self, Error> {
+        let kxd = complete_ecdh(kx, peer_pub_key)?;
+        Ok(match ems_seed {
+            Some(seed) => Self::new_ems(&randoms, &seed, suite, &kxd.shared_secret),
+            None => Self::new(&randoms, suite, &kxd.shared_secret),
+        })
+    }
+
     pub(crate) fn new(
         randoms: &ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
