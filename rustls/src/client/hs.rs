@@ -57,6 +57,7 @@ fn find_session(
 
     #[allow(unused_mut)]
     let mut reader = Reader::init(&value[2..]);
+    #[allow(clippy::bind_instead_of_map)] // https://github.com/rust-lang/rust-clippy/issues/8082
     CipherSuite::read_bytes(&value[..2])
         .and_then(|suite| {
             persist::ClientSessionValue::read(&mut reader, suite, &config.cipher_suites)
