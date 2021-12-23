@@ -363,14 +363,12 @@ mod client_hello {
     ) -> Result<KeyScheduleHandshake, Error> {
         let mut extensions = Vec::new();
 
-        // Do key exchange
-        let kxr = kx::KeyExchange::choose(share.group, &config.kx_groups)
+        // Prepare key exchange
+        let kx = kx::KeyExchange::choose(share.group, &config.kx_groups)
             .and_then(kx::KeyExchange::start)
-            .ok_or(Error::FailedToGetRandomBytes)?
-            .complete(&share.payload.0)
-            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
+            .ok_or(Error::FailedToGetRandomBytes)?;
 
-        let kse = KeyShareEntry::new(share.group, kxr.pubkey.as_ref());
+        let kse = KeyShareEntry::new(share.group, kx.pubkey.as_ref());
         extensions.push(ServerExtension::KeyShare(kse));
         extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
@@ -401,6 +399,11 @@ mod client_hello {
         trace!("sending server hello {:?}", sh);
         transcript.add_message(&sh);
         cx.common.send_msg(sh, false);
+
+        // Do key exchange
+        let kxr = kx
+            .complete(&share.payload.0)
+            .ok_or_else(|| Error::PeerMisbehavedError("key exchange failed".to_string()))?;
 
         // Start key schedule
         let key_schedule = if let Some(psk) = resuming_psk {
