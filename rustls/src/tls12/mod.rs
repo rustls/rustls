@@ -231,11 +231,7 @@ impl ConnectionSecrets {
         })
     }
 
-    pub(crate) fn new(
-        randoms: &ConnectionRandoms,
-        suite: &'static Tls12CipherSuite,
-        pms: &[u8],
-    ) -> Self {
+    fn new(randoms: &ConnectionRandoms, suite: &'static Tls12CipherSuite, pms: &[u8]) -> Self {
         let mut ret = Self {
             randoms: randoms.clone(),
             suite,
@@ -253,7 +249,7 @@ impl ConnectionSecrets {
         ret
     }
 
-    pub(crate) fn new_ems(
+    fn new_ems(
         randoms: &ConnectionRandoms,
         hs_hash: &Digest,
         suite: &'static Tls12CipherSuite,
@@ -451,7 +447,7 @@ fn decode_ecdh_params_<T: Codec>(kx_params: &[u8]) -> Option<T> {
     }
 }
 
-pub(crate) fn complete_ecdh(
+fn complete_ecdh(
     mine: kx::KeyExchange,
     peer_pub_key: &[u8],
 ) -> Result<kx::KeyExchangeResult, Error> {

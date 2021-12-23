@@ -579,24 +579,22 @@ impl State<ServerConnectionData> for ExpectClientKx {
             HandshakePayload::ClientKeyExchange
         )?;
         self.transcript.add_message(&m);
+        let ems_seed = self
+            .using_ems
+            .then(|| self.transcript.get_current_hash());
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
             tls12::decode_ecdh_params::<ClientECDHParams>(cx.common, &client_kx.0)?;
-        let kxd = tls12::complete_ecdh(self.server_kx, &peer_kx_params.public.0)?;
+        let secrets = ConnectionSecrets::from_key_exchange(
+            self.server_kx,
+            &peer_kx_params.public.0,
+            ems_seed,
+            self.randoms,
+            self.suite,
+        )?;
 
-        let secrets = if self.using_ems {
-            let handshake_hash = self.transcript.get_current_hash();
-            ConnectionSecrets::new_ems(
-                &self.randoms,
-                &handshake_hash,
-                self.suite,
-                &kxd.shared_secret,
-            )
-        } else {
-            ConnectionSecrets::new(&self.randoms, self.suite, &kxd.shared_secret)
-        };
         self.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
