@@ -58,7 +58,7 @@ mod client_hello {
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
     use crate::tls13::key_schedule::{
-        KeyScheduleEarly, KeyScheduleHandshake, KeyScheduleNonSecret,
+        KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
 
     use super::*;
@@ -424,10 +424,11 @@ mod client_hello {
                 }
             }
 
-            early_key_schedule.into_handshake(&kxr.shared_secret)
+            KeySchedulePreHandshake::from(early_key_schedule)
         } else {
-            KeyScheduleNonSecret::new(suite.hkdf_algorithm).into_handshake(&kxr.shared_secret)
-        };
+            KeySchedulePreHandshake::new(suite.hkdf_algorithm)
+        }
+        .into_handshake(&kxr.shared_secret);
 
         let handshake_hash = transcript.get_current_hash();
         let (key_schedule, client_key, server_key) = key_schedule.derive_handshake_secrets(
