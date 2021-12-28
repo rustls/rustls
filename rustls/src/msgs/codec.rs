@@ -175,36 +175,49 @@ impl Codec for u64 {
 }
 
 pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let mut sub: Vec<u8> = Vec::new();
+    let len_offset = bytes.len();
+    bytes.push(0);
+
     for i in items {
-        i.encode(&mut sub);
+        i.encode(bytes);
     }
 
-    debug_assert!(sub.len() <= 0xff);
-    (sub.len() as u8).encode(bytes);
-    bytes.append(&mut sub);
+    let len = bytes.len() - len_offset - 1;
+    debug_assert!(len <= 0xff);
+    bytes[len_offset] = len as u8;
 }
 
 pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let mut sub: Vec<u8> = Vec::new();
+    let len_offset = bytes.len();
+    bytes.extend(&[0, 0]);
+
     for i in items {
-        i.encode(&mut sub);
+        i.encode(bytes);
     }
 
-    debug_assert!(sub.len() <= 0xffff);
-    (sub.len() as u16).encode(bytes);
-    bytes.append(&mut sub);
+    let len = bytes.len() - len_offset - 2;
+    debug_assert!(len <= 0xffff);
+    let out: &mut [u8; 2] = (&mut bytes[len_offset..len_offset + 2])
+        .try_into()
+        .unwrap();
+    *out = u16::to_be_bytes(len as u16);
 }
 
 pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let mut sub: Vec<u8> = Vec::new();
+    let len_offset = bytes.len();
+    bytes.extend(&[0, 0, 0]);
+
     for i in items {
-        i.encode(&mut sub);
+        i.encode(bytes);
     }
 
-    debug_assert!(sub.len() <= 0xff_ffff);
-    u24(sub.len() as u32).encode(bytes);
-    bytes.append(&mut sub);
+    let len = bytes.len() - len_offset - 3;
+    debug_assert!(len <= 0xff_ffff);
+    let len_bytes = u32::to_be_bytes(len as u32);
+    let out: &mut [u8; 3] = (&mut bytes[len_offset..len_offset + 3])
+        .try_into()
+        .unwrap();
+    out.copy_from_slice(&len_bytes[1..]);
 }
 
 pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
