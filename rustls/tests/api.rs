@@ -2686,7 +2686,7 @@ fn vectored_write_for_client_appdata() {
 }
 
 #[test]
-fn vectored_write_for_server_handshake() {
+fn vectored_write_for_server_handshake_without_client_auth() {
     let (mut client, mut server) = make_pair(KeyType::Rsa);
 
     server
@@ -2706,11 +2706,57 @@ fn vectored_write_for_server_handshake() {
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 4000); // its pretty big (contains cert chain)
         assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert!(pipe.writevs[0].len() > 3); // at least a server hello/cert/serverkx
+        assert_eq!(pipe.writevs[0].len(), 8); // at least a server hello/ccs/cert/serverkx/0.5rtt data
     }
 
     client.process_new_packets().unwrap();
     transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.write_tls(&mut pipe).unwrap();
+        assert_eq!(wrlen, 103);
+        assert_eq!(pipe.writevs, vec![vec![103]]);
+    }
+
+    assert!(!server.is_handshaking());
+    assert!(!client.is_handshaking());
+    check_read(&mut client.reader(), b"012345678901234567890123456789");
+}
+
+#[test]
+fn vectored_write_for_server_handshake_with_client_auth() {
+    let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa);
+    let (mut client, mut server) =
+        make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa), server_config);
+
+    server
+        .writer()
+        .write_all(b"01234567890123456789")
+        .unwrap();
+    server
+        .writer()
+        .write_all(b"0123456789")
+        .unwrap();
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        let wrlen = server.write_tls(&mut pipe).unwrap();
+        // don't assert exact sizes here, to avoid a brittle test
+        assert!(wrlen > 4000); // its pretty big (contains cert chain)
+        assert_eq!(pipe.writevs.len(), 1); // only one writev
+        assert_eq!(pipe.writevs[0].len(), 7); // at least a server hello/ccs/cert/serverkx data
+    }
+
+    // client second flight
+    client.process_new_packets().unwrap();
+    transfer(&mut client, &mut server);
+
+    // when client auth is enabled, we don't sent 0.5-rtt data, as we'd be sending
+    // it to an unauthenticated peer. so it happens here, in the server's second
+    // flight (42 and 32 are lengths of appdata sent above).
     server.process_new_packets().unwrap();
     {
         let mut pipe = OtherSession::new(&mut client);
