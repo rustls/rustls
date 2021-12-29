@@ -562,7 +562,9 @@ impl<Data> ConnectionCommon<Data> {
         // - if it's not a CCS at all
         // - if we've finished the handshake
         if msg.typ == ContentType::ChangeCipherSpec
-            && !self.common_state.traffic
+            && !self
+                .common_state
+                .may_receive_application_data
             && self.common_state.is_tls13()
         {
             if self.common_state.received_middlebox_ccs {
@@ -783,7 +785,8 @@ pub struct CommonState {
     pub(crate) suite: Option<SupportedCipherSuite>,
     pub(crate) alpn_protocol: Option<Vec<u8>>,
     aligned_handshake: bool,
-    pub(crate) traffic: bool,
+    pub(crate) may_send_application_data: bool,
+    pub(crate) may_receive_application_data: bool,
     pub(crate) early_traffic: bool,
     sent_fatal_alert: bool,
     /// If the peer has signaled end of stream.
@@ -811,7 +814,8 @@ impl CommonState {
             suite: None,
             alpn_protocol: None,
             aligned_handshake: true,
-            traffic: false,
+            may_send_application_data: false,
+            may_receive_application_data: false,
             early_traffic: false,
             sent_fatal_alert: false,
             has_received_close_notify: false,
@@ -842,7 +846,7 @@ impl CommonState {
     /// [`Connection::process_new_packets`] has been called, this might start to return `false`
     /// while the final handshake packets still need to be extracted from the connection's buffers.
     pub fn is_handshaking(&self) -> bool {
-        !self.traffic
+        !(self.may_send_application_data && self.may_receive_application_data)
     }
 
     /// Retrieves the certificate chain used by the peer to authenticate.
@@ -902,7 +906,7 @@ impl CommonState {
     ) -> Result<Box<dyn State<Data>>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.traffic && !self.is_tls13() {
+        if self.may_receive_application_data && !self.is_tls13() {
             let reject_ty = match self.is_client {
                 true => HandshakeType::HelloRequest,
                 false => HandshakeType::ClientHello,
@@ -1061,7 +1065,7 @@ impl CommonState {
     /// Returns the number of bytes written from `data`: this might
     /// be less than `data.len()` if buffer limits were exceeded.
     fn send_plain(&mut self, data: &[u8], limit: Limit) -> usize {
-        if !self.traffic {
+        if !self.may_send_application_data {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
             let len = match limit {
@@ -1085,9 +1089,18 @@ impl CommonState {
         self.send_appdata_encrypt(data, limit)
     }
 
-    pub(crate) fn start_traffic(&mut self) {
-        self.traffic = true;
+    pub(crate) fn start_outgoing_traffic(&mut self) {
+        self.may_send_application_data = true;
         self.flush_plaintext();
+    }
+
+    pub(crate) fn start_incoming_traffic(&mut self) {
+        self.may_receive_application_data = true;
+    }
+
+    pub(crate) fn start_traffic(&mut self) {
+        self.start_incoming_traffic();
+        self.start_outgoing_traffic();
     }
 
     /// Sets a limit on the internal buffers used to buffer
@@ -1137,7 +1150,7 @@ impl CommonState {
     /// Send any buffered plaintext.  Plaintext is buffered if
     /// written during handshake.
     fn flush_plaintext(&mut self) {
-        if !self.traffic {
+        if !self.may_send_application_data {
             return;
         }
 
@@ -1283,7 +1296,7 @@ impl CommonState {
         // completed, but also don't want to read if we still have sendable tls.
         self.received_plaintext.is_empty()
             && !self.has_received_close_notify
-            && (self.traffic || self.sendable_tls.is_empty())
+            && (self.may_send_application_data || self.sendable_tls.is_empty())
     }
 
     fn current_io_state(&self) -> IoState {

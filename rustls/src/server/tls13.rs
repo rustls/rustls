@@ -330,6 +330,13 @@ mod client_hello {
                 &self.config,
             );
 
+            if !doing_client_auth {
+                // Application data can be sent immediately after Finished, in one
+                // flight.  However, if client auth is enabled, we don't want to send
+                // application data to an unauthenticated peer.
+                cx.common.start_outgoing_traffic();
+            }
+
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
                     config: self.config,
@@ -969,6 +976,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             )?;
         }
 
+        // Application data may now flow, even if we have client auth enabled.
         cx.common.start_traffic();
 
         #[cfg(feature = "quic")]
