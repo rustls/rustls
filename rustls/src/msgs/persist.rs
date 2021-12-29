@@ -214,11 +214,6 @@ impl Tls13ClientSessionValue {
         bytes
     }
 
-    // Test-only
-    pub fn set_max_early_data_size(&mut self, new: u32) {
-        self.max_early_data_size = new;
-    }
-
     pub fn max_early_data_size(&self) -> u32 {
         self.max_early_data_size
     }

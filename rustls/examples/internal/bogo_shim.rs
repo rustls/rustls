@@ -11,7 +11,7 @@ use rustls;
 use rustls::internal::msgs::enums::ProtocolVersion;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
-use rustls::{ClientConnection, Connection};
+use rustls::{ClientConnection, Connection, ServerConnection};
 
 use std::convert::TryInto;
 use std::env;
@@ -391,6 +391,11 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
             .collect::<Vec<_>>();
     }
 
+    if opts.enable_early_data {
+        // see kMaxEarlyDataAccepted in boringssl, which bogo validates
+        cfg.max_early_data_size = 14336;
+    }
+
     Arc::new(cfg)
 }
 
@@ -512,6 +517,9 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::CorruptMessage => quit(":GARBAGE:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerMisbehavedError(s) if s == "too much early_data received" => {
+            quit(":TOO_MUCH_READ_EARLY_DATA:")
+        }
         Error::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
@@ -544,6 +552,13 @@ fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
 
 fn client(conn: &mut Connection) -> &mut ClientConnection {
     conn.try_into().unwrap()
+}
+
+fn server(conn: &mut Connection) -> &mut ServerConnection {
+    match conn {
+        Connection::Server(s) => s,
+        _ => panic!("Connection is not a ServerConnection"),
+    }
 }
 
 fn exec(opts: &Options, mut sess: Connection, count: usize) {
@@ -593,6 +608,23 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
         }
 
+        if opts.server && opts.enable_early_data {
+            if let Some(ref mut ed) = server(&mut sess).early_data() {
+                let mut data = Vec::new();
+                let data_len = ed
+                    .read_to_end(&mut data)
+                    .expect("cannot read early_data");
+
+                for b in data.iter_mut() {
+                    *b ^= 0xff;
+                }
+
+                sess.writer()
+                    .write_all(&data[..data_len])
+                    .expect("cannot echo early_data in 1rtt data");
+            }
+        }
+
         if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
             let mut export = Vec::new();
             export.resize(opts.export_keying_material, 0u8);
@@ -633,7 +665,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             quench_writes = true;
         }
 
-        if opts.enable_early_data && !sess.is_handshaking() && count > 0 {
+        if opts.enable_early_data && !opts.server && !sess.is_handshaking() && count > 0 {
             if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
                 quit_err("Early data was not accepted, but we expect the opposite");
             } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
@@ -882,8 +914,8 @@ fn main() {
             "-enable-signed-cert-timestamps" => {
                 opts.send_sct = true;
             }
-            "-enable-early-data" |
-            "-on-resume-enable-early-data" => {
+            "-enable-early-data" => {
+                opts.tickets = false;
                 opts.enable_early_data = true;
             }
             "-on-resume-shim-writes-first" => {
@@ -985,6 +1017,7 @@ fn main() {
             "-on-initial-tls13-variant" |
             "-on-initial-expect-curve-id" |
             "-on-resume-export-early-keying-material" |
+            "-on-resume-enable-early-data" |
             "-export-early-keying-material" |
             "-handshake-twice" |
             "-on-resume-verify-fail" |
@@ -1004,11 +1037,6 @@ fn main() {
                 process::exit(1);
             }
         }
-    }
-
-    if opts.enable_early_data && opts.server {
-        println!("For now we only test client-side early data");
-        process::exit(BOGO_NACK);
     }
 
     println!("opts {:?}", opts);
