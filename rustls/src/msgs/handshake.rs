@@ -2025,6 +2025,21 @@ impl NewSessionTicketPayloadTLS13 {
         }
     }
 
+    pub fn has_duplicate_extension(&self) -> bool {
+        let mut seen = collections::HashSet::new();
+
+        for ext in &self.exts {
+            let typ = ext.get_type().get_u16();
+
+            if seen.contains(&typ) {
+                return true;
+            }
+            seen.insert(typ);
+        }
+
+        false
+    }
+
     pub fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
         self.exts
             .iter()

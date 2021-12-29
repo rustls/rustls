@@ -976,6 +976,14 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTLS13,
     ) -> Result<(), Error> {
+        if nst.has_duplicate_extension() {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter);
+            return Err(Error::PeerMisbehavedError(
+                "peer sent duplicate NewSessionTicket extensions".into(),
+            ));
+        }
+
         let handshake_hash = self.transcript.get_current_hash();
         let secret = self
             .key_schedule

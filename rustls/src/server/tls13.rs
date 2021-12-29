@@ -1126,8 +1126,7 @@ impl ExpectFinished {
             (id, stateful_lifetime)
         };
 
-        let age_add = rand::random_u32()?; // nb, we don't do 0-RTT data, so whatever
-        #[allow(unused_mut)]
+        let age_add = rand::random_u32()?;
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
 
         if config.max_early_data_size > 0 {

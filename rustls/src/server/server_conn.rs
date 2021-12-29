@@ -639,6 +639,27 @@ impl EarlyDataState {
     }
 }
 
+// these branches not reachable externally, unless something else goes wrong.
+#[test]
+fn test_read_in_new_state() {
+    assert_eq!(
+        format!("{:?}", EarlyDataState::default().read(&mut [0u8; 5])),
+        "Err(Kind(BrokenPipe))"
+    );
+}
+
+#[cfg(feature = "read_buf")]
+#[test]
+fn test_read_buf_in_new_state() {
+    assert_eq!(
+        format!(
+            "{:?}",
+            EarlyDataState::default().read_buf(&mut io::ReadBuf::new(&mut [0u8; 5]))
+        ),
+        "Err(Kind(BrokenPipe))"
+    );
+}
+
 /// State associated with a server connection.
 #[derive(Default)]
 pub struct ServerConnectionData {

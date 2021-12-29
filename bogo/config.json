@@ -74,9 +74,6 @@
     "KeyUpdate-FromClient": "not implemented (no API yet)",
     "KeyUpdate-FromServer": "",
     "ExportTrafficSecrets-*": "",
-    "SkipEarlyData*": "no 0rtt support",
-    "TLS13-DuplicateTicketEarlyDataInfo": "",
-    "TLS13-DuplicateTicketEarlyDataSupport": "",
     "*-InvalidSignature-*-SHA1-*": "no sha1",
     "NoCommonCurves": "nothing to fall back to",
     "ClientHelloPadding": "hello padding extension not implemented",
@@ -160,6 +157,8 @@
     "TrailingMessageData-TLS13-ServerFinished-TLS": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "TrailingMessageData-TLS13-ClientCertificate-TLS": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-TLS13-ClientCertificateVerify-TLS": ":BAD_HANDSHAKE_MSG:",
+    "TrailingMessageData-TLS13-EndOfEarlyData-TLS": ":BAD_HANDSHAKE_MSG:",
+    "Server-NonEmptyEndOfEarlyData-TLS13": ":BAD_HANDSHAKE_MSG:",
     "MissingKeyShare-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "MissingKeyShare-Server-TLS13": ":INCOMPATIBLE:",
     "EmptyEncryptedExtensions-TLS13": ":BAD_HANDSHAKE_MSG:",
@@ -290,6 +289,7 @@
     "PartialClientFinishedWithClientHello-TLS12-Resume": ":PEER_MISBEHAVIOUR:",
     "PartialServerHelloWithHelloRetryRequest": ":PEER_MISBEHAVIOUR:",
     "PartialNewSessionTicketWithServerHelloDone": ":PEER_MISBEHAVIOUR:",
+    "PartialEndOfEarlyDataWithClientHello": ":PEER_MISBEHAVIOUR:",
     "FragmentAcrossChangeCipherSpec-Client": ":PEER_MISBEHAVIOUR:",
     "FragmentAcrossChangeCipherSpec-Server-Packed": ":PEER_MISBEHAVIOUR:",
     "FragmentAcrossChangeCipherSpec-Client-Resume-Packed": ":PEER_MISBEHAVIOUR:",
@@ -340,6 +340,7 @@
     "SendServerHelloAsHelloRetryRequest": ":BAD_HANDSHAKE_MSG:",
     "TLS13-OnlyPadding": ":PEER_MISBEHAVIOUR:",
     "TLS13-EmptyRecords": ":PEER_MISBEHAVIOUR:",
+    "TLS13-DuplicateTicketEarlyDataSupport": ":PEER_MISBEHAVIOUR:",
     "SupportedVersionSelection-TLS12": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequest-CipherChange-TLS13": ":PEER_MISBEHAVIOUR:",
     "CurveTest-Client-Compressed-P-256-TLS12": ":PEER_MISBEHAVIOUR:",
@@ -364,7 +365,13 @@
     "TooManyChangeCipherSpec-Server-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyData-CipherMismatch-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:"
+    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:",
+    "EarlyData-SkipEndOfEarlyData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
+    "SkipEarlyData-TooMuchData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
+    "SkipEarlyData-HRR-FatalAlert-TLS13": ":HANDSHAKE_FAILURE:",
+    "SkipEarlyData-HRR-Interleaved-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
+    "SkipEarlyData-HRR-TooMuchData-TLS13": ":UNEXPECTED_MESSAGE:",
+    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": ":PEER_MISBEHAVIOUR:"
   },
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
@@ -375,6 +382,8 @@
     "Downgrade-TLS10-Client": "tls: no cipher suite supported by both client and server",
     "Downgrade-TLS10-Server": "remote error: protocol version not supported",
     "TrailingDataWithFinished-Client-TLS13": "local error: bad record MAC",
-    "TrailingDataWithFinished-Resume-Client-TLS13": "local error: bad record MAC"
-  }
+    "TrailingDataWithFinished-Resume-Client-TLS13": "local error: bad record MAC",
+    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter"
+  },
+  "HalfRTTTickets": 0
 }
