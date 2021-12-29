@@ -1,24 +1,23 @@
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::base::PayloadU16;
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
-use crate::sign;
+use crate::{key, sign};
 
 use std::sync::Arc;
 
 pub(super) struct ServerCertDetails {
-    pub(super) cert_chain: CertificatePayload,
+    pub(super) cert_chain: Vec<key::Certificate>,
     pub(super) ocsp_response: Vec<u8>,
-    pub(super) scts: Option<SCTList>,
+    pub(super) scts: Option<Vec<PayloadU16>>,
 }
 
 impl ServerCertDetails {
     pub(super) fn new(
-        cert_chain: CertificatePayload,
+        cert_chain: Vec<key::Certificate>,
         ocsp_response: Vec<u8>,
-        scts: Option<SCTList>,
+        scts: Option<Vec<PayloadU16>>,
     ) -> Self {
         Self {
             cert_chain,
@@ -29,8 +28,7 @@ impl ServerCertDetails {
 
     pub(super) fn scts(&self) -> impl Iterator<Item = &[u8]> {
         self.scts
-            .as_ref()
-            .map(|items| items.as_slice())
+            .as_deref()
             .unwrap_or(&[])
             .iter()
             .map(|payload| payload.0.as_slice())

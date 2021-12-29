@@ -1,9 +1,8 @@
 use crate::client::ServerName;
 use crate::key;
 use crate::msgs::base::{PayloadU16, PayloadU8};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{u24, Codec, Reader, TlsVec};
 use crate::msgs::enums::{CipherSuite, ProtocolVersion};
-use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
@@ -327,7 +326,7 @@ pub struct ClientSessionCommon {
     secret: PayloadU8,
     epoch: u64,
     lifetime_secs: u32,
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: TlsVec<u24, key::Certificate>,
 }
 
 impl ClientSessionCommon {
@@ -356,7 +355,7 @@ impl ClientSessionCommon {
             secret: PayloadU8::read(r)?,
             epoch: u64::read(r)?,
             lifetime_secs: u32::read(r)?,
-            server_cert_chain: CertificatePayload::read(r)?,
+            server_cert_chain: TlsVec::read(r)?,
         })
     }
 
@@ -396,7 +395,7 @@ pub struct ServerSessionValue {
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
     pub extended_ms: bool,
-    pub client_cert_chain: Option<CertificatePayload>,
+    pub client_cert_chain: Option<TlsVec<u24, key::Certificate>>,
     pub alpn: Option<PayloadU8>,
     pub application_data: PayloadU16,
 }
@@ -444,7 +443,7 @@ impl Codec for ServerSessionValue {
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
         let ccert = if has_ccert {
-            Some(CertificatePayload::read(r)?)
+            Some(TlsVec::read(r)?)
         } else {
             None
         };

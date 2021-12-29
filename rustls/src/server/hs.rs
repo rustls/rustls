@@ -521,10 +521,10 @@ pub(super) fn process_client_hello<'a>(
     let mut sig_schemes = client_hello
         .get_sigalgs_extension()
         .ok_or_else(|| incompatible(common, "client didn't describe signature schemes"))?
-        .clone();
+        .to_vec();
     sig_schemes.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
-    Ok((client_hello, sig_schemes.into()))
+    Ok((client_hello, sig_schemes))
 }
 
 #[allow(clippy::large_enum_variant)]

@@ -4,13 +4,12 @@ use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::base::{Payload, PayloadU8};
+use crate::msgs::base::{Payload, PayloadU16, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::{CertificatePayload, SCTList, SessionID};
-use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
+use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams, SessionID};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -102,7 +101,7 @@ mod server_hello {
                     let error_msg = "server sent invalid SCT list".to_string();
                     return Err(Error::PeerMisbehavedError(error_msg));
                 }
-                Some(sct_list.clone())
+                Some(sct_list.to_vec())
             } else {
                 None
             };
@@ -200,7 +199,7 @@ struct ExpectCertificate {
     pub(super) suite: &'static Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<Vec<PayloadU16>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -227,12 +226,12 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 transcript: self.transcript,
                 suite: self.suite,
                 server_cert_sct_list: self.server_cert_sct_list,
-                server_cert_chain,
+                server_cert_chain: server_cert_chain.into(),
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }))
         } else {
             let server_cert =
-                ServerCertDetails::new(server_cert_chain, vec![], self.server_cert_sct_list);
+                ServerCertDetails::new(server_cert_chain.into(), vec![], self.server_cert_sct_list);
 
             Ok(Box::new(ExpectServerKx {
                 config: self.config,
@@ -259,8 +258,8 @@ struct ExpectCertificateStatusOrServerKx {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
-    server_cert_chain: CertificatePayload,
+    server_cert_sct_list: Option<Vec<PayloadU16>>,
+    server_cert_chain: Vec<key::Certificate>,
     must_issue_new_ticket: bool,
 }
 
@@ -321,8 +320,8 @@ struct ExpectCertificateStatus {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
-    server_cert_chain: CertificatePayload,
+    server_cert_sct_list: Option<Vec<PayloadU16>>,
+    server_cert_chain: Vec<key::Certificate>,
     must_issue_new_ticket: bool,
 }
 
@@ -765,7 +764,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
                 .map_err(|err| hs::send_cert_error_alert(cx.common, err))?
         };
-        cx.common.peer_certificates = Some(st.server_cert.cert_chain.into());
+        cx.common.peer_certificates = Some(st.server_cert.cert_chain);
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {

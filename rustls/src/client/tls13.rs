@@ -11,11 +11,10 @@ use crate::msgs::codec::{Codec, TlsVec};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureScheme};
-use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
-use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
+use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
@@ -342,7 +341,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
 fn validate_encrypted_extensions(
     common: &mut CommonState,
     hello: &ClientHelloDetails,
-    exts: &EncryptedExtensions,
+    exts: &TlsVec<u16, ServerExtension>,
 ) -> Result<(), Error> {
     if exts.has_duplicate_extension() {
         common.send_fatal_alert(AlertDescription::DecodeError);
@@ -551,10 +550,9 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
-        let no_sigschemes = TlsVec::default();
         let compat_sigschemes = certreq
             .get_sigalgs_extension()
-            .unwrap_or(&no_sigschemes)
+            .unwrap_or(&[])
             .iter()
             .cloned()
             .filter(|scheme| tls13_sign_schemes.contains(scheme))
@@ -568,10 +566,9 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             ));
         }
 
-        let no_canames = Vec::new();
         let canames = certreq
             .get_authorities_extension()
-            .unwrap_or(&no_canames)
+            .unwrap_or(&[])
             .iter()
             .map(|p| p.0.as_slice())
             .collect::<Vec<&[u8]>>();
@@ -646,7 +643,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
         }
 
         let server_cert = ServerCertDetails::new(
-            cert_chain.convert(),
+            cert_chain.convert().into(),
             cert_chain.get_end_entity_ocsp(),
             cert_chain.get_end_entity_scts(),
         );
@@ -730,7 +727,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             )
             .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
-        cx.common.peer_certificates = Some(self.server_cert.cert_chain.into());
+        cx.common.peer_certificates = Some(self.server_cert.cert_chain);
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {

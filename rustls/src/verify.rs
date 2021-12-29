@@ -5,7 +5,7 @@ use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
+use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedName};
 
 use ring::digest::Digest;
 
@@ -203,7 +203,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// Return `None` to abort the connection. Return an empty `Vec` to continue
     /// the handshake without passing a list of CA DNs.
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames>;
+    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>>;
 
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// and chains to at least one of the trust anchors in `roots`.
@@ -486,7 +486,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         Some(true)
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
         Some(self.roots.subjects())
     }
 
@@ -539,7 +539,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         Some(false)
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
         self.inner.client_auth_root_subjects()
     }
 
@@ -581,7 +581,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
         unimplemented!();
     }
 

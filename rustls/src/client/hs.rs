@@ -8,17 +8,15 @@ use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-#[cfg(feature = "quic")]
 use crate::msgs::base::PayloadU16;
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{Codec, Reader, TlsVec};
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
+use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
-use crate::msgs::handshake::{ProtocolNameList, SUPPORTED_POINT_FORMATS};
+use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry, SUPPORTED_POINT_FORMATS};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -270,7 +268,7 @@ fn emit_client_hello_for_retry(
     }
 
     if !config.alpn_protocols.is_empty() {
-        exts.push(ClientExtension::Protocols(ProtocolNameList::from_slices(
+        exts.push(ClientExtension::Protocols(TlsVec::from_slices(
             &config
                 .alpn_protocols
                 .iter()
@@ -461,7 +459,7 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
-pub(super) fn sct_list_is_invalid(scts: &SCTList) -> bool {
+pub(super) fn sct_list_is_invalid(scts: &[PayloadU16]) -> bool {
     scts.is_empty() || scts.iter().any(|sct| sct.0.is_empty())
 }
 

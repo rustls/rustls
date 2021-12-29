@@ -901,7 +901,7 @@ fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTLS13 {
     }
 }
 
-fn get_sample_encryptedextensions() -> EncryptedExtensions {
+fn get_sample_encryptedextensions() -> TlsVec<u16, ServerExtension> {
     get_sample_serverhellopayload().extensions
 }
 
