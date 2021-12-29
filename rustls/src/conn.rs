@@ -368,6 +368,11 @@ pub(crate) struct ConnectionRandoms {
 #[cfg(feature = "tls12")]
 static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
+/// How many ChangeCipherSpec messages we accept and drop in TLS1.3 handshakes.
+/// The spec says 1, but implementations (namely the boringssl test suite) get
+/// this wrong.  BoringSSL itself accepts up to 32.
+static TLS13_MAX_DROPPED_CCS: u8 = 2u8;
+
 impl ConnectionRandoms {
     pub(crate) fn new(client: Random, server: Random, we_are_client: bool) -> Self {
         Self {
@@ -567,12 +572,12 @@ impl<Data> ConnectionCommon<Data> {
                 .may_receive_application_data
             && self.common_state.is_tls13()
         {
-            if self.common_state.received_middlebox_ccs {
+            if self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS {
                 return Err(Error::PeerMisbehavedError(
                     "illegal middlebox CCS received".into(),
                 ));
             } else {
-                self.common_state.received_middlebox_ccs = true;
+                self.common_state.received_middlebox_ccs += 1;
                 trace!("Dropping CCS");
                 return Ok(state);
             }
@@ -792,7 +797,7 @@ pub struct CommonState {
     /// If the peer has signaled end of stream.
     has_received_close_notify: bool,
     has_seen_eof: bool,
-    received_middlebox_ccs: bool,
+    received_middlebox_ccs: u8,
     pub(crate) peer_certificates: Option<Vec<key::Certificate>>,
     message_fragmenter: MessageFragmenter,
     received_plaintext: ChunkVecBuffer,
@@ -820,7 +825,7 @@ impl CommonState {
             sent_fatal_alert: false,
             has_received_close_notify: false,
             has_seen_eof: false,
-            received_middlebox_ccs: false,
+            received_middlebox_ccs: 0,
             peer_certificates: None,
             message_fragmenter: MessageFragmenter::new(max_fragment_size)
                 .map_err(|_| Error::BadMaxFragmentSize)?,
