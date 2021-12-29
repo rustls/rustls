@@ -106,7 +106,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             alpn_protocols: Vec::new(),
             versions: self.state.versions,
             key_log: Arc::new(NoKeyLog {}),
-            #[cfg(feature = "quic")]
             max_early_data_size: 0,
         }
     }

@@ -79,8 +79,6 @@ impl ExtensionProcessing {
         &mut self,
         config: &ServerConfig,
         cx: &mut ServerContext<'_>,
-        #[allow(unused_variables)] // #[cfg(feature = "quic")] only
-        suite: SupportedCipherSuite,
         ocsp_response: &mut Option<&[u8]>,
         sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -141,22 +139,6 @@ impl ExtensionProcessing {
                         return Err(cx
                             .common
                             .missing_extension("QUIC transport parameters not found"));
-                    }
-                }
-
-                if let Some(resume) = resumedata {
-                    if config.max_early_data_size > 0
-                        && hello.early_data_extension_offered()
-                        && resume.version == cx.common.negotiated_version.unwrap()
-                        && resume.cipher_suite == suite.suite()
-                        && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref()
-                        && !cx.data.reject_early_data
-                    {
-                        self.exts
-                            .push(ServerExtension::EarlyData);
-                    } else {
-                        // Clobber value set in tls13::emit_server_hello
-                        cx.common.quic.early_secret = None;
                     }
                 }
             }
