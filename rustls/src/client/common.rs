@@ -29,7 +29,8 @@ impl ServerCertDetails {
 
     pub(super) fn scts(&self) -> impl Iterator<Item = &[u8]> {
         self.scts
-            .as_deref()
+            .as_ref()
+            .map(|items| items.as_slice())
             .unwrap_or(&[])
             .iter()
             .map(|payload| payload.0.as_slice())

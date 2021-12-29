@@ -5,12 +5,11 @@ use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::base::PayloadU8;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
+use crate::msgs::handshake::{ClientHelloPayload, ProtocolNameList, ServerExtension};
 use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -110,7 +109,7 @@ pub trait ResolvesServerCert: Send + Sync {
 pub struct ClientHello<'a> {
     server_name: &'a Option<webpki::DnsName>,
     signature_schemes: &'a [SignatureScheme],
-    alpn: Option<&'a Vec<PayloadU8>>,
+    alpn: Option<&'a ProtocolNameList>,
 }
 
 impl<'a> ClientHello<'a> {
@@ -118,7 +117,7 @@ impl<'a> ClientHello<'a> {
     pub(super) fn new(
         server_name: &'a Option<webpki::DnsName>,
         signature_schemes: &'a [SignatureScheme],
-        alpn: Option<&'a Vec<PayloadU8>>,
+        alpn: Option<&'a ProtocolNameList>,
     ) -> Self {
         trace!("sni {:?}", server_name);
         trace!("sig schemes {:?}", signature_schemes);

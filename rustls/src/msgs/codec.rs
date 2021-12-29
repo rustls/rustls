@@ -1,5 +1,8 @@
 use std::convert::TryInto;
 use std::fmt::Debug;
+use std::iter::FromIterator;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 /// Read from a byte slice.
 pub struct Reader<'a> {
@@ -174,88 +177,149 @@ impl Codec for u64 {
     }
 }
 
-pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let len_offset = bytes.len();
-    bytes.push(0);
-
-    for i in items {
-        i.encode(bytes);
-    }
-
-    let len = bytes.len() - len_offset - 1;
-    debug_assert!(len <= 0xff);
-    bytes[len_offset] = len as u8;
+/// Represent a Rust `Vec` together with the length prefix type used to encode it in TLS.
+///
+/// This implements various traits to make it easy to use in place of a normal `Vec` and to
+/// easily convert between `Vec` and `TlsVec` at API boundaries.
+#[derive(Clone, Debug)]
+pub struct TlsVec<L, T> {
+    items: Vec<T>,
+    len: PhantomData<L>,
 }
 
-pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let len_offset = bytes.len();
-    bytes.extend(&[0, 0]);
+impl<L: LengthPrefix, T: Codec> Codec for TlsVec<L, T>
+where
+    usize: From<L>,
+{
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let len_offset = bytes.len();
+        bytes.extend(L::ZERO_LEN);
 
-    for i in items {
-        i.encode(bytes);
+        for i in &self.items {
+            i.encode(bytes);
+        }
+
+        let len = bytes.len() - len_offset - L::BYTES;
+        L::write_into(len, len_offset, bytes);
     }
 
-    let len = bytes.len() - len_offset - 2;
-    debug_assert!(len <= 0xffff);
-    let out: &mut [u8; 2] = (&mut bytes[len_offset..len_offset + 2])
-        .try_into()
-        .unwrap();
-    *out = u16::to_be_bytes(len as u16);
+    fn read(r: &mut Reader) -> Option<Self> {
+        let len = usize::from(L::read(r)?);
+        if len > MAX_VEC_BYTES {
+            return None;
+        }
+
+        let mut sub = r.sub(len)?;
+        let mut items = Vec::with_capacity(len);
+        while sub.any_left() {
+            items.push(T::read(&mut sub)?);
+        }
+
+        Some(Self {
+            items,
+            len: PhantomData,
+        })
+    }
 }
 
-pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let len_offset = bytes.len();
-    bytes.extend(&[0, 0, 0]);
-
-    for i in items {
-        i.encode(bytes);
+impl<L, A> FromIterator<A> for TlsVec<L, A> {
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        Vec::from_iter(iter).into()
     }
-
-    let len = bytes.len() - len_offset - 3;
-    debug_assert!(len <= 0xff_ffff);
-    let len_bytes = u32::to_be_bytes(len as u32);
-    let out: &mut [u8; 3] = (&mut bytes[len_offset..len_offset + 3])
-        .try_into()
-        .unwrap();
-    out.copy_from_slice(&len_bytes[1..]);
 }
 
-pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
-    let mut ret: Vec<T> = Vec::new();
-    let len = usize::from(u8::read(r)?);
-    let mut sub = r.sub(len)?;
+impl<'a, L, T> IntoIterator for &'a TlsVec<L, T> {
+    type Item = &'a T;
 
-    while sub.any_left() {
-        ret.push(T::read(&mut sub)?);
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.items).iter()
     }
-
-    Some(ret)
 }
 
-pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
-    let mut ret: Vec<T> = Vec::new();
-    let len = usize::from(u16::read(r)?);
-    let mut sub = r.sub(len)?;
+impl<L, T> Deref for TlsVec<L, T> {
+    type Target = Vec<T>;
 
-    while sub.any_left() {
-        ret.push(T::read(&mut sub)?);
+    fn deref(&self) -> &Self::Target {
+        &self.items
     }
-
-    Some(ret)
 }
 
-pub fn read_vec_u24_limited<T: Codec>(r: &mut Reader, max_bytes: usize) -> Option<Vec<T>> {
-    let mut ret: Vec<T> = Vec::new();
-    let len = u24::read(r)?.0 as usize;
-    if len > max_bytes {
-        return None;
+impl<L, T> DerefMut for TlsVec<L, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.items
+    }
+}
+
+impl<L, T> From<TlsVec<L, T>> for Vec<T> {
+    fn from(tls: TlsVec<L, T>) -> Self {
+        tls.items
+    }
+}
+
+impl<L, T> From<Vec<T>> for TlsVec<L, T> {
+    fn from(items: Vec<T>) -> Self {
+        Self {
+            items,
+            len: PhantomData,
+        }
+    }
+}
+
+impl<L, T> Default for TlsVec<L, T> {
+    fn default() -> Self {
+        Self {
+            items: Default::default(),
+            len: Default::default(),
+        }
+    }
+}
+
+const MAX_VEC_BYTES: usize = 0x1_0000;
+
+#[allow(clippy::use_self)]
+impl LengthPrefix for u8 {
+    fn write_into(len: usize, offset: usize, bytes: &mut [u8]) {
+        debug_assert!(len <= 0xff);
+        bytes[offset] = len as u8;
     }
 
-    let mut sub = r.sub(len)?;
+    const BYTES: usize = 1;
+    const ZERO_LEN: &'static [u8] = &[0];
+}
 
-    while sub.any_left() {
-        ret.push(T::read(&mut sub)?);
+#[allow(clippy::use_self)]
+impl LengthPrefix for u16 {
+    fn write_into(len: usize, offset: usize, bytes: &mut [u8]) {
+        debug_assert!(len <= 0xffff);
+        let out: &mut [u8; 2] = (&mut bytes[offset..offset + 2])
+            .try_into()
+            .unwrap();
+        *out = Self::to_be_bytes(len as u16);
     }
 
-    Some(ret)
+    const BYTES: usize = 2;
+    const ZERO_LEN: &'static [u8] = &[0, 0];
+}
+
+impl LengthPrefix for u24 {
+    fn write_into(len: usize, offset: usize, bytes: &mut [u8]) {
+        debug_assert!(len <= 0xff_ffff);
+        let len_bytes = u32::to_be_bytes(len as u32);
+        let out: &mut [u8; 3] = (&mut bytes[offset..offset + 3])
+            .try_into()
+            .unwrap();
+        out.copy_from_slice(&len_bytes[1..]);
+    }
+
+    const BYTES: usize = 3;
+    const ZERO_LEN: &'static [u8] = &[0, 0, 0];
+}
+
+pub trait LengthPrefix: Codec + Copy + Debug {
+    fn write_into(len: usize, offset: usize, bytes: &mut [u8]);
+
+    const BYTES: usize;
+    const ZERO_LEN: &'static [u8];
 }

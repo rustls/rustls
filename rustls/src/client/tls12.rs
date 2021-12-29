@@ -17,7 +17,7 @@ use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::{kx, verify};
+use crate::{key, kx, verify};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
@@ -424,14 +424,14 @@ impl State<ClientConnectionData> for ExpectServerKx {
 
 fn emit_certificate(
     transcript: &mut HandshakeHash,
-    cert_chain: CertificatePayload,
+    cert_chain: Vec<key::Certificate>,
     common: &mut CommonState,
 ) {
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::Handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(cert_chain),
+            payload: HandshakePayload::Certificate(cert_chain.into()),
         }),
     };
 
@@ -765,7 +765,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
                 .map_err(|err| hs::send_cert_error_alert(cx.common, err))?
         };
-        cx.common.peer_certificates = Some(st.server_cert.cert_chain);
+        cx.common.peer_certificates = Some(st.server_cert.cert_chain.into());
 
         // 4.
         if let Some(client_auth) = &mut st.client_auth {

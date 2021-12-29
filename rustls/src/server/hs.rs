@@ -524,7 +524,7 @@ pub(super) fn process_client_hello<'a>(
         .clone();
     sig_schemes.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
-    Ok((client_hello, sig_schemes))
+    Ok((client_hello, sig_schemes.into()))
 }
 
 #[allow(clippy::large_enum_variant)]

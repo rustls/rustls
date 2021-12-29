@@ -7,7 +7,7 @@ use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
-use crate::msgs::codec::Codec;
+use crate::msgs::codec::{Codec, TlsVec};
 use crate::msgs::enums::{AlertDescription, KeyUpdateRequest};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
@@ -263,7 +263,10 @@ mod client_hello {
 
             if let Some(ref resume) = resumedata {
                 cx.data.received_resumption_data = Some(resume.application_data.0.clone());
-                cx.common.peer_certificates = resume.client_cert_chain.clone();
+                cx.common.peer_certificates = resume
+                    .client_cert_chain
+                    .as_ref()
+                    .map(|certs| certs.clone().into());
             }
 
             let full_handshake = resumedata.is_none();
@@ -361,7 +364,7 @@ mod client_hello {
         resuming_psk: Option<&[u8]>,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
-        let mut extensions = Vec::new();
+        let mut extensions = TlsVec::default();
 
         // Prepare key exchange
         let kx = kx::KeyExchange::choose(share.group, &config.kx_groups)
@@ -473,7 +476,7 @@ mod client_hello {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id: SessionID::empty(),
             cipher_suite: suite.common.suite,
-            extensions: Vec::new(),
+            extensions: TlsVec::default(),
         };
 
         req.extensions
@@ -524,7 +527,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::EncryptedExtensions,
-                payload: HandshakePayload::EncryptedExtensions(ep.exts),
+                payload: HandshakePayload::EncryptedExtensions(ep.exts.into()),
             }),
         };
 
@@ -545,14 +548,16 @@ mod client_hello {
 
         let mut cr = CertificateRequestPayloadTLS13 {
             context: PayloadU8::empty(),
-            extensions: Vec::new(),
+            extensions: TlsVec::default(),
         };
 
         let schemes = config
             .verifier
             .supported_verify_schemes();
         cr.extensions
-            .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
+            .push(CertReqExtension::SignatureAlgorithms(
+                schemes.to_vec().into(),
+            ));
 
         let names = config
             .verifier
@@ -566,7 +571,7 @@ mod client_hello {
 
         if !names.is_empty() {
             cr.extensions
-                .push(CertReqExtension::AuthorityNames(names));
+                .push(CertReqExtension::AuthorityNames(names.into()));
         }
 
         let m = Message {
@@ -594,7 +599,7 @@ mod client_hello {
         for cert in cert_chain {
             let entry = CertificateEntry {
                 cert: cert.to_owned(),
-                exts: Vec::new(),
+                exts: TlsVec::default(),
             };
 
             cert_entries.push(entry);
@@ -783,7 +788,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            client_cert,
+            client_cert: client_cert.into(),
             send_ticket: self.send_ticket,
         }))
     }

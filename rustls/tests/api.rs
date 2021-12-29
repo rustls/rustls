@@ -3466,17 +3466,21 @@ mod test_quic {
                     client_version: ProtocolVersion::TLSv1_3,
                     random,
                     session_id: SessionID::random().unwrap(),
-                    cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                    compression_methods: vec![Compression::Null],
+                    cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256].into(),
+                    compression_methods: vec![Compression::Null].into(),
                     extensions: vec![
-                        ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-                        ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-                        ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                        ClientExtension::KeyShare(vec![KeyShareEntry {
-                            group: NamedGroup::X25519,
-                            payload: PayloadU16::new(kx.as_ref().to_vec()),
-                        }]),
-                    ],
+                        ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3].into()),
+                        ClientExtension::NamedGroups(vec![NamedGroup::X25519].into()),
+                        ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519].into()),
+                        ClientExtension::KeyShare(
+                            vec![KeyShareEntry {
+                                group: NamedGroup::X25519,
+                                payload: PayloadU16::new(kx.as_ref().to_vec()),
+                            }]
+                            .into(),
+                        ),
+                    ]
+                    .into(),
                 }),
             }),
         };
@@ -3534,16 +3538,20 @@ mod test_quic {
                     client_version: ProtocolVersion::TLSv1_2,
                     random: random.clone(),
                     session_id: SessionID::random().unwrap(),
-                    cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                    compression_methods: vec![Compression::Null],
+                    cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256].into(),
+                    compression_methods: vec![Compression::Null].into(),
                     extensions: vec![
-                        ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-                        ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                        ClientExtension::KeyShare(vec![KeyShareEntry {
-                            group: NamedGroup::X25519,
-                            payload: PayloadU16::new(kx.as_ref().to_vec()),
-                        }]),
-                    ],
+                        ClientExtension::NamedGroups(vec![NamedGroup::X25519].into()),
+                        ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519].into()),
+                        ClientExtension::KeyShare(
+                            vec![KeyShareEntry {
+                                group: NamedGroup::X25519,
+                                payload: PayloadU16::new(kx.as_ref().to_vec()),
+                            }]
+                            .into(),
+                        ),
+                    ]
+                    .into(),
                 }),
             }),
         };
@@ -4046,7 +4054,8 @@ fn test_server_rejects_duplicate_sni_names() {
             if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::ServerName(snr) = &mut ext {
-                        snr.push(snr[0].clone());
+                        let name = snr[0].clone();
+                        snr.push(name);
                     }
                 }
             }

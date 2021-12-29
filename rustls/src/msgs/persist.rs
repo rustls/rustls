@@ -343,7 +343,7 @@ impl ClientSessionCommon {
             secret: PayloadU8(secret),
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
-            server_cert_chain,
+            server_cert_chain: server_cert_chain.into(),
         }
     }
 
@@ -475,7 +475,7 @@ impl ServerSessionValue {
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: Vec<u8>,
-        client_cert_chain: Option<CertificatePayload>,
+        client_cert_chain: Option<Vec<key::Certificate>>,
         alpn: Option<Vec<u8>>,
         application_data: Vec<u8>,
     ) -> Self {
@@ -485,7 +485,7 @@ impl ServerSessionValue {
             cipher_suite: cs,
             master_secret: PayloadU8::new(ms),
             extended_ms: false,
-            client_cert_chain,
+            client_cert_chain: client_cert_chain.map(|certs| certs.into()),
             alpn: alpn.map(PayloadU8::new),
             application_data: PayloadU16::new(application_data),
         }

@@ -7,7 +7,7 @@ use crate::kx;
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::codec::Codec;
+use crate::msgs::codec::{Codec, TlsVec};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureScheme};
@@ -551,7 +551,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
-        let no_sigschemes = Vec::new();
+        let no_sigschemes = TlsVec::default();
         let compat_sigschemes = certreq
             .get_sigalgs_extension()
             .unwrap_or(&no_sigschemes)
@@ -730,7 +730,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             )
             .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
-        cx.common.peer_certificates = Some(self.server_cert.cert_chain);
+        cx.common.peer_certificates = Some(self.server_cert.cert_chain.into());
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -759,7 +759,7 @@ fn emit_certificate_tls13(
 
     let mut cert_payload = CertificatePayloadTLS13 {
         context: PayloadU8::new(context),
-        entries: Vec::new(),
+        entries: TlsVec::default(),
     };
 
     if let Some(cert_key) = &client_auth.certkey {

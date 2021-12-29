@@ -1,7 +1,6 @@
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use crate::msgs::codec;
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{self, u24, Codec, Reader, TlsVec};
 use crate::msgs::enums::ECCurveType;
 use crate::msgs::enums::PSKKeyExchangeMode;
 use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
@@ -16,41 +15,6 @@ use crate::log::warn;
 
 use std::collections;
 use std::fmt;
-
-macro_rules! declare_u8_vec(
-  ($name:ident, $itemtype:ty) => {
-    pub type $name = Vec<$itemtype>;
-
-    impl Codec for $name {
-      fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u8(bytes, self);
-      }
-
-      fn read(r: &mut Reader) -> Option<Self> {
-        codec::read_vec_u8::<$itemtype>(r)
-      }
-    }
-  }
-);
-
-macro_rules! declare_u16_vec(
-  ($name:ident, $itemtype:ty) => {
-    pub type $name = Vec<$itemtype>;
-
-    impl Codec for $name {
-      fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u16(bytes, self);
-      }
-
-      fn read(r: &mut Reader) -> Option<Self> {
-        codec::read_vec_u16::<$itemtype>(r)
-      }
-    }
-  }
-);
-
-declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
-declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Random(pub [u8; 32]);
@@ -186,7 +150,7 @@ impl UnknownExtension {
     }
 }
 
-declare_u8_vec!(ECPointFormatList, ECPointFormat);
+pub type ECPointFormatList = TlsVec<u8, ECPointFormat>;
 
 pub trait SupportedPointFormats {
     fn supported() -> ECPointFormatList;
@@ -194,13 +158,13 @@ pub trait SupportedPointFormats {
 
 impl SupportedPointFormats for ECPointFormatList {
     fn supported() -> ECPointFormatList {
-        vec![ECPointFormat::Uncompressed]
+        vec![ECPointFormat::Uncompressed].into()
     }
 }
 
-declare_u16_vec!(NamedGroups, NamedGroup);
+pub type NamedGroups = TlsVec<u16, NamedGroup>;
 
-declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
+pub type SupportedSignatureSchemes = TlsVec<u16, SignatureScheme>;
 
 pub trait DecomposedSignatureScheme {
     fn sign(&self) -> SignatureAlgorithm;
@@ -304,7 +268,7 @@ impl Codec for ServerName {
     }
 }
 
-declare_u16_vec!(ServerNameRequest, ServerName);
+pub type ServerNameRequest = TlsVec<u16, ServerName>;
 
 pub trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
@@ -340,7 +304,7 @@ impl ConvertServerNameList for ServerNameRequest {
     }
 }
 
-pub type ProtocolNameList = VecU16OfPayloadU8;
+pub type ProtocolNameList = TlsVec<u16, PayloadU8>;
 
 pub trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
@@ -350,7 +314,7 @@ pub trait ConvertProtocolNameList {
 
 impl ConvertProtocolNameList for ProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self {
-        let mut ret = Self::new();
+        let mut ret = Self::default();
 
         for name in names {
             ret.push(PayloadU8::new(name.to_vec()));
@@ -434,9 +398,9 @@ impl Codec for PresharedKeyIdentity {
     }
 }
 
-declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
+pub type PresharedKeyIdentities = TlsVec<u16, PresharedKeyIdentity>;
 pub type PresharedKeyBinder = PayloadU8;
-pub type PresharedKeyBinders = VecU16OfPayloadU8;
+pub type PresharedKeyBinders = TlsVec<u16, PayloadU8>;
 
 #[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
@@ -448,8 +412,8 @@ impl PresharedKeyOffer {
     /// Make a new one with one entry.
     pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> Self {
         Self {
-            identities: vec![id],
-            binders: vec![PresharedKeyBinder::new(binder)],
+            identities: vec![id].into(),
+            binders: vec![PresharedKeyBinder::new(binder)].into(),
         }
     }
 }
@@ -469,7 +433,7 @@ impl Codec for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-type ResponderIDs = VecU16OfPayloadU16;
+type ResponderIDs = TlsVec<u16, PayloadU16>;
 
 #[derive(Clone, Debug)]
 pub struct OCSPCertificateStatusRequest {
@@ -528,7 +492,7 @@ impl Codec for CertificateStatusRequest {
 impl CertificateStatusRequest {
     pub fn build_ocsp() -> Self {
         let ocsp = OCSPCertificateStatusRequest {
-            responder_ids: ResponderIDs::new(),
+            responder_ids: ResponderIDs::default(),
             extensions: PayloadU16::empty(),
         };
         Self::OCSP(ocsp)
@@ -538,13 +502,13 @@ impl CertificateStatusRequest {
 // ---
 // SCTs
 
-pub type SCTList = VecU16OfPayloadU16;
+pub type SCTList = TlsVec<u16, PayloadU16>;
 
 // ---
 
-declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
-declare_u16_vec!(KeyShareEntries, KeyShareEntry);
-declare_u8_vec!(ProtocolVersions, ProtocolVersion);
+pub type PSKKeyExchangeModes = TlsVec<u8, PSKKeyExchangeMode>;
+pub type KeyShareEntries = TlsVec<u16, KeyShareEntry>;
+pub type ProtocolVersions = TlsVec<u8, ProtocolVersion>;
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
@@ -707,7 +671,7 @@ impl ClientExtension {
             payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
         };
 
-        Self::ServerName(vec![name])
+        Self::ServerName(vec![name].into())
     }
 }
 
@@ -849,9 +813,9 @@ pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
     pub session_id: SessionID,
-    pub cipher_suites: Vec<CipherSuite>,
-    pub compression_methods: Vec<Compression>,
-    pub extensions: Vec<ClientExtension>,
+    pub cipher_suites: TlsVec<u16, CipherSuite>,
+    pub compression_methods: TlsVec<u8, Compression>,
+    pub extensions: TlsVec<u16, ClientExtension>,
 }
 
 impl Codec for ClientHelloPayload {
@@ -859,11 +823,11 @@ impl Codec for ClientHelloPayload {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
         self.session_id.encode(bytes);
-        codec::encode_vec_u16(bytes, &self.cipher_suites);
-        codec::encode_vec_u8(bytes, &self.compression_methods);
+        self.cipher_suites.encode(bytes);
+        self.compression_methods.encode(bytes);
 
         if !self.extensions.is_empty() {
-            codec::encode_vec_u16(bytes, &self.extensions);
+            self.extensions.encode(bytes);
         }
     }
 
@@ -872,13 +836,13 @@ impl Codec for ClientHelloPayload {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
             session_id: SessionID::read(r)?,
-            cipher_suites: codec::read_vec_u16::<CipherSuite>(r)?,
-            compression_methods: codec::read_vec_u8::<Compression>(r)?,
-            extensions: Vec::new(),
+            cipher_suites: TlsVec::read(r)?,
+            compression_methods: TlsVec::read(r)?,
+            extensions: TlsVec::default(),
         };
 
         if r.any_left() {
-            ret.extensions = codec::read_vec_u16::<ClientExtension>(r)?;
+            ret.extensions = TlsVec::read(r)?;
         }
 
         if r.any_left() || ret.extensions.is_empty() {
@@ -1108,7 +1072,7 @@ pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
     pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
-    pub extensions: Vec<HelloRetryExtension>,
+    pub extensions: TlsVec<u16, HelloRetryExtension>,
 }
 
 impl Codec for HelloRetryRequest {
@@ -1118,7 +1082,7 @@ impl Codec for HelloRetryRequest {
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         Compression::Null.encode(bytes);
-        codec::encode_vec_u16(bytes, &self.extensions);
+        self.extensions.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
@@ -1134,7 +1098,7 @@ impl Codec for HelloRetryRequest {
             legacy_version: ProtocolVersion::Unknown(0),
             session_id,
             cipher_suite,
-            extensions: codec::read_vec_u16::<HelloRetryExtension>(r)?,
+            extensions: TlsVec::read(r)?,
         })
     }
 }
@@ -1203,7 +1167,7 @@ pub struct ServerHelloPayload {
     pub session_id: SessionID,
     pub cipher_suite: CipherSuite,
     pub compression_method: Compression,
-    pub extensions: Vec<ServerExtension>,
+    pub extensions: TlsVec<u16, ServerExtension>,
 }
 
 impl Codec for ServerHelloPayload {
@@ -1214,7 +1178,7 @@ impl Codec for ServerHelloPayload {
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);
-        codec::encode_vec_u16(bytes, &self.extensions);
+        self.extensions.encode(bytes);
     }
 
     // minus version and random, which have already been read.
@@ -1222,7 +1186,7 @@ impl Codec for ServerHelloPayload {
         let session_id = SessionID::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
-        let extensions = codec::read_vec_u16::<ServerExtension>(r)?;
+        let extensions = TlsVec::read(r)?;
 
         let ret = Self {
             legacy_version: ProtocolVersion::Unknown(0),
@@ -1294,18 +1258,7 @@ impl ServerHelloPayload {
     }
 }
 
-pub type CertificatePayload = Vec<key::Certificate>;
-
-impl Codec for CertificatePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u24(bytes, self);
-    }
-
-    fn read(r: &mut Reader) -> Option<Self> {
-        // 64KB of certificates is plenty, 16MB is obviously silly
-        codec::read_vec_u24_limited(r, 0x10000)
-    }
-}
+pub type CertificatePayload = TlsVec<u24, key::Certificate>;
 
 // TLS1.3 changes the Certificate payload encoding.
 // That's annoying. It means the parsing is not
@@ -1387,7 +1340,7 @@ impl Codec for CertificateExtension {
     }
 }
 
-declare_u16_vec!(CertificateExtensions, CertificateExtension);
+pub type CertificateExtensions = TlsVec<u16, CertificateExtension>;
 
 #[derive(Debug)]
 pub struct CertificateEntry {
@@ -1413,7 +1366,7 @@ impl CertificateEntry {
     pub fn new(cert: key::Certificate) -> Self {
         Self {
             cert,
-            exts: Vec::new(),
+            exts: TlsVec::default(),
         }
     }
 
@@ -1456,19 +1409,19 @@ impl CertificateEntry {
 #[derive(Debug)]
 pub struct CertificatePayloadTLS13 {
     pub context: PayloadU8,
-    pub entries: Vec<CertificateEntry>,
+    pub entries: TlsVec<u24, CertificateEntry>,
 }
 
 impl Codec for CertificatePayloadTLS13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
-        codec::encode_vec_u24(bytes, &self.entries);
+        self.entries.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
         Some(Self {
             context: PayloadU8::read(r)?,
-            entries: codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)?,
+            entries: TlsVec::read(r)?,
         })
     }
 }
@@ -1477,7 +1430,7 @@ impl CertificatePayloadTLS13 {
     pub fn new(entries: Vec<CertificateEntry>) -> Self {
         Self {
             context: PayloadU8::empty(),
-            entries,
+            entries: entries.into(),
         }
     }
 
@@ -1531,7 +1484,7 @@ impl CertificatePayloadTLS13 {
         for entry in &self.entries {
             ret.push(entry.cert.clone());
         }
-        ret
+        ret.into()
     }
 }
 
@@ -1717,7 +1670,7 @@ impl ServerKeyExchangePayload {
 }
 
 // -- EncryptedExtensions (TLS1.3 only) --
-declare_u16_vec!(EncryptedExtensions, ServerExtension);
+pub type EncryptedExtensions = TlsVec<u16, ServerExtension>;
 
 pub trait HasServerExtensions {
     fn get_extensions(&self) -> &[ServerExtension];
@@ -1777,15 +1730,16 @@ impl HasServerExtensions for EncryptedExtensions {
 }
 
 // -- CertificateRequest and sundries --
-declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
+pub type ClientCertificateTypes = TlsVec<u8, ClientCertificateType>;
 pub type DistinguishedName = PayloadU16;
-pub type DistinguishedNames = VecU16OfPayloadU16;
+// This is actually part of the public API!
+pub type DistinguishedNames = Vec<DistinguishedName>;
 
 #[derive(Debug)]
 pub struct CertificateRequestPayload {
     pub certtypes: ClientCertificateTypes,
     pub sigschemes: SupportedSignatureSchemes,
-    pub canames: DistinguishedNames,
+    pub canames: TlsVec<u16, DistinguishedName>,
 }
 
 impl Codec for CertificateRequestPayload {
@@ -1798,7 +1752,7 @@ impl Codec for CertificateRequestPayload {
     fn read(r: &mut Reader) -> Option<Self> {
         let certtypes = ClientCertificateTypes::read(r)?;
         let sigschemes = SupportedSignatureSchemes::read(r)?;
-        let canames = DistinguishedNames::read(r)?;
+        let canames = TlsVec::read(r)?;
 
         if sigschemes.is_empty() {
             warn!("meaningless CertificateRequest message");
@@ -1816,7 +1770,7 @@ impl Codec for CertificateRequestPayload {
 #[derive(Debug)]
 pub enum CertReqExtension {
     SignatureAlgorithms(SupportedSignatureSchemes),
-    AuthorityNames(DistinguishedNames),
+    AuthorityNames(TlsVec<u16, DistinguishedName>),
     Unknown(UnknownExtension),
 }
 
@@ -1859,7 +1813,7 @@ impl Codec for CertReqExtension {
                 Self::SignatureAlgorithms(schemes)
             }
             ExtensionType::CertificateAuthorities => {
-                let cas = DistinguishedNames::read(&mut sub)?;
+                let cas = TlsVec::read(&mut sub)?;
                 Self::AuthorityNames(cas)
             }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
@@ -1873,7 +1827,7 @@ impl Codec for CertReqExtension {
     }
 }
 
-declare_u16_vec!(CertReqExtensions, CertReqExtension);
+pub type CertReqExtensions = TlsVec<u16, CertReqExtension>;
 
 #[derive(Debug)]
 pub struct CertificateRequestPayloadTLS13 {
@@ -2003,7 +1957,7 @@ impl Codec for NewSessionTicketExtension {
     }
 }
 
-declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
+pub type NewSessionTicketExtensions = TlsVec<u16, NewSessionTicketExtension>;
 
 #[derive(Debug)]
 pub struct NewSessionTicketPayloadTLS13 {
@@ -2021,7 +1975,7 @@ impl NewSessionTicketPayloadTLS13 {
             age_add,
             nonce: PayloadU8::new(nonce),
             ticket: PayloadU16::new(ticket),
-            exts: vec![],
+            exts: TlsVec::default(),
         }
     }
 
@@ -2177,7 +2131,7 @@ impl Codec for HandshakeMessagePayload {
             _ => self.typ,
         }
         .encode(bytes);
-        codec::u24(sub.len() as u32).encode(bytes);
+        u24(sub.len() as u32).encode(bytes);
         bytes.append(&mut sub);
     }
 

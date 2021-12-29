@@ -276,7 +276,9 @@ mod client_hello {
             );
             cx.common
                 .start_encryption_tls12(&secrets);
-            cx.common.peer_certificates = resumedata.client_cert_chain;
+            cx.common.peer_certificates = resumedata
+                .client_cert_chain
+                .map(|items| items.into());
 
             if self.send_ticket {
                 emit_ticket(
@@ -342,7 +344,7 @@ mod client_hello {
                     session_id,
                     cipher_suite: suite.common.suite,
                     compression_method: Compression::Null,
-                    extensions: ep.exts,
+                    extensions: ep.exts.into(),
                 }),
             }),
         };
@@ -362,7 +364,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
+                payload: HandshakePayload::Certificate(cert_chain.to_owned().into()),
             }),
         };
 
@@ -451,9 +453,10 @@ mod client_hello {
             certtypes: vec![
                 ClientCertificateType::RSASign,
                 ClientCertificateType::ECDSASign,
-            ],
-            sigschemes: verify_schemes,
-            canames: names,
+            ]
+            .into(),
+            sigschemes: verify_schemes.into(),
+            canames: names.into(),
         };
 
         let m = Message {
@@ -552,7 +555,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             using_ems: self.using_ems,
             server_kx: self.server_kx,
-            client_cert,
+            client_cert: client_cert.map(|certs| certs.into()),
             send_ticket: self.send_ticket,
         }))
     }

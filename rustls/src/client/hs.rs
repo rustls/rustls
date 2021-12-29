@@ -221,7 +221,9 @@ fn emit_client_hello_for_retry(
 
     let mut exts = Vec::new();
     if !supported_versions.is_empty() {
-        exts.push(ClientExtension::SupportedVersions(supported_versions));
+        exts.push(ClientExtension::SupportedVersions(
+            supported_versions.into(),
+        ));
     }
     if let (Some(sni_name), true) = (server_name.for_sni(), config.enable_sni) {
         exts.push(ClientExtension::make_sni(sni_name));
@@ -239,7 +241,8 @@ fn emit_client_hello_for_retry(
     exts.push(ClientExtension::SignatureAlgorithms(
         config
             .verifier
-            .supported_verify_schemes(),
+            .supported_verify_schemes()
+            .into(),
     ));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(
@@ -253,7 +256,7 @@ fn emit_client_hello_for_retry(
     if let Some(key_share) = &key_share {
         debug_assert!(support_tls13);
         let key_share = KeyShareEntry::new(key_share.group(), key_share.pubkey.as_ref());
-        exts.push(ClientExtension::KeyShare(vec![key_share]));
+        exts.push(ClientExtension::KeyShare(vec![key_share].into()));
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
@@ -264,7 +267,7 @@ fn emit_client_hello_for_retry(
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PSKKeyExchangeMode::PSK_DHE_KE];
-        exts.push(ClientExtension::PresharedKeyModes(psk_modes));
+        exts.push(ClientExtension::PresharedKeyModes(psk_modes.into()));
     }
 
     if !config.alpn_protocols.is_empty() {
@@ -343,9 +346,9 @@ fn emit_client_hello_for_retry(
             client_version: ProtocolVersion::TLSv1_2,
             random,
             session_id,
-            cipher_suites,
-            compression_methods: vec![Compression::Null],
-            extensions: exts,
+            cipher_suites: cipher_suites.into(),
+            compression_methods: vec![Compression::Null].into(),
+            extensions: exts.into(),
         }),
     };
 
