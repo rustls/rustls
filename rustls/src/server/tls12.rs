@@ -35,7 +35,7 @@ mod client_hello {
     };
     use crate::msgs::handshake::{ClientExtension, SessionID};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
-    use crate::msgs::handshake::{ECPointFormatList, ServerECDHParams, SupportedPointFormats};
+    use crate::msgs::handshake::{ServerECDHParams, SUPPORTED_POINT_FORMATS};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
     use crate::sign;
 
@@ -160,7 +160,7 @@ mod client_hello {
                 .cloned()
                 .ok_or_else(|| hs::incompatible(cx.common, "no supported group"))?;
 
-            let ecpoint = ECPointFormatList::supported()
+            let ecpoint = SUPPORTED_POINT_FORMATS
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()

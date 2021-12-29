@@ -152,15 +152,7 @@ impl UnknownExtension {
 
 pub type ECPointFormatList = TlsVec<u8, ECPointFormat>;
 
-pub trait SupportedPointFormats {
-    fn supported() -> ECPointFormatList;
-}
-
-impl SupportedPointFormats for ECPointFormatList {
-    fn supported() -> ECPointFormatList {
-        vec![ECPointFormat::Uncompressed].into()
-    }
-}
+pub const SUPPORTED_POINT_FORMATS: &[ECPointFormat] = &[ECPointFormat::Uncompressed];
 
 pub type NamedGroups = TlsVec<u16, NamedGroup>;
 

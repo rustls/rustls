@@ -361,7 +361,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL].into(),
         compression_methods: vec![Compression::Null].into(),
         extensions: vec![
-            ClientExtension::ECPointFormats(ECPointFormatList::supported()),
+            ClientExtension::ECPointFormats(SUPPORTED_POINT_FORMATS.to_vec().into()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519].into()),
             ClientExtension::SignatureAlgorithms(
                 vec![SignatureScheme::ECDSA_NISTP256_SHA256].into(),
@@ -765,7 +765,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
-            ServerExtension::ECPointFormats(ECPointFormatList::supported()),
+            ServerExtension::ECPointFormats(SUPPORTED_POINT_FORMATS.to_vec().into()),
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),

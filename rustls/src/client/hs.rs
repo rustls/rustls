@@ -17,8 +17,7 @@ use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
-use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
+use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList, SUPPORTED_POINT_FORMATS};
 use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
@@ -229,7 +228,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::make_sni(sni_name));
     }
     exts.push(ClientExtension::ECPointFormats(
-        ECPointFormatList::supported(),
+        SUPPORTED_POINT_FORMATS.to_vec().into(),
     ));
     exts.push(ClientExtension::NamedGroups(
         config
