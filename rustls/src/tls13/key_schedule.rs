@@ -225,6 +225,10 @@ pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
+    pub(crate) fn client_key(&self) -> &hkdf::Prk {
+        &self.handshake_client_traffic_secret
+    }
+
     pub(crate) fn sign_client_finish(
         self,
         hs_hash: &Digest,

@@ -323,7 +323,6 @@ mod client_hello {
         ep.process_common(
             config,
             cx,
-            suite.into(),
             ocsp_response,
             sct_list,
             hello,

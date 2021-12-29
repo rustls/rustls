@@ -589,15 +589,27 @@ impl<Data> ConnectionCommon<Data> {
             .record_layer
             .is_decrypting()
         {
-            true => self
-                .common_state
-                .decrypt_incoming(msg)?,
+            true => match self.common_state.decrypt_incoming(msg) {
+                Ok(None) => {
+                    // message dropped
+                    return Ok(state);
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+                Ok(Some(msg)) => msg,
+            },
             false => msg.into_plain_message(),
         };
 
         // For handshake messages, we need to join them before parsing
         // and processing.
         if self.handshake_joiner.want_message(&msg) {
+            // First decryptable handshake message concludes trial decryption
+            self.common_state
+                .record_layer
+                .finish_trial_decryption();
+
             self.handshake_joiner
                 .take_message(msg)
                 .ok_or_else(|| {
@@ -978,7 +990,10 @@ impl CommonState {
         Error::PeerMisbehavedError(why.to_string())
     }
 
-    pub(crate) fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<PlainMessage, Error> {
+    pub(crate) fn decrypt_incoming(
+        &mut self,
+        encr: OpaqueMessage,
+    ) -> Result<Option<PlainMessage>, Error> {
         if self
             .record_layer
             .wants_close_before_decrypt()
@@ -986,11 +1001,29 @@ impl CommonState {
             self.send_close_notify();
         }
 
-        let rc = self.record_layer.decrypt_incoming(encr);
-        if let Err(Error::PeerSentOversizedRecord) = rc {
-            self.send_fatal_alert(AlertDescription::RecordOverflow);
+        let encrypted_len = encr.payload.0.len();
+        let plain = self.record_layer.decrypt_incoming(encr);
+
+        match plain {
+            Err(Error::PeerSentOversizedRecord) => {
+                self.send_fatal_alert(AlertDescription::RecordOverflow);
+                Err(Error::PeerSentOversizedRecord)
+            }
+            Err(Error::DecryptError)
+                if self
+                    .record_layer
+                    .doing_trial_decryption(encrypted_len) =>
+            {
+                trace!("Dropping undecryptable message after aborted early_data");
+                Ok(None)
+            }
+            Err(Error::DecryptError) => {
+                self.send_fatal_alert(AlertDescription::BadRecordMac);
+                Err(Error::DecryptError)
+            }
+            Err(e) => Err(e),
+            Ok(plain) => Ok(Some(plain)),
         }
-        rc
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue

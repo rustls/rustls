@@ -2258,6 +2258,12 @@ impl HandshakeMessagePayload {
             HandshakeType::KeyUpdate => {
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
             }
+            HandshakeType::EndOfEarlyData => {
+                if sub.any_left() {
+                    return None;
+                }
+                HandshakePayload::EndOfEarlyData
+            }
             HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
             HandshakeType::CertificateStatus => {
                 HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)

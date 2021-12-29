@@ -1,6 +1,8 @@
 #[cfg(feature = "quic")]
 use crate::check::check_message;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
+#[cfg(feature = "quic")]
+use crate::conn::Protocol;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -12,7 +14,7 @@ use crate::msgs::enums::{AlertDescription, KeyUpdateRequest};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::handshake::HandshakePayload;
-use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
+use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTLS13};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
@@ -20,8 +22,6 @@ use crate::server::ServerConfig;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
-#[cfg(feature = "quic")]
-use crate::{conn::Protocol, msgs::handshake::NewSessionTicketExtension};
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
@@ -63,6 +63,13 @@ mod client_hello {
 
     use super::*;
 
+    #[derive(PartialEq)]
+    pub(super) enum EarlyDataDecision {
+        Disabled,
+        RequestedButRejected,
+        Accepted,
+    }
+
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
@@ -71,6 +78,21 @@ mod client_hello {
         pub(in crate::server) done_retry: bool,
         pub(in crate::server) send_ticket: bool,
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
+    }
+
+    fn max_early_data_size(configured: u32) -> usize {
+        if configured != 0 {
+            configured as usize
+        } else {
+            // The relevant max_early_data_size may in fact be unknowable: if
+            // we (the server) have turned off early_data but the client has
+            // a stale ticket from when we allowed early_data: we'll naturally
+            // reject early_data but need an upper bound on the amount of data
+            // to drop.
+            //
+            // Use a single maximum-sized message.
+            16384
+        }
     }
 
     impl CompleteClientHelloHandling {
@@ -145,6 +167,15 @@ mod client_hello {
                     .illegal_param("client sent duplicate keyshares"));
             }
 
+            let early_data_requested = client_hello.early_data_extension_offered();
+
+            // EarlyData extension is illegal in second ClientHello
+            if self.done_retry && early_data_requested {
+                return Err(cx
+                    .common
+                    .illegal_param("client sent EarlyData in second ClientHello"));
+            }
+
             // choose a share that we support
             let chosen_share = self
                 .config
@@ -184,7 +215,10 @@ mod client_hello {
                             group.name,
                         );
                         emit_fake_ccs(cx.common);
-                        return Ok(Box::new(hs::ExpectClientHello {
+
+                        let skip_early_data = max_early_data_size(self.config.max_early_data_size);
+
+                        let next = Box::new(hs::ExpectClientHello {
                             config: self.config,
                             transcript: HandshakeHashOrBuffer::Hash(self.transcript),
                             #[cfg(feature = "tls12")]
@@ -194,7 +228,16 @@ mod client_hello {
                             done_retry: true,
                             send_ticket: self.send_ticket,
                             extra_exts: self.extra_exts,
-                        }));
+                        });
+
+                        return if early_data_requested {
+                            Ok(Box::new(ExpectAndSkipRejectedEarlyData {
+                                skip_data_left: skip_early_data,
+                                next,
+                            }))
+                        } else {
+                            Ok(next)
+                        };
                     }
 
                     return Err(hs::incompatible(
@@ -287,7 +330,7 @@ mod client_hello {
 
             let (mut ocsp_response, mut sct_list) =
                 (server_key.get_ocsp(), server_key.get_sct_list());
-            emit_encrypted_extensions(
+            let doing_early_data = emit_encrypted_extensions(
                 &mut self.transcript,
                 self.suite,
                 cx,
@@ -320,6 +363,36 @@ mod client_hello {
                 false
             };
 
+            // If we're not doing early data, then the next messages we receive
+            // are encrypted with the handshake keys.
+            match doing_early_data {
+                EarlyDataDecision::Disabled => {
+                    cx.common
+                        .record_layer
+                        .set_message_decrypter(
+                            self.suite
+                                .derive_decrypter(key_schedule.client_key()),
+                        );
+                    cx.data.early_data.reject();
+                }
+                EarlyDataDecision::RequestedButRejected => {
+                    debug!("Client requested early_data, but not accepted: switching to handshake keys with trial decryption");
+                    cx.common
+                        .record_layer
+                        .set_message_decrypter_with_trial_decryption(
+                            self.suite
+                                .derive_decrypter(key_schedule.client_key()),
+                            max_early_data_size(self.config.max_early_data_size),
+                        );
+                    cx.data.early_data.reject();
+                }
+                EarlyDataDecision::Accepted => {
+                    cx.data
+                        .early_data
+                        .accept(self.config.max_early_data_size as usize);
+                }
+            }
+
             cx.common.check_aligned_handshake()?;
             let key_schedule_traffic = emit_finished_tls13(
                 &mut self.transcript,
@@ -339,6 +412,14 @@ mod client_hello {
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
+                    config: self.config,
+                    transcript: self.transcript,
+                    suite: self.suite,
+                    key_schedule: key_schedule_traffic,
+                    send_ticket: self.send_ticket,
+                }))
+            } else if doing_early_data == EarlyDataDecision::Accepted {
+                Ok(Box::new(ExpectEarlyData {
                     config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
@@ -400,7 +481,6 @@ mod client_hello {
 
         cx.common.check_aligned_handshake()?;
 
-        #[cfg(feature = "quic")]
         let client_hello_hash = transcript.get_hash_given(&[]);
 
         trace!("sending server hello {:?}", sh);
@@ -408,26 +488,20 @@ mod client_hello {
         cx.common.send_msg(sh, false);
 
         // Start key schedule
-        let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
+        let (key_schedule_pre_handshake, early_data_client_key) = if let Some(psk) = resuming_psk {
             let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
-            #[cfg(feature = "quic")]
-            {
-                if cx.common.protocol == Protocol::Quic {
-                    let client_early_traffic_secret = early_key_schedule
-                        .client_early_traffic_secret(
-                            &client_hello_hash,
-                            &*config.key_log,
-                            &randoms.client,
-                        );
-                    // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
-                    // before the application can see.
-                    cx.common.quic.early_secret = Some(client_early_traffic_secret);
-                }
-            }
+            let client_early_traffic_secret = early_key_schedule.client_early_traffic_secret(
+                &client_hello_hash,
+                &*config.key_log,
+                &randoms.client,
+            );
 
-            KeySchedulePreHandshake::from(early_key_schedule)
+            (
+                KeySchedulePreHandshake::from(early_key_schedule),
+                Some(client_early_traffic_secret),
+            )
         } else {
-            KeySchedulePreHandshake::new(suite.hkdf_algorithm)
+            (KeySchedulePreHandshake::new(suite.hkdf_algorithm), None)
         };
 
         // Do key exchange
@@ -436,24 +510,32 @@ mod client_hello {
         })?;
 
         let handshake_hash = transcript.get_current_hash();
-        let (key_schedule, client_key, server_key) = key_schedule.derive_handshake_secrets(
+        let (key_schedule, _client_key, server_key) = key_schedule.derive_handshake_secrets(
             handshake_hash,
             &*config.key_log,
             &randoms.client,
         );
 
-        // Encrypt with our own key, decrypt with the peer's key
+        // Set up to encrypt with handshake secrets, but decrypt with early_data keys.
+        // If not doing early_data after all, this is corrected later to the handshake
+        // keys (now stored in key_schedule).
         cx.common
             .record_layer
             .set_message_encrypter(suite.derive_encrypter(&server_key));
-        cx.common
-            .record_layer
-            .set_message_decrypter(suite.derive_decrypter(&client_key));
+
+        if let Some(key) = &early_data_client_key {
+            cx.common
+                .record_layer
+                .set_message_decrypter(suite.derive_decrypter(key));
+        }
 
         #[cfg(feature = "quic")]
         {
+            // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
+            // before the application can see.
+            cx.common.quic.early_secret = early_data_client_key;
             cx.common.quic.hs_secrets =
-                Some(quic::Secrets::new(client_key, server_key, suite, false));
+                Some(quic::Secrets::new(_client_key, server_key, suite, false));
         }
 
         Ok(key_schedule)
@@ -504,6 +586,58 @@ mod client_hello {
         common.send_msg(m, false);
     }
 
+    fn decide_if_early_data_allowed(
+        cx: &mut ServerContext<'_>,
+        client_hello: &ClientHelloPayload,
+        resumedata: Option<&persist::ServerSessionValue>,
+        suite: &'static Tls13CipherSuite,
+        config: &ServerConfig,
+    ) -> EarlyDataDecision {
+        let early_data_requested = client_hello.early_data_extension_offered();
+        let rejected_or_disabled = match early_data_requested {
+            true => EarlyDataDecision::RequestedButRejected,
+            false => EarlyDataDecision::Disabled,
+        };
+
+        let resume = match resumedata {
+            Some(resume) => resume,
+            None => {
+                // never any early data if not resuming.
+                return rejected_or_disabled;
+            }
+        };
+
+        /* Non-zero max_early_data_size controls whether early_data is allowed at all.
+         * We also require stateful resumption. */
+        let early_data_configured = config.max_early_data_size > 0 && !config.ticketer.enabled();
+
+        /* "In order to accept early data, the server [...] MUST verify that the
+         *  following values are the same as those associated with the
+         *  selected PSK:
+         *
+         *  - The TLS version number
+         *  - The selected cipher suite
+         *  - The selected ALPN [RFC7301] protocol, if any"
+         *
+         * (RFC8446, 4.2.10) */
+        let early_data_possible = early_data_requested
+            && Some(resume.version) == cx.common.negotiated_version
+            && resume.cipher_suite == suite.common.suite
+            && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref();
+
+        if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
+            EarlyDataDecision::Accepted
+        } else {
+            #[cfg(feature = "quic")]
+            if cx.common.is_quic() {
+                // Clobber value set in tls13::emit_server_hello
+                cx.common.quic.early_secret = None;
+            }
+
+            rejected_or_disabled
+        }
+    }
+
     fn emit_encrypted_extensions(
         transcript: &mut HandshakeHash,
         suite: &'static Tls13CipherSuite,
@@ -514,18 +648,22 @@ mod client_hello {
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: Vec<ServerExtension>,
         config: &ServerConfig,
-    ) -> Result<(), Error> {
+    ) -> Result<EarlyDataDecision, Error> {
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(
             config,
             cx,
-            suite.into(),
             ocsp_response,
             sct_list,
             hello,
             resumedata,
             extra_exts,
         )?;
+
+        let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
+        if early_data == EarlyDataDecision::Accepted {
+            ep.exts.push(ServerExtension::EarlyData);
+        }
 
         let ee = Message {
             version: ProtocolVersion::TLSv1_3,
@@ -538,7 +676,7 @@ mod client_hello {
         trace!("sending encrypted extensions {:?}", ee);
         transcript.add_message(&ee);
         cx.common.send_msg(ee, true);
-        Ok(())
+        Ok(early_data)
     }
 
     fn emit_certificate_req_tls13(
@@ -717,6 +855,28 @@ mod client_hello {
     }
 }
 
+struct ExpectAndSkipRejectedEarlyData {
+    skip_data_left: usize,
+    next: Box<hs::ExpectClientHello>,
+}
+
+impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+        /* "The server then ignores early data by skipping all records with an external
+         *  content type of "application_data" (indicating that they are encrypted),
+         *  up to the configured max_early_data_size."
+         * (RFC8446, 14.2.10) */
+        if let MessagePayload::ApplicationData(ref skip_data) = m.payload {
+            if skip_data.0.len() <= self.skip_data_left {
+                self.skip_data_left -= skip_data.0.len();
+                return Ok(self);
+            }
+        }
+
+        self.next.handle(cx, m)
+    }
+}
+
 struct ExpectCertificate {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
@@ -843,6 +1003,64 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
     }
 }
 
+// --- Process (any number of) early ApplicationData messages,
+//     followed by a terminating handshake EndOfEarlyData message ---
+
+struct ExpectEarlyData {
+    config: Arc<ServerConfig>,
+    transcript: HandshakeHash,
+    suite: &'static Tls13CipherSuite,
+    key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    send_ticket: bool,
+}
+
+impl State<ServerConnectionData> for ExpectEarlyData {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::ApplicationData(payload) => {
+                match cx
+                    .data
+                    .early_data
+                    .take_received_plaintext(payload)
+                {
+                    true => Ok(self),
+                    false => {
+                        cx.common
+                            .send_fatal_alert(AlertDescription::UnexpectedMessage);
+                        Err(Error::PeerMisbehavedError(
+                            "too much early_data received".into(),
+                        ))
+                    }
+                }
+            }
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                typ: HandshakeType::EndOfEarlyData,
+                payload: HandshakePayload::EndOfEarlyData,
+            }) => {
+                cx.common
+                    .record_layer
+                    .set_message_decrypter(
+                        self.suite
+                            .derive_decrypter(self.key_schedule.client_key()),
+                    );
+
+                self.transcript.add_message(&m);
+                Ok(Box::new(ExpectFinished {
+                    config: self.config,
+                    suite: self.suite,
+                    key_schedule: self.key_schedule,
+                    transcript: self.transcript,
+                    send_ticket: self.send_ticket,
+                }))
+            }
+            _ => Err(inappropriate_message(
+                &m,
+                &[ContentType::ApplicationData, ContentType::Handshake],
+            )),
+        }
+    }
+}
+
 // --- Process client's Finished ---
 fn get_server_session_value(
     transcript: &mut HandshakeHash,
@@ -911,16 +1129,21 @@ impl ExpectFinished {
         let age_add = rand::random_u32()?; // nb, we don't do 0-RTT data, so whatever
         #[allow(unused_mut)]
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
-        #[cfg(feature = "quic")]
-        {
-            if config.max_early_data_size > 0 && cx.common.protocol == Protocol::Quic {
+
+        if config.max_early_data_size > 0 {
+            if !stateless {
                 payload
                     .exts
                     .push(NewSessionTicketExtension::EarlyData(
                         config.max_early_data_size,
                     ));
+            } else {
+                // We implement RFC8446 section 8.1: by enforcing that 0-RTT is
+                // only possible if using stateful resumption
+                warn!("early_data with stateless resumption is not allowed");
             }
         }
+
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::Handshake(HandshakeMessagePayload {
