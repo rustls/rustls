@@ -295,7 +295,6 @@ impl SigningKey for EcdsaSigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        use crate::msgs::handshake::DecomposedSignatureScheme;
         self.scheme.sign()
     }
 }
@@ -361,7 +360,6 @@ impl SigningKey for Ed25519SigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        use crate::msgs::handshake::DecomposedSignatureScheme;
         self.scheme.sign()
     }
 }

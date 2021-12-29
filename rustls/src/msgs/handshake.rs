@@ -158,13 +158,8 @@ pub type NamedGroups = TlsVec<u16, NamedGroup>;
 
 pub type SupportedSignatureSchemes = TlsVec<u16, SignatureScheme>;
 
-pub trait DecomposedSignatureScheme {
-    fn sign(&self) -> SignatureAlgorithm;
-    fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme;
-}
-
-impl DecomposedSignatureScheme for SignatureScheme {
-    fn sign(&self) -> SignatureAlgorithm {
+impl SignatureScheme {
+    pub fn sign(&self) -> SignatureAlgorithm {
         match *self {
             Self::RSA_PKCS1_SHA1
             | Self::RSA_PKCS1_SHA256
@@ -180,7 +175,7 @@ impl DecomposedSignatureScheme for SignatureScheme {
         }
     }
 
-    fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme {
+    pub fn new(alg: SignatureAlgorithm, hash: HashAlgorithm) -> Self {
         use crate::msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
         use crate::msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
 
@@ -262,14 +257,9 @@ impl Codec for ServerName {
 
 pub type ServerNameRequest = TlsVec<u16, ServerName>;
 
-pub trait ConvertServerNameList {
-    fn has_duplicate_names_for_type(&self) -> bool;
-    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef>;
-}
-
-impl ConvertServerNameList for ServerNameRequest {
+impl TlsVec<u16, ServerName> {
     /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
-    fn has_duplicate_names_for_type(&self) -> bool {
+    pub fn has_duplicate_names_for_type(&self) -> bool {
         let mut seen = collections::HashSet::new();
 
         for name in self {
@@ -281,7 +271,7 @@ impl ConvertServerNameList for ServerNameRequest {
         false
     }
 
-    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef> {
+    pub fn get_single_hostname(&self) -> Option<webpki::DnsNameRef> {
         fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DnsNameRef> {
             if let ServerNamePayload::HostName((_, ref dns)) = name.payload {
                 Some(dns.as_ref())
@@ -298,14 +288,8 @@ impl ConvertServerNameList for ServerNameRequest {
 
 pub type ProtocolNameList = TlsVec<u16, PayloadU8>;
 
-pub trait ConvertProtocolNameList {
-    fn from_slices(names: &[&[u8]]) -> Self;
-    fn to_slices(&self) -> Vec<&[u8]>;
-    fn as_single_slice(&self) -> Option<&[u8]>;
-}
-
-impl ConvertProtocolNameList for ProtocolNameList {
-    fn from_slices(names: &[&[u8]]) -> Self {
+impl TlsVec<u16, PayloadU8> {
+    pub fn from_slices(names: &[&[u8]]) -> Self {
         let mut ret = Self::default();
 
         for name in names {
@@ -315,13 +299,13 @@ impl ConvertProtocolNameList for ProtocolNameList {
         ret
     }
 
-    fn to_slices(&self) -> Vec<&[u8]> {
+    pub fn to_slices(&self) -> Vec<&[u8]> {
         self.iter()
             .map(|proto| -> &[u8] { &proto.0 })
             .collect::<Vec<&[u8]>>()
     }
 
-    fn as_single_slice(&self) -> Option<&[u8]> {
+    pub fn as_single_slice(&self) -> Option<&[u8]> {
         if self.len() == 1 {
             Some(&self[0].0)
         } else {
@@ -1121,7 +1105,7 @@ impl HelloRetryRequest {
         })
     }
 
-    fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
+    pub fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
         self.extensions
             .iter()
             .find(|x| x.get_type() == ext)

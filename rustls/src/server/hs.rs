@@ -7,10 +7,10 @@ use crate::log::{debug, trace};
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
 use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::msgs::handshake::HandshakePayload;
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
-use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig};

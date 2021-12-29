@@ -323,32 +323,32 @@ fn can_roundtrip_single_proto() {
 #[test]
 fn decomposed_signature_scheme_has_correct_mappings() {
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA1),
+        SignatureScheme::new(SignatureAlgorithm::RSA, HashAlgorithm::SHA1),
         SignatureScheme::RSA_PKCS1_SHA1
     );
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA256),
+        SignatureScheme::new(SignatureAlgorithm::RSA, HashAlgorithm::SHA256),
         SignatureScheme::RSA_PKCS1_SHA256
     );
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA384),
+        SignatureScheme::new(SignatureAlgorithm::RSA, HashAlgorithm::SHA384),
         SignatureScheme::RSA_PKCS1_SHA384
     );
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA512),
+        SignatureScheme::new(SignatureAlgorithm::RSA, HashAlgorithm::SHA512),
         SignatureScheme::RSA_PKCS1_SHA512
     );
 
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA256),
+        SignatureScheme::new(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA256),
         SignatureScheme::ECDSA_NISTP256_SHA256
     );
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA384),
+        SignatureScheme::new(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA384),
         SignatureScheme::ECDSA_NISTP384_SHA384
     );
     assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA512),
+        SignatureScheme::new(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA512),
         SignatureScheme::ECDSA_NISTP521_SHA512
     );
 }

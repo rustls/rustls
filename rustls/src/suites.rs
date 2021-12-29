@@ -1,6 +1,5 @@
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
-use crate::msgs::handshake::DecomposedSignatureScheme;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 #[cfg(feature = "tls12")]

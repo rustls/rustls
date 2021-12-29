@@ -9,7 +9,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
-use crate::msgs::handshake::{CertificatePayload, DecomposedSignatureScheme, SCTList, SessionID};
+use crate::msgs::handshake::{CertificatePayload, SCTList, SessionID};
 use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload};
 use crate::msgs::message::{Message, MessagePayload};
