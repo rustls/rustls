@@ -19,6 +19,7 @@
 //! * TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
 //! * TLS1.3 resumption via tickets or session storage.
 //! * TLS1.3 0-RTT data for clients.
+//! * TLS1.3 0-RTT data for servers.
 //! * Client authentication by clients.
 //! * Client authentication by servers.
 //! * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
