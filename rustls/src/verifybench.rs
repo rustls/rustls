@@ -119,7 +119,6 @@ fn test_hn_cert() {
         &[
             include_bytes!("testdata/cert-hn.0.der"),
             include_bytes!("testdata/cert-hn.1.der"),
-            include_bytes!("testdata/cert-hn.2.der"),
         ],
     )
     .bench(100)
@@ -210,7 +209,7 @@ impl Context {
                 .copied()
                 .map(|bytes| key::Certificate(bytes.to_vec()))
                 .collect(),
-            now: SystemTime::UNIX_EPOCH + Duration::from_secs(1617300000),
+            now: SystemTime::UNIX_EPOCH + Duration::from_secs(1640870720),
         }
     }
 
