@@ -394,6 +394,7 @@ pub struct ServerSessionValue {
     pub client_cert_chain: Option<CertificatePayload>,
     pub alpn: Option<PayloadU8>,
     pub application_data: PayloadU16,
+    pub creation_time_sec: u64,
 }
 
 impl Codec for ServerSessionValue {
@@ -422,6 +423,7 @@ impl Codec for ServerSessionValue {
             0u8.encode(bytes);
         }
         self.application_data.encode(bytes);
+        self.creation_time_sec.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
@@ -450,6 +452,7 @@ impl Codec for ServerSessionValue {
             None
         };
         let application_data = PayloadU16::read(r)?;
+        let creation_time_sec = u64::read(r)?;
 
         Some(Self {
             sni,
@@ -460,6 +463,7 @@ impl Codec for ServerSessionValue {
             client_cert_chain: ccert,
             alpn,
             application_data,
+            creation_time_sec,
         })
     }
 }
@@ -473,6 +477,7 @@ impl ServerSessionValue {
         client_cert_chain: Option<CertificatePayload>,
         alpn: Option<Vec<u8>>,
         application_data: Vec<u8>,
+        creation_time: TimeBase,
     ) -> Self {
         Self {
             sni: sni.cloned(),
@@ -483,6 +488,7 @@ impl ServerSessionValue {
             client_cert_chain,
             alpn: alpn.map(PayloadU8::new),
             application_data: PayloadU16::new(application_data),
+            creation_time_sec: creation_time.as_secs(),
         }
     }
 
