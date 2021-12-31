@@ -14,7 +14,7 @@ use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::{kx, verify};
+use crate::{kx, ticketer, verify};
 
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
@@ -285,7 +285,7 @@ mod client_hello {
                     self.using_ems,
                     cx,
                     &*self.config.ticketer,
-                );
+                )?;
             }
             emit_ccs(cx.common);
             cx.common
@@ -727,6 +727,7 @@ fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
     cx: &ServerContext<'_>,
+    time_now: ticketer::TimeBase,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
@@ -739,6 +740,7 @@ fn get_server_connection_value_tls12(
         cx.common.peer_certificates.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
+        time_now,
     );
 
     if using_ems {
@@ -754,10 +756,12 @@ fn emit_ticket(
     using_ems: bool,
     cx: &mut ServerContext<'_>,
     ticketer: &dyn ProducesTickets,
-) {
+) -> Result<(), Error> {
+    let time_now = ticketer::TimeBase::now()?;
+    let plain = get_server_connection_value_tls12(secrets, using_ems, cx, time_now).get_encoding();
+
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
-    let plain = get_server_connection_value_tls12(secrets, using_ems, cx).get_encoding();
     let ticket = ticketer
         .encrypt(&plain)
         .unwrap_or_default();
@@ -776,6 +780,7 @@ fn emit_ticket(
 
     transcript.add_message(&m);
     cx.common.send_msg(m, false);
+    Ok(())
 }
 
 fn emit_ccs(common: &mut CommonState) {
@@ -839,7 +844,9 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
-            let value = get_server_connection_value_tls12(&self.secrets, self.using_ems, cx);
+            let time_now = ticketer::TimeBase::now()?;
+            let value =
+                get_server_connection_value_tls12(&self.secrets, self.using_ems, cx, time_now);
 
             let worked = self
                 .config
@@ -862,7 +869,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                     self.using_ems,
                     cx,
                     &*self.config.ticketer,
-                );
+                )?;
             }
             emit_ccs(cx.common);
             cx.common

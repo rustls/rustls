@@ -19,6 +19,7 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerConfig;
+use crate::ticketer;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
@@ -1068,6 +1069,7 @@ fn get_server_session_value(
     key_schedule: &KeyScheduleTraffic,
     cx: &ServerContext<'_>,
     nonce: &[u8],
+    time_now: ticketer::TimeBase,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
 
@@ -1083,6 +1085,7 @@ fn get_server_session_value(
         cx.common.peer_certificates.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
+        time_now,
     )
 }
 
@@ -1101,10 +1104,11 @@ impl ExpectFinished {
         cx: &mut ServerContext<'_>,
         key_schedule: &KeyScheduleTraffic,
         config: &ServerConfig,
-    ) -> Result<(), rand::GetRandomFailed> {
+    ) -> Result<(), Error> {
         let nonce = rand::random_vec(32)?;
-        let plain =
-            get_server_session_value(transcript, suite, key_schedule, cx, &nonce).get_encoding();
+        let now = ticketer::TimeBase::now()?;
+        let plain = get_server_session_value(transcript, suite, key_schedule, cx, &nonce, now)
+            .get_encoding();
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
