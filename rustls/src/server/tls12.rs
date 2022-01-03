@@ -741,6 +741,7 @@ fn get_server_connection_value_tls12(
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
         time_now,
+        0,
     );
 
     if using_ems {

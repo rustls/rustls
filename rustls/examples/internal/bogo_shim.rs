@@ -8,7 +8,9 @@ use base64;
 use env_logger;
 use rustls;
 
-use rustls::internal::msgs::enums::ProtocolVersion;
+use rustls::internal::msgs::codec::{Codec, Reader};
+use rustls::internal::msgs::enums::{CipherSuite, ProtocolVersion};
+use rustls::internal::msgs::persist;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
 use rustls::{ClientConnection, Connection, ServerConnection};
@@ -75,6 +77,7 @@ struct Options {
     expect_accept_early_data: bool,
     expect_reject_early_data: bool,
     expect_version: u16,
+    resumption_delay: u32,
 }
 
 impl Options {
@@ -121,6 +124,7 @@ impl Options {
             expect_accept_early_data: false,
             expect_reject_early_data: false,
             expect_version: 0,
+            resumption_delay: 0,
         }
     }
 
@@ -330,6 +334,42 @@ fn lookup_kx_group(group: u16) -> &'static rustls::SupportedKxGroup {
     }
 }
 
+struct ServerCacheWithResumptionDelay {
+    delay: u32,
+    storage: Arc<dyn rustls::server::StoresServerSessions>,
+}
+
+impl ServerCacheWithResumptionDelay {
+    fn new(delay: u32) -> Arc<Self> {
+        Arc::new(Self {
+            delay,
+            storage: rustls::server::ServerSessionMemoryCache::new(32),
+        })
+    }
+}
+
+impl rustls::server::StoresServerSessions for ServerCacheWithResumptionDelay {
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+        let mut ssv = persist::ServerSessionValue::read_bytes(&value).unwrap();
+        ssv.creation_time_sec -= self.delay as u64;
+
+        self.storage
+            .put(key, ssv.get_encoding())
+    }
+
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.storage.get(key)
+    }
+
+    fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.storage.take(key)
+    }
+
+    fn can_cache(&self) -> bool {
+        self.storage.can_cache()
+    }
+}
+
 fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
@@ -366,7 +406,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         )
         .unwrap();
 
-    cfg.session_storage = rustls::server::ServerSessionMemoryCache::new(32);
+    cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
 
     if opts.use_signing_scheme > 0 {
@@ -399,27 +439,49 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     Arc::new(cfg)
 }
 
-struct ClientCacheWithoutKxHints(Arc<rustls::client::ClientSessionMemoryCache>);
+struct ClientCacheWithoutKxHints {
+    delay: u32,
+    storage: Arc<rustls::client::ClientSessionMemoryCache>,
+}
 
 impl ClientCacheWithoutKxHints {
-    fn new() -> Arc<ClientCacheWithoutKxHints> {
-        Arc::new(ClientCacheWithoutKxHints(
-            rustls::client::ClientSessionMemoryCache::new(32),
-        ))
+    fn new(delay: u32) -> Arc<ClientCacheWithoutKxHints> {
+        Arc::new(ClientCacheWithoutKxHints {
+            delay,
+            storage: rustls::client::ClientSessionMemoryCache::new(32),
+        })
     }
 }
 
 impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         if key.len() > 2 && key[0] == b'k' && key[1] == b'x' {
-            true
-        } else {
-            self.0.put(key, value)
+            return true;
         }
+
+        let mut reader = Reader::init(&value[2..]);
+        let csv = CipherSuite::read_bytes(&value[..2])
+            .and_then(|suite| {
+                persist::ClientSessionValue::read(&mut reader, suite, &rustls::ALL_CIPHER_SUITES)
+            })
+            .unwrap();
+
+        let value = match csv {
+            persist::ClientSessionValue::Tls13(mut tls13) => {
+                tls13.common.rewind_epoch(self.delay);
+                tls13.get_encoding()
+            }
+            persist::ClientSessionValue::Tls12(mut tls12) => {
+                tls12.common.rewind_epoch(self.delay);
+                tls12.get_encoding()
+            }
+        };
+
+        self.storage.put(key, value)
     }
 
     fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.0.get(key)
+        self.storage.get(key)
     }
 }
 
@@ -458,7 +520,7 @@ fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
         });
     }
 
-    let persist = ClientCacheWithoutKxHints::new();
+    let persist = ClientCacheWithoutKxHints::new(opts.resumption_delay);
     cfg.session_storage = persist;
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
@@ -826,6 +888,7 @@ fn main() {
             "-on-initial-expect-cipher" |
             "-on-resume-expect-cipher" |
             "-on-retry-expect-cipher" |
+            "-expect-ticket-age-skew" |
             "-handshaker-path" |
             "-application-settings" |
             "-expect-msg-callback" => {
@@ -960,6 +1023,9 @@ fn main() {
                     opts.curves = Some(vec![ curve ]);
                 }
             }
+            "-resumption-delay" => {
+                opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -1007,7 +1073,6 @@ fn main() {
             "-use-ticket-callback" |
             "-enable-grease" |
             "-enable-channel-id" |
-            "-resumption-delay" |
             "-expect-early-data-info" |
             "-expect-cipher-aes" |
             "-retain-only-sha256-client-cert-initial" |
