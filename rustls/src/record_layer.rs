@@ -28,7 +28,7 @@ pub(crate) struct RecordLayer {
     // Message encrypted with other keys may be encountered, so failures
     // should be swallowed by the caller.  This struct tracks the amount
     // of message size this is allowed for.
-    trial_decryption_len: usize,
+    trial_decryption_len: Option<usize>,
 }
 
 impl RecordLayer {
@@ -40,7 +40,7 @@ impl RecordLayer {
             read_seq: 0,
             encrypt_state: DirectionState::Invalid,
             decrypt_state: DirectionState::Invalid,
-            trial_decryption_len: 0,
+            trial_decryption_len: None,
         }
     }
 
@@ -52,12 +52,16 @@ impl RecordLayer {
         self.decrypt_state == DirectionState::Active
     }
 
-    pub(crate) fn doing_trial_decryption(&mut self, len: usize) -> bool {
-        if len <= self.trial_decryption_len {
-            self.trial_decryption_len -= len;
-            true
-        } else {
-            false
+    pub(crate) fn doing_trial_decryption(&mut self, requested: usize) -> bool {
+        match self
+            .trial_decryption_len
+            .and_then(|value| value.checked_sub(requested))
+        {
+            Some(remaining) => {
+                self.trial_decryption_len = Some(remaining);
+                true
+            }
+            _ => false,
         }
     }
 
@@ -103,6 +107,7 @@ impl RecordLayer {
     pub(crate) fn set_message_decrypter(&mut self, cipher: Box<dyn MessageDecrypter>) {
         self.prepare_message_decrypter(cipher);
         self.start_decrypting();
+        self.trial_decryption_len = None;
     }
 
     /// Set and start using the given `MessageDecrypter` for future incoming
@@ -115,11 +120,11 @@ impl RecordLayer {
     ) {
         self.prepare_message_decrypter(cipher);
         self.start_decrypting();
-        self.trial_decryption_len = max_length;
+        self.trial_decryption_len = Some(max_length);
     }
 
     pub(crate) fn finish_trial_decryption(&mut self) {
-        self.trial_decryption_len = 0;
+        self.trial_decryption_len = None;
     }
 
     /// Return true if the peer appears to getting close to encrypting
