@@ -250,6 +250,8 @@ mod client_hello {
 
             let mut chosen_psk_index = None;
             let mut resumedata = None;
+            let time_now = ticketer::TimeBase::now()?;
+
             if let Some(psk_offer) = client_hello.get_psk() {
                 if !client_hello.check_psk_ext_is_last() {
                     return Err(cx
@@ -270,6 +272,9 @@ mod client_hello {
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                     let resume = match self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
+                        .map(|resumedata| {
+                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, time_now)
+                        })
                         .filter(|resumedata| {
                             hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
                         }) {
@@ -612,7 +617,14 @@ mod client_hello {
          * We also require stateful resumption. */
         let early_data_configured = config.max_early_data_size > 0 && !config.ticketer.enabled();
 
-        /* "In order to accept early data, the server [...] MUST verify that the
+        /* "For PSKs provisioned via NewSessionTicket, a server MUST validate
+         *  that the ticket age for the selected PSK identity (computed by
+         *  subtracting ticket_age_add from PskIdentity.obfuscated_ticket_age
+         *  modulo 2^32) is within a small tolerance of the time since the ticket
+         *  was issued (see Section 8)." -- this is implemented in ServerSessionValue::set_freshness()
+         *  and related.
+         *
+         * "In order to accept early data, the server [...] MUST verify that the
          *  following values are the same as those associated with the
          *  selected PSK:
          *
@@ -622,6 +634,7 @@ mod client_hello {
          *
          * (RFC8446, 4.2.10) */
         let early_data_possible = early_data_requested
+            && resume.is_fresh()
             && Some(resume.version) == cx.common.negotiated_version
             && resume.cipher_suite == suite.common.suite
             && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref();
@@ -1070,6 +1083,7 @@ fn get_server_session_value(
     cx: &ServerContext<'_>,
     nonce: &[u8],
     time_now: ticketer::TimeBase,
+    age_obfuscation_offset: u32,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
 
@@ -1086,6 +1100,7 @@ fn get_server_session_value(
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
         time_now,
+        age_obfuscation_offset,
     )
 }
 
@@ -1107,8 +1122,10 @@ impl ExpectFinished {
     ) -> Result<(), Error> {
         let nonce = rand::random_vec(32)?;
         let now = ticketer::TimeBase::now()?;
-        let plain = get_server_session_value(transcript, suite, key_schedule, cx, &nonce, now)
-            .get_encoding();
+        let age_add = rand::random_u32()?;
+        let plain =
+            get_server_session_value(transcript, suite, key_schedule, cx, &nonce, now, age_add)
+                .get_encoding();
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
@@ -1130,7 +1147,6 @@ impl ExpectFinished {
             (id, stateful_lifetime)
         };
 
-        let age_add = rand::random_u32()?;
         let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
 
         if config.max_early_data_size > 0 {
