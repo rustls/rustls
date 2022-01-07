@@ -117,7 +117,7 @@ impl TlsClient {
             plaintext.resize(io_state.plaintext_bytes_to_read(), 0u8);
             self.tls_conn
                 .reader()
-                .read(&mut plaintext)
+                .read_exact(&mut plaintext)
                 .unwrap();
             io::stdout()
                 .write_all(&plaintext)
