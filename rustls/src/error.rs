@@ -97,6 +97,10 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// No progress can be made because the configuration didn't enable any
+    /// versions of TLS that are compatible with the configured protocol.
+    NoVersions,
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -161,6 +165,7 @@ impl fmt::Display for Error {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
             Error::General(ref err) => write!(f, "unexpected error: {}", err),
+            Error::NoVersions => write!(f, "version configuration error"),
         }
     }
 }

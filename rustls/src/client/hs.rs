@@ -136,7 +136,7 @@ pub(super) fn start_handshake(
     let hello_details = ClientHelloDetails::new();
     let sent_tls13_fake_ccs = false;
     let may_send_sct_list = config.verifier.request_scts();
-    Ok(emit_client_hello_for_retry(
+    emit_client_hello_for_retry(
         config,
         cx,
         resuming_session,
@@ -152,7 +152,7 @@ pub(super) fn start_handshake(
         extra_exts,
         may_send_sct_list,
         None,
-    ))
+    )
 }
 
 struct ExpectServerHello {
@@ -191,7 +191,7 @@ fn emit_client_hello_for_retry(
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
-) -> NextState {
+) -> NextStateOrError {
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
         match &resuming.value {
@@ -219,10 +219,12 @@ fn emit_client_hello_for_retry(
         supported_versions.push(ProtocolVersion::TLSv1_2);
     }
 
-    let mut exts = Vec::new();
-    if !supported_versions.is_empty() {
-        exts.push(ClientExtension::SupportedVersions(supported_versions));
+    if supported_versions.is_empty() {
+        return Err(Error::NoVersions);
     }
+
+    let mut exts = Vec::new();
+    exts.push(ClientExtension::SupportedVersions(supported_versions));
     if let (Some(sni_name), true) = (server_name.for_sni(), config.enable_sni) {
         exts.push(ClientExtension::make_sni(sni_name));
     }
@@ -413,9 +415,12 @@ fn emit_client_hello_for_retry(
     };
 
     if support_tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
+        Ok(Box::new(ExpectServerHelloOrHelloRetryRequest {
+            next,
+            extra_exts,
+        }))
     } else {
-        Box::new(next)
+        Ok(Box::new(next))
     }
 }
 
@@ -768,7 +773,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             _ => offered_key_share,
         };
 
-        Ok(emit_client_hello_for_retry(
+        emit_client_hello_for_retry(
             self.next.config,
             cx,
             self.next.resuming_session,
@@ -784,7 +789,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.extra_exts,
             may_send_sct_list,
             Some(cs),
-        ))
+        )
     }
 }
 
