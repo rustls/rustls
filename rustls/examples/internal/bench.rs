@@ -555,7 +555,10 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     {
         transfer(client, server);
         let mut buf = [0u8; 1024];
-        server.reader().read(&mut buf).unwrap();
+        server
+            .reader()
+            .read_exact(&mut buf)
+            .unwrap();
     }
 }
 

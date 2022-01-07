@@ -245,7 +245,7 @@ impl OpenConnection {
 
                 self.tls_conn
                     .reader()
-                    .read(&mut buf)
+                    .read_exact(&mut buf)
                     .unwrap();
 
                 debug!("plaintext read {:?}", buf.len());

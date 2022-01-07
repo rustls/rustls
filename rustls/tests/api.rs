@@ -1686,7 +1686,7 @@ fn client_complete_io_for_read() {
 
         server
             .writer()
-            .write(b"01234567890123456789")
+            .write_all(b"01234567890123456789")
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server);
