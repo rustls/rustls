@@ -25,6 +25,7 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::ticketer::TimeBase;
 use crate::tls13::key_schedule::KeyScheduleEarly;
+use crate::versions::EnabledVersions;
 use crate::SupportedCipherSuite;
 
 #[cfg(feature = "tls12")]
@@ -207,17 +208,18 @@ fn emit_client_hello_for_retry(
         (Vec::new(), ProtocolVersion::Unknown(0))
     };
 
-    let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
-    let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
+    let supported_versions = match (cx.common.is_quic(), config.versions) {
+        #[cfg(feature = "tls12")]
+        (true, EnabledVersions::All) => vec![ProtocolVersion::TLSv1_3],
+        #[cfg(feature = "tls12")]
+        (false, EnabledVersions::All) => vec![ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3],
+        (_, EnabledVersions::Tls13) => vec![ProtocolVersion::TLSv1_3],
+        // We won't see `true` here, see `ClientQuicExt::new_quic()`.
+        #[cfg(feature = "tls12")]
+        (_, EnabledVersions::Tls12) => vec![ProtocolVersion::TLSv1_2],
+    };
 
-    let mut supported_versions = Vec::new();
-    if support_tls13 {
-        supported_versions.push(ProtocolVersion::TLSv1_3);
-    }
-
-    if support_tls12 {
-        supported_versions.push(ProtocolVersion::TLSv1_2);
-    }
+    dbg!(&supported_versions);
 
     let mut exts = Vec::new();
     if !supported_versions.is_empty() {
@@ -250,6 +252,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
     }
 
+    let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
     if let Some(key_share) = &key_share {
         debug_assert!(support_tls13);
         let key_share = KeyShareEntry::new(key_share.group(), key_share.pubkey.as_ref());

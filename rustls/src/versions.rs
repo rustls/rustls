@@ -26,6 +26,8 @@ pub static TLS13: SupportedProtocolVersion = SupportedProtocolVersion {
 };
 
 /// A list of all the protocol versions supported by rustls.
+///
+// This needs to be kept in sync with the `impl Default for EnabledVersions`.
 pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
     &TLS13,
     #[cfg(feature = "tls12")]
@@ -37,41 +39,60 @@ pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
 /// This will be [`ALL_VERSIONS`] for now, but gives space in the future
 /// to remove a version from here and require users to opt-in to older
 /// versions.
+//
+// This needs to be kept in sync with the `impl Default for EnabledVersions`.
 pub static DEFAULT_VERSIONS: &[&SupportedProtocolVersion] = ALL_VERSIONS;
 
-#[derive(Debug, Clone)]
-pub(crate) struct EnabledVersions {
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum EnabledVersions {
     #[cfg(feature = "tls12")]
-    tls12: Option<&'static SupportedProtocolVersion>,
-    tls13: Option<&'static SupportedProtocolVersion>,
+    All,
+    Tls13,
+    #[cfg(feature = "tls12")]
+    Tls12,
 }
 
 impl EnabledVersions {
-    pub(crate) fn new(versions: &[&'static SupportedProtocolVersion]) -> Self {
-        let mut ev = Self {
-            #[cfg(feature = "tls12")]
-            tls12: None,
-            tls13: None,
-        };
+    pub(crate) fn new(versions: &[&'static SupportedProtocolVersion]) -> Option<Self> {
+        let tls13 = versions.iter().any(|v| *v == &TLS13);
 
-        for v in versions {
-            match v.version {
-                #[cfg(feature = "tls12")]
-                ProtocolVersion::TLSv1_2 => ev.tls12 = Some(v),
-                ProtocolVersion::TLSv1_3 => ev.tls13 = Some(v),
-                _ => {}
+        #[cfg(feature = "tls12")]
+        {
+            let tls12 = versions.iter().any(|v| *v == &TLS12);
+            match (tls12, tls13) {
+                (true, true) => Some(Self::All),
+                (true, false) => Some(Self::Tls12),
+                (false, true) => Some(Self::Tls13),
+                (false, false) => None,
             }
         }
-
-        ev
+        #[cfg(not(feature = "tls12"))]
+        {
+            tls13.then(|| Self::Tls13)
+        }
     }
 
     pub(crate) fn contains(&self, version: ProtocolVersion) -> bool {
-        match version {
+        match (version, self) {
             #[cfg(feature = "tls12")]
-            ProtocolVersion::TLSv1_2 => self.tls12.is_some(),
-            ProtocolVersion::TLSv1_3 => self.tls13.is_some(),
+            (ProtocolVersion::TLSv1_2, Self::All) | (ProtocolVersion::TLSv1_2, Self::Tls12) => true,
+            #[cfg(feature = "tls12")]
+            (ProtocolVersion::TLSv1_3, Self::All) => true,
+            (ProtocolVersion::TLSv1_3, Self::Tls13) => true,
             _ => false,
+        }
+    }
+}
+
+impl Default for EnabledVersions {
+    fn default() -> Self {
+        #[cfg(feature = "tls12")]
+        {
+            Self::All
+        }
+        #[cfg(not(feature = "tls12"))]
+        {
+            Self::Tls13
         }
     }
 }

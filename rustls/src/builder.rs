@@ -132,7 +132,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
             state: WantsVerifier {
                 cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
                 kx_groups: ALL_KX_GROUPS.to_vec(),
-                versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
+                versions: versions::EnabledVersions::default(), // All enabled versions (depending on `cfg(feature = "tls12")`)
             },
             side: self.side,
         }
@@ -229,11 +229,17 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             return Err(Error::General("no kx groups configured".into()));
         }
 
+        // The error condition is unreachable, because `any_usable_suite` would be false.
+        let versions = versions::EnabledVersions::new(versions)
+            .ok_or_else(|| Error::General("no versions configured".into()))?;
+
+        dbg!(&versions);
+
         Ok(ConfigBuilder {
             state: WantsVerifier {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
-                versions: versions::EnabledVersions::new(versions),
+                versions,
             },
             side: self.side,
         })
