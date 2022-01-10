@@ -360,13 +360,9 @@ pub(crate) enum Protocol {
 
 #[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
-    pub(crate) side: Side,
     pub(crate) client: [u8; 32],
     pub(crate) server: [u8; 32],
 }
-
-#[cfg(feature = "tls12")]
-static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 /// How many ChangeCipherSpec messages we accept and drop in TLS1.3 handshakes.
 /// The spec says 1, but implementations (namely the boringssl test suite) get
@@ -374,26 +370,11 @@ static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 
 static TLS13_MAX_DROPPED_CCS: u8 = 2u8;
 
 impl ConnectionRandoms {
-    pub(crate) fn new(client: Random, server: Random, side: Side) -> Self {
+    pub(crate) fn new(client: Random, server: Random) -> Self {
         Self {
-            side,
             client: client.0,
             server: server.0,
         }
-    }
-
-    #[cfg(feature = "tls12")]
-    pub(crate) fn set_tls12_downgrade_marker(&mut self) {
-        assert_eq!(self.side, Side::Server);
-        self.server[24..].copy_from_slice(&TLS12_DOWNGRADE_SENTINEL);
-    }
-
-    #[cfg(feature = "tls12")]
-    pub(crate) fn has_tls12_downgrade_marker(&mut self) -> bool {
-        assert_eq!(self.side, Side::Client);
-        // both the server random and TLS12_DOWNGRADE_SENTINEL are
-        // public values and don't require constant time comparison
-        self.server[24..] == TLS12_DOWNGRADE_SENTINEL
     }
 }
 
