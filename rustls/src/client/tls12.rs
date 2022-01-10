@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -133,7 +133,7 @@ mod server_hello {
                         &secrets.master_secret,
                     );
                     cx.common
-                        .start_encryption_tls12(&secrets);
+                        .start_encryption_tls12(&secrets, Side::Client);
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
@@ -817,7 +817,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             &secrets.master_secret,
         );
         cx.common
-            .start_encryption_tls12(&secrets);
+            .start_encryption_tls12(&secrets, Side::Client);
         cx.common
             .record_layer
             .start_encrypting();
