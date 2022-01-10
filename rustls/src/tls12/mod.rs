@@ -268,7 +268,7 @@ impl ConnectionSecrets {
 
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
     /// and the session's `secrets`.
-    pub(crate) fn make_cipher_pair(&self) -> MessageCipherPair {
+    pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
         fn split_key<'a>(
             key_block: &'a [u8],
             alg: &'static aead::Algorithm,
@@ -292,7 +292,7 @@ impl ConnectionSecrets {
         let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
-        let (write_key, write_iv, read_key, read_iv) = match self.randoms.side {
+        let (write_key, write_iv, read_key, read_iv) = match side {
             Side::Client => (
                 client_write_key,
                 client_write_iv,

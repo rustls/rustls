@@ -1,5 +1,5 @@
 use crate::check::{check_message, inappropriate_message};
-use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -275,7 +275,7 @@ mod client_hello {
                 &secrets.master_secret,
             );
             cx.common
-                .start_encryption_tls12(&secrets);
+                .start_encryption_tls12(&secrets, Side::Server);
             cx.common.peer_certificates = resumedata.client_cert_chain;
 
             if self.send_ticket {
@@ -600,7 +600,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
             &secrets.master_secret,
         );
         cx.common
-            .start_encryption_tls12(&secrets);
+            .start_encryption_tls12(&secrets, Side::Server);
 
         if let Some(client_cert) = self.client_cert {
             Ok(Box::new(ExpectCertificateVerify {
