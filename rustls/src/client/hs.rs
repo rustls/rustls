@@ -221,6 +221,8 @@ fn emit_client_hello_for_retry(
 
     dbg!(&supported_versions);
 
+    dbg!(&supported_versions);
+
     let mut exts = Vec::new();
     if !supported_versions.is_empty() {
         exts.push(ClientExtension::SupportedVersions(supported_versions));

@@ -44,6 +44,7 @@ jobs:
         run: cargo test --features=logging,dangerous_configuration,quic,tls12
         env:
           RUST_BACKTRACE: 1
+          PERNOSCO_ENABLE: 1
 
       - name: cargo test (debug; all features)
         if: ${{ matrix.rust == 'nightly' }}
