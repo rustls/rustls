@@ -1,5 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{CommonState, ConnectionCommon, State};
+use crate::conn::{CommonState, ConnectionCommon, Side, State};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
@@ -305,7 +305,7 @@ impl ServerConnection {
         config: Arc<ServerConfig>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
-        let common = CommonState::new(config.max_fragment_size, false)?;
+        let common = CommonState::new(config.max_fragment_size, Side::Server)?;
         Ok(Self {
             inner: ConnectionCommon::new(
                 Box::new(hs::ExpectClientHello::new(config, extra_exts)),
@@ -436,7 +436,7 @@ pub struct Acceptor {
 impl Acceptor {
     /// Create a new `Acceptor`.
     pub fn new() -> Result<Self, Error> {
-        let common = CommonState::new(None, false)?;
+        let common = CommonState::new(None, Side::Server)?;
         let state = Box::new(Accepting);
         Ok(Self {
             inner: Some(ConnectionCommon::new(state, Default::default(), common)),

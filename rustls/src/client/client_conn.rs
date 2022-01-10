@@ -1,5 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{CommonState, ConnectionCommon, Protocol};
+use crate::conn::{CommonState, ConnectionCommon, Protocol, Side};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
@@ -431,7 +431,7 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(config.max_fragment_size, true)?;
+        let mut common_state = CommonState::new(config.max_fragment_size, Side::Client)?;
         common_state.protocol = proto;
         let mut data = ClientConnectionData::new();
 

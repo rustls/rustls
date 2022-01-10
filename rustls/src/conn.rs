@@ -360,7 +360,7 @@ pub(crate) enum Protocol {
 
 #[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
-    pub(crate) we_are_client: bool,
+    pub(crate) side: Side,
     pub(crate) client: [u8; 32],
     pub(crate) server: [u8; 32],
 }
@@ -374,9 +374,9 @@ static TLS12_DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 
 static TLS13_MAX_DROPPED_CCS: u8 = 2u8;
 
 impl ConnectionRandoms {
-    pub(crate) fn new(client: Random, server: Random, we_are_client: bool) -> Self {
+    pub(crate) fn new(client: Random, server: Random, side: Side) -> Self {
         Self {
-            we_are_client,
+            side,
             client: client.0,
             server: server.0,
         }
@@ -384,13 +384,13 @@ impl ConnectionRandoms {
 
     #[cfg(feature = "tls12")]
     pub(crate) fn set_tls12_downgrade_marker(&mut self) {
-        assert!(!self.we_are_client);
+        assert_eq!(self.side, Side::Server);
         self.server[24..].copy_from_slice(&TLS12_DOWNGRADE_SENTINEL);
     }
 
     #[cfg(feature = "tls12")]
     pub(crate) fn has_tls12_downgrade_marker(&mut self) -> bool {
-        assert!(self.we_are_client);
+        assert_eq!(self.side, Side::Client);
         // both the server random and TLS12_DOWNGRADE_SENTINEL are
         // public values and don't require constant time comparison
         self.server[24..] == TLS12_DOWNGRADE_SENTINEL
@@ -797,7 +797,7 @@ impl<T> DerefMut for ConnectionCommon<T> {
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) is_client: bool,
+    pub(crate) side: Side,
     pub(crate) record_layer: record_layer::RecordLayer,
     pub(crate) suite: Option<SupportedCipherSuite>,
     pub(crate) alpn_protocol: Option<Vec<u8>>,
@@ -823,10 +823,10 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(max_fragment_size: Option<usize>, is_client: bool) -> Result<Self, Error> {
+    pub(crate) fn new(max_fragment_size: Option<usize>, side: Side) -> Result<Self, Error> {
         Ok(Self {
             negotiated_version: None,
-            is_client,
+            side,
             record_layer: record_layer::RecordLayer::new(),
             suite: None,
             alpn_protocol: None,
@@ -924,9 +924,9 @@ impl CommonState {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if self.may_receive_application_data && !self.is_tls13() {
-            let reject_ty = match self.is_client {
-                true => HandshakeType::HelloRequest,
-                false => HandshakeType::ClientHello,
+            let reject_ty = match self.side {
+                Side::Client => HandshakeType::HelloRequest,
+                Side::Server => HandshakeType::ClientHello,
             };
             if msg.is_handshake_type(reject_ty) {
                 self.send_warning_alert(AlertDescription::NoRenegotiation);
@@ -1405,6 +1405,12 @@ impl Quic {
             returned_traffic_keys: false,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Side {
+    Client,
+    Server,
 }
 
 /// Data specific to the peer's side (client or server).

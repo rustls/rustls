@@ -1,6 +1,5 @@
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
-use crate::conn::CommonState;
-use crate::conn::ConnectionRandoms;
+use crate::conn::{CommonState, ConnectionRandoms, Side};
 use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
@@ -293,20 +292,19 @@ impl ConnectionSecrets {
         let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
-        let (write_key, write_iv, read_key, read_iv) = if self.randoms.we_are_client {
-            (
+        let (write_key, write_iv, read_key, read_iv) = match self.randoms.side {
+            Side::Client => (
                 client_write_key,
                 client_write_iv,
                 server_write_key,
                 server_write_iv,
-            )
-        } else {
-            (
+            ),
+            Side::Server => (
                 server_write_key,
                 server_write_iv,
                 client_write_key,
                 client_write_iv,
-            )
+            ),
         };
 
         (
