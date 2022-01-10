@@ -591,7 +591,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             .start_hash(suite.hash_algorithm());
         transcript.add_message(&m);
 
-        let randoms = ConnectionRandoms::new(self.random, server_hello.random, cx.common.side);
+        let randoms = ConnectionRandoms::new(self.random, server_hello.random);
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {

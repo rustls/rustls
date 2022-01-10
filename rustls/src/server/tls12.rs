@@ -89,8 +89,7 @@ mod client_hello {
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
             if tls13_enabled {
-                self.randoms
-                    .set_tls12_downgrade_marker();
+                self.randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
             }
 
             // -- Check for resumption --

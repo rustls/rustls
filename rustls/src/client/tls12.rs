@@ -61,11 +61,10 @@ mod server_hello {
                 .write_slice(&mut self.randoms.server);
 
             // Look for TLS1.3 downgrade signal in server random
-            if tls13_supported
-                && self
-                    .randoms
-                    .has_tls12_downgrade_marker()
-            {
+            // both the server random and TLS12_DOWNGRADE_SENTINEL are
+            // public values and don't require constant time comparison
+            let has_downgrade_marker = self.randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
+            if tls13_supported && has_downgrade_marker {
                 return Err(cx
                     .common
                     .illegal_param("downgrade to TLS1.2 when TLS1.3 is supported"));
