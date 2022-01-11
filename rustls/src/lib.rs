@@ -446,6 +446,7 @@ pub use server::{ServerConfig, ServerConnection};
 ///
 /// [`ALL_CIPHER_SUITES`] is provided as an array of all of these values.
 pub mod cipher_suite {
+    pub use crate::suites::CipherSuiteCommon;
     #[cfg(feature = "tls12")]
     pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
     #[cfg(feature = "tls12")]
