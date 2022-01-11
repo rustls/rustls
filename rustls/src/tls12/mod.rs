@@ -26,7 +26,6 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -43,7 +42,6 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -60,7 +58,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
-            aead_algorithm: &ring::aead::AES_128_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -77,7 +74,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -94,7 +90,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
-            aead_algorithm: &ring::aead::AES_128_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -111,7 +106,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -288,8 +282,8 @@ impl ConnectionSecrets {
         let suite = self.suite;
         let scs = &suite.common;
 
-        let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
-        let (server_write_key, key_block) = split_key(key_block, scs.aead_algorithm);
+        let (client_write_key, key_block) = split_key(&key_block, scs.bulk.algorithm());
+        let (server_write_key, key_block) = split_key(key_block, scs.bulk.algorithm());
         let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
@@ -324,7 +318,7 @@ impl ConnectionSecrets {
         let common = &self.suite.common;
 
         let len =
-            (common.aead_algorithm.key_len() + suite.fixed_iv_len) * 2 + suite.explicit_nonce_len;
+            (common.bulk.algorithm().key_len() + suite.fixed_iv_len) * 2 + suite.explicit_nonce_len;
 
         let mut out = Vec::new();
         out.resize(len, 0u8);

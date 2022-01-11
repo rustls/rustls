@@ -22,7 +22,6 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         bulk: BulkAlgorithm::Chacha20Poly1305,
-        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     #[cfg(feature = "quic")]
@@ -37,7 +36,6 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
         },
         hkdf_algorithm: ring::hkdf::HKDF_SHA384,
         #[cfg(feature = "quic")]
@@ -54,7 +52,6 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
         bulk: BulkAlgorithm::Aes128Gcm,
-        aead_algorithm: &ring::aead::AES_128_GCM,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     #[cfg(feature = "quic")]
@@ -76,7 +73,7 @@ pub struct Tls13CipherSuite {
 
 impl Tls13CipherSuite {
     pub(crate) fn derive_encrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
-        let key = derive_traffic_key(secret, self.common.aead_algorithm);
+        let key = derive_traffic_key(secret, self.common.bulk.algorithm());
         let iv = derive_traffic_iv(secret);
 
         Box::new(Tls13MessageEncrypter {
@@ -88,7 +85,7 @@ impl Tls13CipherSuite {
     /// Derive a `MessageDecrypter` object from the concerned TLS 1.3
     /// cipher suite.
     pub fn derive_decrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageDecrypter> {
-        let key = derive_traffic_key(secret, self.common.aead_algorithm);
+        let key = derive_traffic_key(secret, self.common.bulk.algorithm());
         let iv = derive_traffic_iv(secret);
 
         Box::new(Tls13MessageDecrypter {

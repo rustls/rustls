@@ -35,6 +35,17 @@ pub enum BulkAlgorithm {
     Chacha20Poly1305,
 }
 
+impl BulkAlgorithm {
+    #[inline]
+    pub(crate) fn algorithm(&self) -> &'static ring::aead::Algorithm {
+        match self {
+            BulkAlgorithm::Aes128Gcm => &ring::aead::AES_128_GCM,
+            BulkAlgorithm::Aes256Gcm => &ring::aead::AES_256_GCM,
+            BulkAlgorithm::Chacha20Poly1305 => &ring::aead::CHACHA20_POLY1305,
+        }
+    }
+}
+
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
@@ -42,8 +53,6 @@ pub struct CipherSuiteCommon {
 
     /// How to do bulk encryption.
     pub bulk: BulkAlgorithm,
-
-    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
 }
 
 /// A cipher suite supported by rustls.
