@@ -10,6 +10,7 @@ homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
+resolver = "2"
 
 [dependencies]
 log = { version = "0.4.4", optional = true }

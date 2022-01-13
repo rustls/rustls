@@ -6,6 +6,7 @@ authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
 description = "Rustls example code and tests that depend on mio."
 publish = false
+resolver = "2"
 
 [features]
 default = ["logging"]
