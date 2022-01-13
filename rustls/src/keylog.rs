@@ -2,7 +2,7 @@ use std::env;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Mutex;
 
 #[cfg(feature = "logging")]
@@ -66,7 +66,6 @@ impl KeyLog for NoKeyLog {
 
 // Internal mutable state for KeyLogFile
 struct KeyLogFileInner {
-    path: Option<PathBuf>,
     file: Option<File>,
     buf: Vec<u8>,
 }
@@ -74,31 +73,36 @@ struct KeyLogFileInner {
 impl KeyLogFileInner {
     fn new(var: Result<String, env::VarError>) -> Self {
         let path = match var {
-            Ok(ref s) => Some(PathBuf::from(s)),
-            Err(env::VarError::NotUnicode(ref s)) => Some(PathBuf::from(s)),
-            Err(env::VarError::NotPresent) => None,
+            Ok(ref s) => Path::new(s),
+            Err(env::VarError::NotUnicode(ref s)) => Path::new(s),
+            Err(env::VarError::NotPresent) => {
+                return Self {
+                    file: None,
+                    buf: Vec::new(),
+                };
+            }
+        };
+
+        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+        let file = match OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+        {
+            Ok(f) => Some(f),
+            Err(e) => {
+                warn!("unable to create key log file {:?}: {}", path, e);
+                None
+            }
         };
 
         Self {
-            path,
-            file: None,
+            file,
             buf: Vec::new(),
         }
     }
 
     fn try_write(&mut self, label: &str, client_random: &[u8], secret: &[u8]) -> io::Result<()> {
-        if let Some(path) = self.path.take() {
-            #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(&path)
-            {
-                Ok(f) => self.file = Some(f),
-                Err(e) => warn!("unable to create key log file {:?}: {}", path, e),
-            }
-        }
-
         let mut file = match self.file {
             None => {
                 return Ok(());
