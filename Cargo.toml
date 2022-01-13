@@ -6,3 +6,4 @@ members = [
   "rustls-mio",
 ]
 exclude = ["admin/rustfmt"]
+resolver = "2"
