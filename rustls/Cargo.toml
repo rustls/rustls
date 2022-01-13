@@ -18,7 +18,8 @@ sct = "0.7.0"
 webpki = { version = "0.22.0", features = ["alloc", "std"] }
 
 [features]
-default = ["logging", "tls12"]
+default = ["keylogfile", "logging", "tls12"]
+keylogfile = []
 logging = ["log"]
 dangerous_configuration = []
 quic = []

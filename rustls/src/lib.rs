@@ -330,6 +330,8 @@ mod bs_debug;
 mod builder;
 mod key;
 mod keylog;
+#[cfg(feature = "keylogfile")]
+mod keylogfile;
 mod kx;
 mod suites;
 mod ticketer;
@@ -358,7 +360,9 @@ pub use crate::conn::{
 };
 pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
-pub use crate::keylog::{KeyLog, KeyLogFile, NoKeyLog};
+pub use crate::keylog::{KeyLog, NoKeyLog};
+#[cfg(feature = "keylogfile")]
+pub use crate::keylogfile::KeyLogFile;
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::CipherSuite;
 pub use crate::msgs::enums::ProtocolVersion;
