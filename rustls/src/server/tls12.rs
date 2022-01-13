@@ -761,7 +761,7 @@ fn emit_ticket(
     let plain = get_server_connection_value_tls12(secrets, using_ems, cx).get_encoding();
     let ticket = ticketer
         .encrypt(&plain)
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     let ticket_lifetime = ticketer.lifetime();
 
     let m = Message {

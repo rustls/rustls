@@ -1516,7 +1516,7 @@ impl CertificatePayloadTLS13 {
             .first()
             .and_then(CertificateEntry::get_ocsp_response)
             .cloned()
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
     }
 
     pub fn get_end_entity_scts(&self) -> Option<SCTList> {

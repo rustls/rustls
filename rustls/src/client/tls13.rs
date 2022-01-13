@@ -755,7 +755,7 @@ fn emit_certificate_tls13(
     let context = client_auth
         .auth_context
         .take()
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
 
     let mut cert_payload = CertificatePayloadTLS13 {
         context: PayloadU8::new(context),
