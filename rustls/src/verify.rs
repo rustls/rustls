@@ -46,7 +46,7 @@ pub struct HandshakeSignatureValid(());
 impl HandshakeSignatureValid {
     /// Make a `HandshakeSignatureValid`
     pub fn assertion() -> Self {
-        Self { 0: () }
+        Self(())
     }
 }
 
@@ -54,7 +54,7 @@ pub(crate) struct FinishedMessageVerified(());
 
 impl FinishedMessageVerified {
     pub(crate) fn assertion() -> Self {
-        Self { 0: () }
+        Self(())
     }
 }
 
@@ -66,7 +66,7 @@ pub struct ServerCertVerified(());
 impl ServerCertVerified {
     /// Make a `ServerCertVerified`
     pub fn assertion() -> Self {
-        Self { 0: () }
+        Self(())
     }
 }
 
@@ -75,7 +75,7 @@ pub struct ClientCertVerified(());
 impl ClientCertVerified {
     /// Make a `ClientCertVerified`
     pub fn assertion() -> Self {
-        Self { 0: () }
+        Self(())
     }
 }
 
