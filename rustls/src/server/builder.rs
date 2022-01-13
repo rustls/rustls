@@ -1,13 +1,13 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::key;
-use crate::keylog::NoKeyLog;
 use crate::kx::SupportedKxGroup;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
+use crate::NoKeyLog;
 
 use std::marker::PhantomData;
 use std::sync::Arc;

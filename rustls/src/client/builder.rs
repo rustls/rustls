@@ -4,11 +4,11 @@ use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::error::Error;
 use crate::key;
-use crate::keylog::NoKeyLog;
 use crate::kx::SupportedKxGroup;
 use crate::suites::SupportedCipherSuite;
 use crate::verify::{self, CertificateTransparencyPolicy};
 use crate::versions;
+use crate::NoKeyLog;
 
 use std::marker::PhantomData;
 use std::sync::Arc;

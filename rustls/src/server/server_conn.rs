@@ -1,7 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, State};
 use crate::error::Error;
-use crate::keylog::KeyLog;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
@@ -15,6 +14,7 @@ use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
+use crate::KeyLog;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, quic};
 
