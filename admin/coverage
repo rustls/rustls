@@ -81,7 +81,7 @@ for example in 'bench bogo_shim trytls_shim'.split():
     rustc('--package', 'rustls', '--profile', 'dev', '--example', example)
 
 # crate-level tests
-for test in 'api key_log_file_env'.split():
+for test in 'api client_cert_verifier key_log_file_env server_cert_verifier'.split():
     rustc('--package', 'rustls', '--profile', 'dev', '--test', test)
     run(test)
 
