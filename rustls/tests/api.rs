@@ -2,7 +2,6 @@
 use std::convert::TryFrom;
 #[cfg(feature = "tls12")]
 use std::convert::TryInto;
-use std::env;
 use std::fmt;
 use std::io::{self, IoSlice, Read, Write};
 use std::mem;
@@ -4057,48 +4056,6 @@ fn bad_client_max_fragment_sizes() {
         check_client_max_fragment_size(0xffff),
         Some(Error::BadMaxFragmentSize)
     );
-}
-
-#[test]
-fn exercise_key_log_file_for_client() {
-    let server_config = Arc::new(make_server_config(KeyType::Rsa));
-    env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
-
-    for version in rustls::ALL_VERSIONS {
-        let mut client_config = make_client_config_with_versions(KeyType::Rsa, &[version]);
-        client_config.key_log = Arc::new(rustls::KeyLogFile::new());
-
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-
-        assert_eq!(5, client.writer().write(b"hello").unwrap());
-
-        do_handshake(&mut client, &mut server);
-        transfer(&mut client, &mut server);
-        server.process_new_packets().unwrap();
-    }
-}
-
-#[test]
-fn exercise_key_log_file_for_server() {
-    let mut server_config = make_server_config(KeyType::Rsa);
-
-    env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
-    server_config.key_log = Arc::new(rustls::KeyLogFile::new());
-
-    let server_config = Arc::new(server_config);
-
-    for version in rustls::ALL_VERSIONS {
-        let client_config = make_client_config_with_versions(KeyType::Rsa, &[version]);
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-
-        assert_eq!(5, client.writer().write(b"hello").unwrap());
-
-        do_handshake(&mut client, &mut server);
-        transfer(&mut client, &mut server);
-        server.process_new_packets().unwrap();
-    }
 }
 
 fn assert_lt(left: usize, right: usize) {
