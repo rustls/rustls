@@ -219,32 +219,31 @@ fn emit_client_hello_for_retry(
         supported_versions.push(ProtocolVersion::TLSv1_2);
     }
 
-    let mut exts = Vec::new();
-    if !supported_versions.is_empty() {
-        exts.push(ClientExtension::SupportedVersions(supported_versions));
-    }
+    // should be unreachable thanks to config builder
+    assert!(!supported_versions.is_empty());
+
+    let mut exts = vec![
+        ClientExtension::SupportedVersions(supported_versions),
+        ClientExtension::ECPointFormats(ECPointFormatList::supported()),
+        ClientExtension::NamedGroups(
+            config
+                .kx_groups
+                .iter()
+                .map(|skxg| skxg.name)
+                .collect(),
+        ),
+        ClientExtension::SignatureAlgorithms(
+            config
+                .verifier
+                .supported_verify_schemes(),
+        ),
+        ClientExtension::ExtendedMasterSecretRequest,
+        ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
+    ];
+
     if let (Some(sni_name), true) = (server_name.for_sni(), config.enable_sni) {
         exts.push(ClientExtension::make_sni(sni_name));
     }
-    exts.push(ClientExtension::ECPointFormats(
-        ECPointFormatList::supported(),
-    ));
-    exts.push(ClientExtension::NamedGroups(
-        config
-            .kx_groups
-            .iter()
-            .map(|skxg| skxg.name)
-            .collect(),
-    ));
-    exts.push(ClientExtension::SignatureAlgorithms(
-        config
-            .verifier
-            .supported_verify_schemes(),
-    ));
-    exts.push(ClientExtension::ExtendedMasterSecretRequest);
-    exts.push(ClientExtension::CertificateStatusRequest(
-        CertificateStatusRequest::build_ocsp(),
-    ));
 
     if may_send_sct_list {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
