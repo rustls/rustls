@@ -179,7 +179,7 @@ static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
 ];
 
 impl RsaSigningKey {
-    /// Make a new `RSASigningKey` from a DER encoding, in either
+    /// Make a new `RsaSigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
     pub fn new(der: &key::PrivateKey) -> Result<Self, SignError> {
         RsaKeyPair::from_der(&der.0)
@@ -252,7 +252,7 @@ impl Signer for RsaSigner {
 /// A SigningKey that uses exactly one TLS-level SignatureScheme
 /// and one ring-level signature::SigningAlgorithm.
 ///
-/// Compare this to RSASigningKey, which for a particular key is
+/// Compare this to RsaSigningKey, which for a particular key is
 /// willing to sign with several algorithms.  This is quite poor
 /// cryptography practice, but is necessary because a given RSA key
 /// is expected to work in TLS1.2 (PKCS#1 signatures) and TLS1.3
@@ -322,7 +322,7 @@ impl Signer for EcdsaSigner {
 /// A SigningKey that uses exactly one TLS-level SignatureScheme
 /// and one ring-level signature::SigningAlgorithm.
 ///
-/// Compare this to RSASigningKey, which for a particular key is
+/// Compare this to RsaSigningKey, which for a particular key is
 /// willing to sign with several algorithms.  This is quite poor
 /// cryptography practice, but is necessary because a given RSA key
 /// is expected to work in TLS1.2 (PKCS#1 signatures) and TLS1.3
