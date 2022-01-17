@@ -303,7 +303,7 @@ impl<'a> io::Read for Reader<'a> {
 
 /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
 /// allowing them to be the subject of a [`Writer`].
-pub trait PlaintextSink {
+pub(crate) trait PlaintextSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
     fn flush(&mut self) -> io::Result<()>;
@@ -337,8 +337,7 @@ impl<'a> Writer<'a> {
     ///
     /// This is not an external interface.  Get one of these objects
     /// from [`Connection::writer`].
-    #[doc(hidden)]
-    pub fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
+    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
         Writer { sink }
     }
 }
