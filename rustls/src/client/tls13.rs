@@ -34,7 +34,7 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig, ServerName};
+use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
 
 use crate::ticketer::TimeBase;
 use ring::constant_time;
@@ -930,7 +930,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common.start_traffic();
 
         let st = ExpectTraffic {
-            config: st.config,
+            session_storage: Arc::clone(&st.config.session_storage),
             server_name: st.server_name,
             suite: st.suite,
             transcript: st.transcript,
@@ -958,7 +958,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // In this state we can be sent tickets, key updates,
 // and application data.
 struct ExpectTraffic {
-    config: Arc<ClientConfig>,
+    session_storage: Arc<dyn StoresClientSessions>,
     server_name: ServerName,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -1034,7 +1034,6 @@ impl ExpectTraffic {
         }
 
         let worked = self
-            .config
             .session_storage
             .put(key.get_encoding(), ticket);
 
