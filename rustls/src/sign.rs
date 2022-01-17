@@ -164,7 +164,11 @@ pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, Sign
     Err(SignError(()))
 }
 
-/// A `SigningKey` for RSA-PKCS1 or RSA-PSS
+/// A `SigningKey` for RSA-PKCS1 or RSA-PSS.
+///
+/// This is used by the test suite, so it must be `pub`, but it isn't part of
+/// the public, stable, API.
+#[doc(hidden)]
 pub struct RsaSigningKey {
     key: Arc<RsaKeyPair>,
 }
