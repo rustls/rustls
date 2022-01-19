@@ -163,7 +163,11 @@ impl fmt::Display for Error {
             Error::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
-            Error::FailedToDecodeRootCertData(ref reason) => write!(f, "failed to decode DER-encoded root certificate: {}", reason),
+            Error::FailedToDecodeRootCertData(ref reason) => write!(
+                f,
+                "failed to decode DER-encoded root certificate: {}",
+                reason
+            ),
             Error::General(ref err) => write!(f, "unexpected error: {}", err),
         }
     }
