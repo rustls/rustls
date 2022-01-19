@@ -97,6 +97,9 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// Failed to decode DER-encoded root certificate
+    FailedToDecodeRootCertData(String),
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -160,6 +163,7 @@ impl fmt::Display for Error {
             Error::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
+            Error::FailedToDecodeRootCertData(ref reason) => write!(f, "failed to decode DER-encoded root certificate: {}", reason),
             Error::General(ref err) => write!(f, "unexpected error: {}", err),
         }
     }
@@ -217,6 +221,7 @@ mod tests {
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
+            Error::FailedToDecodeRootCertData("bad DER root cert".to_string()),
         ];
 
         for err in all {
