@@ -1113,12 +1113,8 @@ impl CommonState {
         self.flush_plaintext();
     }
 
-    pub(crate) fn start_incoming_traffic(&mut self) {
-        self.may_receive_application_data = true;
-    }
-
     pub(crate) fn start_traffic(&mut self) {
-        self.start_incoming_traffic();
+        self.may_receive_application_data = true;
         self.start_outgoing_traffic();
     }
 
