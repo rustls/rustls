@@ -1,4 +1,4 @@
-use crate::check::{check_message, inappropriate_handshake_message};
+use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -481,16 +481,11 @@ struct ExpectCertificateOrCertReq {
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        check_message(
-            &m,
-            &[ContentType::Handshake],
-            &[
-                HandshakeType::Certificate,
-                HandshakeType::CertificateRequest,
-            ],
-        )?;
-        if m.is_handshake_type(HandshakeType::Certificate) {
-            Box::new(ExpectCertificate {
+        match m.payload {
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::CertificateTLS13(..),
+                ..
+            }) => Box::new(ExpectCertificate {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -500,9 +495,11 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 may_send_sct_list: self.may_send_sct_list,
                 client_auth: None,
             })
-            .handle(cx, m)
-        } else {
-            Box::new(ExpectCertificateRequest {
+            .handle(cx, m),
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::CertificateRequestTLS13(..),
+                ..
+            }) => Box::new(ExpectCertificateRequest {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -511,7 +508,15 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 key_schedule: self.key_schedule,
                 may_send_sct_list: self.may_send_sct_list,
             })
-            .handle(cx, m)
+            .handle(cx, m),
+            ref payload => Err(inappropriate_handshake_message(
+                payload,
+                &[ContentType::Handshake],
+                &[
+                    HandshakeType::Certificate,
+                    HandshakeType::CertificateRequest,
+                ],
+            )),
         }
     }
 }
