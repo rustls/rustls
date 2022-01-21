@@ -1,4 +1,4 @@
-use crate::check::inappropriate_message;
+use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -908,10 +908,19 @@ impl State<ServerConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::ClientHello(..),
+                ..
+            }) => {
+                // TODO(https://github.com/rustls/rustls/issues/952): DoS potential.
+                cx.common
+                    .send_no_renegotiation_warning_alert();
+            }
             payload => {
-                return Err(inappropriate_message(
+                return Err(inappropriate_handshake_message(
                     &payload,
-                    &[ContentType::ApplicationData],
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                    &[HandshakeType::ClientHello],
                 ));
             }
         }

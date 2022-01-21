@@ -1093,10 +1093,19 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::HelloRequest,
+                ..
+            }) => {
+                // XXX(https://github.com/rustls/rustls/issues/952): DoS potential.
+                cx.common
+                    .send_no_renegotiation_warning_alert();
+            }
             payload => {
-                return Err(inappropriate_message(
+                return Err(inappropriate_handshake_message(
                     &payload,
-                    &[ContentType::ApplicationData],
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                    &[HandshakeType::HelloRequest],
                 ));
             }
         }

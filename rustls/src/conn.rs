@@ -5,7 +5,6 @@ use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::deframer::MessageDeframer;
-use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::Random;
@@ -778,7 +777,6 @@ impl<T> DerefMut for ConnectionCommon<T> {
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) side: Side,
     pub(crate) record_layer: record_layer::RecordLayer,
     pub(crate) suite: Option<SupportedCipherSuite>,
     pub(crate) alpn_protocol: Option<Vec<u8>>,
@@ -804,10 +802,9 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(max_fragment_size: Option<usize>, side: Side) -> Result<Self, Error> {
+    pub(crate) fn new(max_fragment_size: Option<usize>) -> Result<Self, Error> {
         Ok(Self {
             negotiated_version: None,
-            side,
             record_layer: record_layer::RecordLayer::new(),
             suite: None,
             alpn_protocol: None,
@@ -899,19 +896,6 @@ impl CommonState {
         mut state: Box<dyn State<Data>>,
         data: &mut Data,
     ) -> Result<Box<dyn State<Data>>, Error> {
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self.may_receive_application_data && !self.is_tls13() {
-            let reject_ty = match self.side {
-                Side::Client => HandshakeType::HelloRequest,
-                Side::Server => HandshakeType::ClientHello,
-            };
-            if msg.is_handshake_type(reject_ty) {
-                self.send_warning_alert(AlertDescription::NoRenegotiation);
-                return Ok(state);
-            }
-        }
-
         let mut cx = Context { common: self, data };
         match state.handle(&mut cx, msg) {
             Ok(next) => {
@@ -1228,9 +1212,11 @@ impl CommonState {
         Error::PeerMisbehavedError(why.to_string())
     }
 
-    fn send_warning_alert(&mut self, desc: AlertDescription) {
-        warn!("Sending warning alert {:?}", desc);
-        self.send_warning_alert_no_log(desc);
+    #[cfg(feature = "tls12")]
+    pub(crate) fn send_no_renegotiation_warning_alert(&mut self) {
+        const DESC: AlertDescription = AlertDescription::NoRenegotiation;
+        warn!("Sending warning alert {:?}", DESC);
+        self.send_warning_alert_no_log(DESC);
     }
 
     fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
