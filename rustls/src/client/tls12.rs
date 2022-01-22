@@ -1,4 +1,4 @@
-use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
+use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -305,6 +305,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
             .handle(cx, m),
             ref payload => Err(inappropriate_handshake_message(
                 payload,
+                &[ContentType::Handshake],
                 &[
                     HandshakeType::ServerKeyExchange,
                     HandshakeType::CertificateStatus,
@@ -694,12 +695,21 @@ struct ExpectServerDone {
 
 impl State<ClientConnectionData> for ExpectServerDone {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+        match m.payload {
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::ServerHelloDone,
+                ..
+            }) => {}
+            ref payload => {
+                return Err(inappropriate_handshake_message(
+                    payload,
+                    &[ContentType::Handshake],
+                    &[HandshakeType::ServerHelloDone],
+                ));
+            }
+        }
+
         let mut st = *self;
-        check_message(
-            &m,
-            &[ContentType::Handshake],
-            &[HandshakeType::ServerHelloDone],
-        )?;
         st.transcript.add_message(&m);
 
         cx.common.check_aligned_handshake()?;
@@ -918,7 +928,15 @@ struct ExpectCcs {
 
 impl State<ClientConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
+        match m.payload {
+            MessagePayload::ChangeCipherSpec(..) => {}
+            ref payload => {
+                return Err(inappropriate_message(
+                    payload,
+                    &[ContentType::ChangeCipherSpec],
+                ));
+            }
+        }
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
         cx.common.check_aligned_handshake()?;

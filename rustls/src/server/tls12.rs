@@ -1,4 +1,4 @@
-use crate::check::{check_message, inappropriate_message};
+use crate::check::inappropriate_message;
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -700,7 +700,15 @@ struct ExpectCcs {
 
 impl State<ServerConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        check_message(&m, &[ContentType::ChangeCipherSpec], &[])?;
+        match m.payload {
+            MessagePayload::ChangeCipherSpec(..) => {}
+            ref payload => {
+                return Err(inappropriate_message(
+                    payload,
+                    &[ContentType::ChangeCipherSpec],
+                ))
+            }
+        }
 
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
