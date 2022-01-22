@@ -1072,8 +1072,11 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            _ => {
-                return Err(inappropriate_message(&m, &[ContentType::ApplicationData]));
+            payload => {
+                return Err(inappropriate_message(
+                    &payload,
+                    &[ContentType::ApplicationData],
+                ));
             }
         }
         Ok(self)

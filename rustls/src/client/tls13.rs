@@ -1095,23 +1095,23 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            MessagePayload::Handshake(payload) => match payload.payload {
+            MessagePayload::Handshake(payload) => match &payload.payload {
                 HandshakePayload::NewSessionTicketTLS13(new_ticket) => {
-                    self.handle_new_ticket_tls13(cx, &new_ticket)?
+                    self.handle_new_ticket_tls13(cx, new_ticket)?
                 }
                 HandshakePayload::KeyUpdate(key_update) => {
-                    self.handle_key_update(cx.common, &key_update)?
+                    self.handle_key_update(cx.common, key_update)?
                 }
                 _ => {
                     return Err(inappropriate_handshake_message(
-                        &payload,
+                        &MessagePayload::Handshake(payload),
                         &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
                     ));
                 }
             },
-            _ => {
+            payload => {
                 return Err(inappropriate_message(
-                    &m,
+                    &payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
                 ));
             }
