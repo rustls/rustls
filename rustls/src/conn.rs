@@ -893,9 +893,6 @@ impl CommonState {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    /// Process `msg`.  First, we get the current state.  Then we ask what messages
-    /// that state expects, enforced via `check_message`.  Finally, we ask the handler
-    /// to handle the message.
     fn process_main_protocol<Data>(
         &mut self,
         msg: Message,
