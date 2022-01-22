@@ -10,16 +10,12 @@ use crate::msgs::message::{Message, MessagePayload};
 /// $handshake_type as the expected handshake type.
 macro_rules! require_handshake_msg(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
-    match $m.payload {
-        MessagePayload::Handshake(ref hsp) => match hsp.payload {
-            $payload_type(ref hm) => Ok(hm),
-            _ => Err(Error::InappropriateHandshakeMessage {
-                     expect_types: vec![ $handshake_type ],
-                     got_type: hsp.typ})
-        }
-        _ => Err(Error::InappropriateMessage {
-                 expect_types: vec![ ContentType::Handshake ],
-                 got_type: $m.payload.content_type()})
+    match &$m.payload {
+        MessagePayload::Handshake($crate::msgs::handshake::HandshakeMessagePayload {
+            payload: $payload_type(hm),
+            ..
+        }) => Ok(hm),
+        payload => Err($crate::check::inappropriate_handshake_message(payload, &[$handshake_type]))
     }
   )
 );
@@ -29,15 +25,12 @@ macro_rules! require_handshake_msg(
 macro_rules! require_handshake_msg_move(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
     match $m.payload {
-        MessagePayload::Handshake(hsp) => match hsp.payload {
-            $payload_type(hm) => Ok(hm),
-            _ => Err(Error::InappropriateHandshakeMessage {
-                     expect_types: vec![ $handshake_type ],
-                     got_type: hsp.typ})
-        }
-        _ => Err(Error::InappropriateMessage {
-                 expect_types: vec![ ContentType::Handshake ],
-                 got_type: $m.payload.content_type()})
+        MessagePayload::Handshake($crate::msgs::handshake::HandshakeMessagePayload {
+            payload: $payload_type(hm),
+            ..
+        }) => Ok(hm),
+        ref payload =>
+            Err($crate::check::inappropriate_handshake_message(payload, &[$handshake_type]))
     }
   )
 );
