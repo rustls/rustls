@@ -1,4 +1,4 @@
-use crate::check::{check_message, inappropriate_message};
+use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -265,17 +265,11 @@ struct ExpectCertificateStatusOrServerKx {
 
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        check_message(
-            &m,
-            &[ContentType::Handshake],
-            &[
-                HandshakeType::ServerKeyExchange,
-                HandshakeType::CertificateStatus,
-            ],
-        )?;
-
-        if m.is_handshake_type(HandshakeType::ServerKeyExchange) {
-            Box::new(ExpectServerKx {
+        match m.payload {
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::ServerKeyExchange(..),
+                ..
+            }) => Box::new(ExpectServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
@@ -291,9 +285,11 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 ),
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
-            .handle(cx, m)
-        } else {
-            Box::new(ExpectCertificateStatus {
+            .handle(cx, m),
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::CertificateStatus(..),
+                ..
+            }) => Box::new(ExpectCertificateStatus {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
@@ -306,7 +302,14 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 server_cert_chain: self.server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
-            .handle(cx, m)
+            .handle(cx, m),
+            ref payload => Err(inappropriate_handshake_message(
+                payload,
+                &[
+                    HandshakeType::ServerKeyExchange,
+                    HandshakeType::CertificateStatus,
+                ],
+            )),
         }
     }
 }
