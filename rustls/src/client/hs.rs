@@ -1,6 +1,6 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
-use crate::check::check_message;
+use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHashBuffer;
@@ -12,8 +12,8 @@ use crate::msgs::base::Payload;
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
-use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
+use crate::msgs::enums::{ExtensionType, HandshakeType};
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
@@ -789,16 +789,21 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
-        check_message(
-            &m,
-            &[ContentType::Handshake],
-            &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
-        )?;
-        if m.is_handshake_type(HandshakeType::ServerHello) {
-            self.into_expect_server_hello()
-                .handle(cx, m)
-        } else {
-            self.handle_hello_retry_request(cx, m)
+        match m.payload {
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::ServerHello(..),
+                ..
+            }) => self
+                .into_expect_server_hello()
+                .handle(cx, m),
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::HelloRetryRequest(..),
+                ..
+            }) => self.handle_hello_retry_request(cx, m),
+            ref payload => Err(inappropriate_handshake_message(
+                payload,
+                &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
+            )),
         }
     }
 }
