@@ -1,4 +1,4 @@
-use crate::check::{check_message, inappropriate_handshake_message, inappropriate_message};
+use crate::check::{check_message, inappropriate_handshake_message};
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -1095,24 +1095,19 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            MessagePayload::Handshake(payload) => match &payload.payload {
-                HandshakePayload::NewSessionTicketTLS13(new_ticket) => {
-                    self.handle_new_ticket_tls13(cx, new_ticket)?
-                }
-                HandshakePayload::KeyUpdate(key_update) => {
-                    self.handle_key_update(cx.common, key_update)?
-                }
-                _ => {
-                    return Err(inappropriate_handshake_message(
-                        &MessagePayload::Handshake(payload),
-                        &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-                    ));
-                }
-            },
-            payload => {
-                return Err(inappropriate_message(
-                    &payload,
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::NewSessionTicketTLS13(ref new_ticket),
+                ..
+            }) => self.handle_new_ticket_tls13(cx, new_ticket)?,
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::KeyUpdate(ref key_update),
+                ..
+            }) => self.handle_key_update(cx.common, key_update)?,
+            ref payload => {
+                return Err(inappropriate_handshake_message(
+                    payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
+                    &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
                 ));
             }
         }
