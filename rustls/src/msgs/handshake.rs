@@ -2132,7 +2132,6 @@ pub enum HandshakePayload {
     CertificateRequestTLS13(CertificateRequestPayloadTLS13),
     CertificateVerify(DigitallySignedStruct),
     ServerHelloDone,
-    EarlyData,
     EndOfEarlyData,
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
@@ -2150,7 +2149,6 @@ impl HandshakePayload {
         match *self {
             HandshakePayload::HelloRequest
             | HandshakePayload::ServerHelloDone
-            | HandshakePayload::EarlyData
             | HandshakePayload::EndOfEarlyData => {}
             HandshakePayload::ClientHello(ref x) => x.encode(bytes),
             HandshakePayload::ServerHello(ref x) => x.encode(bytes),
