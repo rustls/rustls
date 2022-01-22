@@ -1298,21 +1298,15 @@ impl State<ServerConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            MessagePayload::Handshake(payload) => match payload.payload {
-                HandshakePayload::KeyUpdate(key_update) => {
-                    self.handle_key_update(cx.common, &key_update)?
-                }
-                _ => {
-                    return Err(inappropriate_handshake_message(
-                        &MessagePayload::Handshake(payload),
-                        &[HandshakeType::KeyUpdate],
-                    ));
-                }
-            },
-            payload => {
-                return Err(inappropriate_message(
-                    &payload,
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::KeyUpdate(key_update),
+                ..
+            }) => self.handle_key_update(cx.common, &key_update)?,
+            ref payload => {
+                return Err(inappropriate_handshake_message(
+                    payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
+                    &[HandshakeType::KeyUpdate],
                 ));
             }
         }

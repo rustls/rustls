@@ -15,7 +15,10 @@ macro_rules! require_handshake_msg(
             payload: $payload_type(hm),
             ..
         }) => Ok(hm),
-        payload => Err($crate::check::inappropriate_handshake_message(payload, &[$handshake_type]))
+        payload => Err($crate::check::inappropriate_handshake_message(
+            payload,
+            &[$crate::msgs::enums::ContentType::Handshake],
+            &[$handshake_type]))
     }
   )
 );
@@ -30,7 +33,10 @@ macro_rules! require_handshake_msg_move(
             ..
         }) => Ok(hm),
         ref payload =>
-            Err($crate::check::inappropriate_handshake_message(payload, &[$handshake_type]))
+            Err($crate::check::inappropriate_handshake_message(
+                payload,
+                &[$crate::msgs::enums::ContentType::Handshake],
+                &[$handshake_type]))
     }
   )
 );
@@ -51,7 +57,11 @@ pub(crate) fn check_message(
 
     if let MessagePayload::Handshake(hsp) = &m.payload {
         if !handshake_types.is_empty() && !handshake_types.contains(&hsp.typ) {
-            return Err(inappropriate_handshake_message(&m.payload, handshake_types));
+            return Err(inappropriate_handshake_message(
+                &m.payload,
+                content_types,
+                handshake_types,
+            ));
         }
     }
 
@@ -75,6 +85,7 @@ pub(crate) fn inappropriate_message(
 
 pub(crate) fn inappropriate_handshake_message(
     payload: &MessagePayload,
+    content_types: &[ContentType],
     handshake_types: &[HandshakeType],
 ) -> Error {
     match payload {
@@ -88,6 +99,6 @@ pub(crate) fn inappropriate_handshake_message(
                 got_type: hsp.typ,
             }
         }
-        payload => inappropriate_message(payload, &[ContentType::Handshake]),
+        payload => inappropriate_message(payload, content_types),
     }
 }
