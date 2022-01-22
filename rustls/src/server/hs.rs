@@ -6,7 +6,7 @@ use crate::log::{debug, trace};
 #[cfg(feature = "tls12")]
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
-use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::msgs::enums::{HandshakeType, ProtocolVersion, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
