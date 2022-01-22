@@ -11,7 +11,9 @@ use crate::msgs::base::Payload;
 #[cfg(feature = "quic")]
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{AlertDescription, CipherSuite, Compression, ProtocolVersion};
+use crate::msgs::enums::{
+    AlertDescription, CipherSuite, Compression, ContentType, ProtocolVersion,
+};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::enums::{ExtensionType, HandshakeType};
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
@@ -802,6 +804,7 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
             }) => self.handle_hello_retry_request(cx, m),
             ref payload => Err(inappropriate_handshake_message(
                 payload,
+                &[ContentType::Handshake],
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
             )),
         }

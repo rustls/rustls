@@ -1,5 +1,3 @@
-#[cfg(feature = "quic")]
-use crate::check::check_message;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 #[cfg(feature = "quic")]
 use crate::conn::Protocol;
@@ -1349,8 +1347,7 @@ struct ExpectQuicTraffic {
 impl State<ServerConnectionData> for ExpectQuicTraffic {
     fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         // reject all messages
-        check_message(&m, &[], &[])?;
-        unreachable!();
+        Err(inappropriate_message(&m.payload, &[]))
     }
 
     fn export_keying_material(
