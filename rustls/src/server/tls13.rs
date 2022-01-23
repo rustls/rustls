@@ -1065,9 +1065,10 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     send_ticket: self.send_ticket,
                 }))
             }
-            payload => Err(inappropriate_message(
+            payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::ApplicationData, ContentType::Handshake],
+                &[HandshakeType::EndOfEarlyData],
             )),
         }
     }
