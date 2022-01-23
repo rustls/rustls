@@ -802,8 +802,8 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
                 payload: HandshakePayload::HelloRetryRequest(..),
                 ..
             }) => self.handle_hello_retry_request(cx, m),
-            ref payload => Err(inappropriate_handshake_message(
-                payload,
+            payload => Err(inappropriate_handshake_message(
+                &payload,
                 &[ContentType::Handshake],
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
             )),

@@ -500,9 +500,9 @@ pub enum CertificateStatusRequest {
 
 impl Codec for CertificateStatusRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        match *self {
+        match self {
             Self::OCSP(ref r) => r.encode(bytes),
-            Self::Unknown((typ, ref payload)) => {
+            Self::Unknown((typ, payload)) => {
                 typ.encode(bytes);
                 payload.encode(bytes);
             }

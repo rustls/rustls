@@ -509,8 +509,8 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 may_send_sct_list: self.may_send_sct_list,
             })
             .handle(cx, m),
-            ref payload => Err(inappropriate_handshake_message(
-                payload,
+            payload => Err(inappropriate_handshake_message(
+                &payload,
                 &[ContentType::Handshake],
                 &[
                     HandshakeType::Certificate,
@@ -1108,9 +1108,9 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 payload: HandshakePayload::KeyUpdate(ref key_update),
                 ..
             }) => self.handle_key_update(cx.common, key_update)?,
-            ref payload => {
+            payload => {
                 return Err(inappropriate_handshake_message(
-                    payload,
+                    &payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
                     &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
                 ));

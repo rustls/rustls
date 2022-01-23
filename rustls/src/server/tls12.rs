@@ -702,9 +702,9 @@ impl State<ServerConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
-            ref payload => {
+            payload => {
                 return Err(inappropriate_message(
-                    payload,
+                    &payload,
                     &[ContentType::ChangeCipherSpec],
                 ))
             }
@@ -908,9 +908,9 @@ impl State<ServerConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            ref payload => {
+            payload => {
                 return Err(inappropriate_message(
-                    payload,
+                    &payload,
                     &[ContentType::ApplicationData],
                 ));
             }
