@@ -10,7 +10,11 @@ homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
+build = "build.rs"
 resolver = "2"
+
+[build-dependencies]
+rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
 log = { version = "0.4.4", optional = true }
@@ -24,7 +28,7 @@ logging = ["log"]
 dangerous_configuration = []
 quic = []
 tls12 = []
-read_buf = []
+read_buf = ["rustversion"]
 
 [dev-dependencies]
 env_logger = "0.9.0"
