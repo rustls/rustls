@@ -32,9 +32,9 @@ macro_rules! require_handshake_msg_move(
             payload: $payload_type(hm),
             ..
         }) => Ok(hm),
-        ref payload =>
+        payload =>
             Err($crate::check::inappropriate_handshake_message(
-                payload,
+                &payload,
                 &[$crate::msgs::enums::ContentType::Handshake],
                 &[$handshake_type]))
     }

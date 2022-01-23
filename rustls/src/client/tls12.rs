@@ -303,8 +303,8 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m),
-            ref payload => Err(inappropriate_handshake_message(
-                payload,
+            payload => Err(inappropriate_handshake_message(
+                &payload,
                 &[ContentType::Handshake],
                 &[
                     HandshakeType::ServerKeyExchange,
@@ -700,9 +700,9 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 payload: HandshakePayload::ServerHelloDone,
                 ..
             }) => {}
-            ref payload => {
+            payload => {
                 return Err(inappropriate_handshake_message(
-                    payload,
+                    &payload,
                     &[ContentType::Handshake],
                     &[HandshakeType::ServerHelloDone],
                 ));
@@ -930,9 +930,9 @@ impl State<ClientConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
-            ref payload => {
+            payload => {
                 return Err(inappropriate_message(
-                    payload,
+                    &payload,
                     &[ContentType::ChangeCipherSpec],
                 ));
             }

@@ -1300,9 +1300,9 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 payload: HandshakePayload::KeyUpdate(key_update),
                 ..
             }) => self.handle_key_update(cx.common, &key_update)?,
-            ref payload => {
+            payload => {
                 return Err(inappropriate_handshake_message(
-                    payload,
+                    &payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
                     &[HandshakeType::KeyUpdate],
                 ));
