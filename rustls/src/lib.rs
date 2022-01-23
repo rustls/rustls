@@ -251,10 +251,6 @@
 //!   is enabled by default, other crates in your dependency graph could re-enable
 //!   it for your application. If you want to disable TLS 1.2 for security reasons,
 //!   consider explicitly enabling TLS 1.3 only in the config builder API.
-//!
-//! - `read_buf`: When building with Rust Nightly, adds support for the unstable
-//!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
-//!   buffers. Will do nothing on non-Nightly releases.
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
