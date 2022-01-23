@@ -73,7 +73,7 @@ where
         self.conn.reader().read(buf)
     }
 
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     fn read_buf(&mut self, buf: &mut std::io::ReadBuf<'_>) -> Result<()> {
         self.complete_prior_io()?;
 
@@ -209,7 +209,7 @@ where
         self.as_stream().read(buf)
     }
 
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     fn read_buf(&mut self, buf: &mut std::io::ReadBuf<'_>) -> Result<()> {
         self.as_stream().read_buf(buf)
     }

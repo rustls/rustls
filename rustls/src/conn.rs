@@ -263,7 +263,7 @@ impl<'a> io::Read for Reader<'a> {
     ///
     /// You may learn the number of bytes available at any time by inspecting
     /// the return of [`Connection::process_new_packets`].
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
         let before = buf.filled_len();
         self.received_plaintext.read_buf(buf)?;

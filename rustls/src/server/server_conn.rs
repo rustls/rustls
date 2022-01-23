@@ -280,7 +280,7 @@ impl<'a> std::io::Read for ReadEarlyData<'a> {
         self.early_data.read(buf)
     }
 
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
         self.early_data.read_buf(buf)
     }
@@ -619,7 +619,7 @@ impl EarlyDataState {
         }
     }
 
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
         match self {
             Self::Accepted(ref mut received) => received.read_buf(buf),
@@ -648,7 +648,7 @@ fn test_read_in_new_state() {
     );
 }
 
-#[cfg(feature = "read_buf")]
+#[cfg(read_buf)]
 #[test]
 fn test_read_buf_in_new_state() {
     assert_eq!(

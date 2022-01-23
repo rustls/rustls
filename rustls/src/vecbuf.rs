@@ -99,7 +99,7 @@ impl ChunkVecBuffer {
         Ok(offs)
     }
 
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     /// Read data out of this object, writing it into `buf`.
     pub(crate) fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
         while !self.is_empty() && buf.remaining() > 0 {
@@ -158,7 +158,7 @@ mod test {
         assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
     }
 
-    #[cfg(feature = "read_buf")]
+    #[cfg(read_buf)]
     #[test]
     fn read_buf() {
         use std::{io::ReadBuf, mem::MaybeUninit};
