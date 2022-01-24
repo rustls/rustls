@@ -153,7 +153,7 @@ mod server_hello {
                             sig_verified,
                         }))
                     } else {
-                        Ok(Box::new(ExpectCcs {
+                        Ok(Box::new(ExpectCcs(Box::new(ExpectFinished {
                             config: self.config,
                             secrets,
                             resuming_session: self.resuming_session,
@@ -165,7 +165,7 @@ mod server_hello {
                             resuming: true,
                             cert_verified,
                             sig_verified,
-                        }))
+                        }))))
                     };
                 }
             }
@@ -782,7 +782,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 sig_verified,
             }))
         } else {
-            Ok(Box::new(ExpectCcs {
+            Ok(Box::new(ExpectCcs(Box::new(ExpectFinished {
                 config: st.config,
                 secrets,
                 resuming_session: st.resuming_session,
@@ -794,7 +794,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 resuming: false,
                 cert_verified,
                 sig_verified,
-            }))
+            }))))
         }
     }
 }
@@ -826,7 +826,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             HandshakePayload::NewSessionTicket
         )?;
 
-        Ok(Box::new(ExpectCcs {
+        Ok(Box::new(ExpectCcs(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
             resuming_session: self.resuming_session,
@@ -838,24 +838,12 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
-        }))
+        }))))
     }
 }
 
 // -- Waiting for their CCS --
-struct ExpectCcs {
-    config: Arc<ClientConfig>,
-    secrets: ConnectionSecrets,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
-    server_name: ServerName,
-    using_ems: bool,
-    transcript: HandshakeHash,
-    ticket: Option<NewSessionTicketPayload>,
-    resuming: bool,
-    cert_verified: verify::ServerCertVerified,
-    sig_verified: verify::HandshakeSignatureValid,
-}
+struct ExpectCcs(Box<ExpectFinished>);
 
 impl State<ClientConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
@@ -877,19 +865,7 @@ impl State<ClientConnectionData> for ExpectCcs {
             .record_layer
             .start_decrypting();
 
-        Ok(Box::new(ExpectFinished {
-            config: self.config,
-            secrets: self.secrets,
-            resuming_session: self.resuming_session,
-            session_id: self.session_id,
-            server_name: self.server_name,
-            using_ems: self.using_ems,
-            transcript: self.transcript,
-            ticket: self.ticket,
-            resuming: self.resuming,
-            cert_verified: self.cert_verified,
-            sig_verified: self.sig_verified,
-        }))
+        Ok(self.0)
     }
 }
 
