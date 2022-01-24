@@ -3,6 +3,7 @@
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::base::Payload;
 use crate::msgs::enums::HandshakeType;
 use crate::msgs::handshake::{
     CertificateEntry, CertificateExtension, CertificatePayloadTLS13, CertificateStatus,
@@ -86,4 +87,23 @@ pub(crate) fn emit_certificate_verify(
     transcript.add_message(&m);
     common.send_msg(m, true);
     Ok(())
+}
+
+pub(crate) fn emit_finished(
+    transcript: &mut HandshakeHash,
+    common: &mut CommonState,
+    verify_data: ring::hmac::Tag,
+) {
+    let verify_data_payload = Payload::new(verify_data.as_ref());
+
+    let m = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Finished,
+            payload: HandshakePayload::Finished(verify_data_payload),
+        }),
+    };
+
+    transcript.add_message(&m);
+    common.send_msg(m, true);
 }

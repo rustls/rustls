@@ -5,7 +5,6 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
@@ -751,25 +750,6 @@ fn emit_certificate_tls13(
     )
 }
 
-fn emit_finished_tls13(
-    transcript: &mut HandshakeHash,
-    verify_data: ring::hmac::Tag,
-    common: &mut CommonState,
-) {
-    let verify_data_payload = Payload::new(verify_data.as_ref());
-
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
-    };
-
-    transcript.add_message(&m);
-    common.send_msg(m, true);
-}
-
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
     if common.is_quic() {
         return;
@@ -875,7 +855,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         let handshake_hash = st.transcript.get_current_hash();
         let (key_schedule_traffic, verify_data, _) =
             key_schedule_finished.sign_client_finish(&handshake_hash);
-        emit_finished_tls13(&mut st.transcript, verify_data, cx.common);
+        tls13::hs::emit_finished(&mut st.transcript, cx.common, verify_data);
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;

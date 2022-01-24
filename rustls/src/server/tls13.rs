@@ -32,7 +32,7 @@ use ring::constant_time;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
-    use crate::msgs::base::{Payload, PayloadU8};
+    use crate::msgs::base::PayloadU8;
     use crate::msgs::enums::{Compression, PSKKeyExchangeMode};
     use crate::msgs::enums::{NamedGroup, SignatureScheme};
     use crate::msgs::handshake::CertReqExtension;
@@ -752,20 +752,10 @@ mod client_hello {
     ) -> KeyScheduleTrafficWithClientFinishedPending {
         let handshake_hash = transcript.get_current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
-        let verify_data_payload = Payload::new(verify_data.as_ref());
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Finished,
-                payload: HandshakePayload::Finished(verify_data_payload),
-            }),
-        };
+        tls13::hs::emit_finished(transcript, cx.common, verify_data);
 
-        trace!("sending finished {:?}", m);
-        transcript.add_message(&m);
         let hash_at_server_fin = transcript.get_current_hash();
-        cx.common.send_msg(m, true);
 
         // Now move to application data keys.  Read key change is deferred until
         // the Finish message is received & validated.
