@@ -7,8 +7,25 @@ use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::tls12::{ConnectionSecrets, FinishedLabel};
-use crate::{verify, CommonState, Error, ProtocolVersion};
+use crate::{verify, Certificate, CommonState, Error, ProtocolVersion};
 use ring::constant_time;
+
+pub(crate) fn emit_certificate(
+    transcript: &mut HandshakeHash,
+    common: &mut CommonState,
+    cert_chain: &[Certificate],
+) {
+    let cert = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::Certificate(cert_chain.to_owned()),
+        }),
+    };
+
+    transcript.add_message(&cert);
+    common.send_msg(cert, false);
+}
 
 pub(crate) fn emit_finished(
     secrets: &ConnectionSecrets,

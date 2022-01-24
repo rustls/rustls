@@ -188,7 +188,7 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.transcript, cx.common, server_key.get_cert());
+            tls12::hs::emit_certificate(&mut self.transcript, cx.common, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut self.transcript, cx.common, ocsp_response);
             }
@@ -346,23 +346,6 @@ mod client_hello {
         transcript.add_message(&sh);
         cx.common.send_msg(sh, false);
         Ok(ep.send_ticket)
-    }
-
-    fn emit_certificate(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
-        cert_chain: &[Certificate],
-    ) {
-        let c = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
-            }),
-        };
-
-        transcript.add_message(&c);
-        common.send_msg(c, false);
     }
 
     fn emit_cert_status(transcript: &mut HandshakeHash, common: &mut CommonState, ocsp: &[u8]) {

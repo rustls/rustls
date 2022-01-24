@@ -425,23 +425,6 @@ impl State<ClientConnectionData> for ExpectServerKx {
     }
 }
 
-fn emit_certificate(
-    transcript: &mut HandshakeHash,
-    cert_chain: CertificatePayload,
-    common: &mut CommonState,
-) {
-    let cert = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(cert_chain),
-        }),
-    };
-
-    transcript.add_message(&cert);
-    common.send_msg(cert, false);
-}
-
 fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pubkey: &PublicKey) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(pubkey.as_ref()));
@@ -744,10 +727,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 4.
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
-                ClientAuthDetails::Empty { .. } => Vec::new(),
-                ClientAuthDetails::Verify { certkey, .. } => certkey.cert.clone(),
+                ClientAuthDetails::Empty { .. } => &[],
+                ClientAuthDetails::Verify { certkey, .. } => certkey.cert.as_slice(),
             };
-            emit_certificate(&mut st.transcript, certs, cx.common);
+            tls12::hs::emit_certificate(&mut st.transcript, cx.common, certs);
         }
 
         // 5a.
