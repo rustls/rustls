@@ -4,6 +4,7 @@ use crate::key;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
+use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::deframer::MessageDeframer;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, ProtocolVersion};
 use crate::msgs::fragmenter::MessageFragmenter;
@@ -1204,6 +1205,15 @@ impl CommonState {
             .prepare_message_encrypter(enc);
         self.record_layer
             .prepare_message_decrypter(dec);
+    }
+
+    pub(crate) fn send_ccs(&mut self) {
+        let ccs = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        };
+
+        self.send_msg(ccs, false);
     }
 
     #[cfg(feature = "quic")]

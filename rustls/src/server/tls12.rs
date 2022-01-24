@@ -5,7 +5,6 @@ use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, HandshakePayload};
@@ -283,7 +282,7 @@ mod client_hello {
                     &*self.config.ticketer,
                 )?;
             }
-            emit_ccs(cx.common);
+            cx.common.send_ccs();
             cx.common
                 .record_layer
                 .start_encrypting();
@@ -771,15 +770,6 @@ fn emit_ticket(
     Ok(())
 }
 
-fn emit_ccs(common: &mut CommonState) {
-    let m = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    };
-
-    common.send_msg(m, false);
-}
-
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
@@ -837,7 +827,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                     &*self.config.ticketer,
                 )?;
             }
-            emit_ccs(cx.common);
+            cx.common.send_ccs();
             cx.common
                 .record_layer
                 .start_encrypting();

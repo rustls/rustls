@@ -34,7 +34,6 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 mod client_hello {
     use crate::kx;
     use crate::msgs::base::{Payload, PayloadU8};
-    use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, PSKKeyExchangeMode};
     use crate::msgs::enums::{NamedGroup, SignatureScheme};
     use crate::msgs::handshake::CertReqExtension;
@@ -549,11 +548,7 @@ mod client_hello {
         if common.is_quic() {
             return;
         }
-        let m = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-        };
-        common.send_msg(m, false);
+        common.send_ccs();
     }
 
     fn emit_hello_retry_request(

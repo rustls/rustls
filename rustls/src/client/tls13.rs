@@ -6,7 +6,6 @@ use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
-use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
@@ -333,11 +332,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
         return;
     }
 
-    let m = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    };
-    common.send_msg(m, false);
+    common.send_ccs();
 }
 
 fn validate_encrypted_extensions(

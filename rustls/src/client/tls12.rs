@@ -5,7 +5,6 @@ use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
-use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ProtocolVersion};
 use crate::msgs::enums::{ContentType, HandshakeType};
@@ -469,15 +468,6 @@ fn emit_certverify(
     Ok(())
 }
 
-fn emit_ccs(common: &mut CommonState) {
-    let ccs = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    };
-
-    common.send_msg(ccs, false);
-}
-
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
@@ -757,7 +747,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         }
 
         // 5d.
-        emit_ccs(cx.common);
+        cx.common.send_ccs();
 
         // 5e. Now commit secrets.
         let secrets = ConnectionSecrets::from_key_exchange(
@@ -996,7 +986,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         st.save_session(cx);
 
         if st.resuming {
-            emit_ccs(cx.common);
+            cx.common.send_ccs();
             cx.common
                 .record_layer
                 .start_encrypting();
