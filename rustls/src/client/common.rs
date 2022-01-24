@@ -1,10 +1,11 @@
+use super::ResolvesClientCert;
 #[cfg(feature = "logging")]
-use crate::log::trace;
+use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SCTList;
 use crate::msgs::handshake::ServerExtension;
-use crate::sign;
+use crate::{sign, DistinguishedNames, SignatureScheme};
 
 use std::sync::Arc;
 
@@ -70,18 +71,43 @@ impl ClientHelloDetails {
     }
 }
 
-pub(super) struct ClientAuthDetails {
-    pub(super) certkey: Option<Arc<sign::CertifiedKey>>,
-    pub(super) signer: Option<Box<dyn sign::Signer>>,
-    pub(super) auth_context: Option<Vec<u8>>,
+pub(super) enum ClientAuthDetails {
+    /// Send an empty `Certificate` and no `CertificateVerify`.
+    Empty { auth_context_tls13: Option<Vec<u8>> },
+    /// Send a non-empty `Certificate` and a `CertificateVerify`.
+    Verify {
+        certkey: Arc<sign::CertifiedKey>,
+        signer: Box<dyn sign::Signer>,
+        auth_context_tls13: Option<Vec<u8>>,
+    },
 }
 
 impl ClientAuthDetails {
-    pub(super) fn new() -> Self {
-        Self {
-            certkey: None,
-            signer: None,
-            auth_context: None,
+    pub(super) fn resolve(
+        resolver: &dyn ResolvesClientCert,
+        canames: Option<&DistinguishedNames>,
+        sigschemes: &[SignatureScheme],
+        auth_context_tls13: Option<Vec<u8>>,
+    ) -> Self {
+        let acceptable_issuers = canames
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+            .iter()
+            .map(|p| p.0.as_slice())
+            .collect::<Vec<&[u8]>>();
+
+        if let Some(certkey) = resolver.resolve(&acceptable_issuers, sigschemes) {
+            if let Some(signer) = certkey.key.choose_scheme(sigschemes) {
+                debug!("Attempting client auth");
+                return Self::Verify {
+                    certkey,
+                    signer,
+                    auth_context_tls13,
+                };
+            }
         }
+
+        debug!("Client auth requested but no cert/sigscheme available");
+        Self::Empty { auth_context_tls13 }
     }
 }
