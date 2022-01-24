@@ -500,20 +500,7 @@ fn emit_finished(
     transcript: &mut HandshakeHash,
     common: &mut CommonState,
 ) {
-    let vh = transcript.get_current_hash();
-    let verify_data = secrets.client_verify_data(&vh);
-    let verify_data_payload = Payload::new(verify_data);
-
-    let f = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
-    };
-
-    transcript.add_message(&f);
-    common.send_msg(f, true);
+    tls12::hs::emit_finished(secrets, transcript, common, tls12::CLIENT_FINISHED);
 }
 
 struct ServerKxDetails {
@@ -1013,11 +1000,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         let mut st = *self;
 
         let fin_verified = tls12::hs::handle_finished(
-            cx.common,
-            &st.transcript,
             &st.secrets,
-            &m,
+            &st.transcript,
+            cx.common,
             tls12::SERVER_FINISHED,
+            &m,
         )?;
 
         // Hash this message too.

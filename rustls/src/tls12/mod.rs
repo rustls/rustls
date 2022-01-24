@@ -367,14 +367,6 @@ impl ConnectionSecrets {
         out
     }
 
-    pub(crate) fn client_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
-        self.make_verify_data(handshake_hash, CLIENT_FINISHED)
-    }
-
-    pub(crate) fn server_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
-        self.make_verify_data(handshake_hash, SERVER_FINISHED)
-    }
-
     pub(crate) fn export_keying_material(
         &self,
         output: &mut [u8],

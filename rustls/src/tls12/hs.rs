@@ -2,19 +2,42 @@
 //!
 use crate::check::inappropriate_handshake_message;
 use crate::hash_hs::HandshakeHash;
+use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::tls12::{ConnectionSecrets, FinishedLabel};
-use crate::{verify, CommonState, Error};
+use crate::{verify, CommonState, Error, ProtocolVersion};
 use ring::constant_time;
 
-pub(crate) fn handle_finished(
-    common: &mut CommonState,
-    transcript: &HandshakeHash,
+pub(crate) fn emit_finished(
     secrets: &ConnectionSecrets,
-    m: &Message,
+    transcript: &mut HandshakeHash,
+    common: &mut CommonState,
     finished_label: FinishedLabel,
+) {
+    let vh = transcript.get_current_hash();
+    let verify_data = secrets.make_verify_data(&vh, finished_label);
+    let verify_data_payload = Payload::new(verify_data);
+
+    let f = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            typ: HandshakeType::Finished,
+            payload: HandshakePayload::Finished(verify_data_payload),
+        }),
+    };
+
+    transcript.add_message(&f);
+    common.send_msg(f, true);
+}
+
+pub(crate) fn handle_finished(
+    secrets: &ConnectionSecrets,
+    transcript: &HandshakeHash,
+    common: &mut CommonState,
+    finished_label: FinishedLabel,
+    m: &Message,
 ) -> Result<verify::FinishedMessageVerified, Error> {
     let finished = require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
     common.check_aligned_handshake()?;

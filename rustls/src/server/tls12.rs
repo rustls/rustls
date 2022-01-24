@@ -5,7 +5,6 @@ use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -803,20 +802,7 @@ fn emit_finished(
     transcript: &mut HandshakeHash,
     common: &mut CommonState,
 ) {
-    let vh = transcript.get_current_hash();
-    let verify_data = secrets.server_verify_data(&vh);
-    let verify_data_payload = Payload::new(verify_data);
-
-    let f = Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
-    };
-
-    transcript.add_message(&f);
-    common.send_msg(f, true);
+    tls12::hs::emit_finished(secrets, transcript, common, tls12::SERVER_FINISHED);
 }
 
 struct ExpectFinished {
@@ -832,11 +818,11 @@ struct ExpectFinished {
 impl State<ServerConnectionData> for ExpectFinished {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let fin_verified = tls12::hs::handle_finished(
-            cx.common,
-            &self.transcript,
             &self.secrets,
-            &m,
+            &self.transcript,
+            cx.common,
             tls12::CLIENT_FINISHED,
+            &m,
         )?;
 
         // Save connection, perhaps
