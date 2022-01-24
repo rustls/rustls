@@ -343,6 +343,15 @@ mod client_hello {
             let doing_client_auth = if full_handshake {
                 let client_auth =
                     emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
+
+                let signer = server_key
+                    .get_key()
+                    .choose_scheme(&sigschemes_ext)
+                    .ok_or_else(|| hs::incompatible(cx.common, "no overlapping sigschemes"))?;
+                // XXX: Why does `choose_scheme` return a `Box<dyn SigningKey>` instead of
+                // `&dyn SigningKey`? It seems. like an unnecessary copy/allocation.
+                let signer = signer.as_ref();
+
                 const NO_CONTEXT: Option<Vec<u8>> = None;
                 tls13::hs::emit_certificate(
                     &mut self.transcript,
@@ -352,19 +361,13 @@ mod client_hello {
                     ocsp_response,
                     sct_list,
                 );
-                let signer = server_key
-                    .get_key()
-                    .choose_scheme(&sigschemes_ext)
-                    .ok_or_else(|| hs::incompatible(cx.common, "no overlapping sigschemes"))?;
-                // XXX: Why does `choose_scheme` return a `Box<dyn SigningKey>` instead of
-                // `&dyn SigningKey`? It seems. like an unnecessary copy/allocation.
-                let signer = signer.as_ref();
                 tls13::hs::emit_certificate_verify(
                     &mut self.transcript,
                     cx.common,
                     signer,
                     verify::SERVER_VERIFY_CONTEXT_STRING,
                 )?;
+
                 client_auth
             } else {
                 false
