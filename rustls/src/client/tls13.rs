@@ -39,6 +39,7 @@ use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
 use crate::ticketer::TimeBase;
 use ring::constant_time;
 
+use crate::sign::{CertifiedKey, Signer};
 use std::sync::Arc;
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -573,30 +574,14 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             ));
         }
 
-        let no_canames = Vec::new();
-        let canames = certreq
-            .get_authorities_extension()
-            .unwrap_or(&no_canames)
-            .iter()
-            .map(|p| p.0.as_slice())
-            .collect::<Vec<&[u8]>>();
-        let maybe_certkey = self
-            .config
-            .client_auth_cert_resolver
-            .resolve(&canames, &compat_sigschemes);
-
-        let mut client_auth = ClientAuthDetails::new();
-        if let Some(certkey) = maybe_certkey {
-            debug!("Attempting client auth");
-            let maybe_signer = certkey
-                .key
-                .choose_scheme(&compat_sigschemes);
-            client_auth.certkey = Some(certkey);
-            client_auth.signer = maybe_signer;
-            client_auth.auth_context = Some(certreq.context.0.clone());
-        } else {
-            debug!("Client auth requested but no cert selected");
-        }
+        let client_auth = ClientAuthDetails::resolve(
+            self.config
+                .client_auth_cert_resolver
+                .as_ref(),
+            certreq.get_authorities_extension(),
+            &compat_sigschemes,
+            Some(certreq.context.0.clone()),
+        );
 
         Ok(Box::new(ExpectCertificate {
             config: self.config,
@@ -754,21 +739,19 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
 
 fn emit_certificate_tls13(
     transcript: &mut HandshakeHash,
-    client_auth: &mut ClientAuthDetails,
+    certkey: Option<&CertifiedKey>,
+    auth_context: Option<Vec<u8>>,
     common: &mut CommonState,
 ) {
-    let context = client_auth
-        .auth_context
-        .take()
-        .unwrap_or_default();
+    let context = auth_context.unwrap_or_default();
 
     let mut cert_payload = CertificatePayloadTLS13 {
         context: PayloadU8::new(context),
         entries: Vec::new(),
     };
 
-    if let Some(cert_key) = &client_auth.certkey {
-        for cert in &cert_key.cert {
+    if let Some(certkey) = certkey {
+        for cert in &certkey.cert {
             cert_payload
                 .entries
                 .push(CertificateEntry::new(cert.clone()));
@@ -788,17 +771,9 @@ fn emit_certificate_tls13(
 
 fn emit_certverify_tls13(
     transcript: &mut HandshakeHash,
-    client_auth: &mut ClientAuthDetails,
+    signer: &dyn Signer,
     common: &mut CommonState,
 ) -> Result<(), Error> {
-    let signer = match client_auth.signer.take() {
-        Some(s) => s,
-        None => {
-            debug!("Skipping certverify message (no client scheme/key)");
-            return Ok(());
-        }
-    };
-
     let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
 
     let scheme = signer.scheme();
@@ -904,9 +879,27 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
-        if let Some(client_auth) = &mut st.client_auth {
-            emit_certificate_tls13(&mut st.transcript, client_auth, cx.common);
-            emit_certverify_tls13(&mut st.transcript, client_auth, cx.common)?;
+        if let Some(client_auth) = st.client_auth {
+            match client_auth {
+                ClientAuthDetails::Empty {
+                    auth_context_tls13: auth_context,
+                } => {
+                    emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
+                }
+                ClientAuthDetails::Verify {
+                    certkey,
+                    signer,
+                    auth_context_tls13: auth_context,
+                } => {
+                    emit_certificate_tls13(
+                        &mut st.transcript,
+                        Some(&certkey),
+                        auth_context,
+                        cx.common,
+                    );
+                    emit_certverify_tls13(&mut st.transcript, signer.as_ref(), cx.common)?;
+                }
+            }
         }
 
         let (key_schedule_finished, client_key, server_key) = st

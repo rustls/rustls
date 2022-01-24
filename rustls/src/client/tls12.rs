@@ -14,6 +14,7 @@ use crate::msgs::handshake::{DigitallySignedStruct, ServerECDHParams};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sign::Signer;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -462,21 +463,12 @@ fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pubke
 
 fn emit_certverify(
     transcript: &mut HandshakeHash,
-    client_auth: &mut ClientAuthDetails,
+    signer: &dyn Signer,
     common: &mut CommonState,
 ) -> Result<(), Error> {
-    let (signer, message) = match (client_auth.signer.take(), transcript.take_handshake_buf()) {
-        (Some(signer), Some(msg)) => (signer, msg),
-        (None, _) => {
-            trace!("Not sending CertificateVerify, no key");
-            transcript.abandon_client_auth();
-            return Ok(());
-        }
-        (_, None) => {
-            trace!("Not sending CertificateVerify, no transcript");
-            return Ok(());
-        }
-    };
+    let message = transcript
+        .take_handshake_buf()
+        .ok_or_else(|| Error::General("Expected transcript".to_owned()))?;
 
     let scheme = signer.scheme();
     let sig = signer.sign(&message)?;
@@ -629,37 +621,21 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         self.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
 
-        let mut client_auth = ClientAuthDetails::new();
-
         // The RFC jovially describes the design here as 'somewhat complicated'
         // and 'somewhat underspecified'.  So thanks for that.
         //
         // We ignore certreq.certtypes as a result, since the information it contains
         // is entirely duplicated in certreq.sigschemes.
 
-        let canames = certreq
-            .canames
-            .iter()
-            .map(|p| p.0.as_slice())
-            .collect::<Vec<&[u8]>>();
-        let maybe_certkey = self
-            .config
-            .client_auth_cert_resolver
-            .resolve(&canames, &certreq.sigschemes);
-
-        if let Some(certkey) = maybe_certkey {
-            let maybe_signer = certkey
-                .key
-                .choose_scheme(&certreq.sigschemes);
-
-            if maybe_signer.is_some() {
-                debug!("Attempting client auth");
-                client_auth.certkey = Some(certkey);
-            }
-            client_auth.signer = maybe_signer;
-        } else {
-            debug!("Client auth requested but no cert/sigscheme available");
-        }
+        const NO_CONTEXT: Option<Vec<u8>> = None; // TLS 1.2 doesn't use a context.
+        let client_auth = ClientAuthDetails::resolve(
+            self.config
+                .client_auth_cert_resolver
+                .as_ref(),
+            Some(&certreq.canames),
+            &certreq.sigschemes,
+            NO_CONTEXT,
+        );
 
         Ok(Box::new(ExpectServerDone {
             config: self.config,
@@ -780,12 +756,12 @@ impl State<ClientConnectionData> for ExpectServerDone {
         cx.common.peer_certificates = Some(st.server_cert.cert_chain);
 
         // 4.
-        if let Some(client_auth) = &mut st.client_auth {
-            if let Some(cert_key) = &client_auth.certkey {
-                emit_certificate(&mut st.transcript, cert_key.cert.clone(), cx.common);
-            } else {
-                emit_certificate(&mut st.transcript, Vec::new(), cx.common);
-            }
+        if let Some(client_auth) = &st.client_auth {
+            let certs = match client_auth {
+                ClientAuthDetails::Empty { .. } => Vec::new(),
+                ClientAuthDetails::Verify { certkey, .. } => certkey.cert.clone(),
+            };
+            emit_certificate(&mut st.transcript, certs, cx.common);
         }
 
         // 5a.
@@ -807,8 +783,8 @@ impl State<ClientConnectionData> for ExpectServerDone {
             .then(|| transcript.get_current_hash());
 
         // 5c.
-        if let Some(client_auth) = &mut st.client_auth {
-            emit_certverify(&mut transcript, client_auth, cx.common)?;
+        if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
+            emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
         }
 
         // 5d.
