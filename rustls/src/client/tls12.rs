@@ -1089,26 +1089,9 @@ struct ExpectTraffic {
 
 impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        match m.payload {
-            MessagePayload::ApplicationData(payload) => cx
-                .common
-                .take_received_plaintext(payload),
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::HelloRequest,
-                ..
-            }) => {
-                // XXX(https://github.com/rustls/rustls/issues/952): DoS potential.
-                cx.common
-                    .send_no_renegotiation_warning_alert();
-            }
-            payload => {
-                return Err(inappropriate_handshake_message(
-                    &payload,
-                    &[ContentType::ApplicationData, ContentType::Handshake],
-                    &[HandshakeType::HelloRequest],
-                ));
-            }
-        }
+        tls12::hs::expect_traffic(cx.common, m, |hsp| {
+            matches!(hsp, HandshakePayload::HelloRequest)
+        })?;
         Ok(self)
     }
 

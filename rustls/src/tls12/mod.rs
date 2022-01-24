@@ -16,6 +16,8 @@ use std::fmt;
 mod cipher;
 pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
 
+pub(crate) mod hs;
+
 mod prf;
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
