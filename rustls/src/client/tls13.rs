@@ -11,7 +11,6 @@ use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType, SignatureScheme};
 use crate::msgs::handshake::ClientExtension;
-use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
@@ -37,7 +36,7 @@ use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
 use crate::ticketer::TimeBase;
 use ring::constant_time;
 
-use crate::sign::{CertifiedKey, Signer};
+use crate::sign::CertifiedKey;
 use std::sync::Arc;
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -752,30 +751,6 @@ fn emit_certificate_tls13(
     )
 }
 
-fn emit_certverify_tls13(
-    transcript: &mut HandshakeHash,
-    signer: &dyn Signer,
-    common: &mut CommonState,
-) -> Result<(), Error> {
-    let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
-
-    let scheme = signer.scheme();
-    let sig = signer.sign(&message)?;
-    let dss = DigitallySignedStruct::new(scheme, sig);
-
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(dss),
-        }),
-    };
-
-    transcript.add_message(&m);
-    common.send_msg(m, true);
-    Ok(())
-}
-
 fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
     verify_data: ring::hmac::Tag,
@@ -880,7 +855,12 @@ impl State<ClientConnectionData> for ExpectFinished {
                         Some(&certkey),
                         cx.common,
                     );
-                    emit_certverify_tls13(&mut st.transcript, signer.as_ref(), cx.common)?;
+                    tls13::hs::emit_certificate_verify(
+                        &mut st.transcript,
+                        cx.common,
+                        signer.as_ref(),
+                        verify::CLIENT_VERIFY_CONTEXT_STRING,
+                    )?;
                 }
             }
         }

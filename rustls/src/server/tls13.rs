@@ -38,7 +38,6 @@ mod client_hello {
     use crate::msgs::handshake::CertReqExtension;
     use crate::msgs::handshake::CertificateRequestPayloadTLS13;
     use crate::msgs::handshake::ClientHelloPayload;
-    use crate::msgs::handshake::DigitallySignedStruct;
     use crate::msgs::handshake::HelloRetryExtension;
     use crate::msgs::handshake::HelloRetryRequest;
     use crate::msgs::handshake::KeyShareEntry;
@@ -353,11 +352,18 @@ mod client_hello {
                     ocsp_response,
                     sct_list,
                 );
-                emit_certificate_verify_tls13(
+                let signer = server_key
+                    .get_key()
+                    .choose_scheme(&sigschemes_ext)
+                    .ok_or_else(|| hs::incompatible(cx.common, "no overlapping sigschemes"))?;
+                // XXX: Why does `choose_scheme` return a `Box<dyn SigningKey>` instead of
+                // `&dyn SigningKey`? It seems. like an unnecessary copy/allocation.
+                let signer = signer.as_ref();
+                tls13::hs::emit_certificate_verify(
                     &mut self.transcript,
                     cx.common,
-                    server_key.get_key(),
-                    &sigschemes_ext,
+                    signer,
+                    verify::SERVER_VERIFY_CONTEXT_STRING,
                 )?;
                 client_auth
             } else {
@@ -731,37 +737,6 @@ mod client_hello {
         transcript.add_message(&m);
         cx.common.send_msg(m, true);
         Ok(true)
-    }
-
-    fn emit_certificate_verify_tls13(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
-        signing_key: &dyn sign::SigningKey,
-        schemes: &[SignatureScheme],
-    ) -> Result<(), Error> {
-        let message = verify::construct_tls13_server_verify_message(&transcript.get_current_hash());
-
-        let signer = signing_key
-            .choose_scheme(schemes)
-            .ok_or_else(|| hs::incompatible(common, "no overlapping sigschemes"))?;
-
-        let scheme = signer.scheme();
-        let sig = signer.sign(&message)?;
-
-        let cv = DigitallySignedStruct::new(scheme, sig);
-
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateVerify,
-                payload: HandshakePayload::CertificateVerify(cv),
-            }),
-        };
-
-        trace!("sending certificate-verify {:?}", m);
-        transcript.add_message(&m);
-        common.send_msg(m, true);
-        Ok(())
     }
 
     fn emit_finished_tls13(

@@ -692,17 +692,24 @@ fn convert_alg_tls13(
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
 pub(crate) fn construct_tls13_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
-    construct_tls13_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
+    construct_tls13_verify_message(handshake_hash, CLIENT_VERIFY_CONTEXT_STRING)
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
 pub(crate) fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
-    construct_tls13_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
+    construct_tls13_verify_message(handshake_hash, SERVER_VERIFY_CONTEXT_STRING)
 }
 
-fn construct_tls13_verify_message(
+#[derive(Clone, Copy)]
+pub(crate) struct ContextString(&'static [u8]);
+pub(crate) const CLIENT_VERIFY_CONTEXT_STRING: ContextString =
+    ContextString(b"TLS 1.3, client CertificateVerify\x00");
+pub(crate) const SERVER_VERIFY_CONTEXT_STRING: ContextString =
+    ContextString(b"TLS 1.3, server CertificateVerify\x00");
+
+pub(crate) fn construct_tls13_verify_message(
     handshake_hash: &Digest,
-    context_string_with_0: &[u8],
+    ContextString(context_string_with_0): ContextString,
 ) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
