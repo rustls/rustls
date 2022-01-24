@@ -33,7 +33,6 @@ use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
 
 use crate::ticketer::TimeBase;
-use ring::constant_time;
 
 use crate::sign::CertifiedKey;
 use std::sync::Arc;
@@ -782,23 +781,13 @@ struct ExpectFinished {
 impl State<ClientConnectionData> for ExpectFinished {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
-        let finished =
-            require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
-
         let handshake_hash = st.transcript.get_current_hash();
         let expect_verify_data = st
             .key_schedule
             .sign_server_finish(&handshake_hash);
 
-        let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
-            .map_err(|_| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
-                Error::DecryptError
-            })
-            .map(|_| verify::FinishedMessageVerified::assertion())?;
-
-        st.transcript.add_message(&m);
+        let fin =
+            tls13::hs::verify_finished(&mut st.transcript, cx.common, &m, expect_verify_data)?;
 
         let hash_after_handshake = st.transcript.get_current_hash();
         /* The EndOfEarlyData message to server is still encrypted with early data keys,

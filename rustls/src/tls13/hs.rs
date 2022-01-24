@@ -2,9 +2,9 @@
 
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
-use crate::log::trace;
+use crate::log::{trace, warn};
 use crate::msgs::base::Payload;
-use crate::msgs::enums::HandshakeType;
+use crate::msgs::enums::{AlertDescription, HandshakeType};
 use crate::msgs::handshake::{
     CertificateEntry, CertificateExtension, CertificatePayloadTLS13, CertificateStatus,
     DigitallySignedStruct, HandshakeMessagePayload, HandshakePayload,
@@ -12,6 +12,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::sign::Signer;
 use crate::{verify, Certificate, CommonState, Error, ProtocolVersion};
+use ring::{constant_time, hmac};
 
 pub(crate) fn emit_certificate(
     transcript: &mut HandshakeHash,
@@ -106,4 +107,22 @@ pub(crate) fn emit_finished(
 
     transcript.add_message(&m);
     common.send_msg(m, true);
+}
+
+pub(crate) fn verify_finished(
+    transcript: &mut HandshakeHash,
+    common: &mut CommonState,
+    m: &Message,
+    expect_verify_data: hmac::Tag,
+) -> Result<verify::FinishedMessageVerified, Error> {
+    let finished = require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
+    transcript.add_message(m);
+    let verified = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
+        .map_err(|_| {
+            common.send_fatal_alert(AlertDescription::DecryptError);
+            warn!("Finished wrong");
+            Error::DecryptError
+        })
+        .map(|_| verify::FinishedMessageVerified::assertion())?;
+    Ok(verified)
 }

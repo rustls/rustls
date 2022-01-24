@@ -18,6 +18,7 @@ use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerConfig;
 use crate::ticketer;
+use crate::tls13;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
@@ -902,6 +903,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             let certs = &self.client_cert;
             let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
 
+            // TODO: what if certs[0] goes OOB?
             self.config
                 .verifier
                 .verify_tls13_signature(&msg, &certs[0], sig)
@@ -1090,26 +1092,13 @@ impl ExpectFinished {
 
 impl State<ServerConnectionData> for ExpectFinished {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        let finished =
-            require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
-
-        let handshake_hash = self.transcript.get_current_hash();
         let (key_schedule_traffic, expect_verify_data, client_key) = self
             .key_schedule
-            .sign_client_finish(&handshake_hash);
-
-        let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
-            .map_err(|_| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
-                warn!("Finished wrong");
-                Error::DecryptError
-            })
-            .map(|_| verify::FinishedMessageVerified::assertion())?;
-
+            .sign_client_finish(&self.transcript.get_current_hash());
         // nb. future derivations include Client Finished, but not the
         // main application data keying.
-        self.transcript.add_message(&m);
+        let fin =
+            tls13::hs::verify_finished(&mut self.transcript, cx.common, &m, expect_verify_data)?;
 
         cx.common.check_aligned_handshake()?;
 
