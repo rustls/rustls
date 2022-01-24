@@ -1,6 +1,6 @@
 //! Shared logic for TLS 1.2 client and server handshakes.
-//!
-use crate::check::inappropriate_handshake_message;
+
+use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
@@ -52,6 +52,26 @@ pub(crate) fn emit_finished(
 
     transcript.add_message(&f);
     common.send_msg(f, true);
+}
+
+pub(crate) fn handle_ccs(common: &mut CommonState, m: &Message) -> Result<(), Error> {
+    match &m.payload {
+        MessagePayload::ChangeCipherSpec(..) => {}
+        payload => {
+            return Err(inappropriate_message(
+                payload,
+                &[ContentType::ChangeCipherSpec],
+            ))
+        }
+    }
+
+    // CCS should not be received interleaved with fragmented handshake-level
+    // message.
+    common.check_aligned_handshake()?;
+
+    common.record_layer.start_decrypting();
+
+    Ok(())
 }
 
 pub(crate) fn handle_finished(

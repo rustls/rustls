@@ -1,4 +1,4 @@
-use crate::check::{inappropriate_handshake_message, inappropriate_message};
+use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -847,24 +847,7 @@ struct ExpectCcs(Box<ExpectFinished>);
 
 impl State<ClientConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        match m.payload {
-            MessagePayload::ChangeCipherSpec(..) => {}
-            payload => {
-                return Err(inappropriate_message(
-                    &payload,
-                    &[ContentType::ChangeCipherSpec],
-                ));
-            }
-        }
-        // CCS should not be received interleaved with fragmented handshake-level
-        // message.
-        cx.common.check_aligned_handshake()?;
-
-        // nb. msgs layer validates trivial contents of CCS
-        cx.common
-            .record_layer
-            .start_decrypting();
-
+        tls12::hs::handle_ccs(cx.common, &m)?;
         Ok(self.0)
     }
 }

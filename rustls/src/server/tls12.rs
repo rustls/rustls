@@ -1,4 +1,3 @@
-use crate::check::inappropriate_message;
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -6,7 +5,7 @@ use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
+use crate::msgs::enums::{AlertDescription, HandshakeType, ProtocolVersion};
 use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
@@ -668,23 +667,7 @@ struct ExpectCcs(Box<ExpectFinished>);
 
 impl State<ServerConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        match m.payload {
-            MessagePayload::ChangeCipherSpec(..) => {}
-            payload => {
-                return Err(inappropriate_message(
-                    &payload,
-                    &[ContentType::ChangeCipherSpec],
-                ))
-            }
-        }
-
-        // CCS should not be received interleaved with fragmented handshake-level
-        // message.
-        cx.common.check_aligned_handshake()?;
-
-        cx.common
-            .record_layer
-            .start_decrypting();
+        tls12::hs::handle_ccs(cx.common, &m)?;
         Ok(self.0)
     }
 }
