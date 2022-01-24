@@ -20,8 +20,6 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
-use ring::constant_time;
-
 use std::sync::Arc;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
@@ -833,22 +831,13 @@ struct ExpectFinished {
 
 impl State<ServerConnectionData> for ExpectFinished {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        let finished =
-            require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
-
-        cx.common.check_aligned_handshake()?;
-
-        let vh = self.transcript.get_current_hash();
-        let expect_verify_data = self.secrets.client_verify_data(&vh);
-
-        let _fin_verified =
-            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-                .map_err(|_| {
-                    cx.common
-                        .send_fatal_alert(AlertDescription::DecryptError);
-                    Error::DecryptError
-                })
-                .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let fin_verified = tls12::hs::handle_finished(
+            cx.common,
+            &self.transcript,
+            &self.secrets,
+            &m,
+            tls12::CLIENT_FINISHED,
+        )?;
 
         // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
@@ -889,7 +878,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         cx.common.start_traffic();
         Ok(Box::new(ExpectTraffic {
             secrets: self.secrets,
-            _fin_verified,
+            _fin_verified: fin_verified,
         }))
     }
 }

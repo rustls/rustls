@@ -27,7 +27,6 @@ use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
 use ring::agreement::PublicKey;
-use ring::constant_time;
 
 use std::sync::Arc;
 
@@ -1012,25 +1011,14 @@ impl ExpectFinished {
 impl State<ClientConnectionData> for ExpectFinished {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
-        let finished =
-            require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        cx.common.check_aligned_handshake()?;
-
-        // Work out what verify_data we expect.
-        let vh = st.transcript.get_current_hash();
-        let expect_verify_data = st.secrets.server_verify_data(&vh);
-
-        // Constant-time verification of this is relatively unimportant: they only
-        // get one chance.  But it can't hurt.
-        let _fin_verified =
-            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-                .map_err(|_| {
-                    cx.common
-                        .send_fatal_alert(AlertDescription::DecryptError);
-                    Error::DecryptError
-                })
-                .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let fin_verified = tls12::hs::handle_finished(
+            cx.common,
+            &st.transcript,
+            &st.secrets,
+            &m,
+            tls12::SERVER_FINISHED,
+        )?;
 
         // Hash this message too.
         st.transcript.add_message(&m);
@@ -1050,7 +1038,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             secrets: st.secrets,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
-            _fin_verified,
+            _fin_verified: fin_verified,
         }))
     }
 }

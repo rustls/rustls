@@ -1,10 +1,38 @@
 //! Shared logic for TLS 1.2 client and server handshakes.
 //!
 use crate::check::inappropriate_handshake_message;
-use crate::msgs::enums::{ContentType, HandshakeType};
+use crate::hash_hs::HandshakeHash;
+use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
-use crate::{CommonState, Error};
+use crate::tls12::{ConnectionSecrets, FinishedLabel};
+use crate::{verify, CommonState, Error};
+use ring::constant_time;
+
+pub(crate) fn handle_finished(
+    common: &mut CommonState,
+    transcript: &HandshakeHash,
+    secrets: &ConnectionSecrets,
+    m: &Message,
+    finished_label: FinishedLabel,
+) -> Result<verify::FinishedMessageVerified, Error> {
+    let finished = require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
+    common.check_aligned_handshake()?;
+
+    let vh = transcript.get_current_hash();
+    let expect_verify_data = secrets.make_verify_data(&vh, finished_label);
+
+    // Constant-time verification of this is relatively unimportant: they only
+    // get one chance.  But it can't hurt.
+    let fin_verified = constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
+        .map_err(|_| {
+            common.send_fatal_alert(AlertDescription::DecryptError);
+            Error::DecryptError
+        })
+        .map(|_| verify::FinishedMessageVerified::assertion())?;
+
+    Ok(fin_verified)
+}
 
 pub(crate) fn handle_traffic(
     common_state: &mut CommonState,

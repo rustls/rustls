@@ -312,18 +312,30 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
+#[macro_use]
+mod check;
+
 #[allow(missing_docs)]
 #[macro_use]
 mod msgs;
+
 mod anchors;
+mod bs_debug;
+mod builder;
 mod cipher;
 mod conn;
 mod error;
 mod hash_hs;
+mod key;
+mod key_log;
+mod key_log_file;
+mod kx;
 mod limited_cache;
 mod rand;
 mod record_layer;
 mod stream;
+mod suites;
+mod ticketer;
 #[cfg(feature = "tls12")]
 mod tls12;
 mod tls13;
@@ -331,18 +343,8 @@ mod vecbuf;
 mod verify;
 #[cfg(test)]
 mod verifybench;
-mod x509;
-#[macro_use]
-mod check;
-mod bs_debug;
-mod builder;
-mod key;
-mod key_log;
-mod key_log_file;
-mod kx;
-mod suites;
-mod ticketer;
 mod versions;
+mod x509;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.

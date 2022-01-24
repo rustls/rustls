@@ -353,7 +353,7 @@ impl ConnectionSecrets {
         ret
     }
 
-    fn make_verify_data(&self, handshake_hash: &Digest, label: &[u8]) -> Vec<u8> {
+    fn make_verify_data(&self, handshake_hash: &Digest, label: FinishedLabel) -> Vec<u8> {
         let mut out = Vec::new();
         out.resize(12, 0u8);
 
@@ -361,18 +361,18 @@ impl ConnectionSecrets {
             &mut out,
             self.suite.hmac_algorithm,
             &self.master_secret,
-            label,
+            label.0,
             handshake_hash.as_ref(),
         );
         out
     }
 
     pub(crate) fn client_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
-        self.make_verify_data(handshake_hash, b"client finished")
+        self.make_verify_data(handshake_hash, CLIENT_FINISHED)
     }
 
     pub(crate) fn server_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
-        self.make_verify_data(handshake_hash, b"server finished")
+        self.make_verify_data(handshake_hash, SERVER_FINISHED)
     }
 
     pub(crate) fn export_keying_material(
@@ -399,6 +399,10 @@ impl ConnectionSecrets {
         )
     }
 }
+
+pub(crate) struct FinishedLabel(&'static [u8]);
+pub(crate) const CLIENT_FINISHED: FinishedLabel = FinishedLabel(b"client finished");
+pub(crate) const SERVER_FINISHED: FinishedLabel = FinishedLabel(b"server finished");
 
 enum Seed {
     Ems(Digest),
