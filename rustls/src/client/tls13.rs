@@ -5,7 +5,7 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{Payload, PayloadU8};
+use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{AlertDescription, NamedGroup, ProtocolVersion};
@@ -14,7 +14,6 @@ use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
-use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
@@ -27,7 +26,7 @@ use crate::tls13::Tls13CipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
-use crate::{sign, KeyLog};
+use crate::{sign, tls13, KeyLog};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
@@ -734,34 +733,23 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
 
 fn emit_certificate_tls13(
     transcript: &mut HandshakeHash,
+    context: Option<Vec<u8>>,
     certkey: Option<&CertifiedKey>,
-    auth_context: Option<Vec<u8>>,
     common: &mut CommonState,
 ) {
-    let context = auth_context.unwrap_or_default();
-
-    let mut cert_payload = CertificatePayloadTLS13 {
-        context: PayloadU8::new(context),
-        entries: Vec::new(),
-    };
-
-    if let Some(certkey) = certkey {
-        for cert in &certkey.cert {
-            cert_payload
-                .entries
-                .push(CertificateEntry::new(cert.clone()));
-        }
-    }
-
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTLS13(cert_payload),
-        }),
-    };
-    transcript.add_message(&m);
-    common.send_msg(m, true);
+    let cert_chain = certkey
+        .map(|cert_key| cert_key.cert.clone())
+        .unwrap_or_default();
+    const NO_OCSP_STAPLED: Option<&[u8]> = None;
+    const NO_SCT_LIST: Option<&[u8]> = None;
+    tls13::hs::emit_certificate(
+        transcript,
+        common,
+        context,
+        cert_chain,
+        NO_OCSP_STAPLED,
+        NO_SCT_LIST,
+    )
 }
 
 fn emit_certverify_tls13(
@@ -879,7 +867,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 ClientAuthDetails::Empty {
                     auth_context_tls13: auth_context,
                 } => {
-                    emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
+                    emit_certificate_tls13(&mut st.transcript, auth_context, None, cx.common);
                 }
                 ClientAuthDetails::Verify {
                     certkey,
@@ -888,8 +876,8 @@ impl State<ClientConnectionData> for ExpectFinished {
                 } => {
                     emit_certificate_tls13(
                         &mut st.transcript,
-                        Some(&certkey),
                         auth_context,
+                        Some(&certkey),
                         cx.common,
                     );
                     emit_certverify_tls13(&mut st.transcript, signer.as_ref(), cx.common)?;

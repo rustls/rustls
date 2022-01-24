@@ -32,16 +32,11 @@ use ring::constant_time;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
-    use crate::kx;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::enums::{Compression, PSKKeyExchangeMode};
     use crate::msgs::enums::{NamedGroup, SignatureScheme};
     use crate::msgs::handshake::CertReqExtension;
-    use crate::msgs::handshake::CertificateEntry;
-    use crate::msgs::handshake::CertificateExtension;
-    use crate::msgs::handshake::CertificatePayloadTLS13;
     use crate::msgs::handshake::CertificateRequestPayloadTLS13;
-    use crate::msgs::handshake::CertificateStatus;
     use crate::msgs::handshake::ClientHelloPayload;
     use crate::msgs::handshake::DigitallySignedStruct;
     use crate::msgs::handshake::HelloRetryExtension;
@@ -58,6 +53,7 @@ mod client_hello {
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
+    use crate::{kx, tls13};
 
     use super::*;
 
@@ -348,10 +344,12 @@ mod client_hello {
             let doing_client_auth = if full_handshake {
                 let client_auth =
                     emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
-                emit_certificate_tls13(
+                const NO_CONTEXT: Option<Vec<u8>> = None;
+                tls13::hs::emit_certificate(
                     &mut self.transcript,
                     cx.common,
-                    server_key.get_cert(),
+                    NO_CONTEXT,
+                    server_key.get_cert().to_owned(),
                     ocsp_response,
                     sct_list,
                 );
@@ -733,55 +731,6 @@ mod client_hello {
         transcript.add_message(&m);
         cx.common.send_msg(m, true);
         Ok(true)
-    }
-
-    fn emit_certificate_tls13(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
-        cert_chain: &[Certificate],
-        ocsp_response: Option<&[u8]>,
-        sct_list: Option<&[u8]>,
-    ) {
-        let mut cert_entries = vec![];
-        for cert in cert_chain {
-            let entry = CertificateEntry {
-                cert: cert.to_owned(),
-                exts: Vec::new(),
-            };
-
-            cert_entries.push(entry);
-        }
-
-        if let Some(end_entity_cert) = cert_entries.first_mut() {
-            // Apply OCSP response to first certificate (we don't support OCSP
-            // except for leaf certs).
-            if let Some(ocsp) = ocsp_response {
-                let cst = CertificateStatus::new(ocsp.to_owned());
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::CertificateStatus(cst));
-            }
-
-            // Likewise, SCT
-            if let Some(sct_list) = sct_list {
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::make_sct(sct_list.to_owned()));
-            }
-        }
-
-        let cert_body = CertificatePayloadTLS13::new(cert_entries);
-        let c = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::CertificateTLS13(cert_body),
-            }),
-        };
-
-        trace!("sending certificate {:?}", c);
-        transcript.add_message(&c);
-        common.send_msg(c, true);
     }
 
     fn emit_certificate_verify_tls13(

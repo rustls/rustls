@@ -14,6 +14,8 @@ use std::fmt;
 pub(crate) mod key_schedule;
 use key_schedule::{derive_traffic_iv, derive_traffic_key};
 
+pub(crate) mod hs;
+
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);

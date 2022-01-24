@@ -1474,9 +1474,9 @@ impl Codec for CertificatePayloadTLS13 {
 }
 
 impl CertificatePayloadTLS13 {
-    pub fn new(entries: Vec<CertificateEntry>) -> Self {
+    pub fn new(context: Option<Vec<u8>>, entries: Vec<CertificateEntry>) -> Self {
         Self {
-            context: PayloadU8::empty(),
+            context: PayloadU8::new(context.unwrap_or_default()),
             entries,
         }
     }
