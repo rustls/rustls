@@ -27,6 +27,11 @@ pub(crate) fn emit_certificate(
     common.send_msg(cert, false);
 }
 
+pub(crate) fn emit_ccs_and_start_encrypting(common: &mut CommonState) {
+    common.send_ccs();
+    common.record_layer.start_encrypting();
+}
+
 pub(crate) fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,

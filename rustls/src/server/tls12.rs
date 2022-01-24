@@ -282,10 +282,7 @@ mod client_hello {
                     &*self.config.ticketer,
                 )?;
             }
-            cx.common.send_ccs();
-            cx.common
-                .record_layer
-                .start_encrypting();
+            tls12::hs::emit_ccs_and_start_encrypting(cx.common);
             emit_finished(&secrets, &mut self.transcript, cx.common);
 
             Ok(Box::new(ExpectCcs {
@@ -828,10 +825,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 )?;
             }
 
-            cx.common.send_ccs();
-            cx.common
-                .record_layer
-                .start_encrypting();
+            tls12::hs::emit_ccs_and_start_encrypting(cx.common);
             emit_finished(&self.secrets, &mut self.transcript, cx.common);
         }
 

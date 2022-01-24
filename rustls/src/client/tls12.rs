@@ -760,13 +760,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
             &secrets.randoms.client,
             &secrets.master_secret,
         );
+        // 5d.
         cx.common
             .start_encryption_tls12(&secrets, Side::Client);
-        // 5d.
-        cx.common.send_ccs();
-        cx.common
-            .record_layer
-            .start_encrypting();
+        tls12::hs::emit_ccs_and_start_encrypting(cx.common);
 
         // 6.
         emit_finished(&secrets, &mut transcript, cx.common);
@@ -985,10 +982,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         st.save_session(cx);
 
         if st.resuming {
-            cx.common.send_ccs();
-            cx.common
-                .record_layer
-                .start_encrypting();
+            tls12::hs::emit_ccs_and_start_encrypting(cx.common);
             emit_finished(&st.secrets, &mut st.transcript, cx.common);
         }
 
