@@ -285,7 +285,7 @@ mod client_hello {
             tls12::hs::emit_ccs_and_start_encrypting(cx.common);
             emit_finished(&secrets, &mut self.transcript, cx.common);
 
-            Ok(Box::new(ExpectCcs {
+            Ok(Box::new(ExpectCcs(Box::new(ExpectFinished {
                 config: self.config,
                 secrets,
                 transcript: self.transcript,
@@ -293,7 +293,7 @@ mod client_hello {
                 using_ems: self.using_ems,
                 resuming: true,
                 send_ticket: self.send_ticket,
-            }))
+            }))))
         }
     }
 
@@ -588,7 +588,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 send_ticket: self.send_ticket,
             }))
         } else {
-            Ok(Box::new(ExpectCcs {
+            Ok(Box::new(ExpectCcs(Box::new(ExpectFinished {
                 config: self.config,
                 secrets,
                 transcript: self.transcript,
@@ -596,7 +596,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 using_ems: self.using_ems,
                 resuming: false,
                 send_ticket: self.send_ticket,
-            }))
+            }))))
         }
     }
 }
@@ -651,7 +651,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         cx.common.peer_certificates = Some(self.client_cert);
 
         self.transcript.add_message(&m);
-        Ok(Box::new(ExpectCcs {
+        Ok(Box::new(ExpectCcs(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
             transcript: self.transcript,
@@ -659,20 +659,12 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             using_ems: self.using_ems,
             resuming: false,
             send_ticket: self.send_ticket,
-        }))
+        }))))
     }
 }
 
 // --- Process client's ChangeCipherSpec ---
-struct ExpectCcs {
-    config: Arc<ServerConfig>,
-    secrets: ConnectionSecrets,
-    transcript: HandshakeHash,
-    session_id: SessionID,
-    using_ems: bool,
-    resuming: bool,
-    send_ticket: bool,
-}
+struct ExpectCcs(Box<ExpectFinished>);
 
 impl State<ServerConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
@@ -693,15 +685,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         cx.common
             .record_layer
             .start_decrypting();
-        Ok(Box::new(ExpectFinished {
-            config: self.config,
-            secrets: self.secrets,
-            transcript: self.transcript,
-            session_id: self.session_id,
-            using_ems: self.using_ems,
-            resuming: self.resuming,
-            send_ticket: self.send_ticket,
-        }))
+        Ok(self.0)
     }
 }
 
