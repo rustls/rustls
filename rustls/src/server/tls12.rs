@@ -827,6 +827,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                     &*self.config.ticketer,
                 )?;
             }
+
             cx.common.send_ccs();
             cx.common
                 .record_layer

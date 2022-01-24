@@ -746,10 +746,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
         }
 
-        // 5d.
-        cx.common.send_ccs();
-
-        // 5e. Now commit secrets.
+        // 5e (Intentionally before 5d). Now commit secrets
         let secrets = ConnectionSecrets::from_key_exchange(
             kx,
             &ecdh_params.public.0,
@@ -765,6 +762,8 @@ impl State<ClientConnectionData> for ExpectServerDone {
         );
         cx.common
             .start_encryption_tls12(&secrets, Side::Client);
+        // 5d.
+        cx.common.send_ccs();
         cx.common
             .record_layer
             .start_encrypting();
