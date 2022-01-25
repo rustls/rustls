@@ -1,6 +1,4 @@
-use crate::check::{inappropriate_handshake_message, inappropriate_message};
-#[cfg(feature = "quic")]
-use crate::conn::Protocol;
+use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -21,6 +19,8 @@ use crate::ticketer;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
+#[cfg(feature = "quic")]
+use crate::{check::inappropriate_message, conn::Protocol};
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
