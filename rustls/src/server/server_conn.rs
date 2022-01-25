@@ -559,28 +559,26 @@ impl Acceptor {
 
     /// Check if a `ClientHello` message has been received.
     ///
-    /// Returns an error if the `ClientHello` message is invalid or if the acceptor has already
-    /// yielded an [`Accepted`]. Returns `Ok(None)` if no complete `ClientHello` has been received
-    /// yet.
+    /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
+    /// Do more I/O and then call this function again.
+    ///
+    /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
+    /// `accepted.into_connection()` to continue. Do not call this function again.
+    ///
+    /// Returns `Err(err)` if an error occurred. Do not call this function again.
     pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
         let mut connection = match self.inner.take() {
             Some(conn) => conn,
             None => {
-                return Err(Error::General(
-                    "cannot accept after successful acceptance".into(),
-                ));
+                return Err(Error::General("Acceptor polled after completion".into()));
             }
         };
 
-        let message = match connection.first_handshake_message() {
-            Ok(Some(msg)) => msg,
-            Ok(None) => {
+        let message = match connection.first_handshake_message()? {
+            Some(msg) => msg,
+            None => {
                 self.inner = Some(connection);
                 return Ok(None);
-            }
-            Err(e) => {
-                self.inner = Some(connection);
-                return Err(e);
             }
         };
 
