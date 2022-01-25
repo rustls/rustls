@@ -268,9 +268,12 @@ impl ExpectClientHello {
     }
 
     /// Continues handling of a `ClientHello` message once config and certificate are available.
+    ///
+    /// `client_sig_schemes` has been filtered at least according to the client's supported
+    /// cipher suites, but maybe hasn't been filtered by our supported cipher suites.
     pub(super) fn with_certified_key(
         self,
-        sig_schemes: Vec<SignatureScheme>,
+        client_sig_schemes: Vec<SignatureScheme>,
         client_hello: &ClientHelloPayload,
         m: &Message,
         cx: &mut ServerContext<'_>,
@@ -314,6 +317,14 @@ impl ExpectClientHello {
         };
 
         cx.common.negotiated_version = Some(version);
+
+        // Filter out any unsupported signature schemes before we pass them to
+        // certificate resolver so the resolver doesn't have to do the filtering
+        // itself.
+        let mut sig_schemes = client_sig_schemes;
+        sig_schemes.retain(|scheme| {
+            suites::compatible_sigscheme_for_suites(*scheme, &self.config.cipher_suites)
+        });
 
         // Choose a certificate.
         let certkey = {
