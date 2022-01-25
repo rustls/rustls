@@ -3834,9 +3834,7 @@ fn test_acceptor() {
     );
     assert_eq!(
         acceptor.accept().err(),
-        Some(Error::General(
-            "cannot accept after successful acceptance".into()
-        ))
+        Some(Error::General("Acceptor polled after completion".into()))
     );
 
     let mut acceptor = Acceptor::new().unwrap();
