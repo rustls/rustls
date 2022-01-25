@@ -498,9 +498,14 @@ impl Acceptor {
             }
         };
 
+        // XXX(https://github.com/rustls/rustls/issues/973): We shouldn't be using
+        // `ALL_CIPHER_SUITES` here.
+        let supported_cipher_suites = &crate::ALL_CIPHER_SUITES;
+
         let (_, sig_schemes) = hs::process_client_hello(
             &message,
             false,
+            supported_cipher_suites,
             &mut connection.common_state,
             &mut connection.data,
         )?;

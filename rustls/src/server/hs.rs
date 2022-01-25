@@ -14,8 +14,8 @@ use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList, Han
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig};
+use crate::suites;
 use crate::SupportedCipherSuite;
-use crate::{suites, ALL_CIPHER_SUITES};
 
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
@@ -410,8 +410,13 @@ impl ExpectClientHello {
 
 impl State<ServerConnectionData> for ExpectClientHello {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
-        let (client_hello, sig_schemes) =
-            process_client_hello(&m, self.done_retry, cx.common, cx.data)?;
+        let (client_hello, sig_schemes) = process_client_hello(
+            &m,
+            self.done_retry,
+            &self.config.cipher_suites,
+            cx.common,
+            cx.data,
+        )?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 }
@@ -426,6 +431,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
 pub(super) fn process_client_hello<'a>(
     m: &'a Message,
     done_retry: bool,
+    supported_cipher_suites: &[SupportedCipherSuite],
     common: &mut CommonState,
     data: &mut ServerConnectionData,
 ) -> Result<(&'a ClientHelloPayload, Vec<SignatureScheme>), Error> {
@@ -490,7 +496,7 @@ pub(super) fn process_client_hello<'a>(
     // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
     // So: reduce the offered sigschemes to those compatible with the
     // intersection of ciphersuites.
-    let client_suites = ALL_CIPHER_SUITES
+    let client_suites = supported_cipher_suites
         .iter()
         .copied()
         .filter(|scs| {
