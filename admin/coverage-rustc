@@ -15,7 +15,7 @@ get_crate_name()
 }
 
 case $(get_crate_name "$@") in
-  rustls|tlsclient|tlsserver|features|client_cert_verifier|server_cert_verifier|key_log_file_env|server_suites|client_suites|errors|api|badssl|bugs|curves|topsites|bogo_shim|trytls_shim|bench)
+  rustls|tlsclient|tlsserver|features|client_cert_verifier|server_cert_verifier|key_log_file_env|server_suites|client_suites|errors|api|badssl|bugs|topsites|bogo_shim|trytls_shim|bench)
     EXTRA=$COVERAGE_OPTIONS
     ;;
   *)
