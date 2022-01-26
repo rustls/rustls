@@ -167,18 +167,6 @@ fn unused_port(mut port: u16) -> u16 {
     }
 }
 
-// Note we skipped this test.
-pub fn skipped(why: &str) {
-    use std::io;
-    let mut stdout = io::stdout();
-    write!(
-        &mut stdout,
-        "[  SKIPPED  ]        because: {}\n -- UNTESTED: ",
-        why
-    )
-    .unwrap();
-}
-
 pub fn tlsserver_find() -> &'static str {
     "../target/debug/examples/tlsserver"
 }
