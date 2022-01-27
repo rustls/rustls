@@ -6,28 +6,6 @@ use crate::common::TlsServer;
 use std::fs;
 
 #[test]
-fn client_auth_requested_but_unsupported() {
-    let test_ca = common::new_test_ca();
-
-    let mut server = OpenSSLServer::new_rsa(test_ca.path(), 9030);
-    server
-        .arg("-verify")
-        .arg("0")
-        .arg("-tls1_2");
-    server.run();
-
-    server
-        .client()
-        .expect_log("Got CertificateRequest")
-        .expect_log("Client auth requested but no cert/sigscheme available")
-        .expect("no client certificate available\n")
-        .expect("Ciphers common between both SSL end points:\n")
-        .go();
-
-    server.kill();
-}
-
-#[test]
 fn client_resumes() {
     let test_ca = common::new_test_ca();
 
