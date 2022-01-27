@@ -246,7 +246,6 @@ pub struct TlsClient {
     pub cache: Option<String>,
     pub suites: Vec<String>,
     pub protos: Vec<Vec<u8>>,
-    pub no_tickets: bool,
     pub no_sni: bool,
     pub insecure: bool,
     pub verbose: bool,
@@ -266,7 +265,6 @@ impl TlsClient {
             client_auth_key: None,
             client_auth_certs: None,
             cache: None,
-            no_tickets: false,
             no_sni: false,
             insecure: false,
             verbose: false,
@@ -292,11 +290,6 @@ impl TlsClient {
 
     pub fn cache(&mut self, cache: &str) -> &mut TlsClient {
         self.cache = Some(cache.to_string());
-        self
-    }
-
-    pub fn no_tickets(&mut self) -> &mut TlsClient {
-        self.no_tickets = true;
         self
     }
 
@@ -368,10 +361,6 @@ impl TlsClient {
         if self.cache.is_some() {
             args.push("--cache");
             args.push(self.cache.as_ref().unwrap());
-        }
-
-        if self.no_tickets {
-            args.push("--no-tickets");
         }
 
         if self.no_sni {
@@ -591,294 +580,5 @@ impl Drop for OpenSSLServer {
         if self.running() {
             self.kill();
         }
-    }
-}
-
-pub struct TlsServer {
-    pub port: u16,
-    pub http: bool,
-    pub echo: bool,
-    pub certs: PathBuf,
-    pub key: PathBuf,
-    pub cafile: PathBuf,
-    pub suites: Vec<String>,
-    pub protos: Vec<Vec<u8>>,
-    used_suites: Vec<String>,
-    used_protos: Vec<Vec<u8>>,
-    pub resumes: bool,
-    pub tickets: bool,
-    pub client_auth_roots: Option<PathBuf>,
-    pub client_auth_required: bool,
-    pub verbose: bool,
-    pub child: Option<process::Child>,
-}
-
-impl TlsServer {
-    pub fn new(test_ca: &Path, port: u16) -> Self {
-        Self::new_keytype(test_ca, port, "rsa")
-    }
-
-    pub fn new_keytype(test_ca: &Path, port: u16, keytype: &str) -> Self {
-        TlsServer {
-            port: unused_port(port),
-            http: false,
-            echo: false,
-            key: test_ca.join(keytype).join("end.key"),
-            certs: test_ca
-                .join(keytype)
-                .join("end.fullchain"),
-            cafile: test_ca.join(keytype).join("ca.cert"),
-            verbose: false,
-            suites: Vec::new(),
-            protos: Vec::new(),
-            used_suites: Vec::new(),
-            used_protos: Vec::new(),
-            resumes: false,
-            tickets: false,
-            client_auth_roots: None,
-            client_auth_required: false,
-            child: None,
-        }
-    }
-
-    pub fn echo_mode(&mut self) -> &mut Self {
-        self.echo = true;
-        self.http = false;
-        self
-    }
-
-    pub fn http_mode(&mut self) -> &mut Self {
-        self.echo = false;
-        self.http = true;
-        self
-    }
-
-    pub fn verbose(&mut self) -> &mut Self {
-        self.verbose = true;
-        self
-    }
-
-    pub fn port(&mut self, port: u16) -> &mut Self {
-        self.port = port;
-        self
-    }
-
-    pub fn suite(&mut self, suite: &str) -> &mut Self {
-        self.suites.push(suite.to_string());
-        self
-    }
-
-    pub fn proto(&mut self, proto: &[u8]) -> &mut Self {
-        self.protos.push(proto.to_vec());
-        self
-    }
-
-    pub fn resumes(&mut self) -> &mut Self {
-        self.resumes = true;
-        self
-    }
-
-    pub fn tickets(&mut self) -> &mut Self {
-        self.tickets = true;
-        self
-    }
-
-    pub fn client_auth_roots(&mut self, cafile: &Path) -> &mut Self {
-        self.client_auth_roots = Some(cafile.to_path_buf());
-        self
-    }
-
-    pub fn client_auth_required(&mut self) -> &mut Self {
-        self.client_auth_required = true;
-        self
-    }
-
-    pub fn run(&mut self) {
-        let portstring = self.port.to_string();
-        let mut args = Vec::<&str>::new();
-        args.push("--port");
-        args.push(&portstring);
-        args.push("--key");
-        args.push(self.key.to_str().unwrap());
-        args.push("--certs");
-        args.push(self.certs.to_str().unwrap());
-
-        self.used_suites = self.suites.clone();
-        for suite in &self.used_suites {
-            args.push("--suite");
-            args.push(suite.as_ref());
-        }
-
-        self.used_protos = self.protos.clone();
-        for proto in &self.used_protos {
-            args.push("--proto");
-            args.push(str::from_utf8(proto.as_ref()).unwrap());
-        }
-
-        if self.resumes {
-            args.push("--resumption");
-        }
-
-        if self.tickets {
-            args.push("--tickets");
-        }
-
-        if let Some(ref client_auth_roots) = self.client_auth_roots {
-            args.push("--auth");
-            args.push(client_auth_roots.to_str().unwrap());
-
-            if self.client_auth_required {
-                args.push("--require-auth");
-            }
-        }
-
-        if self.verbose {
-            args.push("--verbose");
-        }
-
-        if self.http {
-            args.push("http");
-        } else if self.echo {
-            args.push("echo");
-        } else {
-            assert!(false, "specify http/echo mode");
-        }
-
-        println!("args {:?}", args);
-
-        let child = process::Command::new(tlsserver_find())
-            .args(&args)
-            .spawn()
-            .expect("cannot run tlsserver");
-
-        wait_for_port(self.port).expect("tlsserver didn't come up");
-        self.child = Some(child);
-    }
-
-    pub fn kill(&mut self) {
-        self.child
-            .as_mut()
-            .unwrap()
-            .kill()
-            .unwrap();
-        self.child = None;
-    }
-
-    pub fn running(&self) -> bool {
-        self.child.is_some()
-    }
-
-    pub fn client(&self) -> OpenSSLClient {
-        let mut c = OpenSSLClient::new(self.port);
-        c.cafile(&self.cafile);
-        c
-    }
-}
-
-impl Drop for TlsServer {
-    fn drop(&mut self) {
-        if self.running() {
-            self.kill();
-        }
-    }
-}
-
-pub struct OpenSSLClient {
-    pub port: u16,
-    pub cafile: PathBuf,
-    pub extra_args: Vec<String>,
-    pub expect_fails: bool,
-    pub expect_output: Vec<String>,
-    pub expect_log: Vec<String>,
-}
-
-impl OpenSSLClient {
-    pub fn new(port: u16) -> Self {
-        OpenSSLClient {
-            port,
-            cafile: PathBuf::new(),
-            extra_args: Vec::new(),
-            expect_fails: false,
-            expect_output: Vec::new(),
-            expect_log: Vec::new(),
-        }
-    }
-
-    pub fn arg(&mut self, arg: &str) -> &mut Self {
-        self.extra_args.push(arg.to_string());
-        self
-    }
-
-    pub fn cafile(&mut self, cafile: &Path) -> &mut Self {
-        self.cafile = cafile.to_path_buf();
-        self
-    }
-
-    pub fn expect(&mut self, expect: &str) -> &mut Self {
-        self.expect_output
-            .push(expect.to_string());
-        self
-    }
-
-    pub fn expect_log(&mut self, expect: &str) -> &mut Self {
-        self.expect_log.push(expect.to_string());
-        self
-    }
-
-    pub fn fails(&mut self) -> &mut Self {
-        self.expect_fails = true;
-        self
-    }
-
-    pub fn go(&mut self) -> Option<()> {
-        let mut extra_args = Vec::new();
-        extra_args.extend(&self.extra_args);
-
-        let mut subp = process::Command::new(openssl_find());
-        subp.arg("s_client")
-            .arg("-tls1_2")
-            .arg("-host")
-            .arg("localhost")
-            .arg("-port")
-            .arg(self.port.to_string())
-            .arg("-CAfile")
-            .arg(&self.cafile)
-            .args(&extra_args);
-
-        let output = subp
-            .output()
-            .unwrap_or_else(|e| panic!("failed to execute: {}", e));
-
-        let stdout_str = unsafe { String::from_utf8_unchecked(output.stdout.clone()) };
-        let stderr_str = unsafe { String::from_utf8_unchecked(output.stderr.clone()) };
-
-        print!("{}", stdout_str);
-        print!("{}", stderr_str);
-
-        for expect in &self.expect_output {
-            let re = Regex::new(expect).unwrap();
-            if re.find(&stdout_str).is_none() {
-                println!("We expected to find '{}' in the following output:", expect);
-                println!("{:?}", output);
-                panic!("Test failed");
-            }
-        }
-
-        for expect in &self.expect_log {
-            let re = Regex::new(expect).unwrap();
-            if re.find(&stderr_str).is_none() {
-                println!("We expected to find '{}' in the following output:", expect);
-                println!("{:?}", output);
-                panic!("Test failed");
-            }
-        }
-
-        if self.expect_fails {
-            assert!(output.status.code().unwrap() != 0);
-        } else {
-            assert!(output.status.success());
-        }
-
-        Some(())
     }
 }
