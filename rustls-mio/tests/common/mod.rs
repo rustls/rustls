@@ -136,11 +136,6 @@ embed_files! {
     (RSA_INTER_REQ, "rsa", "inter.req");
 }
 
-// For tests which connect to internet servers, don't go crazy.
-pub fn polite() {
-    thread::sleep(time::Duration::from_secs(1));
-}
-
 // Wait until we can connect to localhost:port.
 fn wait_for_port(port: u16) -> Option<()> {
     let mut count = 0;
