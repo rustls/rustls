@@ -209,43 +209,13 @@ pub fn openssl_find() -> String {
     "openssl".to_string()
 }
 
-fn openssl_supports_option(cmd: &str, opt: &str) -> bool {
-    let output = process::Command::new(openssl_find())
-        .arg(cmd)
-        .arg("-help")
-        .output()
-        .unwrap();
-
-    String::from_utf8(output.stderr)
-        .unwrap()
-        .contains(opt)
-}
-
-// Does openssl s_client support -alpn?
-pub fn openssl_client_supports_alpn() -> bool {
-    openssl_supports_option("s_client", " -alpn ")
-}
-
-// Does openssl s_server support -alpn?
-pub fn openssl_server_supports_alpn() -> bool {
-    openssl_supports_option("s_server", " -alpn ")
-}
-
-// Does openssl s_server support -no_ecdhe?
-pub fn openssl_server_supports_no_echde() -> bool {
-    openssl_supports_option("s_server", " -no_ecdhe ")
-}
-
 pub struct TlsClient {
     pub hostname: String,
     pub port: u16,
     pub http: bool,
     pub cafile: Option<PathBuf>,
-    pub client_auth_key: Option<PathBuf>,
-    pub client_auth_certs: Option<PathBuf>,
     pub cache: Option<String>,
     pub suites: Vec<String>,
-    pub protos: Vec<Vec<u8>>,
     pub no_sni: bool,
     pub insecure: bool,
     pub verbose: bool,
@@ -262,25 +232,16 @@ impl TlsClient {
             port: 443,
             http: true,
             cafile: None,
-            client_auth_key: None,
-            client_auth_certs: None,
             cache: None,
             no_sni: false,
             insecure: false,
             verbose: false,
             max_fragment_size: None,
             suites: Vec::new(),
-            protos: Vec::new(),
             expect_fails: false,
             expect_output: Vec::new(),
             expect_log: Vec::new(),
         }
-    }
-
-    pub fn client_auth(&mut self, certs: &Path, key: &Path) -> &mut Self {
-        self.client_auth_key = Some(key.to_path_buf());
-        self.client_auth_certs = Some(certs.to_path_buf());
-        self
     }
 
     pub fn cafile(&mut self, cafile: &Path) -> &mut TlsClient {
@@ -335,11 +296,6 @@ impl TlsClient {
         self
     }
 
-    pub fn proto(&mut self, proto: &[u8]) -> &mut TlsClient {
-        self.protos.push(proto.to_vec());
-        self
-    }
-
     pub fn fails(&mut self) -> &mut TlsClient {
         self.expect_fails = true;
         self
@@ -382,36 +338,9 @@ impl TlsClient {
             );
         }
 
-        if self.client_auth_key.is_some() {
-            args.push("--auth-key");
-            args.push(
-                self.client_auth_key
-                    .as_ref()
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            );
-        }
-
-        if self.client_auth_certs.is_some() {
-            args.push("--auth-certs");
-            args.push(
-                self.client_auth_certs
-                    .as_ref()
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            );
-        }
-
         for suite in &self.suites {
             args.push("--suite");
             args.push(suite.as_ref());
-        }
-
-        for proto in &self.protos {
-            args.push("--proto");
-            args.push(str::from_utf8(proto.as_ref()).unwrap());
         }
 
         if self.verbose {
