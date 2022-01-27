@@ -489,10 +489,6 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    fn client_auth_mandatory(&self) -> Option<bool> {
-        Some(true)
-    }
-
     fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
