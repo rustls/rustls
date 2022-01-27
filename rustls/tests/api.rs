@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use rustls::client::ResolvesClientCert;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
-use rustls::server::{ClientHello, ResolvesServerCert};
+use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -401,6 +401,41 @@ fn server_can_get_client_cert_after_resumption() {
             do_handshake(&mut client, &mut server);
             let resumed_certs = server.peer_certificates();
             assert_eq!(original_certs, resumed_certs);
+        }
+    }
+}
+
+/// Test that the server handles combination of `offer_client_auth()` returning true
+/// and `client_auth_mandatory` returning `Some(false)`. This exercises both the
+/// client's and server's ability to "recover" from the server asking for a client
+/// certificate and not being given one. This also covers the implementation
+/// of `AllowAnyAnonymousOrAuthenticatedClient`.
+#[test]
+fn server_allow_any_anonymous_or_authenticated_client() {
+    let kt = KeyType::Rsa;
+    for client_cert_chain in [None, Some(kt.get_client_chain())].iter() {
+        let client_auth_roots = get_client_root_store(kt);
+        let client_auth = AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
+
+        let server_config = ServerConfig::builder()
+            .with_safe_defaults()
+            .with_client_cert_verifier(client_auth)
+            .with_single_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
+        let server_config = Arc::new(server_config);
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config = if client_cert_chain.is_some() {
+                make_client_config_with_versions_with_auth(kt, &[version])
+            } else {
+                make_client_config_with_versions(kt, &[version])
+            };
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            do_handshake(&mut client, &mut server);
+
+            let certs = server.peer_certificates();
+            assert_eq!(certs, client_cert_chain.as_deref());
         }
     }
 }
