@@ -730,3 +730,28 @@ fn unix_time_millis(now: SystemTime) -> Result<u64, Error> {
                 .ok_or(Error::FailedToGetCurrentTime)
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assertions_are_debug() {
+        assert_eq!(
+            format!("{:?}", ClientCertVerified::assertion()),
+            "ClientCertVerified(())"
+        );
+        assert_eq!(
+            format!("{:?}", HandshakeSignatureValid::assertion()),
+            "HandshakeSignatureValid(())"
+        );
+        assert_eq!(
+            format!("{:?}", FinishedMessageVerified::assertion()),
+            "FinishedMessageVerified(())"
+        );
+        assert_eq!(
+            format!("{:?}", ServerCertVerified::assertion()),
+            "ServerCertVerified(())"
+        );
+    }
+}
