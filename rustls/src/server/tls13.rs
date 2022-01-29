@@ -407,7 +407,7 @@ mod client_hello {
                 &self.config,
             );
 
-            if !doing_client_auth {
+            if !doing_client_auth && self.config.send_half_rtt_data {
                 // Application data can be sent immediately after Finished, in one
                 // flight.  However, if client auth is enabled, we don't want to send
                 // application data to an unauthenticated peer.

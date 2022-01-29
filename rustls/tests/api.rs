@@ -2334,8 +2334,11 @@ fn vectored_write_for_client_appdata() {
 }
 
 #[test]
-fn vectored_write_for_server_handshake_without_client_auth() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa);
+fn vectored_write_for_server_handshake_with_half_rtt_data() {
+    let mut server_config = make_server_config(KeyType::Rsa);
+    server_config.send_half_rtt_data = true;
+    let (mut client, mut server) =
+        make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa), server_config);
 
     server
         .writer()
@@ -2372,9 +2375,7 @@ fn vectored_write_for_server_handshake_without_client_auth() {
     check_read(&mut client.reader(), b"012345678901234567890123456789");
 }
 
-#[test]
-fn vectored_write_for_server_handshake_with_client_auth() {
-    let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa);
+fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     let (mut client, mut server) =
         make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa), server_config);
 
@@ -2395,7 +2396,7 @@ fn vectored_write_for_server_handshake_with_client_auth() {
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 4000); // its pretty big (contains cert chain)
         assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert_eq!(pipe.writevs[0].len(), 7); // at least a server hello/ccs/cert/serverkx data
+        assert!(pipe.writevs[0].len() >= 6); // at least a server hello/ccs/cert/serverkx data
     }
 
     // client second flight
@@ -2416,6 +2417,20 @@ fn vectored_write_for_server_handshake_with_client_auth() {
     assert!(!server.is_handshaking());
     assert!(!client.is_handshaking());
     check_read(&mut client.reader(), b"012345678901234567890123456789");
+}
+
+#[test]
+fn vectored_write_for_server_handshake_no_half_rtt_with_client_auth() {
+    let mut server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa);
+    server_config.send_half_rtt_data = true; // ask even though it will be ignored
+    check_half_rtt_does_not_work(server_config);
+}
+
+#[test]
+fn vectored_write_for_server_handshake_no_half_rtt_by_default() {
+    let server_config = make_server_config(KeyType::Rsa);
+    assert_eq!(server_config.send_half_rtt_data, false);
+    check_half_rtt_does_not_work(server_config);
 }
 
 #[test]

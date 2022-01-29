@@ -107,6 +107,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             versions: self.state.versions,
             key_log: Arc::new(NoKeyLog {}),
             max_early_data_size: 0,
+            send_half_rtt_data: false,
         }
     }
 }

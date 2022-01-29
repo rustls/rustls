@@ -234,6 +234,27 @@ pub struct ServerConfig {
     /// this value to account for the unknown amount of ciphertext
     /// expansion in the latter case.
     pub max_early_data_size: u32,
+
+    /// Whether the server should send "0.5RTT" data.  This means the server
+    /// sends data after its first flight of handshake messages, without
+    /// waiting for the client to complete the handshake.
+    ///
+    /// This can improve TTFB latency for either server-speaks-first protocols,
+    /// or client-speaks-first protocols when paired with "0RTT" data.  This
+    /// comes at the cost of a subtle weakening of the normal handshake
+    /// integrity guarantees that TLS provides.  Note that the initial
+    /// `ClientHello` is indirectly authenticated because it is included
+    /// in the transcript used to derive the keys used to encrypt the data.
+    ///
+    /// This only applies to TLS1.3 connections.  TLS1.2 connections cannot
+    /// do this optimisation and this setting is ignored for them.  It is
+    /// also ignored for TLS1.3 connections that even attempt client
+    /// authentication.
+    ///
+    /// This defaults to false.  This means the first application data
+    /// sent by the server comes after receiving and validating the client's
+    /// handshake up to the `Finished` message.  This is the safest option.
+    pub send_half_rtt_data: bool,
 }
 
 impl ServerConfig {
