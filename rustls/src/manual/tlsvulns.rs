@@ -68,7 +68,7 @@ rustls does not support these ciphersuites.
 In 2002 [John Kelsey](https://www.iacr.org/cryptodb/archive/2002/FSE/3091/3091.pdf) discussed the length side channel
 as applied to compression of combined secret and attacker-chosen strings.
 
-Compression continued to be an option in TLSv1.1 (2006) nor in TLSv1.2 (2008).  Support in libraries was widespread.
+Compression continued to be an option in TLSv1.1 (2006) and in TLSv1.2 (2008).  Support in libraries was widespread.
 
 [CRIME](http://netifera.com/research/crime/CRIME_ekoparty2012.pdf) ([CVE-2012-4929](https://nvd.nist.gov/vuln/detail/CVE-2012-4929))
 was demonstrated in 2012, again by Thai Duong and Juliano Rizzo.  It attacked several protocols offering transparent
