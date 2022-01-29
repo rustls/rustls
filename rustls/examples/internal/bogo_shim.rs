@@ -434,6 +434,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
     if opts.enable_early_data {
         // see kMaxEarlyDataAccepted in boringssl, which bogo validates
         cfg.max_early_data_size = 14336;
+        cfg.send_half_rtt_data = true;
     }
 
     Arc::new(cfg)
