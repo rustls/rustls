@@ -3668,6 +3668,49 @@ fn test_client_mtu_reduction() {
     }
 }
 
+#[test]
+fn test_server_mtu_reduction() {
+    let mut server_config = make_server_config(KeyType::Rsa);
+    server_config.max_fragment_size = Some(64);
+    let (mut client, mut server) =
+        make_pair_for_configs(make_client_config(KeyType::Rsa), server_config);
+
+    let big_data = [0u8; 2048];
+    server
+        .writer()
+        .write_all(&big_data)
+        .unwrap();
+
+    let encryption_overhead = 20; // FIXME: see issue #991
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        server.write_tls(&mut pipe).unwrap();
+
+        assert_eq!(pipe.writevs.len(), 1);
+        assert!(pipe.writevs[0]
+            .iter()
+            .all(|x| *x <= 64 + encryption_overhead));
+    }
+
+    client.process_new_packets().unwrap();
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    {
+        let mut pipe = OtherSession::new(&mut client);
+        server.write_tls(&mut pipe).unwrap();
+        assert_eq!(pipe.writevs.len(), 1);
+        assert!(pipe.writevs[0]
+            .iter()
+            .all(|x| *x <= 64 + encryption_overhead));
+    }
+
+    client.process_new_packets().unwrap();
+    check_read(&mut client.reader(), &big_data);
+}
+
 fn check_client_max_fragment_size(size: usize) -> Option<Error> {
     let mut client_config = make_client_config(KeyType::Ed25519);
     client_config.max_fragment_size = Some(size);
