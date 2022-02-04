@@ -3,8 +3,6 @@ use crate::key;
 use crate::msgs::enums::{SignatureAlgorithm, SignatureScheme};
 
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
-use sec1::der::Decodable;
-use sec1::EcPrivateKey;
 
 use std::convert::TryFrom;
 use std::error::Error as StdError;
@@ -276,24 +274,10 @@ impl EcdsaSigningKey {
         sigalg: &'static signature::EcdsaSigningAlgorithm,
     ) -> Result<Self, ()> {
         EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
+            .or_else(|_| EcdsaKeyPair::from_der(sigalg, &der.0))
             .map(|kp| Self {
                 key: Arc::new(kp),
                 scheme,
-            })
-            .or_else(|_| match EcPrivateKey::from_der(&der.0) {
-                Ok(EcPrivateKey {
-                    private_key,
-                    public_key: Some(public_key),
-                    ..
-                }) => {
-                    EcdsaKeyPair::from_private_key_and_public_key(sigalg, private_key, public_key)
-                        .map(|kp| Self {
-                            key: Arc::new(kp),
-                            scheme,
-                        })
-                        .map_err(|_| ())
-                }
-                _ => Err(()),
             })
             .map_err(|_| ())
     }

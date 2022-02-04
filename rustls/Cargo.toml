@@ -16,7 +16,6 @@ log = { version = "0.4.4", optional = true }
 ring = "0.16.20"
 sct = "0.7.0"
 webpki = { version = "0.22.0", features = ["alloc", "std"] }
-sec1 = "0.2.1"
 
 [features]
 default = ["logging", "tls12"]
