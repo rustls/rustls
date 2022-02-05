@@ -3687,6 +3687,7 @@ fn test_client_mtu_reduction() {
 fn test_server_mtu_reduction() {
     let mut server_config = make_server_config(KeyType::Rsa);
     server_config.max_fragment_size = Some(64);
+    server_config.send_half_rtt_data = true;
     let (mut client, mut server) =
         make_pair_for_configs(make_client_config(KeyType::Rsa), server_config);
 
