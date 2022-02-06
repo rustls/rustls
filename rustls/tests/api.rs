@@ -3774,7 +3774,7 @@ use rustls::internal::msgs::{
 
 #[test]
 fn test_server_rejects_duplicate_sni_names() {
-    fn duplicate_sni_payload(msg: &mut Message) {
+    fn duplicate_sni_payload(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake(hs) = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
                 for mut ext in ch.extensions.iter_mut() {
@@ -3784,6 +3784,7 @@ fn test_server_rejects_duplicate_sni_names() {
                 }
             }
         }
+        Altered::InPlace
     }
 
     let (client, server) = make_pair(KeyType::Rsa);
@@ -3799,7 +3800,7 @@ fn test_server_rejects_duplicate_sni_names() {
 
 #[test]
 fn test_server_rejects_empty_sni_extension() {
-    fn empty_sni_payload(msg: &mut Message) {
+    fn empty_sni_payload(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake(hs) = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
                 for mut ext in ch.extensions.iter_mut() {
@@ -3809,6 +3810,7 @@ fn test_server_rejects_empty_sni_extension() {
                 }
             }
         }
+        Altered::InPlace
     }
 
     let (client, server) = make_pair(KeyType::Rsa);
@@ -3824,7 +3826,7 @@ fn test_server_rejects_empty_sni_extension() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    fn different_kx_group(msg: &mut Message) {
+    fn different_kx_group(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake(hs) = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
                 for mut ext in ch.extensions.iter_mut() {
@@ -3837,6 +3839,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
                 }
             }
         }
+        Altered::InPlace
     }
 
     let (client, server) = make_pair(KeyType::Rsa);
@@ -3846,6 +3849,31 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
         server.process_new_packets(),
         Err(Error::PeerIncompatibleError(
             "no kx group overlap with client".into()
+        ))
+    );
+}
+
+#[test]
+fn test_client_rejects_illegal_tls13_ccs() {
+    fn corrupt_ccs(msg: &mut Message) -> Altered {
+        if let MessagePayload::ChangeCipherSpec(_) = &mut msg.payload {
+            println!("seen CCS {:?}", msg);
+            return Altered::Raw(vec![0x14, 0x03, 0x03, 0x00, 0x02, 0x01, 0x02]);
+        }
+        Altered::InPlace
+    }
+
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    let (mut server, mut client) = (server.into(), client.into());
+
+    transfer_altered(&mut server, corrupt_ccs, &mut client);
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::PeerMisbehavedError(
+            "illegal middlebox CCS received".into()
         ))
     );
 }
