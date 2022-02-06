@@ -2,7 +2,7 @@
 
 use ring::io::der;
 
-fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
+pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
     let len = bytes.len();
 
     if len <= 0x7f {
