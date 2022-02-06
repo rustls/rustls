@@ -131,9 +131,16 @@ pub fn transfer_eof(conn: &mut (impl DerefMut + Deref<Target = ConnectionCommon<
     assert_eq!(sz, 0);
 }
 
+pub enum Altered {
+    /// message has been edited in-place (or is unchanged)
+    InPlace,
+    /// send these raw bytes instead of the message.
+    Raw(Vec<u8>),
+}
+
 pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
 where
-    F: Fn(&mut Message),
+    F: Fn(&mut Message) -> Altered,
 {
     let mut buf = [0u8; 262144];
     let mut total = 0;
@@ -152,10 +159,13 @@ where
         while reader.any_left() {
             let message = OpaqueMessage::read(&mut reader).unwrap();
             let mut message = Message::try_from(message.into_plain_message()).unwrap();
-            filter(&mut message);
-            let message_enc = PlainMessage::from(message)
-                .into_unencrypted_opaque()
-                .encode();
+            let message_enc = match filter(&mut message) {
+                Altered::InPlace => PlainMessage::from(message)
+                    .into_unencrypted_opaque()
+                    .encode(),
+                Altered::Raw(data) => data,
+            };
+
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
             let len = right
                 .read_tls(message_enc_reader)

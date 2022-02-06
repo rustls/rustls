@@ -380,6 +380,13 @@ impl ConnectionRandoms {
 
 // --- Common (to client and server) connection functions ---
 
+fn is_valid_ccs(msg: &OpaqueMessage) -> bool {
+    // nb. this is prior to the record layer, so is unencrypted. see
+    // third paragraph of section 5 in RFC8446.
+    msg.typ == ContentType::ChangeCipherSpec
+        && msg.payload.0 == &[0x01]
+}
+
 enum Limit {
     Yes,
     No,
@@ -542,18 +549,21 @@ impl<Data> ConnectionCommon<Data> {
         msg: OpaqueMessage,
         state: Box<dyn State<Data>>,
     ) -> Result<Box<dyn State<Data>>, Error> {
-        // pass message to handshake state machine if any of these are true:
-        // - TLS1.2 (where it's part of the state machine),
-        // - prior to determining the version (it's illegal as a first message)
-        // - if it's not a CCS at all
-        // - if we've finished the handshake
+        // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
             && !self
                 .common_state
                 .may_receive_application_data
             && self.common_state.is_tls13()
         {
-            if self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS {
+            if !is_valid_ccs(&msg)
+                || self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS
+            {
+                // "An implementation which receives any other change_cipher_spec value or
+                //  which receives a protected change_cipher_spec record MUST abort the
+                //  handshake with an "unexpected_message" alert."
+                self.common_state
+                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
                 return Err(Error::PeerMisbehavedError(
                     "illegal middlebox CCS received".into(),
                 ));
