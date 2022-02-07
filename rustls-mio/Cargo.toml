@@ -17,7 +17,7 @@ quic = ["rustls/quic"]
 [dependencies]
 log = { version = "0.4.4", optional = true }
 rustls = { path = "../rustls" }
-rustls-pemfile = "0.2.0"
+rustls-pemfile = "0.3.0"
 sct = "0.7"
 
 [dev-dependencies]
