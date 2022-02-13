@@ -383,8 +383,7 @@ impl ConnectionRandoms {
 fn is_valid_ccs(msg: &OpaqueMessage) -> bool {
     // nb. this is prior to the record layer, so is unencrypted. see
     // third paragraph of section 5 in RFC8446.
-    msg.typ == ContentType::ChangeCipherSpec
-        && msg.payload.0 == &[0x01]
+    msg.typ == ContentType::ChangeCipherSpec && msg.payload.0 == [0x01]
 }
 
 enum Limit {
