@@ -21,6 +21,19 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.3 (2022-02-13)
+  - Support loading ECDSA keys in SEC1 format.
+  - Support receipt of 0-RTT "early data" in TLS1.3 servers.  It is not enabled
+    by default; opt in by setting `ServerConfig::max_early_data_size` to a non-zero
+    value.
+  - Support sending of data with the first server flight.  This is also not
+    enabled by default either: opt in by setting `ServerConfig::send_half_rtt_data`.
+  - Support `read_buf` interface when compiled with nightly. This means
+    data can be safely read out of a rustls connection into a buffer without
+    the buffer requiring initialisation first.  Set the `read_buf` feature to
+    use this.
+  - Improve efficiency when writing vectors of TLS types.
+  - Reduce copying and improve efficiency in TLS1.2 handshake.
 * 0.20.2 (2021-11-21)
   - Fix `CipherSuite::as_str()` value (as introduced in 0.20.1).
 * 0.20.1 (2021-11-14)
