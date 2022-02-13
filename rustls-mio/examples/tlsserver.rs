@@ -526,6 +526,7 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
         match rustls_pemfile::read_one(&mut reader).expect("cannot parse private key .pem file") {
             Some(rustls_pemfile::Item::RSAKey(key)) => return rustls::PrivateKey(key),
             Some(rustls_pemfile::Item::PKCS8Key(key)) => return rustls::PrivateKey(key),
+            Some(rustls_pemfile::Item::ECKey(key)) => return rustls::PrivateKey(key),
             None => break,
             _ => {}
         }
