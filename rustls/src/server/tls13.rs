@@ -537,7 +537,7 @@ mod client_hello {
         }
 
         #[cfg(feature = "quic")]
-        {
+        if cx.common.is_quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
             cx.common.quic.early_secret = early_data_client_key;
