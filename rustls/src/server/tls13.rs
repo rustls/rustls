@@ -422,7 +422,10 @@ mod client_hello {
                     key_schedule: key_schedule_traffic,
                     send_ticket: self.send_ticket,
                 }))
-            } else if doing_early_data == EarlyDataDecision::Accepted {
+            } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.is_quic() {
+                // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
+                // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
+                // connection error of type PROTOCOL_VIOLATION.
                 Ok(Box::new(ExpectEarlyData {
                     config: self.config,
                     transcript: self.transcript,
