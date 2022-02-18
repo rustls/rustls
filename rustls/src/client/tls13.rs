@@ -164,7 +164,7 @@ pub(super) fn handle_server_hello(
     }
 
     #[cfg(feature = "quic")]
-    {
+    if cx.common.is_quic() {
         cx.common.quic.hs_secrets = Some(quic::Secrets::new(client_key, server_key, suite, true));
     }
 
@@ -315,7 +315,7 @@ pub(super) fn derive_early_traffic_secret(
         .set_message_encrypter(resuming_suite.derive_encrypter(&client_early_traffic_secret));
 
     #[cfg(feature = "quic")]
-    {
+    if cx.common.is_quic() {
         cx.common.quic.early_secret = Some(client_early_traffic_secret);
     }
 
