@@ -21,6 +21,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.4 (2022-02-19)
+  - Correct regression in QUIC 0-RTT support.
 * 0.20.3 (2022-02-13)
   - Support loading ECDSA keys in SEC1 format.
   - Support receipt of 0-RTT "early data" in TLS1.3 servers.  It is not enabled
