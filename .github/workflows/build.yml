@@ -3,7 +3,11 @@ name: rustls
 permissions:
   contents: read
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 18 * * *'
 
 jobs:
   build:
