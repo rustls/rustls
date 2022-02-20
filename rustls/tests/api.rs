@@ -1,4 +1,5 @@
 //! Assorted public API tests.
+use std::cell::RefCell;
 use std::convert::TryFrom;
 #[cfg(feature = "tls12")]
 use std::convert::TryInto;
@@ -9,6 +10,8 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+
+use log;
 
 use rustls::client::ResolvesClientCert;
 #[cfg(feature = "quic")]
@@ -3985,4 +3988,105 @@ fn test_acceptor() {
         .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
         .unwrap();
     assert!(acceptor.accept().is_err());
+}
+
+#[derive(Default, Debug)]
+struct LogCounts {
+    trace: usize,
+    debug: usize,
+    info: usize,
+    warn: usize,
+    error: usize,
+}
+
+impl LogCounts {
+    fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn add(&mut self, level: log::Level) {
+        match level {
+            log::Level::Trace => self.trace += 1,
+            log::Level::Debug => self.debug += 1,
+            log::Level::Info => self.info += 1,
+            log::Level::Warn => self.warn += 1,
+            log::Level::Error => self.error += 1,
+        }
+    }
+}
+
+thread_local!(static COUNTS: RefCell<LogCounts> = RefCell::new(LogCounts::new()));
+
+struct CountingLogger;
+
+static LOGGER: CountingLogger = CountingLogger;
+
+impl CountingLogger {
+    fn install() {
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Trace);
+    }
+
+    fn reset() {
+        COUNTS.with(|c| {
+            c.borrow_mut().reset();
+        });
+    }
+}
+
+impl log::Log for CountingLogger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        println!("logging at {:?}: {:?}", record.level(), record.args());
+
+        COUNTS.with(|c| {
+            c.borrow_mut().add(record.level());
+        });
+    }
+
+    fn flush(&self) {}
+}
+
+#[test]
+fn test_no_warning_logging_during_successful_sessions() {
+    CountingLogger::install();
+    CountingLogger::reset();
+
+    for kt in ALL_KEY_TYPES.iter() {
+        for version in rustls::ALL_VERSIONS {
+            let client_config = make_client_config_with_versions(*kt, &[version]);
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config, make_server_config(*kt));
+            do_handshake(&mut client, &mut server);
+        }
+    }
+
+    if cfg!(feature = "logging") {
+        COUNTS.with(|c| {
+            println!("After tests: {:?}", c.borrow());
+            assert_eq!(c.borrow().warn, 0);
+            assert_eq!(c.borrow().error, 0);
+            assert_eq!(c.borrow().info, 0);
+            assert!(c.borrow().trace > 0);
+            assert!(c.borrow().debug > 0);
+        });
+    } else {
+        COUNTS.with(|c| {
+            println!("After tests: {:?}", c.borrow());
+            assert_eq!(c.borrow().warn, 0);
+            assert_eq!(c.borrow().error, 0);
+            assert_eq!(c.borrow().info, 0);
+            assert_eq!(c.borrow().trace, 0);
+            assert_eq!(c.borrow().debug, 0);
+        });
+    }
 }
