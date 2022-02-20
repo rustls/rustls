@@ -550,13 +550,13 @@ struct ExpectServerDoneOrCertReq {
 
 impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        if require_handshake_msg!(
-            m,
-            HandshakeType::CertificateRequest,
-            HandshakePayload::CertificateRequest
-        )
-        .is_ok()
-        {
+        if matches!(
+            m.payload,
+            MessagePayload::Handshake(HandshakeMessagePayload {
+                payload: HandshakePayload::CertificateRequest(_),
+                ..
+            })
+        ) {
             Box::new(ExpectCertificateRequest {
                 config: self.config,
                 resuming_session: self.resuming_session,
