@@ -156,11 +156,13 @@ impl ResolvesServerCertUsingSni {
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
         let checked_name = webpki::DnsNameRef::try_from_ascii_str(name)
-            .map_err(|_| Error::General("Bad DNS name".into()))?;
+            .map_err(|_| Error::General("Bad DNS name".into()))?
+            .to_owned();
 
-        ck.cross_check_end_entity_cert(Some(checked_name))?;
+        ck.cross_check_end_entity_cert(Some(checked_name.as_ref()))?;
+        let as_str: &str = checked_name.as_ref().into();
         self.by_name
-            .insert(name.into(), Arc::new(ck));
+            .insert(as_str.to_string(), Arc::new(ck));
         Ok(())
     }
 }
