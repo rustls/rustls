@@ -553,7 +553,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             warn!("Server sent non-empty certreq context");
             cx.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+            return Err(Error::corrupt_message(ContentType::Handshake));
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
@@ -621,7 +621,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             warn!("certificate with non-empty context during handshake");
             cx.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+            return Err(Error::corrupt_message(ContentType::Handshake));
         }
 
         if cert_chain.any_entry_has_duplicate_extension()
@@ -1068,7 +1068,7 @@ impl ExpectTraffic {
             }
             _ => {
                 common.send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+                return Err(Error::corrupt_message(ContentType::Handshake));
             }
         }
 

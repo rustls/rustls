@@ -44,7 +44,7 @@ impl MessagePayload {
 
         parsed
             .filter(|_| !r.any_left())
-            .ok_or(Error::CorruptMessagePayload(typ))
+            .ok_or_else(|| Error::corrupt_message(typ))
     }
 
     pub fn content_type(&self) -> ContentType {

@@ -12,6 +12,8 @@ use std::time;
 use self::regex::Regex;
 use regex;
 
+pub const DEBUG_LOCATION_REPLACEMENT: &str = "TEST_PLACEHOLDER";
+
 use ring::rand::SecureRandom;
 
 pub struct DeleteFilesOnDrop {
@@ -326,8 +328,12 @@ impl TlsClient {
         let stdout_str = String::from_utf8_lossy(&output.stdout);
         let stderr_str = String::from_utf8_lossy(&output.stderr);
 
+        let location_regex = Regex::new(r"Location \{(.*?)\}").unwrap();
         for expect in &self.expect_output {
             let re = Regex::new(expect).unwrap();
+            // Replace the `Debug` form of `std::panic::Location` in errors with a constant to avoid
+            // code churn.
+            let stdout_str = location_regex.replace_all(&stdout_str, DEBUG_LOCATION_REPLACEMENT);
             if re.find(&stdout_str).is_none() {
                 println!("We expected to find '{}' in the following output:", expect);
                 println!("{:?}", output);
