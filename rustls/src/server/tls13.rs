@@ -1275,7 +1275,7 @@ impl ExpectTraffic {
             }
             _ => {
                 common.send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+                return Err(Error::corrupt_message(ContentType::Handshake));
             }
         }
 
