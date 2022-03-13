@@ -348,6 +348,30 @@ impl ServerCacheWithResumptionDelay {
     }
 }
 
+fn align_time() {
+    /* we don't have an injectable clock source in rustls' public api, and
+     * resumption timing is in seconds resolution, so tests that use
+     * resumption_delay tend to be flickery if the seconds time ticks
+     * during this.
+     *
+     * this function delays until a fresh second ticks, which alleviates
+     * this. gross!
+     */
+    use std::{thread, time};
+
+    fn sample() -> u64 {
+        time::SystemTime::now()
+            .duration_since(time::SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
+
+    let start_secs = sample();
+    while start_secs == sample() {
+        thread::sleep(time::Duration::from_millis(20));
+    }
+}
+
 impl rustls::server::StoresServerSessions for ServerCacheWithResumptionDelay {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         let mut ssv = persist::ServerSessionValue::read_bytes(&value).unwrap();
@@ -1026,6 +1050,7 @@ fn main() {
             }
             "-resumption-delay" => {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
+                align_time();
             }
 
             // defaults:
