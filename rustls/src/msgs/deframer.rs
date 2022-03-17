@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io;
 
@@ -16,12 +17,9 @@ pub struct MessageDeframer {
     /// the deframer cannot recover.
     pub desynced: bool,
 
-    /// A fixed-size buffer containing the currently-accumulating
-    /// TLS message.
-    buf: Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>,
-
-    /// What size prefix of `buf` is used.
-    used: usize,
+    /// Bytes left after the previous attempt to decode the read buffer.
+    /// A non-empty slice.
+    partial_msg: Option<Box<[u8]>>,
 }
 
 enum BufferContents {
@@ -42,92 +40,89 @@ impl Default for MessageDeframer {
     }
 }
 
+thread_local! {
+    static BUF: RefCell<Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>> =
+        RefCell::new(Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]))
+}
+
 impl MessageDeframer {
     pub fn new() -> Self {
         Self {
             frames: VecDeque::new(),
             desynced: false,
-            buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
-            used: 0,
+            partial_msg: None,
         }
     }
 
-    /// Read some bytes from `rd`, and add them to our internal
-    /// buffer.  If this means our internal buffer contains
-    /// full messages, decode them all.
+    /// Read some bytes from `rd` and combine them with the previously read ones.
+    /// If this means the buffer now contains full messages, decode them all.
     pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        // Try to do the largest reads possible.  Note that if
-        // we get a message with a length field out of range here,
-        // we do a zero length read.  That looks like an EOF to
-        // the next layer up, which is fine.
-        debug_assert!(self.used <= OpaqueMessage::MAX_WIRE_SIZE);
-        let new_bytes = rd.read(&mut self.buf[self.used..])?;
+        BUF.with(|buf| {
+            let buf = &mut buf.borrow_mut()[..];
+            let mut used = 0;
 
-        self.used += new_bytes;
-
-        loop {
-            match self.try_deframe_one() {
-                BufferContents::Invalid => {
-                    self.desynced = true;
-                    break;
-                }
-                BufferContents::Valid => continue,
-                BufferContents::Partial => break,
+            // Restore bytes left from the previous attempt to decode.
+            if let Some(partial_msg) = &self.partial_msg {
+                used = partial_msg.len();
+                buf[..used].copy_from_slice(partial_msg);
             }
-        }
 
-        Ok(new_bytes)
+            // Try to do the largest reads possible.  Note that if
+            // we get a message with a length field out of range here,
+            // we do a zero length read.  That looks like an EOF to
+            // the next layer up, which is fine.
+            debug_assert!(used <= OpaqueMessage::MAX_WIRE_SIZE);
+            let new_bytes = rd.read(&mut buf[used..])?;
+
+            used += new_bytes;
+            self.partial_msg = None;
+
+            // Decode full messages.
+            let mut data_left = &buf[..used];
+            loop {
+                match self.try_deframe_one(&mut data_left) {
+                    BufferContents::Invalid => {
+                        self.desynced = true;
+                        break;
+                    }
+                    BufferContents::Valid => continue,
+                    BufferContents::Partial => break,
+                }
+            }
+
+            // Save remaining bytes.
+            if !data_left.is_empty() {
+                self.partial_msg = Some(data_left.into());
+            }
+
+            Ok(new_bytes)
+        })
     }
 
     /// Returns true if we have messages for the caller
     /// to process, either whole messages in our output
     /// queue or partial messages in our buffer.
     pub fn has_pending(&self) -> bool {
-        !self.frames.is_empty() || self.used > 0
+        !self.frames.is_empty() || self.partial_msg.is_some()
     }
 
-    /// Does our `buf` contain a full message?  It does if it is big enough to
+    /// Does the `buf` contain a full message?  It does if it is big enough to
     /// contain a header, and that header has a length which falls within `buf`.
-    /// If so, deframe it and place the message onto the frames output queue.
-    fn try_deframe_one(&mut self) -> BufferContents {
+    /// If so, deframe it, adjust `buf` and place the message onto the frames output queue.
+    fn try_deframe_one(&mut self, buf: &mut &[u8]) -> BufferContents {
         // Try to decode a message off the front of buf.
-        let mut rd = codec::Reader::init(&self.buf[..self.used]);
+        let mut rd = codec::Reader::init(buf);
 
         match OpaqueMessage::read(&mut rd) {
             Ok(m) => {
-                let used = rd.used();
                 self.frames.push_back(m);
-                self.buf_consume(used);
+                *buf = &buf[rd.used()..];
                 BufferContents::Valid
             }
             Err(MessageError::TooShortForHeader) | Err(MessageError::TooShortForLength) => {
                 BufferContents::Partial
             }
             Err(_) => BufferContents::Invalid,
-        }
-    }
-
-    #[allow(clippy::comparison_chain)]
-    fn buf_consume(&mut self, taken: usize) {
-        if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken == self.used {
-            self.used = 0;
         }
     }
 }
