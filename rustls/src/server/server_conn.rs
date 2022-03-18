@@ -162,10 +162,12 @@ impl<'a> ClientHello<'a> {
         })
     }
 
+    /// Get cipher suites.
     pub fn cipher_suites(&self) -> &[CipherSuite] {
         self.cipher_suites
     }
 
+    /// Get supported cipher suites
     pub fn supported_cipher_suites(&self) -> Vec<SupportedCipherSuite> {
         self.cipher_suites()
             .iter()
