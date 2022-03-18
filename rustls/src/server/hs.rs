@@ -321,6 +321,7 @@ impl ExpectClientHello {
                 &cx.data.sni,
                 &sig_schemes,
                 client_hello.get_alpn_extension(),
+                &client_hello.cipher_suites,
             );
 
             let certkey = self
