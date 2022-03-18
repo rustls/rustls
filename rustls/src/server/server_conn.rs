@@ -126,6 +126,7 @@ impl<'a> ClientHello<'a> {
         trace!("sni {:?}", server_name);
         trace!("sig schemes {:?}", signature_schemes);
         trace!("alpn protocols {:?}", alpn);
+        trace!("cipher suites {:?}", cipher_suites);
 
         ClientHello {
             server_name,
