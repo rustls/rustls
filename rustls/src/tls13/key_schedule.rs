@@ -27,16 +27,17 @@ enum SecretKind {
 
 impl SecretKind {
     fn to_bytes(self) -> &'static [u8] {
+        use self::SecretKind::*;
         match self {
-            SecretKind::ResumptionPskBinderKey => b"res binder",
-            SecretKind::ClientEarlyTrafficSecret => b"c e traffic",
-            SecretKind::ClientHandshakeTrafficSecret => b"c hs traffic",
-            SecretKind::ServerHandshakeTrafficSecret => b"s hs traffic",
-            SecretKind::ClientApplicationTrafficSecret => b"c ap traffic",
-            SecretKind::ServerApplicationTrafficSecret => b"s ap traffic",
-            SecretKind::ExporterMasterSecret => b"exp master",
-            SecretKind::ResumptionMasterSecret => b"res master",
-            SecretKind::DerivedSecret => b"derived",
+            ResumptionPskBinderKey => b"res binder",
+            ClientEarlyTrafficSecret => b"c e traffic",
+            ClientHandshakeTrafficSecret => b"c hs traffic",
+            ServerHandshakeTrafficSecret => b"s hs traffic",
+            ClientApplicationTrafficSecret => b"c ap traffic",
+            ServerApplicationTrafficSecret => b"s ap traffic",
+            ExporterMasterSecret => b"exp master",
+            ResumptionMasterSecret => b"res master",
+            DerivedSecret => b"derived",
         }
     }
 

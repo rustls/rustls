@@ -2146,28 +2146,27 @@ pub enum HandshakePayload {
 
 impl HandshakePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        use self::HandshakePayload::*;
         match *self {
-            HandshakePayload::HelloRequest
-            | HandshakePayload::ServerHelloDone
-            | HandshakePayload::EndOfEarlyData => {}
-            HandshakePayload::ClientHello(ref x) => x.encode(bytes),
-            HandshakePayload::ServerHello(ref x) => x.encode(bytes),
-            HandshakePayload::HelloRetryRequest(ref x) => x.encode(bytes),
-            HandshakePayload::Certificate(ref x) => x.encode(bytes),
-            HandshakePayload::CertificateTLS13(ref x) => x.encode(bytes),
-            HandshakePayload::ServerKeyExchange(ref x) => x.encode(bytes),
-            HandshakePayload::ClientKeyExchange(ref x) => x.encode(bytes),
-            HandshakePayload::CertificateRequest(ref x) => x.encode(bytes),
-            HandshakePayload::CertificateRequestTLS13(ref x) => x.encode(bytes),
-            HandshakePayload::CertificateVerify(ref x) => x.encode(bytes),
-            HandshakePayload::NewSessionTicket(ref x) => x.encode(bytes),
-            HandshakePayload::NewSessionTicketTLS13(ref x) => x.encode(bytes),
-            HandshakePayload::EncryptedExtensions(ref x) => x.encode(bytes),
-            HandshakePayload::KeyUpdate(ref x) => x.encode(bytes),
-            HandshakePayload::Finished(ref x) => x.encode(bytes),
-            HandshakePayload::CertificateStatus(ref x) => x.encode(bytes),
-            HandshakePayload::MessageHash(ref x) => x.encode(bytes),
-            HandshakePayload::Unknown(ref x) => x.encode(bytes),
+            HelloRequest | ServerHelloDone | EndOfEarlyData => {}
+            ClientHello(ref x) => x.encode(bytes),
+            ServerHello(ref x) => x.encode(bytes),
+            HelloRetryRequest(ref x) => x.encode(bytes),
+            Certificate(ref x) => x.encode(bytes),
+            CertificateTLS13(ref x) => x.encode(bytes),
+            ServerKeyExchange(ref x) => x.encode(bytes),
+            ClientKeyExchange(ref x) => x.encode(bytes),
+            CertificateRequest(ref x) => x.encode(bytes),
+            CertificateRequestTLS13(ref x) => x.encode(bytes),
+            CertificateVerify(ref x) => x.encode(bytes),
+            NewSessionTicket(ref x) => x.encode(bytes),
+            NewSessionTicketTLS13(ref x) => x.encode(bytes),
+            EncryptedExtensions(ref x) => x.encode(bytes),
+            KeyUpdate(ref x) => x.encode(bytes),
+            Finished(ref x) => x.encode(bytes),
+            CertificateStatus(ref x) => x.encode(bytes),
+            MessageHash(ref x) => x.encode(bytes),
+            Unknown(ref x) => x.encode(bytes),
         }
     }
 }

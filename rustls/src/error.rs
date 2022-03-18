@@ -110,7 +110,7 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::InappropriateMessage {
+            Self::InappropriateMessage {
                 ref expect_types,
                 ref got_type,
             } => write!(
@@ -119,7 +119,7 @@ impl fmt::Display for Error {
                 got_type,
                 join::<ContentType>(expect_types)
             ),
-            Error::InappropriateHandshakeMessage {
+            Self::InappropriateHandshakeMessage {
                 ref expect_types,
                 ref got_type,
             } => write!(
@@ -128,39 +128,39 @@ impl fmt::Display for Error {
                 got_type,
                 join::<HandshakeType>(expect_types)
             ),
-            Error::CorruptMessagePayload(ref typ) => {
+            Self::CorruptMessagePayload(ref typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
-            Error::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
-            Error::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
-            Error::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            Error::InvalidCertificateEncoding => {
+            Self::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
+            Self::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
+            Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
+            Self::InvalidCertificateEncoding => {
                 write!(f, "invalid peer certificate encoding")
             }
-            Error::InvalidCertificateSignatureType => {
+            Self::InvalidCertificateSignatureType => {
                 write!(f, "invalid peer certificate signature type")
             }
-            Error::InvalidCertificateSignature => {
+            Self::InvalidCertificateSignature => {
                 write!(f, "invalid peer certificate signature")
             }
-            Error::InvalidCertificateData(ref reason) => {
+            Self::InvalidCertificateData(ref reason) => {
                 write!(f, "invalid peer certificate contents: {}", reason)
             }
-            Error::CorruptMessage => write!(f, "received corrupt message"),
-            Error::NoCertificatesPresented => write!(f, "peer sent no certificates"),
-            Error::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
-            Error::DecryptError => write!(f, "cannot decrypt peer's message"),
-            Error::EncryptError => write!(f, "cannot encrypt message"),
-            Error::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
-            Error::HandshakeNotComplete => write!(f, "handshake not complete"),
-            Error::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
-            Error::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
-            Error::FailedToGetCurrentTime => write!(f, "failed to get current time"),
-            Error::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
-            Error::BadMaxFragmentSize => {
+            Self::CorruptMessage => write!(f, "received corrupt message"),
+            Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
+            Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
+            Self::DecryptError => write!(f, "cannot decrypt peer's message"),
+            Self::EncryptError => write!(f, "cannot encrypt message"),
+            Self::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
+            Self::HandshakeNotComplete => write!(f, "handshake not complete"),
+            Self::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            Self::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
+            Self::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
+            Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
-            Error::General(ref err) => write!(f, "unexpected error: {}", err),
+            Self::General(ref err) => write!(f, "unexpected error: {}", err),
         }
     }
 }
