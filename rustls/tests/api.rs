@@ -617,6 +617,7 @@ struct ServerCheckCertResolve {
     expected_sni: Option<String>,
     expected_sigalgs: Option<Vec<SignatureScheme>>,
     expected_alpn: Option<Vec<Vec<u8>>>,
+    expected_cipher_suites: Option<Vec<CipherSuite>>,
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
@@ -626,6 +627,10 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             .is_empty()
         {
             panic!("no signature schemes shared by client");
+        }
+
+        if client_hello.cipher_suites().is_empty() {
+            panic!("no cipher suites shared by client");
         }
 
         if let Some(expected_sni) = &self.expected_sni {
@@ -654,6 +659,16 @@ impl ResolvesServerCert for ServerCheckCertResolve {
 
             for (got, wanted) in alpn.iter().zip(expected_alpn.iter()) {
                 assert_eq!(got, &wanted.as_slice());
+            }
+        }
+
+        if let Some(expected_cipher_suites) = &self.expected_cipher_suites {
+            if expected_cipher_suites != client_hello.cipher_suites() {
+                panic!(
+                    "unexpected cipher_suites (wanted {:?} got {:?})",
+                    self.expected_cipher_suites,
+                    client_hello.cipher_suites()
+                );
             }
         }
 
@@ -741,6 +756,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
 
     server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
         expected_sigalgs: Some(expected_sigalgs),
+        expected_cipher_suites: Some(vec![suite, CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV]),
         ..Default::default()
     });
 
