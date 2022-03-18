@@ -167,19 +167,6 @@ impl<'a> ClientHello<'a> {
     pub fn cipher_suites(&self) -> &[CipherSuite] {
         self.cipher_suites
     }
-
-    /// Get supported cipher suites
-    pub fn supported_cipher_suites(&self) -> Vec<SupportedCipherSuite> {
-        self.cipher_suites()
-            .iter()
-            .filter_map(|cs| {
-                crate::ALL_CIPHER_SUITES
-                    .iter()
-                    .find(|scs| scs.suite() == *cs)
-                    .copied()
-            })
-            .collect()
-    }
 }
 
 /// Common configuration for a set of server sessions.
