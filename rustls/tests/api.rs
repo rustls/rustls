@@ -641,13 +641,11 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         }
 
         if let Some(expected_sigalgs) = &self.expected_sigalgs {
-            if expected_sigalgs != client_hello.signature_schemes() {
-                panic!(
-                    "unexpected signature schemes (wanted {:?} got {:?})",
-                    self.expected_sigalgs,
-                    client_hello.signature_schemes()
-                );
-            }
+            assert_eq!(
+                expected_sigalgs,
+                client_hello.signature_schemes(),
+                "unexpected signature schemes"
+            );
         }
 
         if let Some(expected_alpn) = &self.expected_alpn {
@@ -663,13 +661,11 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         }
 
         if let Some(expected_cipher_suites) = &self.expected_cipher_suites {
-            if expected_cipher_suites != client_hello.cipher_suites() {
-                panic!(
-                    "unexpected cipher_suites (wanted {:?} got {:?})",
-                    self.expected_cipher_suites,
-                    client_hello.cipher_suites()
-                );
-            }
+            assert_eq!(
+                expected_cipher_suites,
+                client_hello.cipher_suites(),
+                "unexpected cipher suites"
+            );
         }
 
         None
