@@ -41,7 +41,8 @@ impl Default for MessageDeframer {
 }
 
 thread_local! {
-    static BUF: RefCell<Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>> =
+    /// A shared buffer, to be used in read().
+    static READ_BUF: RefCell<Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>> =
         RefCell::new(Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]))
 }
 
@@ -57,7 +58,7 @@ impl MessageDeframer {
     /// Read some bytes from `rd` and combine them with the previously read ones.
     /// If this means the buffer now contains full messages, decode them all.
     pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        BUF.with(|buf| {
+        READ_BUF.with(|buf| {
             let buf = &mut buf.borrow_mut()[..];
             let mut used = 0;
 
