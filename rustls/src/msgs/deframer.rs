@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io;
 
@@ -17,9 +16,103 @@ pub struct MessageDeframer {
     /// the deframer cannot recover.
     pub desynced: bool,
 
-    /// Bytes left after the previous attempt to decode the read buffer.
-    /// A non-empty slice.
-    partial_msg: Option<Box<[u8]>>,
+    /// A fixed-size buffer containing the currently-accumulating TLS message.
+    buf: Option<Buf>,
+}
+
+impl Default for MessageDeframer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MessageDeframer {
+    pub fn new() -> Self {
+        Self {
+            frames: VecDeque::new(),
+            desynced: false,
+            buf: None,
+        }
+    }
+
+    /// Read some bytes from `rd`, and add them to our internal
+    /// buffer.  If this means our internal buffer contains
+    /// full messages, decode them all.
+    pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+        let buf = Self::get_or_init(&mut self.buf);
+
+        // Try to do the largest reads possible.  Note that if
+        // we get a message with a length field out of range here,
+        // we do a zero length read.  That looks like an EOF to
+        // the next layer up, which is fine.
+        debug_assert!(buf.used <= OpaqueMessage::MAX_WIRE_SIZE);
+        let frames = &mut self.frames;
+        let desynced = &mut self.desynced;
+        let res = rd
+            .read(&mut buf.buf[buf.used..])
+            .map(|new_bytes| {
+                buf.used += new_bytes;
+
+                loop {
+                    match buf.try_deframe_one() {
+                        BufferContents::Invalid => {
+                            *desynced = true;
+                            break;
+                        }
+                        BufferContents::Valid(m) => {
+                            frames.push_back(m);
+                            continue;
+                        }
+                        BufferContents::Partial => break,
+                    }
+                }
+
+                new_bytes
+            });
+
+        #[cfg(feature = "shared_bufs")]
+        if buf.used == 0 {
+            BUF_POOL.with(|v| *v.borrow_mut() = self.buf.take());
+        }
+
+        res
+    }
+
+    /// Returns true if we have messages for the caller
+    /// to process, either whole messages in our output
+    /// queue or partial messages in our buffer.
+    pub fn has_pending(&self) -> bool {
+        !self.frames.is_empty()
+            || self
+                .buf
+                .as_ref()
+                .map_or(false, |b| b.used != 0)
+    }
+
+    fn get_or_init(buf: &mut Option<Buf>) -> &mut Buf {
+        if let Some(b) = buf {
+            #[cfg(feature = "shared_bufs")]
+            debug_assert!(b.used > 0);
+            
+            return b;
+        }
+
+        #[cfg(feature = "shared_bufs")]
+        if let Some(mut b) = BUF_POOL.with(|v| v.borrow_mut().take()) {
+            debug_assert_eq!(b.used, 0);
+            b.used = 0;
+            return buf.insert(b);
+        }
+
+        buf.insert(Buf::new())
+    }
+}
+
+#[cfg(feature = "shared_bufs")]
+thread_local! {
+    /// A shared pool containing at most one item. A `MessageDeframer` takes the buffer from it
+    /// when it needs to read data and returns the buffer back afterwards.
+    static BUF_POOL: std::cell::RefCell<Option<Buf>> = std::cell::RefCell::new(None)
 }
 
 enum BufferContents {
@@ -30,100 +123,67 @@ enum BufferContents {
     /// Perhaps totally empty!
     Partial,
 
-    /// Contains a valid frame as a prefix.
-    Valid,
+    /// Contained a valid frame as a prefix. May contain more data.
+    Valid(OpaqueMessage),
 }
 
-impl Default for MessageDeframer {
-    fn default() -> Self {
-        Self::new()
-    }
+struct Buf {
+    /// The currently-accumulating TLS message.
+    buf: Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>,
+
+    /// What size prefix of `buf` is used.
+    used: usize,
 }
 
-thread_local! {
-    /// A shared buffer, to be used in read().
-    static READ_BUF: RefCell<Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>> =
-        RefCell::new(Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]))
-}
-
-impl MessageDeframer {
-    pub fn new() -> Self {
+impl Buf {
+    fn new() -> Self {
         Self {
-            frames: VecDeque::new(),
-            desynced: false,
-            partial_msg: None,
+            buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
+            used: 0,
         }
     }
 
-    /// Read some bytes from `rd` and combine them with the previously read ones.
-    /// If this means the buffer now contains full messages, decode them all.
-    pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        READ_BUF.with(|buf| {
-            let buf = &mut buf.borrow_mut()[..];
-            let mut used = 0;
-
-            // Restore bytes left from the previous attempt to decode.
-            if let Some(partial_msg) = &self.partial_msg {
-                used = partial_msg.len();
-                buf[..used].copy_from_slice(partial_msg);
-            }
-
-            // Try to do the largest reads possible.  Note that if
-            // we get a message with a length field out of range here,
-            // we do a zero length read.  That looks like an EOF to
-            // the next layer up, which is fine.
-            debug_assert!(used <= OpaqueMessage::MAX_WIRE_SIZE);
-            let new_bytes = rd.read(&mut buf[used..])?;
-
-            used += new_bytes;
-            self.partial_msg = None;
-
-            // Decode full messages.
-            let mut data_left = &buf[..used];
-            loop {
-                match self.try_deframe_one(&mut data_left) {
-                    BufferContents::Invalid => {
-                        self.desynced = true;
-                        break;
-                    }
-                    BufferContents::Valid => continue,
-                    BufferContents::Partial => break,
-                }
-            }
-
-            // Save remaining bytes.
-            if !data_left.is_empty() {
-                self.partial_msg = Some(data_left.into());
-            }
-
-            Ok(new_bytes)
-        })
-    }
-
-    /// Returns true if we have messages for the caller
-    /// to process, either whole messages in our output
-    /// queue or partial messages in our buffer.
-    pub fn has_pending(&self) -> bool {
-        !self.frames.is_empty() || self.partial_msg.is_some()
-    }
-
-    /// Does the `buf` contain a full message?  It does if it is big enough to
+    /// Does our `buf` contain a full message?  It does if it is big enough to
     /// contain a header, and that header has a length which falls within `buf`.
-    /// If so, deframe it, adjust `buf` and place the message onto the frames output queue.
-    fn try_deframe_one(&mut self, buf: &mut &[u8]) -> BufferContents {
+    /// If so, deframe and return it.
+    fn try_deframe_one(&mut self) -> BufferContents {
         // Try to decode a message off the front of buf.
-        let mut rd = codec::Reader::init(buf);
+        let mut rd = codec::Reader::init(&self.buf[..self.used]);
 
         match OpaqueMessage::read(&mut rd) {
             Ok(m) => {
-                self.frames.push_back(m);
-                *buf = &buf[rd.used()..];
-                BufferContents::Valid
+                let used = rd.used();
+                self.buf_consume(used);
+                BufferContents::Valid(m)
             }
             Err(MessageError::TooShortForHeader) | Err(MessageError::TooShortForLength) => {
                 BufferContents::Partial
             }
             Err(_) => BufferContents::Invalid,
+        }
+    }
+
+    #[allow(clippy::comparison_chain)]
+    fn buf_consume(&mut self, taken: usize) {
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken == self.used {
+            self.used = 0;
         }
     }
 }
