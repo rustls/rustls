@@ -778,6 +778,11 @@ pub trait ServerQuicExt {
         let ext = match quic_version {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
+            _ => {
+                return Err(Error::General(
+                    "QUIC unsupported version".into(),
+                ));
+            }
         };
         let mut new = ServerConnection::from_config(config, vec![ext])?;
         new.inner.common_state.protocol = Protocol::Quic;

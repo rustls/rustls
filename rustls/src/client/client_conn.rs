@@ -603,6 +603,11 @@ pub trait ClientQuicExt {
         let ext = match quic_version {
             quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             quic::Version::V1 => ClientExtension::TransportParameters(params),
+            _ => {
+                return Err(Error::General(
+                    "QUIC unsupported version".into(),
+                ));
+            }
         };
 
         ClientConnection::new_inner(config, name, vec![ext], Protocol::Quic)

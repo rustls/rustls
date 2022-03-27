@@ -474,6 +474,8 @@ fn nonce_for(packet_number: u64, iv: &Iv) -> ring::aead::Nonce {
 #[non_exhaustive]
 #[derive(Clone, Copy)]
 pub enum Version {
+    /// Draft versions 23 till 28 and 0xfaceb002
+    V1Draft23,
     /// Draft versions 29, 30, 31 and 32
     V1Draft,
     /// First stable RFC
@@ -483,6 +485,11 @@ pub enum Version {
 impl Version {
     fn initial_salt(self) -> &'static [u8; 20] {
         match self {
+            Self::V1Draft23 => &[
+                // https://datatracker.ietf.org/doc/html/draft-ietf-quic-tls-23#section-5.2
+                0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7, 0xd2, 0x43, 0x2b, 0xb4,
+                0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02,
+            ],
             Self::V1Draft => &[
                 // https://datatracker.ietf.org/doc/html/draft-ietf-quic-tls-32#section-5.2
                 0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61,
