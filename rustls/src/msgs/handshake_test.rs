@@ -1202,3 +1202,11 @@ fn cannot_decode_huge_certificate() {
     buf[6] = 0x01;
     assert!(HandshakeMessagePayload::read_bytes(&buf).is_none());
 }
+
+#[test]
+fn can_decode_server_hello_from_api_devicecheck_apple_com() {
+    let data = include_bytes!("hello-api.devicecheck.apple.com.bin");
+    let mut r = Reader::init(data);
+    let hm = HandshakeMessagePayload::read(&mut r).unwrap();
+    println!("msg: {:?}", hm);
+}

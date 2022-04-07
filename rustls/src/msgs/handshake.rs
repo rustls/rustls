@@ -1214,7 +1214,10 @@ impl Codec for ServerHelloPayload {
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);
-        codec::encode_vec_u16(bytes, &self.extensions);
+
+        if !self.extensions.is_empty() {
+            codec::encode_vec_u16(bytes, &self.extensions);
+        }
     }
 
     // minus version and random, which have already been read.
@@ -1222,7 +1225,16 @@ impl Codec for ServerHelloPayload {
         let session_id = SessionID::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
-        let extensions = codec::read_vec_u16::<ServerExtension>(r)?;
+
+        // RFC5246:
+        // "The presence of extensions can be detected by determining whether
+        //  there are bytes following the compression_method field at the end of
+        //  the ServerHello."
+        let extensions = if r.any_left() {
+            codec::read_vec_u16::<ServerExtension>(r)?
+        } else {
+            vec![]
+        };
 
         let ret = Self {
             legacy_version: ProtocolVersion::Unknown(0),
