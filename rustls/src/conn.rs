@@ -478,11 +478,27 @@ impl<Data> ConnectionCommon<Data> {
                 return Ok((rdlen, wrlen));
             }
 
-            if !eof && self.wants_read() {
-                match self.read_tls(io)? {
-                    0 => eof = true,
-                    n => rdlen += n,
-                }
+             while !eof && self.wants_read() {
+                debug!("read_tls");
+                match self.read_tls(io) {
+                    Ok(0) => {
+                        eof = true;
+                        debug!("eof");
+                        break;
+                    }
+                    Ok(n) => {
+                        rdlen += n;
+                        debug!("read {} bytes", n);
+                        break;
+                    }
+                    Err(ref err) if err.kind() == io::ErrorKind::Interrupted => {
+                        // nothing to do
+                        debug!("complete_io: read interrupted");
+                    }
+                    Err(err) => {
+                        return Err(err);
+                    }
+                };
             }
 
             match self.process_new_packets() {
