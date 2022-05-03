@@ -302,7 +302,12 @@ impl ServerCertVerifier for WebPkiVerifier {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
-        let ServerName::DnsName(dns_name) = server_name;
+        let dns_name = match server_name {
+            ServerName::DnsName(dns_name) => dns_name,
+            ServerName::IpAddress(_) => {
+                return Err(Error::UnsupportedNameType);
+            }
+        };
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
