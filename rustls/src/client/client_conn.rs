@@ -23,6 +23,7 @@ use crate::quic;
 use std::convert::TryFrom;
 use std::error::Error as StdError;
 use std::marker::PhantomData;
+use std::net::IpAddr;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{fmt, io, mem};
@@ -189,9 +190,8 @@ impl ClientConfig {
 /// Encodes ways a client can know the expected name of the server.
 ///
 /// This currently covers knowing the DNS name of the server, but
-/// will be extended in the future to knowing the IP address of the
-/// server, as well as supporting privacy-preserving names for the
-/// server ("ECH").  For this reason this enum is `non_exhaustive`.
+/// will be extended in the future to supporting privacy-preserving names
+/// for the server ("ECH").  For this reason this enum is `non_exhaustive`.
 ///
 /// # Making one
 ///
@@ -215,6 +215,10 @@ pub enum ServerName {
     /// is sent in the TLS Server Name Indication (SNI)
     /// extension.
     DnsName(verify::DnsName),
+
+    /// The server is identified by an IP address. SNI is not
+    /// done.
+    IpAddress(IpAddr),
 }
 
 impl ServerName {
@@ -224,6 +228,7 @@ impl ServerName {
     pub(crate) fn for_sni(&self) -> Option<webpki::DnsNameRef> {
         match self {
             Self::DnsName(dns_name) => Some(dns_name.0.as_ref()),
+            Self::IpAddress(_) => None,
         }
     }
 
@@ -231,17 +236,32 @@ impl ServerName {
     pub(crate) fn encode(&self) -> Vec<u8> {
         enum UniqueTypeCode {
             DnsName = 0x01,
+            IpAddr = 0x02,
         }
 
-        let Self::DnsName(dns_name) = self;
-        let bytes = dns_name.0.as_ref();
+        match self {
+            Self::DnsName(dns_name) => {
+                let bytes = dns_name.0.as_ref();
 
-        let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
-        r.push(UniqueTypeCode::DnsName as u8);
-        r.push(bytes.as_ref().len() as u8);
-        r.extend_from_slice(bytes.as_ref());
+                let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
+                r.push(UniqueTypeCode::DnsName as u8);
+                r.push(bytes.as_ref().len() as u8);
+                r.extend_from_slice(bytes.as_ref());
 
-        r
+                r
+            }
+            Self::IpAddress(address) => {
+                let string = address.to_string();
+                let bytes = string.as_bytes();
+
+                let mut r = Vec::with_capacity(2 + bytes.len());
+                r.push(UniqueTypeCode::IpAddr as u8);
+                r.push(bytes.len() as u8);
+                r.extend_from_slice(bytes);
+
+                r
+            }
+        }
     }
 }
 
@@ -250,9 +270,13 @@ impl ServerName {
 impl TryFrom<&str> for ServerName {
     type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
+        trace!("in try_from: {s}");
         match webpki::DnsNameRef::try_from_ascii_str(s) {
             Ok(dns) => Ok(Self::DnsName(verify::DnsName(dns.into()))),
-            Err(webpki::InvalidDnsNameError) => Err(InvalidDnsNameError),
+            Err(webpki::InvalidDnsNameError) => match s.parse() {
+                Ok(ip) => Ok(Self::IpAddress(ip)),
+                Err(_) => Err(InvalidDnsNameError),
+            },
         }
     }
 }
