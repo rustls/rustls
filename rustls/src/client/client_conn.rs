@@ -270,7 +270,6 @@ impl ServerName {
 impl TryFrom<&str> for ServerName {
     type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        trace!("in try_from: {s}");
         match webpki::DnsNameRef::try_from_ascii_str(s) {
             Ok(dns) => Ok(Self::DnsName(verify::DnsName(dns.into()))),
             Err(webpki::InvalidDnsNameError) => match s.parse() {
