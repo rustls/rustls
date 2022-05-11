@@ -102,8 +102,10 @@ mod client_hello {
             psk: &[u8],
             binder: &[u8],
         ) -> bool {
-            let binder_plaintext = match client_hello.payload {
-                MessagePayload::Handshake(ref hmp) => hmp.get_encoding_for_binder_signing(),
+            let binder_plaintext = match &client_hello.payload {
+                MessagePayload::Handshake { parsed, .. } => {
+                    parsed.get_encoding_for_binder_signing()
+                }
                 _ => unreachable!(),
             };
 
@@ -473,7 +475,7 @@ mod client_hello {
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ServerHello,
                 payload: HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -581,7 +583,7 @@ mod client_hello {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::HelloRetryRequest,
                 payload: HandshakePayload::HelloRetryRequest(req),
             }),
@@ -682,7 +684,7 @@ mod client_hello {
 
         let ee = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::EncryptedExtensions,
                 payload: HandshakePayload::EncryptedExtensions(ep.exts),
             }),
@@ -731,7 +733,7 @@ mod client_hello {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateRequest,
                 payload: HandshakePayload::CertificateRequestTLS13(cr),
             }),
@@ -781,7 +783,7 @@ mod client_hello {
         let cert_body = CertificatePayloadTLS13::new(cert_entries);
         let c = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
                 payload: HandshakePayload::CertificateTLS13(cert_body),
             }),
@@ -811,7 +813,7 @@ mod client_hello {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateVerify,
                 payload: HandshakePayload::CertificateVerify(cv),
             }),
@@ -837,7 +839,7 @@ mod client_hello {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Finished,
                 payload: HandshakePayload::Finished(verify_data_payload),
             }),
@@ -1048,10 +1050,14 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     }
                 }
             }
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                typ: HandshakeType::EndOfEarlyData,
-                payload: HandshakePayload::EndOfEarlyData,
-            }) => {
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        typ: HandshakeType::EndOfEarlyData,
+                        payload: HandshakePayload::EndOfEarlyData,
+                    },
+                ..
+            } => {
                 cx.common
                     .record_layer
                     .set_message_decrypter(
@@ -1167,7 +1173,7 @@ impl ExpectFinished {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::NewSessionTicket,
                 payload: HandshakePayload::NewSessionTicketTLS13(payload),
             }),
@@ -1300,10 +1306,14 @@ impl State<ServerConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::KeyUpdate(key_update),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::KeyUpdate(key_update),
+                        ..
+                    },
                 ..
-            }) => self.handle_key_update(cx.common, &key_update)?,
+            } => self.handle_key_update(cx.common, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

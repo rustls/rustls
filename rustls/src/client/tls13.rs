@@ -483,10 +483,14 @@ struct ExpectCertificateOrCertReq {
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::CertificateTLS13(..),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::CertificateTLS13(..),
+                        ..
+                    },
                 ..
-            }) => Box::new(ExpectCertificate {
+            } => Box::new(ExpectCertificate {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -497,10 +501,14 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 client_auth: None,
             })
             .handle(cx, m),
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::CertificateRequestTLS13(..),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::CertificateRequestTLS13(..),
+                        ..
+                    },
                 ..
-            }) => Box::new(ExpectCertificateRequest {
+            } => Box::new(ExpectCertificateRequest {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -760,7 +768,7 @@ fn emit_certificate_tls13(
 
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
             payload: HandshakePayload::CertificateTLS13(cert_payload),
         }),
@@ -782,7 +790,7 @@ fn emit_certverify_tls13(
 
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
             payload: HandshakePayload::CertificateVerify(dss),
         }),
@@ -802,7 +810,7 @@ fn emit_finished_tls13(
 
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
             payload: HandshakePayload::Finished(verify_data_payload),
         }),
@@ -819,7 +827,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
 
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::EndOfEarlyData,
             payload: HandshakePayload::EndOfEarlyData,
         }),
@@ -1093,14 +1101,22 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::NewSessionTicketTLS13(ref new_ticket),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::NewSessionTicketTLS13(ref new_ticket),
+                        ..
+                    },
                 ..
-            }) => self.handle_new_ticket_tls13(cx, new_ticket)?,
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::KeyUpdate(ref key_update),
+            } => self.handle_new_ticket_tls13(cx, new_ticket)?,
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::KeyUpdate(ref key_update),
+                        ..
+                    },
                 ..
-            }) => self.handle_key_update(cx.common, key_update)?,
+            } => self.handle_key_update(cx.common, key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

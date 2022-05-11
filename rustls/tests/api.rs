@@ -14,6 +14,8 @@ use std::sync::Mutex;
 use log;
 
 use rustls::client::ResolvesClientCert;
+use rustls::internal::msgs::base::Payload;
+use rustls::internal::msgs::codec::Codec;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
@@ -3259,7 +3261,7 @@ mod test_quic {
 
         let client_hello = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ClientHello,
                 payload: HandshakePayload::ClientHello(ClientHelloPayload {
                     client_version: ProtocolVersion::TLSv1_3,
@@ -3327,7 +3329,7 @@ mod test_quic {
 
         let client_hello = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ClientHello,
                 payload: HandshakePayload::ClientHello(ClientHelloPayload {
                     client_version: ProtocolVersion::TLSv1_2,
@@ -3579,7 +3581,7 @@ fn test_client_does_not_offer_sha1() {
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 
             let client_hello = match msg.payload {
-                MessagePayload::Handshake(hs) => match hs.payload {
+                MessagePayload::Handshake { parsed, .. } => match parsed.payload {
                     HandshakePayload::ClientHello(ch) => ch,
                     _ => unreachable!(),
                 },
@@ -3843,14 +3845,16 @@ use rustls::internal::msgs::{
 #[test]
 fn test_server_rejects_duplicate_sni_names() {
     fn duplicate_sni_payload(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake(hs) = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::ServerName(snr) = &mut ext {
                         snr.push(snr[0].clone());
                     }
                 }
             }
+
+            *encoded = Payload::new(parsed.get_encoding());
         }
         Altered::InPlace
     }
@@ -3869,15 +3873,18 @@ fn test_server_rejects_duplicate_sni_names() {
 #[test]
 fn test_server_rejects_empty_sni_extension() {
     fn empty_sni_payload(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake(hs) = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::ServerName(snr) = &mut ext {
                         snr.clear();
                     }
                 }
             }
+
+            *encoded = Payload::new(parsed.get_encoding());
         }
+
         Altered::InPlace
     }
 
@@ -3895,8 +3902,8 @@ fn test_server_rejects_empty_sni_extension() {
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
     fn different_kx_group(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake(hs) = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut hs.payload {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::NamedGroups(ngs) = &mut ext {
                         ngs.clear();
@@ -3906,6 +3913,8 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
                     }
                 }
             }
+
+            *encoded = Payload::new(parsed.get_encoding());
         }
         Altered::InPlace
     }
