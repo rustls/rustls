@@ -479,7 +479,7 @@ impl<Data> ConnectionCommon<Data> {
             }
 
             while !eof && self.wants_read() {
-                let readSize = match self.read_tls(io) {
+                let read_size = match self.read_tls(io) {
                     Ok(0) => {
                         eof = true;
                         Some(0)
@@ -491,7 +491,7 @@ impl<Data> ConnectionCommon<Data> {
                     Err(ref err) if err.kind() == io::ErrorKind::Interrupted => None,// nothing to do
                     Err(err) => return Err(err),
                 };
-                if readSize.is_some() {
+                if read_size.is_some() {
                     break;
                 }
             }
