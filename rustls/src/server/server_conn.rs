@@ -599,7 +599,8 @@ impl Accepted {
 
     fn client_hello_payload(message: &Message) -> &ClientHelloPayload {
         match &message.payload {
-            crate::msgs::message::MessagePayload::Handshake(inner) => match &inner.payload {
+            crate::msgs::message::MessagePayload::Handshake { parsed, .. } => match &parsed.payload
+            {
                 crate::msgs::handshake::HandshakePayload::ClientHello(ch) => ch,
                 _ => unreachable!(),
             },

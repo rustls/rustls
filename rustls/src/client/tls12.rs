@@ -267,10 +267,14 @@ struct ExpectCertificateStatusOrServerKx {
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::ServerKeyExchange(..),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::ServerKeyExchange(..),
+                        ..
+                    },
                 ..
-            }) => Box::new(ExpectServerKx {
+            } => Box::new(ExpectServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
@@ -287,10 +291,14 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m),
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::CertificateStatus(..),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::CertificateStatus(..),
+                        ..
+                    },
                 ..
-            }) => Box::new(ExpectCertificateStatus {
+            } => Box::new(ExpectCertificateStatus {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
@@ -433,7 +441,7 @@ fn emit_certificate(
 ) {
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
             payload: HandshakePayload::Certificate(cert_chain),
         }),
@@ -451,7 +459,7 @@ fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pubke
 
     let ckx = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::ClientKeyExchange,
             payload: HandshakePayload::ClientKeyExchange(pubkey),
         }),
@@ -476,7 +484,7 @@ fn emit_certverify(
 
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
             payload: HandshakePayload::CertificateVerify(body),
         }),
@@ -507,7 +515,7 @@ fn emit_finished(
 
     let f = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::Handshake(HandshakeMessagePayload {
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::Finished,
             payload: HandshakePayload::Finished(verify_data_payload),
         }),
@@ -552,10 +560,13 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         if matches!(
             m.payload,
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::CertificateRequest(_),
+            MessagePayload::Handshake {
+                parsed: HandshakeMessagePayload {
+                    payload: HandshakePayload::CertificateRequest(_),
+                    ..
+                },
                 ..
-            })
+            }
         ) {
             Box::new(ExpectCertificateRequest {
                 config: self.config,
@@ -672,10 +683,14 @@ struct ExpectServerDone {
 impl State<ClientConnectionData> for ExpectServerDone {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::ServerHelloDone,
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::ServerHelloDone,
+                        ..
+                    },
                 ..
-            }) => {}
+            } => {}
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

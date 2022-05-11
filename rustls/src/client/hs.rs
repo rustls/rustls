@@ -366,7 +366,7 @@ fn emit_client_hello_for_retry(
         } else {
             ProtocolVersion::TLSv1_0
         },
-        payload: MessagePayload::Handshake(chp),
+        payload: MessagePayload::handshake(chp),
     };
 
     if retryreq.is_some() {
@@ -792,16 +792,24 @@ impl ExpectServerHelloOrHelloRetryRequest {
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         match m.payload {
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::ServerHello(..),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::ServerHello(..),
+                        ..
+                    },
                 ..
-            }) => self
+            } => self
                 .into_expect_server_hello()
                 .handle(cx, m),
-            MessagePayload::Handshake(HandshakeMessagePayload {
-                payload: HandshakePayload::HelloRetryRequest(..),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        payload: HandshakePayload::HelloRetryRequest(..),
+                        ..
+                    },
                 ..
-            }) => self.handle_hello_retry_request(cx, m),
+            } => self.handle_hello_retry_request(cx, m),
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],

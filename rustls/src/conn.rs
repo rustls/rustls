@@ -1205,7 +1205,7 @@ impl CommonState {
                     self.quic.alert = Some(alert.description);
                 } else {
                     debug_assert!(
-                        matches!(m.payload, MessagePayload::Handshake(_)),
+                        matches!(m.payload, MessagePayload::Handshake { .. }),
                         "QUIC uses TLS for the cryptographic handshake only"
                     );
                     let mut bytes = Vec::new();

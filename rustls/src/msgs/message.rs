@@ -13,18 +13,28 @@ use std::convert::TryFrom;
 #[derive(Debug)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
-    Handshake(HandshakeMessagePayload),
+    Handshake {
+        parsed: HandshakeMessagePayload,
+        encoded: Payload,
+    },
     ChangeCipherSpec(ChangeCipherSpecPayload),
     ApplicationData(Payload),
 }
 
 impl MessagePayload {
     pub fn encode(&self, bytes: &mut Vec<u8>) {
-        match *self {
-            Self::Alert(ref x) => x.encode(bytes),
-            Self::Handshake(ref x) => x.encode(bytes),
-            Self::ChangeCipherSpec(ref x) => x.encode(bytes),
-            Self::ApplicationData(ref x) => x.encode(bytes),
+        match self {
+            Self::Alert(x) => x.encode(bytes),
+            Self::Handshake { encoded, .. } => bytes.extend(&encoded.0),
+            Self::ChangeCipherSpec(x) => x.encode(bytes),
+            Self::ApplicationData(x) => x.encode(bytes),
+        }
+    }
+
+    pub fn handshake(parsed: HandshakeMessagePayload) -> Self {
+        Self::Handshake {
+            encoded: Payload::new(parsed.get_encoding()),
+            parsed,
         }
     }
 
@@ -32,25 +42,28 @@ impl MessagePayload {
         let mut r = Reader::init(&payload.0);
         let parsed = match typ {
             ContentType::ApplicationData => return Ok(Self::ApplicationData(payload)),
-            ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
-            ContentType::Handshake => {
-                HandshakeMessagePayload::read_version(&mut r, vers).map(MessagePayload::Handshake)
-            }
-            ContentType::ChangeCipherSpec => {
-                ChangeCipherSpecPayload::read(&mut r).map(MessagePayload::ChangeCipherSpec)
-            }
+            ContentType::Alert => AlertMessagePayload::read(&mut r)
+                .filter(|_| !r.any_left())
+                .map(MessagePayload::Alert),
+            ContentType::Handshake => HandshakeMessagePayload::read_version(&mut r, vers)
+                .filter(|_| !r.any_left())
+                .map(|parsed| Self::Handshake {
+                    parsed,
+                    encoded: payload,
+                }),
+            ContentType::ChangeCipherSpec => ChangeCipherSpecPayload::read(&mut r)
+                .filter(|_| !r.any_left())
+                .map(MessagePayload::ChangeCipherSpec),
             _ => None,
         };
 
-        parsed
-            .filter(|_| !r.any_left())
-            .ok_or_else(|| Error::corrupt_message(typ))
+        parsed.ok_or_else(|| Error::corrupt_message(typ))
     }
 
     pub fn content_type(&self) -> ContentType {
         match self {
             Self::Alert(_) => ContentType::Alert,
-            Self::Handshake(_) => ContentType::Handshake,
+            Self::Handshake { .. } => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
         }
@@ -206,8 +219,8 @@ pub struct Message {
 impl Message {
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
         // Bit of a layering violation, but OK.
-        if let MessagePayload::Handshake(ref hsp) = self.payload {
-            hsp.typ == hstyp
+        if let MessagePayload::Handshake { parsed, .. } = &self.payload {
+            parsed.typ == hstyp
         } else {
             false
         }
@@ -226,7 +239,7 @@ impl Message {
     pub fn build_key_update_notify() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload::build_key_update_notify()),
+            payload: MessagePayload::handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
 }

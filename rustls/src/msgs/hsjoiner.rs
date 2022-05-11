@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::msgs::base::Payload;
 use crate::msgs::codec;
 use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
@@ -119,14 +120,17 @@ impl HandshakeJoiner {
     fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
         let used = {
             let mut rd = codec::Reader::init(&self.buf);
-            let payload = match HandshakeMessagePayload::read_version(&mut rd, version) {
+            let parsed = match HandshakeMessagePayload::read_version(&mut rd, version) {
                 Some(p) => p,
                 None => return false,
             };
 
             let m = Message {
                 version,
-                payload: MessagePayload::Handshake(payload),
+                payload: MessagePayload::Handshake {
+                    parsed,
+                    encoded: Payload::new(&self.buf[..rd.used()]),
+                },
             };
 
             self.frames.push_back(m);
@@ -197,7 +201,7 @@ mod tests {
 
         let expect = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::HelloRequest,
                 payload: HandshakePayload::HelloRequest,
             }),
@@ -266,7 +270,7 @@ mod tests {
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::Handshake(HandshakeMessagePayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Finished,
                 payload: HandshakePayload::Finished(Payload::new(payload)),
             }),
