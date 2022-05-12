@@ -488,14 +488,14 @@ impl<Data> ConnectionCommon<Data> {
                         rdlen += n;
                         Some(n)
                     }
-                    Err(ref err) if err.kind() == io::ErrorKind::Interrupted => None,// nothing to do
+                    Err(ref err) if err.kind() == io::ErrorKind::Interrupted => None, // nothing to do
                     Err(err) => return Err(err),
                 };
                 if read_size.is_some() {
                     break;
                 }
             }
-            
+
             match self.process_new_packets() {
                 Ok(_) => {}
                 Err(e) => {
