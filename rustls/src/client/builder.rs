@@ -10,6 +10,7 @@ use crate::verify::{self, CertificateTransparencyPolicy};
 use crate::versions;
 use crate::NoKeyLog;
 
+use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -143,6 +144,16 @@ pub struct WantsClientCert {
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
+}
+
+impl fmt::Debug for WantsClientCert {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WantsClientCert")
+            .field("cipher_suites", &self.cipher_suites)
+            .field("kx_groups", &self.kx_groups)
+            .field("versions", &self.versions)
+            .finish()
+    }
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
