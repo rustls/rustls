@@ -1,6 +1,6 @@
 use crate::msgs::enums::ProtocolVersion;
 
-/// A TLS protocl version supported by rustls.
+/// A TLS protocol version supported by rustls.
 ///
 /// All possible instances of this class are provided by the library in
 /// the [`ALL_VERSIONS`] array, as well as individually as [`TLS12`]

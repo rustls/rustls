@@ -152,7 +152,7 @@ where
 /// This allows you to use a rustls Connection like a normal stream.
 #[derive(Debug)]
 pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
-    /// Our conneciton
+    /// Our connection
     pub conn: C,
 
     /// The underlying transport, like a socket

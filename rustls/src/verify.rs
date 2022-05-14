@@ -179,7 +179,7 @@ pub trait ServerCertVerifier: Send + Sync {
     }
 }
 
-/// A type which encapsuates a string that is a syntactically valid DNS name.
+/// A type which encapsulates a string that is a syntactically valid DNS name.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DnsName(pub(crate) webpki::DnsName);
 
