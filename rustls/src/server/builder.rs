@@ -39,6 +39,7 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 /// the connecting peer.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[derive(Clone)]
 pub struct WantsServerCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,

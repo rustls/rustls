@@ -56,6 +56,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 /// invoke one of the methods related to client certificates (as in the [`WantsClientCert`] state).
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[derive(Clone, Debug)]
 pub struct WantsTransparencyPolicyOrClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
@@ -136,6 +137,7 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
 /// certificate.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[derive(Clone)]
 pub struct WantsClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,

@@ -114,7 +114,7 @@ impl<Side: ConfigSide, State> fmt::Debug for ConfigBuilder<Side, State> {
 /// Config builder state where the caller must supply cipher suites.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WantsCipherSuites(pub(crate) ());
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
@@ -164,7 +164,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
 /// Config builder state where the caller must supply key exchange groups.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WantsKxGroups {
     cipher_suites: Vec<SupportedCipherSuite>,
 }
@@ -195,6 +195,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
 /// Config builder state where the caller must supply TLS protocol versions.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[derive(Clone, Debug)]
 pub struct WantsVersions {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
@@ -243,6 +244,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 /// Config builder state where the caller must supply a verifier.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[derive(Clone, Debug)]
 pub struct WantsVerifier {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
