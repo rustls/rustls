@@ -9,6 +9,7 @@ use crate::verify;
 use crate::versions;
 use crate::NoKeyLog;
 
+use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -45,6 +46,16 @@ pub struct WantsServerCert {
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ClientCertVerifier>,
+}
+
+impl fmt::Debug for WantsServerCert {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WantsServerCert")
+            .field("cipher_suites", &self.cipher_suites)
+            .field("kx_groups", &self.kx_groups)
+            .field("versions", &self.versions)
+            .finish()
+    }
 }
 
 impl ConfigBuilder<ServerConfig, WantsServerCert> {
