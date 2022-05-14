@@ -21,6 +21,11 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.5 (2022-05-14)
+  - Correct compatbility with servers which return no TLS extensions and take
+    advantage of a special case encoding.
+  - Remove spurious warn-level logging introduced in 0.20.3.
+  - Fix server::ResolvesServerCertUsingSni case sensitivity.
 * 0.20.4 (2022-02-19)
   - Correct regression in QUIC 0-RTT support.
 * 0.20.3 (2022-02-13)
