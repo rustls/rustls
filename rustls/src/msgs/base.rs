@@ -46,6 +46,12 @@ impl Codec for key::Certificate {
     }
 }
 
+impl fmt::Debug for Payload {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, &self.0)
+    }
+}
+
 /// An arbitrary, unknown-content, u24-length-prefixed payload
 #[derive(Clone, PartialEq)]
 pub struct PayloadU24(pub Vec<u8>);
@@ -67,6 +73,12 @@ impl Codec for PayloadU24 {
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Some(Self(body))
+    }
+}
+
+impl fmt::Debug for PayloadU24 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, &self.0)
     }
 }
 
@@ -102,6 +114,12 @@ impl Codec for PayloadU16 {
     }
 }
 
+impl fmt::Debug for PayloadU16 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, &self.0)
+    }
+}
+
 /// An arbitrary, unknown-content, u8-length-prefixed payload
 #[derive(Clone, PartialEq)]
 pub struct PayloadU8(pub Vec<u8>);
@@ -120,41 +138,6 @@ impl PayloadU8 {
     }
 }
 
-// Format an iterator of u8 into a hex string
-pub(super) fn hex<'a>(
-    f: &mut fmt::Formatter<'_>,
-    payload: impl IntoIterator<Item = &'a u8>,
-) -> fmt::Result {
-    for b in payload {
-        write!(f, "{:02x}", b)?
-    }
-    Ok(())
-}
-
-impl fmt::Debug for Payload {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
-    }
-}
-
-impl fmt::Debug for PayloadU8 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
-    }
-}
-
-impl fmt::Debug for PayloadU16 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
-    }
-}
-
-impl fmt::Debug for PayloadU24 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
-    }
-}
-
 impl Codec for PayloadU8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         (self.0.len() as u8).encode(bytes);
@@ -167,4 +150,21 @@ impl Codec for PayloadU8 {
         let body = sub.rest().to_vec();
         Some(Self(body))
     }
+}
+
+impl fmt::Debug for PayloadU8 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, &self.0)
+    }
+}
+
+// Format an iterator of u8 into a hex string
+pub(super) fn hex<'a>(
+    f: &mut fmt::Formatter<'_>,
+    payload: impl IntoIterator<Item = &'a u8>,
+) -> fmt::Result {
+    for b in payload {
+        write!(f, "{:02x}", b)?
+    }
+    Ok(())
 }
