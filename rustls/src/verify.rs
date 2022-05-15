@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::error::Error;
@@ -179,6 +181,12 @@ pub trait ServerCertVerifier: Send + Sync {
     }
 }
 
+impl fmt::Debug for dyn ServerCertVerifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "dyn ServerCertVerifier")
+    }
+}
+
 /// A type which encapsulates a string that is a syntactically valid DNS name.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DnsName(pub(crate) webpki::DnsName);
@@ -282,6 +290,12 @@ pub trait ClientCertVerifier: Send + Sync {
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         WebPkiVerifier::verification_schemes()
+    }
+}
+
+impl fmt::Debug for dyn ClientCertVerifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "dyn ClientCertVerifier")
     }
 }
 
