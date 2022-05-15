@@ -9,6 +9,7 @@ use crate::{sign, DistinguishedNames, SignatureScheme};
 
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub(super) struct ServerCertDetails {
     pub(super) cert_chain: CertificatePayload,
     pub(super) ocsp_response: Vec<u8>,

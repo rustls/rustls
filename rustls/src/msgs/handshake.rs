@@ -52,8 +52,14 @@ macro_rules! declare_u16_vec(
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Random(pub [u8; 32]);
+
+impl fmt::Debug for Random {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        super::base::hex(f, &self.0)
+    }
+}
 
 static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
     0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11, 0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
@@ -103,10 +109,8 @@ pub struct SessionID {
 }
 
 impl fmt::Debug for SessionID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("SessionID")
-            .field(&&self.data[..self.len]) // must be `Sized` to cast to `dyn Debug`
-            .finish()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        super::base::hex(f, &self.data[..self.len])
     }
 }
 

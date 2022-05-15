@@ -1,3 +1,6 @@
+use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
+
+use super::base::Payload;
 use super::codec::Reader;
 use super::enums::{AlertDescription, AlertLevel, HandshakeType};
 use super::message::{Message, OpaqueMessage, PlainMessage};
@@ -99,4 +102,12 @@ fn construct_all_types() {
         let m = Message::try_from(m.into_plain_message());
         println!("m' = {:?}", m);
     }
+}
+
+#[test]
+fn debug_payload() {
+    assert_eq!("01020304", format!("{:?}", Payload(vec![1, 2, 3, 4])));
+    assert_eq!("01020304", format!("{:?}", PayloadU8(vec![1, 2, 3, 4])));
+    assert_eq!("01020304", format!("{:?}", PayloadU16(vec![1, 2, 3, 4])));
+    assert_eq!("01020304", format!("{:?}", PayloadU24(vec![1, 2, 3, 4])));
 }
