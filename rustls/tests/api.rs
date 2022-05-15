@@ -410,6 +410,24 @@ fn server_can_get_client_cert_after_resumption() {
     }
 }
 
+#[test]
+fn test_debug() {
+    let b = ServerConfig::builder();
+    assert_eq!(
+        "ConfigBuilder<ServerConfig, _> { state: WantsCipherSuites(()) }",
+        format!("{:?}", b)
+    );
+    let b = b.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
+    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsKxGroups { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256] } }", format!("{:?}", b));
+    let b = b.with_kx_groups(&[&rustls::kx_group::X25519]);
+    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsVersions { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519] } }", format!("{:?}", b));
+    let b = b
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap();
+    let b = b.with_no_client_auth();
+    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], versions: [TLSv1_3] } }", format!("{:?}", b));
+}
+
 /// Test that the server handles combination of `offer_client_auth()` returning true
 /// and `client_auth_mandatory` returning `Some(false)`. This exercises both the
 /// client's and server's ability to "recover" from the server asking for a client
