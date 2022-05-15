@@ -23,6 +23,14 @@ fn reads_random() {
 }
 
 #[test]
+fn debug_random() {
+    assert_eq!(
+        "0101010101010101010101010101010101010101010101010101010101010101",
+        format!("{:?}", Random::from([1; 32]))
+    );
+}
+
+#[test]
 fn rejects_truncated_sessionid() {
     let bytes = [32; 32];
     let mut rd = Reader::init(&bytes);
@@ -65,6 +73,20 @@ fn accepts_empty_sessionid() {
     assert!(sess.is_empty());
     assert_eq!(sess.len(), 0);
     assert!(!rd.any_left());
+}
+
+#[test]
+fn debug_sessionid() {
+    let bytes = [
+        32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1,
+    ];
+    let mut rd = Reader::init(&bytes);
+    let sess = SessionID::read(&mut rd).unwrap();
+    assert_eq!(
+        "0101010101010101010101010101010101010101010101010101010101010101",
+        format!("{:?}", sess)
+    );
 }
 
 #[test]
