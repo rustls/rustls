@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::error::Error;
 use crate::msgs::enums::NamedGroup;
 
@@ -62,13 +64,18 @@ impl KeyExchange {
 ///
 /// All possible instances of this class are provided by the library in
 /// the `ALL_KX_GROUPS` array.
-#[derive(Debug)]
 pub struct SupportedKxGroup {
     /// The IANA "TLS Supported Groups" name of the group
     pub name: NamedGroup,
 
     /// The corresponding ring agreement::Algorithm
     agreement_algorithm: &'static ring::agreement::Algorithm,
+}
+
+impl fmt::Debug for SupportedKxGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.name.fmt(f)
+    }
 }
 
 /// Ephemeral ECDH on curve25519 (see RFC7748)
