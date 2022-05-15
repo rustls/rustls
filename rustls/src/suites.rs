@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
 use crate::msgs::handshake::DecomposedSignatureScheme;
@@ -50,13 +52,19 @@ pub struct CipherSuiteCommon {
 ///
 /// All possible instances of this type are provided by the library in
 /// the [`ALL_CIPHER_SUITES`] array.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite
     #[cfg(feature = "tls12")]
     Tls12(&'static Tls12CipherSuite),
     /// A TLS 1.3 cipher suite
     Tls13(&'static Tls13CipherSuite),
+}
+
+impl fmt::Debug for SupportedCipherSuite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.suite().fmt(f)
+    }
 }
 
 impl SupportedCipherSuite {

@@ -99,14 +99,15 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) side: PhantomData<Side>,
 }
 
-impl<Side: ConfigSide, State> fmt::Debug for ConfigBuilder<Side, State> {
+impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ConfigBuilder")
-            .field("side", &format_args!("{}", &std::any::type_name::<Side>()))
-            .field(
-                "state",
-                &format_args!("{}", &std::any::type_name::<State>()),
-            )
+        let side_name = std::any::type_name::<Side>();
+        let side_name = side_name
+            .split("::")
+            .last()
+            .unwrap_or(side_name);
+        f.debug_struct(&format!("ConfigBuilder<{}, _>", side_name))
+            .field("state", &self.state)
             .finish()
     }
 }
