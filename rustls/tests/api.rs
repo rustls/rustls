@@ -439,6 +439,7 @@ fn test_config_builders_debug() {
     let b = b
         .with_protocol_versions(&[&rustls::version::TLS13])
         .unwrap();
+    assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsVerifier { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], versions: [TLSv1_3] } }", format!("{:?}", b));
 }
 
 /// Test that the server handles combination of `offer_client_auth()` returning true
