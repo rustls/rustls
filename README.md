@@ -21,10 +21,17 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.6 (2022-05-18)
+  - 0.20.5 included a change to track more context for the `Error::CorruptMessage`
+    which made API-incompatible changes to the `Error` type. We yanked 0.20.5
+    and have reverted that change as part of 0.20.6.
 * 0.20.5 (2022-05-14)
   - Correct compatbility with servers which return no TLS extensions and take
     advantage of a special case encoding.
   - Remove spurious warn-level logging introduced in 0.20.3.
+  - Expose cipher suites in `ClientHello` type.
+  - Allow verification of IP addresses with `dangerous_config` enabled.
+  - Retry I/O operations in `ConnectionCommon::complete_io()` when interrupted.
   - Fix server::ResolvesServerCertUsingSni case sensitivity.
 * 0.20.4 (2022-02-19)
   - Correct regression in QUIC 0-RTT support.
