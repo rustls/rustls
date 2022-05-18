@@ -533,7 +533,7 @@ impl<Data> ConnectionCommon<Data> {
 
         let msg = msg.into_plain_message();
         if !self.handshake_joiner.want_message(&msg) {
-            return Err(Error::corrupt_message(ContentType::Handshake));
+            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
         }
 
         if self
@@ -543,7 +543,7 @@ impl<Data> ConnectionCommon<Data> {
         {
             self.common_state
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::corrupt_message(ContentType::Handshake));
+            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
         }
 
         self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
@@ -616,7 +616,7 @@ impl<Data> ConnectionCommon<Data> {
                 .ok_or_else(|| {
                     self.common_state
                         .send_fatal_alert(AlertDescription::DecodeError);
-                    Error::corrupt_message(ContentType::Handshake)
+                    Error::CorruptMessagePayload(ContentType::Handshake)
                 })?;
             return self.process_new_handshake_messages(state);
         }

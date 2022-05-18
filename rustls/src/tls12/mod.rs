@@ -427,7 +427,7 @@ pub(crate) fn decode_ecdh_params<T: Codec>(
 ) -> Result<T, Error> {
     decode_ecdh_params_::<T>(kx_params).ok_or_else(|| {
         common.send_fatal_alert(AlertDescription::DecodeError);
-        Error::corrupt_message(ContentType::Handshake)
+        Error::CorruptMessagePayload(ContentType::Handshake)
     })
 }
 
