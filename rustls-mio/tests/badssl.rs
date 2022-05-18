@@ -6,7 +6,6 @@ mod common;
 
 mod online {
     use super::common::TlsClient;
-    use super::common::DEBUG_LOCATION_REPLACEMENT;
 
     fn connect(hostname: &str) -> TlsClient {
         TlsClient::new(hostname)
@@ -106,7 +105,7 @@ mod online {
     fn too_many_sans() {
         connect("10000-sans.badssl.com")
             .fails()
-            .expect(&format!(r"TLS error: CorruptMessagePayload\(CorruptMessagePayload \{{ location: {}, kind: Handshake \}}\)", DEBUG_LOCATION_REPLACEMENT))
+            .expect(r"TLS error: CorruptMessagePayload\(Handshake\)")
             .go()
             .unwrap();
     }

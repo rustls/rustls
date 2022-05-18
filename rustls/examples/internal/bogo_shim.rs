@@ -595,16 +595,12 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::AlertReceived(AlertDescription::InternalError) => {
             quit(":PEER_ALERT_INTERNAL_ERROR:")
         }
-        Error::CorruptMessagePayload(corrupt_payload) => match corrupt_payload.content_type() {
-            ContentType::ChangeCipherSpec => quit(":BAD_CHANGE_CIPHER_SPEC:"),
-            ContentType::Alert => quit(":BAD_ALERT:"),
-            ContentType::Handshake => quit(":BAD_HANDSHAKE_MSG:"),
-            ContentType::Unknown(42) => quit(":GARBAGE:"),
-            err => {
-                println_err!("unhandled corrupt message error: {:?}", err);
-                quit(":FIXME:")
-            }
-        },
+        Error::CorruptMessagePayload(ContentType::Alert) => quit(":BAD_ALERT:"),
+        Error::CorruptMessagePayload(ContentType::ChangeCipherSpec) => {
+            quit(":BAD_CHANGE_CIPHER_SPEC:")
+        }
+        Error::CorruptMessagePayload(ContentType::Handshake) => quit(":BAD_HANDSHAKE_MSG:"),
+        Error::CorruptMessagePayload(ContentType::Unknown(42)) => quit(":GARBAGE:"),
         Error::CorruptMessage => quit(":GARBAGE:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
@@ -751,8 +747,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             let mut one_byte = [0u8];
             let mut cursor = io::Cursor::new(&mut one_byte[..]);
             sess.write_tls(&mut cursor).unwrap();
-            conn.write_all(&one_byte)
-                .expect("IO error");
+            conn.write(&one_byte).expect("IO error");
 
             quench_writes = true;
         }

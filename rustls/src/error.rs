@@ -5,21 +5,6 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::time::SystemTimeError;
 
-/// Context around a corrupt TLS message payload that resulted in
-/// an error.
-#[derive(Debug, PartialEq, Clone)]
-pub struct CorruptMessagePayload {
-    location: &'static core::panic::Location<'static>,
-    kind: ContentType,
-}
-
-impl CorruptMessagePayload {
-    /// Returns the type of content we expected but found as corrupt.
-    pub fn content_type(&self) -> ContentType {
-        self.kind
-    }
-}
-
 /// rustls reports protocol errors using this type.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
@@ -49,7 +34,7 @@ pub enum Error {
     CorruptMessage,
 
     /// The peer sent us a TLS message with invalid contents.
-    CorruptMessagePayload(CorruptMessagePayload),
+    CorruptMessagePayload(ContentType),
 
     /// The peer didn't give us any certificates.
     NoCertificatesPresented,
@@ -112,16 +97,6 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
-}
-
-impl Error {
-    #[track_caller]
-    pub(crate) fn corrupt_message(kind: ContentType) -> Self {
-        Self::CorruptMessagePayload(CorruptMessagePayload {
-            location: core::panic::Location::caller(),
-            kind,
-        })
-    }
 }
 
 fn join<T: fmt::Debug>(items: &[T]) -> String {
@@ -207,7 +182,7 @@ impl From<rand::GetRandomFailed> for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{CorruptMessagePayload, Error};
+    use super::Error;
 
     #[test]
     fn smoke() {
@@ -224,10 +199,7 @@ mod tests {
                 got_type: HandshakeType::ServerHello,
             },
             Error::CorruptMessage,
-            Error::CorruptMessagePayload(CorruptMessagePayload {
-                location: core::panic::Location::caller(),
-                kind: ContentType::Alert,
-            }),
+            Error::CorruptMessagePayload(ContentType::Alert),
             Error::NoCertificatesPresented,
             Error::DecryptError,
             Error::PeerIncompatibleError("no tls1.2".to_string()),

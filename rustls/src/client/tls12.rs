@@ -405,7 +405,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
             .ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::DecodeError);
-                Error::corrupt_message(ContentType::Handshake)
+                Error::CorruptMessagePayload(ContentType::Handshake)
             })?;
 
         // Save the signature and signed parameters for later verification.

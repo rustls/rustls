@@ -88,13 +88,12 @@ fn client_verifier_no_schemes() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
-            match err {
-                Ok(()) => panic!("handshake did not error"),
-                Err(ErrorFromPeer::Client(Error::CorruptMessagePayload(c))) => {
-                    assert_eq!(c.content_type(), ContentType::Handshake)
-                }
-                Err(e) => panic!("unexpected error: {:?}", e),
-            }
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Client(Error::CorruptMessagePayload(
+                    ContentType::Handshake
+                )))
+            );
         }
     }
 }

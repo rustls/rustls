@@ -365,7 +365,7 @@ pub use crate::builder::{
 pub use crate::conn::{
     CommonState, Connection, ConnectionCommon, IoState, Reader, SideData, Writer,
 };
-pub use crate::error::{CorruptMessagePayload, Error};
+pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
