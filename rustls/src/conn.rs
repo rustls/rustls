@@ -840,7 +840,7 @@ impl CommonState {
             has_seen_eof: false,
             received_middlebox_ccs: 0,
             peer_certificates: None,
-            message_fragmenter: Default::default(),
+            message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(0)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),

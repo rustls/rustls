@@ -464,14 +464,22 @@ pub struct Acceptor {
     inner: Option<ConnectionCommon<ServerConnectionData>>,
 }
 
+impl Default for Acceptor {
+    fn default() -> Self {
+        Self {
+            inner: Some(ConnectionCommon::new(
+                Box::new(Accepting),
+                ServerConnectionData::default(),
+                CommonState::new(Side::Server),
+            )),
+        }
+    }
+}
+
 impl Acceptor {
     /// Create a new `Acceptor`.
     pub fn new() -> Result<Self, Error> {
-        let common = CommonState::new(None, Side::Server)?;
-        let state = Box::new(Accepting);
-        Ok(Self {
-            inner: Some(ConnectionCommon::new(state, Default::default(), common)),
-        })
+        Ok(Self::default())
     }
 
     /// Returns true if the caller should call [`Connection::read_tls()`] as soon as possible.

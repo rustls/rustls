@@ -8,9 +8,16 @@ pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
-#[derive(Default)]
 pub struct MessageFragmenter {
     max_frag: usize,
+}
+
+impl Default for MessageFragmenter {
+    fn default() -> Self {
+        Self {
+            max_frag: MAX_FRAGMENT_LEN,
+        }
+    }
 }
 
 impl MessageFragmenter {
@@ -53,11 +60,16 @@ impl MessageFragmenter {
         }
     }
 
-    /// `max_fragment_size` is the maximum fragment size that will be produced --
-    /// this includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
-    /// up to 10 bytes.
-    pub fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
-        self.max_frag = match new {
+    /// Set the maximum fragment size that will be produced.
+    ///
+    /// This includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
+    /// up to 10 bytes long.
+    ///
+    /// A `max_fragment_size` of `None` sets the highest allowable fragment size.
+    ///
+    /// Returns BadMaxFragmentSize if the size is smaller than 32 or larger than 16389.
+    pub fn set_max_fragment_size(&mut self, max_fragment_size: Option<usize>) -> Result<(), Error> {
+        self.max_frag = match max_fragment_size {
             Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
             None => MAX_FRAGMENT_LEN,
             _ => return Err(Error::BadMaxFragmentSize),
