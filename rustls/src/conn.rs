@@ -824,8 +824,8 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(max_fragment_size: Option<usize>, side: Side) -> Result<Self, Error> {
-        Ok(Self {
+    pub(crate) fn new(side: Side) -> Self {
+        Self {
             negotiated_version: None,
             side,
             record_layer: record_layer::RecordLayer::new(),
@@ -840,8 +840,7 @@ impl CommonState {
             has_seen_eof: false,
             received_middlebox_ccs: 0,
             peer_certificates: None,
-            message_fragmenter: MessageFragmenter::new(max_fragment_size)
-                .map_err(|_| Error::BadMaxFragmentSize)?,
+            message_fragmenter: Default::default(),
             received_plaintext: ChunkVecBuffer::new(Some(0)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
@@ -849,7 +848,7 @@ impl CommonState {
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
-        })
+        }
     }
 
     /// Returns true if the caller should call [`CommonState::write_tls`] as soon
