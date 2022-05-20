@@ -454,7 +454,8 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(config.max_fragment_size, Side::Client)?;
+        let mut common_state = CommonState::new(Side::Client);
+        common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         let mut data = ClientConnectionData::new();
 

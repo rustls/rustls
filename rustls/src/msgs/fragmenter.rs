@@ -8,22 +8,12 @@ pub const MAX_FRAGMENT_LEN: usize = 16384;
 pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
+#[derive(Default)]
 pub struct MessageFragmenter {
     max_frag: usize,
 }
 
 impl MessageFragmenter {
-    /// Make a new fragmenter.
-    ///
-    /// `max_fragment_size` is the maximum fragment size that will be produced --
-    /// this includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
-    /// up to 10 bytes.
-    pub fn new(max_fragment_size: Option<usize>) -> Result<Self, Error> {
-        let mut new = Self { max_frag: 0 };
-        new.set_max_fragment_size(max_fragment_size)?;
-        Ok(new)
-    }
-
     /// Take the Message `msg` and re-fragment it into new
     /// messages whose fragment is no more than max_frag.
     /// The new messages are appended to the `out` deque.
@@ -63,6 +53,9 @@ impl MessageFragmenter {
         }
     }
 
+    /// `max_fragment_size` is the maximum fragment size that will be produced --
+    /// this includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
+    /// up to 10 bytes.
     pub fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
         self.max_frag = match new {
             Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
@@ -112,7 +105,9 @@ mod tests {
             payload: Payload::new(data),
         };
 
-        let frag = MessageFragmenter::new(Some(32)).unwrap();
+        let mut frag = MessageFragmenter::default();
+        frag.set_max_fragment_size(Some(32))
+            .unwrap();
         let mut q = VecDeque::new();
         frag.fragment(m, &mut q);
         msg_eq(
@@ -153,7 +148,9 @@ mod tests {
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
         };
 
-        let frag = MessageFragmenter::new(Some(32)).unwrap();
+        let mut frag = MessageFragmenter::default();
+        frag.set_max_fragment_size(Some(32))
+            .unwrap();
         let mut q = VecDeque::new();
         frag.fragment(m, &mut q);
         msg_eq(
