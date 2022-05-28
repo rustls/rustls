@@ -345,13 +345,6 @@ impl ServerCertVerifier for WebPkiVerifier {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
-        let dns_name = match server_name {
-            ServerName::DnsName(dns_name) => dns_name,
-            ServerName::IpAddress(_) => {
-                return Err(Error::UnsupportedNameType);
-            }
-        };
-
         let cert = cert
             .verify_is_valid_tls_server_cert(
                 SUPPORTED_SIG_ALGS,
@@ -370,9 +363,22 @@ impl ServerCertVerifier for WebPkiVerifier {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        cert.verify_is_valid_for_dns_name(dns_name.0.as_ref())
-            .map_err(pki_error)
-            .map(|_| ServerCertVerified::assertion())
+        match server_name {
+            ServerName::DnsName(dns_name) => {
+                let name = webpki::SubjectNameRef::DnsName(dns_name.0.as_ref());
+                cert.verify_is_valid_for_subject_name(name)
+                    .map_err(pki_error)
+                    .map(|_| ServerCertVerified::assertion())
+            }
+            ServerName::IpAddress(ip_addr) => {
+                let ip_addr = webpki::IpAddr::from(*ip_addr);
+                cert.verify_is_valid_for_subject_name(webpki::SubjectNameRef::IpAddress(
+                    webpki::IpAddrRef::from(&ip_addr),
+                ))
+                .map_err(pki_error)
+                .map(|_| ServerCertVerified::assertion())
+            }
+        }
     }
 }
 
