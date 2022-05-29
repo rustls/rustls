@@ -52,7 +52,7 @@ macro_rules! declare_u16_vec(
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Random(pub [u8; 32]);
 
 impl fmt::Debug for Random {

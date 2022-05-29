@@ -7,7 +7,7 @@ use crate::msgs::enums::ProtocolVersion;
 /// All possible instances of this class are provided by the library in
 /// the [`ALL_VERSIONS`] array, as well as individually as [`TLS12`]
 /// and [`TLS13`].
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct SupportedProtocolVersion {
     /// The TLS enumeration naming this version.
     pub version: ProtocolVersion,
