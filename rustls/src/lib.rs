@@ -368,6 +368,7 @@ pub use crate::builder::{
 pub use crate::conn::{
     CommonState, Connection, ConnectionCommon, IoState, Reader, SideData, Writer,
 };
+pub use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
@@ -383,7 +384,6 @@ pub use crate::ticketer::Ticketer;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
-pub use enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 
 /// Items for use in a client.
 pub mod client {
