@@ -336,6 +336,9 @@ mod x509;
 mod check;
 mod bs_debug;
 mod builder;
+#[allow(non_camel_case_types)]
+#[allow(missing_docs)]
+mod enums;
 mod key;
 mod key_log;
 mod key_log_file;
@@ -370,9 +373,6 @@ pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-pub use crate::msgs::enums::CipherSuite;
-pub use crate::msgs::enums::ProtocolVersion;
-pub use crate::msgs::enums::SignatureScheme;
 pub use crate::msgs::handshake::DistinguishedNames;
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
@@ -383,6 +383,7 @@ pub use crate::ticketer::Ticketer;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
+pub use enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 
 /// Items for use in a client.
 pub mod client {

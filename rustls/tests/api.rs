@@ -3273,13 +3273,12 @@ mod test_quic {
 
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
-        use rustls::internal::msgs::enums::{
-            CipherSuite, Compression, HandshakeType, NamedGroup, SignatureScheme,
-        };
+        use rustls::internal::msgs::enums::{Compression, HandshakeType, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
         use rustls::internal::msgs::message::PlainMessage;
+        use rustls::{CipherSuite, SignatureScheme};
 
         let rng = ring::rand::SystemRandom::new();
         let mut random = [0; 32];
@@ -3337,13 +3336,12 @@ mod test_quic {
 
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
-        use rustls::internal::msgs::enums::{
-            CipherSuite, Compression, HandshakeType, NamedGroup, SignatureScheme,
-        };
+        use rustls::internal::msgs::enums::{Compression, HandshakeType, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
         use rustls::internal::msgs::message::PlainMessage;
+        use rustls::{CipherSuite, SignatureScheme};
 
         let rng = ring::rand::SystemRandom::new();
         let mut random = [0; 32];

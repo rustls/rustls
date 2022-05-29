@@ -1,6 +1,6 @@
 use super::codec::{Codec, Reader};
-use super::enums::*;
 use super::persist::*;
+use crate::enums::*;
 
 use crate::key::Certificate;
 use crate::ticketer::TimeBase;

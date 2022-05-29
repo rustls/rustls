@@ -1,11 +1,12 @@
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::enums::ContentType;
 use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel};
-use crate::msgs::enums::{ContentType, ProtocolVersion};
 use crate::msgs::handshake::HandshakeMessagePayload;
 
 use std::convert::TryFrom;

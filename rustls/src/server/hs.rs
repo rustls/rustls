@@ -1,12 +1,11 @@
 use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-#[cfg(feature = "tls12")]
-use crate::msgs::enums::CipherSuite;
+use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
-use crate::msgs::enums::{HandshakeType, ProtocolVersion, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
@@ -206,7 +205,7 @@ impl ExtensionProcessing {
             .is_some()
             || hello
                 .cipher_suites
-                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+                .contains(&crate::enums::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         if secure_reneg_offered {
             self.exts

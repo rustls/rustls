@@ -2,6 +2,7 @@
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::Error;
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
@@ -11,9 +12,7 @@ use crate::msgs::base::Payload;
 #[cfg(feature = "quic")]
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{
-    AlertDescription, CipherSuite, Compression, ContentType, ProtocolVersion,
-};
+use crate::msgs::enums::{AlertDescription, Compression, ContentType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::enums::{ExtensionType, HandshakeType};
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};

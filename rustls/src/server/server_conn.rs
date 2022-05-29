@@ -1,5 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Side, State};
+use crate::enums::ProtocolVersion;
+use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
@@ -7,8 +9,6 @@ use crate::log::trace;
 use crate::msgs::base::{Payload, PayloadU8};
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
-use crate::msgs::enums::ProtocolVersion;
-use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
 use crate::msgs::message::Message;
 use crate::suites::SupportedCipherSuite;

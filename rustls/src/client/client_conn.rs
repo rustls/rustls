@@ -1,14 +1,14 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Protocol, Side};
+use crate::enums::CipherSuite;
+use crate::enums::ProtocolVersion;
+use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
-use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::ProtocolVersion;
-use crate::msgs::enums::SignatureScheme;
 use crate::msgs::handshake::ClientExtension;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;

@@ -1,9 +1,9 @@
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::conn::{CommonState, ConnectionRandoms, Side};
+use crate::enums::{CipherSuite, SignatureScheme};
 use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
-use crate::msgs::enums::{CipherSuite, SignatureScheme};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 use crate::Error;

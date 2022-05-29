@@ -1,8 +1,8 @@
 use crate::client;
+use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::key;
 use crate::limited_cache;
-use crate::msgs::enums::SignatureScheme;
 use crate::sign;
 
 use std::sync::{Arc, Mutex};
