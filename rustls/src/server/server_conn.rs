@@ -478,6 +478,10 @@ impl Default for Acceptor {
 
 impl Acceptor {
     /// Create a new `Acceptor`.
+    #[deprecated(
+        since = "0.20.7",
+        note = "Use Acceptor::default instead for an infallible constructor"
+    )]
     pub fn new() -> Result<Self, Error> {
         Ok(Self::default())
     }

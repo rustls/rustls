@@ -4040,7 +4040,7 @@ fn test_acceptor() {
     client.write_tls(&mut buf).unwrap();
 
     let server_config = Arc::new(make_server_config(KeyType::Ed25519));
-    let mut acceptor = Acceptor::new().unwrap();
+    let mut acceptor = Acceptor::default();
     assert!(acceptor.wants_read());
     acceptor
         .read_tls(&mut buf.as_slice())
@@ -4070,7 +4070,7 @@ fn test_acceptor() {
         ))
     );
 
-    let mut acceptor = Acceptor::new().unwrap();
+    let mut acceptor = Acceptor::default();
     assert!(acceptor.accept().unwrap().is_none());
     acceptor
         .read_tls(&mut &buf[..3])
@@ -4081,14 +4081,14 @@ fn test_acceptor() {
         .unwrap(); // invalid message (len = 32k bytes)
     assert!(acceptor.accept().is_err());
 
-    let mut acceptor = Acceptor::new().unwrap();
+    let mut acceptor = Acceptor::default();
     // Minimal valid 1-byte application data message is not a handshake message
     acceptor
         .read_tls(&mut [0x17, 0x03, 0x03, 0x00, 0x01, 0x00].as_ref())
         .unwrap();
     assert!(acceptor.accept().is_err());
 
-    let mut acceptor = Acceptor::new().unwrap();
+    let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
     acceptor
         .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
