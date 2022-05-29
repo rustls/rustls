@@ -1,3 +1,5 @@
+#![allow(non_camel_case_types)]
+#![allow(missing_docs)]
 use crate::msgs::codec::{Codec, Reader};
 
 enum_builder! {

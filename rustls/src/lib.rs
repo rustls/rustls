@@ -312,7 +312,6 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
-#[allow(missing_docs)]
 #[macro_use]
 mod msgs;
 mod anchors;
@@ -336,8 +335,6 @@ mod x509;
 mod check;
 mod bs_debug;
 mod builder;
-#[allow(non_camel_case_types)]
-#[allow(missing_docs)]
 mod enums;
 mod key;
 mod key_log;

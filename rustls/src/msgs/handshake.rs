@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
