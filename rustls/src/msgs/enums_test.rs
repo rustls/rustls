@@ -45,7 +45,6 @@ fn test_enum8<T: Codec>(first: T, last: T) {
 
 #[test]
 fn test_enums() {
-    test_enum16::<ProtocolVersion>(ProtocolVersion::SSLv2, ProtocolVersion::TLSv1_3);
     test_enum8::<HashAlgorithm>(HashAlgorithm::NONE, HashAlgorithm::SHA512);
     test_enum8::<SignatureAlgorithm>(SignatureAlgorithm::Anonymous, SignatureAlgorithm::ECDSA);
     test_enum8::<ClientCertificateType>(
@@ -71,10 +70,6 @@ fn test_enums() {
         NamedCurve::arbitrary_explicit_char2_curves,
     );
     test_enum16::<NamedGroup>(NamedGroup::secp256r1, NamedGroup::FFDHE8192);
-    test_enum16::<CipherSuite>(
-        CipherSuite::TLS_NULL_WITH_NULL_NULL,
-        CipherSuite::SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA,
-    );
     test_enum8::<ECPointFormat>(
         ECPointFormat::Uncompressed,
         ECPointFormat::ANSIX962CompressedChar2,
@@ -84,18 +79,10 @@ fn test_enums() {
         HeartbeatMode::PeerNotAllowedToSend,
     );
     test_enum8::<ECCurveType>(ECCurveType::ExplicitPrime, ECCurveType::NamedCurve);
-    test_enum16::<SignatureScheme>(SignatureScheme::RSA_PKCS1_SHA1, SignatureScheme::ED448);
     test_enum8::<PSKKeyExchangeMode>(PSKKeyExchangeMode::PSK_KE, PSKKeyExchangeMode::PSK_DHE_KE);
     test_enum8::<KeyUpdateRequest>(
         KeyUpdateRequest::UpdateNotRequested,
         KeyUpdateRequest::UpdateRequested,
     );
     test_enum8::<CertificateStatusType>(CertificateStatusType::OCSP, CertificateStatusType::OCSP);
-}
-
-#[test]
-fn test_string_macro() {
-    let suite = CipherSuite::TLS13_AES_256_GCM_SHA384;
-    let s = suite.as_str().unwrap();
-    assert_eq!(s, "TLS13_AES_256_GCM_SHA384")
 }

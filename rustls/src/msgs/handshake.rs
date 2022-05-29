@@ -1,14 +1,13 @@
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::ECCurveType;
-use crate::msgs::enums::PSKKeyExchangeMode;
-use crate::msgs::enums::{CertificateStatusType, ClientCertificateType};
-use crate::msgs::enums::{CipherSuite, Compression, ECPointFormat, ExtensionType};
-use crate::msgs::enums::{HandshakeType, ProtocolVersion};
-use crate::msgs::enums::{HashAlgorithm, ServerNameType, SignatureAlgorithm};
-use crate::msgs::enums::{KeyUpdateRequest, NamedGroup, SignatureScheme};
+use crate::msgs::enums::{
+    CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
+    ExtensionType, HandshakeType, HashAlgorithm, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode,
+    ServerNameType, SignatureAlgorithm,
+};
 use crate::rand;
 
 #[cfg(feature = "logging")]

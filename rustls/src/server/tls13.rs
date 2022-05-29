@@ -1,5 +1,6 @@
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -7,7 +8,7 @@ use crate::key::Certificate;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, KeyUpdateRequest};
-use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::msgs::enums::{ContentType, HandshakeType};
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::handshake::HandshakePayload;
 use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTLS13};
@@ -32,11 +33,12 @@ use ring::constant_time;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
+    use crate::enums::SignatureScheme;
     use crate::kx;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
+    use crate::msgs::enums::NamedGroup;
     use crate::msgs::enums::{Compression, PSKKeyExchangeMode};
-    use crate::msgs::enums::{NamedGroup, SignatureScheme};
     use crate::msgs::handshake::CertReqExtension;
     use crate::msgs::handshake::CertificateEntry;
     use crate::msgs::handshake::CertificateExtension;

@@ -1,5 +1,6 @@
+use crate::enums::ProtocolVersion;
 use crate::msgs::base::Payload;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::enums::ContentType;
 use crate::msgs::message::{BorrowedPlainMessage, PlainMessage};
 use crate::Error;
 use std::collections::VecDeque;
@@ -81,8 +82,9 @@ impl MessageFragmenter {
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
+    use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
-    use crate::msgs::enums::{ContentType, ProtocolVersion};
+    use crate::msgs::enums::ContentType;
     use crate::msgs::message::PlainMessage;
     use std::collections::VecDeque;
 

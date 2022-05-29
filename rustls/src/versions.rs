@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::msgs::enums::ProtocolVersion;
+use crate::enums::ProtocolVersion;
 
 /// A TLS protocol version supported by rustls.
 ///

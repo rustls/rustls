@@ -1,8 +1,8 @@
 use crate::client::ServerName;
+use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::key;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{CipherSuite, ProtocolVersion};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
 use crate::suites::SupportedCipherSuite;

@@ -9,10 +9,10 @@ use env_logger;
 use rustls;
 
 use rustls::internal::msgs::codec::{Codec, Reader};
-use rustls::internal::msgs::enums::{CipherSuite, ProtocolVersion};
 use rustls::internal::msgs::persist;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
+use rustls::{CipherSuite, ProtocolVersion};
 use rustls::{ClientConnection, Connection, ServerConnection};
 
 use std::convert::TryInto;

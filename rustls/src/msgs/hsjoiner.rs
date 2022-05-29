@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 
+use crate::enums::ProtocolVersion;
 use crate::msgs::base::Payload;
 use crate::msgs::codec;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::enums::ContentType;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 
@@ -144,9 +145,10 @@ impl HandshakeJoiner {
 #[cfg(test)]
 mod tests {
     use super::HandshakeJoiner;
+    use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
     use crate::msgs::codec::Codec;
-    use crate::msgs::enums::{ContentType, HandshakeType, ProtocolVersion};
+    use crate::msgs::enums::{ContentType, HandshakeType};
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
     use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 

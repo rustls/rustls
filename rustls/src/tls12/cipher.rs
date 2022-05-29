@@ -1,8 +1,9 @@
 use crate::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::msgs::base::Payload;
 use crate::msgs::codec;
-use crate::msgs::enums::{ContentType, ProtocolVersion};
+use crate::msgs::enums::ContentType;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 
