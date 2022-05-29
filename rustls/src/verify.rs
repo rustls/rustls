@@ -188,7 +188,7 @@ impl fmt::Debug for dyn ServerCertVerifier {
 }
 
 /// A type which encapsulates a string that is a syntactically valid DNS name.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DnsName(pub(crate) webpki::DnsName);
 
 impl AsRef<str> for DnsName {

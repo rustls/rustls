@@ -25,7 +25,7 @@ use crate::versions::{SupportedProtocolVersion, TLS13};
 
 /// Bulk symmetric encryption scheme used by a cipher suite.
 #[allow(non_camel_case_types)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum BulkAlgorithm {
     /// AES with 128-bit keys in Galois counter mode.
     Aes128Gcm,

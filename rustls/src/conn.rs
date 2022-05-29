@@ -162,7 +162,7 @@ impl DerefMut for Connection {
 
 /// Values of this structure are returned from [`Connection::process_new_packets`]
 /// and tell the caller the current I/O state of the TLS connection.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
     tls_bytes_to_write: usize,
     plaintext_bytes_to_read: usize,

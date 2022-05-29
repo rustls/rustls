@@ -5,7 +5,7 @@ use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 
 /// An externally length'd payload
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Payload(pub Vec<u8>);
 
 impl Codec for Payload {
@@ -53,7 +53,7 @@ impl fmt::Debug for Payload {
 }
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PayloadU24(pub Vec<u8>);
 
 impl PayloadU24 {
@@ -83,7 +83,7 @@ impl fmt::Debug for PayloadU24 {
 }
 
 /// An arbitrary, unknown-content, u16-length-prefixed payload
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PayloadU16(pub Vec<u8>);
 
 impl PayloadU16 {
@@ -121,7 +121,7 @@ impl fmt::Debug for PayloadU16 {
 }
 
 /// An arbitrary, unknown-content, u8-length-prefixed payload
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PayloadU8(pub Vec<u8>);
 
 impl PayloadU8 {
