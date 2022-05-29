@@ -272,6 +272,16 @@ pub struct BorrowedPlainMessage<'a> {
     pub payload: &'a [u8],
 }
 
+impl<'a> BorrowedPlainMessage<'a> {
+    pub fn to_unencrypted_opaque(&self) -> OpaqueMessage {
+        OpaqueMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: Payload(self.payload.to_vec()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum MessageError {
     TooShortForHeader,
