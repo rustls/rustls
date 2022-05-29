@@ -1028,10 +1028,10 @@ impl CommonState {
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
-        for m in self
+        let iter = self
             .message_fragmenter
-            .fragment_message(&m)
-        {
+            .fragment_message(&m);
+        for m in iter {
             self.send_single_fragment(m);
         }
     }
@@ -1049,11 +1049,12 @@ impl CommonState {
             Limit::No => payload.len(),
         };
 
-        for m in self.message_fragmenter.fragment_slice(
+        let iter = self.message_fragmenter.fragment_slice(
             ContentType::ApplicationData,
             ProtocolVersion::TLSv1_2,
             &payload[..len],
-        ) {
+        );
+        for m in iter {
             self.send_single_fragment(m);
         }
 
@@ -1214,11 +1215,12 @@ impl CommonState {
             }
         }
         if !must_encrypt {
-            for mm in self
+            let msg = &m.into();
+            let iter = self
                 .message_fragmenter
-                .fragment_message(&m.into())
-            {
-                self.queue_tls_message(mm.to_unencrypted_opaque());
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
             }
         } else {
             self.send_msg_encrypt(m.into());
