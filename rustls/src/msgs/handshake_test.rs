@@ -1,9 +1,24 @@
-use super::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use super::codec::{put_u16, Codec, Reader};
-use super::enums::*;
-use super::handshake::*;
-use crate::enums::*;
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::key::Certificate;
+use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
+use crate::msgs::codec::{put_u16, Codec, Reader};
+use crate::msgs::enums::{
+    ClientCertificateType, Compression, ECCurveType, ExtensionType, HandshakeType, HashAlgorithm,
+    KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType, SignatureAlgorithm,
+};
+use crate::msgs::handshake::{
+    CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTLS13,
+    CertificateRequestPayload, CertificateRequestPayloadTLS13, CertificateStatus,
+    CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
+    ConvertProtocolNameList, ConvertServerNameList, DecomposedSignatureScheme,
+    DigitallySignedStruct, ECDHEServerKeyExchange, ECParameters, ECPointFormatList,
+    EncryptedExtensions, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
+    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
+    NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, Random, ServerECDHParams, ServerExtension,
+    ServerHelloPayload, ServerKeyExchangePayload, SessionID, SupportedPointFormats,
+    UnknownExtension,
+};
 use webpki::DnsNameRef;
 
 #[test]

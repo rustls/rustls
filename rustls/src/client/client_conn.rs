@@ -1,8 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Protocol, Side};
-use crate::enums::CipherSuite;
-use crate::enums::ProtocolVersion;
-use crate::enums::SignatureScheme;
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]

@@ -1,5 +1,5 @@
 use crate::conn::{CommonState, ConnectionRandoms, State};
-use crate::enums::{ProtocolVersion, SignatureScheme};
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
@@ -205,7 +205,7 @@ impl ExtensionProcessing {
             .is_some()
             || hello
                 .cipher_suites
-                .contains(&crate::enums::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         if secure_reneg_offered {
             self.exts
