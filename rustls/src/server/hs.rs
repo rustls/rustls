@@ -269,7 +269,7 @@ impl ExpectClientHello {
     /// Continues handling of a `ClientHello` message once config and certificate are available.
     pub(super) fn with_certified_key(
         self,
-        sig_schemes: Vec<SignatureScheme>,
+        mut sig_schemes: Vec<SignatureScheme>,
         client_hello: &ClientHelloPayload,
         m: &Message,
         cx: &mut ServerContext<'_>,
@@ -313,6 +313,26 @@ impl ExpectClientHello {
         };
 
         cx.common.negotiated_version = Some(version);
+
+        // We communicate to the upper layer what kind of key they should choose
+        // via the sigschemes value.  Clients tend to treat this extension
+        // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
+        // So: reduce the offered sigschemes to those compatible with the
+        // intersection of ciphersuites.
+        let client_suites = self
+            .config
+            .cipher_suites
+            .iter()
+            .copied()
+            .filter(|scs| {
+                client_hello
+                    .cipher_suites
+                    .contains(&scs.suite())
+            })
+            .collect::<Vec<_>>();
+
+        sig_schemes
+            .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
         // Choose a certificate.
         let certkey = {
@@ -410,13 +430,8 @@ impl ExpectClientHello {
 
 impl State<ServerConnectionData> for ExpectClientHello {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
-        let (client_hello, sig_schemes) = process_client_hello(
-            &m,
-            self.done_retry,
-            &self.config.cipher_suites,
-            cx.common,
-            cx.data,
-        )?;
+        let (client_hello, sig_schemes) =
+            process_client_hello(&m, self.done_retry, cx.common, cx.data)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 }
@@ -431,7 +446,6 @@ impl State<ServerConnectionData> for ExpectClientHello {
 pub(super) fn process_client_hello<'a>(
     m: &'a Message,
     done_retry: bool,
-    supported_cipher_suites: &[SupportedCipherSuite],
     common: &mut CommonState,
     data: &mut ServerConnectionData,
 ) -> Result<(&'a ClientHelloPayload, Vec<SignatureScheme>), Error> {
@@ -491,26 +505,10 @@ pub(super) fn process_client_hello<'a>(
         ));
     }
 
-    // We communicate to the upper layer what kind of key they should choose
-    // via the sigschemes value.  Clients tend to treat this extension
-    // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
-    // So: reduce the offered sigschemes to those compatible with the
-    // intersection of ciphersuites.
-    let client_suites = supported_cipher_suites
-        .iter()
-        .copied()
-        .filter(|scs| {
-            client_hello
-                .cipher_suites
-                .contains(&scs.suite())
-        })
-        .collect::<Vec<_>>();
-
-    let mut sig_schemes = client_hello
+    let sig_schemes = client_hello
         .get_sigalgs_extension()
         .ok_or_else(|| incompatible(common, "client didn't describe signature schemes"))?
         .clone();
-    sig_schemes.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
     Ok((client_hello, sig_schemes))
 }
