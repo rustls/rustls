@@ -99,6 +99,10 @@ pub trait ServerCertVerifier: Send + Sync {
     /// along with the end-entity certificate; it is in the same order that the
     /// peer sent them and may be empty.
     ///
+    /// Note that none of the certificates have been parsed yet, so it is the responsibility of
+    /// the implementor to handle invalid data. It is recommended that the implementor returns
+    /// [`Error::InvalidCertificateEncoding`] when these cases are encountered.
+    ///
     /// `scts` contains the Signed Certificate Timestamps (SCTs) the server
     /// sent with the certificate, if any.
     fn verify_server_cert(
@@ -226,6 +230,10 @@ pub trait ClientCertVerifier: Send + Sync {
     /// `intermediates` contains the intermediate certificates the
     /// client sent along with the end-entity certificate; it is in the same
     /// order that the peer sent them and may be empty.
+    ///
+    /// Note that none of the certificates have been parsed yet, so it is the responsibility of
+    /// the implementor to handle invalid data. It is recommended that the implementor returns
+    /// [`Error::InvalidCertificateEncoding`] when these cases are encountered.
     fn verify_client_cert(
         &self,
         end_entity: &Certificate,

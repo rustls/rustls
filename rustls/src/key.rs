@@ -15,6 +15,11 @@ pub struct PrivateKey(pub Vec<u8>);
 /// The certificate must be DER-encoded X.509.
 ///
 /// The `rustls-pemfile` crate can be used to parse a PEM file.
+///
+/// ## Note
+///
+/// If you are receiving certificates from an untrusted client or server, the contents
+/// must be validated manually.
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Certificate(pub Vec<u8>);
 
