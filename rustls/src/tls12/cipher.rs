@@ -24,7 +24,7 @@ fn make_tls12_aad(
     ring::aead::Aad::from(out)
 }
 
-pub(crate) struct AesGcm;
+pub struct AesGcm;
 
 impl Tls12AeadAlgorithm for AesGcm {
     fn decrypter(&self, dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
@@ -62,7 +62,7 @@ impl Tls12AeadAlgorithm for AesGcm {
     }
 }
 
-pub(crate) struct ChaCha20Poly1305;
+pub struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     fn decrypter(&self, dec_key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
@@ -85,7 +85,7 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     }
 }
 
-pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
+pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
     fn encrypter(
         &self,

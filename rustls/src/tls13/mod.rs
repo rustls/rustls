@@ -11,14 +11,14 @@ use ring::{aead, hkdf};
 
 use std::fmt;
 
-pub(crate) mod key_schedule;
+pub mod key_schedule;
 use key_schedule::{derive_traffic_iv, derive_traffic_key};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);
 
-pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
+pub static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         bulk: BulkAlgorithm::Chacha20Poly1305,
@@ -50,7 +50,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
 pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(TLS13_AES_128_GCM_SHA256_INTERNAL);
 
-pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
+pub static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
         bulk: BulkAlgorithm::Aes128Gcm,
@@ -67,15 +67,15 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
 pub struct Tls13CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
-    pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
+    pub hkdf_algorithm: ring::hkdf::Algorithm,
     #[cfg(feature = "quic")]
-    pub(crate) confidentiality_limit: u64,
+    pub confidentiality_limit: u64,
     #[cfg(feature = "quic")]
-    pub(crate) integrity_limit: u64,
+    pub integrity_limit: u64,
 }
 
 impl Tls13CipherSuite {
-    pub(crate) fn derive_encrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
+    pub fn derive_encrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
         let key = derive_traffic_key(secret, self.common.aead_algorithm);
         let iv = derive_traffic_iv(secret);
 

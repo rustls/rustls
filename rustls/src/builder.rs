@@ -95,8 +95,8 @@ use std::marker::PhantomData;
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
-    pub(crate) state: State,
-    pub(crate) side: PhantomData<Side>,
+    pub state: State,
+    pub side: PhantomData<Side>,
 }
 
 impl<Side: ConfigSide, State> fmt::Debug for ConfigBuilder<Side, State> {
@@ -115,7 +115,7 @@ impl<Side: ConfigSide, State> fmt::Debug for ConfigBuilder<Side, State> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
-pub struct WantsCipherSuites(pub(crate) ());
+pub struct WantsCipherSuites(pub ());
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
@@ -244,9 +244,9 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 pub struct WantsVerifier {
-    pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
-    pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
-    pub(crate) versions: versions::EnabledVersions,
+    pub cipher_suites: Vec<SupportedCipherSuite>,
+    pub kx_groups: Vec<&'static SupportedKxGroup>,
+    pub versions: versions::EnabledVersions,
 }
 
 /// Helper trait to abstract [`ConfigBuilder`] over building a [`ClientConfig`] or [`ServerConfig`].

@@ -15,6 +15,8 @@ use crate::msgs::heartbeat::HeartbeatPayload;
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
     Handshake(HandshakeMessagePayload),
+    // this type is for TLS 1.2 encrypted handshake messages
+    TLS12EncryptedHandshake(Payload),
     ChangeCipherSpec(ChangeCipherSpecPayload),
     ApplicationData(Payload),
     Heartbeat(HeartbeatPayload),
@@ -25,6 +27,7 @@ impl MessagePayload {
         match *self {
             Self::Alert(ref x) => x.encode(bytes),
             Self::Handshake(ref x) => x.encode(bytes),
+            Self::TLS12EncryptedHandshake(ref x) => x.encode(bytes),
             Self::ChangeCipherSpec(ref x) => x.encode(bytes),
             Self::ApplicationData(ref x) => x.encode(bytes),
             Self::Heartbeat(ref x) => x.encode(bytes),
@@ -57,6 +60,7 @@ impl MessagePayload {
         match self {
             Self::Alert(_) => ContentType::Alert,
             Self::Handshake(_) => ContentType::Handshake,
+            Self::TLS12EncryptedHandshake(_) => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
             Self::Heartbeat(_) => ContentType::Heartbeat,

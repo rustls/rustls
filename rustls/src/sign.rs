@@ -79,7 +79,7 @@ impl CertifiedKey {
     ///
     /// These checks are not security-sensitive.  They are the
     /// *server* attempting to detect accidental misconfiguration.
-    pub(crate) fn cross_check_end_entity_cert(
+    pub fn cross_check_end_entity_cert(
         &self,
         name: Option<webpki::DnsNameRef>,
     ) -> Result<(), Error> {

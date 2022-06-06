@@ -9,13 +9,14 @@ use std::mem;
 /// Before we know the hash algorithm to use to verify the handshake, we just buffer the messages.
 /// During the handshake, we may restart the transcript due to a HelloRetryRequest, reverting
 /// from the `HandshakeHash` to a `HandshakeHashBuffer` again.
-pub(crate) struct HandshakeHashBuffer {
+#[derive(Clone)]
+pub struct HandshakeHashBuffer {
     buffer: Vec<u8>,
     client_auth_enabled: bool,
 }
 
 impl HandshakeHashBuffer {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             buffer: Vec::new(),
             client_auth_enabled: false,
@@ -24,12 +25,12 @@ impl HandshakeHashBuffer {
 
     /// We might be doing client auth, so need to keep a full
     /// log of the handshake.
-    pub(crate) fn set_client_auth_enabled(&mut self) {
+    pub fn set_client_auth_enabled(&mut self) {
         self.client_auth_enabled = true;
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message) {
+    pub fn add_message(&mut self, m: &Message) {
         if let MessagePayload::Handshake(hs) = &m.payload {
             self.buffer
                 .extend_from_slice(&hs.get_encoding());
@@ -43,7 +44,7 @@ impl HandshakeHashBuffer {
     }
 
     /// Get the hash value if we were to hash `extra` too.
-    pub(crate) fn get_hash_given(
+    pub fn get_hash_given(
         &self,
         hash: &'static digest::Algorithm,
         extra: &[u8],
@@ -55,7 +56,7 @@ impl HandshakeHashBuffer {
     }
 
     /// We now know what hash function the verify_data will use.
-    pub(crate) fn start_hash(self, alg: &'static digest::Algorithm) -> HandshakeHash {
+    pub fn start_hash(self, alg: &'static digest::Algorithm) -> HandshakeHash {
         let mut ctx = digest::Context::new(alg);
         ctx.update(&self.buffer);
         HandshakeHash {
@@ -64,6 +65,7 @@ impl HandshakeHashBuffer {
                 true => Some(self.buffer),
                 false => None,
             },
+            override_buffer: None
         }
     }
 }
@@ -75,7 +77,8 @@ impl HandshakeHashBuffer {
 ///
 /// For client auth, we also need to buffer all the messages.
 /// This is disabled in cases where client auth is not possible.
-pub(crate) struct HandshakeHash {
+#[derive(Clone)]
+pub struct HandshakeHash {
     /// None before we know what hash function we're using
     ctx: digest::Context,
 
@@ -86,24 +89,34 @@ pub(crate) struct HandshakeHash {
 }
 
 impl HandshakeHash {
-    /// Creates a Handshake hash which return the same override hash always
-    pub fn new_override(static_buffer: Vec<u8>) -> HandshakeHash {
+
+    pub fn new(alg: &'static digest::Algorithm) -> HandshakeHash {
+        let mut ctx = digest::Context::new(alg);
         HandshakeHash {
-            ctx: None,
-            client_auth_enabled: false,
-            buffer: Vec::new(),
+            ctx,
+            client_auth: None,
+            override_buffer: None
+        }
+    }
+
+    /// Creates a Handshake hash which return the same override hash always
+    pub fn new_override(static_buffer: Vec<u8>, alg: &'static digest::Algorithm) -> HandshakeHash {
+        let mut ctx = digest::Context::new(alg);
+        HandshakeHash {
+            ctx,
+            client_auth: None,
             override_buffer: Some(static_buffer)
         }
     }
 
     /// We decided not to do client auth after all, so discard
     /// the transcript.
-    pub(crate) fn abandon_client_auth(&mut self) {
+    pub fn abandon_client_auth(&mut self) {
         self.client_auth = None;
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message) -> &mut Self {
+    pub fn add_message(&mut self, m: &Message) -> &mut Self {
         if let MessagePayload::Handshake(hs) = &m.payload {
             let buf = hs.get_encoding();
             self.update_raw(&buf);
@@ -124,13 +137,13 @@ impl HandshakeHash {
 
     /// Get the hash value if we were to hash `extra` too,
     /// using hash function `hash`.
-    pub(crate) fn get_hash_given(&self, extra: &[u8]) -> digest::Digest {
+    pub fn get_hash_given(&self, extra: &[u8]) -> digest::Digest {
         let mut ctx = self.ctx.clone();
         ctx.update(extra);
         ctx.finish()
     }
 
-    pub(crate) fn into_hrr_buffer(self) -> HandshakeHashBuffer {
+    pub fn into_hrr_buffer(self) -> HandshakeHashBuffer {
         let old_hash = self.ctx.finish();
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
@@ -144,7 +157,7 @@ impl HandshakeHash {
     /// Take the current hash value, and encapsulate it in a
     /// 'handshake_hash' handshake message.  Start this hash
     /// again, with that message at the front.
-    pub(crate) fn rollup_for_hrr(&mut self) {
+    pub fn rollup_for_hrr(&mut self) {
         let ctx = &mut self.ctx;
 
         let old_ctx = mem::replace(ctx, digest::Context::new(ctx.algorithm()));
@@ -156,13 +169,13 @@ impl HandshakeHash {
     }
 
     /// Get the current hash value.
-    pub(crate) fn get_current_hash(&self) -> digest::Digest {
+    pub fn get_current_hash(&self) -> digest::Digest {
         self.ctx.clone().finish()
     }
 
     pub fn get_current_hash_raw(&self) -> Vec<u8> {
         if let Some(static_buffer) = &self.override_buffer {
-            return static_buffer.clone()
+            return (*static_buffer).clone()
         } else {
             Vec::from(self.get_current_hash().as_ref())
         }
@@ -172,12 +185,12 @@ impl HandshakeHash {
     /// so far.  This method only works once; it resets the buffer
     /// to empty.
     #[cfg(feature = "tls12")]
-    pub(crate) fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
+    pub fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
         self.client_auth.take()
     }
 
     /// The digest algorithm
-    pub(crate) fn algorithm(&self) -> &'static digest::Algorithm {
+    pub fn algorithm(&self) -> &'static digest::Algorithm {
         self.ctx.algorithm()
     }
 }

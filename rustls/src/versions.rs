@@ -40,14 +40,14 @@ pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
 pub static DEFAULT_VERSIONS: &[&SupportedProtocolVersion] = ALL_VERSIONS;
 
 #[derive(Debug, Clone)]
-pub(crate) struct EnabledVersions {
+pub struct EnabledVersions {
     #[cfg(feature = "tls12")]
     tls12: Option<&'static SupportedProtocolVersion>,
     tls13: Option<&'static SupportedProtocolVersion>,
 }
 
 impl EnabledVersions {
-    pub(crate) fn new(versions: &[&'static SupportedProtocolVersion]) -> Self {
+    pub fn new(versions: &[&'static SupportedProtocolVersion]) -> Self {
         let mut ev = Self {
             #[cfg(feature = "tls12")]
             tls12: None,

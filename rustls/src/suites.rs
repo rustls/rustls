@@ -43,7 +43,7 @@ pub struct CipherSuiteCommon {
     /// How to do bulk encryption.
     pub bulk: BulkAlgorithm,
 
-    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
+    pub aead_algorithm: &'static ring::aead::Algorithm,
 }
 
 /// A cipher suite supported by rustls.
@@ -74,7 +74,7 @@ impl SupportedCipherSuite {
         self.common().suite
     }
 
-    pub(crate) fn common(&self) -> &CipherSuiteCommon {
+    pub fn common(&self) -> &CipherSuiteCommon {
         match self {
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(inner) => &inner.common,
@@ -82,11 +82,20 @@ impl SupportedCipherSuite {
         }
     }
 
-    pub(crate) fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
+    pub fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
         match self {
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(_) => None,
             SupportedCipherSuite::Tls13(inner) => Some(inner),
+        }
+    }
+
+    #[cfg(feature = "tls12")]
+    pub fn tls12(&self) -> Option<&'static Tls12CipherSuite> {
+        match self {
+            #[cfg(feature = "tls12")]
+            SupportedCipherSuite::Tls12(inner) => Some(inner),
+            SupportedCipherSuite::Tls13(inner) => None,
         }
     }
 
@@ -141,7 +150,7 @@ pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
 pub static DEFAULT_CIPHER_SUITES: &[SupportedCipherSuite] = ALL_CIPHER_SUITES;
 
 // These both O(N^2)!
-pub(crate) fn choose_ciphersuite_preferring_client(
+pub fn choose_ciphersuite_preferring_client(
     client_suites: &[CipherSuite],
     server_suites: &[SupportedCipherSuite],
 ) -> Option<SupportedCipherSuite> {
@@ -157,7 +166,7 @@ pub(crate) fn choose_ciphersuite_preferring_client(
     None
 }
 
-pub(crate) fn choose_ciphersuite_preferring_server(
+pub fn choose_ciphersuite_preferring_server(
     client_suites: &[CipherSuite],
     server_suites: &[SupportedCipherSuite],
 ) -> Option<SupportedCipherSuite> {
@@ -173,7 +182,7 @@ pub(crate) fn choose_ciphersuite_preferring_server(
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with `SignatureAlgorithm` `sigalg` removed.
-pub(crate) fn reduce_given_sigalg(
+pub fn reduce_given_sigalg(
     all: &[SupportedCipherSuite],
     sigalg: SignatureAlgorithm,
 ) -> Vec<SupportedCipherSuite> {
@@ -185,7 +194,7 @@ pub(crate) fn reduce_given_sigalg(
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with the chosen `version` removed.
-pub(crate) fn reduce_given_version(
+pub fn reduce_given_version(
     all: &[SupportedCipherSuite],
     version: ProtocolVersion,
 ) -> Vec<SupportedCipherSuite> {
@@ -196,7 +205,7 @@ pub(crate) fn reduce_given_version(
 }
 
 /// Return true if `sigscheme` is usable by any of the given suites.
-pub(crate) fn compatible_sigscheme_for_suites(
+pub fn compatible_sigscheme_for_suites(
     sigscheme: SignatureScheme,
     common_suites: &[SupportedCipherSuite],
 ) -> bool {

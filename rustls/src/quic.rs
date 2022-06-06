@@ -24,7 +24,7 @@ pub struct Secrets {
 }
 
 impl Secrets {
-    pub(crate) fn new(
+    pub fn new(
         client: hkdf::Prk,
         server: hkdf::Prk,
         suite: &'static Tls13CipherSuite,
@@ -99,7 +99,7 @@ pub struct DirectionalKeys {
 }
 
 impl DirectionalKeys {
-    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
+    pub fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
         Self {
             header: HeaderProtectionKey::new(suite, secret),
             packet: PacketKey::new(suite, secret),
@@ -397,7 +397,7 @@ impl Keys {
     }
 }
 
-pub(crate) fn write_hs(this: &mut CommonState, buf: &mut Vec<u8>) -> Option<KeyChange> {
+pub fn write_hs(this: &mut CommonState, buf: &mut Vec<u8>) -> Option<KeyChange> {
     while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
         buf.extend_from_slice(&msg);
         if let Some(&(true, _)) = this.quic.hs_queue.front() {

@@ -517,7 +517,7 @@ pub(super) fn process_client_hello<'a>(
 }
 
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum HandshakeHashOrBuffer {
+pub enum HandshakeHashOrBuffer {
     Buffer(HandshakeHashBuffer),
     Hash(HandshakeHash),
 }

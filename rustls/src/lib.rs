@@ -264,7 +264,6 @@
     clippy::use_self,
     trivial_casts,
     trivial_numeric_casts,
-    missing_docs,
     unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
@@ -312,7 +311,6 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
 }
 
-#[allow(missing_docs)]
 #[macro_use]
 pub mod msgs;
 pub mod anchors;
@@ -330,8 +328,8 @@ pub mod tls13;
 pub mod vecbuf;
 pub mod verify;
 #[cfg(test)]
-pub pub mod verifybench;
-pub pub mod x509;
+pub mod verifybench;
+pub mod x509;
 #[macro_use]
 pub mod check;
 pub mod bs_debug;
@@ -421,14 +419,14 @@ pub use client::{ClientConfig, ClientConnection, ServerName};
 
 /// Items for use in a server.
 pub mod server {
-    pub(crate) mod builder;
-    mod common;
-    pub(crate) mod handy;
-    mod hs;
-    mod server_conn;
+    pub mod builder;
+    pub mod common;
+    pub mod handy;
+    pub mod hs;
+    pub mod server_conn;
     #[cfg(feature = "tls12")]
-    mod tls12;
-    mod tls13;
+    pub mod tls12;
+    pub mod tls13;
 
     pub use crate::verify::{
         AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,

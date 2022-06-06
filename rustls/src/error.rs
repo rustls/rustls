@@ -116,7 +116,7 @@ pub enum Error {
 
 impl Error {
     #[track_caller]
-    pub(crate) fn corrupt_message(kind: ContentType) -> Self {
+    pub fn corrupt_message(kind: ContentType) -> Self {
         Self::CorruptMessagePayload(CorruptMessagePayload {
             location: core::panic::Location::caller(),
             kind,

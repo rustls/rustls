@@ -1,5 +1,6 @@
 use std::collections;
 use std::fmt;
+use log::warn;
 
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
@@ -574,9 +575,7 @@ impl ClientExtension {
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::ServerName(_) => ExtensionType::ServerName,
-            Self::SessionTicketRequest | Self::SessionTicketOffer(_) => {
-                ExtensionType::SessionTicket
-            },
+            Self::SessionTicket(_) => ExtensionType::SessionTicket,
             Self::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
             Self::KeyShare(_) => ExtensionType::KeyShare,
@@ -606,11 +605,11 @@ impl Codec for ClientExtension {
             Self::NamedGroups(ref r) => r.encode(&mut sub),
             Self::SignatureAlgorithms(ref r) => r.encode(&mut sub),
             Self::ServerName(ref r) => r.encode(&mut sub),
-            Self::SessionTicketRequest
+            Self::SessionTicket(ClientSessionTicket::Request)
             | Self::ExtendedMasterSecretRequest
             | Self::SignedCertificateTimestampRequest
             | Self::EarlyData => {}
-            Self::SessionTicketOffer(ref r) => r.encode(&mut sub),
+            Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.encode(&mut sub),
             Self::Protocols(ref r) => r.encode(&mut sub),
             Self::SupportedVersions(ref r) => r.encode(&mut sub),
             Self::KeyShare(ref r) => r.encode(&mut sub),

@@ -14,9 +14,9 @@ use ring::digest::Digest;
 use std::fmt;
 
 mod cipher;
-pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
+pub use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
 
-mod prf;
+pub mod prf;
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 #[cfg(feature = "tls12")]
@@ -143,7 +143,7 @@ static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
-    pub(crate) hmac_algorithm: ring::hmac::Algorithm,
+    pub hmac_algorithm: ring::hmac::Algorithm,
     /// How to exchange/agree keys.
     pub kx: KeyExchangeAlgorithm,
 
@@ -162,7 +162,7 @@ pub struct Tls12CipherSuite {
     /// chacha20poly1305 works this way by design.
     pub explicit_nonce_len: usize,
 
-    pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
+    pub aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
 
 #[cfg(feature = "tls12")]
@@ -209,14 +209,14 @@ impl fmt::Debug for Tls12CipherSuite {
 }
 
 /// TLS1.2 per-connection keying material
-pub(crate) struct ConnectionSecrets {
-    pub(crate) randoms: ConnectionRandoms,
+pub struct ConnectionSecrets {
+    pub randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
-    pub(crate) master_secret: [u8; 48],
+    pub master_secret: [u8; 48],
 }
 
 impl ConnectionSecrets {
-    pub(crate) fn from_key_exchange(
+    pub fn from_key_exchange(
         kx: kx::KeyExchange,
         peer_pub_key: &[u8],
         ems_seed: Option<Digest>,
@@ -251,7 +251,7 @@ impl ConnectionSecrets {
         Ok(ret)
     }
 
-    pub(crate) fn new_resume(
+    pub fn new_resume(
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
         master_secret: &[u8],
@@ -268,7 +268,7 @@ impl ConnectionSecrets {
 
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
     /// and the session's `secrets`.
-    pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
+    pub fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
         fn split_key<'a>(
             key_block: &'a [u8],
             alg: &'static aead::Algorithm,
@@ -341,11 +341,11 @@ impl ConnectionSecrets {
         out
     }
 
-    pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
+    pub fn suite(&self) -> &'static Tls12CipherSuite {
         self.suite
     }
 
-    pub(crate) fn get_master_secret(&self) -> Vec<u8> {
+    pub fn get_master_secret(&self) -> Vec<u8> {
         let mut ret = Vec::new();
         ret.extend_from_slice(&self.master_secret);
         ret
@@ -365,15 +365,15 @@ impl ConnectionSecrets {
         out
     }
 
-    pub(crate) fn client_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
+    pub fn client_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"client finished")
     }
 
-    pub(crate) fn server_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
+    pub fn server_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"server finished")
     }
 
-    pub(crate) fn export_keying_material(
+    pub fn export_keying_material(
         &self,
         output: &mut [u8],
         label: &[u8],
@@ -421,7 +421,7 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
-pub(crate) fn decode_ecdh_params<T: Codec>(
+pub fn decode_ecdh_params<T: Codec>(
     common: &mut CommonState,
     kx_params: &[u8],
 ) -> Result<T, Error> {
@@ -440,7 +440,7 @@ fn decode_ecdh_params_<T: Codec>(kx_params: &[u8]) -> Option<T> {
     }
 }
 
-pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
+pub const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 #[cfg(test)]
 mod tests {

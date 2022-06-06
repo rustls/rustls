@@ -221,14 +221,14 @@ impl ServerName {
     /// Return the name that should go in the SNI extension.
     /// If [`None`] is returned, the SNI extension is not included
     /// in the handshake.
-    pub(crate) fn for_sni(&self) -> Option<webpki::DnsNameRef> {
+    pub fn for_sni(&self) -> Option<webpki::DnsNameRef> {
         match self {
             Self::DnsName(dns_name) => Some(dns_name.0.as_ref()),
         }
     }
 
     /// Return a prefix-free, unique encoding for the name.
-    pub(crate) fn encode(&self) -> Vec<u8> {
+    pub fn encode(&self) -> Vec<u8> {
         enum UniqueTypeCode {
             DnsName = 0x01,
         }

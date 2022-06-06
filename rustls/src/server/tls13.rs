@@ -518,7 +518,7 @@ mod client_hello {
 
         let handshake_hash = transcript.get_current_hash();
         let (key_schedule, _client_key, server_key) = key_schedule.derive_handshake_secrets(
-            handshake_hash,
+            handshake_hash.as_ref(),
             &*config.key_log,
             &randoms.client,
         );

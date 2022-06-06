@@ -54,10 +54,10 @@ impl HandshakeSignatureValid {
 }
 
 #[derive(Debug)]
-pub(crate) struct FinishedMessageVerified(());
+pub struct FinishedMessageVerified(());
 
 impl FinishedMessageVerified {
-    pub(crate) fn assertion() -> Self {
+    pub fn assertion() -> Self {
         Self(())
     }
 }
@@ -181,7 +181,7 @@ pub trait ServerCertVerifier: Send + Sync {
 
 /// A type which encapsuates a string that is a syntactically valid DNS name.
 #[derive(Clone, Debug, PartialEq)]
-pub struct DnsName(pub(crate) webpki::DnsName);
+pub struct DnsName(pub webpki::DnsName);
 
 impl AsRef<str> for DnsName {
     fn as_ref(&self) -> &str {
@@ -687,12 +687,12 @@ fn convert_alg_tls13(
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_tls13_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+pub fn construct_tls13_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
     construct_tls13_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+pub fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
     construct_tls13_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
 }
 

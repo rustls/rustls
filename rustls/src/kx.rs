@@ -3,15 +3,15 @@ use crate::msgs::enums::NamedGroup;
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
-pub(crate) struct KeyExchange {
-    skxg: &'static SupportedKxGroup,
-    privkey: ring::agreement::EphemeralPrivateKey,
-    pub(crate) pubkey: ring::agreement::PublicKey,
+pub struct KeyExchange {
+    pub skxg: &'static SupportedKxGroup,
+    pub privkey: ring::agreement::EphemeralPrivateKey,
+    pub pubkey: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
     /// Choose a SupportedKxGroup by name, from a list of supported groups.
-    pub(crate) fn choose(
+    pub fn choose(
         name: NamedGroup,
         supported: &[&'static SupportedKxGroup],
     ) -> Option<&'static SupportedKxGroup> {
@@ -24,7 +24,7 @@ impl KeyExchange {
     /// Start a key exchange, using the given SupportedKxGroup.
     ///
     /// This generates an ephemeral key pair and stores it in the returned KeyExchange object.
-    pub(crate) fn start(skxg: &'static SupportedKxGroup) -> Option<Self> {
+    pub fn start(skxg: &'static SupportedKxGroup) -> Option<Self> {
         let rng = ring::rand::SystemRandom::new();
         let ours =
             ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).ok()?;
@@ -39,7 +39,7 @@ impl KeyExchange {
     }
 
     /// Return the group being used.
-    pub(crate) fn group(&self) -> NamedGroup {
+    pub fn group(&self) -> NamedGroup {
         self.skxg.name
     }
 
@@ -47,7 +47,7 @@ impl KeyExchange {
     ///
     /// The shared secret is passed into the closure passed down in `f`, and the result of calling
     /// `f` is returned to the caller.
-    pub(crate) fn complete<T>(
+    pub fn complete<T>(
         self,
         peer: &[u8],
         f: impl FnOnce(&[u8]) -> Result<T, ()>,

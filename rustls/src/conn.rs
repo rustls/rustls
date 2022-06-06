@@ -352,16 +352,16 @@ impl<'a> io::Write for Writer<'a> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub(crate) enum Protocol {
+pub enum Protocol {
     Tcp,
     #[cfg(feature = "quic")]
     Quic,
 }
 
 #[derive(Debug)]
-pub(crate) struct ConnectionRandoms {
-    pub(crate) client: [u8; 32],
-    pub(crate) server: [u8; 32],
+pub struct ConnectionRandoms {
+    pub client: [u8; 32],
+    pub server: [u8; 32],
 }
 
 /// How many ChangeCipherSpec messages we accept and drop in TLS1.3 handshakes.
@@ -370,7 +370,7 @@ pub(crate) struct ConnectionRandoms {
 static TLS13_MAX_DROPPED_CCS: u8 = 2u8;
 
 impl ConnectionRandoms {
-    pub(crate) fn new(client: Random, server: Random) -> Self {
+    pub fn new(client: Random, server: Random) -> Self {
         Self {
             client: client.0,
             server: server.0,
@@ -394,14 +394,14 @@ enum Limit {
 /// Interface shared by client and server connections.
 pub struct ConnectionCommon<Data> {
     state: Result<Box<dyn State<Data>>, Error>,
-    pub(crate) data: Data,
-    pub(crate) common_state: CommonState,
+    pub data: Data,
+    pub common_state: CommonState,
     message_deframer: MessageDeframer,
     handshake_joiner: HandshakeJoiner,
 }
 
 impl<Data> ConnectionCommon<Data> {
-    pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
+    pub fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),
             data,
@@ -510,7 +510,7 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
-    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
+    pub fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
         if self.message_deframer.desynced {
             return Err(Error::CorruptMessage);
         }
@@ -539,7 +539,7 @@ impl<Data> ConnectionCommon<Data> {
         Ok(self.handshake_joiner.frames.pop_front())
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
+    pub fn replace_state(&mut self, new: Box<dyn State<Data>>) {
         self.state = Ok(new);
     }
 
@@ -682,7 +682,7 @@ impl<Data> ConnectionCommon<Data> {
         Ok(state)
     }
 
-    pub(crate) fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
+    pub fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
         if let Ok(st) = &mut self.state {
             st.perhaps_write_key_update(&mut self.common_state);
         }
@@ -741,7 +741,7 @@ impl<Data> ConnectionCommon<Data> {
 
 #[cfg(feature = "quic")]
 impl<Data> ConnectionCommon<Data> {
-    pub(crate) fn read_quic_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+    pub fn read_quic_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         let state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -786,34 +786,34 @@ impl<T> DerefMut for ConnectionCommon<T> {
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) side: Side,
-    pub(crate) record_layer: record_layer::RecordLayer,
-    pub(crate) suite: Option<SupportedCipherSuite>,
-    pub(crate) alpn_protocol: Option<Vec<u8>>,
+    pub negotiated_version: Option<ProtocolVersion>,
+    pub side: Side,
+    pub record_layer: record_layer::RecordLayer,
+    pub suite: Option<SupportedCipherSuite>,
+    pub alpn_protocol: Option<Vec<u8>>,
     aligned_handshake: bool,
-    pub(crate) may_send_application_data: bool,
-    pub(crate) may_receive_application_data: bool,
-    pub(crate) early_traffic: bool,
+    pub may_send_application_data: bool,
+    pub may_receive_application_data: bool,
+    pub early_traffic: bool,
     sent_fatal_alert: bool,
     /// If the peer has signaled end of stream.
     has_received_close_notify: bool,
     has_seen_eof: bool,
     received_middlebox_ccs: u8,
-    pub(crate) peer_certificates: Option<Vec<key::Certificate>>,
+    pub peer_certificates: Option<Vec<key::Certificate>>,
     message_fragmenter: MessageFragmenter,
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
-    pub(crate) sendable_tls: ChunkVecBuffer,
+    pub sendable_tls: ChunkVecBuffer,
     #[allow(dead_code)] // only read for QUIC
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    pub(crate) protocol: Protocol,
+    pub protocol: Protocol,
     #[cfg(feature = "quic")]
-    pub(crate) quic: Quic,
+    pub quic: Quic,
 }
 
 impl CommonState {
-    pub(crate) fn new(max_fragment_size: Option<usize>, side: Side) -> Result<Self, Error> {
+    pub fn new(max_fragment_size: Option<usize>, side: Side) -> Result<Self, Error> {
         Ok(Self {
             negotiated_version: None,
             side,
@@ -898,7 +898,7 @@ impl CommonState {
         self.negotiated_version
     }
 
-    pub(crate) fn is_tls13(&self) -> bool {
+    pub fn is_tls13(&self) -> bool {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
@@ -941,11 +941,11 @@ impl CommonState {
     ///
     /// If internal buffers are too small, this function will not accept
     /// all the data.
-    pub(crate) fn send_some_plaintext(&mut self, data: &[u8]) -> usize {
+    pub fn send_some_plaintext(&mut self, data: &[u8]) -> usize {
         self.send_plain(data, Limit::Yes)
     }
 
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
+    pub fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.early_traffic);
         debug_assert!(self.record_layer.is_encrypting());
 
@@ -961,7 +961,7 @@ impl CommonState {
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
     // which is illegal.  Not mentioned in RFC.
-    pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
+    pub fn check_aligned_handshake(&mut self) -> Result<(), Error> {
         if !self.aligned_handshake {
             self.send_fatal_alert(AlertDescription::UnexpectedMessage);
             Err(Error::PeerMisbehavedError(
@@ -972,12 +972,12 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn illegal_param(&mut self, why: &str) -> Error {
+    pub fn illegal_param(&mut self, why: &str) -> Error {
         self.send_fatal_alert(AlertDescription::IllegalParameter);
         Error::PeerMisbehavedError(why.to_string())
     }
 
-    pub(crate) fn decrypt_incoming(
+    pub fn decrypt_incoming(
         &mut self,
         encr: OpaqueMessage,
     ) -> Result<Option<PlainMessage>, Error> {
@@ -1015,7 +1015,7 @@ impl CommonState {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
+    pub fn send_msg_encrypt(&mut self, m: PlainMessage) {
         let mut plain_messages = VecDeque::new();
         self.message_fragmenter
             .fragment(m, &mut plain_messages);
@@ -1114,12 +1114,12 @@ impl CommonState {
         self.send_appdata_encrypt(data, limit)
     }
 
-    pub(crate) fn start_outgoing_traffic(&mut self) {
+    pub fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         self.flush_plaintext();
     }
 
-    pub(crate) fn start_traffic(&mut self) {
+    pub fn start_traffic(&mut self) {
         self.may_receive_application_data = true;
         self.start_outgoing_traffic();
     }
@@ -1186,7 +1186,7 @@ impl CommonState {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool) {
+    pub fn send_msg(&mut self, m: Message, must_encrypt: bool) {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = self.protocol {
@@ -1218,12 +1218,12 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
+    pub fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext.append(bytes.0);
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
+    pub fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
         let (dec, enc) = secrets.make_cipher_pair(side);
         self.record_layer
             .prepare_message_encrypter(enc);
@@ -1232,7 +1232,7 @@ impl CommonState {
     }
 
     #[cfg(feature = "quic")]
-    pub(crate) fn missing_extension(&mut self, why: &str) -> Error {
+    pub fn missing_extension(&mut self, why: &str) -> Error {
         self.send_fatal_alert(AlertDescription::MissingExtension);
         Error::PeerMisbehavedError(why.to_string())
     }
@@ -1270,7 +1270,7 @@ impl CommonState {
         Err(Error::AlertReceived(alert.description))
     }
 
-    pub(crate) fn send_fatal_alert(&mut self, desc: AlertDescription) {
+    pub fn send_fatal_alert(&mut self, desc: AlertDescription) {
         warn!("Sending fatal alert {:?}", desc);
         debug_assert!(!self.sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, desc);
@@ -1291,12 +1291,12 @@ impl CommonState {
         self.send_msg(m, self.record_layer.is_encrypting());
     }
 
-    pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
+    pub fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
         self.message_fragmenter
             .set_max_fragment_size(new)
     }
 
-    pub(crate) fn get_alpn_protocol(&self) -> Option<&[u8]> {
+    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
         self.alpn_protocol
             .as_ref()
             .map(AsRef::as_ref)
@@ -1328,7 +1328,7 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn is_quic(&self) -> bool {
+    pub fn is_quic(&self) -> bool {
         #[cfg(feature = "quic")]
         {
             self.protocol == Protocol::Quic
@@ -1338,7 +1338,7 @@ impl CommonState {
     }
 }
 
-pub(crate) trait State<Data>: Send + Sync {
+pub trait State<Data>: Send + Sync {
     fn handle(
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
@@ -1357,22 +1357,22 @@ pub(crate) trait State<Data>: Send + Sync {
     fn perhaps_write_key_update(&mut self, _cx: &mut CommonState) {}
 }
 
-pub(crate) struct Context<'a, Data> {
-    pub(crate) common: &'a mut CommonState,
-    pub(crate) data: &'a mut Data,
+pub struct Context<'a, Data> {
+    pub common: &'a mut CommonState,
+    pub data: &'a mut Data,
 }
 
 #[cfg(feature = "quic")]
 pub struct Quic {
     /// QUIC transport parameters received from the peer during the handshake
-    pub(crate) params: Option<Vec<u8>>,
-    pub(crate) alert: Option<AlertDescription>,
-    pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<ring::hkdf::Prk>,
-    pub(crate) hs_secrets: Option<quic::Secrets>,
-    pub(crate) traffic_secrets: Option<quic::Secrets>,
+    pub params: Option<Vec<u8>>,
+    pub alert: Option<AlertDescription>,
+    pub hs_queue: VecDeque<(bool, Vec<u8>)>,
+    pub early_secret: Option<ring::hkdf::Prk>,
+    pub hs_secrets: Option<quic::Secrets>,
+    pub traffic_secrets: Option<quic::Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    pub(crate) returned_traffic_keys: bool,
+    pub returned_traffic_keys: bool,
 }
 
 #[cfg(feature = "quic")]
@@ -1391,7 +1391,7 @@ impl Quic {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Side {
+pub enum Side {
     Client,
     Server,
 }

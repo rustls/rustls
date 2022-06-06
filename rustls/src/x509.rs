@@ -2,7 +2,7 @@
 
 use ring::io::der;
 
-pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
+pub fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
     let len = bytes.len();
 
     if len <= 0x7f {
@@ -20,7 +20,7 @@ pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
 }
 
 /// Prepend stuff to `bytes` to put it in a DER SEQUENCE.
-pub(crate) fn wrap_in_sequence(bytes: &mut Vec<u8>) {
+pub fn wrap_in_sequence(bytes: &mut Vec<u8>) {
     wrap_in_asn1_len(bytes);
     bytes.insert(0, der::Tag::Sequence as u8);
 }

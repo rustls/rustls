@@ -146,7 +146,7 @@ pub(super) fn handle_server_hello(
     let hash_at_client_recvd_server_hello = transcript.get_current_hash();
 
     let (key_schedule, client_key, server_key) = key_schedule.derive_handshake_secrets(
-        hash_at_client_recvd_server_hello,
+        hash_at_client_recvd_server_hello.as_ref(),
         &*config.key_log,
         &randoms.client,
     );

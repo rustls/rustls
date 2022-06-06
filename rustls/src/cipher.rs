@@ -12,25 +12,25 @@ pub trait MessageDecrypter: Send + Sync {
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub(crate) trait MessageEncrypter: Send + Sync {
+pub trait MessageEncrypter: Send + Sync {
     fn encrypt(&self, m: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
 }
 
 impl dyn MessageEncrypter {
-    pub(crate) fn invalid() -> Box<dyn MessageEncrypter> {
+    pub fn invalid() -> Box<dyn MessageEncrypter> {
         Box::new(InvalidMessageEncrypter {})
     }
 }
 
 impl dyn MessageDecrypter {
-    pub(crate) fn invalid() -> Box<dyn MessageDecrypter> {
+    pub fn invalid() -> Box<dyn MessageDecrypter> {
         Box::new(InvalidMessageDecrypter {})
     }
 }
 
 /// A write or read IV.
 #[derive(Default)]
-pub(crate) struct Iv(pub(crate) [u8; ring::aead::NONCE_LEN]);
+pub struct Iv(pub [u8; ring::aead::NONCE_LEN]);
 
 impl Iv {
     #[cfg(feature = "tls12")]
@@ -39,7 +39,7 @@ impl Iv {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn copy(value: &[u8]) -> Self {
+    pub fn copy(value: &[u8]) -> Self {
         debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
         let mut iv = Self::new(Default::default());
         iv.0.copy_from_slice(value);
@@ -68,7 +68,7 @@ impl From<hkdf::Okm<'_, IvLen>> for Iv {
     }
 }
 
-pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
+pub fn make_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
     let mut nonce = [0u8; ring::aead::NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
 

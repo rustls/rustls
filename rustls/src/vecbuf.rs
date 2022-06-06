@@ -7,13 +7,13 @@ use std::io::Read;
 /// of byte vectors.  This avoids extra copies when
 /// appending a new byte vector, at the expense of
 /// more complexity when reading out.
-pub(crate) struct ChunkVecBuffer {
+pub struct ChunkVecBuffer {
     chunks: VecDeque<Vec<u8>>,
     limit: Option<usize>,
 }
 
 impl ChunkVecBuffer {
-    pub(crate) fn new(limit: Option<usize>) -> Self {
+    pub fn new(limit: Option<usize>) -> Self {
         Self {
             chunks: VecDeque::new(),
             limit,
@@ -27,17 +27,17 @@ impl ChunkVecBuffer {
     /// data is not an error.
     ///
     /// A [`None`] limit is interpreted as no limit.
-    pub(crate) fn set_limit(&mut self, new_limit: Option<usize>) {
+    pub fn set_limit(&mut self, new_limit: Option<usize>) {
         self.limit = new_limit;
     }
 
     /// If we're empty
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
 
     /// How many bytes we're storing
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         let mut len = 0;
         for ch in &self.chunks {
             len += ch.len();
@@ -48,7 +48,7 @@ impl ChunkVecBuffer {
     /// For a proposed append of `len` bytes, how many
     /// bytes should we actually append to adhere to the
     /// currently set `limit`?
-    pub(crate) fn apply_limit(&self, len: usize) -> usize {
+    pub fn apply_limit(&self, len: usize) -> usize {
         if let Some(limit) = self.limit {
             let space = limit.saturating_sub(self.len());
             cmp::min(len, space)
@@ -59,14 +59,14 @@ impl ChunkVecBuffer {
 
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
-    pub(crate) fn append_limited_copy(&mut self, bytes: &[u8]) -> usize {
+    pub fn append_limited_copy(&mut self, bytes: &[u8]) -> usize {
         let take = self.apply_limit(bytes.len());
         self.append(bytes[..take].to_vec());
         take
     }
 
     /// Take and append the given `bytes`.
-    pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
+    pub fn append(&mut self, bytes: Vec<u8>) -> usize {
         let len = bytes.len();
 
         if !bytes.is_empty() {
@@ -78,13 +78,13 @@ impl ChunkVecBuffer {
 
     /// Take one of the chunks from this object.  This
     /// function panics if the object `is_empty`.
-    pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
+    pub fn pop(&mut self) -> Option<Vec<u8>> {
         self.chunks.pop_front()
     }
 
     /// Read data out of this object, writing it into `buf`
     /// and returning how many bytes were written there.
-    pub(crate) fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
@@ -101,7 +101,7 @@ impl ChunkVecBuffer {
 
     #[cfg(read_buf)]
     /// Read data out of this object, writing it into `buf`.
-    pub(crate) fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
+    pub fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
         while !self.is_empty() && buf.remaining() > 0 {
             let chunk = self.chunks[0].as_slice();
             let used = std::cmp::min(chunk.len(), buf.remaining());
@@ -125,7 +125,7 @@ impl ChunkVecBuffer {
     }
 
     /// Read data out of this object, passing it `wr`
-    pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
+    pub fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         if self.is_empty() {
             return Ok(0);
         }
