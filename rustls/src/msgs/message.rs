@@ -35,12 +35,15 @@ impl MessagePayload {
     }
 
     pub fn new(typ: ContentType, vers: ProtocolVersion, payload: Payload) -> Result<Self, Error> {
+        let fallback_payload = payload.clone();
         let mut r = Reader::init(&payload.0);
         let parsed = match typ {
             ContentType::ApplicationData => return Ok(Self::ApplicationData(payload)),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
             ContentType::Handshake => {
                 HandshakeMessagePayload::read_version(&mut r, vers).map(MessagePayload::Handshake)
+                    // this type is for TLS 1.2 encrypted handshake messages
+                    .or(Some(MessagePayload::TLS12EncryptedHandshake(fallback_payload)))
             }
             ContentType::ChangeCipherSpec => {
                 ChangeCipherSpecPayload::read(&mut r).map(MessagePayload::ChangeCipherSpec)
@@ -51,9 +54,10 @@ impl MessagePayload {
             _ => None,
         };
 
-        parsed
+        parsed.ok_or(Error::corrupt_message(typ))
+/*        parsed
             .filter(|_| !r.any_left())
-            .ok_or_else(|| Error::corrupt_message(typ))
+            .ok_or_else(|| Error::corrupt_message(typ))*/
     }
 
     pub fn content_type(&self) -> ContentType {
