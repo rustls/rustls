@@ -289,14 +289,14 @@ impl KeyScheduleTraffic {
 
         let current_client_traffic_secret = ks.derive_logged_secret(
             SecretKind::ClientApplicationTrafficSecret,
-            &[],
+            hs_hash,
             key_log,
             client_random,
         );
 
         let current_server_traffic_secret = ks.derive_logged_secret(
             SecretKind::ServerApplicationTrafficSecret,
-            &[],
+            hs_hash,
             key_log,
             client_random,
         );
