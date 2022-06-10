@@ -83,9 +83,9 @@ impl ClientSessionValue {
 
     fn common(&self) -> &ClientSessionCommon {
         match self {
-            ClientSessionValue::Tls13(inner) => &inner.common,
+            Self::Tls13(inner) => &inner.common,
             #[cfg(feature = "tls12")]
-            ClientSessionValue::Tls12(inner) => &inner.common,
+            Self::Tls12(inner) => &inner.common,
         }
     }
 }

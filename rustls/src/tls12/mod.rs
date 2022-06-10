@@ -406,8 +406,8 @@ enum Seed {
 impl AsRef<[u8]> for Seed {
     fn as_ref(&self) -> &[u8] {
         match self {
-            Seed::Ems(seed) => seed.as_ref(),
-            Seed::Randoms(randoms) => randoms.as_ref(),
+            Self::Ems(seed) => seed.as_ref(),
+            Self::Randoms(randoms) => randoms.as_ref(),
         }
     }
 }
