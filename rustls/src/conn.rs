@@ -42,24 +42,24 @@ impl Connection {
     /// See [`ConnectionCommon::read_tls()`] for more information.
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         match self {
-            Connection::Client(conn) => conn.read_tls(rd),
-            Connection::Server(conn) => conn.read_tls(rd),
+            Self::Client(conn) => conn.read_tls(rd),
+            Self::Server(conn) => conn.read_tls(rd),
         }
     }
 
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader {
         match self {
-            Connection::Client(conn) => conn.reader(),
-            Connection::Server(conn) => conn.reader(),
+            Self::Client(conn) => conn.reader(),
+            Self::Server(conn) => conn.reader(),
         }
     }
 
     /// Returns an object that allows writing plaintext.
     pub fn writer(&mut self) -> Writer {
         match self {
-            Connection::Client(conn) => Writer::new(&mut **conn),
-            Connection::Server(conn) => Writer::new(&mut **conn),
+            Self::Client(conn) => Writer::new(&mut **conn),
+            Self::Server(conn) => Writer::new(&mut **conn),
         }
     }
 
@@ -68,8 +68,8 @@ impl Connection {
     /// See [`ConnectionCommon::process_new_packets()`] for more information.
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
         match self {
-            Connection::Client(conn) => conn.process_new_packets(),
-            Connection::Server(conn) => conn.process_new_packets(),
+            Self::Client(conn) => conn.process_new_packets(),
+            Self::Server(conn) => conn.process_new_packets(),
         }
     }
 
@@ -83,8 +83,8 @@ impl Connection {
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
         match self {
-            Connection::Client(conn) => conn.export_keying_material(output, label, context),
-            Connection::Server(conn) => conn.export_keying_material(output, label, context),
+            Self::Client(conn) => conn.export_keying_material(output, label, context),
+            Self::Server(conn) => conn.export_keying_material(output, label, context),
         }
     }
 
@@ -97,8 +97,8 @@ impl Connection {
         T: io::Read + io::Write,
     {
         match self {
-            Connection::Client(conn) => conn.complete_io(io),
-            Connection::Server(conn) => conn.complete_io(io),
+            Self::Client(conn) => conn.complete_io(io),
+            Self::Server(conn) => conn.complete_io(io),
         }
     }
 }
@@ -107,36 +107,36 @@ impl Connection {
 impl crate::quic::QuicExt for Connection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         match self {
-            Connection::Client(conn) => conn.quic_transport_parameters(),
-            Connection::Server(conn) => conn.quic_transport_parameters(),
+            Self::Client(conn) => conn.quic_transport_parameters(),
+            Self::Server(conn) => conn.quic_transport_parameters(),
         }
     }
 
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         match self {
-            Connection::Client(conn) => conn.zero_rtt_keys(),
-            Connection::Server(conn) => conn.zero_rtt_keys(),
+            Self::Client(conn) => conn.zero_rtt_keys(),
+            Self::Server(conn) => conn.zero_rtt_keys(),
         }
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
         match self {
-            Connection::Client(conn) => conn.read_quic_hs(plaintext),
-            Connection::Server(conn) => conn.read_quic_hs(plaintext),
+            Self::Client(conn) => conn.read_quic_hs(plaintext),
+            Self::Server(conn) => conn.read_quic_hs(plaintext),
         }
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
         match self {
-            Connection::Client(conn) => quic::write_hs(conn, buf),
-            Connection::Server(conn) => quic::write_hs(conn, buf),
+            Self::Client(conn) => quic::write_hs(conn, buf),
+            Self::Server(conn) => quic::write_hs(conn, buf),
         }
     }
 
     fn alert(&self) -> Option<AlertDescription> {
         match self {
-            Connection::Client(conn) => conn.alert(),
-            Connection::Server(conn) => conn.alert(),
+            Self::Client(conn) => conn.alert(),
+            Self::Server(conn) => conn.alert(),
         }
     }
 }
@@ -146,8 +146,8 @@ impl Deref for Connection {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Connection::Client(conn) => &conn.common_state,
-            Connection::Server(conn) => &conn.common_state,
+            Self::Client(conn) => &conn.common_state,
+            Self::Server(conn) => &conn.common_state,
         }
     }
 }
@@ -155,8 +155,8 @@ impl Deref for Connection {
 impl DerefMut for Connection {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Connection::Client(conn) => &mut conn.common_state,
-            Connection::Server(conn) => &mut conn.common_state,
+            Self::Client(conn) => &mut conn.common_state,
+            Self::Server(conn) => &mut conn.common_state,
         }
     }
 }

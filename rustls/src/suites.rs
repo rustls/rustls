@@ -72,8 +72,8 @@ impl SupportedCipherSuite {
     pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         match self {
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(inner) => inner.hash_algorithm(),
-            SupportedCipherSuite::Tls13(inner) => inner.hash_algorithm(),
+            Self::Tls12(inner) => inner.hash_algorithm(),
+            Self::Tls13(inner) => inner.hash_algorithm(),
         }
     }
 
@@ -85,16 +85,16 @@ impl SupportedCipherSuite {
     pub(crate) fn common(&self) -> &CipherSuiteCommon {
         match self {
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(inner) => &inner.common,
-            SupportedCipherSuite::Tls13(inner) => &inner.common,
+            Self::Tls12(inner) => &inner.common,
+            Self::Tls13(inner) => &inner.common,
         }
     }
 
     pub(crate) fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
         match self {
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(_) => None,
-            SupportedCipherSuite::Tls13(inner) => Some(inner),
+            Self::Tls12(_) => None,
+            Self::Tls13(inner) => Some(inner),
         }
     }
 
@@ -102,8 +102,8 @@ impl SupportedCipherSuite {
     pub fn version(&self) -> &'static SupportedProtocolVersion {
         match self {
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(_) => &TLS12,
-            SupportedCipherSuite::Tls13(_) => &TLS13,
+            Self::Tls12(_) => &TLS12,
+            Self::Tls13(_) => &TLS13,
         }
     }
 
@@ -111,9 +111,9 @@ impl SupportedCipherSuite {
     /// signatures.  This resolves to true for all TLS1.3 suites.
     pub fn usable_for_signature_algorithm(&self, _sig_alg: SignatureAlgorithm) -> bool {
         match self {
-            SupportedCipherSuite::Tls13(_) => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
+            Self::Tls13(_) => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(inner) => inner
+            Self::Tls12(inner) => inner
                 .sign
                 .iter()
                 .any(|scheme| scheme.sign() == _sig_alg),
