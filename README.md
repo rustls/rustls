@@ -21,6 +21,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release:
   - Planned: removal of unused signature verification schemes at link-time.
+  - Expose AlertDescription, ContentType, and HandshakeType,
+    SignatureAlgorithm, and NamedGroup as part of the stable API. Previously they
+    were part of the unstable internals API, but were referenced by parts of the
+    stable API.
 * 0.20.6 (2022-05-18)
   - 0.20.5 included a change to track more context for the `Error::CorruptMessage`
     which made API-incompatible changes to the `Error` type. We yanked 0.20.5
