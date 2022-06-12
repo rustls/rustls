@@ -47,6 +47,18 @@ impl OwnedTrustAnchor {
             name_constraints: name_constraints.map(|x| x.into()),
         }
     }
+
+    /// Return the subject field.
+    ///
+    /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/traits/trait.FromDer.html).
+    ///
+    /// ```ignore
+    /// use x509_parser::traits::FromDer;
+    /// println!("{}", x509_parser::x509::X509Name::from_der(anchor.subject())?.1);
+    /// ```
+    pub fn subject(&self) -> &[u8] {
+        &self.subject
+    }
 }
 
 /// A container for root certificates able to provide a root-of-trust
