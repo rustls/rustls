@@ -487,9 +487,10 @@ impl Acceptor {
 
     /// Returns true if the caller should call [`Connection::read_tls()`] as soon as possible.
     ///
-    /// For more details, refer to [`CommonState::wants_read()`].
+    /// Since the purpose of an Acceptor is to read and then parse TLS bytes, this always returns true.
     ///
     /// [`Connection::read_tls()`]: crate::Connection::read_tls
+    #[deprecated(since = "0.20.7", note = "Always returns true")]
     pub fn wants_read(&self) -> bool {
         self.inner
             .as_ref()

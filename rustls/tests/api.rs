@@ -4039,7 +4039,6 @@ fn test_acceptor() {
 
     let server_config = Arc::new(make_server_config(KeyType::Ed25519));
     let mut acceptor = Acceptor::default();
-    assert!(acceptor.wants_read());
     acceptor
         .read_tls(&mut buf.as_slice())
         .unwrap();
