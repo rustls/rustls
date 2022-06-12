@@ -516,6 +516,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
+    #[allow(deprecated)]
     fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
