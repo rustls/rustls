@@ -24,12 +24,18 @@ impl OwnedTrustAnchor {
 
     /// Constructs an `OwnedTrustAnchor` from its components.
     ///
-    /// `subject` is the subject field of the trust anchor.
+    /// All inputs are DER-encoded.
     ///
-    /// `spki` is the `subjectPublicKeyInfo` field of the trust anchor.
+    /// `subject` is the [Subject] field of the trust anchor.
     ///
-    /// `name_constraints` is the value of a DER-encoded name constraints to
+    /// `spki` is the [SubjectPublicKeyInfo] field of the trust anchor.
+    ///
+    /// `name_constraints` is the [Name Constraints] to
     /// apply for this trust anchor, if any.
+    ///
+    /// [Subject]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
+    /// [SubjectPublicKeyInfo]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.7
+    /// [Name Constraints]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.10
     pub fn from_subject_spki_name_constraints(
         subject: impl Into<Vec<u8>>,
         spki: impl Into<Vec<u8>>,
