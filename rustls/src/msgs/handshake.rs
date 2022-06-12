@@ -1802,6 +1802,18 @@ impl HasServerExtensions for EncryptedExtensions {
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
 pub type DistinguishedName = PayloadU16;
+/// DistinguishedNames is a `Vec<Vec<u8>>` wrapped in internal types. Each element contains the
+/// DER or BER encoded [`Subject` field from RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6)
+/// for a single certificate. The Subject field is
+/// [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
+/// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/traits/trait.FromDer.html).
+///
+/// ```ignore
+/// for name in distinguished_names {
+///     use x509_parser::traits::FromDer;
+///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
+/// }
+/// ```
 pub type DistinguishedNames = VecU16OfPayloadU16;
 
 #[derive(Debug)]
