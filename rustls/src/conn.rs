@@ -21,8 +21,9 @@ use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
-
+#[cfg(feature = "quic")]
 use std::collections::VecDeque;
+
 use std::convert::TryFrom;
 use std::io;
 use std::mem;
@@ -1027,12 +1028,11 @@ impl CommonState {
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
-        let mut plain_messages = VecDeque::new();
-        self.message_fragmenter
-            .fragment(m, &mut plain_messages);
-
-        for m in plain_messages {
-            self.send_single_fragment(m.borrow());
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&m);
+        for m in iter {
+            self.send_single_fragment(m);
         }
     }
 
@@ -1049,15 +1049,12 @@ impl CommonState {
             Limit::No => payload.len(),
         };
 
-        let mut plain_messages = VecDeque::new();
-        self.message_fragmenter.fragment_borrow(
+        let iter = self.message_fragmenter.fragment_slice(
             ContentType::ApplicationData,
             ProtocolVersion::TLSv1_2,
             &payload[..len],
-            &mut plain_messages,
         );
-
-        for m in plain_messages {
+        for m in iter {
             self.send_single_fragment(m);
         }
 
@@ -1218,11 +1215,12 @@ impl CommonState {
             }
         }
         if !must_encrypt {
-            let mut to_send = VecDeque::new();
-            self.message_fragmenter
-                .fragment(m.into(), &mut to_send);
-            for mm in to_send {
-                self.queue_tls_message(mm.into_unencrypted_opaque());
+            let msg = &m.into();
+            let iter = self
+                .message_fragmenter
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
             }
         } else {
             self.send_msg_encrypt(m.into());
