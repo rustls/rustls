@@ -1595,19 +1595,26 @@ impl Codec for ECParameters {
 #[derive(Debug, Clone)]
 pub struct DigitallySignedStruct {
     pub scheme: SignatureScheme,
+    #[deprecated(since = "0.20.7", note = "Use sig() accessor")]
     pub sig: PayloadU16,
 }
 
 impl DigitallySignedStruct {
+    #![allow(deprecated)]
     pub fn new(scheme: SignatureScheme, sig: Vec<u8>) -> Self {
         Self {
             scheme,
             sig: PayloadU16::new(sig),
         }
     }
+
+    pub fn signature(&self) -> &[u8] {
+        &self.sig.0
+    }
 }
 
 impl Codec for DigitallySignedStruct {
+    #![allow(deprecated)]
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.scheme.encode(bytes);
         self.sig.encode(bytes);

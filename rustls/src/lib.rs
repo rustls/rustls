@@ -374,7 +374,7 @@ pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::{
     AlertDescription, ContentType, HandshakeType, NamedGroup, SignatureAlgorithm,
 };
-pub use crate::msgs::handshake::DistinguishedNames;
+pub use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,

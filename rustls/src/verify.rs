@@ -689,7 +689,7 @@ fn verify_signed_struct(
     let possible_algs = convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
 
-    verify_sig_using_any_alg(&cert, possible_algs, message, &dss.sig.0)
+    verify_sig_using_any_alg(&cert, possible_algs, message, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
 }
@@ -743,7 +743,7 @@ fn verify_tls13(
 
     let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
 
-    cert.verify_signature(alg, msg, &dss.sig.0)
+    cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
 }

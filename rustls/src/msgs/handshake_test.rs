@@ -867,10 +867,7 @@ fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
             },
             public: PayloadU8(vec![1, 2, 3]),
         },
-        dss: DigitallySignedStruct {
-            scheme: SignatureScheme::RSA_PSS_SHA256,
-            sig: PayloadU16(vec![1, 2, 3]),
-        },
+        dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
 }
 
