@@ -711,6 +711,16 @@ impl State<ClientConnectionData> for ExpectServerDone {
         debug!("Server DNS name is {:?}", st.server_name);
 
         let suite = st.suite;
+        // Check the signature is compatible with the ciphersuite.
+        let sig = &st.server_kx.kx_sig;
+        if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig.scheme.sign()) {
+            let error_message = format!(
+                "peer signed kx with wrong algorithm (got {:?} expect {:?})",
+                sig.scheme.sign(),
+                suite.sign
+            );
+            return Err(Error::PeerMisbehavedError(error_message));
+        }
 
         // 1. Verify the cert chain.
         // 2. Verify any SCTs provided with the certificate.
@@ -752,18 +762,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
             message.extend_from_slice(&st.randoms.client);
             message.extend_from_slice(&st.randoms.server);
             message.extend_from_slice(&st.server_kx.kx_params);
-
-            // Check the signature is compatible with the ciphersuite.
-            let sig = &st.server_kx.kx_sig;
-            if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig.scheme.sign())
-            {
-                let error_message = format!(
-                    "peer signed kx with wrong algorithm (got {:?} expect {:?})",
-                    sig.scheme.sign(),
-                    suite.sign
-                );
-                return Err(Error::PeerMisbehavedError(error_message));
-            }
 
             st.config
                 .verifier
