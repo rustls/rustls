@@ -325,7 +325,37 @@ impl ServerCertVerifier for WebPkiVerifier {
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, Error> {
-        let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
+        self.verify_server_cert(
+            end_entity,
+            &webpki::EndEntityCert::try_from(end_entity.0.as_ref()).map_err(pki_error)?,
+            intermediates,
+            server_name,
+            scts,
+            ocsp_response,
+            now,
+        )
+    }
+}
+
+/// Default `ServerCertVerifier`, see the trait impl for more information.
+#[allow(unreachable_pub)]
+pub struct WebPkiVerifier {
+    roots: RootCertStore,
+    ct_policy: Option<CertificateTransparencyPolicy>,
+}
+
+impl WebPkiVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &Certificate,
+        cert: &webpki::EndEntityCert<'_>,
+        intermediates: &[Certificate],
+        server_name: &ServerName,
+        scts: &mut dyn Iterator<Item = &[u8]>,
+        ocsp_response: &[u8],
+        now: SystemTime,
+    ) -> Result<ServerCertVerified, Error> {
+        let (chain, trustroots) = prepare(intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
         let dns_name = match server_name {
@@ -357,13 +387,6 @@ impl ServerCertVerifier for WebPkiVerifier {
             .map_err(pki_error)
             .map(|_| ServerCertVerified::assertion())
     }
-}
-
-/// Default `ServerCertVerifier`, see the trait impl for more information.
-#[allow(unreachable_pub)]
-pub struct WebPkiVerifier {
-    roots: RootCertStore,
-    ct_policy: Option<CertificateTransparencyPolicy>,
 }
 
 #[allow(unreachable_pub)]
@@ -472,20 +495,12 @@ impl CertificateTransparencyPolicy {
     }
 }
 
-type CertChainAndRoots<'a, 'b> = (
-    webpki::EndEntityCert<'a>,
-    Vec<&'a [u8]>,
-    Vec<webpki::TrustAnchor<'b>>,
-);
+type CertChainAndRoots<'a, 'b> = (Vec<&'a [u8]>, Vec<webpki::TrustAnchor<'b>>);
 
 fn prepare<'a, 'b>(
-    end_entity: &'a Certificate,
     intermediates: &'a [Certificate],
     roots: &'b RootCertStore,
 ) -> Result<CertChainAndRoots<'a, 'b>, Error> {
-    // EE cert must appear first.
-    let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref()).map_err(pki_error)?;
-
     let intermediates: Vec<&'a [u8]> = intermediates
         .iter()
         .map(|cert| cert.0.as_ref())
@@ -497,7 +512,7 @@ fn prepare<'a, 'b>(
         .map(OwnedTrustAnchor::to_trust_anchor)
         .collect();
 
-    Ok((cert, intermediates, trustroots))
+    Ok((intermediates, trustroots))
 }
 
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
@@ -530,8 +545,10 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         intermediates: &[Certificate],
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
-        let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
+        let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref()).map_err(pki_error)?;
+        let (chain, trustroots) = prepare(intermediates, &self.roots)?;
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
+
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
             &webpki::TlsClientTrustAnchors(&trustroots),
