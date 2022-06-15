@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
+use crate::client::common::ServerVerifyInput;
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
@@ -8,6 +9,8 @@ use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
+#[cfg(feature = "tls12")]
+use crate::version::TLS12;
 
 use ring::digest::Digest;
 
@@ -92,6 +95,57 @@ impl ClientCertVerified {
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
 pub trait ServerCertVerifier: Send + Sync {
+    /// Verify the end-entity certificate and a signature by allegedly signed by it.
+    ///
+    /// The default implementation of this method just calls [`Self::verify_server_cert`]
+    /// and [`Self::verify_tls12_signature()`] or [`Self::verify_tls13_signature()`]
+    /// depending on the TLS version (in `input.version()`) for the given handshake.
+    ///
+    /// Verify the end-entity certificate `input.end_entity` is valid for the
+    /// hostname `input.server_name` and chains to at least one trust anchor.
+    ///
+    /// `input.intermediates` contains the intermediate certificates the client sent
+    /// along with the end-entity certificate; it is in the same order that the
+    /// peer sent them and may be empty.
+    ///
+    /// `input.scts()` contains the Signed Certificate Timestamps (SCTs) the server
+    /// sent with the certificate, if any.
+    ///
+    /// The `input.server_verify_message()` is not hashed, and needs hashing during
+    /// the verification. The signature and algorithm can be found as part of
+    /// `input.server_signature`.  `input.end_entity` contains the public key to use.
+    ///
+    /// Note that none of the certificates have been parsed yet, so it is the responsibility of
+    /// the implementor to handle invalid data. It is recommended that the implementor returns
+    /// [`Error::InvalidCertificateEncoding`] when these cases are encountered.
+    fn verify(
+        &self,
+        input: ServerVerifyInput,
+    ) -> Result<(ServerCertVerified, HandshakeSignatureValid), Error> {
+        let cert_verified = self.verify_server_cert(
+            input.end_entity,
+            input.intermediates,
+            input.server_name,
+            &mut input.scts(),
+            input.ocsp_response(),
+            input.now,
+        )?;
+
+        let message = input.server_verify_message();
+        #[cfg(feature = "tls12")]
+        let sig_verified = if input.version() == &TLS12 {
+            self.verify_tls12_signature(&message, input.end_entity, input.server_signature)
+        } else {
+            self.verify_tls13_signature(&message, input.end_entity, input.server_signature)
+        }?;
+
+        #[cfg(not(feature = "tls12"))]
+        let sig_verified =
+            self.verify_tls13_signature(&message, input.end_entity, input.server_signature)?;
+
+        Ok((cert_verified, sig_verified))
+    }
+
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// hostname `dns_name` and chains to at least one trust anchor.
     ///
@@ -312,6 +366,36 @@ impl fmt::Debug for dyn ClientCertVerifier {
 }
 
 impl ServerCertVerifier for WebPkiVerifier {
+    fn verify(
+        &self,
+        input: ServerVerifyInput,
+    ) -> Result<(ServerCertVerified, HandshakeSignatureValid), Error> {
+        let cert =
+            webpki::EndEntityCert::try_from(input.end_entity.0.as_ref()).map_err(pki_error)?;
+        let cert_verified = self.verify_server_cert(
+            input.end_entity,
+            &cert,
+            input.intermediates,
+            input.server_name,
+            &mut input.scts(),
+            input.ocsp_response(),
+            input.now,
+        )?;
+
+        let message = input.server_verify_message();
+        #[cfg(feature = "tls12")]
+        let sig_verified = if input.version() == &TLS12 {
+            verify_signed_struct(&message, cert, input.server_signature)
+        } else {
+            verify_tls13(&message, cert, input.server_signature)
+        }?;
+
+        #[cfg(not(feature = "tls12"))]
+        let sig_verified = verify_tls13(&message, cert, input.server_signature)?;
+
+        Ok((cert_verified, sig_verified))
+    }
+
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a  trusted `RootCertStore` CA
     /// - Not Expired

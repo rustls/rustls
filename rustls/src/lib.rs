@@ -389,7 +389,7 @@ pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIO
 pub mod client {
     pub(super) mod builder;
     mod client_conn;
-    mod common;
+    pub(crate) mod common;
     pub(super) mod handy;
     mod hs;
     #[cfg(feature = "tls12")]
@@ -405,6 +405,9 @@ pub mod client {
     pub use client_conn::ServerName;
     pub use client_conn::StoresClientSessions;
     pub use client_conn::{ClientConfig, ClientConnection, ClientConnectionData, WriteEarlyData};
+    #[cfg(feature = "dangerous_configuration")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+    pub use common::ServerVerifyInput;
     pub use handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 
     #[cfg(feature = "dangerous_configuration")]

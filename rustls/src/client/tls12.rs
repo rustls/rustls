@@ -23,9 +23,10 @@ use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::{kx, verify};
 
 use super::client_conn::ClientConnectionData;
+use super::common::{
+    ClientAuthDetails, ServerCertDetails, ServerVerifyInput, ServerVerifyVersionInput,
+};
 use super::hs::ClientContext;
-use crate::client::common::ClientAuthDetails;
-use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
 use ring::agreement::PublicKey;
@@ -741,33 +742,27 @@ impl State<ClientConnectionData> for ExpectServerDone {
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let cert_verified = st
-            .config
-            .verifier
-            .verify_server_cert(
-                end_entity,
-                intermediates,
-                &st.server_name,
-                &mut st.server_cert.scts(),
-                &st.server_cert.ocsp_response,
-                now,
-            )
-            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
+
+        let verify_input = ServerVerifyInput {
+            end_entity,
+            intermediates,
+            server_name: &st.server_name,
+            now,
+            server_signature: sig,
+            details: &st.server_cert,
+            version: ServerVerifyVersionInput::Tls12 {
+                randoms: &st.randoms,
+                kx_params: &st.server_kx.kx_params,
+            },
+        };
 
         // 3.
-        // Build up the contents of the signed message.
-        // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
-        let sig_verified = {
-            let mut message = Vec::new();
-            message.extend_from_slice(&st.randoms.client);
-            message.extend_from_slice(&st.randoms.server);
-            message.extend_from_slice(&st.server_kx.kx_params);
+        let (cert_verified, sig_verified) = st
+            .config
+            .verifier
+            .verify(verify_input)
+            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
-            st.config
-                .verifier
-                .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
-                .map_err(|err| hs::send_cert_error_alert(cx.common, err))?
-        };
         cx.common.peer_certificates = Some(st.server_cert.cert_chain);
 
         // 4.

@@ -32,9 +32,11 @@ use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
 use crate::{sign, KeyLog};
 
 use super::client_conn::ClientConnectionData;
+use super::common::{
+    ClientAuthDetails, ClientHelloDetails, ServerCertDetails, ServerVerifyInput,
+    ServerVerifyVersionInput,
+};
 use super::hs::ClientContext;
-use crate::client::common::ServerCertDetails;
-use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
 
 use crate::ticketer::TimeBase;
@@ -704,29 +706,23 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
         let now = std::time::SystemTime::now();
-        let cert_verified = self
-            .config
-            .verifier
-            .verify_server_cert(
-                end_entity,
-                intermediates,
-                &self.server_name,
-                &mut self.server_cert.scts(),
-                &self.server_cert.ocsp_response,
-                now,
-            )
-            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
-        // 2. Verify their signature on the handshake.
-        let handshake_hash = self.transcript.get_current_hash();
-        let sig_verified = self
+        let verify_input = ServerVerifyInput {
+            end_entity,
+            intermediates,
+            server_name: &self.server_name,
+            now,
+            server_signature: cert_verify,
+            details: &self.server_cert,
+            version: ServerVerifyVersionInput::Tls13 {
+                transcript: &self.transcript,
+            },
+        };
+
+        let (cert_verified, sig_verified) = self
             .config
             .verifier
-            .verify_tls13_signature(
-                &verify::construct_tls13_server_verify_message(&handshake_hash),
-                &self.server_cert.cert_chain[0],
-                cert_verify,
-            )
+            .verify(verify_input)
             .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
 
         cx.common.peer_certificates = Some(self.server_cert.cert_chain);
