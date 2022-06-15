@@ -140,6 +140,7 @@ pub trait ServerCertVerifier: Send + Sync {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
+        let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
         verify_signed_struct(message, cert, dss)
     }
 
@@ -160,6 +161,7 @@ pub trait ServerCertVerifier: Send + Sync {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
+        let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
         verify_tls13(message, cert, dss)
     }
 
@@ -266,6 +268,7 @@ pub trait ClientCertVerifier: Send + Sync {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
+        let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
         verify_signed_struct(message, cert, dss)
     }
 
@@ -286,6 +289,7 @@ pub trait ClientCertVerifier: Send + Sync {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
+        let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
         verify_tls13(message, cert, dss)
     }
 
@@ -683,12 +687,10 @@ fn verify_sig_using_any_alg(
 
 fn verify_signed_struct(
     message: &[u8],
-    cert: &Certificate,
+    cert: webpki::EndEntityCert<'_>,
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
-
     verify_sig_using_any_alg(&cert, possible_algs, message, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
@@ -736,13 +738,10 @@ fn construct_tls13_verify_message(
 
 fn verify_tls13(
     msg: &[u8],
-    cert: &Certificate,
+    cert: webpki::EndEntityCert<'_>,
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, Error> {
     let alg = convert_alg_tls13(dss.scheme)?;
-
-    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
-
     cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
