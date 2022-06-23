@@ -154,6 +154,20 @@ impl<'a> ClientHello<'a> {
     /// Get the alpn.
     ///
     /// Returns `None` if the client did not include an ALPN extension
+    ///
+    /// ALPN (Application Layer Protocol Negotiation) contains a set of identifiers
+    /// which are encoded as a set of octet values, which could be UTF-8 encoded.
+    /// It's a form of TLS extension allowing the client to provide an externally visible
+    /// marker for the application-layer protocol associated with the TLS connection.
+    ///
+    /// Common examples of ALPN identifiers given by web clients are "http/1.1", "h2" and "h3",
+    /// and are used to hint to the web server that these HTTP protocols are supported by the
+    /// web client can be established if desired.
+    ///
+    /// You can find a list of many other possible identifier values at
+    /// <https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids>,
+    /// note however that this is not an exhaustive list, so please keep in mind
+    /// that other identifiers are possible as well.
     pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
         self.alpn.map(|protocols| {
             protocols
