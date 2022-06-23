@@ -321,6 +321,7 @@ impl ExpectClientHello {
                 &sig_schemes,
                 client_hello.get_alpn_extension(),
                 &client_hello.cipher_suites,
+                maybe_versions_ext,
             );
 
             let certkey = self

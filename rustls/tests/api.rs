@@ -652,6 +652,7 @@ struct ServerCheckCertResolve {
     expected_sigalgs: Option<Vec<SignatureScheme>>,
     expected_alpn: Option<Vec<Vec<u8>>>,
     expected_cipher_suites: Option<Vec<CipherSuite>>,
+    expected_supported_versions: Option<Vec<ProtocolVersion>>,
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
@@ -702,6 +703,16 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             );
         }
 
+        if let Some(expected_supported_versions) = &self.expected_supported_versions {
+            let supported_versions = client_hello
+                .supported_versions()
+                .expect("supported versions unexpectedly absent");
+            assert_eq!(
+                expected_supported_versions, supported_versions,
+                "unexpected supported (protocol) versions"
+            );
+        }
+
         None
     }
 }
@@ -735,6 +746,30 @@ fn server_cert_resolve_with_alpn() {
         let mut server_config = make_server_config(*kt);
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
             expected_alpn: Some(vec![b"foo".to_vec(), b"bar".to_vec()]),
+            ..Default::default()
+        });
+
+        let mut client =
+            ClientConnection::new(Arc::new(client_config), dns_name("sni-value")).unwrap();
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert!(err.is_err());
+    }
+}
+
+#[test]
+fn server_cert_resolve_with_supported_versions() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+
+        let mut server_config = make_server_config(*kt);
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_supported_versions: Some(vec![
+                ProtocolVersion::TLSv1_3,
+                #[cfg(feature = "tls12")]
+                ProtocolVersion::TLSv1_2,
+            ]),
             ..Default::default()
         });
 

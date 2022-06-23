@@ -112,6 +112,7 @@ pub struct ClientHello<'a> {
     signature_schemes: &'a [SignatureScheme],
     alpn: Option<&'a Vec<PayloadU8>>,
     cipher_suites: &'a [CipherSuite],
+    supported_versions: Option<&'a Vec<ProtocolVersion>>,
 }
 
 impl<'a> ClientHello<'a> {
@@ -121,17 +122,20 @@ impl<'a> ClientHello<'a> {
         signature_schemes: &'a [SignatureScheme],
         alpn: Option<&'a Vec<PayloadU8>>,
         cipher_suites: &'a [CipherSuite],
+        supported_versions: Option<&'a Vec<ProtocolVersion>>,
     ) -> Self {
         trace!("sni {:?}", server_name);
         trace!("sig schemes {:?}", signature_schemes);
         trace!("alpn protocols {:?}", alpn);
         trace!("cipher suites {:?}", cipher_suites);
+        trace!("supported versions {:?}", supported_versions);
 
         ClientHello {
             server_name,
             signature_schemes,
             alpn,
             cipher_suites,
+            supported_versions,
         }
     }
 
@@ -165,6 +169,13 @@ impl<'a> ClientHello<'a> {
     /// Get cipher suites.
     pub fn cipher_suites(&self) -> &[CipherSuite] {
         self.cipher_suites
+    }
+
+    /// Get the supported TLS versions.
+    pub fn supported_versions(&self) -> Option<&[ProtocolVersion]> {
+        self.supported_versions
+            .as_ref()
+            .map(|v| &v[..])
     }
 }
 
@@ -579,6 +590,7 @@ impl Accepted {
             &self.sig_schemes,
             payload.get_alpn_extension(),
             &payload.cipher_suites,
+            payload.get_versions_extension(),
         )
     }
 
