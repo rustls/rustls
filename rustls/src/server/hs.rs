@@ -322,6 +322,9 @@ impl ExpectClientHello {
                 client_hello.get_alpn_extension(),
                 &client_hello.cipher_suites,
                 maybe_versions_ext,
+                client_hello.get_psk_modes(),
+                client_hello.get_ecpoints_extension(),
+                client_hello.get_namedgroups_extension(),
             );
 
             let certkey = self

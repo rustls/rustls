@@ -653,6 +653,9 @@ struct ServerCheckCertResolve {
     expected_alpn: Option<Vec<Vec<u8>>>,
     expected_cipher_suites: Option<Vec<CipherSuite>>,
     expected_supported_versions: Option<Vec<ProtocolVersion>>,
+    expected_psk_modes: Option<Vec<u8>>,
+    expected_ec_points: Option<Vec<u8>>,
+    expected_named_groups: Option<Vec<u16>>,
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
@@ -713,6 +716,42 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             );
         }
 
+        if let Some(expected_psk_modes) = &self.expected_psk_modes {
+            let psk_modes = client_hello
+                .psk_modes()
+                .expect("PSK modes unexpectedly absent")
+                .collect::<Vec<_>>();
+            assert_eq!(
+                expected_psk_modes.as_slice(),
+                psk_modes.as_slice(),
+                "unexpected PSK modes"
+            );
+        }
+
+        if let Some(expected_ec_points) = &self.expected_ec_points {
+            let ec_points = client_hello
+                .ec_points()
+                .expect("EC points unexpectedly absent")
+                .collect::<Vec<_>>();
+            assert_eq!(
+                expected_ec_points.as_slice(),
+                ec_points.as_slice(),
+                "unexpected EC points"
+            );
+        }
+
+        if let Some(expected_named_groups) = &self.expected_named_groups {
+            let named_groups = client_hello
+                .named_groups()
+                .expect("named groups unexpectedly absent")
+                .collect::<Vec<_>>();
+            assert_eq!(
+                expected_named_groups.as_slice(),
+                named_groups.as_slice(),
+                "unexpected named groups"
+            );
+        }
+
         None
     }
 }
@@ -770,6 +809,66 @@ fn server_cert_resolve_with_supported_versions() {
                 #[cfg(feature = "tls12")]
                 ProtocolVersion::TLSv1_2,
             ]),
+            ..Default::default()
+        });
+
+        let mut client =
+            ClientConnection::new(Arc::new(client_config), dns_name("sni-value")).unwrap();
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert!(err.is_err());
+    }
+}
+
+#[test]
+fn server_cert_resolve_with_psk_modes() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+
+        let mut server_config = make_server_config(*kt);
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_psk_modes: Some(vec![0x01]),
+            ..Default::default()
+        });
+
+        let mut client =
+            ClientConnection::new(Arc::new(client_config), dns_name("sni-value")).unwrap();
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert!(err.is_err());
+    }
+}
+
+#[test]
+fn server_cert_resolve_with_ec_points() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+
+        let mut server_config = make_server_config(*kt);
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_ec_points: Some(vec![0]),
+            ..Default::default()
+        });
+
+        let mut client =
+            ClientConnection::new(Arc::new(client_config), dns_name("sni-value")).unwrap();
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert!(err.is_err());
+    }
+}
+
+#[test]
+fn server_cert_resolve_with_named_groups() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let client_config = make_client_config(*kt);
+
+        let mut server_config = make_server_config(*kt);
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_named_groups: Some(vec![29, 23, 24]),
             ..Default::default()
         });
 

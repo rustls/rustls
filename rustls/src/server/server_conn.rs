@@ -8,7 +8,9 @@ use crate::log::trace;
 use crate::msgs::base::{Payload, PayloadU8};
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
-use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
+use crate::msgs::handshake::{
+    ClientHelloPayload, ECPointFormatList, NamedGroups, PSKKeyExchangeModes, ServerExtension,
+};
 use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -113,6 +115,9 @@ pub struct ClientHello<'a> {
     alpn: Option<&'a Vec<PayloadU8>>,
     cipher_suites: &'a [CipherSuite],
     supported_versions: Option<&'a Vec<ProtocolVersion>>,
+    psk_modes: Option<&'a PSKKeyExchangeModes>,
+    ec_points: Option<&'a ECPointFormatList>,
+    named_groups: Option<&'a NamedGroups>,
 }
 
 impl<'a> ClientHello<'a> {
@@ -123,12 +128,18 @@ impl<'a> ClientHello<'a> {
         alpn: Option<&'a Vec<PayloadU8>>,
         cipher_suites: &'a [CipherSuite],
         supported_versions: Option<&'a Vec<ProtocolVersion>>,
+        psk_modes: Option<&'a PSKKeyExchangeModes>,
+        ec_points: Option<&'a ECPointFormatList>,
+        named_groups: Option<&'a NamedGroups>,
     ) -> Self {
         trace!("sni {:?}", server_name);
         trace!("sig schemes {:?}", signature_schemes);
         trace!("alpn protocols {:?}", alpn);
         trace!("cipher suites {:?}", cipher_suites);
         trace!("supported versions {:?}", supported_versions);
+        trace!("psk modes {:?}", psk_modes);
+        trace!("ec points {:?}", ec_points);
+        trace!("named groups {:?}", named_groups);
 
         ClientHello {
             server_name,
@@ -136,6 +147,9 @@ impl<'a> ClientHello<'a> {
             alpn,
             cipher_suites,
             supported_versions,
+            psk_modes,
+            ec_points,
+            named_groups,
         }
     }
 
@@ -172,10 +186,39 @@ impl<'a> ClientHello<'a> {
     }
 
     /// Get the supported TLS versions.
+    ///
+    /// Returns `None` if the client did not include a Protocol Versions extension.
     pub fn supported_versions(&self) -> Option<&[ProtocolVersion]> {
         self.supported_versions
             .as_ref()
             .map(|v| &v[..])
+    }
+
+    /// Get the PSK modes.
+    ///
+    /// Returns `None` if the client did not include a PSK modes extension.
+    pub fn psk_modes(&self) -> Option<impl Iterator<Item = u8> + 'a> {
+        self.psk_modes
+            .as_ref()
+            .map(|modes| modes.iter().map(|m| m.get_u8()))
+    }
+
+    /// Get the EC points.
+    ///
+    /// Returns `None` if the client did not include a EC points extension.
+    pub fn ec_points(&self) -> Option<impl Iterator<Item = u8> + 'a> {
+        self.ec_points
+            .as_ref()
+            .map(|modes| modes.iter().map(|m| m.get_u8()))
+    }
+
+    /// Get the named groups.
+    ///
+    /// Returns `None` if the client did not include a named groups extension.
+    pub fn named_groups(&self) -> Option<impl Iterator<Item = u16> + 'a> {
+        self.named_groups
+            .as_ref()
+            .map(|modes| modes.iter().map(|m| m.get_u16()))
     }
 }
 
@@ -591,6 +634,9 @@ impl Accepted {
             payload.get_alpn_extension(),
             &payload.cipher_suites,
             payload.get_versions_extension(),
+            payload.get_psk_modes(),
+            payload.get_ecpoints_extension(),
+            payload.get_namedgroups_extension(),
         )
     }
 
