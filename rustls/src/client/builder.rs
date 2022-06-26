@@ -26,6 +26,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
                 root_store,
+                accept_invalid_hostnames: false,
             },
             side: PhantomData::default(),
         }
@@ -62,6 +63,7 @@ pub struct WantsTransparencyPolicyOrClientCert {
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
     root_store: anchors::RootCertStore,
+    accept_invalid_hostnames: bool,
 }
 
 impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
@@ -81,6 +83,28 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
             logs,
             validation_deadline,
         )))
+    }
+
+    /// Set whether to completely ignore hostnames in server certificates.
+    ///
+    /// This is almost never a good idea unless you are happy to end up talking
+    /// to any server with a certificate that is transitively trusted by any
+    /// trusted root certificate.
+    ///
+    /// The safest way to use this is to provide a root certificate store (using `with_root_certificates`)
+    /// containing only the exact certificate that that the host should have.
+    ///
+    /// This may be useful for, e.g., peer-to-peer applications where peers
+    /// authenticate with each other using certificates but do not have stable
+    /// addresses or hostnames.
+    pub fn with_dangerous_accept_invalid_hostnames(self, accept_invalid_hostnames: bool) -> Self {
+        Self {
+            state: WantsTransparencyPolicyOrClientCert {
+                accept_invalid_hostnames: accept_invalid_hostnames,
+                ..self.state
+            },
+            ..self
+        }
     }
 
     /// Sets a single certificate chain and matching private key for use
@@ -126,6 +150,7 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
                 verifier: Arc::new(verify::WebPkiVerifier::new(
                     self.state.root_store,
                     ct_policy,
+                    self.state.accept_invalid_hostnames,
                 )),
             },
             side: PhantomData,

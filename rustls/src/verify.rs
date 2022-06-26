@@ -327,7 +327,7 @@ impl ServerCertVerifier for WebPkiVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a  trusted `RootCertStore` CA
     /// - Not Expired
-    /// - Valid for DNS entry
+    /// - Valid for DNS entry, unless configured to ignore hostnames
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
@@ -340,12 +340,9 @@ impl ServerCertVerifier for WebPkiVerifier {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
-        let dns_name = match server_name {
-            ServerName::DnsName(dns_name) => dns_name,
-            ServerName::IpAddress(_) => {
-                return Err(Error::UnsupportedNameType);
-            }
-        };
+        if !self.accept_invalid_hostnames && !matches!(server_name, ServerName::DnsName(_)) {
+            return Err(Error::UnsupportedNameType);
+        }
 
         let cert = cert
             .verify_is_valid_tls_server_cert(
@@ -365,9 +362,19 @@ impl ServerCertVerifier for WebPkiVerifier {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
         }
 
-        cert.verify_is_valid_for_dns_name(dns_name.0.as_ref())
-            .map_err(pki_error)
-            .map(|_| ServerCertVerified::assertion())
+        if self.accept_invalid_hostnames {
+            Ok(ServerCertVerified::assertion())
+        } else {
+            let dns_name = match server_name {
+                ServerName::DnsName(dns_name) => dns_name,
+                ServerName::IpAddress(_) => {
+                    return Err(Error::UnsupportedNameType);
+                }
+            };
+            cert.verify_is_valid_for_dns_name(dns_name.0.as_ref())
+                .map_err(pki_error)
+                .map(|_| ServerCertVerified::assertion())
+        }
     }
 }
 
@@ -376,6 +383,7 @@ impl ServerCertVerifier for WebPkiVerifier {
 pub struct WebPkiVerifier {
     roots: RootCertStore,
     ct_policy: Option<CertificateTransparencyPolicy>,
+    accept_invalid_hostnames: bool,
 }
 
 #[allow(unreachable_pub)]
@@ -387,8 +395,16 @@ impl WebPkiVerifier {
     /// `ct_logs` is the list of logs that are trusted for Certificate
     /// Transparency. Currently CT log enforcement is opportunistic; see
     /// <https://github.com/rustls/rustls/issues/479>.
-    pub fn new(roots: RootCertStore, ct_policy: Option<CertificateTransparencyPolicy>) -> Self {
-        Self { roots, ct_policy }
+    pub fn new(
+        roots: RootCertStore,
+        ct_policy: Option<CertificateTransparencyPolicy>,
+        accept_invalid_hostnames: bool,
+    ) -> Self {
+        Self {
+            roots,
+            ct_policy,
+            accept_invalid_hostnames,
+        }
     }
 
     /// Returns the signature verification methods supported by
