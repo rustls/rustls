@@ -1,5 +1,7 @@
 use crate::conn::{CommonState, ConnectionRandoms, State};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+#[cfg(feature = "tls12")]
+use crate::enums::CipherSuite;
+use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]

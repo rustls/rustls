@@ -992,6 +992,7 @@ impl ExpectFinished {
 
         let time_now = match TimeBase::now() {
             Ok(time_now) => time_now,
+            #[allow(unused_variables)]
             Err(e) => {
                 debug!("Session not saved: {}", e);
                 return;
