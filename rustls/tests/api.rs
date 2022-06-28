@@ -3205,6 +3205,7 @@ mod test_quic {
         }
     }
 
+    #[cfg(feature = "tls12")]
     #[test]
     fn test_quic_no_tls13_error() {
         let mut client_config =
