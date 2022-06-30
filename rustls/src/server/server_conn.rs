@@ -154,6 +154,25 @@ impl<'a> ClientHello<'a> {
     /// Get the alpn.
     ///
     /// Returns `None` if the client did not include an ALPN extension
+    ///
+    /// Application Layer Protocol Negotiation (ALPN) is a TLS extension that lets a client
+    /// submit a set of identifiers that each a represent an application-layer protocol.
+    /// The server will then pick its preferred protocol from the set submitted by the client.
+    /// Each identifier is represented as a byte array, although common values are often ASCII-encoded.
+    /// See the official RFC-7301 specifications at <https://datatracker.ietf.org/doc/html/rfc7301>
+    /// for more information on ALPN.
+    ///
+    /// Common examples of ALPN identifiers given by web clients are "http/1.1" and "h2".
+    /// These indicate that the web client supports each of these HTTP protocols,
+    /// and it is the server that will respond with one of these two as the chosen HTTP protocol.
+    ///
+    /// On the server side you can configure the ALPN protocols supported by your server
+    /// using `ServerConfig::alpn_protocols`. And it are the protocols that it has in common with the ones
+    /// defined in the `ClientHello` message which will be sent back to the client as part of the handshake phase.
+    ///
+    /// You can find a list of many other possible identifier values at
+    /// <https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids>.
+    /// Please keep in mind that this is not an exhaustive list.
     pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
         self.alpn.map(|protocols| {
             protocols
