@@ -216,14 +216,14 @@ impl SigningKey for RsaSigningKey {
 #[deprecated(since = "0.20.0", note = "Use RsaSigningKey")]
 pub type RSASigningKey = RsaSigningKey;
 
-struct RsaSigner {
+pub struct RsaSigner {
     key: Arc<RsaKeyPair>,
     scheme: SignatureScheme,
     encoding: &'static dyn signature::RsaEncoding,
 }
 
 impl RsaSigner {
-    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
+    pub fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
         let encoding: &dyn signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
