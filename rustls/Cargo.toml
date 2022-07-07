@@ -12,12 +12,12 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-base64 = { git = "https://github.com/mesalock-linux/rust-base64-sgx" }
-log = { git = "https://github.com/mesalock-linux/log-sgx", optional = true }
-ring = { git = "https://github.com/mesalock-linux/ring-sgx", tag = "v0.16.5" }
-sct = { git = "https://github.com/mesalock-linux/sct.rs", branch = "mesalock_sgx" }
-webpki = { git = "https://github.com/mesalock-linux/webpki", branch = "mesalock_sgx" }
-sgx_tstd = { rev = "v1.1.3", git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
+base64 = { git = "https://github.com/yunuseozer/rust-base64-sgx" }
+log = { git = "https://github.com/yunuseozer/log-sgx", optional = true }
+ring = { git = "https://github.com/yunuseozer/ring-sgx" }
+sct = { git = "https://github.com/yunuseozer/sct.rs", branch = "mesalock_sgx" }
+webpki = { git = "https://github.com/yunuseozer/webpki", branch = "mesalock_sgx" }
+sgx_tstd = { rev = "v1.1.4-upgrade", git = "https://github.com/yunuseozer/incubator-teaclave-sgx-sdk.git", optional = true }
 
 [features]
 default = ["logging", "mesalock_sgx"]
