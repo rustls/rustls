@@ -269,7 +269,7 @@ impl Signer for RsaSigner {
 /// different protocol versions.
 ///
 /// Currently this is only implemented for ECDSA keys.
-struct EcdsaSigningKey {
+pub struct EcdsaSigningKey {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
@@ -278,7 +278,7 @@ impl EcdsaSigningKey {
     /// Make a new `ECDSASigningKey` from a DER encoding in PKCS#8 or SEC1
     /// format, expecting a key usable with precisely the given signature
     /// scheme.
-    fn new(
+    pub fn new(
         der: &key::PrivateKey,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
@@ -359,9 +359,9 @@ impl SigningKey for EcdsaSigningKey {
     }
 }
 
-struct EcdsaSigner {
-    key: Arc<EcdsaKeyPair>,
-    scheme: SignatureScheme,
+pub struct EcdsaSigner {
+    pub key: Arc<EcdsaKeyPair>,
+    pub scheme: SignatureScheme,
 }
 
 impl Signer for EcdsaSigner {
