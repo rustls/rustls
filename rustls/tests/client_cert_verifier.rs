@@ -10,6 +10,7 @@ use crate::common::{
     make_pair_for_arc_configs, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
+use rustls::internal::msgs::base::PayloadU16;
 use rustls::internal::msgs::enums::AlertDescription;
 use rustls::internal::msgs::enums::ContentType;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
@@ -51,7 +52,13 @@ fn client_verifier_works() {
     for kt in ALL_KEY_TYPES.iter() {
         let client_verifier = MockClientVerifier {
             verified: ver_ok,
-            subjects: Some(get_client_root_store(*kt).subjects()),
+            subjects: Some(
+                get_client_root_store(*kt)
+                    .roots
+                    .iter()
+                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .collect(),
+            ),
             mandatory: Some(true),
             offered_schemes: None,
         };
@@ -75,7 +82,13 @@ fn client_verifier_no_schemes() {
     for kt in ALL_KEY_TYPES.iter() {
         let client_verifier = MockClientVerifier {
             verified: ver_ok,
-            subjects: Some(get_client_root_store(*kt).subjects()),
+            subjects: Some(
+                get_client_root_store(*kt)
+                    .roots
+                    .iter()
+                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .collect(),
+            ),
             mandatory: Some(true),
             offered_schemes: Some(vec![]),
         };
@@ -170,7 +183,13 @@ fn client_verifier_no_auth_yes_root() {
     for kt in ALL_KEY_TYPES.iter() {
         let client_verifier = MockClientVerifier {
             verified: ver_unreachable,
-            subjects: Some(get_client_root_store(*kt).subjects()),
+            subjects: Some(
+                get_client_root_store(*kt)
+                    .roots
+                    .iter()
+                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .collect(),
+            ),
             mandatory: Some(true),
             offered_schemes: None,
         };
@@ -203,7 +222,13 @@ fn client_verifier_fails_properly() {
     for kt in ALL_KEY_TYPES.iter() {
         let client_verifier = MockClientVerifier {
             verified: ver_err,
-            subjects: Some(get_client_root_store(*kt).subjects()),
+            subjects: Some(
+                get_client_root_store(*kt)
+                    .roots
+                    .iter()
+                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .collect(),
+            ),
             mandatory: Some(true),
             offered_schemes: None,
         };
@@ -231,7 +256,13 @@ fn client_verifier_must_determine_client_auth_requirement_to_continue() {
     for kt in ALL_KEY_TYPES.iter() {
         let client_verifier = MockClientVerifier {
             verified: ver_ok,
-            subjects: Some(get_client_root_store(*kt).subjects()),
+            subjects: Some(
+                get_client_root_store(*kt)
+                    .roots
+                    .iter()
+                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .collect(),
+            ),
             mandatory: None,
             offered_schemes: None,
         };
