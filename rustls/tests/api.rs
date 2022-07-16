@@ -2531,7 +2531,7 @@ fn vectored_write_for_server_handshake_no_half_rtt_with_client_auth() {
 #[test]
 fn vectored_write_for_server_handshake_no_half_rtt_by_default() {
     let server_config = make_server_config(KeyType::Rsa);
-    assert_eq!(server_config.send_half_rtt_data, false);
+    assert!(!server_config.send_half_rtt_data);
     check_half_rtt_does_not_work(server_config);
 }
 
@@ -2923,7 +2923,7 @@ fn early_data_can_be_rejected_by_server() {
     server.reject_early_data();
     do_handshake(&mut client, &mut server);
 
-    assert_eq!(client.is_early_data_accepted(), false);
+    assert!(!client.is_early_data_accepted());
 }
 
 #[cfg(feature = "quic")]
