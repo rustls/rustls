@@ -107,7 +107,7 @@ mod test {
     #[test]
     fn test_noclientsessionstorage_drops_put() {
         let c = NoClientSessionStorage {};
-        assert_eq!(c.put(vec![0x01], vec![0x02]), false);
+        assert!(!c.put(vec![0x01], vec![0x02]));
     }
 
     #[test]
@@ -122,13 +122,13 @@ mod test {
     #[test]
     fn test_clientsessionmemorycache_accepts_put() {
         let c = ClientSessionMemoryCache::new(4);
-        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
+        assert!(c.put(vec![0x01], vec![0x02]));
     }
 
     #[test]
     fn test_clientsessionmemorycache_persists_put() {
         let c = ClientSessionMemoryCache::new(4);
-        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
+        assert!(c.put(vec![0x01], vec![0x02]));
         assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
         assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
     }
@@ -136,19 +136,19 @@ mod test {
     #[test]
     fn test_clientsessionmemorycache_overwrites_put() {
         let c = ClientSessionMemoryCache::new(4);
-        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
-        assert_eq!(c.put(vec![0x01], vec![0x04]), true);
+        assert!(c.put(vec![0x01], vec![0x02]));
+        assert!(c.put(vec![0x01], vec![0x04]));
         assert_eq!(c.get(&[0x01]), Some(vec![0x04]));
     }
 
     #[test]
     fn test_clientsessionmemorycache_drops_to_maintain_size_invariant() {
         let c = ClientSessionMemoryCache::new(2);
-        assert_eq!(c.put(vec![0x01], vec![0x02]), true);
-        assert_eq!(c.put(vec![0x03], vec![0x04]), true);
-        assert_eq!(c.put(vec![0x05], vec![0x06]), true);
-        assert_eq!(c.put(vec![0x07], vec![0x08]), true);
-        assert_eq!(c.put(vec![0x09], vec![0x0a]), true);
+        assert!(c.put(vec![0x01], vec![0x02]));
+        assert!(c.put(vec![0x03], vec![0x04]));
+        assert!(c.put(vec![0x05], vec![0x06]));
+        assert!(c.put(vec![0x07], vec![0x08]));
+        assert!(c.put(vec![0x09], vec![0x0a]));
 
         let count = c.get(&[0x01]).iter().count()
             + c.get(&[0x03]).iter().count()
