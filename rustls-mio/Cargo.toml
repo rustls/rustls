@@ -21,7 +21,6 @@ rustls-pemfile = "1.0.0"
 sct = "0.7"
 
 [dev-dependencies]
-ct-logs = "0.9"
 docopt = "~1.1"
 env_logger = "0.9.0"
 mio = { version = "0.8", features = ["net", "os-poll"] }
