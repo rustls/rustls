@@ -958,7 +958,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         let now = std::time::SystemTime::now();
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, now)
+            .verify_client_cert(cx.data.get_sni_str(), end_entity, intermediates, now)
             .map_err(|err| {
                 hs::incompatible(cx.common, "certificate invalid");
                 err

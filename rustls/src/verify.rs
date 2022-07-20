@@ -252,6 +252,7 @@ pub trait ClientCertVerifier: Send + Sync {
     /// [`Error::InvalidCertificateEncoding`] when these cases are encountered.
     fn verify_client_cert(
         &self,
+        sni_name_str: Option<&str>,
         end_entity: &Certificate,
         intermediates: &[Certificate],
         now: SystemTime,
@@ -539,6 +540,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
 
     fn verify_client_cert(
         &self,
+        _sni_name_str: Option<&str>,
         end_entity: &Certificate,
         intermediates: &[Certificate],
         now: SystemTime,
@@ -592,12 +594,13 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
 
     fn verify_client_cert(
         &self,
+        sni_name_str: Option<&str>,
         end_entity: &Certificate,
         intermediates: &[Certificate],
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         self.inner
-            .verify_client_cert(end_entity, intermediates, now)
+            .verify_client_cert(sni_name_str, end_entity, intermediates, now)
     }
 }
 
@@ -634,6 +637,7 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn verify_client_cert(
         &self,
+        _sni_name_str: Option<&str>,
         _end_entity: &Certificate,
         _intermediates: &[Certificate],
         _now: SystemTime,
