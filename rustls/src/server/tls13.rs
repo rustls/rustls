@@ -703,7 +703,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         config: &ServerConfig,
     ) -> Result<bool, Error> {
-        if !config.verifier.offer_client_auth() {
+        if !config.verifier.offer_client_auth(cx.data.get_sni_str()) {
             return Ok(false);
         }
 
@@ -720,7 +720,7 @@ mod client_hello {
 
         let names = config
             .verifier
-            .client_auth_root_subjects()
+            .client_auth_root_subjects(cx.data.get_sni_str())
             .ok_or_else(|| {
                 debug!("could not determine root subjects based on SNI");
                 cx.common
@@ -926,7 +926,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         let mandatory = self
             .config
             .verifier
-            .client_auth_mandatory()
+            .client_auth_mandatory(cx.data.get_sni_str())
             .ok_or_else(|| {
                 debug!("could not determine if client auth is mandatory based on SNI");
                 cx.common

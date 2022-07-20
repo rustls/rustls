@@ -213,15 +213,15 @@ impl AsRef<str> for DnsName {
 pub trait ClientCertVerifier: Send + Sync {
     /// Returns `true` to enable the server to request a client certificate and
     /// `false` to skip requesting a client certificate. Defaults to `true`.
-    fn offer_client_auth(&self) -> bool {
+    fn offer_client_auth(&self, _sni_name_str: Option<&str>) -> bool {
         true
     }
 
     /// Return `Some(true)` to require a client certificate and `Some(false)` to make
     /// client authentication optional. Return `None` to abort the connection.
     /// Defaults to `Some(self.offer_client_auth())`.
-    fn client_auth_mandatory(&self) -> Option<bool> {
-        Some(self.offer_client_auth())
+    fn client_auth_mandatory(&self, sni_name_str: Option<&str>) -> Option<bool> {
+        Some(self.offer_client_auth(sni_name_str))
     }
 
     /// Returns the [Subjects] of the client authentication trust anchors to
@@ -237,7 +237,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// Return `None` to abort the connection. Return an empty `Vec` to continue
     /// the handshake without sending a CertificateRequest message.
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames>;
+    fn client_auth_root_subjects(&self, sni_name_str: Option<&str>) -> Option<DistinguishedNames>;
 
     /// Verify the end-entity certificate `end_entity` is valid, acceptable,
     /// and chains to at least one of the trust anchors trusted by
@@ -529,12 +529,12 @@ impl AllowAnyAuthenticatedClient {
 }
 
 impl ClientCertVerifier for AllowAnyAuthenticatedClient {
-    fn offer_client_auth(&self) -> bool {
+    fn offer_client_auth(&self, _sni_name_str: Option<&str>) -> bool {
         true
     }
 
     #[allow(deprecated)]
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni_name_str: Option<&str>) -> Option<DistinguishedNames> {
         Some(self.roots.subjects())
     }
 
@@ -580,16 +580,16 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
 }
 
 impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
-    fn offer_client_auth(&self) -> bool {
-        self.inner.offer_client_auth()
+    fn offer_client_auth(&self, sni_name_str: Option<&str>) -> bool {
+        self.inner.offer_client_auth(sni_name_str)
     }
 
-    fn client_auth_mandatory(&self) -> Option<bool> {
+    fn client_auth_mandatory(&self, _sni_name_str: Option<&str>) -> Option<bool> {
         Some(false)
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
-        self.inner.client_auth_root_subjects()
+    fn client_auth_root_subjects(&self, sni_name_str: Option<&str>) -> Option<DistinguishedNames> {
+        self.inner.client_auth_root_subjects(sni_name_str)
     }
 
     fn verify_client_cert(
@@ -627,11 +627,11 @@ impl NoClientAuth {
 }
 
 impl ClientCertVerifier for NoClientAuth {
-    fn offer_client_auth(&self) -> bool {
+    fn offer_client_auth(&self, _sni_name_str: Option<&str>) -> bool {
         false
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self, _sni_name_str: Option<&str>) -> Option<DistinguishedNames> {
         unimplemented!();
     }
 
