@@ -217,7 +217,7 @@ impl HeaderProtectionKey {
 
         let first_plain = match masked {
             // When unmasking, use the packet length bits after unmasking
-            true => (*first ^ (first_mask & bits)),
+            true => *first ^ (first_mask & bits),
             // When masking, use the packet length bits before masking
             false => *first,
         };
