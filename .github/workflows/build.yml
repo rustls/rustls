@@ -85,7 +85,7 @@ jobs:
 
   bogo:
     name: BoGo test suite
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -137,7 +137,7 @@ jobs:
 
   benchmarks:
     name: Smoke-test benchmarks
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -155,7 +155,7 @@ jobs:
 
   docs:
     name: Check for documentation errors
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -176,7 +176,7 @@ jobs:
 
   coverage:
     name: Measure coverage
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -188,7 +188,7 @@ jobs:
       - name: Install LLVM
         run: |
           curl https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo apt-add-repository -y 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-14 main'
+          sudo apt-add-repository -y 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-14 main'
           sudo apt-get install -y clang-14
 
       - name: Install rust toolchain
@@ -218,7 +218,7 @@ jobs:
 
   minver:
     name: Check minimum versions
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
