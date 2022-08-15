@@ -4,7 +4,7 @@ import os
 import glob
 import subprocess
 
-COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Zprofile -Cpanic=abort -Zpanic-abort-tests -Zinstrument-coverage'
+COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Zprofile -Cpanic=abort -Zpanic-abort-tests -Cinstrument-coverage'
 LCOVOPTS = '--gcov-tool ./admin/llvm-gcov --rc lcov_excl_line=assert'.split()
 
 def check_call(*args, **kwargs):
