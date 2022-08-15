@@ -4,6 +4,6 @@ set -xe
 if [ ! -e lcov/ ] ; then
   git clone https://github.com/linux-test-project/lcov.git
   cd lcov
-  git checkout v1.14
+  git checkout v1.16
   sudo make install
 fi
