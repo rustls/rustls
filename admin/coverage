@@ -5,7 +5,8 @@ import glob
 import subprocess
 
 COVERAGE_OPTIONS = '-Ccodegen-units=1 -Clink-dead-code -Zprofile -Cpanic=abort -Zpanic-abort-tests -Cinstrument-coverage'
-LCOVOPTS = '--gcov-tool ./admin/llvm-gcov --rc lcov_excl_line=assert'.split()
+LLVM_GCOV = os.path.abspath('./admin/llvm-gcov')
+LCOVOPTS = ['--gcov-tool', LLVM_GCOV, '--rc' ,'lcov_excl_line=assert']
 
 def check_call(*args, **kwargs):
     subprocess.check_call(*args, **kwargs)
