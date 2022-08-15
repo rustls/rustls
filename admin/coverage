@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os
 import glob
@@ -21,7 +21,7 @@ def cleanup():
     sh("rm -rf *.gcda *.gcno")
 
 def run(which):
-    exe = filter(lambda x: '.' not in x, glob.glob('target/debug/deps/' + which + '-*'))[0]
+    exe = next(filter(lambda x: '.' not in x, glob.glob('target/debug/deps/' + which + '-*')))
     sh('./' + exe)
 
 def rustc(*args):
