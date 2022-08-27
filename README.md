@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-Rustls is a modern TLS library written in Rust.  It uses <a href = "https://github.com/briansmith/ring">[`ring`]</a> for cryptography and <a href = "https://github.com/briansmith/webpki">[`webpki`]</a> for certificate
+Rustls is a modern TLS library written in Rust.  It uses <a href = "https://github.com/briansmith/ring">ring</a> for cryptography and <a href = "https://github.com/briansmith/webpki">webpki</a> for certificate
 verification.
 </p>
 
