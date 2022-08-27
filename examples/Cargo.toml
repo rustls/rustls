@@ -1,10 +1,10 @@
 [package]
-name = "rustls-mio"
+name = "rustls-examples"
 version = "0.0.1"
 edition = "2018"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
-description = "Rustls example code and tests that depend on mio."
+description = "Rustls example code and tests."
 publish = false
 resolver = "2"
 
@@ -32,8 +32,8 @@ ring = "0.16.20"
 
 [[example]]
 name = "tlsclient"
-path = "examples/tlsclient.rs"
+path = "programs/tlsclient.rs"
 
 [[example]]
 name = "tlsserver"
-path = "examples/tlsserver.rs"
+path = "programs/tlsserver.rs"
