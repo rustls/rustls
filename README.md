@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-Rustls is a modern TLS library written in Rust.  It uses <a href = "https://github.com/briansmith/ring"><em>ring</em></a> for cryptography and <a href = "https://github.com/briansmith/webpki">libwebpki</a> for certificate
+Rustls is a modern TLS library written in Rust.  It uses <a href = "https://github.com/briansmith/ring"><em>ring</em></a> for cryptography and <a href = "https://github.com/briansmith/webpki">webpki</a> for certificate
 verification.
 </p>
 
@@ -17,9 +17,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 [![Coverage Status (codecov.io)](https://codecov.io/gh/rustls/rustls/branch/main/graph/badge.svg)](https://codecov.io/gh/rustls/rustls/)
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 
-## Release history:
+## Release history
 
-* Next release:
+* Next release
   - Planned: removal of unused signature verification schemes at link-time.
   - Expose AlertDescription, ContentType, and HandshakeType,
     SignatureAlgorithm, and NamedGroup as part of the stable API. Previously they
