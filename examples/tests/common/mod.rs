@@ -163,11 +163,11 @@ fn unused_port(mut port: u16) -> u16 {
 }
 
 pub fn tlsserver_find() -> &'static str {
-    "../target/debug/examples/tlsserver"
+    "../target/debug/tlsserver"
 }
 
 pub fn tlsclient_find() -> &'static str {
-    "../target/debug/examples/tlsclient"
+    "../target/debug/tlsclient"
 }
 
 pub struct TlsClient {
