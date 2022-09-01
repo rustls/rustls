@@ -711,10 +711,14 @@ fn test_read_in_new_state() {
 #[cfg(read_buf)]
 #[test]
 fn test_read_buf_in_new_state() {
+    use std::io::BorrowedBuf;
+
+    let buf: &mut [_] = &mut [0u8; 5];
+    let mut buf: BorrowedBuf<'_> = buf.into();
     assert_eq!(
         format!(
             "{:?}",
-            EarlyDataState::default().read_buf(&mut io::ReadBuf::new(&mut [0u8; 5]))
+            EarlyDataState::default().read_buf(buf.unfilled())
         ),
         "Err(Kind(BrokenPipe))"
     );
