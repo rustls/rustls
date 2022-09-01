@@ -716,10 +716,7 @@ fn test_read_buf_in_new_state() {
     let mut buf = [0u8; 5];
     let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
     assert_eq!(
-        format!(
-            "{:?}",
-            EarlyDataState::default().read_buf(buf.unfilled())
-        ),
+        format!("{:?}", EarlyDataState::default().read_buf(buf.unfilled())),
         "Err(Kind(BrokenPipe))"
     );
 }
