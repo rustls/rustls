@@ -169,8 +169,8 @@ mod test {
             cvb.append(b"fixture ".to_vec());
             cvb.append(b"data".to_vec());
 
-            let buf: &mut [_] = &mut [MaybeUninit::<u8>::uninit(); 8];
-            let mut buf: BorrowedBuf<'_> = buf.into();
+            let mut buf = [MaybeUninit::<u8>::uninit(); 8];
+            let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
             cvb.read_buf(buf.unfilled()).unwrap();
             assert_eq!(buf.filled(), b"test fix");
             buf.clear();
@@ -185,8 +185,8 @@ mod test {
             let mut cvb = ChunkVecBuffer::new(None);
             cvb.append(b"short message".to_vec());
 
-            let buf: &mut [_] = &mut [MaybeUninit::<u8>::uninit(); 1024];
-            let mut buf: BorrowedBuf<'_> = buf.into();
+            let mut buf = [MaybeUninit::<u8>::uninit(); 1024];
+            let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
             cvb.read_buf(buf.unfilled()).unwrap();
             assert_eq!(buf.filled(), b"short message");
         }

@@ -713,8 +713,8 @@ fn test_read_in_new_state() {
 fn test_read_buf_in_new_state() {
     use std::io::BorrowedBuf;
 
-    let buf: &mut [_] = &mut [0u8; 5];
-    let mut buf: BorrowedBuf<'_> = buf.into();
+    let mut buf = [0u8; 5];
+    let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
     assert_eq!(
         format!(
             "{:?}",
