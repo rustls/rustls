@@ -100,7 +100,7 @@ impl ChunkVecBuffer {
     }
 
     #[cfg(read_buf)]
-    /// Read data out of this object, writing it into `buf`.
+    /// Read data out of this object, writing it into `cursor`.
     pub(crate) fn read_buf(&mut self, mut cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
         while !self.is_empty() && cursor.capacity() > 0 {
             let chunk = self.chunks[0].as_slice();
