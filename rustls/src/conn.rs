@@ -266,12 +266,13 @@ impl<'a> io::Read for Reader<'a> {
     /// You may learn the number of bytes available at any time by inspecting
     /// the return of [`Connection::process_new_packets`].
     #[cfg(read_buf)]
-    fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
-        let before = buf.filled_len();
-        self.received_plaintext.read_buf(buf)?;
-        let len = buf.filled_len() - before;
+    fn read_buf(&mut self, mut cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
+        let before = cursor.written();
+        self.received_plaintext
+            .read_buf(cursor.reborrow())?;
+        let len = cursor.written() - before;
 
-        if len == 0 && buf.capacity() > 0 {
+        if len == 0 && cursor.capacity() > 0 {
             // No bytes available:
             match (self.peer_cleanly_closed, self.has_seen_eof) {
                 // cleanly closed; don't care about TCP EOF: express this as Ok(0)

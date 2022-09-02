@@ -100,12 +100,12 @@ impl ChunkVecBuffer {
     }
 
     #[cfg(read_buf)]
-    /// Read data out of this object, writing it into `buf`.
-    pub(crate) fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
-        while !self.is_empty() && buf.remaining() > 0 {
+    /// Read data out of this object, writing it into `cursor`.
+    pub(crate) fn read_buf(&mut self, mut cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
+        while !self.is_empty() && cursor.capacity() > 0 {
             let chunk = self.chunks[0].as_slice();
-            let used = std::cmp::min(chunk.len(), buf.remaining());
-            buf.append(&chunk[..used]);
+            let used = std::cmp::min(chunk.len(), cursor.capacity());
+            cursor.append(&chunk[..used]);
             self.consume(used);
         }
 
@@ -161,7 +161,7 @@ mod test {
     #[cfg(read_buf)]
     #[test]
     fn read_buf() {
-        use std::{io::ReadBuf, mem::MaybeUninit};
+        use std::{io::BorrowedBuf, mem::MaybeUninit};
 
         {
             let mut cvb = ChunkVecBuffer::new(None);
@@ -170,14 +170,14 @@ mod test {
             cvb.append(b"data".to_vec());
 
             let mut buf = [MaybeUninit::<u8>::uninit(); 8];
-            let mut buf = ReadBuf::uninit(&mut buf);
-            cvb.read_buf(&mut buf).unwrap();
+            let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+            cvb.read_buf(buf.unfilled()).unwrap();
             assert_eq!(buf.filled(), b"test fix");
             buf.clear();
-            cvb.read_buf(&mut buf).unwrap();
+            cvb.read_buf(buf.unfilled()).unwrap();
             assert_eq!(buf.filled(), b"ture dat");
             buf.clear();
-            cvb.read_buf(&mut buf).unwrap();
+            cvb.read_buf(buf.unfilled()).unwrap();
             assert_eq!(buf.filled(), b"a");
         }
 
@@ -186,8 +186,8 @@ mod test {
             cvb.append(b"short message".to_vec());
 
             let mut buf = [MaybeUninit::<u8>::uninit(); 1024];
-            let mut buf = ReadBuf::uninit(&mut buf);
-            cvb.read_buf(&mut buf).unwrap();
+            let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+            cvb.read_buf(buf.unfilled()).unwrap();
             assert_eq!(buf.filled(), b"short message");
         }
     }

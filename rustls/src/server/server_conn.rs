@@ -324,8 +324,8 @@ impl<'a> std::io::Read for ReadEarlyData<'a> {
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
-        self.early_data.read_buf(buf)
+    fn read_buf(&mut self, cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
+        self.early_data.read_buf(cursor)
     }
 }
 
@@ -680,9 +680,9 @@ impl EarlyDataState {
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, buf: &mut io::ReadBuf<'_>) -> io::Result<()> {
+    fn read_buf(&mut self, cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
         match self {
-            Self::Accepted(ref mut received) => received.read_buf(buf),
+            Self::Accepted(ref mut received) => received.read_buf(cursor),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }
@@ -711,11 +711,12 @@ fn test_read_in_new_state() {
 #[cfg(read_buf)]
 #[test]
 fn test_read_buf_in_new_state() {
+    use std::io::BorrowedBuf;
+
+    let mut buf = [0u8; 5];
+    let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
     assert_eq!(
-        format!(
-            "{:?}",
-            EarlyDataState::default().read_buf(&mut io::ReadBuf::new(&mut [0u8; 5]))
-        ),
+        format!("{:?}", EarlyDataState::default().read_buf(buf.unfilled())),
         "Err(Kind(BrokenPipe))"
     );
 }
