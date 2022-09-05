@@ -73,7 +73,7 @@ impl ProducesTickets for AeadTicketer {
 
         let mut ciphertext =
             Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
-        ciphertext.extend(&nonce_buf);
+        ciphertext.extend(nonce_buf);
         ciphertext.extend(message);
         self.key
             .seal_in_place_separate_tag(nonce, aad, &mut ciphertext[nonce_buf.len()..])
