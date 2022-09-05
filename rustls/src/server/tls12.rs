@@ -397,8 +397,8 @@ mod client_hello {
         let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();
-        msg.extend(&randoms.client);
-        msg.extend(&randoms.server);
+        msg.extend(randoms.client);
+        msg.extend(randoms.server);
         secdh.encode(&mut msg);
 
         let signer = signing_key

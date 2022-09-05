@@ -145,7 +145,7 @@ pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
 
 impl Codec for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend(&Self::to_be_bytes(*self))
+        bytes.extend(Self::to_be_bytes(*self))
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
@@ -189,7 +189,7 @@ pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
 
 pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     let len_offset = bytes.len();
-    bytes.extend(&[0, 0]);
+    bytes.extend([0, 0]);
 
     for i in items {
         i.encode(bytes);
@@ -205,7 +205,7 @@ pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
 
 pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     let len_offset = bytes.len();
-    bytes.extend(&[0, 0, 0]);
+    bytes.extend([0, 0, 0]);
 
     for i in items {
         i.encode(bytes);
