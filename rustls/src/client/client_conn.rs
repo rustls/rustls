@@ -207,7 +207,7 @@ impl ClientConfig {
 /// # let _: ServerName = x;
 /// ```
 #[non_exhaustive]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ServerName {
     /// The server is identified by a DNS name.  The name
     /// is sent in the TLS Server Name Indication (SNI)
