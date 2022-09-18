@@ -1,78 +1,106 @@
 use std::convert::TryInto;
 use std::fmt::Debug;
 
-/// Read from a byte slice.
+/// Wrapper over a slice of bytes that allows reading chunks from
+/// with the current position state held using a cursor.
+///
+/// A new reader for a sub section of the the buffer can be created
+/// using the `sub` function or a section of a certain length can
+/// be obtained using the `take` function
 pub struct Reader<'a> {
-    buf: &'a [u8],
-    offs: usize,
+    /// The underlying buffer storing the readers content
+    buffer: &'a [u8],
+    /// Stores the current reading position for the buffer
+    cursor: usize,
 }
 
 impl<'a> Reader<'a> {
+    /// Creates a new Reader of the provided `bytes` slice with
+    /// the initial cursor position of zero.
     pub fn init(bytes: &[u8]) -> Reader {
         Reader {
-            buf: bytes,
-            offs: 0,
+            buffer: bytes,
+            cursor: 0,
         }
     }
 
-    pub fn rest(&mut self) -> &[u8] {
-        let ret = &self.buf[self.offs..];
-        self.offs = self.buf.len();
-        ret
+    /// Attempts to create a new Reader on a sub section of this
+    /// readers bytes by taking a slice of the provided `length`
+    /// will return None if there is not enough bytes
+    pub fn sub(&mut self, length: usize) -> Option<Reader> {
+        self.take(length).map(Reader::init)
     }
 
-    pub fn take(&mut self, len: usize) -> Option<&[u8]> {
-        if self.left() < len {
+    /// Borrows a slice of all the remaining bytes
+    /// that appear after the cursor position.
+    ///
+    /// Moves the cursor to the end of the buffer length.
+    pub fn rest(&mut self) -> &[u8] {
+        let rest = &self.buffer[self.cursor..];
+        self.cursor = self.buffer.len();
+        rest
+    }
+
+    /// Attempts to borrow a slice of bytes from the current
+    /// cursor position of `length` if there is not enough
+    /// bytes remaining after the cursor to take the length
+    /// then None is returned instead.
+    pub fn take(&mut self, length: usize) -> Option<&[u8]> {
+        if self.left() < length {
             return None;
         }
-
-        let current = self.offs;
-        self.offs += len;
-        Some(&self.buf[current..current + len])
+        let current = self.cursor;
+        self.cursor += length;
+        Some(&self.buffer[current..current + length])
     }
 
+    /// Used to check whether the reader has any content left
+    /// after the cursor (cursor has not reached end of buffer)
     pub fn any_left(&self) -> bool {
-        self.offs < self.buf.len()
+        self.cursor < self.buffer.len()
     }
 
-    pub fn left(&self) -> usize {
-        self.buf.len() - self.offs
-    }
-
+    /// Returns the cursor position which is also the number
+    /// of bytes that have been read from the buffer.
     pub fn used(&self) -> usize {
-        self.offs
+        self.cursor
     }
 
-    pub fn sub(&mut self, len: usize) -> Option<Reader> {
-        self.take(len).map(Reader::init)
+    /// Returns the number of bytes that are still able to be
+    /// read (The number of remaining takes)
+    pub fn left(&self) -> usize {
+        self.buffer.len() - self.cursor
     }
 }
 
-/// Things we can encode and read from a Reader.
+/// Trait for implementing encoding and decoding functionality
+/// on something.
 pub trait Codec: Debug + Sized {
-    /// Encode yourself by appending onto `bytes`.
+    /// Function for encoding itself by appending itself to
+    /// the provided vec of bytes.
     fn encode(&self, bytes: &mut Vec<u8>);
 
-    /// Decode yourself by fiddling with the `Reader`.
-    /// Return Some if it worked, None if not.
+    /// Function for decoding itself from the provided reader
+    /// will return Some if the decoding was successful or
+    /// None if it was not.
     fn read(_: &mut Reader) -> Option<Self>;
 
-    /// Convenience function to get the results of `encode()`.
+    /// Convenience function for encoding the implementation
+    /// into a vec and returning it
     fn get_encoding(&self) -> Vec<u8> {
-        let mut ret = Vec::new();
-        self.encode(&mut ret);
-        ret
+        let mut bytes = Vec::new();
+        self.encode(&mut bytes);
+        bytes
     }
 
-    /// Read one of these from the front of `bytes` and
-    /// return it.
+    /// Function for wrapping a call to the read function in
+    /// a Reader for the slice of bytes provided
     fn read_bytes(bytes: &[u8]) -> Option<Self> {
-        let mut rd = Reader::init(bytes);
-        Self::read(&mut rd)
+        let mut reader = Reader::init(bytes);
+        Self::read(&mut reader)
     }
 }
 
-// Encoding functions.
 fn decode_u8(bytes: &[u8]) -> Option<u8> {
     let [value]: [u8; 1] = bytes.try_into().ok()?;
     Some(value)
@@ -82,6 +110,7 @@ impl Codec for u8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
+
     fn read(r: &mut Reader) -> Option<Self> {
         r.take(1).and_then(decode_u8)
     }
