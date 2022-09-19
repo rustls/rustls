@@ -289,7 +289,7 @@ impl Tls12ClientSessionValue {
             .suite
             .encode(&mut bytes);
         self.session_id.encode(&mut bytes);
-        (if self.extended_ms { 1u8 } else { 0u8 }).encode(&mut bytes);
+        (u8::from(self.extended_ms)).encode(&mut bytes);
         self.common.encode(&mut bytes);
         bytes
     }
@@ -422,7 +422,7 @@ impl Codec for ServerSessionValue {
         self.version.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
-        (if self.extended_ms { 1u8 } else { 0u8 }).encode(bytes);
+        (u8::from(self.extended_ms)).encode(bytes);
         if let Some(ref chain) = self.client_cert_chain {
             1u8.encode(bytes);
             chain.encode(bytes);
