@@ -5,7 +5,9 @@ use crate::msgs::enums::SignatureAlgorithm;
 use crate::x509::{wrap_in_asn1_len, wrap_in_sequence};
 
 use ring::io::der;
-use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
+use ring::rand::{SecureRandom, SystemRandom};
+use ring::rsa;
+use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair};
 
 use std::convert::TryFrom;
 use std::error::Error as StdError;
@@ -140,10 +142,12 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, 
 /// Both SEC1 (PEM section starting with 'BEGIN EC PRIVATE KEY') and PKCS8
 /// (PEM section starting with 'BEGIN PRIVATE KEY') encodings are supported.
 pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
+    let rng = SystemRandom::new();
     if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
         &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
+        &rng,
     ) {
         return Ok(Arc::new(ecdsa_p256));
     }
@@ -152,6 +156,7 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, Sign
         der,
         SignatureScheme::ECDSA_NISTP384_SHA384,
         &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
+        &rng,
     ) {
         return Ok(Arc::new(ecdsa_p384));
     }
@@ -176,7 +181,7 @@ pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, Sign
 /// the public, stable, API.
 #[doc(hidden)]
 pub struct RsaSigningKey {
-    key: Arc<RsaKeyPair>,
+    key: Arc<rsa::KeyPair>,
 }
 
 static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
@@ -192,8 +197,8 @@ impl RsaSigningKey {
     /// Make a new `RsaSigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
     pub fn new(der: &key::PrivateKey) -> Result<Self, SignError> {
-        RsaKeyPair::from_der(&der.0)
-            .or_else(|_| RsaKeyPair::from_pkcs8(&der.0))
+        rsa::KeyPair::from_der(&der.0)
+            .or_else(|_| rsa::KeyPair::from_pkcs8(&der.0))
             .map(|s| Self { key: Arc::new(s) })
             .map_err(|_| SignError(()))
     }
@@ -218,13 +223,13 @@ impl SigningKey for RsaSigningKey {
 pub type RSASigningKey = RsaSigningKey;
 
 struct RsaSigner {
-    key: Arc<RsaKeyPair>,
+    key: Arc<rsa::KeyPair>,
     scheme: SignatureScheme,
     encoding: &'static dyn signature::RsaEncoding,
 }
 
 impl RsaSigner {
-    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
+    fn new(key: Arc<rsa::KeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
         let encoding: &dyn signature::RsaEncoding = match scheme {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
@@ -245,7 +250,7 @@ impl RsaSigner {
 
 impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let mut sig = vec![0; self.key.public_modulus_len()];
+        let mut sig = vec![0; self.key.public().modulus_len()];
 
         let rng = ring::rand::SystemRandom::new();
         self.key
@@ -283,10 +288,11 @@ impl EcdsaSigningKey {
         der: &key::PrivateKey,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
+        rng: &dyn SecureRandom,
     ) -> Result<Self, ()> {
-        EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
+        EcdsaKeyPair::from_pkcs8(sigalg, &der.0, rng)
             .map_err(|_| ())
-            .or_else(|_| Self::convert_sec1_to_pkcs8(scheme, sigalg, &der.0))
+            .or_else(|_| Self::convert_sec1_to_pkcs8(scheme, sigalg, &der.0, rng))
             .map(|kp| Self {
                 key: Arc::new(kp),
                 scheme,
@@ -300,6 +306,7 @@ impl EcdsaSigningKey {
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
         maybe_sec1_der: &[u8],
+        rng: &dyn SecureRandom,
     ) -> Result<EcdsaKeyPair, ()> {
         let pkcs8_prefix = match scheme {
             SignatureScheme::ECDSA_NISTP256_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
@@ -318,7 +325,7 @@ impl EcdsaSigningKey {
         pkcs8.extend_from_slice(&sec1_wrap);
         wrap_in_sequence(&mut pkcs8);
 
-        EcdsaKeyPair::from_pkcs8(sigalg, &pkcs8).map_err(|_| ())
+        EcdsaKeyPair::from_pkcs8(sigalg, &pkcs8, rng).map_err(|_| ())
     }
 }
 

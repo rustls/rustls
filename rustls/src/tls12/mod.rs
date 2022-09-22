@@ -245,7 +245,6 @@ impl ConnectionSecrets {
                 label.as_bytes(),
                 seed.as_ref(),
             );
-            Ok(())
         })?;
 
         Ok(ret)
