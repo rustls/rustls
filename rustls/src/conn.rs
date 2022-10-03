@@ -1410,3 +1410,36 @@ pub(crate) enum Side {
 pub trait SideData {}
 
 const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
+
+/// Secrets for transmitting/receiving data over a TLS session. These can be
+/// used to configure kTLS for a socket, for example.
+#[cfg(feature = "extract_secrets")]
+pub struct ExtractedSecrets<'a> {
+    /// secrets for the "tx" (transmit) direction - if we're the client, these
+    /// are the client secrets. if we're the server, these are the server
+    /// secrets.
+    pub tx: DirectionalSecrets<'a>,
+
+    /// secrets for the "rx" (receive) direction - if we're the client, these
+    /// are the server secrets. if we're the server, these are the client
+    /// secrets.
+    pub rx: DirectionalSecrets<'a>,
+}
+
+/// Secrets required to transmit or receive data over a TLS session (in a single
+/// direction)
+#[cfg(feature = "extract_secrets")]
+pub struct DirectionalSecrets<'a> {
+    /// sequence number
+    pub seq_number: u64,
+
+    /// traffic key size depends on the cipher suite
+    pub key: &'a [u8],
+
+    /// 4 bytes salt + 8 bytes IV for AES-GCM,
+    /// 12 bytes IV for ChaCha20Poly1305
+    pub iv: &'a [u8],
+
+    /// for ChaCha20Poly1305, this is an empty slice
+    pub salt: &'a [u8],
+}
