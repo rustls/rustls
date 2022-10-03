@@ -1351,6 +1351,14 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 .set_message_encrypter(self.suite.derive_encrypter(&write_key));
         }
     }
+
+    #[cfg(feature = "extract_secrets")]
+    fn extract_secrets(&self, tx_seq: u64, rx_seq: u64) -> Result<crate::ExtractedSecrets, Error> {
+        let algo = self.suite.common.aead_algorithm;
+
+        self.key_schedule
+            .extract_secrets(tx_seq, rx_seq, algo, crate::conn::Side::Server)
+    }
 }
 
 #[cfg(feature = "quic")]

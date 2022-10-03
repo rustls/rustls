@@ -334,6 +334,92 @@ impl KeyScheduleTraffic {
         self.ks
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
+
+    #[cfg(feature = "extract_secrets")]
+    pub(crate) fn extract_secrets(
+        &self,
+        tx_seq: u64,
+        rx_seq: u64,
+        algo: &ring::aead::Algorithm,
+        side: crate::conn::Side,
+    ) -> Result<crate::ExtractedSecrets, Error> {
+        let expand = |secret: &hkdf::Prk, key: &mut [u8], iv: &mut [u8]| -> Result<(), Error> {
+            hkdf_expand_info(secret, PayloadU8Len(key.len()), b"key", &[], |okm| {
+                okm.fill(key)
+            })
+            .map_err(|_| Error::General("hkdf_expand_info failed".to_string()))?;
+
+            hkdf_expand_info(secret, PayloadU8Len(iv.len()), b"iv", &[], |okm| {
+                okm.fill(iv)
+            })
+            .map_err(|_| Error::General("hkdf_expand_info failed".to_string()))?;
+
+            Ok(())
+        };
+
+        let client_secrets;
+        let server_secrets;
+
+        use std::convert::TryInto;
+
+        if algo == &ring::aead::AES_128_GCM {
+            let extract = |secret: &hkdf::Prk| -> Result<crate::AlgorithmSecrets, Error> {
+                let mut key = [0u8; 16];
+                let mut iv = [0u8; 12];
+                expand(secret, &mut key, &mut iv)?;
+
+                Ok(crate::AlgorithmSecrets::Aes128Gcm {
+                    key,
+                    salt: iv[..4].try_into().unwrap(),
+                    iv: iv[4..].try_into().unwrap(),
+                })
+            };
+
+            client_secrets = extract(&self.current_client_traffic_secret)?;
+            server_secrets = extract(&self.current_server_traffic_secret)?;
+        } else if algo == &ring::aead::AES_256_GCM {
+            let extract = |secret: &hkdf::Prk| -> Result<crate::AlgorithmSecrets, Error> {
+                let mut key = [0u8; 32];
+                let mut iv = [0u8; 12];
+                expand(secret, &mut key, &mut iv)?;
+
+                Ok(crate::AlgorithmSecrets::Aes256Gcm {
+                    key,
+                    salt: iv[..4].try_into().unwrap(),
+                    iv: iv[4..].try_into().unwrap(),
+                })
+            };
+
+            client_secrets = extract(&self.current_client_traffic_secret)?;
+            server_secrets = extract(&self.current_server_traffic_secret)?;
+        } else if algo == &ring::aead::CHACHA20_POLY1305 {
+            let extract = |secret: &hkdf::Prk| -> Result<crate::AlgorithmSecrets, Error> {
+                let mut key = [0u8; 32];
+                let mut iv = [0u8; 12];
+                expand(secret, &mut key, &mut iv)?;
+
+                Ok(crate::AlgorithmSecrets::Chacha20Poly1305 { key, iv })
+            };
+
+            client_secrets = extract(&self.current_client_traffic_secret)?;
+            server_secrets = extract(&self.current_server_traffic_secret)?;
+        } else {
+            return Err(Error::General(format!(
+                "exporting secrets for {:?}: unimplemented",
+                algo
+            )));
+        }
+
+        let (tx_secrets, rx_secrets) = match side {
+            crate::conn::Side::Client => (client_secrets, server_secrets),
+            crate::conn::Side::Server => (server_secrets, client_secrets),
+        };
+
+        Ok(crate::ExtractedSecrets {
+            tx: (tx_seq, tx_secrets),
+            rx: (rx_seq, rx_secrets),
+        })
+    }
 }
 
 impl KeySchedule {
