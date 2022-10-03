@@ -89,6 +89,14 @@ impl Connection {
         }
     }
 
+    /// Extract secrets, to set up kTLS for example
+    pub fn extract_secrets(&self, f: &mut dyn FnMut(ExtractedSecrets<'_>)) -> Result<(), Error> {
+        match self {
+            Self::Client(conn) => conn.extract_secrets(f),
+            Self::Server(conn) => conn.extract_secrets(f),
+        }
+    }
+
     /// This function uses `io` to complete any outstanding IO for this connection.
     ///
     /// See [`ConnectionCommon::complete_io()`] for more information.
@@ -751,6 +759,37 @@ impl<Data> ConnectionCommon<Data> {
             Err(e) => Err(e.clone()),
         }
     }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    #[cfg(feature = "extract_secrets")]
+    pub fn extract_secrets<T>(
+        &self,
+        mut f: impl FnMut(ExtractedSecrets<'_>) -> T,
+    ) -> Result<T, Error> {
+        match self.state.as_ref() {
+            Ok(st) => {
+                let tx_seq = self
+                    .common_state
+                    .record_layer
+                    .write_seq();
+                let rx_seq = self
+                    .common_state
+                    .record_layer
+                    .read_seq();
+
+                let mut res: Option<T> = None;
+                st.extract_secrets(tx_seq, rx_seq, &mut |es| {
+                    res = Some(f(es));
+                })?;
+
+                match res {
+                    Some(r) => Ok(r),
+                    None => Err(Error::General("no secrets extracted".into())),
+                }
+            }
+            Err(e) => Err(e.clone()),
+        }
+    }
 }
 
 #[cfg(feature = "quic")]
@@ -1364,6 +1403,16 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
+    #[cfg(feature = "extract_secrets")]
+    fn extract_secrets(
+        &self,
+        _tx_seq: u64,
+        _rx_seq: u64,
+        _f: &mut dyn FnMut(ExtractedSecrets<'_>),
+    ) -> Result<(), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+
     fn perhaps_write_key_update(&mut self, _cx: &mut CommonState) {}
 }
 
@@ -1431,7 +1480,7 @@ pub struct ExtractedSecrets<'a> {
 #[cfg(feature = "extract_secrets")]
 pub struct DirectionalSecrets<'a> {
     /// sequence number
-    pub seq_number: u64,
+    pub seq: u64,
 
     /// traffic key size depends on the cipher suite
     pub key: &'a [u8],
@@ -1439,7 +1488,4 @@ pub struct DirectionalSecrets<'a> {
     /// 4 bytes salt + 8 bytes IV for AES-GCM,
     /// 12 bytes IV for ChaCha20Poly1305
     pub iv: &'a [u8],
-
-    /// for ChaCha20Poly1305, this is an empty slice
-    pub salt: &'a [u8],
 }

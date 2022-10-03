@@ -930,4 +930,15 @@ impl State<ServerConnectionData> for ExpectTraffic {
             .export_keying_material(output, label, context);
         Ok(())
     }
+
+    #[cfg(feature = "extract_secrets")]
+    fn extract_secrets(
+        &self,
+        tx_seq: u64,
+        rx_seq: u64,
+        f: &mut dyn FnMut(crate::ExtractedSecrets<'_>),
+    ) -> Result<(), Error> {
+        self.secrets
+            .extract_secrets(tx_seq, rx_seq, crate::conn::Side::Server, f)
+    }
 }
