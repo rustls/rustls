@@ -483,7 +483,7 @@ impl ConnectionSecrets {
                 key: server_key.try_into().map_err(|_| {
                     Error::General("exporting CHACHA20_POLY1305: bad key length (server)".into())
                 })?,
-                iv: client_iv.try_into().map_err(|_| {
+                iv: server_iv.try_into().map_err(|_| {
                     Error::General("exporting CHACHA20_POLY1305: bad extra length (server)".into())
                 })?,
             };
