@@ -336,6 +336,8 @@ mod check;
 mod bs_debug;
 mod builder;
 mod enums;
+#[cfg(feature = "extract_secrets")]
+mod extract_secrets;
 mod key;
 mod key_log;
 mod key_log_file;
@@ -365,10 +367,10 @@ pub use crate::builder::{
 pub use crate::conn::{
     CommonState, Connection, ConnectionCommon, IoState, Reader, SideData, Writer,
 };
-#[cfg(feature = "extract_secrets")]
-pub use crate::conn::{DirectionalSecrets, ExtractedSecrets};
 pub use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 pub use crate::error::Error;
+#[cfg(feature = "extract_secrets")]
+pub use crate::extract_secrets::{AlgorithmSecrets, ExtractedSecrets};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
