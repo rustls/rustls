@@ -403,47 +403,106 @@ impl ConnectionSecrets {
         tx_seq: u64,
         rx_seq: u64,
         side: Side,
-        f: &mut dyn FnMut(crate::ExtractedSecrets<'_>),
-    ) -> Result<(), Error> {
+    ) -> Result<crate::ExtractedSecrets, Error> {
         // Make a key block, and chop it up
         let key_block = self.make_key_block();
 
-        let suite = &self.suite;
-        let algo = &suite.common.aead_algorithm;
+        let suite = self.suite;
+        let algo = suite.common.aead_algorithm;
 
         let (client_key, key_block) = key_block.split_at(algo.key_len());
         let (server_key, key_block) = key_block.split_at(algo.key_len());
         let (client_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
-        let mut full_client_iv = [0u8; 12];
-        full_client_iv[..suite.fixed_iv_len].copy_from_slice(client_iv);
-        full_client_iv[suite.fixed_iv_len..].copy_from_slice(&extra[..12 - suite.fixed_iv_len]);
+        let client_secrets;
+        let server_secrets;
 
-        let mut full_server_iv = [0u8; 12];
-        full_server_iv[..suite.fixed_iv_len].copy_from_slice(server_iv);
-        full_server_iv[suite.fixed_iv_len..].copy_from_slice(&extra[12 - suite.fixed_iv_len..]);
+        use crate::AlgorithmSecrets;
+        use std::convert::TryInto;
 
-        let (tx_key, tx_iv, rx_key, rx_iv) = match side {
-            Side::Client => (client_key, full_client_iv, server_key, full_server_iv),
-            Side::Server => (server_key, full_server_iv, client_key, full_client_iv),
+        if algo == &ring::aead::AES_128_GCM {
+            client_secrets = AlgorithmSecrets::Aes128Gcm {
+                key: client_key.try_into().map_err(|_| {
+                    Error::General("exporting AES_128_GCM: bad key length (client)".into())
+                })?,
+                salt: client_iv.try_into().map_err(|_| {
+                    Error::General("exporting AES_128_GCM: bad iv length (client)".into())
+                })?,
+                iv: extra[..8].try_into().map_err(|_| {
+                    Error::General("exporting AES_128_GCM: bad extra length (client)".into())
+                })?,
+            };
+
+            server_secrets = AlgorithmSecrets::Aes128Gcm {
+                key: server_key.try_into().map_err(|_| {
+                    Error::General("exporting AES_128_GCM: bad key length (server)".into())
+                })?,
+                salt: server_iv.try_into().map_err(|_| {
+                    Error::General("exporting AES_128_GCM: bad iv length (server)".into())
+                })?,
+                iv: extra[..8].try_into().map_err(|_| {
+                    Error::General("exporting AES_128_GCM: bad extra length (server)".into())
+                })?,
+            };
+        } else if algo == &ring::aead::AES_256_GCM {
+            client_secrets = AlgorithmSecrets::Aes256Gcm {
+                key: client_key.try_into().map_err(|_| {
+                    Error::General("exporting AES_256_GCM: bad key length (client)".into())
+                })?,
+                salt: client_iv.try_into().map_err(|_| {
+                    Error::General("exporting AES_256_GCM: bad iv length (client)".into())
+                })?,
+                iv: extra[..8].try_into().map_err(|_| {
+                    Error::General("exporting AES_256_GCM: bad extra length (client)".into())
+                })?,
+            };
+
+            server_secrets = AlgorithmSecrets::Aes256Gcm {
+                key: server_key.try_into().map_err(|_| {
+                    Error::General("exporting AES_256_GCM: bad key length (server)".into())
+                })?,
+                salt: server_iv.try_into().map_err(|_| {
+                    Error::General("exporting AES_256_GCM: bad iv length (server)".into())
+                })?,
+                iv: extra[..8].try_into().map_err(|_| {
+                    Error::General("exporting AES_256_GCM: bad extra length (server)".into())
+                })?,
+            };
+        } else if algo == &ring::aead::CHACHA20_POLY1305 {
+            client_secrets = AlgorithmSecrets::Chacha20Poly1305 {
+                key: client_key.try_into().map_err(|_| {
+                    Error::General("exporting CHACHA20_POLY1305: bad key length (client)".into())
+                })?,
+                iv: client_iv.try_into().map_err(|_| {
+                    Error::General("exporting CHACHA20_POLY1305: bad extra length (client)".into())
+                })?,
+            };
+
+            server_secrets = AlgorithmSecrets::Chacha20Poly1305 {
+                key: server_key.try_into().map_err(|_| {
+                    Error::General("exporting CHACHA20_POLY1305: bad key length (server)".into())
+                })?,
+                iv: client_iv.try_into().map_err(|_| {
+                    Error::General("exporting CHACHA20_POLY1305: bad extra length (server)".into())
+                })?,
+            };
+        } else {
+            return Err(Error::General(format!(
+                "exporting secrets for {:?}: unimplemented",
+                algo
+            )));
+        }
+
+        let (tx_secrets, rx_secrets) = match side {
+            Side::Client => (client_secrets, server_secrets),
+            Side::Server => (server_secrets, client_secrets),
         };
 
-        f(crate::ExtractedSecrets {
-            tx: crate::DirectionalSecrets {
-                key: tx_key,
-                iv: &tx_iv[..],
-                seq: tx_seq,
-            },
-
-            rx: crate::DirectionalSecrets {
-                key: rx_key,
-                iv: &rx_iv[..],
-                seq: rx_seq,
-            },
-        });
-
-        Ok(())
+        Ok(crate::ExtractedSecrets {
+            tx: (tx_seq, tx_secrets),
+            rx: (rx_seq, rx_secrets),
+        })
     }
 }
 

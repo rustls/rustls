@@ -91,10 +91,10 @@ impl Connection {
 
     /// Extract secrets, to set up kTLS for example
     #[cfg(feature = "extract_secrets")]
-    pub fn extract_secrets(&self, f: &mut dyn FnMut(ExtractedSecrets<'_>)) -> Result<(), Error> {
+    pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
         match self {
-            Self::Client(conn) => conn.extract_secrets(f),
-            Self::Server(conn) => conn.extract_secrets(f),
+            Self::Client(conn) => conn.extract_secrets(),
+            Self::Server(conn) => conn.extract_secrets(),
         }
     }
 
@@ -763,10 +763,7 @@ impl<Data> ConnectionCommon<Data> {
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     #[cfg(feature = "extract_secrets")]
-    pub fn extract_secrets<T>(
-        &self,
-        mut f: impl FnMut(ExtractedSecrets<'_>) -> T,
-    ) -> Result<T, Error> {
+    pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
         match self.state.as_ref() {
             Ok(st) => {
                 let tx_seq = self
@@ -778,15 +775,7 @@ impl<Data> ConnectionCommon<Data> {
                     .record_layer
                     .read_seq();
 
-                let mut res: Option<T> = None;
-                st.extract_secrets(tx_seq, rx_seq, &mut |es| {
-                    res = Some(f(es));
-                })?;
-
-                match res {
-                    Some(r) => Ok(r),
-                    None => Err(Error::General("no secrets extracted".into())),
-                }
+                st.extract_secrets(tx_seq, rx_seq)
             }
             Err(e) => Err(e.clone()),
         }
@@ -1409,8 +1398,7 @@ pub(crate) trait State<Data>: Send + Sync {
         &self,
         _tx_seq: u64,
         _rx_seq: u64,
-        _f: &mut dyn FnMut(ExtractedSecrets<'_>),
-    ) -> Result<(), Error> {
+    ) -> Result<crate::ExtractedSecrets, Error> {
         Err(Error::HandshakeNotComplete)
     }
 
@@ -1460,33 +1448,3 @@ pub(crate) enum Side {
 pub trait SideData {}
 
 const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
-
-/// Secrets for transmitting/receiving data over a TLS session. These can be
-/// used to configure kTLS for a socket, for example.
-#[cfg(feature = "extract_secrets")]
-pub struct ExtractedSecrets<'a> {
-    /// secrets for the "tx" (transmit) direction - if we're the client, these
-    /// are the client secrets. if we're the server, these are the server
-    /// secrets.
-    pub tx: DirectionalSecrets<'a>,
-
-    /// secrets for the "rx" (receive) direction - if we're the client, these
-    /// are the server secrets. if we're the server, these are the client
-    /// secrets.
-    pub rx: DirectionalSecrets<'a>,
-}
-
-/// Secrets required to transmit or receive data over a TLS session (in a single
-/// direction)
-#[cfg(feature = "extract_secrets")]
-pub struct DirectionalSecrets<'a> {
-    /// sequence number
-    pub seq: u64,
-
-    /// traffic key size depends on the cipher suite
-    pub key: &'a [u8],
-
-    /// 4 bytes salt + 8 bytes IV for AES-GCM,
-    /// 12 bytes IV for ChaCha20Poly1305
-    pub iv: &'a [u8],
-}

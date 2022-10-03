@@ -932,13 +932,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
     }
 
     #[cfg(feature = "extract_secrets")]
-    fn extract_secrets(
-        &self,
-        tx_seq: u64,
-        rx_seq: u64,
-        f: &mut dyn FnMut(crate::ExtractedSecrets<'_>),
-    ) -> Result<(), Error> {
+    fn extract_secrets(&self, tx_seq: u64, rx_seq: u64) -> Result<crate::ExtractedSecrets, Error> {
         self.secrets
-            .extract_secrets(tx_seq, rx_seq, crate::conn::Side::Server, f)
+            .extract_secrets(tx_seq, rx_seq, crate::conn::Side::Server)
     }
 }
