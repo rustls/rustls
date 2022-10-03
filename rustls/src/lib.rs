@@ -365,6 +365,8 @@ pub use crate::builder::{
 pub use crate::conn::{
     CommonState, Connection, ConnectionCommon, IoState, Reader, SideData, Writer,
 };
+#[cfg(feature = "extract_secrets")]
+pub use crate::conn::{DirectionalSecrets, ExtractedSecrets};
 pub use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 pub use crate::error::Error;
 pub use crate::key::{Certificate, PrivateKey};
