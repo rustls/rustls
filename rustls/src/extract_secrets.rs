@@ -10,6 +10,7 @@ pub struct ExtractedSecrets {
 
 /// Secrets specific to an AEAD algorithm. These are traffic secrets,
 /// post-handshake.
+#[non_exhaustive]
 pub enum AlgorithmSecrets {
     /// Secrets for the AES_128_GCM AEAD algorithm
     Aes128Gcm {
