@@ -90,6 +90,7 @@ impl Connection {
     }
 
     /// Extract secrets, to set up kTLS for example
+    #[cfg(feature = "extract_secrets")]
     pub fn extract_secrets(&self, f: &mut dyn FnMut(ExtractedSecrets<'_>)) -> Result<(), Error> {
         match self {
             Self::Client(conn) => conn.extract_secrets(f),
