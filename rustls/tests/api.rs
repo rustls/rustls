@@ -4204,6 +4204,8 @@ fn test_no_warning_logging_during_successful_sessions() {
 #[cfg(feature = "extract_secrets")]
 #[test]
 fn test_extract_secrets() {
+    use rustls::BulkAlgorithm;
+
     let kt = KeyType::Rsa;
     for suite in [
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
@@ -4238,12 +4240,45 @@ fn test_extract_secrets() {
         let mut client_secrets = client.extract_secrets().unwrap();
         let mut server_secrets = server.extract_secrets().unwrap();
 
+        fn make_nonce(iv: &[u8], seq: u64) -> ring::aead::Nonce {
+            let mut nonce = [0u8; ring::aead::NONCE_LEN];
+            rustls::internal::msgs::codec::put_u64(seq, &mut nonce[4..]);
+
+            nonce
+                .iter_mut()
+                .zip(iv.iter())
+                .for_each(|(nonce, iv)| {
+                    *nonce ^= *iv;
+                });
+
+            ring::aead::Nonce::assume_unique_for_key(nonce)
+        }
+
         match suite {
             SupportedCipherSuite::Tls12(_suite) => {
                 todo!()
             }
             SupportedCipherSuite::Tls13(suite) => {
-                let client_encrypted = {
+                let aead_algorithm = match suite.common.bulk {
+                    BulkAlgorithm::Aes128Gcm => &ring::aead::AES_128_GCM,
+                    BulkAlgorithm::Aes256Gcm => &ring::aead::AES_256_GCM,
+                    BulkAlgorithm::Chacha20Poly1305 => &ring::aead::CHACHA20_POLY1305,
+                };
+
+                // https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
+                const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
+
+                fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
+                    ring::aead::Aad::from([
+                        0x17, // ContentType::ApplicationData
+                        0x3,  // ProtocolVersion (major)
+                        0x3,  // ProtocolVersion (minor)
+                        (len >> 8) as u8,
+                        len as u8,
+                    ])
+                }
+
+                let mut payload = {
                     // TODO: don't allocate
                     let out_key: Vec<u8>;
                     let out_iv: Vec<u8>;
@@ -4274,20 +4309,27 @@ fn test_extract_secrets() {
                         }
                     };
 
-                    let msg = BorrowedPlainMessage {
-                        typ: ContentType::ApplicationData,
-                        version: ProtocolVersion::TLSv1_3,
-                        payload: &[1, 2, 3, 4, 5],
-                    };
+                    let plaintext = &[1, 2, 3, 4, 5];
+                    let total_len = plaintext.len() + aead_algorithm.tag_len();
+                    let mut payload = Vec::with_capacity(total_len);
+                    payload.extend_from_slice(plaintext);
 
-                    let msg = suite
-                        .test_encrypt_message(&out_key[..], &out_iv[..], msg, client_secrets.tx.0)
+                    let nonce = make_nonce(&out_iv, client_secrets.tx.0);
+                    let aad = make_tls13_aad(total_len);
+
+                    let enc_key = ring::aead::UnboundKey::new(aead_algorithm, &out_key).unwrap();
+                    let enc_key = ring::aead::LessSafeKey::new(enc_key);
+                    enc_key
+                        .seal_in_place_append_tag(nonce, aad, &mut payload)
                         .unwrap();
+
                     client_secrets.tx.0 += 1;
-                    msg
+                    payload
                 };
 
-                let server_decrypted = {
+                println!("Encrypted payload: {:x?}", payload);
+
+                let payload = {
                     // TODO: don't allocate
                     let out_key: Vec<u8>;
                     let out_iv: Vec<u8>;
@@ -4318,19 +4360,23 @@ fn test_extract_secrets() {
                         }
                     };
 
-                    let msg = suite
-                        .test_decrypt_message(
-                            &out_key[..],
-                            &out_iv[..],
-                            client_encrypted,
-                            server_secrets.rx.0,
-                        )
+                    let nonce = make_nonce(&out_iv, server_secrets.rx.0);
+                    let aad = make_tls13_aad(payload.len());
+
+                    let dec_key = ring::aead::UnboundKey::new(aead_algorithm, &out_key).unwrap();
+                    let dec_key = ring::aead::LessSafeKey::new(dec_key);
+
+                    let plain = dec_key
+                        .open_in_place(nonce, aad, &mut payload)
                         .unwrap();
+
                     server_secrets.rx.0 += 1;
-                    msg
+                    plain
                 };
 
-                assert_eq!(&server_decrypted.payload.0[..], &[1, 2, 3, 4, 5]);
+                println!("Decrypted payload: {:x?}", payload);
+
+                assert_eq!(payload, &[1, 2, 3, 4, 5]);
             }
         }
     }
