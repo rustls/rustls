@@ -770,16 +770,8 @@ impl<Data> ConnectionCommon<Data> {
 
         match self.state.as_ref() {
             Ok(st) => {
-                let tx_seq = self
-                    .common_state
-                    .record_layer
-                    .write_seq();
-                let rx_seq = self
-                    .common_state
-                    .record_layer
-                    .read_seq();
-
-                st.extract_secrets(tx_seq, rx_seq)
+                let record_layer = &self.common_state.record_layer;
+                st.extract_secrets(record_layer.write_seq(), record_layer.read_seq())
             }
             Err(e) => Err(e.clone()),
         }
