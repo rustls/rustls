@@ -5,12 +5,16 @@ use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
+#[cfg(feature = "extract_secrets")]
+use crate::suites::{AlgorithmSecrets, PartiallyExtractedSecrets};
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 use crate::Error;
 
 use ring::aead;
 use ring::digest::Digest;
 
+#[cfg(feature = "extract_secrets")]
+use std::convert::TryInto;
 use std::fmt;
 
 mod cipher;
@@ -398,12 +402,7 @@ impl ConnectionSecrets {
     }
 
     #[cfg(feature = "extract_secrets")]
-    pub(crate) fn extract_secrets(
-        &self,
-        tx_seq: u64,
-        rx_seq: u64,
-        side: Side,
-    ) -> Result<crate::ExtractedSecrets, Error> {
+    pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         // Make a key block, and chop it up
         let key_block = self.make_key_block();
 
@@ -417,9 +416,6 @@ impl ConnectionSecrets {
 
         let client_secrets;
         let server_secrets;
-
-        use crate::AlgorithmSecrets;
-        use std::convert::TryInto;
 
         if algo == &ring::aead::AES_128_GCM {
             client_secrets = AlgorithmSecrets::Aes128Gcm {
@@ -494,15 +490,11 @@ impl ConnectionSecrets {
             )));
         }
 
-        let (tx_secrets, rx_secrets) = match side {
+        let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),
             Side::Server => (server_secrets, client_secrets),
         };
-
-        Ok(crate::ExtractedSecrets {
-            tx: (tx_seq, tx_secrets),
-            rx: (rx_seq, rx_secrets),
-        })
+        Ok(PartiallyExtractedSecrets { tx, rx })
     }
 }
 
