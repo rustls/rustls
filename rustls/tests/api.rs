@@ -19,6 +19,11 @@ use rustls::internal::msgs::codec::Codec;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
+#[cfg(feature = "extract_secrets")]
+use rustls::{
+    internal::msgs::{enums::ContentType, message::BorrowedPlainMessage},
+    ConnectionTrafficSecrets,
+};
 use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -4204,9 +4209,9 @@ fn test_extract_secrets() {
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
         rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        // rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        // rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        // rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     ] {
         let version = suite.version();
         println!("Testing suite {:?}", suite.suite().as_str());
@@ -4230,7 +4235,103 @@ fn test_extract_secrets() {
 
         do_handshake(&mut client, &mut server);
 
-        let client_secrets = client.extract_secrets().unwrap();
-        let server_secrets = client.extract_secrets().unwrap();
+        let mut client_secrets = client.extract_secrets().unwrap();
+        let mut server_secrets = server.extract_secrets().unwrap();
+
+        match suite {
+            SupportedCipherSuite::Tls12(_suite) => {
+                todo!()
+            }
+            SupportedCipherSuite::Tls13(suite) => {
+                let client_encrypted = {
+                    // TODO: don't allocate
+                    let out_key: Vec<u8>;
+                    let out_iv: Vec<u8>;
+
+                    match &client_secrets.tx.1 {
+                        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => {
+                            out_key = key.to_vec();
+                            out_iv = salt
+                                .iter()
+                                .chain(iv.iter())
+                                .copied()
+                                .collect();
+                        }
+                        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => {
+                            out_key = key.to_vec();
+                            out_iv = salt
+                                .iter()
+                                .chain(iv.iter())
+                                .copied()
+                                .collect();
+                        }
+                        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
+                            out_key = key.to_vec();
+                            out_iv = iv.to_vec();
+                        }
+                        _ => {
+                            panic!("algo not supported")
+                        }
+                    };
+
+                    let msg = BorrowedPlainMessage {
+                        typ: ContentType::ApplicationData,
+                        version: ProtocolVersion::TLSv1_3,
+                        payload: &[1, 2, 3, 4, 5],
+                    };
+
+                    let msg = suite
+                        .test_encrypt_message(&out_key[..], &out_iv[..], msg, client_secrets.tx.0)
+                        .unwrap();
+                    client_secrets.tx.0 += 1;
+                    msg
+                };
+
+                let server_decrypted = {
+                    // TODO: don't allocate
+                    let out_key: Vec<u8>;
+                    let out_iv: Vec<u8>;
+
+                    match &server_secrets.rx.1 {
+                        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => {
+                            out_key = key.to_vec();
+                            out_iv = salt
+                                .iter()
+                                .chain(iv.iter())
+                                .copied()
+                                .collect();
+                        }
+                        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => {
+                            out_key = key.to_vec();
+                            out_iv = salt
+                                .iter()
+                                .chain(iv.iter())
+                                .copied()
+                                .collect();
+                        }
+                        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
+                            out_key = key.to_vec();
+                            out_iv = iv.to_vec();
+                        }
+                        _ => {
+                            panic!("algo not supported")
+                        }
+                    };
+
+                    let msg = suite
+                        .test_decrypt_message(
+                            &out_key[..],
+                            &out_iv[..],
+                            client_encrypted,
+                            server_secrets.rx.0,
+                        )
+                        .unwrap();
+                    server_secrets.rx.0 += 1;
+                    msg
+                };
+
+                assert_eq!(&server_decrypted.payload.0[..], &[1, 2, 3, 4, 5]);
+            }
+        }
     }
 }
