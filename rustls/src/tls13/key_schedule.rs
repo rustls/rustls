@@ -365,28 +365,32 @@ impl KeyScheduleTraffic {
         let client_secrets;
         let server_secrets;
 
-        use std::convert::TryInto;
-
         if algo == &ring::aead::AES_128_GCM {
             let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
-                let (key, iv) = expand::<16, 12>(secret)?;
-                Ok(crate::ConnectionTrafficSecrets::Aes128Gcm {
-                    key,
-                    salt: iv[..4].try_into().unwrap(),
-                    iv: iv[4..].try_into().unwrap(),
-                })
+                let (key, iv_in) = expand::<16, 12>(secret)?;
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(&iv_in[..4]);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&iv_in[4..]);
+
+                Ok(crate::ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
             };
 
             client_secrets = extract(&self.current_client_traffic_secret)?;
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::AES_256_GCM {
             let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
-                let (key, iv) = expand::<32, 12>(secret)?;
-                Ok(crate::ConnectionTrafficSecrets::Aes256Gcm {
-                    key,
-                    salt: iv[..4].try_into().unwrap(),
-                    iv: iv[4..].try_into().unwrap(),
-                })
+                let (key, iv_in) = expand::<32, 12>(secret)?;
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(&iv_in[..4]);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&iv_in[4..]);
+
+                Ok(crate::ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
             };
 
             client_secrets = extract(&self.current_client_traffic_secret)?;
