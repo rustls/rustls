@@ -244,6 +244,11 @@ pub struct ServerConfig {
     /// does nothing.
     pub key_log: Arc<dyn KeyLog>,
 
+    /// Allows traffic secrets to be extracted after the handshake,
+    /// e.g. for kTLS setup.
+    #[cfg(feature = "extract_secrets")]
+    pub enable_secret_extraction: bool,
+
     /// Amount of early data to accept for sessions created by
     /// this config.  Specify 0 to disable early data.  The
     /// default is 0.
@@ -350,6 +355,10 @@ impl ServerConnection {
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
+        #[cfg(feature = "extract_secrets")]
+        {
+            common.enable_secret_extraction = config.enable_secret_extraction;
+        }
         Ok(Self {
             inner: ConnectionCommon::new(
                 Box::new(hs::ExpectClientHello::new(config, extra_exts)),
@@ -600,6 +609,14 @@ impl Accepted {
         self.connection
             .common_state
             .set_max_fragment_size(config.max_fragment_size)?;
+
+        #[cfg(feature = "extract_secrets")]
+        {
+            self.connection
+                .common_state
+                .enable_secret_extraction = config.enable_secret_extraction;
+        }
+
         let state = hs::ExpectClientHello::new(config, Vec::new());
         let mut cx = hs::ServerContext {
             common: &mut self.connection.common_state,

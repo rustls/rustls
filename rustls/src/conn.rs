@@ -93,8 +93,24 @@ impl Connection {
     #[cfg(feature = "extract_secrets")]
     pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
         match self {
-            Self::Client(conn) => conn.extract_secrets(),
-            Self::Server(conn) => conn.extract_secrets(),
+            Self::Client(conn) => {
+                if !conn
+                    .common_state
+                    .enable_secret_extraction
+                {
+                    return Err(Error::General("Secret extraction is disabled".into()));
+                }
+                conn.extract_secrets()
+            }
+            Self::Server(conn) => {
+                if !conn
+                    .common_state
+                    .enable_secret_extraction
+                {
+                    return Err(Error::General("Secret extraction is disabled".into()));
+                }
+                conn.extract_secrets()
+            }
         }
     }
 
@@ -853,6 +869,8 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     #[cfg(feature = "quic")]
     pub(crate) quic: Quic,
+    #[cfg(feature = "extract_secrets")]
+    pub(crate) enable_secret_extraction: bool,
 }
 
 impl CommonState {
@@ -880,6 +898,9 @@ impl CommonState {
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
+
+            #[cfg(feature = "extract_secrets")]
+            enable_secret_extraction: false,
         }
     }
 
