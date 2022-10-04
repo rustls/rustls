@@ -76,6 +76,48 @@ pub struct Tls13CipherSuite {
 }
 
 impl Tls13CipherSuite {
+    /// This shouldn't be pub
+    #[cfg(feature = "extract_secrets")]
+    pub fn test_encrypt_message(
+        &self,
+        key: &[u8],
+        iv: &[u8],
+        msg: BorrowedPlainMessage,
+        seq: u64,
+    ) -> Result<OpaqueMessage, Error> {
+        use std::convert::TryInto;
+
+        let key = aead::UnboundKey::new(self.common.aead_algorithm, key).unwrap();
+        let iv = Iv(iv.try_into().unwrap());
+
+        let enc = Tls13MessageEncrypter {
+            enc_key: aead::LessSafeKey::new(key),
+            iv,
+        };
+        enc.encrypt(msg, seq)
+    }
+
+    /// This shouldn't be pub
+    #[cfg(feature = "extract_secrets")]
+    pub fn test_decrypt_message(
+        &self,
+        key: &[u8],
+        iv: &[u8],
+        msg: OpaqueMessage,
+        seq: u64,
+    ) -> Result<PlainMessage, Error> {
+        use std::convert::TryInto;
+
+        let key = aead::UnboundKey::new(self.common.aead_algorithm, key).unwrap();
+        let iv = Iv(iv.try_into().unwrap());
+
+        let dec = Tls13MessageDecrypter {
+            dec_key: aead::LessSafeKey::new(key),
+            iv,
+        };
+        dec.decrypt(msg, seq)
+    }
+
     pub(crate) fn derive_encrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageEncrypter> {
         let key = derive_traffic_key(secret, self.common.aead_algorithm);
         let iv = derive_traffic_iv(secret);
