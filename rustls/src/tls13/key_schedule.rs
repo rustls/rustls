@@ -343,19 +343,24 @@ impl KeyScheduleTraffic {
         algo: &ring::aead::Algorithm,
         side: crate::conn::Side,
     ) -> Result<PartiallyExtractedSecrets, Error> {
-        let expand = |secret: &hkdf::Prk, key: &mut [u8], iv: &mut [u8]| -> Result<(), Error> {
+        fn expand<const KEY_LEN: usize, const IV_LEN: usize>(
+            secret: &hkdf::Prk,
+        ) -> Result<([u8; KEY_LEN], [u8; IV_LEN]), Error> {
+            let mut key = [0u8; KEY_LEN];
+            let mut iv = [0u8; IV_LEN];
+
             hkdf_expand_info(secret, PayloadU8Len(key.len()), b"key", &[], |okm| {
-                okm.fill(key)
+                okm.fill(&mut key)
             })
             .map_err(|_| Error::General("hkdf_expand_info failed".to_string()))?;
 
             hkdf_expand_info(secret, PayloadU8Len(iv.len()), b"iv", &[], |okm| {
-                okm.fill(iv)
+                okm.fill(&mut iv)
             })
             .map_err(|_| Error::General("hkdf_expand_info failed".to_string()))?;
 
-            Ok(())
-        };
+            Ok((key, iv))
+        }
 
         let client_secrets;
         let server_secrets;
@@ -364,10 +369,7 @@ impl KeyScheduleTraffic {
 
         if algo == &ring::aead::AES_128_GCM {
             let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
-                let mut key = [0u8; 16];
-                let mut iv = [0u8; 12];
-                expand(secret, &mut key, &mut iv)?;
-
+                let (key, iv) = expand::<16, 12>(secret)?;
                 Ok(crate::ConnectionTrafficSecrets::Aes128Gcm {
                     key,
                     salt: iv[..4].try_into().unwrap(),
@@ -379,10 +381,7 @@ impl KeyScheduleTraffic {
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::AES_256_GCM {
             let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
-                let mut key = [0u8; 32];
-                let mut iv = [0u8; 12];
-                expand(secret, &mut key, &mut iv)?;
-
+                let (key, iv) = expand::<32, 12>(secret)?;
                 Ok(crate::ConnectionTrafficSecrets::Aes256Gcm {
                     key,
                     salt: iv[..4].try_into().unwrap(),
@@ -394,10 +393,7 @@ impl KeyScheduleTraffic {
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::CHACHA20_POLY1305 {
             let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
-                let mut key = [0u8; 32];
-                let mut iv = [0u8; 12];
-                expand(secret, &mut key, &mut iv)?;
-
+                let (key, iv) = expand::<32, 12>(secret)?;
                 Ok(crate::ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
             };
 
