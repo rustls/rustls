@@ -768,13 +768,13 @@ impl<Data> ConnectionCommon<Data> {
             return Err(Error::General("Secret extraction is disabled".into()));
         }
 
-        match self.state.as_ref() {
-            Ok(st) => {
-                let record_layer = &self.common_state.record_layer;
-                st.extract_secrets(record_layer.write_seq(), record_layer.read_seq())
-            }
-            Err(e) => Err(e.clone()),
-        }
+        let st = self
+            .state
+            .as_ref()
+            .map_err(|e| e.clone())?;
+
+        let record_layer = &self.common_state.record_layer;
+        st.extract_secrets(record_layer.write_seq(), record_layer.read_seq())
     }
 }
 
