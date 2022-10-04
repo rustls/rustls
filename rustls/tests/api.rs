@@ -4194,3 +4194,43 @@ fn test_no_warning_logging_during_successful_sessions() {
         });
     }
 }
+
+/// Test that secrets can be extracted.
+#[cfg(feature = "extract_secrets")]
+#[test]
+fn test_extract_secrets() {
+    let kt = KeyType::Rsa;
+    for suite in [
+        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ] {
+        let version = suite.version();
+        println!("Testing suite {:?}", suite.suite().as_str());
+
+        let mut server_config = ServerConfig::builder()
+            .with_cipher_suites(&[suite])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[version])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
+        server_config.enable_secret_extraction = true;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = make_client_config(kt);
+        client_config.enable_secret_extraction = true;
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        do_handshake(&mut client, &mut server);
+
+        let client_secrets = client.extract_secrets().unwrap();
+        let server_secrets = client.extract_secrets().unwrap();
+    }
+}
